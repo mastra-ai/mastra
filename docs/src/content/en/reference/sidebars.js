@@ -374,6 +374,11 @@ const sidebars = {
       items: [
         {
           type: 'category',
+          label: 'Feedback',
+          items: [{ type: 'doc', id: 'observability/feedback', label: 'Feedback' }],
+        },
+        {
+          type: 'category',
           label: 'Logging',
           items: [{ type: 'doc', id: 'logging/pino-logger', label: 'PinoLogger' }],
         },
@@ -607,6 +612,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
         { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },
+        { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
         { type: 'doc', id: 'storage/upstash', label: 'Upstash Storage' },
       ],
     },
@@ -650,7 +656,7 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Tools & MCP',
+      label: 'Tools and MCP',
       collapsed: true,
       items: [
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
@@ -800,8 +806,8 @@ const sidebars = {
         { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
-        { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },
-        { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
+        { type: 'doc', id: 'workspace/vercel-sandbox', label: 'VercelSandbox' },
+        { type: 'doc', id: 'workspace/vercel-serverless', label: 'VercelServerlessSandbox' },
         { type: 'doc', id: 'workspace/workspace-class', label: 'Workspace Class' },
         { type: 'doc', id: 'workspace/filesystem', label: 'WorkspaceFilesystem' },
         { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },

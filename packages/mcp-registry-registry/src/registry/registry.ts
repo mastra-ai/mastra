@@ -212,6 +212,13 @@ export const registryData: RegistryFile = {
       postProcessServers: processPulseMcpServers,
     },
     {
+      id: 'remoteopenclaw',
+      name: 'Remote OpenClaw',
+      description: 'Free searchable directory of MCP servers, agent skills, and plugins for coding agents.',
+      url: 'https://www.remoteopenclaw.com/',
+      count: 13870,
+    },
+    {
       id: 'smithery',
       name: 'Smithery',
       description: 'Extend your agent with 4,274 capabilities via Model Context Protocol servers.',

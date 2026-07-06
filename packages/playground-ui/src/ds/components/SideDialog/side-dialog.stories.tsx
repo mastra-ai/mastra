@@ -54,6 +54,8 @@ const DetailDialogDemo = ({ level = 1 }: { level?: 1 | 2 | 3 }) => {
   const [index, setIndex] = useState(0);
   const item = items[index];
 
+  if (!item) return null;
+
   return (
     <div className="p-8">
       <Button onClick={() => setIsOpen(true)}>Open Side Dialog</Button>

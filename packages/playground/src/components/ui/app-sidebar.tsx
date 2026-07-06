@@ -64,6 +64,7 @@ export function AppSidebar() {
   };
 
   const filterItem = (item: NavItem) => {
+    if (item.hidden) return false;
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     // While the user's permissions are still loading, hide permission-gated

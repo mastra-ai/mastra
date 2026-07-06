@@ -1,5 +1,6 @@
 import { lstat, readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_FS_SUBAGENT_DEPTH } from '@mastra/core/agent';
 import matter from 'gray-matter';
 import { slash } from '../utils';
 
@@ -33,8 +34,9 @@ export interface DiscoveredFsAgent {
   skills: DiscoveredFsSkill[];
   /**
    * Declared subagents discovered under `subagents/`, in stable (sorted) order.
-   * Subagents are one level deep only: a discovered subagent never carries its
-   * own `subagents` (nested `subagents/` directories are ignored with a warning).
+   * Subagents may declare their own `subagents/`, up to `MAX_FS_SUBAGENT_DEPTH`
+   * levels below the top-level agent; deeper `subagents/` directories are
+   * ignored with a warning.
    */
   subagents: DiscoveredFsAgent[];
 }
@@ -192,7 +194,16 @@ async function parsePackagedSkill(
   const parsed = matter(raw);
   const frontmatter = parsed.data as { name?: string; description?: string };
   const name = frontmatter.name ?? fallbackName;
-  const description = frontmatter.description ?? '';
+  const description = frontmatter.description;
+
+  if (!description) {
+    throw new Error(
+      `Skill "${name}" in ${skillMdPath} is missing a required "description". ` +
+        `Add a YAML frontmatter block with a "description:" field. ` +
+        `See https://agentskills.io/specification for the SKILL.md format.`,
+    );
+  }
+
   const instructions = parsed.content.trim();
   return { kind: 'packaged', name, description, instructions, references };
 }
@@ -256,17 +267,18 @@ async function discoverSkills(skillsDir: string): Promise<DiscoveredFsSkill[]> {
 
 /**
  * Discover a single agent directory: its `config`/`instructions`/`workspace`
- * files plus `tools/`, `skills/`, and (when `allowSubagents`) one level of
- * declared `subagents/`. Returns `undefined` when `dir` is not an agent
- * directory (no `config.(ts|js)` and no `instructions.md`).
+ * files plus `tools/`, `skills/`, and declared `subagents/`. Returns
+ * `undefined` when `dir` is not an agent directory (no `config.(ts|js)` and no
+ * `instructions.md`).
  *
- * `allowSubagents` is `true` for top-level agents and `false` when discovering a
- * subagent, so nested `subagents/` directories are never recursed into.
+ * `depth` is the subagent nesting level (`0` for top-level agents). Discovery
+ * recurses into `subagents/` until `MAX_FS_SUBAGENT_DEPTH`; deeper directories
+ * are ignored with a warning.
  */
 async function discoverAgentDir(
   dir: string,
   name: string,
-  allowSubagents: boolean,
+  depth: number,
   onWarn?: (message: string) => void,
 ): Promise<DiscoveredFsAgent | undefined> {
   const configPath = await firstExisting(dir, CONFIG_BASENAMES);
@@ -284,7 +296,7 @@ async function discoverAgentDir(
   const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
   const tools = await discoverTools(join(dir, 'tools'));
   const skills = await discoverSkills(join(dir, 'skills'));
-  const subagents = await discoverSubagents(dir, allowSubagents, onWarn);
+  const subagents = await discoverSubagents(dir, depth, onWarn);
 
   return {
     name,
@@ -301,15 +313,14 @@ async function discoverAgentDir(
 }
 
 /**
- * Discover declared subagents under `<dir>/subagents/*`. Subagents are one level
- * deep only: each discovered subagent is scanned with `allowSubagents: false`,
- * so a nested `subagents/` directory inside a subagent is ignored with a warning.
- * When `allowSubagents` is `false` (we are already inside a subagent) the whole
- * `subagents/` directory is skipped and a warning is emitted if present.
+ * Discover declared subagents under `<dir>/subagents/*`. `parentDepth` is the
+ * parent agent's nesting level (`0` for top-level agents). Discovery recurses
+ * until `MAX_FS_SUBAGENT_DEPTH` levels of subagents; a `subagents/` directory
+ * that would exceed the cap is skipped with a warning.
  */
 async function discoverSubagents(
   parentDir: string,
-  allowSubagents: boolean,
+  parentDepth: number,
   onWarn?: (message: string) => void,
 ): Promise<DiscoveredFsAgent[]> {
   const subagentsDir = join(parentDir, 'subagents');
@@ -317,9 +328,9 @@ async function discoverSubagents(
     return [];
   }
 
-  if (!allowSubagents) {
+  if (parentDepth >= MAX_FS_SUBAGENT_DEPTH) {
     onWarn?.(
-      `Ignoring nested subagents in "${slash(subagentsDir)}": subagents are one level deep only, so a subagent cannot declare its own subagents.`,
+      `Ignoring subagents in "${slash(subagentsDir)}": subagents may only nest ${MAX_FS_SUBAGENT_DEPTH} levels below a top-level agent.`,
     );
     return [];
   }
@@ -337,7 +348,7 @@ async function discoverSubagents(
     if (!(await realDirectory(dir))) {
       continue;
     }
-    const child = await discoverAgentDir(dir, name, false, onWarn);
+    const child = await discoverAgentDir(dir, name, parentDepth + 1, onWarn);
     if (child) {
       subagents.push(child);
     }
@@ -349,10 +360,10 @@ async function discoverSubagents(
 /**
  * Scan `<mastraDir>/agents/*` for file-system routed agents. A directory is
  * treated as an agent only when it contains a `config.(ts|js)` or an
- * `instructions.md`; other directories are ignored. Each top-level agent may
- * declare one level of `subagents/`. Returns descriptors with absolute,
- * slash-normalized paths ready for codegen. Performs no module evaluation —
- * only filesystem inspection.
+ * `instructions.md`; other directories are ignored. Each agent may declare
+ * `subagents/` up to `MAX_FS_SUBAGENT_DEPTH` levels deep. Returns descriptors
+ * with absolute, slash-normalized paths ready for codegen. Performs no module
+ * evaluation — only filesystem inspection.
  */
 export async function discoverFsAgents(
   mastraDir: string,
@@ -376,11 +387,123 @@ export async function discoverFsAgents(
     if (!(await realDirectory(dir))) {
       continue;
     }
-    const agent = await discoverAgentDir(dir, name, true, onWarn);
+    const agent = await discoverAgentDir(dir, name, 0, onWarn);
     if (agent) {
       discovered.push(agent);
     }
   }
 
   return discovered;
+}
+
+/**
+ * A file-system routed workflow file discovered under `<mastraDir>/workflows/`.
+ * All paths are absolute and slash-normalized so they can be embedded into
+ * generated module source on any platform.
+ */
+export interface DiscoveredFsWorkflow {
+  /** Workflow key derived from the filename (without extension). */
+  key: string;
+  /** Absolute, slash-normalized path to the workflow module. */
+  path: string;
+}
+
+/**
+ * Scan `<mastraDir>/workflows/` for file-system routed workflow modules. Only
+ * files whose source contains an `export default` are treated as fs-routed
+ * workflows — this convention distinguishes them from workflow files that are
+ * manually imported and registered programmatically. Returns descriptors with
+ * absolute, slash-normalized paths ready for codegen. Performs no module
+ * evaluation — only filesystem and source-text inspection.
+ */
+export async function discoverFsWorkflows(mastraDir: string): Promise<DiscoveredFsWorkflow[]> {
+  const workflowsDir = join(mastraDir, 'workflows');
+  if (!(await exists(workflowsDir))) {
+    return [];
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(workflowsDir);
+  } catch {
+    return [];
+  }
+
+  const discovered: DiscoveredFsWorkflow[] = [];
+  for (const basename of entries.sort()) {
+    if (isTestFile(basename)) {
+      continue;
+    }
+    if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
+      continue;
+    }
+    const path = join(workflowsDir, basename);
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
+      continue;
+    }
+    // Convention: only files with `export default` are fs-routed workflows.
+    // Files using named exports are assumed to be manually imported.
+    const source = await readFile(path, 'utf-8');
+    if (!/\bexport\s+default\b/.test(source)) {
+      continue;
+    }
+    discovered.push({ key: toolKey(basename), path: slash(path) });
+  }
+
+  return discovered;
+}
+
+/**
+ * A discovered singleton config file under `<mastraDir>/`. All paths are
+ * absolute and slash-normalized so they can be embedded into generated module
+ * source on any platform.
+ */
+export interface DiscoveredFsSingleton {
+  /** Absolute, slash-normalized path to the singleton module. */
+  path: string;
+}
+
+const SINGLETON_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
+
+/** Safe singleton identifier: no path separators, `..`, or other traversal. */
+const SINGLETON_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Check for a singleton config file (e.g. `storage.ts`, `storage.js`) directly
+ * under `<mastraDir>`. Returns the first matching file path or `undefined`.
+ * Symlinks are rejected for security.
+ *
+ * Convention: only files with `export default` are fs-routed singletons. Files
+ * using named exports are assumed to be manually imported into the user's
+ * `index.ts`, so they are ignored to remain backward-compatible with existing
+ * project structures.
+ *
+ * `name` must be a bare identifier — path separators and traversal sequences are
+ * rejected so the lookup can never escape `<mastraDir>`.
+ */
+export async function discoverFsSingleton(mastraDir: string, name: string): Promise<DiscoveredFsSingleton | undefined> {
+  if (!SINGLETON_NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid fs-singleton name ${JSON.stringify(name)}: expected a bare identifier.`);
+  }
+
+  for (const ext of SINGLETON_EXTENSIONS) {
+    const candidate = join(mastraDir, `${name}${ext}`);
+    try {
+      const stats = await lstat(candidate);
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        continue;
+      }
+      const source = await readFile(candidate, 'utf-8');
+      // Only files with a default export are fs-routed. A named-export file with
+      // this name is user-managed, so skip it and keep scanning other extensions.
+      if (!/\bexport\s+default\b/.test(source)) {
+        continue;
+      }
+      return { path: slash(candidate) };
+    } catch {
+      // not present
+    }
+  }
+  return undefined;
 }

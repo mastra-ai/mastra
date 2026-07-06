@@ -273,13 +273,24 @@ describe('analyzeEntry', () => {
         sourcemapEnabled: false,
         workspaceMap,
         projectRoot: root,
+        initialDepsToOptimize: new Map([
+          [
+            '@internal/shared',
+            {
+              exports: ['shared'],
+              rootPath: `${root}/packages/shared`,
+              isWorkspace: true,
+              version: '1.0.0',
+            },
+          ],
+        ]),
       },
     );
 
-    expect(rollup).toHaveBeenCalledTimes(3);
+    expect(rollup).toHaveBeenCalledTimes(2);
     expect(result.dependencies.size).toBe(2);
     expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
-    expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared']);
+    expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
     // Verify that the analyzer doesn't get stuck in infinite loops.
     // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)

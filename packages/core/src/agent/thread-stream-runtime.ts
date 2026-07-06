@@ -865,7 +865,7 @@ export class AgentThreadStreamRuntime {
       streamSeq,
     });
     // Always drive the run's stream to completion, even when no caller consumes
-    // the returned output (e.g. a fire-and-forget heartbeat wake). The broadcast
+    // the returned output (e.g. a fire-and-forget schedule wake). The broadcast
     // tee buffers every part, so a later/external subscriber still replays the
     // full stream; without this pump the run never reaches a terminal state and
     // its active-run record + thread lease would never release, permanently

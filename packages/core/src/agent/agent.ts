@@ -129,6 +129,7 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -859,6 +860,17 @@ export class Agent<
    */
   __getGoalConfig(): GoalConfig | undefined {
     return this.#goal;
+  }
+
+  /**
+   * Returns a closure that drains pending signals for a given run from the
+   * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
+   * store the drain function on the in-process `RunRegistryEntry`.
+   * @internal
+   */
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
+    const pubsub = this.getPubSub();
+    return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
   }
 
   /**
@@ -3079,8 +3091,10 @@ export class Agent<
     this.#mastra = mastra;
 
     // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish.
+    // the background — we don't await to keep this hot path sync-ish. Release
+    // its global scorer hook synchronously so it can't outlive the instance.
     if (this.#ephemeralMastra) {
+      this.#ephemeralMastra.__unregisterHooks();
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
     }
@@ -6310,7 +6324,7 @@ export class Agent<
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId,
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, key),
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
@@ -6319,6 +6333,18 @@ export class Agent<
     }
 
     return toolCalls;
+  }
+
+  /**
+   * Suspend payloads persisted before they carried `toolCallId` only hold the
+   * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
+   * Recover it when exactly one label points at the suspended step.
+   */
+  #findResumeLabelForStep(existingSnapshot: WorkflowRunState | null | undefined, stepId: string): string | undefined {
+    const labels = Object.entries(existingSnapshot?.resumeLabels ?? {}).filter(
+      ([, target]) => target.stepId === stepId,
+    );
+    return labels.length === 1 ? labels[0]![0] : undefined;
   }
 
   #getSuspendedToolInfo(

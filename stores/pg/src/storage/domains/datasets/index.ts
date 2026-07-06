@@ -26,6 +26,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -36,10 +37,11 @@ import type {
   BatchDeleteItemsInput,
   CreateIndexOptions,
   TargetType,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
@@ -275,8 +277,8 @@ export class DatasetsPG extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds !== undefined ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
           candidateKey: input.candidateKey ?? null,
@@ -318,10 +320,18 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
       const tableName = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
-      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE "id" = $1`, [id]);
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const whereSql = ['"id" = $1', ...conditions].join(' AND ');
+      const result = await this.#db.client.oneOrNone(`SELECT * FROM ${tableName} WHERE ${whereSql}`, [id, ...params]);
       return result ? this.transformDatasetRow(result) : null;
     } catch (error) {
       throw new MastraError(
@@ -337,7 +347,7 @@ export class DatasetsPG extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('PG', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -436,7 +446,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
       const datasetsTable = getTableName({ indexName: TABLE_DATASETS, schemaName: getSchemaName(this.#schema) });
       const itemsTable = getTableName({ indexName: TABLE_DATASET_ITEMS, schemaName: getSchemaName(this.#schema) });
@@ -450,29 +460,43 @@ export class DatasetsPG extends DatasetsStorage {
         schemaName: getSchemaName(this.#schema),
       });
 
-      // Detach experiments — each wrapped in try/catch because experiment tables may not exist yet
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
-      try {
-        await this.#db.client.none(
-          `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
-          [id],
-        );
-      } catch {
-        /* table may not exist */
-      }
+      // Atomic gate + cascade under a single transaction; the tenancy predicate
+      // is folded into a SELECT ... FOR UPDATE lock and the parent DELETE, so
+      // a concurrent delete/recreate under a different tenant cannot let a
+      // scoped delete hit another tenant's row. Silent no-op on mismatch.
+      const { conditions, params } = tenancyWhere(filters, 2);
+      const scopedWhere = ['"id" = $1', ...conditions].join(' AND ');
 
-      // Cascade delete — atomic transaction
       await this.#db.client.tx(async t => {
+        const locked = await t.oneOrNone(`SELECT "id" FROM ${datasetsTable} WHERE ${scopedWhere} FOR UPDATE`, [
+          id,
+          ...params,
+        ]);
+        if (!locked) return;
+
+        // Detach experiments only if their tables exist. We probe with
+        // to_regclass instead of try/catch inside the transaction, because a
+        // failed DML in Postgres puts the connection into an aborted state
+        // (SQLSTATE 25P02), which would cause every subsequent DELETE below
+        // to fail and roll back the whole transaction.
+        const experimentTablesExist = await t.oneOrNone<{ exists: boolean }>(
+          `SELECT to_regclass($1) IS NOT NULL AND to_regclass($2) IS NOT NULL AS exists`,
+          [experimentResultsTable, experimentsTable],
+        );
+        if (experimentTablesExist?.exists) {
+          await t.none(
+            `DELETE FROM ${experimentResultsTable} WHERE "experimentId" IN (SELECT "id" FROM ${experimentsTable} WHERE "datasetId" = $1)`,
+            [id],
+          );
+          await t.none(
+            `UPDATE ${experimentsTable} SET "datasetId" = NULL, "datasetVersion" = NULL WHERE "datasetId" = $1`,
+            [id],
+          );
+        }
+
         await t.none(`DELETE FROM ${versionsTable} WHERE "datasetId" = $1`, [id]);
         await t.none(`DELETE FROM ${itemsTable} WHERE "datasetId" = $1`, [id]);
-        await t.none(`DELETE FROM ${datasetsTable} WHERE "id" = $1`, [id]);
+        await t.none(`DELETE FROM ${datasetsTable} WHERE ${scopedWhere}`, [id, ...params]);
       });
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -497,7 +521,7 @@ export class DatasetsPG extends DatasetsStorage {
       let paramIndex = 1;
 
       if (args.filters) {
-        const { organizationId, projectId, candidateKey, candidateId } = args.filters;
+        const { organizationId, projectId, candidateKey, candidateId, targetType, targetIds, name } = args.filters;
         if (organizationId !== undefined) {
           conditions.push(`"organizationId" = $${paramIndex++}`);
           queryParams.push(organizationId);
@@ -513,6 +537,19 @@ export class DatasetsPG extends DatasetsStorage {
         if (candidateId !== undefined) {
           conditions.push(`"candidateId" = $${paramIndex++}`);
           queryParams.push(candidateId);
+        }
+        if (targetType !== undefined) {
+          conditions.push(`"targetType" = $${paramIndex++}`);
+          queryParams.push(targetType);
+        }
+        if (targetIds !== undefined && targetIds.length > 0) {
+          // jsonb ?| text[] — true if any of the strings exists as a top-level element.
+          conditions.push(`"targetIds" ?| $${paramIndex++}::text[]`);
+          queryParams.push(targetIds);
+        }
+        if (name !== undefined && name.length > 0) {
+          conditions.push(`"name" ILIKE $${paramIndex++}`);
+          queryParams.push(`%${name}%`);
         }
       }
 
@@ -763,7 +800,7 @@ export class DatasetsPG extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.getItemById({ id });
       if (!existing) return; // no-op if not found

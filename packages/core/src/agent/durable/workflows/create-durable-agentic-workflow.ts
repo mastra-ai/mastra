@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { MastraScorer, MastraScorerEntry } from '../../../evals/base';
 import { runScorer } from '../../../evals/hooks';
 import type { PubSub } from '../../../events/pubsub';
+import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { createObservabilityContext, InternalSpans } from '../../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
@@ -11,7 +12,7 @@ import { createWorkflow } from '../../../workflows/create';
 import { MessageList } from '../../message-list';
 import { DurableStepIds, DurableAgentDefaults } from '../constants';
 import { globalRunRegistry } from '../run-registry';
-import { emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
+import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
   DurableAgenticWorkflowInput,
@@ -141,6 +142,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           params.workflowStatus === 'suspended'
         );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
       sharePubsub: true,
       // Internal durable-agent execution plumbing — hide workflow spans;
@@ -209,6 +213,58 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     .then(llmMappingStep)
     // Step 6: Check for pending background tasks
     .then(backgroundTaskCheckStep)
+    // Step 6.5: Drain signals that were queued while tool execution was running
+    // within this iteration. Mirrors the non-durable `signalDrainStep` which
+    // sits between backgroundTaskCheckStep and isTaskCompleteStep.
+    .map(
+      async params => {
+        const execOutput = params.inputData as DurableAgenticExecutionOutput;
+        const initData = params.getInitData() as IterationState;
+        const runId = initData.runId;
+        const registryEntry = globalRunRegistry.get(runId);
+        const drainFn = registryEntry?.drainPendingSignals;
+
+        if (!drainFn) return execOutput;
+
+        try {
+          const pendingSignals = drainFn('pending');
+          if (pendingSignals.length === 0) return execOutput;
+
+          const drainList = new MessageList();
+          drainList.deserialize(execOutput.messageListState);
+          drainList.markResponseMessageBoundary(execOutput.messageId);
+
+          const nextMessageId =
+            (params.mastra as Mastra | undefined)?.generateId?.() ??
+            globalThis.crypto?.randomUUID?.() ??
+            `msg_${Date.now()}`;
+
+          const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
+          for (const pendingSignal of pendingSignals) {
+            const signalForTranscript = drainList.addSignal(pendingSignal);
+            if (pubsub) {
+              await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
+            }
+          }
+
+          return {
+            ...execOutput,
+            messageListState: drainList.serialize(),
+            messageId: nextMessageId,
+            stepResult: {
+              ...execOutput.stepResult,
+              messageId: nextMessageId,
+              isContinued: true,
+            },
+          };
+        } catch {
+          // Signal drain is best-effort; drainPendingSignals() is inside
+          // the try so signals remain queued if it throws.
+          return execOutput;
+        }
+      },
+      { id: 'signal-drain' },
+    )
     // Step 7: Map back to iteration state format using shared function
     .map(
       async ({ inputData, getInitData }) => {
@@ -260,6 +316,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             params.workflowStatus === 'suspended'
           );
         },
+        // Agent-loop snapshots are pure resume artifacts — strip everything a
+        // resume never reads before persisting.
+        pruneSnapshot: pruneAgentLoopSnapshot,
         validateInputs: false,
         // Internal durable-agent execution plumbing — see singleIterationWorkflow.
         tracingPolicy: {
@@ -310,7 +369,8 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // Continuation check. isTaskComplete (when configured) runs as a
         // proper step inside singleIterationWorkflow and may have already
         // flipped lastStepResult.isContinued by the time we get here.
-        const shouldContinue = state.lastStepResult?.isContinued === true;
+        // Declared as `let` because signal drain may force isContinued later.
+        let shouldContinue = state.lastStepResult?.isContinued === true;
         const runMaxSteps = state.options?.maxSteps ?? maxSteps;
         const underMaxSteps = state.iterationCount < runMaxSteps;
 
@@ -345,6 +405,47 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
           hardStop = true;
           // Reset the flag so it doesn't carry forward
           (state as any).delegationBailed = false;
+        }
+
+        // ── Inter-iteration signal drain ──────────────────────────────
+        // Mirror the non-durable agentic-loop predicate: drain pending
+        // signals that were queued while the previous iteration was
+        // running. If signals are present, mark a response boundary,
+        // rotate the messageId, add them to the transcript, emit them
+        // to the stream, and force continuation so the LLM sees them.
+        if (pubsub && registryEntry?.drainPendingSignals) {
+          try {
+            const pendingSignals = registryEntry.drainPendingSignals('pending');
+            if (pendingSignals.length > 0) {
+              const drainList = new MessageList();
+              drainList.deserialize(state.messageListState);
+              drainList.markResponseMessageBoundary();
+
+              const nextMessageId =
+                (mastra as Mastra | undefined)?.generateId?.() ??
+                globalThis.crypto?.randomUUID?.() ??
+                `msg_${Date.now()}`;
+              state.messageId = nextMessageId;
+
+              for (const pendingSignal of pendingSignals) {
+                const signalForTranscript = drainList.addSignal(pendingSignal);
+                await emitChunkEvent(pubsub, state.runId, signalForTranscript.toDataPart() as any);
+              }
+
+              state.messageListState = drainList.serialize();
+
+              // Force continuation — the LLM must see the injected signals
+              if (state.lastStepResult) {
+                state.lastStepResult.isContinued = true;
+              }
+              shouldContinue = true;
+            }
+          } catch {
+            // Signal drain is best-effort; if deserialization fails
+            // the next iteration still runs with the un-drained state.
+            // drainPendingSignals() is inside the try so signals remain
+            // queued if the drain function itself throws.
+          }
         }
 
         let isFinal = !shouldContinue || !underMaxSteps || hasFinishedSteps;

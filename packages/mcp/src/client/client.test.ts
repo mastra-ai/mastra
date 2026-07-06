@@ -7,6 +7,7 @@ import type { AddressInfo } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/di';
+import { toStandardSchema } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -403,9 +404,8 @@ describe('MastraMCPClient with Streamable HTTP', () => {
 describe('MastraMCPClient - outputSchema without structuredContent', () => {
   // When MCP servers (e.g. FastMCP) define outputSchema on a tool but don't
   // return structuredContent in the response, the full CallToolResult envelope
-  // should be returned as-is. We don't pass outputSchema to createTool, so
-  // Zod won't strip unrecognised keys. The MCP SDK validates structuredContent
-  // against outputSchema internally via AJV.
+  // should be returned as-is. outputSchema is attached for documentation with a
+  // no-op validator; the MCP SDK validates structuredContent via AJV.
   let testServer: {
     httpServer: HttpServer;
     mcpServer: McpServer;
@@ -522,6 +522,56 @@ describe('MastraMCPClient - outputSchema without structuredContent', () => {
 
     expect(storedSchema.properties?.root?.$ref).toBe('#/$defs/node');
     expect(storedSchema.$defs?.node?.properties?.children?.items?.$ref).toBe('#/$defs/node');
+  });
+
+  it('exposes output JSON schema for documentation while Mastra validation always succeeds', async () => {
+    const sdkClient = (client as any).client as Client;
+    const outputSchema = {
+      type: 'object' as const,
+      properties: {
+        result: { type: 'number' },
+        expression: { type: 'string' },
+      },
+      required: ['result'],
+    };
+
+    vi.spyOn(sdkClient, 'listTools').mockResolvedValue({
+      tools: [
+        {
+          name: 'calculate',
+          description: 'Calculates a math expression',
+          inputSchema: {
+            type: 'object' as const,
+            properties: { expression: { type: 'string' } },
+          },
+          outputSchema,
+        },
+      ],
+    });
+
+    const tools = await client.tools();
+    const calculateTool = tools['calculate'];
+    expect(calculateTool).toBeDefined();
+
+    const documentedSchema = calculateTool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-07' });
+    expect(documentedSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        result: { type: 'number' },
+        expression: { type: 'string' },
+      },
+    });
+
+    const invalidOutput = { result: 'not-a-number', extraField: true };
+    expect(calculateTool.outputSchema?.['~standard'].validate(invalidOutput)).toEqual({ value: invalidOutput });
+    expect(toStandardSchema(outputSchema)['~standard'].validate(invalidOutput)).toHaveProperty('issues');
+
+    const callToolResult = {
+      content: [{ type: 'text', text: JSON.stringify({ result: 2, expression: '1 + 1' }) }],
+      isError: false,
+    };
+    vi.spyOn(sdkClient, 'callTool').mockResolvedValue(callToolResult);
+    await expect(calculateTool.execute?.({ expression: '1 + 1' })).resolves.toEqual(callToolResult);
   });
 });
 
@@ -1193,9 +1243,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
 
     // The tool reports the failure in-band (isError: true), which the client now
     // surfaces on the failed-tool-call path by throwing.
-    await expect(
-      collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {}),
-    ).rejects.toThrow();
+    await expect(collectUserInfoTool?.execute?.({ message: 'This will cause handler to throw' }, {})).rejects.toThrow();
 
     expect(mockHandler).toHaveBeenCalledTimes(1);
   });
@@ -1216,9 +1264,7 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(collectUserInfoTool).toBeDefined();
 
     // Call the tool which will trigger elicitation; the in-band error is surfaced by throwing.
-    await expect(
-      collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {}),
-    ).rejects.toThrow();
+    await expect(collectUserInfoTool?.execute?.({ message: 'This should fail gracefully' }, {})).rejects.toThrow();
   });
 
   it('should validate elicitation request schema structure', async () => {

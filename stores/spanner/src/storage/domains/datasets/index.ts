@@ -22,6 +22,7 @@ import type {
   DatasetItem,
   DatasetItemRow,
   DatasetRecord,
+  DatasetTenancyFilters,
   DatasetVersion,
   ListDatasetItemsInput,
   ListDatasetItemsOutput,
@@ -31,6 +32,7 @@ import type {
   ListDatasetVersionsOutput,
   UpdateDatasetInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
 } from '@mastra/core/storage';
 import { SpannerDB, resolveSpannerConfig } from '../../db';
 import type { SpannerDomainConfig } from '../../db';
@@ -143,7 +145,15 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.alterTable({
       tableName: TABLE_DATASETS,
       schema: TABLE_SCHEMAS[TABLE_DATASETS],
-      ifNotExists: ['organizationId', 'projectId', 'candidateKey', 'candidateId'],
+      ifNotExists: [
+        'organizationId',
+        'projectId',
+        'candidateKey',
+        'candidateId',
+        'targetType',
+        'targetIds',
+        'scorerIds',
+      ],
     });
     await this.db.alterTable({
       tableName: TABLE_DATASET_ITEMS,
@@ -193,6 +203,21 @@ export class DatasetsSpanner extends DatasetsStorage {
     await this.db.clearTable({ tableName: TABLE_DATASET_VERSIONS });
     await this.db.clearTable({ tableName: TABLE_DATASET_ITEMS });
     await this.db.clearTable({ tableName: TABLE_DATASETS });
+  }
+
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const [rows] = await this.database.run({
+        sql: `SELECT COUNT(*) AS c FROM INFORMATION_SCHEMA.TABLES
+              WHERE TABLE_SCHEMA = "" AND TABLE_NAME IN (@a, @b)`,
+        params: { a: TABLE_EXPERIMENTS, b: TABLE_EXPERIMENT_RESULTS },
+        json: true,
+      });
+      const row = rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
   }
 
   // ==========================================================================
@@ -259,9 +284,29 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async getDatasetById(args: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null> {
     try {
-      const row = await this.db.load<Record<string, any>>({ tableName: TABLE_DATASETS, keys: { id: args.id } });
+      const hasTenancy = args.filters?.organizationId !== undefined || args.filters?.projectId !== undefined;
+      if (!hasTenancy) {
+        const row = await this.db.load<Record<string, any>>({ tableName: TABLE_DATASETS, keys: { id: args.id } });
+        return row ? rowToDataset(row) : null;
+      }
+      const conditions: string[] = [`${quoteIdent('id', 'column name')} = @id`];
+      const params: Record<string, any> = { id: args.id };
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        params.organizationId = args.filters.organizationId;
+      }
+      if (args.filters?.projectId !== undefined) {
+        conditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        params.projectId = args.filters.projectId;
+      }
+      const [rows] = await this.database.run({
+        sql: `SELECT * FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${conditions.join(' AND ')} LIMIT 1`,
+        params,
+        json: true,
+      });
+      const row = (rows as Array<Record<string, any>>)[0];
       return row ? rowToDataset(row) : null;
     } catch (error) {
       throw new MastraError(
@@ -293,7 +338,7 @@ export class DatasetsSpanner extends DatasetsStorage {
 
       await this.db.update({ tableName: TABLE_DATASETS, keys: { id: args.id }, data });
 
-      const updated = await this.getDatasetById({ id: args.id });
+      const updated = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('SPANNER', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -318,32 +363,63 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  async deleteDataset(args: { id: string }): Promise<void> {
+  async deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // Best-effort detach of experiments referencing this dataset. These tables
-      // may not exist when datasets is used standalone, so failures are swallowed.
-      try {
-        await this.db.runDml({
-          sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
-                WHERE ${quoteIdent('experimentId', 'column name')} IN (
-                  SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
-                  WHERE ${quoteIdent('datasetId', 'column name')} = @id)`,
-          params: { id: args.id },
-        });
-        await this.db.runDml({
-          sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
-                SET ${quoteIdent('datasetId', 'column name')} = NULL,
-                    ${quoteIdent('datasetVersion', 'column name')} = NULL
-                WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
-          params: { id: args.id },
-        });
-      } catch {
-        // Experiments tables absent — nothing to detach.
+      // Atomic gate + cascade inside a single read-write transaction. The
+      // gate SELECT locks the parent row within the tx, and the tenancy
+      // predicate is folded into the parent DELETE, so a concurrent
+      // delete/recreate under a different tenant cannot let a scoped delete
+      // hit another tenant's row. Silent no-op on mismatch.
+      const tenancyConditions: string[] = [];
+      const tenancyParams: Record<string, any> = {};
+      if (args.filters?.organizationId !== undefined) {
+        tenancyConditions.push(`${quoteIdent('organizationId', 'column name')} = @organizationId`);
+        tenancyParams.organizationId = args.filters.organizationId;
       }
+      if (args.filters?.projectId !== undefined) {
+        tenancyConditions.push(`${quoteIdent('projectId', 'column name')} = @projectId`);
+        tenancyParams.projectId = args.filters.projectId;
+      }
+      const scopedWhere = [`${quoteIdent('id', 'column name')} = @id`, ...tenancyConditions].join(' AND ');
+
+      // Probe for experiment tables outside the transaction. Once any statement
+      // fails inside a Spanner read-write transaction, the transaction is left
+      // in a state where subsequent statements can't be trusted to run (the
+      // batch-DML contract halts on the first error, and a client-side try/catch
+      // around a DML doesn't put the tx back into a usable shape). Checking
+      // existence up front avoids running detach DMLs against missing tables.
+      const experimentTablesExist = await this.experimentTablesExist();
 
       await this.db.runWithAbortRetry(() =>
         this.database.runTransactionAsync(async tx => {
           try {
+            const [rows] = await tx.run({
+              sql: `SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${scopedWhere}`,
+              params: { id: args.id, ...tenancyParams },
+              json: true,
+            });
+            if (!rows || rows.length === 0) {
+              await tx.commit();
+              return;
+            }
+
+            if (experimentTablesExist) {
+              await tx.runUpdate({
+                sql: `DELETE FROM ${quoteIdent(TABLE_EXPERIMENT_RESULTS, 'table name')}
+                      WHERE ${quoteIdent('experimentId', 'column name')} IN (
+                        SELECT ${quoteIdent('id', 'column name')} FROM ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                        WHERE ${quoteIdent('datasetId', 'column name')} = @id)`,
+                params: { id: args.id },
+              });
+              await tx.runUpdate({
+                sql: `UPDATE ${quoteIdent(TABLE_EXPERIMENTS, 'table name')}
+                      SET ${quoteIdent('datasetId', 'column name')} = NULL,
+                          ${quoteIdent('datasetVersion', 'column name')} = NULL
+                      WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
+                params: { id: args.id },
+              });
+            }
+
             for (const table of [TABLE_DATASET_VERSIONS, TABLE_DATASET_ITEMS]) {
               await tx.runUpdate({
                 sql: `DELETE FROM ${quoteIdent(table, 'table name')} WHERE ${quoteIdent('datasetId', 'column name')} = @id`,
@@ -351,8 +427,8 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
             }
             await tx.runUpdate({
-              sql: `DELETE FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${quoteIdent('id', 'column name')} = @id`,
-              params: { id: args.id },
+              sql: `DELETE FROM ${quoteIdent(TABLE_DATASETS, 'table name')} WHERE ${scopedWhere}`,
+              params: { id: args.id, ...tenancyParams },
             });
             await tx.commit();
           } catch (err) {
@@ -399,11 +475,35 @@ export class DatasetsSpanner extends DatasetsStorage {
         filterConditions.push(`${quoteIdent('candidateId', 'column name')} = @candidateId`);
         filterParams.candidateId = args.filters.candidateId;
       }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push(`${quoteIdent('targetType', 'column name')} = @targetType`);
+        filterParams.targetType = args.filters.targetType;
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        // Spanner stores `targetIds` as a JSON array column; unnest it and intersect
+        // with the supplied IDs. This matches dataset rows whose targetIds overlap
+        // with any of the supplied values.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM UNNEST(JSON_QUERY_ARRAY(${quoteIdent('targetIds', 'column name')})) AS t WHERE JSON_VALUE(t) IN UNNEST(@targetIds))`,
+        );
+        filterParams.targetIds = args.filters.targetIds;
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        filterConditions.push(`LOWER(${quoteIdent('name', 'column name')}) LIKE LOWER(@nameSubstring)`);
+        filterParams.nameSubstring = `%${args.filters.name}%`;
+      }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
+      // Spanner cannot infer the element type of empty arrays, so declare ARRAY<STRING>
+      // for `targetIds` whenever the filter is in play.
+      const filterTypes: Record<string, any> =
+        args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0
+          ? { targetIds: { type: 'array', child: { type: 'string' } } }
+          : {};
 
       const [countRows] = await this.database.run({
         sql: `SELECT COUNT(*) AS count FROM ${tableName} ${whereClause}`,
         params: filterParams,
+        types: filterTypes,
         json: true,
       });
       const total = Number((countRows as Array<{ count: number | string }>)[0]?.count ?? 0);
@@ -416,6 +516,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               ORDER BY ${quoteIdent('createdAt', 'column name')} DESC, ${quoteIdent('id', 'column name')} ASC
               LIMIT @limit OFFSET @offset`,
         params: { ...filterParams, limit, offset },
+        types: filterTypes,
         json: true,
       });
       const datasets = (rows as Array<Record<string, any>>).map(rowToDataset);
@@ -692,7 +793,7 @@ export class DatasetsSpanner extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem(args: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem(args: DeleteDatasetItemInput): Promise<void> {
     try {
       const existing = await this.loadCurrentItemRow(args.id);
       if (!existing) return;

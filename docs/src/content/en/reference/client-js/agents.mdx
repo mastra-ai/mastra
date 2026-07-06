@@ -350,7 +350,7 @@ await subscription.processDataStream({
 
 ### `streamUntilIdle()`
 
-Stream a response and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.
+Stream a response and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. The server re-enters the agentic loop on each task completion so the LLM can react to results in the same call. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `stream()`.
 
 ```typescript
 const response = await agent.streamUntilIdle('Research solana for me', {
@@ -372,7 +372,7 @@ response.processDataStream({
 
 ### `resumeStreamUntilIdle()`
 
-Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `resumeStream()`:
+Resume a suspended agent stream with custom data and keep the stream open until every [background task](/docs/long-running-agents/background-tasks) dispatched during the run completes. Use this to continue execution after a suspension point, such as a workflow suspend within an agent. Requires background tasks to be [enabled on the Mastra instance](/reference/configuration#backgroundtasks) and a memory thread; otherwise the call falls through to a plain `resumeStream()`:
 
 ```typescript
 const response = await agent.resumeStreamUntilIdle(

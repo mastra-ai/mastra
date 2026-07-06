@@ -66,6 +66,7 @@ export function setupKeyboardShortcuts(
       state.pendingInlineQuestions.length = 0;
       state.pendingAskUserComponents?.clear();
       state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('user_interrupt').catch(() => {});
       state.session.abort();
     } else {
       const current = state.editor.getText();
@@ -214,6 +215,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   if (!activeGoalJudge) return false;
 
   state.userInitiatedAbort = true;
+  state.hookManager?.runInterrupt('goal_judge_interrupt').catch(() => {});
   activeGoalJudge.abortController.abort();
   activeGoalJudge.component.setInterrupted();
   // Esc during an in-loop goal evaluation pauses the goal so it does not
@@ -525,13 +527,21 @@ export function setupKeyHandlers(
     }
     if (state.pendingApprovalDismiss) {
       state.pendingApprovalDismiss();
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      return;
     }
-    state.activeInlinePlanApproval = undefined;
-    state.activeInlineQuestion = undefined;
-    state.pendingInlineQuestions.length = 0;
-    state.pendingAskUserComponents?.clear();
-    state.userInitiatedAbort = true;
-    state.session.abort();
+
+    if (state.session.run.isRunning() || state.session.suspensions.hasPending()) {
+      state.activeInlinePlanApproval = undefined;
+      state.activeInlineQuestion = undefined;
+      state.pendingInlineQuestions.length = 0;
+      state.pendingAskUserComponents?.clear();
+      state.userInitiatedAbort = true;
+      state.hookManager?.runInterrupt('process_sigint').catch(() => {});
+      state.session.abort();
+    }
   };
   process.on('SIGINT', sigintHandler);
 
