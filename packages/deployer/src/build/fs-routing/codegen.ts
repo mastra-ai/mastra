@@ -148,12 +148,14 @@ export async function generateFsAgentsModule(
     storage?: DiscoveredFsSingleton;
     observability?: DiscoveredFsSingleton;
     server?: DiscoveredFsSingleton;
+    studio?: DiscoveredFsSingleton;
   },
 ): Promise<string> {
   const workflows = options?.workflows ?? [];
   const storage = options?.storage;
   const observability = options?.observability;
   const server = options?.server;
+  const studio = options?.studio;
   const lines: string[] = [];
 
   const hasInlineSkills = (function check(list: DiscoveredFsAgent[]): boolean {
@@ -187,6 +189,9 @@ export async function generateFsAgentsModule(
   }
   if (server) {
     singletonImports.push(`import __fsServer from ${JSON.stringify(server.path)};`);
+  }
+  if (studio) {
+    singletonImports.push(`import __fsStudio from ${JSON.stringify(studio.path)};`);
   }
   if (singletonImports.length > 0) {
     lines.push(...singletonImports);
@@ -247,6 +252,13 @@ export async function generateFsAgentsModule(
   if (server) {
     lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsServer === 'function') {`);
     lines.push(`  __userEntry.mastra.__registerFsServer(__fsServer);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
+  if (studio) {
+    lines.push(`if (__userEntry.mastra && typeof __userEntry.mastra.__registerFsStudio === 'function') {`);
+    lines.push(`  __userEntry.mastra.__registerFsStudio(__fsStudio);`);
     lines.push(`}`);
     lines.push(``);
   }

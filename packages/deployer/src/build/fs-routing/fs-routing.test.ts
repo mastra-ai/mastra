@@ -545,6 +545,7 @@ describe('prepareFsAgentsEntry', () => {
       hasStorage: false,
       hasObservability: false,
       hasServer: false,
+      hasStudio: false,
     });
   });
 
@@ -1027,6 +1028,56 @@ describe('prepareFsAgentsEntry with server', () => {
   });
 });
 
+describe('generateFsAgentsModule with studio', () => {
+  it('includes studio import and registration when provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', [], {
+      studio: { path: '/project/src/mastra/studio.ts' },
+    });
+    expect(source).toContain(`import __fsStudio from "/project/src/mastra/studio.ts"`);
+    expect(source).toContain('__registerFsStudio(__fsStudio)');
+  });
+
+  it('omits studio when not provided', async () => {
+    const source = await generateFsAgentsModule('/project/index.ts', []);
+    expect(source).not.toContain('__fsStudio');
+    expect(source).not.toContain('__registerFsStudio');
+  });
+});
+
+describe('prepareFsAgentsEntry with studio', () => {
+  it('generates a wrapper entry when only studio.ts exists (no agents)', async () => {
+    await writeFile(join(dir, 'studio.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.hasStudio).toBe(true);
+    expect(result.agentCount).toBe(0);
+    expect(result.moduleSource).toContain('__registerFsStudio');
+  });
+
+  it('discovers studio alongside all other primitives', async () => {
+    await writeAgent('assistant', {
+      config: `export default { model: 'openai/gpt-4o' };`,
+      instructions: 'hi',
+    });
+    await mkdir(join(dir, 'workflows'), { recursive: true });
+    await writeFile(join(dir, 'workflows', 'pipeline.ts'), `export default {};`);
+    await writeFile(join(dir, 'storage.ts'), `export default {};`);
+    await writeFile(join(dir, 'observability.ts'), `export default {};`);
+    await writeFile(join(dir, 'studio.ts'), `export default {};`);
+    const out = join(dir, '.mastra');
+
+    const result = await prepareFsAgentsEntry(dir, join(dir, 'index.ts'), out);
+    expect(result.agentCount).toBe(1);
+    expect(result.workflowCount).toBe(1);
+    expect(result.hasStorage).toBe(true);
+    expect(result.hasObservability).toBe(true);
+    expect(result.hasStudio).toBe(true);
+    expect(result.moduleSource).toContain('__registerFsWorkflows');
+    expect(result.moduleSource).toContain('__registerFsStorage');
+    expect(result.moduleSource).toContain('__registerFsObservability');
+    expect(result.moduleSource).toContain('__registerFsStudio');
+  });
+});
 describe('subagents', () => {
   it('discovers subagents under subagents/', async () => {
     await writeAgent('supervisor', {
