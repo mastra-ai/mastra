@@ -628,6 +628,7 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraCompositeStore;
+  #storageExplicit = false;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
@@ -1285,6 +1286,7 @@ export class Mastra<
     let storage: MastraCompositeStore;
     if (config?.storage) {
       storage = config.storage;
+      this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
       this.#logger?.warn(
@@ -2320,6 +2322,67 @@ export class Mastra<
       }
       this.addAgent(agent, key, { source: 'fs' });
     }
+  }
+
+  /**
+   * Registers a map of file-system routed workflows (discovered from
+   * `workflows/*.ts` files) into this Mastra instance.
+   *
+   * Code-registered workflows win on name collisions: if a workflow with the
+   * same key already exists, the file-system workflow is skipped and a warning
+   * is logged. Otherwise each workflow is added via {@link addWorkflow} with
+   * its key.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsWorkflows(fsWorkflows: Record<string, AnyWorkflow>): void {
+    if (!fsWorkflows) {
+      return;
+    }
+
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    for (const [key, workflow] of Object.entries(fsWorkflows)) {
+      if (workflow == null) {
+        continue;
+      }
+      if (workflows[key]) {
+        this.getLogger().warn(
+          `File-system routed workflow "${key}" conflicts with a code-registered workflow of the same name. Keeping the code-registered workflow.`,
+        );
+        continue;
+      }
+      this.addWorkflow(workflow, key);
+    }
+  }
+
+  /**
+   * Registers a file-system routed storage instance (discovered from
+   * `storage.ts`) into this Mastra instance.
+   *
+   * Code-registered storage wins: if the user already passed `storage` to the
+   * `new Mastra({storage})` constructor, the file-system storage is skipped
+   * and a warning is logged. Otherwise the fs-provided storage replaces the
+   * default InMemoryStore via {@link setStorage}.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsStorage(fsStorage: MastraCompositeStore): void {
+    if (!fsStorage) {
+      return;
+    }
+
+    if (this.#storageExplicit) {
+      this.getLogger().warn(
+        `File-system routed storage conflicts with a code-registered storage. Keeping the code-registered storage.`,
+      );
+      return;
+    }
+
+    this.setStorage(fsStorage);
   }
 
   /**
