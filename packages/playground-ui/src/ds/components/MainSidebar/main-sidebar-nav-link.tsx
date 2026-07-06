@@ -36,6 +36,9 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
    * Use for `<button>` items or custom router Links. Item classes are forwarded
    * to the slotted element. `link.url` and `LinkComponent` are ignored; other
    * `link` presentation fields still apply when supplied.
+   *
+   * @deprecated Prefer typed render composition for new APIs; this legacy
+   * slotted prop will be migrated separately.
    */
   asChild?: boolean;
 };

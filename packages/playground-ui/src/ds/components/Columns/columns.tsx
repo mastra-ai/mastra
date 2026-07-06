@@ -1,4 +1,4 @@
-import { cn } from '@/index';
+import { cn } from '@/lib/utils';
 
 export type ColumnsProps = {
   children: React.ReactNode;

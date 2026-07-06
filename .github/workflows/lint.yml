@@ -204,7 +204,7 @@ jobs:
   validate-pkg-json:
     name: Validate package.json files
     needs: changes
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-24.04-2
     timeout-minutes: 10
     if: needs.changes.outputs.has_code == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:

@@ -6,6 +6,7 @@ import './switch.css';
 
 type SwitchProps = Omit<SwitchPrimitive.Root.Props, 'className'> & {
   className?: string;
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
   icon?: React.ReactNode;
   checkedIcon?: React.ReactNode;

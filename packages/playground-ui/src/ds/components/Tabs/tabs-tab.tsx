@@ -29,7 +29,7 @@ export const Tab = ({ children, value, onClick, onClose, disabled, disabledToolt
         'disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:text-neutral3',
         'aria-disabled:cursor-not-allowed aria-disabled:opacity-50 aria-disabled:hover:text-neutral3',
         'data-[disabled]:cursor-not-allowed data-[disabled]:opacity-50 data-[disabled]:hover:text-neutral3',
-        // Line variant (default) — active state drawn by <Tabs.Indicator> in TabList
+        // Line variant legacy fallback — active state drawn by <Tabs.Indicator> in TabList
         'group-data-[variant=line]/tabs-list:py-2 group-data-[variant=line]/tabs-list:px-5',
         'group-data-[variant=line]/tabs-list:border-b-2 group-data-[variant=line]/tabs-list:border-transparent',
         // Pill variant

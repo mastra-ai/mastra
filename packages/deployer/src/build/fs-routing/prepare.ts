@@ -2,13 +2,14 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { slash } from '../utils';
 import { generateFsAgentsModule } from './codegen';
-import { discoverFsAgents } from './discover';
+import { discoverFsAgents, discoverFsSingleton, discoverFsWorkflows } from './discover';
 
 export interface PrepareFsAgentsEntryResult {
   /**
    * The entry file that should be fed to the bundler/analyzer. When fs-routed
-   * agents are found this is a generated wrapper module that registers them onto
-   * the user's mastra instance; otherwise it is the original entry unchanged.
+   * primitives (agents, workflows, storage, observability, server) are found
+   * this is a generated wrapper module that registers them onto the user's
+   * mastra instance; otherwise it is the original entry unchanged.
    */
   entryFile: string;
   /**
@@ -18,50 +19,91 @@ export interface PrepareFsAgentsEntryResult {
   toolPaths: string[];
   /** Number of fs-routed agents discovered. */
   agentCount: number;
+  /** Number of fs-routed workflows discovered. */
+  workflowCount: number;
+  /** Whether a `storage.ts` singleton was discovered. */
+  hasStorage: boolean;
+  /** Whether an `observability.ts` singleton was discovered. */
+  hasObservability: boolean;
+  /** Whether a `server.ts` singleton was discovered. */
+  hasServer: boolean;
   /**
    * Generated wrapper source to write to {@link entryFile}, or `undefined` when
-   * there are no fs-routed agents. The write is deferred so callers can run it
-   * *after* `bundler.prepare()` empties the output directory — otherwise the
+   * there are no fs-routed primitives. The write is deferred so callers can run
+   * it *after* `bundler.prepare()` empties the output directory — otherwise the
    * wrapper is wiped before the bundler reads it.
    */
   moduleSource?: string;
 }
 
 /**
- * Discover fs-routed agents under `<mastraDir>/agents/*` and, if any exist,
- * generate a wrapper entry module that registers them onto the user's mastra
- * instance. Returns the entry the bundler should use plus extra tool glob paths
- * so `agents/*\/tools` are bundled.
+ * Discover fs-routed agents under `<mastraDir>/agents/*`, workflows under
+ * `<mastraDir>/workflows/`, and singleton config files (e.g. `storage.ts`,
+ * `observability.ts`, `server.ts`).
+ * When any are found, generate a wrapper entry module that registers them onto
+ * the user's mastra instance. Returns the entry the bundler should use plus
+ * extra tool glob paths so `agents/*\/tools` are bundled.
  *
  * This does NOT write the wrapper to disk; call {@link writeFsAgentsEntry} with
  * the result after `bundler.prepare()` so the generated file is not wiped when
  * the output directory is emptied.
  *
- * When no fs-routed agents are present the original entry is returned unchanged,
- * so existing code-only projects are completely unaffected.
+ * When no fs-routed primitives are present the original entry is returned
+ * unchanged, so existing code-only projects are completely unaffected.
  */
 export async function prepareFsAgentsEntry(
   mastraDir: string,
   entryFile: string,
   outputDirectory: string,
 ): Promise<PrepareFsAgentsEntryResult> {
-  const agents = await discoverFsAgents(mastraDir);
+  const [agents, workflows, storage, observability, server] = await Promise.all([
+    discoverFsAgents(mastraDir),
+    discoverFsWorkflows(mastraDir),
+    discoverFsSingleton(mastraDir, 'storage'),
+    discoverFsSingleton(mastraDir, 'observability'),
+    discoverFsSingleton(mastraDir, 'server'),
+  ]);
 
-  if (agents.length === 0) {
-    return { entryFile, toolPaths: [], agentCount: 0 };
+  if (agents.length === 0 && workflows.length === 0 && !storage && !observability && !server) {
+    return {
+      entryFile,
+      toolPaths: [],
+      agentCount: 0,
+      workflowCount: 0,
+      hasStorage: false,
+      hasObservability: false,
+      hasServer: false,
+    };
   }
 
-  const moduleSource = await generateFsAgentsModule(slash(entryFile), agents);
+  const moduleSource = await generateFsAgentsModule(slash(entryFile), agents, {
+    workflows,
+    storage,
+    observability,
+    server,
+  });
   const generatedEntry = join(outputDirectory, '.mastra-fs-agents-entry.mjs');
 
   const normalizedMastraDir = slash(mastraDir);
-  const toolPaths = [
-    posix.join(normalizedMastraDir, 'agents/*/tools/**/*.{js,ts}'),
-    `!${posix.join(normalizedMastraDir, 'agents/*/tools/**/*.{test,spec}.{js,ts}')}`,
-    `!${posix.join(normalizedMastraDir, 'agents/*/tools/**/__tests__/**')}`,
-  ];
+  const toolPaths =
+    agents.length > 0
+      ? [
+          posix.join(normalizedMastraDir, 'agents/*/tools/**/*.{js,ts}'),
+          `!${posix.join(normalizedMastraDir, 'agents/*/tools/**/*.{test,spec}.{js,ts}')}`,
+          `!${posix.join(normalizedMastraDir, 'agents/*/tools/**/__tests__/**')}`,
+        ]
+      : [];
 
-  return { entryFile: generatedEntry, toolPaths, agentCount: agents.length, moduleSource };
+  return {
+    entryFile: generatedEntry,
+    toolPaths,
+    agentCount: agents.length,
+    workflowCount: workflows.length,
+    hasStorage: !!storage,
+    hasObservability: !!observability,
+    hasServer: !!server,
+    moduleSource,
+  };
 }
 
 /**

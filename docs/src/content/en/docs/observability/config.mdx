@@ -101,8 +101,7 @@ export const observability = new Observability({
 In serverless environments, flush observability exporters before the runtime pauses or exits:
 
 ```ts
-const observability = mastra.getObservability()
-await observability.flush()
+await mastra.observability.flush()
 ```
 
 Use external storage in serverless environments instead of local file storage. For storage selection and routing, see [Storage](/docs/observability/storage).

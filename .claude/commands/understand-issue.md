@@ -1,0 +1,1 @@
+../../.mastracode/commands/understand-issue.md

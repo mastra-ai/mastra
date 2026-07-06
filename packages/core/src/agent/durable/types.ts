@@ -33,7 +33,7 @@ import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
-import type { GoalConfig } from '../types';
+import type { GoalConfig, StructuredOutputOptions } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -703,6 +703,23 @@ export interface RunRegistryEntry {
    */
   workflowExecution?: Promise<unknown>;
   /**
+   * Tripwire data from `processInput` (initial input processing). When an
+   * input processor calls `abort()` during `runInputProcessors` in
+   * `preparation.ts`, the TripWire is caught and stored here instead of
+   * swallowed. The first durable `llm-execution` step checks this slot and
+   * immediately emits a `tripwire` chunk + bail response, preventing the
+   * model from ever being called.
+   *
+   * Non-serializable (contains metadata of unknown shape); populated during
+   * `prepareForDurableExecution`.
+   */
+  tripwire?: {
+    reason: string;
+    retry?: boolean;
+    metadata?: unknown;
+    processorId?: string;
+  };
+  /**
    * Call-time headers from `modelSettings.headers`. These are intentionally
    * excluded from the serialized `workflowInput` so they never reach durable
    * storage. The durable `llm-execution` step reads them from this in-process
@@ -714,6 +731,15 @@ export interface RunRegistryEntry {
    * variables.
    */
   callTimeHeaders?: Record<string, string>;
+  /**
+   * Call-time structured output configuration (with live schema). The schema
+   * is non-serializable (Zod/standard schema instance), so it lives only on
+   * the in-process registry. The durable stream adapter reads it to configure
+   * `MastraModelOutput`'s `createObjectStreamTransformer`, which parses LLM
+   * text into `object-result` chunks. Cross-process engines lose this slot
+   * and structured output degrades to raw text.
+   */
+  structuredOutput?: StructuredOutputOptions;
 }
 
 /**

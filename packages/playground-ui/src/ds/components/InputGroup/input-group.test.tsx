@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
 import { cleanup, render } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
 
@@ -8,8 +9,17 @@ afterEach(() => {
   cleanup();
 });
 
-const getWrapper = () => document.querySelector<HTMLDivElement>('[data-slot="input-group"]')!;
-const getInput = () => document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]')!;
+const getWrapper = () => {
+  const wrapper = document.querySelector<HTMLDivElement>('[data-slot="input-group"]');
+  assert(wrapper, 'Expected input group wrapper');
+  return wrapper;
+};
+
+const getInput = () => {
+  const input = document.querySelector<HTMLInputElement>('[data-slot="input-group-control"]');
+  assert(input, 'Expected input group control');
+  return input;
+};
 
 const inputGroupVariants = ['default', 'filled', 'outline'] as const;
 

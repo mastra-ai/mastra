@@ -1594,7 +1594,7 @@ describe('ChatChannelOutputProcessor', () => {
 // Fallback render-context resolution (no inbound requestContext)
 // ---------------------------------------------------------------------------
 //
-// Runs that did NOT originate from a platform webhook (heartbeats, Studio,
+// Runs that did NOT originate from a platform webhook (schedule fires, Studio,
 // custom UI, user code) have no `CHAT_CHANNEL_RENDER_CONTEXT_KEY` on
 // `requestContext`. When the processor is bound to its owning `AgentChannels`
 // and the run's thread carries channel coordinates, it must reconstruct the
@@ -1675,12 +1675,12 @@ describe('ChatChannelOutputProcessor fallback render context', () => {
 
   it('broadcasts on a channel-backed thread with no requestContext key', async () => {
     const { channels, calls } = await makeFallbackChannels();
-    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'heartbeat says hi' } }], {
+    await driveFallback(channels, [{ type: 'text-delta', payload: { text: 'schedule says hi' } }], {
       threadId: FALLBACK_THREAD_ID,
     });
 
     const posts = calls.filter(c => c.kind === 'post');
-    expect(posts).toEqual([{ kind: 'post', arg: 'heartbeat says hi' }]);
+    expect(posts).toEqual([{ kind: 'post', arg: 'schedule says hi' }]);
   });
 
   it('passes through when the thread has no channel metadata', async () => {

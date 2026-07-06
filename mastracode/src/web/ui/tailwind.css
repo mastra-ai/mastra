@@ -1,14 +1,14 @@
 /* Tailwind v4 entry for the MastraCode web UI.
  *
- * Brings in Tailwind utilities plus the @mastra/playground-ui design tokens so
- * playground-ui components render with their intended theme. The app's own
- * hand-written design system lives in ./styles.css and is layered on top. */
+ * The compiled Playground UI stylesheet is imported from main.tsx. This file
+ * only adds Tailwind utilities and imports raw design tokens for @theme-based
+ * utility generation. */
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
 /* Raw design tokens (:root + @theme) shipped by playground-ui. Importing the
- * uncompiled theme lets Tailwind read @theme and generate the DS utilities
- * without redeclaring tokens. */
+ * uncompiled theme lets Tailwind read @theme and generate DS utilities without
+ * treating theme.css as the component stylesheet. */
 @import '@mastra/playground-ui/theme.css';
 
 @custom-variant dark (&:is(.dark *));

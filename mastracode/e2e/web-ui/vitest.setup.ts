@@ -17,8 +17,13 @@ import { server } from './msw-server';
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 // Reset handlers + unmount React trees between tests so cases stay isolated.
-afterEach(() => {
+// Between unmounting and resetting, drain the event loop so fire-and-forget
+// requests kicked off during the test (e.g. `void session.setState(...)` from
+// `useProjectSessionSync`) land against this test's handlers instead of
+// surfacing as unhandled-request errors after the reset.
+afterEach(async () => {
   cleanup();
+  await new Promise(resolve => setTimeout(resolve, 0));
   server.resetHandlers();
 });
 
