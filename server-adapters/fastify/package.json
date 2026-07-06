@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.4.5-alpha.2",
+  "version": "1.4.5-alpha.4",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -51,7 +51,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.47.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.50.0-0 <2.0.0-0",
     "fastify": "^5.0.0"
   },
   "engines": {

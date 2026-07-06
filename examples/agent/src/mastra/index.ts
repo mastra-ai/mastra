@@ -71,7 +71,7 @@ const externalMcpClient = new MCPClient({
 });
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import { refundWorkflow } from './workflows/refund-workflow';
-import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
+import { tickWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -179,7 +179,7 @@ export const mastra = new Mastra({
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
-    heartbeatWorkflow,
+    tickWorkflow,
     multiCadenceWorkflow,
     refundWorkflow,
   },

@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -24,6 +24,25 @@ const myLlm: CustomProviderInfo = {
 };
 
 describe('CustomProvidersSection', () => {
+  describe('while providers are loading', () => {
+    it('renders a skeleton placeholder instead of loading text', async () => {
+      server.use(
+        http.get(LIST_URL, async () => {
+          await delay(150);
+          return listResponse([myLlm]);
+        }),
+      );
+
+      renderWithProviders(<CustomProvidersSection />);
+
+      expect(await screen.findByRole('status', { name: 'Loading custom providers' })).toBeInTheDocument();
+      expect(screen.queryByText(/Loading custom providers/)).not.toBeInTheDocument();
+
+      expect(await screen.findByText('my-llm')).toBeInTheDocument();
+      expect(screen.queryByRole('status', { name: 'Loading custom providers' })).not.toBeInTheDocument();
+    });
+  });
+
   describe('when providers load', () => {
     it('renders the configured providers', async () => {
       server.use(http.get(LIST_URL, () => listResponse([myLlm])));

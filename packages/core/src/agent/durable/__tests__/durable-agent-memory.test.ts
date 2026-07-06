@@ -236,6 +236,39 @@ describe('DurableAgent memory configuration', () => {
       expect(JSON.stringify(messages.messages[1]?.content)).toContain('assistant response');
       result.cleanup();
     });
+
+    it('does not persist messages when memory is readOnly', async () => {
+      const mockMemory = new MockMemory();
+      await mockMemory.createThread({ threadId: 'thread-readonly', resourceId: 'resource-readonly' });
+
+      const baseAgent = new Agent({
+        id: 'readonly-persist-agent',
+        name: 'ReadOnly Persist Agent',
+        instructions: 'Test readOnly persistence',
+        model: createTextModel('assistant response') as LanguageModelV2,
+        memory: mockMemory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const result = await durableAgent.stream('user input', {
+        memory: {
+          thread: 'thread-readonly',
+          resource: 'resource-readonly',
+          options: { readOnly: true },
+        },
+      });
+      for await (const _chunk of result.fullStream as AsyncIterable<any>) {
+      }
+
+      const messages = await mockMemory.recall({
+        threadId: 'thread-readonly',
+        resourceId: 'resource-readonly',
+      });
+
+      // readOnly means "read memory but do not save new messages".
+      expect(messages.messages).toEqual([]);
+      result.cleanup();
+    });
   });
 
   describe('memory.options configuration', () => {

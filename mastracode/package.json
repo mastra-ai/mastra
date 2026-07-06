@@ -1,6 +1,6 @@
 {
   "name": "mastracode",
-  "version": "0.29.0-alpha.2",
+  "version": "0.29.0-alpha.4",
   "description": "",
   "type": "module",
   "files": [
@@ -135,6 +135,7 @@
     "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",
     "@tursodatabase/api": "2.0.4",
+    "date-fns": "catalog:",
     "ai": "^6.0.176",
     "chalk": "^5.5.0",
     "cli-highlight": "^2.1.11",
