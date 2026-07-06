@@ -22,6 +22,7 @@ describe('root entry (@mastra/livekit)', () => {
     expect(Object.keys(entry).sort()).toEqual([
       'DEFAULT_LIVEKIT_AGENT_NAME',
       'createConsentTool',
+      'createEndCallTool',
       'dispatchVoiceSession',
       'liveKitConnectionRoute',
       'pipeAgentReplyToWriter',

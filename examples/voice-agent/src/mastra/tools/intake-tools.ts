@@ -1,4 +1,4 @@
-import { createConsentTool } from '@mastra/livekit';
+import { createConsentTool, createEndCallTool } from '@mastra/livekit';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { checkServiceArea as checkServiceAreaBackend, reconcileIntake, recordSummaryConsent } from '../backend';
@@ -16,6 +16,18 @@ export const recordConsent = createConsentTool({
     if (item === 'summaryStorage' && resourceId) {
       await recordSummaryConsent(resourceId, granted);
     }
+  },
+});
+
+/**
+ * Lets the agent hang up once the call is done — the companion to the worker's
+ * `configuration.endCall`. The tool only SIGNALS the intent (it can't reach the LiveKit room from
+ * inside the agent loop); the worker waits for the goodbye to play out, then disconnects. `onEndCall`
+ * is optional bookkeeping — here we just log the reason and caller.
+ */
+export const endCall = createEndCallTool({
+  onEndCall: ({ reason, resourceId }) => {
+    console.info('[call-center] agent ended the call', { reason, resourceId });
   },
 });
 

@@ -28,6 +28,10 @@ export default createLiveKitWorker({
     // Consent this deployment requires — a named, extensible set (add more items over time). Here we
     // require consent before storing a summary of the call (the end-of-call OM distillation).
     requireConsent: { summaryStorage: true },
+    // Let the agent hang up when the call is done. It calls the `endCall` tool (see intake-tools) as
+    // its last action; the worker waits for the goodbye to play out, then disconnects (running the
+    // onCallEnd summary flush below). No `message` here — the agent speaks its own goodbye.
+    endCall: {},
   },
   // Scope memory for the call: `thread` is this call, `resource` is the caller so their
   // collected details and working memory persist across calls (returning callers are

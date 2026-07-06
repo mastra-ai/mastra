@@ -1,13 +1,16 @@
-import { InferenceRunner } from '@livekit/agents';
+import { InferenceRunner, voice } from '@livekit/agents';
 import type { JobContext, JobProcess } from '@livekit/agents';
 import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createLiveKitWorker,
+  DEFAULT_END_CALL_REASON,
   resolveGreetingConfig,
   resolveGreetingText,
   resolveMemoryInstance,
+  runEndCall,
   speakGreeting,
+  waitForAgentDoneSpeaking,
 } from './worker';
 import type { GreetingContext, ResolveMastraAgentArgs } from './worker';
 import { workerSetupComplete } from './worker-setup';
@@ -307,6 +310,156 @@ describe('speakGreeting', () => {
     // waitForPlayout rejects when the greeting is interrupted; speakGreeting must swallow it.
     const { session } = fakeSession(Promise.reject(new Error('interrupted')));
     await expect(speakGreeting(session, { text: 'hi', awaitPlayout: true })).resolves.toBeDefined();
+  });
+});
+
+// A fake AgentSession that exposes a mutable agentState + AgentStateChanged emitter, plus `say`.
+function fakeSpeakingSession(initialState: voice.AgentState = 'speaking', playout: Promise<void> = Promise.resolve()) {
+  const listeners = new Set<(ev: voice.AgentStateChangedEvent) => void>();
+  let state = initialState;
+  const say = vi.fn(() => ({ waitForPlayout: vi.fn(() => playout) }));
+  const session = {
+    get agentState() {
+      return state;
+    },
+    on: vi.fn((event: string, cb: (ev: voice.AgentStateChangedEvent) => void) => {
+      if (event === voice.AgentSessionEventTypes.AgentStateChanged) listeners.add(cb);
+      return session;
+    }),
+    off: vi.fn((event: string, cb: (ev: voice.AgentStateChangedEvent) => void) => {
+      listeners.delete(cb);
+      return session;
+    }),
+    say,
+  };
+  const setState = (newState: voice.AgentState) => {
+    const oldState = state;
+    state = newState;
+    for (const cb of [...listeners]) cb({ type: 'agent_state_changed', oldState, newState, createdAt: 0 });
+  };
+  return {
+    session: session as unknown as Parameters<typeof runEndCall>[0],
+    setState,
+    say,
+    listenerCount: () => listeners.size,
+  };
+}
+
+function fakeEndCallCtx() {
+  return {
+    deleteRoom: vi.fn(async () => {}),
+    shutdown: vi.fn(),
+  } as unknown as Parameters<typeof runEndCall>[1] & {
+    deleteRoom: ReturnType<typeof vi.fn>;
+    shutdown: ReturnType<typeof vi.fn>;
+  };
+}
+
+const fakeLogger = () => ({ warn: vi.fn() });
+
+describe('waitForAgentDoneSpeaking', () => {
+  it('resolves immediately when the agent is already idle', async () => {
+    const { session, listenerCount } = fakeSpeakingSession('listening');
+    await expect(waitForAgentDoneSpeaking(session)).resolves.toBeUndefined();
+    // No subscription needed since it was already idle.
+    expect(listenerCount()).toBe(0);
+  });
+
+  it('waits while the agent is speaking, then resolves when it stops', async () => {
+    const { session, setState, listenerCount } = fakeSpeakingSession('speaking');
+    let resolved = false;
+    const done = waitForAgentDoneSpeaking(session).then(() => {
+      resolved = true;
+    });
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    setState('speaking'); // still busy — must not resolve
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    setState('listening'); // done speaking
+    await done;
+    expect(resolved).toBe(true);
+    // Listener is cleaned up after resolving.
+    expect(listenerCount()).toBe(0);
+  });
+
+  it('keeps waiting through the thinking state', async () => {
+    const { session, setState } = fakeSpeakingSession('thinking');
+    let resolved = false;
+    const done = waitForAgentDoneSpeaking(session).then(() => {
+      resolved = true;
+    });
+    setState('speaking');
+    await Promise.resolve();
+    expect(resolved).toBe(false);
+    setState('idle');
+    await done;
+    expect(resolved).toBe(true);
+  });
+
+  it('resolves via the maxWait safety cap even if the state never clears', async () => {
+    vi.useFakeTimers();
+    try {
+      const { session } = fakeSpeakingSession('speaking');
+      let resolved = false;
+      const done = waitForAgentDoneSpeaking(session, 5000).then(() => {
+        resolved = true;
+      });
+      await vi.advanceTimersByTimeAsync(4999);
+      expect(resolved).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await done;
+      expect(resolved).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('runEndCall', () => {
+  it('waits for the agent to finish, then deletes the room and shuts down with the default reason', async () => {
+    const { session, say } = fakeSpeakingSession('listening'); // already idle
+    const ctx = fakeEndCallCtx();
+    await runEndCall(session, ctx, {}, fakeLogger());
+    expect(say).not.toHaveBeenCalled(); // no closing message configured
+    expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
+    expect(ctx.shutdown).toHaveBeenCalledWith(DEFAULT_END_CALL_REASON);
+    // deleteRoom is awaited before the shutdown that triggers onCallEnd.
+    expect(ctx.deleteRoom.mock.invocationCallOrder[0]!).toBeLessThan(ctx.shutdown.mock.invocationCallOrder[0]!);
+  });
+
+  it('speaks a non-interruptible closing message before hanging up', async () => {
+    const { session, say } = fakeSpeakingSession('listening');
+    const ctx = fakeEndCallCtx();
+    await runEndCall(session, ctx, { message: 'Thanks for calling, goodbye.' }, fakeLogger());
+    expect(say).toHaveBeenCalledWith('Thanks for calling, goodbye.', { allowInterruptions: false });
+    expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
+    expect(ctx.shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses the configured shutdown reason', async () => {
+    const { session } = fakeSpeakingSession('listening');
+    const ctx = fakeEndCallCtx();
+    await runEndCall(session, ctx, { reason: 'resolved' }, fakeLogger());
+    expect(ctx.shutdown).toHaveBeenCalledWith('resolved');
+  });
+
+  it('still shuts down when deleteRoom rejects', async () => {
+    const { session } = fakeSpeakingSession('listening');
+    const ctx = fakeEndCallCtx();
+    ctx.deleteRoom.mockRejectedValueOnce(new Error('no room'));
+    const logger = fakeLogger();
+    await runEndCall(session, ctx, {}, logger);
+    expect(ctx.shutdown).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalled();
+  });
+
+  it('still hangs up when the closing message playout rejects', async () => {
+    const { session } = fakeSpeakingSession('listening', Promise.reject(new Error('interrupted')));
+    const ctx = fakeEndCallCtx();
+    await runEndCall(session, ctx, { message: 'bye' }, fakeLogger());
+    expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
+    expect(ctx.shutdown).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -6,6 +6,7 @@ export type {
   ConsentConfiguration,
   ConsentRequirement,
   CreateLiveKitWorkerOptions,
+  EndCallConfiguration,
   GreetingConfiguration,
   GreetingContext,
   GreetingText,

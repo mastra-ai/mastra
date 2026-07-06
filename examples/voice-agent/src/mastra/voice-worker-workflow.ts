@@ -42,6 +42,10 @@ export default createLiveKitWorker({
     },
     // Require consent before storing a summary of the call (the end-of-call OM distillation).
     requireConsent: { summaryStorage: true },
+    // Agent-initiated hang-up — works on the workflow path too: the reply step pipes the agent's
+    // fullStream, so the `endCall` tool call reaches the worker, which waits for the goodbye then
+    // disconnects. Same detection as the agent worker.
+    endCall: {},
   },
   // Spoken filler while a tool runs, so the caller isn't left in silence — same map as the agent
   // worker. On the workflow path it fires because the reply step pipes the agent's fullStream, so

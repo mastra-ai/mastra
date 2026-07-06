@@ -6,7 +6,7 @@ import {
   lookupCustomer,
   rescheduleAppointment,
 } from '../tools/call-center-tools';
-import { checkServiceArea, finalizeIntake, recordConsent } from '../tools/intake-tools';
+import { checkServiceArea, endCall, finalizeIntake, recordConsent } from '../tools/intake-tools';
 import { callCenterMemory } from '../memory';
 import { workspaceContextProcessor } from '../processors/workspace-context';
 
@@ -44,6 +44,8 @@ Memory and pace, because this is a live call:
 
 At the END of the call, once you have everything, call finalizeIntake exactly once with the scenario ("lead", "inspection", or "callback") and the collected fields. It reconciles and submits the record and returns a reference number to read back — or it tells you what is still missing or that the address is out of area, which you must resolve before saying goodbye. Existing-customer scheduling handled with the booking tools does not need finalizeIntake.
 
+Hanging up: when everything is wrapped up and the caller has nothing else, say a short goodbye and then call endCall as your very last action to hang up. Do not call endCall while the caller still needs something, and do not narrate that you are hanging up — just say goodbye and call it.
+
 Stay warm and professional. If a request is outside trades work, scheduling, or accounts, offer to take a callback.`,
   // Fast, NON-reasoning model for the voice loop — time-to-first-token is what the caller hears.
   // A reasoning model (e.g. gpt-5-mini) spends several seconds "thinking" before it speaks on
@@ -59,6 +61,7 @@ Stay warm and professional. If a request is outside trades work, scheduling, or 
     checkServiceArea,
     finalizeIntake,
     recordConsent,
+    endCall,
   },
   // Deterministic per-turn tenant context, injected before the model runs (mock "Firebase").
   inputProcessors: [workspaceContextProcessor],

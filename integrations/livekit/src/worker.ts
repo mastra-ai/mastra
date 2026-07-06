@@ -445,16 +445,48 @@ export interface ConsentConfiguration {
 }
 
 /**
+ * Agent-initiated hang-up: let the agent end the call itself (say goodbye → hang up). Enable it here
+ * and add a matching tool to the agent with `createEndCallTool` (both default to the tool name
+ * `'endCall'`). The tool only signals intent — from inside `agent.stream()` it can't reach the room;
+ * the worker owns the hang-up. On each turn the worker watches for the tool, waits for the agent's
+ * closing words to finish playing (so the goodbye is never cut off), then disconnects — running
+ * `onCallEnd` on the way out, exactly as a caller-initiated hang-up does. Works on the agent and
+ * workflow reply paths.
+ */
+export interface EndCallConfiguration {
+  /**
+   * Name of the tool the agent calls to end the call — must match the `id` you gave
+   * `createEndCallTool`. Defaults to `'endCall'`.
+   */
+  tool?: string;
+  /**
+   * Optional closing line spoken (non-interruptibly) right before hanging up, after the agent's own
+   * final words finish. Use it for a guaranteed sign-off or a compliance closing. Omit to just hang
+   * up once the agent's closing words finish playing.
+   */
+  message?: string;
+  /** Reason recorded on the shutdown (shows up in LiveKit logs). Defaults to `'agent ended call'`. */
+  reason?: string;
+  /**
+   * Safety cap in milliseconds on how long to wait for the agent's closing words to finish playing
+   * before hanging up, in case the speaking state never clears. Defaults to `30000`.
+   */
+  maxWaitMs?: number;
+}
+
+/**
  * Grouped conversation & compliance configuration for {@link CreateLiveKitWorkerOptions.configuration}.
  * A single home for related policy knobs so they don't each become a top-level worker option. Today
- * it carries the greeting / AI-disclosure and consent requirements; it's the intended landing spot
- * for further compliance controls (recording notice, data retention, human handoff, …).
+ * it carries the greeting / AI-disclosure, consent requirements, and agent-initiated hang-up; it's
+ * the intended landing spot for further compliance controls (recording notice, data retention, …).
  */
 export interface LiveKitWorkerConfiguration {
   /** The opening greeting / AI-disclosure, plus optional periodic re-disclosure. See {@link GreetingConfiguration}. */
   greeting?: GreetingConfiguration;
   /** Consent requirements for the call. See {@link ConsentConfiguration}. */
   requireConsent?: ConsentConfiguration;
+  /** Let the agent end the call itself (say goodbye → hang up). See {@link EndCallConfiguration}. */
+  endCall?: EndCallConfiguration;
 }
 
 /**
@@ -512,6 +544,128 @@ export async function speakGreeting(
     await handle.waitForPlayout().catch(() => {});
   }
   return handle;
+}
+
+/** Default tool name the worker watches for to end the call. Matches `createEndCallTool`'s default. */
+export const DEFAULT_END_CALL_TOOL = 'endCall';
+/** Default shutdown reason recorded when the agent ends the call. */
+export const DEFAULT_END_CALL_REASON = 'agent ended call';
+/** Default safety cap on waiting for the agent's closing words to finish before hanging up. */
+export const DEFAULT_END_CALL_MAX_WAIT_MS = 30_000;
+
+/** Agent states where the agent is still busy producing / playing a reply (not done speaking). */
+const AGENT_BUSY_STATES = new Set<voice.AgentState>(['thinking', 'speaking']);
+
+/** The minimal logger surface these helpers use (the Mastra logger satisfies it). */
+type WarnLogger = { warn: (message: string, ...args: unknown[]) => void };
+
+/**
+ * Resolves once the agent is no longer producing or playing a reply — i.e. its state has left
+ * `thinking`/`speaking` for `listening`/`idle`. Returns immediately when it's already idle. A
+ * `maxWaitMs` safety cap guarantees it resolves even if the speaking state never clears. Used before
+ * an agent-initiated hang-up so the closing words play out fully instead of being cut off by the
+ * session close. Exported for unit testing.
+ */
+export function waitForAgentDoneSpeaking(
+  session: Pick<voice.AgentSession, 'agentState' | 'on' | 'off'>,
+  maxWaitMs: number = DEFAULT_END_CALL_MAX_WAIT_MS,
+): Promise<void> {
+  if (!AGENT_BUSY_STATES.has(session.agentState)) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    // Check-then-subscribe with no await in between, so a state change can't slip past unobserved.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onChange = (ev: voice.AgentStateChangedEvent) => {
+      if (AGENT_BUSY_STATES.has(ev.newState)) return;
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      session.off(voice.AgentSessionEventTypes.AgentStateChanged, onChange);
+      if (timer) clearTimeout(timer);
+    };
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, onChange);
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, maxWaitMs);
+    // Don't let the safety timer keep the worker process alive on its own.
+    (timer as { unref?: () => void }).unref?.();
+  });
+}
+
+/**
+ * Ends the call after the agent asked to (via its end-call tool): wait for the agent's closing words
+ * to finish, speak an optional final `message`, then disconnect. The teardown's session close
+ * force-interrupts any playing speech, so the waits here MUST complete before we disconnect — that's
+ * the whole point of the sequence. `ctx.deleteRoom()` hangs up the caller (SIP-safe); `ctx.shutdown()`
+ * ends the job and runs the registered shutdown callbacks (`onCallEnd`), so end-of-call work happens
+ * exactly as it does on a caller hang-up. Both run in a `finally` so a hiccup while waiting still ends
+ * the call. Exported for unit testing.
+ */
+export async function runEndCall(
+  session: Pick<voice.AgentSession, 'agentState' | 'on' | 'off' | 'say'>,
+  ctx: Pick<JobContext, 'deleteRoom' | 'shutdown'>,
+  config: EndCallConfiguration,
+  logger: WarnLogger,
+): Promise<void> {
+  try {
+    await waitForAgentDoneSpeaking(session, config.maxWaitMs ?? DEFAULT_END_CALL_MAX_WAIT_MS);
+    if (config.message) {
+      // waitForPlayout rejects if interrupted; the closing line is non-interruptible, but swallow
+      // anyway so a hiccup can't leave the call hanging.
+      await session
+        .say(config.message, { allowInterruptions: false })
+        .waitForPlayout()
+        .catch(() => {});
+    }
+  } catch (error) {
+    logger.warn('@mastra/livekit: waiting for the agent to finish before ending the call failed', error);
+  } finally {
+    try {
+      await ctx.deleteRoom();
+    } catch (error) {
+      logger.warn('@mastra/livekit: deleteRoom while ending the call failed', error);
+    }
+    ctx.shutdown(config.reason ?? DEFAULT_END_CALL_REASON);
+  }
+}
+
+/**
+ * Builds the per-turn hook that detects the agent's end-call tool and kicks off the hang-up once, or
+ * `undefined` when end-call isn't configured. The detector fires the teardown fire-and-forget (the
+ * turn never waits on it) and de-dupes so a repeated tool call can't start two hang-ups.
+ */
+function buildEndCallDetector(
+  config: EndCallConfiguration | undefined,
+  getSession: () => Pick<voice.AgentSession, 'agentState' | 'on' | 'off' | 'say'> | undefined,
+  ctx: Pick<JobContext, 'deleteRoom' | 'shutdown'>,
+  logger: WarnLogger,
+): VoiceTurnCompleteHook | undefined {
+  if (!config) return undefined;
+  const toolName = config.tool ?? DEFAULT_END_CALL_TOOL;
+  let triggered = false;
+  return turnCtx => {
+    if (triggered) return;
+    if (!turnCtx.result.toolCalls.some(call => call.toolName === toolName)) return;
+    const session = getSession();
+    if (!session) return;
+    triggered = true;
+    void runEndCall(session, ctx, config, logger);
+  };
+}
+
+/** Runs the worker's own turn-complete detector alongside the user's `onTurnComplete`, if any. */
+function composeTurnComplete(
+  user: VoiceTurnCompleteHook | undefined,
+  detector: VoiceTurnCompleteHook | undefined,
+): VoiceTurnCompleteHook | undefined {
+  if (!detector) return user;
+  return ctx => {
+    // The detector is fire-and-forget (it kicks off the hang-up itself); don't couple the user's
+    // hook to it.
+    void detector(ctx);
+    return user?.(ctx);
+  };
 }
 
 /**
@@ -711,13 +865,18 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           ? { everyMs: greetingConfig.repeatEvery, text: greetingConfig.repeatText }
           : undefined;
 
+      // Agent-initiated hang-up: watch each turn for the end-call tool, then (once) wait for the
+      // agent's closing words to play out and disconnect. Detected at the turn boundary alongside the
+      // user's onTurnComplete; the closure reads `session` (assigned just below, before any turn).
+      const endCallDetector = buildEndCallDetector(options.configuration?.endCall, () => session, ctx, logger);
+
       const agent = createMastraVoiceAgent({
         ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
         instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,
-        onTurnComplete: options.onTurnComplete,
+        onTurnComplete: composeTurnComplete(options.onTurnComplete, endCallDetector),
         greetingReminder,
         streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
