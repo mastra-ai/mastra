@@ -548,10 +548,16 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
     case 'text-start': {
       const lastMessage = result[result.length - 1];
       const textId = chunk.payload.id || `text-${Date.now()}`;
+      // Dedupe a repeated text-start only when the currently open (tail) text
+      // part already carries this id. Matching anywhere in the message would
+      // wrongly swallow a post-tool continuation that reuses the same text id
+      // (text → tool → text), leaving the second segment without its own part.
+      const tailPart = lastMessage?.content.parts[lastMessage.content.parts.length - 1];
       if (
         chunk.payload.id &&
         lastMessage?.role === 'assistant' &&
-        lastMessage.content.parts.some(part => part.type === 'text' && partTextId(part) === textId)
+        tailPart?.type === 'text' &&
+        partTextId(tailPart) === textId
       ) {
         return result;
       }
@@ -631,6 +637,19 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       if (textPartIndex === -1) {
         textPartIndex = parts.findLastIndex(part => part.type === 'text' && partState(part) === 'streaming');
+      }
+
+      // A text run is closed once a tool invocation is emitted after it. If the
+      // matched text part is followed by a tool-invocation (text → tool → text
+      // interleaving), this delta belongs to a NEW text segment; appending to
+      // the earlier part would merge the two text blocks and push the tool chip
+      // out of order in the live view (issue #18964). Storage persists them as
+      // separate parts, which is why a reload already renders correctly.
+      if (
+        textPartIndex !== -1 &&
+        parts.some((part, index) => index > textPartIndex && part.type === 'tool-invocation')
+      ) {
+        textPartIndex = -1;
       }
 
       if (textPartIndex === -1) {
