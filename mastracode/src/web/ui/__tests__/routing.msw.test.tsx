@@ -10,7 +10,7 @@ import type { AgentControllerSessionState } from '@mastra/client-js';
 import { QueryClient } from '@tanstack/react-query';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -95,7 +95,7 @@ const UNAUTHENTICATED = () => HttpResponse.json({ authenticated: false, user: nu
 const AUTHENTICATED = () =>
   HttpResponse.json({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
-function renderRoutes(initialEntry: string, authMe: () => Response) {
+function renderRoutes(initialEntry: string, authMe: () => Response | Promise<Response>) {
   seedProject();
   useAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
@@ -111,6 +111,18 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 }
 
 describe('MastraCode web routing', () => {
+  it('given the auth check is pending, when visiting /chat, then a skeleton renders instead of a blank screen', async () => {
+    renderRoutes('/chat', async () => {
+      await delay(150);
+      return new Response(null, { status: 404 });
+    });
+
+    expect(await screen.findByRole('status', { name: 'Checking sign-in' })).toBeInTheDocument();
+
+    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
+  });
+
   it('given auth is disabled, when visiting /chat, then the chat UI renders without auth affordances', async () => {
     const { router } = renderRoutes('/chat', AUTH_DISABLED);
 

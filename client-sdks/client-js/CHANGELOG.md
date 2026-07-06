@@ -1,5 +1,35 @@
 # @mastra/client-js
 
+## 1.31.0-alpha.3
+
+### Minor Changes
+
+- **Added unified schedule methods and deprecated heartbeat methods.** The client now manages agent schedules (previously heartbeats) and workflow schedules through one set of methods backed by `/api/schedules`. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+  Added `createSchedule()`, `updateSchedule()`, `deleteSchedule()`, and `runSchedule()`, alongside the existing `listSchedules()`, `getSchedule()`, `pauseSchedule()`, `resumeSchedule()`, and `listScheduleTriggers()`. `ScheduleResponse.target` is now a discriminated union of agent and workflow targets.
+
+  ```ts
+  // Schedule an agent (was createHeartbeat)
+  const schedule = await client.createSchedule({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  // Schedule a workflow with the same method
+  await client.createSchedule({
+    workflowId: 'daily-report',
+    cron: '0 6 * * *',
+  });
+  ```
+
+  Deprecated `listHeartbeats()`, `getHeartbeat()`, `createHeartbeat()`, `updateHeartbeat()`, `deleteHeartbeat()`, `pauseHeartbeat()`, `resumeHeartbeat()`, and `runHeartbeat()`. They now delegate to the schedule methods and will be removed in a future release.
+
+### Patch Changes
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+
 ## 1.30.1-alpha.2
 
 ### Patch Changes

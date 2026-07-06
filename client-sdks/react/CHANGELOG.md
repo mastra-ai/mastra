@@ -1,5 +1,15 @@
 # @mastra/react
 
+## 1.2.3-alpha.3
+
+### Patch Changes
+
+- Fixed Studio agent chat hanging on the first message when thread signals are enabled. When the thread subscription was aborted during mount, `useChat` cached the failed attempt and never retried it, so the assistant reply never arrived until a full page reload. The subscription is now retried on the next send. Also, when a send fails for any reason (subscription setup, request, or stream), `useChat` now resets its running state instead of leaving the chat spinner stuck until reload. ([#18903](https://github.com/mastra-ai/mastra/pull/18903))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/client-js@1.31.0-alpha.3
+
 ## 1.2.3-alpha.2
 
 ### Patch Changes

@@ -764,6 +764,7 @@ export function createDurableToolCallStep() {
               {
                 type: 'suspension',
                 toolCallSuspended: suspendPayload,
+                toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,
               },
