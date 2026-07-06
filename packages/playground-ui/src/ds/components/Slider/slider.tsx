@@ -14,6 +14,16 @@ function toArray(value: number | readonly number[]): number[] {
   return [...value];
 }
 
+function getSliderValues(value: SliderProps['value'], defaultValue: SliderProps['defaultValue'], min: number) {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  if (Array.isArray(defaultValue)) {
+    return defaultValue;
+  }
+  return [min];
+}
+
 const Slider = ({
   className,
   defaultValue,
@@ -24,15 +34,7 @@ const Slider = ({
   onValueCommitted,
   ...props
 }: SliderProps) => {
-  const values = (() => {
-    if (Array.isArray(value)) {
-      return value;
-    }
-    if (Array.isArray(defaultValue)) {
-      return defaultValue;
-    }
-    return [min];
-  })();
+  const values = getSliderValues(value, defaultValue, min);
 
   return (
     <SliderPrimitive.Root

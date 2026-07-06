@@ -236,6 +236,16 @@ function toDate(value: Date | string): Date | null {
   return isNaN(date.getTime()) ? null : date;
 }
 
+function formatDateCellLabel(date: Date | null) {
+  if (!date) {
+    return null;
+  }
+  if (isToday(date)) {
+    return 'Today';
+  }
+  return format(date, 'MMM dd');
+}
+
 export interface DataListDateCellProps {
   timestamp: Date | string;
 }
@@ -245,15 +255,7 @@ export function DataListDateCell({ timestamp }: DataListDateCellProps) {
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {(() => {
-        if (date) {
-          if (isToday(date)) {
-            return 'Today';
-          }
-          return format(date, 'MMM dd');
-        }
-        return null;
-      })()}
+      {formatDateCellLabel(date)}
     </DataListCell>
   );
 }

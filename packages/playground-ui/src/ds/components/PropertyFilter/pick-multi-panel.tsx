@@ -1,5 +1,4 @@
 import { useMemo, useState } from 'react';
-import type { ReactNode } from 'react';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
 import { Checkbox } from '@/ds/components/Checkbox';
 import { Input } from '@/ds/components/Input';
@@ -13,6 +12,148 @@ export type PickMultiPanelProps = {
   tokens: PropertyFilterToken[];
   onChange: (fieldId: string, value: string | string[] | undefined) => void;
 };
+
+type PickMultiOption = PickMultiField['options'][number];
+
+function getSelectedValue(token: PropertyFilterToken | undefined, field: PickMultiField) {
+  if (typeof token?.value === 'string') {
+    return token.value;
+  }
+  if (!field.multi) {
+    return field.defaultValue;
+  }
+  return undefined;
+}
+
+function getNextSelectedValues(selectedValues: string[], optionValue: string, isChecked: boolean) {
+  if (!isChecked) {
+    return selectedValues.filter(v => v !== optionValue);
+  }
+  if (selectedValues.includes(optionValue)) {
+    return selectedValues;
+  }
+  return [...selectedValues, optionValue];
+}
+
+function getPickMultiOptionLabelId(fieldId: string, optionValue: string) {
+  return `pick-multi-option-${fieldId}-${optionValue}`.replace(/[^A-Za-z0-9_-]/g, '_');
+}
+
+function isEventTargetInPickMultiControl(target: EventTarget | null) {
+  return target instanceof Element && target.closest('[data-pick-multi-control]') != null;
+}
+
+function PickMultiOptions({
+  field,
+  filteredOptions,
+  selectedValue,
+  selectedValues,
+  onChange,
+}: {
+  field: PickMultiField;
+  filteredOptions: PickMultiOption[];
+  selectedValue: string | undefined;
+  selectedValues: string[];
+  onChange: PickMultiPanelProps['onChange'];
+}) {
+  if (field.isLoading) {
+    return (
+      <div className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-neutral3">
+        <Spinner size="sm" className="size-3 text-neutral3" />
+        Loading options…
+      </div>
+    );
+  }
+  if (filteredOptions.length === 0) {
+    return <div className="px-2 py-1.5 text-ui-sm text-neutral3">{field.emptyText ?? 'No option found.'}</div>;
+  }
+  if (field.multi) {
+    return (
+      <div className="max-h-[80dvh] overflow-auto">
+        {filteredOptions.map(option => {
+          const checked = selectedValues.includes(option.value);
+          const labelId = getPickMultiOptionLabelId(field.id, option.value);
+          return (
+            <div
+              key={option.value}
+              title={option.label}
+              onPointerUp={event => {
+                if (isEventTargetInPickMultiControl(event.target)) return;
+                onChange(field.id, getNextSelectedValues(selectedValues, option.value, !checked));
+              }}
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+            >
+              <Checkbox
+                data-pick-multi-item=""
+                data-pick-multi-control=""
+                checked={checked}
+                aria-labelledby={labelId}
+                onCheckedChange={next =>
+                  onChange(field.id, getNextSelectedValues(selectedValues, option.value, next === true))
+                }
+                className="shrink-0"
+              />
+              <span id={labelId} className="truncate min-w-0 flex-1">
+                {option.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return (
+    <RadioGroup
+      value={selectedValue ?? ''}
+      onValueChange={value => onChange(field.id, value)}
+      className="max-h-[80dvh] gap-0 overflow-auto"
+    >
+      {filteredOptions.map(option => (
+        <div
+          key={option.value}
+          title={option.label}
+          onPointerUp={event => {
+            if (isEventTargetInPickMultiControl(event.target)) return;
+            onChange(field.id, option.value);
+          }}
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+        >
+          <RadioGroupItem
+            data-pick-multi-item=""
+            data-pick-multi-control=""
+            value={option.value}
+            aria-labelledby={getPickMultiOptionLabelId(field.id, option.value)}
+            className="shrink-0"
+          />
+          <span id={getPickMultiOptionLabelId(field.id, option.value)} className="truncate min-w-0 flex-1">
+            {option.label}
+          </span>
+        </div>
+      ))}
+      {!field.omitAnyOption && (
+        <div
+          title="Any"
+          onPointerUp={event => {
+            if (isEventTargetInPickMultiControl(event.target)) return;
+            onChange(field.id, 'Any');
+          }}
+          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
+        >
+          <RadioGroupItem
+            data-pick-multi-item=""
+            data-pick-multi-control=""
+            value="Any"
+            aria-labelledby={getPickMultiOptionLabelId(field.id, 'Any')}
+            className="shrink-0"
+          />
+          <span id={getPickMultiOptionLabelId(field.id, 'Any')} className="truncate min-w-0 flex-1">
+            Any
+          </span>
+        </div>
+      )}
+    </RadioGroup>
+  );
+}
 
 /**
  * Reusable body for a pick-multi side popover: optional search input plus a
@@ -32,96 +173,13 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
   const token = useMemo(() => tokens.find(t => t.fieldId === field.id), [tokens, field.id]);
   // Fall back to `defaultValue` when no token exists — lets view-toggle fields (e.g. List mode)
   // show their default option pre-selected before the user explicitly picks one.
-  let selectedValue: string | undefined;
-  if (typeof token?.value === 'string') {
-    selectedValue = token.value;
-  } else if (!field.multi) {
-    selectedValue = field.defaultValue;
-  }
+  const selectedValue = getSelectedValue(token, field);
   const selectedValues = useMemo<string[]>(() => {
     const value = token?.value;
     if (Array.isArray(value)) return value;
     if (typeof value === 'string') return [value];
     return [];
   }, [token]);
-
-  let optionsContent: ReactNode;
-  if (field.isLoading) {
-    optionsContent = (
-      <div className="flex items-center gap-2 px-2 py-1.5 text-ui-sm text-neutral3">
-        <Spinner size="sm" className="size-3 text-neutral3" />
-        Loading options…
-      </div>
-    );
-  } else if (filteredOptions.length === 0) {
-    optionsContent = (
-      <div className="px-2 py-1.5 text-ui-sm text-neutral3">{field.emptyText ?? 'No option found.'}</div>
-    );
-  } else if (field.multi) {
-    optionsContent = (
-      <div className="max-h-[80dvh] overflow-auto">
-        {filteredOptions.map(option => {
-          const checked = selectedValues.includes(option.value);
-          return (
-            <label
-              key={option.value}
-              title={option.label}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
-            >
-              <Checkbox
-                data-pick-multi-item=""
-                checked={checked}
-                onCheckedChange={next => {
-                  const isChecked = next === true;
-                  let nextValues: string[];
-                  if (isChecked) {
-                    if (selectedValues.includes(option.value)) {
-                      nextValues = selectedValues;
-                    } else {
-                      nextValues = [...selectedValues, option.value];
-                    }
-                  } else {
-                    nextValues = selectedValues.filter(v => v !== option.value);
-                  }
-                  onChange(field.id, nextValues);
-                }}
-                className="shrink-0"
-              />
-              <span className="truncate min-w-0 flex-1">{option.label}</span>
-            </label>
-          );
-        })}
-      </div>
-    );
-  } else {
-    optionsContent = (
-      <RadioGroup
-        value={selectedValue ?? ''}
-        onValueChange={value => onChange(field.id, value)}
-        className="max-h-[80dvh] gap-0 overflow-auto"
-      >
-        {filteredOptions.map(option => (
-          <label
-            key={option.value}
-            title={option.label}
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
-          >
-            <RadioGroupItem data-pick-multi-item="" value={option.value} className="shrink-0" />
-            <span className="truncate min-w-0 flex-1">{option.label}</span>
-          </label>
-        ))}
-        {!field.omitAnyOption && (
-          <label
-            title="Any"
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-ui-md text-neutral4 hover:bg-surface4 hover:text-neutral6 cursor-pointer focus-within:bg-surface4 focus-within:text-neutral6 min-w-0"
-          >
-            <RadioGroupItem data-pick-multi-item="" value="Any" className="shrink-0" />
-            <span className="truncate min-w-0 flex-1">Any</span>
-          </label>
-        )}
-      </RadioGroup>
-    );
-  }
 
   return (
     <>
@@ -144,7 +202,13 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
         />
       )}
 
-      {optionsContent}
+      <PickMultiOptions
+        field={field}
+        filteredOptions={filteredOptions}
+        selectedValue={selectedValue}
+        selectedValues={selectedValues}
+        onChange={onChange}
+      />
     </>
   );
 }

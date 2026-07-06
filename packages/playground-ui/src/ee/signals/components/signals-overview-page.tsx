@@ -130,6 +130,63 @@ interface SignalSectionProps {
   onSelectCluster: (signalName: string, topicId: string) => void;
 }
 
+function SignalClusterCountBadge({
+  isLoading,
+  isError,
+  topicCount,
+}: {
+  isLoading: boolean;
+  isError: boolean;
+  topicCount: number;
+}) {
+  if (isLoading) {
+    return <Skeleton className="h-badge-default w-20 rounded-full" aria-hidden="true" />;
+  }
+  if (isError) {
+    return null;
+  }
+  return (
+    <Badge variant="default">
+      {topicCount} {topicCount === 1 ? 'cluster' : 'clusters'}
+    </Badge>
+  );
+}
+
+function SignalSectionBody({
+  isLoading,
+  isError,
+  topics,
+  signalName,
+  onSelectCluster,
+}: {
+  isLoading: boolean;
+  isError: boolean;
+  topics: EntityLearningTopic[];
+  signalName: string;
+  onSelectCluster: (signalName: string, topicId: string) => void;
+}) {
+  if (isLoading) {
+    return <SignalSectionSkeleton />;
+  }
+  if (isError) {
+    return <p className="px-1 text-ui-md text-accent2">Failed to load clusters for this signal.</p>;
+  }
+  if (topics.length === 0) {
+    return <p className="px-1 text-ui-md text-neutral3">No clusters found for this signal yet.</p>;
+  }
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      {topics.map(topic => (
+        <SignalClusterCard
+          key={topic.topicId}
+          topic={topic}
+          onSelect={topicId => onSelectCluster(signalName, topicId)}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function SignalSection({ entity, catalog, signalName, onSeeDetails, onSelectCluster }: SignalSectionProps) {
   // No runId: the API resolves the latest run per signal. `entity.latestRunId`
   // is entity-wide and belongs to a single signal, so reusing it here would
@@ -137,45 +194,13 @@ export function SignalSection({ entity, catalog, signalName, onSeeDetails, onSel
   const { data, isLoading, isError } = useEntityTopics(entity.entityId, signalName);
   const topics = data?.topics ?? [];
 
-  let clusterCountBadge = null;
-  if (isLoading) {
-    clusterCountBadge = <Skeleton className="h-badge-default w-20 rounded-full" aria-hidden="true" />;
-  } else if (!isError) {
-    clusterCountBadge = (
-      <Badge variant="default">
-        {topics.length} {topics.length === 1 ? 'cluster' : 'clusters'}
-      </Badge>
-    );
-  }
-
-  let sectionBody;
-  if (isLoading) {
-    sectionBody = <SignalSectionSkeleton />;
-  } else if (isError) {
-    sectionBody = <p className="px-1 text-ui-md text-accent2">Failed to load clusters for this signal.</p>;
-  } else if (topics.length === 0) {
-    sectionBody = <p className="px-1 text-ui-md text-neutral3">No clusters found for this signal yet.</p>;
-  } else {
-    sectionBody = (
-      <div className="grid gap-6 md:grid-cols-2">
-        {topics.map(topic => (
-          <SignalClusterCard
-            key={topic.topicId}
-            topic={topic}
-            onSelect={topicId => onSelectCluster(signalName, topicId)}
-          />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <section className="space-y-4">
       <header className="flex items-start justify-between gap-6 px-1">
         <div className="min-w-0">
           <div className="flex items-center gap-3">
             <h2 className="text-ui-2xl font-semibold text-neutral6">{catalog.name}</h2>
-            {clusterCountBadge}
+            <SignalClusterCountBadge isLoading={isLoading} isError={isError} topicCount={topics.length} />
           </div>
           {catalog.description ? <p className="text-ui-lg text-neutral3">{catalog.description}</p> : null}
         </div>
@@ -192,7 +217,13 @@ export function SignalSection({ entity, catalog, signalName, onSeeDetails, onSel
         </Button>
       </header>
 
-      {sectionBody}
+      <SignalSectionBody
+        isLoading={isLoading}
+        isError={isError}
+        topics={topics}
+        signalName={signalName}
+        onSelectCluster={onSelectCluster}
+      />
     </section>
   );
 }
@@ -201,6 +232,91 @@ export interface SignalsOverviewPageProps {
   selectedEntity: SelectedEntity | null;
   onEntityChange: (selected: SelectedEntity | null) => void;
   onSignalSelect: (signalName: string, topicId?: string) => void;
+}
+
+function SignalsOverviewContent({
+  isLoading,
+  isError,
+  entities,
+  entity,
+  selectedEntity,
+  onEntityChange,
+  onSignalSelect,
+}: {
+  isLoading: boolean;
+  isError: boolean;
+  entities: EntityLearningEntitySummary[];
+  entity: EntityLearningEntitySummary | undefined;
+  selectedEntity: SelectedEntity | null;
+  onEntityChange: (selected: SelectedEntity | null) => void;
+  onSignalSelect: (signalName: string, topicId?: string) => void;
+}) {
+  if (isLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState iconSlot={<Spinner />} titleSlot="Loading entities…" />
+      </div>
+    );
+  }
+  if (isError) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          iconSlot={<CircleSlashIcon />}
+          titleSlot="Failed to load entities"
+          descriptionSlot="Failed to load entities from the observability endpoint."
+        />
+      </div>
+    );
+  }
+  if (entities.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          iconSlot={<InboxIcon />}
+          titleSlot="No entities available"
+          descriptionSlot="No entities are available on the server yet."
+        />
+      </div>
+    );
+  }
+  if (!entity) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          iconSlot={<MousePointerClickIcon />}
+          titleSlot="No entity selected"
+          descriptionSlot="Select an entity to inspect its signals and clusters."
+          actionSlot={<SignalsEntityFilter entities={entities} selected={selectedEntity} onChange={onEntityChange} />}
+        />
+      </div>
+    );
+  }
+  if (entity.availableSignals.length === 0) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <EmptyState
+          iconSlot={<InboxIcon />}
+          titleSlot="No signals yet"
+          descriptionSlot="This entity has no signals yet."
+        />
+      </div>
+    );
+  }
+  return (
+    <div className="mx-auto flex max-w-6xl flex-col gap-12">
+      {entity.availableSignals.map(signalName => (
+        <SignalSection
+          key={signalName}
+          entity={entity}
+          signalName={signalName}
+          catalog={getSignalCatalogEntry(signalName)}
+          onSeeDetails={onSignalSelect}
+          onSelectCluster={onSignalSelect}
+        />
+      ))}
+    </div>
+  );
 }
 
 export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSelect }: SignalsOverviewPageProps) {
@@ -214,71 +330,6 @@ export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSe
   // shows the top bar with an empty agent dropdown.
   const showFilterBar = Boolean(entity);
 
-  let content;
-  if (isLoading) {
-    content = (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState iconSlot={<Spinner />} titleSlot="Loading entities…" />
-      </div>
-    );
-  } else if (isError) {
-    content = (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<CircleSlashIcon />}
-          titleSlot="Failed to load entities"
-          descriptionSlot="Failed to load entities from the observability endpoint."
-        />
-      </div>
-    );
-  } else if (entities.length === 0) {
-    content = (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<InboxIcon />}
-          titleSlot="No entities available"
-          descriptionSlot="No entities are available on the server yet."
-        />
-      </div>
-    );
-  } else if (!entity) {
-    content = (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<MousePointerClickIcon />}
-          titleSlot="No entity selected"
-          descriptionSlot="Select an entity to inspect its signals and clusters."
-          actionSlot={<SignalsEntityFilter entities={entities} selected={selectedEntity} onChange={onEntityChange} />}
-        />
-      </div>
-    );
-  } else if (entity.availableSignals.length === 0) {
-    content = (
-      <div className="flex h-full items-center justify-center">
-        <EmptyState
-          iconSlot={<InboxIcon />}
-          titleSlot="No signals yet"
-          descriptionSlot="This entity has no signals yet."
-        />
-      </div>
-    );
-  } else {
-    content = (
-      <div className="mx-auto flex max-w-6xl flex-col gap-12">
-        {entity.availableSignals.map(signalName => (
-          <SignalSection
-            key={signalName}
-            entity={entity}
-            signalName={signalName}
-            catalog={getSignalCatalogEntry(signalName)}
-            onSeeDetails={onSignalSelect}
-            onSelectCluster={onSignalSelect}
-          />
-        ))}
-      </div>
-    );
-  }
-
   return (
     <TopicsLayout sidebar={null} contentPadding={false}>
       <div className="flex h-full min-w-0 flex-col" aria-label="Signals">
@@ -288,7 +339,17 @@ export function SignalsOverviewPage({ selectedEntity, onEntityChange, onSignalSe
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">{content}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <SignalsOverviewContent
+            isLoading={isLoading}
+            isError={isError}
+            entities={entities}
+            entity={entity}
+            selectedEntity={selectedEntity}
+            onEntityChange={onEntityChange}
+            onSignalSelect={onSignalSelect}
+          />
+        </div>
       </div>
     </TopicsLayout>
   );

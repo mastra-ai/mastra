@@ -14,6 +14,29 @@ export interface TracesLayoutProps {
   traceCollapsed?: boolean;
 }
 
+function getTracesPanelGridRows({
+  spanPanelSlot,
+  scorePanelSlot,
+  traceCollapsed,
+}: Pick<TracesLayoutProps, 'spanPanelSlot' | 'scorePanelSlot' | 'traceCollapsed'>) {
+  if (scorePanelSlot) {
+    if (traceCollapsed) {
+      return 'grid-rows-[auto_3fr_3fr]';
+    }
+    return 'grid-rows-[2fr_3fr_3fr]';
+  }
+  if (spanPanelSlot) {
+    if (traceCollapsed) {
+      return 'grid-rows-[auto_3fr]';
+    }
+    return 'grid-rows-[2fr_3fr]';
+  }
+  if (traceCollapsed) {
+    return 'grid-rows-[auto]';
+  }
+  return 'grid-rows-[1fr]';
+}
+
 /**
  * Pure 2-column layout shell for the traces page. Owns no state and fetches no data — pass slots in.
  * Right-column row template adapts based on which panels are present.
@@ -40,24 +63,7 @@ export function TracesLayout({
         <div
           className={cn(
             'grid gap-4 max-h-full overflow-auto',
-            (() => {
-              if (scorePanelSlot) {
-                if (traceCollapsed) {
-                  return 'grid-rows-[auto_3fr_3fr]';
-                }
-                return 'grid-rows-[2fr_3fr_3fr]';
-              }
-              if (spanPanelSlot) {
-                if (traceCollapsed) {
-                  return 'grid-rows-[auto_3fr]';
-                }
-                return 'grid-rows-[2fr_3fr]';
-              }
-              if (traceCollapsed) {
-                return 'grid-rows-[auto]';
-              }
-              return 'grid-rows-[1fr]';
-            })(),
+            getTracesPanelGridRows({ spanPanelSlot, scorePanelSlot, traceCollapsed }),
           )}
         >
           {tracePanelSlot}

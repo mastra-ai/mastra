@@ -106,6 +106,35 @@ function SignalTraceListSkeleton({ rows = 8 }: { rows?: number }) {
   );
 }
 
+function SignalTraceListRows({
+  loading,
+  visible,
+  selectedTraceId,
+  onTraceSelect,
+}: {
+  loading: boolean;
+  visible: EntityLearningTopicExample[];
+  selectedTraceId: string | null;
+  onTraceSelect: (traceId: string) => void;
+}) {
+  if (loading) {
+    return <SignalTraceListSkeleton />;
+  }
+  if (visible.length === 0) {
+    return <DataList.NoMatch message="No traces match this subtopic." />;
+  }
+  return visible.map(example => (
+    <DataList.RowButton
+      key={example.exampleId}
+      featured={selectedTraceId === example.traceId}
+      onClick={() => onTraceSelect(example.traceId)}
+      aria-pressed={selectedTraceId === example.traceId}
+    >
+      <DataList.TextCell>{example.signalText}</DataList.TextCell>
+    </DataList.RowButton>
+  ));
+}
+
 function SignalClusterSidebarSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-hidden="true">
@@ -198,24 +227,12 @@ export function SignalTraceListTab({
           </DataList.TopCells>
         </DataList.Top>
 
-        {(() => {
-          if (loading) {
-            return <SignalTraceListSkeleton />;
-          }
-          if (visible.length === 0) {
-            return <DataList.NoMatch message="No traces match this subtopic." />;
-          }
-          return visible.map(example => (
-            <DataList.RowButton
-              key={example.exampleId}
-              featured={selectedTraceId === example.traceId}
-              onClick={() => onTraceSelect(example.traceId)}
-              aria-pressed={selectedTraceId === example.traceId}
-            >
-              <DataList.TextCell>{example.signalText}</DataList.TextCell>
-            </DataList.RowButton>
-          ));
-        })()}
+        <SignalTraceListRows
+          loading={loading}
+          visible={visible}
+          selectedTraceId={selectedTraceId}
+          onTraceSelect={onTraceSelect}
+        />
       </DataList>
 
       {hasMore && !loading ? (

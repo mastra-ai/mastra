@@ -32,29 +32,31 @@ const langAliases: Record<string, string> = {
 
 let highlighterPromise: Promise<HighlighterCore> | null = null;
 
+async function createHighlighter() {
+  const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] = await Promise.all([
+    import('shiki/core'),
+    import('shiki/engine/javascript'),
+  ]);
+
+  return createHighlighterCore({
+    themes: [import('shiki/themes/github-light.mjs'), import('shiki/themes/github-dark.mjs')],
+    langs: [
+      import('shiki/langs/javascript.mjs'),
+      import('shiki/langs/typescript.mjs'),
+      import('shiki/langs/tsx.mjs'),
+      import('shiki/langs/jsx.mjs'),
+      import('shiki/langs/json.mjs'),
+      import('shiki/langs/bash.mjs'),
+      import('shiki/langs/markdown.mjs'),
+      import('shiki/langs/python.mjs'),
+    ],
+    engine: createJavaScriptRegexEngine(),
+  });
+}
+
 function getHighlighter(): Promise<HighlighterCore> {
   if (!highlighterPromise) {
-    highlighterPromise = (async () => {
-      const [{ createHighlighterCore }, { createJavaScriptRegexEngine }] = await Promise.all([
-        import('shiki/core'),
-        import('shiki/engine/javascript'),
-      ]);
-
-      return createHighlighterCore({
-        themes: [import('shiki/themes/github-light.mjs'), import('shiki/themes/github-dark.mjs')],
-        langs: [
-          import('shiki/langs/javascript.mjs'),
-          import('shiki/langs/typescript.mjs'),
-          import('shiki/langs/tsx.mjs'),
-          import('shiki/langs/jsx.mjs'),
-          import('shiki/langs/json.mjs'),
-          import('shiki/langs/bash.mjs'),
-          import('shiki/langs/markdown.mjs'),
-          import('shiki/langs/python.mjs'),
-        ],
-        engine: createJavaScriptRegexEngine(),
-      });
-    })();
+    highlighterPromise = createHighlighter();
   }
 
   return highlighterPromise;

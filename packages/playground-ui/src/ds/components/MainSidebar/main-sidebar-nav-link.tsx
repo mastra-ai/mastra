@@ -47,6 +47,56 @@ type SlottedNavChildProps = {
   className?: string;
 };
 
+function getTooltipContent(link: NavLink, isCollapsed: boolean) {
+  if (link.tooltipMsg) {
+    if (isCollapsed) {
+      return `${link.name} | ${link.tooltipMsg}`;
+    }
+    return link.tooltipMsg;
+  }
+  return link.name;
+}
+
+function createInteractiveElement({
+  asChild,
+  children,
+  itemClassName,
+  link,
+  Link,
+  linkParams,
+  state,
+}: {
+  asChild: boolean;
+  children: React.ReactNode;
+  itemClassName: string;
+  link?: NavLink;
+  Link: LinkComponent;
+  linkParams: { target?: string; rel?: string };
+  state: SidebarState;
+}) {
+  if (asChild) {
+    if (!React.isValidElement<SlottedNavChildProps>(children)) {
+      throw new Error(
+        'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
+      );
+    }
+
+    return React.cloneElement(children, {
+      className: cn(itemClassName, children.props.className),
+    });
+  }
+  if (link) {
+    return (
+      <Link href={link.url} {...linkParams} className={itemClassName}>
+        {link.icon}
+        <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
+        {children}
+      </Link>
+    );
+  }
+  return null;
+}
+
 export function MainSidebarNavLink({
   link,
   state: stateProp,
@@ -77,27 +127,7 @@ export function MainSidebarNavLink({
     level,
   });
 
-  let interactiveEl: React.ReactNode = null;
-
-  if (asChild) {
-    if (!React.isValidElement<SlottedNavChildProps>(children)) {
-      throw new Error(
-        'MainSidebarNavLink requires a valid React element child when `asChild` is true so it can apply `SlottedNavChildProps` and merge `itemClassName`.',
-      );
-    }
-
-    interactiveEl = React.cloneElement(children, {
-      className: cn(itemClassName, children.props.className),
-    });
-  } else if (link) {
-    interactiveEl = (
-      <Link href={link.url} {...linkParams} className={itemClassName}>
-        {link.icon}
-        <MainSidebarNavLabel state={state}>{link.name}</MainSidebarNavLabel>
-        {children}
-      </Link>
-    );
-  }
+  const interactiveEl = createInteractiveElement({ asChild, children, itemClassName, link, Link, linkParams, state });
 
   return (
     <li {...props} className={cn('flex flex-col relative min-w-0', className)}>
@@ -105,15 +135,7 @@ export function MainSidebarNavLink({
         <Tooltip>
           <TooltipTrigger render={interactiveEl} />
           <TooltipContent side="right" align="center" sideOffset={16}>
-            {(() => {
-              if (link.tooltipMsg) {
-                if (isCollapsed) {
-                  return `${link.name} | ${link.tooltipMsg}`;
-                }
-                return link.tooltipMsg;
-              }
-              return link.name;
-            })()}
+            {getTooltipContent(link, isCollapsed)}
           </TooltipContent>
         </Tooltip>
       ) : (

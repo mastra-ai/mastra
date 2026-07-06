@@ -102,6 +102,16 @@ function clampScrollButtonNumber(value: number | undefined, fallback: number, mi
   return Number.isFinite(resolvedValue) ? Math.max(min, resolvedValue) : Math.max(min, fallback);
 }
 
+function getContentStyle(orientation: Orientation): React.CSSProperties | undefined {
+  if (orientation === 'vertical') {
+    return { minWidth: '0px' };
+  }
+  if (orientation === 'horizontal') {
+    return { minHeight: '0px' };
+  }
+  return undefined;
+}
+
 type ScrollButtonProps = {
   direction: ScrollButtonDirection;
   label: string;
@@ -268,15 +278,7 @@ const ScrollArea = React.forwardRef<HTMLDivElement, ScrollAreaProps>(
     // content can grow wider than the viewport (required for horizontal scroll
     // measurement). For vertical-only scroll we override it so children shrink
     // to the viewport width instead of forcing horizontal scroll.
-    const contentStyle: React.CSSProperties | undefined = (() => {
-      if (orientation === 'vertical') {
-        return { minWidth: '0px' };
-      }
-      if (orientation === 'horizontal') {
-        return { minHeight: '0px' };
-      }
-      return undefined;
-    })();
+    const contentStyle = getContentStyle(orientation);
 
     return (
       <ScrollAreaPrimitive.Root

@@ -13,6 +13,16 @@ function computeTraceStatus(span: { error?: unknown; endedAt?: Date | string | n
   return TraceStatus.SUCCESS;
 }
 
+function getTraceStatusLabel(status: TraceStatus) {
+  if (status === TraceStatus.ERROR) {
+    return 'ERROR';
+  }
+  if (status === TraceStatus.RUNNING) {
+    return 'RUNNING';
+  }
+  return 'SUCCESS';
+}
+
 /** Lightweight root-span fields available from `useTraceLightSpans`. */
 type RootSpanSummary = {
   entityId?: string | null;
@@ -33,15 +43,7 @@ export function TraceKeysAndValues({ rootSpan, numOfCol = 2, className }: TraceK
   const startedAt = rootSpan.startedAt ? new Date(rootSpan.startedAt) : null;
   const endedAt = rootSpan.endedAt ? new Date(rootSpan.endedAt) : null;
   const status = computeTraceStatus(rootSpan);
-  const statusLabel = (() => {
-    if (status === TraceStatus.ERROR) {
-      return 'ERROR';
-    }
-    if (status === TraceStatus.RUNNING) {
-      return 'RUNNING';
-    }
-    return 'SUCCESS';
-  })();
+  const statusLabel = getTraceStatusLabel(status);
 
   return (
     <DataKeysAndValues numOfCol={numOfCol} className={className}>

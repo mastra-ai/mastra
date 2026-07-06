@@ -10,6 +10,26 @@ function toDate(value: Date | string): Date | null {
   return isNaN(date.getTime()) ? null : date;
 }
 
+function formatScoreDateCellLabel(date: Date | null) {
+  if (!date) {
+    return '-';
+  }
+  if (isToday(date)) {
+    return 'Today';
+  }
+  return format(date, 'MMM dd');
+}
+
+function formatScoreCellValue(score: unknown) {
+  if (score == null) {
+    return '-';
+  }
+  if (typeof score === 'object') {
+    return JSON.stringify(score);
+  }
+  return String(score);
+}
+
 // ---------------------------------------------------------------------------
 // DateCell
 // ---------------------------------------------------------------------------
@@ -22,15 +42,7 @@ export function ScoresDataListDateCell({ timestamp }: ScoresDataListDateCellProp
   const date = toDate(timestamp);
   return (
     <DataListCell height="compact" className="text-ui-smd text-neutral2">
-      {(() => {
-        if (date) {
-          if (isToday(date)) {
-            return 'Today';
-          }
-          return format(date, 'MMM dd');
-        }
-        return '-';
-      })()}
+      {formatScoreDateCellLabel(date)}
     </DataListCell>
   );
 }
@@ -95,15 +107,7 @@ export interface ScoresDataListScoreCellProps {
 }
 
 export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps) {
-  const display = (() => {
-    if (score == null) {
-      return '-';
-    }
-    if (typeof score === 'object') {
-      return JSON.stringify(score);
-    }
-    return String(score);
-  })();
+  const display = formatScoreCellValue(score);
   return (
     <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
       {display}

@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { MetricsKpiCard } from '../../../ds/components/MetricsKpiCard';
 
 export interface KpiCardViewProps {
@@ -10,29 +9,41 @@ export interface KpiCardViewProps {
   isError: boolean;
 }
 
+function KpiCardStatus({
+  hasData,
+  prevValue,
+  changePct,
+  isLoading,
+  isError,
+}: Pick<KpiCardViewProps, 'prevValue' | 'changePct' | 'isLoading' | 'isError'> & { hasData: boolean }) {
+  if (isError) {
+    return <MetricsKpiCard.Error />;
+  }
+  if (isLoading) {
+    return <MetricsKpiCard.Loading />;
+  }
+  if (hasData) {
+    if (changePct != null) {
+      return <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} />;
+    }
+    return <MetricsKpiCard.NoChange />;
+  }
+  return <MetricsKpiCard.NoData />;
+}
+
 export function KpiCardView({ label, value, prevValue, changePct, isLoading, isError }: KpiCardViewProps) {
   const hasData = value != null;
-  let statusSlot: ReactNode;
-
-  if (isError) {
-    statusSlot = <MetricsKpiCard.Error />;
-  } else if (isLoading) {
-    statusSlot = <MetricsKpiCard.Loading />;
-  } else if (hasData) {
-    if (changePct != null) {
-      statusSlot = <MetricsKpiCard.Change changePct={changePct} prevValue={prevValue} />;
-    } else {
-      statusSlot = <MetricsKpiCard.NoChange />;
-    }
-  } else {
-    statusSlot = <MetricsKpiCard.NoData />;
-  }
-
   return (
     <MetricsKpiCard>
       <MetricsKpiCard.Label>{label}</MetricsKpiCard.Label>
       <MetricsKpiCard.Value className={hasData ? undefined : 'invisible'}>{hasData ? value : '—'}</MetricsKpiCard.Value>
-      {statusSlot}
+      <KpiCardStatus
+        hasData={hasData}
+        prevValue={prevValue}
+        changePct={changePct}
+        isLoading={isLoading}
+        isError={isError}
+      />
     </MetricsKpiCard>
   );
 }

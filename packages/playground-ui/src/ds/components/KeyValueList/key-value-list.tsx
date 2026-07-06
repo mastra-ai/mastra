@@ -29,11 +29,59 @@ export type KeyValueListProps = {
   LinkComponent?: LinkComponent;
 };
 
-export function KeyValueList({ data, className, labelsAreHidden, isLoading, LinkComponent: Link }: KeyValueListProps) {
-  const LabelWrapper = ({ children }: { children: React.ReactNode }) => {
-    return labelsAreHidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
-  };
+function KeyValueLabel({ hidden, children }: { hidden?: boolean; children: React.ReactNode }) {
+  return hidden ? <VisuallyHidden>{children}</VisuallyHidden> : children;
+}
 
+function getLoadingValueWidth(index: number) {
+  return `${50 + ((index * 17) % 41)}%`;
+}
+
+function KeyValueValue({
+  value,
+  isLoading,
+  Link,
+  index,
+}: {
+  value: Value;
+  isLoading?: boolean;
+  Link?: LinkComponent;
+  index: number;
+}) {
+  if (isLoading) {
+    return (
+      <span className={cn('bg-surface4 rounded-e-lg w-full')} style={{ width: getLoadingValueWidth(index) }}>
+        &nbsp;
+      </span>
+    );
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => {
+      if (item.path && Link) {
+        return (
+          <RelationWrapper description={item.description} key={item.id}>
+            <Link href={item.path}>
+              {item?.name} <ChevronRightIcon />
+            </Link>
+          </RelationWrapper>
+        );
+      }
+      if (item.path) {
+        return (
+          <RelationWrapper description={item.description} key={item.id}>
+            <a href={item.path}>
+              {item?.name} <ChevronRightIcon />
+            </a>
+          </RelationWrapper>
+        );
+      }
+      return <span key={item.id}>{item?.name}</span>;
+    });
+  }
+  return <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>;
+}
+
+export function KeyValueList({ data, className, labelsAreHidden, isLoading, LinkComponent: Link }: KeyValueListProps) {
   if (!data || data.length === 0) {
     return null;
   }
@@ -41,8 +89,6 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
   return (
     <dl className={cn('grid grid-cols-[auto_1fr] gap-x-4 items-start content-start', className)}>
       {data.map(({ label, value, icon, separator }, index) => {
-        const isValueItemArray = Array.isArray(value);
-
         return (
           <React.Fragment key={label + index}>
             <dt className={cn('text-neutral3 text-ui-md flex items-center gap-8 justify-between min-h-9')}>
@@ -55,7 +101,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                   },
                 )}
               >
-                {icon} <LabelWrapper>{label}</LabelWrapper>
+                {icon} <KeyValueLabel hidden={labelsAreHidden}>{label}</KeyValueLabel>
               </span>
               {!labelsAreHidden && (
                 <span className={cn('text-neutral3', '[&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:text-neutral3')}>
@@ -71,42 +117,7 @@ export function KeyValueList({ data, className, labelsAreHidden, isLoading, Link
                 '[&>a>svg]:w-[1em] [&>a>svg]:h-[1em] [&>a>svg]:text-neutral3 [&>a>svg]:ml-[-0.5em]',
               )}
             >
-              {(() => {
-                if (isLoading) {
-                  return (
-                    <span
-                      className={cn('bg-surface4 rounded-e-lg w-full')}
-                      style={{ width: `${Math.floor(Math.random() * (90 - 30 + 1)) + 50}%` }}
-                    >
-                      &nbsp;
-                    </span>
-                  );
-                }
-                if (isValueItemArray) {
-                  return value?.map(item => {
-                    if (item.path && Link) {
-                      return (
-                        <RelationWrapper description={item.description} key={item.id}>
-                          <Link href={item.path}>
-                            {item?.name} <ChevronRightIcon />
-                          </Link>
-                        </RelationWrapper>
-                      );
-                    }
-                    if (item.path) {
-                      return (
-                        <RelationWrapper description={item.description} key={item.id}>
-                          <a href={item.path}>
-                            {item?.name} <ChevronRightIcon />
-                          </a>
-                        </RelationWrapper>
-                      );
-                    }
-                    return <span key={item.id}>{item?.name}</span>;
-                  });
-                }
-                return <>{value ? value : <span className="text-neutral3 text-ui-sm">n/a</span>}</>;
-              })()}
+              <KeyValueValue value={value} isLoading={isLoading} Link={Link} index={index} />
             </dd>
           </React.Fragment>
         );

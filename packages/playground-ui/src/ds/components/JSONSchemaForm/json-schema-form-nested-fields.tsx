@@ -3,11 +3,22 @@ import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import { JSONSchemaFormNestedProvider } from './json-schema-form-nested-context';
 import { createField } from './types';
+import type { SchemaField } from './types';
 import { cn } from '@/lib/utils';
 
 export interface JSONSchemaFormNestedFieldsProps {
   className?: string;
   children?: React.ReactNode;
+}
+
+function getNestedFields(field: SchemaField) {
+  if (field.type === 'object') {
+    return field.properties || [];
+  }
+  if (field.type === 'array' && field.items) {
+    return field.items.properties || [];
+  }
+  return [];
 }
 
 export function NestedFields({ className, children }: JSONSchemaFormNestedFieldsProps) {
@@ -37,15 +48,7 @@ export function NestedFields({ className, children }: JSONSchemaFormNestedFields
 
   // For objects, show properties directly
   // For arrays, show the items schema's properties (items is always an object)
-  const nestedFields = (() => {
-    if (field.type === 'object') {
-      return field.properties || [];
-    }
-    if (field.type === 'array' && field.items) {
-      return field.items.properties || [];
-    }
-    return [];
-  })();
+  const nestedFields = getNestedFields(field);
 
   return (
     <JSONSchemaFormNestedProvider value={{ parentPath: nestedPath, depth: nestedDepth, fields: nestedFields }}>

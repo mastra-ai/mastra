@@ -34,6 +34,19 @@ const PRESET_MS: Partial<Record<TraceDatePreset, number>> = {
   'last-30d': 30 * DAY_MS,
 };
 
+function parseSpanTab(tabParam: string | null): SpanTab | undefined {
+  if (tabParam === 'scoring') {
+    return 'scoring';
+  }
+  if (tabParam === 'feedback') {
+    return 'feedback';
+  }
+  if (tabParam === 'details') {
+    return 'details';
+  }
+  return undefined;
+}
+
 /** Mutates `params` in place to drop the featured trace/span/tab/score selection.
  *  Used whenever a filter changes — selection no longer makes sense in the new result set. */
 function clearSelectionParams(params: URLSearchParams) {
@@ -167,18 +180,7 @@ export function useTraceUrlState(
    *  while the user navigates between spans inside the panel (which only changes spanIdParam). */
   const anchorSpanIdParam = searchParams.get(TRACE_ANCHOR_SPAN_ID_PARAM) || undefined;
   const tabParam = searchParams.get(TAB_PARAM);
-  const spanTabParam: SpanTab | undefined = (() => {
-    if (tabParam === 'scoring') {
-      return 'scoring';
-    }
-    if (tabParam === 'feedback') {
-      return 'feedback';
-    }
-    if (tabParam === 'details') {
-      return 'details';
-    }
-    return undefined;
-  })();
+  const spanTabParam = parseSpanTab(tabParam);
   const scoreIdParam = searchParams.get(SCORE_ID_PARAM) || undefined;
 
   const listMode = useMemo<TraceListMode>(() => {

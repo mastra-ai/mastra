@@ -28,6 +28,90 @@ function isTokenUsageTab(value: string): value is TokenUsageTab {
   return value === 'tokens' || value === 'cost';
 }
 
+function TokenUsageByAgentCardBody({
+  rows,
+  isLoading,
+  isError,
+  activeTab,
+  setActiveTab,
+  costRows,
+  hasCostData,
+  costUnit,
+  getRowHref,
+  LinkComponent,
+}: {
+  rows: TokenUsageByAgentRow[];
+  isLoading: boolean;
+  isError: boolean;
+  activeTab: TokenUsageTab;
+  setActiveTab: (tab: TokenUsageTab) => void;
+  costRows: (TokenUsageByAgentRow & { cost: number })[];
+  hasCostData: boolean;
+  costUnit: string | null;
+  getRowHref?: (row: TokenUsageByAgentRow) => string | undefined;
+  LinkComponent?: LinkComponent;
+}) {
+  if (isLoading) {
+    return <MetricsCard.Loading />;
+  }
+  if (isError) {
+    return <MetricsCard.Error message="Failed to load token usage data" />;
+  }
+  return (
+    <MetricsCard.Content>
+      {rows.length === 0 ? (
+        <MetricsCard.NoData message="No token usage data yet" />
+      ) : (
+        <Tabs
+          defaultTab="tokens"
+          value={activeTab}
+          onValueChange={v => {
+            if (isTokenUsageTab(v)) setActiveTab(v);
+          }}
+          className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
+        >
+          <TabList>
+            <Tab value="tokens">Tokens</Tab>
+            <Tab value="cost">Cost</Tab>
+          </TabList>
+          <TabContent value="tokens">
+            <HorizontalBars
+              LinkComponent={LinkComponent}
+              data={rows.map(d => ({
+                name: d.name,
+                values: [d.input, d.output],
+                href: getRowHref?.(d),
+              }))}
+              segments={[
+                { label: 'Input', color: CHART_COLORS.blueDark },
+                { label: 'Output', color: CHART_COLORS.blue },
+              ]}
+              maxVal={Math.max(...rows.map(d => d.input + d.output))}
+              fmt={formatCompact}
+            />
+          </TabContent>
+          <TabContent value="cost">
+            {hasCostData ? (
+              <HorizontalBars
+                LinkComponent={LinkComponent}
+                data={costRows
+                  .slice()
+                  .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))
+                  .map(d => ({ name: d.name, values: [d.cost], href: getRowHref?.(d) }))}
+                segments={[{ label: 'Cost', color: CHART_COLORS.purple }]}
+                maxVal={Math.max(...costRows.map(d => d.cost ?? 0))}
+                fmt={v => formatCost(v, costUnit)}
+              />
+            ) : (
+              <MetricsCard.NoData message="No cost data yet" />
+            )}
+          </TabContent>
+        </Tabs>
+      )}
+    </MetricsCard.Content>
+  );
+}
+
 export function TokenUsageByAgentCardView({
   data,
   isLoading,
@@ -47,67 +131,6 @@ export function TokenUsageByAgentCardView({
   const costUnit = hasSingleCostUnit ? ([...uniqueCostUnits][0] ?? 'usd') : null;
   const totalCost = hasSingleCostUnit ? costRows.reduce((s, d) => s + (d.cost ?? 0), 0) : 0;
   const hasCostData = hasSingleCostUnit && totalCost > 0;
-  let cardBody: ReactNode;
-
-  if (isLoading) {
-    cardBody = <MetricsCard.Loading />;
-  } else if (isError) {
-    cardBody = <MetricsCard.Error message="Failed to load token usage data" />;
-  } else {
-    cardBody = (
-      <MetricsCard.Content>
-        {!hasData ? (
-          <MetricsCard.NoData message="No token usage data yet" />
-        ) : (
-          <Tabs
-            defaultTab="tokens"
-            value={activeTab}
-            onValueChange={v => {
-              if (isTokenUsageTab(v)) setActiveTab(v);
-            }}
-            className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
-          >
-            <TabList>
-              <Tab value="tokens">Tokens</Tab>
-              <Tab value="cost">Cost</Tab>
-            </TabList>
-            <TabContent value="tokens">
-              <HorizontalBars
-                LinkComponent={LinkComponent}
-                data={rows.map(d => ({
-                  name: d.name,
-                  values: [d.input, d.output],
-                  href: getRowHref?.(d),
-                }))}
-                segments={[
-                  { label: 'Input', color: CHART_COLORS.blueDark },
-                  { label: 'Output', color: CHART_COLORS.blue },
-                ]}
-                maxVal={Math.max(...rows.map(d => d.input + d.output))}
-                fmt={formatCompact}
-              />
-            </TabContent>
-            <TabContent value="cost">
-              {hasCostData ? (
-                <HorizontalBars
-                  LinkComponent={LinkComponent}
-                  data={costRows
-                    .slice()
-                    .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))
-                    .map(d => ({ name: d.name, values: [d.cost], href: getRowHref?.(d) }))}
-                  segments={[{ label: 'Cost', color: CHART_COLORS.purple }]}
-                  maxVal={Math.max(...costRows.map(d => d.cost ?? 0))}
-                  fmt={v => formatCost(v, costUnit)}
-                />
-              ) : (
-                <MetricsCard.NoData message="No cost data yet" />
-              )}
-            </TabContent>
-          </Tabs>
-        )}
-      </MetricsCard.Content>
-    );
-  }
 
   return (
     <MetricsCard>
@@ -124,7 +147,18 @@ export function TokenUsageByAgentCardView({
           ))}
         {hasData && actions ? <MetricsCard.Actions>{actions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      {cardBody}
+      <TokenUsageByAgentCardBody
+        rows={rows}
+        isLoading={isLoading}
+        isError={isError}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        costRows={costRows}
+        hasCostData={hasCostData}
+        costUnit={costUnit}
+        getRowHref={getRowHref}
+        LinkComponent={LinkComponent}
+      />
     </MetricsCard>
   );
 }

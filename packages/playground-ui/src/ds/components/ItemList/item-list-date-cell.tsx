@@ -9,18 +9,20 @@ export type ItemListDateCellProps = {
   withTime?: boolean;
 };
 
+function getDisplayDayAndMonth(date: Date | string | null) {
+  if (!date) {
+    return '';
+  }
+  if (isToday(new Date(date))) {
+    return 'Today';
+  }
+  return format(new Date(date), 'MMM dd');
+}
+
 export function ItemListDateCell({ date, className, withTime = false }: ItemListDateCellProps) {
   const isThisYearDate = date ? isThisYear(new Date(date)) : false;
 
-  const displayDayAndMonth = (() => {
-    if (date) {
-      if (isToday(new Date(date))) {
-        return 'Today';
-      }
-      return format(new Date(date), 'MMM dd');
-    }
-    return '';
-  })();
+  const displayDayAndMonth = getDisplayDayAndMonth(date);
   const displayYear = date && !isThisYearDate ? format(new Date(date), 'yyyy') : '';
   const displayTime = date && withTime ? `${format(new Date(date), "'at' h:mm aaa")}` : '';
 

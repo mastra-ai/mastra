@@ -6,6 +6,17 @@ const reactHooks = (await import('eslint-plugin-react-hooks')).default;
 
 const config = await createConfig();
 
+const restrictedInlineIifeSelectors = [
+  {
+    selector: 'CallExpression[callee.type="ArrowFunctionExpression"]',
+    message: 'Avoid inline IIFEs. Extract a named helper for values or a PascalCase component for JSX branches.',
+  },
+  {
+    selector: 'CallExpression[callee.type="FunctionExpression"]',
+    message: 'Avoid inline IIFEs. Extract a named helper for values or a PascalCase component for JSX branches.',
+  },
+];
+
 /** @type {import("eslint").Linter.Config[]} */
 export default [
   { ignores: ['storybook-static/**'] },
@@ -20,6 +31,7 @@ export default [
       'react-hooks/exhaustive-deps': 'warn',
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
       'no-nested-ternary': 'error',
+      'no-restricted-syntax': ['error', ...restrictedInlineIifeSelectors],
     },
   },
   {

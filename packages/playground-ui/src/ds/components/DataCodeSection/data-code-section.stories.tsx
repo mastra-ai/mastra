@@ -23,6 +23,16 @@ const meta: Meta<typeof DataCodeSection> = {
 export default meta;
 type Story = StoryObj<typeof DataCodeSection>;
 
+function getMockStepType(index: number) {
+  if (index % 3 === 0) {
+    return 'transform';
+  }
+  if (index % 3 === 1) {
+    return 'validate';
+  }
+  return 'output';
+}
+
 const sampleJson = JSON.stringify(
   {
     model: 'gpt-4-turbo',
@@ -84,15 +94,7 @@ export const LargeContent: Story = {
           name: 'Data Processing Pipeline',
           steps: Array.from({ length: 20 }, (_, i) => ({
             id: `step-${i + 1}`,
-            type: (() => {
-              if (i % 3 === 0) {
-                return 'transform';
-              }
-              if (i % 3 === 1) {
-                return 'validate';
-              }
-              return 'output';
-            })(),
+            type: getMockStepType(i),
             config: { timeout: 5000, retries: 3 },
           })),
           metadata: {

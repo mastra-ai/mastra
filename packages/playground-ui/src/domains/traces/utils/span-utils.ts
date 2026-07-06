@@ -2,6 +2,16 @@ import type { SpanRecord } from '@mastra/core/storage';
 
 type MessageLike = { role?: string; content?: unknown };
 
+function getMessageArray(input: unknown) {
+  if (Array.isArray(input)) {
+    return input;
+  }
+  if (input && typeof input === 'object' && !Array.isArray(input) && Array.isArray((input as any).messages)) {
+    return (input as any).messages;
+  }
+  return null;
+}
+
 /**
  * Extract a truncated text preview from a span's input field.
  * Agent traces store `input` as an array of message objects.
@@ -11,15 +21,7 @@ export function getInputPreview(input: unknown, maxLength = 100): string {
   if (input == null) return '';
 
   // Unwrap legacy { messages: [...] } wrapper from agent_run spans
-  const messageArray = (() => {
-    if (Array.isArray(input)) {
-      return input;
-    }
-    if (input && typeof input === 'object' && !Array.isArray(input) && Array.isArray((input as any).messages)) {
-      return (input as any).messages;
-    }
-    return null;
-  })();
+  const messageArray = getMessageArray(input);
 
   if (messageArray) {
     const messages = messageArray as MessageLike[];

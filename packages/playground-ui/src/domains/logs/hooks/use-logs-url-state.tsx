@@ -19,6 +19,16 @@ const LOG_PARAM = 'logId';
 const TRACE_PARAM = 'traceId';
 const SPAN_PARAM = 'spanId';
 
+function getFeaturedParam(field: string) {
+  if (field === 'logId') {
+    return LOG_PARAM;
+  }
+  if (field === 'traceId') {
+    return TRACE_PARAM;
+  }
+  return SPAN_PARAM;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 const PRESET_MS: Partial<Record<LogsDatePreset, number>> = {
   'last-24h': DAY_MS,
@@ -131,15 +141,7 @@ export function useLogsUrlState(
         prev => {
           const next = new URLSearchParams(prev);
           for (const [field, value] of Object.entries(ids)) {
-            const param = (() => {
-              if (field === 'logId') {
-                return LOG_PARAM;
-              }
-              if (field === 'traceId') {
-                return TRACE_PARAM;
-              }
-              return SPAN_PARAM;
-            })();
+            const param = getFeaturedParam(field);
             if (value) {
               next.set(param, value);
             } else {

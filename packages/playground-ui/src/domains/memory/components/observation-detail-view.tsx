@@ -273,6 +273,35 @@ function ObservationHistoryPanel({
   );
 }
 
+function ObservationDetailBody({
+  showDiff,
+  previousRecord,
+  activeObservations,
+  selected,
+}: {
+  showDiff: boolean;
+  previousRecord: OMHistoryRecord | null;
+  activeObservations: string;
+  selected: OMHistoryRecord;
+}) {
+  if (showDiff && previousRecord) {
+    return (
+      <CodeDiff
+        codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}
+        codeB={activeObservations}
+      />
+    );
+  }
+  if (activeObservations) {
+    return <ObservationContent observations={activeObservations} />;
+  }
+  return (
+    <p className="italic text-xs text-icon3">
+      {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
+    </p>
+  );
+}
+
 export interface ObservationDetailViewProps {
   records: OMHistoryRecord[];
   selectedRecordId: string | null;
@@ -343,24 +372,12 @@ export function ObservationDetailView({
         )}
 
         <div data-testid="observation-detail-body" className="flex-1 overflow-y-auto p-4">
-          {(() => {
-            if (showDiff && previousRecord) {
-              return (
-                <CodeDiff
-                  codeA={typeof previousRecord.activeObservations === 'string' ? previousRecord.activeObservations : ''}
-                  codeB={activeObservations}
-                />
-              );
-            }
-            if (activeObservations) {
-              return <ObservationContent observations={activeObservations} />;
-            }
-            return (
-              <p className="italic text-xs text-icon3">
-                {selected.isObserving || selected.isReflecting ? 'Processing…' : 'Initialized'}
-              </p>
-            );
-          })()}
+          <ObservationDetailBody
+            showDiff={showDiff}
+            previousRecord={previousRecord}
+            activeObservations={activeObservations}
+            selected={selected}
+          />
         </div>
       </div>
 

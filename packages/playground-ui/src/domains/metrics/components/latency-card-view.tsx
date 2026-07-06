@@ -78,6 +78,60 @@ export interface LatencyCardViewProps {
   actions?: ReactNode | ((tab: LatencyTab) => ReactNode);
 }
 
+function LatencyCardBody({
+  data,
+  isLoading,
+  isError,
+  activeTab,
+  setActiveTab,
+  initialTab,
+  onPointClick,
+}: Pick<LatencyCardViewProps, 'data' | 'isLoading' | 'isError' | 'onPointClick'> & {
+  activeTab: LatencyTab;
+  setActiveTab: (tab: LatencyTab) => void;
+  initialTab: LatencyTab;
+}) {
+  if (isLoading) {
+    return <MetricsCard.Loading />;
+  }
+  if (isError) {
+    return <MetricsCard.Error message="Failed to load latency data" />;
+  }
+  if (!data || (data.agentData.length === 0 && data.workflowData.length === 0 && data.toolData.length === 0)) {
+    return (
+      <MetricsCard.Content>
+        <MetricsCard.NoData message="No latency data yet" />
+      </MetricsCard.Content>
+    );
+  }
+  return (
+    <MetricsCard.Content>
+      <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={initialTab} className="overflow-visible">
+        <TabList>
+          <Tab value="agents">Agents</Tab>
+          <Tab value="workflows">Workflows</Tab>
+          <Tab value="tools">Tools</Tab>
+        </TabList>
+        <TabContent value="agents">
+          <LatencyChart
+            data={data.agentData}
+            onPointClick={onPointClick ? p => onPointClick('agents', p) : undefined}
+          />
+        </TabContent>
+        <TabContent value="workflows">
+          <LatencyChart
+            data={data.workflowData}
+            onPointClick={onPointClick ? p => onPointClick('workflows', p) : undefined}
+          />
+        </TabContent>
+        <TabContent value="tools">
+          <LatencyChart data={data.toolData} onPointClick={onPointClick ? p => onPointClick('tools', p) : undefined} />
+        </TabContent>
+      </Tabs>
+    </MetricsCard.Content>
+  );
+}
+
 export function LatencyCardView({ data, isLoading, isError, onPointClick, actions }: LatencyCardViewProps) {
   const initialTab = getInitialLatencyTab(data);
   const [activeTab, setActiveTab] = useState<LatencyTab>(initialTab);
@@ -107,47 +161,6 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
   const avgP50 =
     p50Values.length > 0 ? `${Math.round(p50Values.reduce((s, v) => s + v, 0) / p50Values.length)}ms` : '—';
 
-  let cardBody;
-  if (isLoading) {
-    cardBody = <MetricsCard.Loading />;
-  } else if (isError) {
-    cardBody = <MetricsCard.Error message="Failed to load latency data" />;
-  } else {
-    cardBody = (
-      <MetricsCard.Content>
-        {!hasData ? (
-          <MetricsCard.NoData message="No latency data yet" />
-        ) : (
-          <Tabs value={activeTab} onValueChange={setActiveTab} defaultTab={initialTab} className="overflow-visible">
-            <TabList>
-              <Tab value="agents">Agents</Tab>
-              <Tab value="workflows">Workflows</Tab>
-              <Tab value="tools">Tools</Tab>
-            </TabList>
-            <TabContent value="agents">
-              <LatencyChart
-                data={data.agentData}
-                onPointClick={onPointClick ? p => onPointClick('agents', p) : undefined}
-              />
-            </TabContent>
-            <TabContent value="workflows">
-              <LatencyChart
-                data={data.workflowData}
-                onPointClick={onPointClick ? p => onPointClick('workflows', p) : undefined}
-              />
-            </TabContent>
-            <TabContent value="tools">
-              <LatencyChart
-                data={data.toolData}
-                onPointClick={onPointClick ? p => onPointClick('tools', p) : undefined}
-              />
-            </TabContent>
-          </Tabs>
-        )}
-      </MetricsCard.Content>
-    );
-  }
-
   return (
     <MetricsCard>
       <MetricsCard.TopBar>
@@ -155,7 +168,15 @@ export function LatencyCardView({ data, isLoading, isError, onPointClick, action
         {hasData && <MetricsCard.Summary value={avgP50} label="Avg p50" />}
         {renderedActions ? <MetricsCard.Actions>{renderedActions}</MetricsCard.Actions> : null}
       </MetricsCard.TopBar>
-      {cardBody}
+      <LatencyCardBody
+        data={data}
+        isLoading={isLoading}
+        isError={isError}
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        initialTab={initialTab}
+        onPointClick={onPointClick}
+      />
     </MetricsCard>
   );
 }

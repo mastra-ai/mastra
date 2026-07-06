@@ -61,6 +61,41 @@ export interface SpanDataPanelViewProps {
   isAnchor?: boolean;
 }
 
+function SpanDataPanelBody({
+  span,
+  isLoading,
+  traceId,
+  spanId,
+  activeTab,
+  onTabChange,
+  scoringTabSlot,
+  scoringTabBadge,
+  feedbackTabSlot,
+  feedbackTabBadge,
+  isAnchor,
+}: Omit<SpanDataPanelViewProps, 'onClose' | 'onPrevious' | 'onNext'>) {
+  if (isLoading) {
+    return <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>;
+  }
+  if (!span) {
+    return <DataPanel.NoData>Span not found.</DataPanel.NoData>;
+  }
+  return (
+    <SpanDataPanelContent
+      span={span}
+      traceId={traceId}
+      spanId={spanId}
+      activeTab={activeTab}
+      onTabChange={onTabChange}
+      scoringTabSlot={scoringTabSlot}
+      scoringTabBadge={scoringTabBadge}
+      feedbackTabSlot={feedbackTabSlot}
+      feedbackTabBadge={feedbackTabBadge}
+      isAnchor={isAnchor}
+    />
+  );
+}
+
 export function SpanDataPanelView({
   traceId,
   spanId,
@@ -94,28 +129,19 @@ export function SpanDataPanelView({
         </ButtonsGroup>
       </DataPanel.Header>
 
-      {(() => {
-        if (isLoading) {
-          return <DataPanel.LoadingData>Loading span details...</DataPanel.LoadingData>;
-        }
-        if (!span) {
-          return <DataPanel.NoData>Span not found.</DataPanel.NoData>;
-        }
-        return (
-          <SpanDataPanelContent
-            span={span}
-            traceId={traceId}
-            spanId={spanId}
-            activeTab={activeTab}
-            onTabChange={onTabChange}
-            scoringTabSlot={scoringTabSlot}
-            scoringTabBadge={scoringTabBadge}
-            feedbackTabSlot={feedbackTabSlot}
-            feedbackTabBadge={feedbackTabBadge}
-            isAnchor={isAnchor}
-          />
-        );
-      })()}
+      <SpanDataPanelBody
+        span={span}
+        isLoading={isLoading}
+        traceId={traceId}
+        spanId={spanId}
+        activeTab={activeTab}
+        onTabChange={onTabChange}
+        scoringTabSlot={scoringTabSlot}
+        scoringTabBadge={scoringTabBadge}
+        feedbackTabSlot={feedbackTabSlot}
+        feedbackTabBadge={feedbackTabBadge}
+        isAnchor={isAnchor}
+      />
     </DataPanel>
   );
 }

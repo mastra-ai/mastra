@@ -1,9 +1,12 @@
 import type { LightSpanRecord } from '@mastra/core/storage';
 import { useEffect, useMemo, useState } from 'react';
+import type { Dispatch, SetStateAction } from 'react';
 import { getAllSpanIds } from '../hooks/get-all-span-ids';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceTimeline } from './trace-timeline';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
+
+type HierarchicalSpans = ReturnType<typeof formatHierarchicalSpans>;
 
 export interface TraceDetailsViewProps {
   traceId: string;
@@ -15,6 +18,40 @@ export interface TraceDetailsViewProps {
   onSpanSelect?: (spanId: string | undefined) => void;
   /** Fully controlled selection — the span to highlight. Pass whatever the parent's source of truth is. */
   selectedSpanId?: string | null;
+}
+
+function TraceDetailsContent({
+  isLoading,
+  hierarchicalSpans,
+  onSpanClick,
+  selectedSpanId,
+  expandedSpanIds,
+  setExpandedSpanIds,
+}: {
+  isLoading?: boolean;
+  hierarchicalSpans: HierarchicalSpans;
+  onSpanClick: (id: string) => void;
+  selectedSpanId?: string | null;
+  expandedSpanIds: string[];
+  setExpandedSpanIds: Dispatch<SetStateAction<string[]>>;
+}) {
+  if (isLoading) {
+    return <DataDetailsPanel.LoadingData>Loading trace...</DataDetailsPanel.LoadingData>;
+  }
+  if (hierarchicalSpans.length === 0) {
+    return <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>;
+  }
+  return (
+    <DataDetailsPanel.Content>
+      <TraceTimeline
+        hierarchicalSpans={hierarchicalSpans}
+        onSpanClick={onSpanClick}
+        selectedSpanId={selectedSpanId ?? undefined}
+        expandedSpanIds={expandedSpanIds}
+        setExpandedSpanIds={setExpandedSpanIds}
+      />
+    </DataDetailsPanel.Content>
+  );
 }
 
 /**
@@ -53,25 +90,14 @@ export function TraceDetailsView({
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>
 
-      {(() => {
-        if (isLoading) {
-          return <DataDetailsPanel.LoadingData>Loading trace...</DataDetailsPanel.LoadingData>;
-        }
-        if (hierarchicalSpans.length === 0) {
-          return <DataDetailsPanel.NoData>No spans found for this trace.</DataDetailsPanel.NoData>;
-        }
-        return (
-          <DataDetailsPanel.Content>
-            <TraceTimeline
-              hierarchicalSpans={hierarchicalSpans}
-              onSpanClick={handleSpanClick}
-              selectedSpanId={selectedSpanId ?? undefined}
-              expandedSpanIds={expandedSpanIds}
-              setExpandedSpanIds={setExpandedSpanIds}
-            />
-          </DataDetailsPanel.Content>
-        );
-      })()}
+      <TraceDetailsContent
+        isLoading={isLoading}
+        hierarchicalSpans={hierarchicalSpans}
+        onSpanClick={handleSpanClick}
+        selectedSpanId={selectedSpanId}
+        expandedSpanIds={expandedSpanIds}
+        setExpandedSpanIds={setExpandedSpanIds}
+      />
     </DataDetailsPanel>
   );
 }

@@ -14,6 +14,29 @@ export interface LogsLayoutProps {
   logCollapsed?: boolean;
 }
 
+function getLogsPanelGridRows({
+  tracePanelSlot,
+  spanPanelSlot,
+  logCollapsed,
+}: Pick<LogsLayoutProps, 'tracePanelSlot' | 'spanPanelSlot' | 'logCollapsed'>) {
+  if (tracePanelSlot && spanPanelSlot) {
+    if (logCollapsed) {
+      return 'grid-rows-[auto_1fr_1fr]';
+    }
+    return 'grid-rows-[1fr_1fr_1fr]';
+  }
+  if (tracePanelSlot) {
+    if (logCollapsed) {
+      return 'grid-rows-[auto_1fr]';
+    }
+    return 'grid-rows-[1fr_1fr]';
+  }
+  if (logCollapsed) {
+    return 'grid-rows-[auto]';
+  }
+  return 'grid-rows-[1fr]';
+}
+
 /**
  * Pure 2-column layout shell for the logs page. Owns no state and fetches no data — pass slots in.
  * Right-column row template adapts based on which panels are present and whether the log panel is
@@ -32,24 +55,7 @@ export function LogsLayout({ listSlot, logPanelSlot, tracePanelSlot, spanPanelSl
         <div
           className={cn(
             'grid gap-4 h-full overflow-auto',
-            (() => {
-              if (tracePanelSlot && spanPanelSlot) {
-                if (logCollapsed) {
-                  return 'grid-rows-[auto_1fr_1fr]';
-                }
-                return 'grid-rows-[1fr_1fr_1fr]';
-              }
-              if (tracePanelSlot) {
-                if (logCollapsed) {
-                  return 'grid-rows-[auto_1fr]';
-                }
-                return 'grid-rows-[1fr_1fr]';
-              }
-              if (logCollapsed) {
-                return 'grid-rows-[auto]';
-              }
-              return 'grid-rows-[1fr]';
-            })(),
+            getLogsPanelGridRows({ tracePanelSlot, spanPanelSlot, logCollapsed }),
           )}
         >
           {logPanelSlot}

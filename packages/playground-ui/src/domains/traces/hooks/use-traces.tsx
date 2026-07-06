@@ -119,6 +119,16 @@ function getPageSpans(page: TracesPageResponse) {
   return page.spans ?? [];
 }
 
+function getRowsFromListResponse(response: ListTracesResponse | ListBranchesResponse, listMode: TraceListMode) {
+  if (listMode === 'branches' && 'branches' in response) {
+    return response.branches ?? [];
+  }
+  if ('spans' in response) {
+    return response.spans ?? [];
+  }
+  return [];
+}
+
 /** Deduplicates trace/branch rows by traceId + spanId across all loaded pages.
  *  Also surfaces page 0's deltaCursor so the live-tail query can read it reactively. */
 export function selectUniqueTraces(data: { pages: TracesPageResponse[] }): {
@@ -151,15 +161,7 @@ export function refreshPage0Rows(
   if (!old || old.pages.length === 0) return old;
   const [firstPage, ...rest] = old.pages;
 
-  const refreshedRows = (() => {
-    if (listMode === 'branches' && 'branches' in refreshed) {
-      return refreshed.branches ?? [];
-    }
-    if ('spans' in refreshed) {
-      return refreshed.spans ?? [];
-    }
-    return [];
-  })();
+  const refreshedRows = getRowsFromListResponse(refreshed, listMode);
 
   if (refreshedRows.length === 0) return old;
 
@@ -372,15 +374,7 @@ export const useTraces: (args: UseTracesArgs) => UseTracesReturn = ({
       mergeDeltaIntoPage0(old, result, listMode),
     );
 
-    const newRows = (() => {
-      if (listMode === 'branches' && 'branches' in result) {
-        return result.branches ?? [];
-      }
-      if ('spans' in result) {
-        return result.spans ?? [];
-      }
-      return [];
-    })();
+    const newRows = getRowsFromListResponse(result, listMode);
     if (newRows.length === 0) return;
     const keys = newRows.map(r => `${r.traceId}:${r.spanId ?? ''}`);
     setRecentlyAddedKeys(prev => {

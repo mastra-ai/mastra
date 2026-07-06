@@ -19,6 +19,16 @@ const PILL_EDGE_MARGIN = 22;
 
 type PanelElementRef = RefObject<HTMLDivElement | null>;
 
+function getPanelContentTranslate(collapsed: boolean, direction: CollapsiblePanelProps['direction']) {
+  if (!collapsed) {
+    return undefined;
+  }
+  if (direction === 'left') {
+    return '-100% 0';
+  }
+  return '100% 0';
+}
+
 const usePanelSizeTransitions = (elementRef: PanelElementRef) => {
   const [booted, setBooted] = useState(false);
   const bootedRef = useRef(false);
@@ -213,15 +223,7 @@ export const CollapsiblePanel = ({
         style={{
           minWidth: 'var(--panel-min-w)',
           opacity: collapsed ? 0 : undefined,
-          translate: (() => {
-            if (collapsed) {
-              if (direction === 'left') {
-                return '-100% 0';
-              }
-              return '100% 0';
-            }
-            return undefined;
-          })(),
+          translate: getPanelContentTranslate(collapsed, direction),
         }}
         className={cn(
           'absolute inset-y-0 w-full overflow-hidden',
