@@ -133,6 +133,10 @@ function getInstallCommand(
       : { command: 'bun', args: ['install'] };
   }
 
+  if (manager) {
+    return { command: manager.split('@')[0] ?? manager, args: ['install'] };
+  }
+
   if (hasFile(pluginRoot, 'pnpm-lock.yaml')) {
     return { command: 'pnpm', args: ['install', '--frozen-lockfile'] };
   }

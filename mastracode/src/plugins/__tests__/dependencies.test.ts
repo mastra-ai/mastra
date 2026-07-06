@@ -144,6 +144,19 @@ describe('installPluginDependencies', () => {
     );
   });
 
+  it('uses packageManager names that are not known lockfile managers', async () => {
+    const pluginRoot = makePluginRoot();
+    writePackageJson(pluginRoot, { packageManager: 'definitely-missing-pm@1.0.0' });
+
+    await installPluginDependencies(pluginRoot);
+
+    expect(execaMock).toHaveBeenCalledWith(
+      'definitely-missing-pm',
+      ['install'],
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
+  });
+
   it('finds dependency roots for nested entry packages', () => {
     const pluginRoot = makePluginRoot();
     const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');

@@ -29,7 +29,8 @@ vi.mock('@earendil-works/pi-tui', () => {
     Text,
     Spacer,
     SelectList,
-    matchesKey: (data: string, key: string) => key === 'escape' && data === '\x1b',
+    matchesKey: (data: string, key: string) =>
+      (key === 'escape' && data === '\x1b') || (key === 'ctrl+c' && data === '\x03'),
   };
 });
 

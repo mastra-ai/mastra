@@ -35,7 +35,7 @@ class PluginInstallProgress extends Box {
   }
 
   handleInput(data: string): void {
-    if (matchesKey(data, 'escape') || data === '\x03' || data === '\x1b' || data === '\x1b\x1b') {
+    if (matchesKey(data, 'escape') || matchesKey(data, 'ctrl+c') || data === '\x1b' || data === '\x1b\x1b') {
       this.onCancel();
     }
   }
