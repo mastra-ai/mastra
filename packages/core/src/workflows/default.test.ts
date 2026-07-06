@@ -567,6 +567,104 @@ describe('DefaultExecutionEngine.executeEntry resume payload handling', () => {
       output: [11, 21],
     });
   });
+
+  it('should only resume the selected suspended foreach iteration without forEachIndex', async () => {
+    const workflowId = 'resume-foreach-single-index-repro';
+    const runId = randomUUID();
+    const resumedItems: number[] = [];
+    const suspendedItems: number[] = [];
+    const now = Date.now();
+    const foreachStep = {
+      id: 'process-item',
+      inputSchema: z.number(),
+      outputSchema: z.object({ item: z.number(), approved: z.boolean() }),
+      suspendSchema: z.object({ item: z.number() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async ({
+        inputData,
+        resumeData,
+        suspend,
+      }: {
+        inputData: number;
+        resumeData?: { approved: boolean };
+        suspend: (payload: { item: number }) => Promise<void>;
+      }) => {
+        if (!resumeData) {
+          suspendedItems.push(inputData);
+          await suspend({ item: inputData });
+          return { item: inputData, approved: false };
+        }
+
+        resumedItems.push(inputData);
+        return { item: inputData, approved: resumeData.approved };
+      },
+    };
+    const producerStep = {
+      id: 'producer',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async () => ({ stale: true }),
+    };
+    const foreachOutput = [10, 20, 30].map(item => ({
+      status: 'suspended',
+      suspendPayload: { item },
+      suspendedAt: now,
+    }));
+    const stepResults = {
+      producer: {
+        status: 'success',
+        output: { stale: true },
+        payload: {},
+      },
+      'process-item': {
+        status: 'suspended',
+        payload: [10, 20, 30],
+        suspendPayload: {
+          item: 10,
+          __workflow_meta: {
+            foreachIndex: 0,
+            foreachOutput,
+            resumeLabels: {},
+          },
+        },
+        suspendedAt: now,
+      },
+    } as Record<string, StepResult<any, any, any, any>>;
+
+    const result = await engine.executeEntry({
+      workflowId,
+      runId,
+      entry: { type: 'foreach', step: foreachStep, opts: { concurrency: 3 } },
+      prevStep: { type: 'step', step: producerStep },
+      serializedStepGraph: [],
+      stepResults,
+      resume: {
+        steps: ['process-item'],
+        stepResults,
+        resumePayload: { approved: true },
+        resumePath: [],
+      },
+      executionContext: {
+        workflowId,
+        runId,
+        executionPath: [1],
+        stepExecutionPath: [],
+        suspendedPaths: {},
+        retryConfig: { attempts: 0, delay: 0 },
+        activeStepsPath: {},
+        resumeLabels: {},
+        state: {},
+      },
+      pubsub,
+      abortController,
+      requestContext,
+      tracingContext: {},
+    });
+
+    expect(resumedItems).toEqual([10]);
+    expect(suspendedItems).toContain(20);
+    expect(result.result.status).toBe('suspended');
+  });
 });
 
 describe('DefaultExecutionEngine.executeLoop resume payload handling', () => {

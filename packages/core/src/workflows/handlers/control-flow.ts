@@ -1154,7 +1154,7 @@ export async function executeForeach(
     if (resume?.forEachIndex !== undefined) {
       resumeToUse = resume.forEachIndex === k ? resume : undefined;
     } else {
-      const isIndexSuspended = prevItemResult?.status === 'suspended' || resumeIndex === k;
+      const isIndexSuspended = resumeIndex === k;
       if (isIndexSuspended) {
         resumeToUse = resume;
       }
