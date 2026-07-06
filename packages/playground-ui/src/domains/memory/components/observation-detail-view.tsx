@@ -324,7 +324,7 @@ export function ObservationDetailView({
 
   const selected = selectedRecordId ? sorted.find(r => r.id === selectedRecordId) : sorted[sorted.length - 1];
   const selectedIndex = selected ? sorted.findIndex(r => r.id === selected.id) : -1;
-  const previousRecord = selectedIndex > 0 ? sorted[selectedIndex - 1] : null;
+  const previousRecord = selectedIndex > 0 ? (sorted[selectedIndex - 1] ?? null) : null;
 
   useEffect(() => {
     if (!selectedRecordId && sorted.length > 0) {
