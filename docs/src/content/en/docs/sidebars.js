@@ -138,9 +138,6 @@ const sidebars = {
                   type: 'doc',
                   id: 'agents/sdk-agents',
                   label: 'SDK Agents',
-                  customProps: {
-                    tags: ['new'],
-                  },
                 },
                 {
                   type: 'category',
@@ -510,8 +507,8 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'long-running-agents/heartbeats',
-          label: 'Heartbeats',
+          id: 'long-running-agents/schedules',
+          label: 'Schedules',
           customProps: {
             tags: ['beta'],
           },
@@ -615,9 +612,6 @@ const sidebars = {
               type: 'doc',
               id: 'server/pubsub',
               label: 'PubSub',
-              customProps: {
-                tags: ['new'],
-              },
             },
             {
               type: 'doc',
@@ -731,6 +725,11 @@ const sidebars = {
               type: 'doc',
               id: 'observability/logging',
               label: 'Logging',
+            },
+            {
+              type: 'doc',
+              id: 'observability/feedback',
+              label: 'Feedback',
             },
             {
               type: 'category',

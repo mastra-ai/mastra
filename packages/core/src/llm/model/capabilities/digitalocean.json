@@ -59,6 +59,8 @@
     "deepseek-v3",
     "deepseek-v4-pro",
     "gemma-4-31B-it",
+    "glm-5.1",
+    "glm-5.2",
     "llama-4-maverick",
     "llama3-8b-instruct",
     "llama3.3-70b-instruct",

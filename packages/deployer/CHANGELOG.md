@@ -1,5 +1,49 @@
 # @mastra/deployer
 
+## 1.50.0-alpha.3
+
+### Minor Changes
+
+- Added file-system routed storage support. A `storage.ts` file under the mastra directory is now auto-discovered and registered during `mastra dev` / `mastra build`. The default export replaces the InMemoryStore fallback. Code-registered storage (passed to `new Mastra({storage})`) wins on collision. ([#18885](https://github.com/mastra-ai/mastra/pull/18885))
+
+  ```ts
+  // src/mastra/storage.ts
+  import { LibSQLStore } from '@mastra/libsql';
+
+  export default new LibSQLStore({ url: 'file:local.db' });
+  ```
+
+### Patch Changes
+
+- Fixed flat markdown skills crashing at runtime when missing a description in frontmatter. Discovery now fails early with a clear error pointing to the file and the Agent Skills spec. ([#18935](https://github.com/mastra-ai/mastra/pull/18935))
+
+- Fixed deployer output dependency versions for packages that do not export package.json. ([#18930](https://github.com/mastra-ai/mastra/pull/18930))
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`d889c04`](https://github.com/mastra-ai/mastra/commit/d889c046468a97ba9e90007dbca729b4fecf5db0), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/server@1.50.0-alpha.3
+
+## 1.50.0-alpha.2
+
+### Minor Changes
+
+- Added file-system-routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions. ([#18883](https://github.com/mastra-ai/mastra/pull/18883))
+
+  ```ts
+  // src/mastra/workflows/onboarding.ts
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  export default createWorkflow({ id: 'onboarding' /* ...steps */ });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e)]:
+  - @mastra/core@1.50.0-alpha.2
+  - @mastra/server@1.50.0-alpha.2
+
 ## 1.50.0-alpha.1
 
 ### Patch Changes

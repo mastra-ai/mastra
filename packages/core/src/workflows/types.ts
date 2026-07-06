@@ -483,6 +483,17 @@ export interface WorkflowOptions {
   }) => boolean;
 
   /**
+   * Transforms the run snapshot immediately before it is persisted.
+   * Called at every snapshot persist site (both engines). Must be a pure
+   * function returning JSON-safe data — the snapshot may cross a pubsub
+   * codec boundary. Defaults to identity (no change).
+   *
+   * Used internally by agent-loop workflows to strip data that is never
+   * read on resume (stale suspend payloads, duplicated message arrays).
+   */
+  pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
+
+  /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).
    * This callback is invoked server-side without requiring client-side .watch().
    * Errors thrown in this callback are caught and logged, not propagated.

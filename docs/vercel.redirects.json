@@ -107,7 +107,12 @@
     },
     {
       "source": "/docs/agents/heartbeats",
-      "destination": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
       "permanent": true
     },
     {

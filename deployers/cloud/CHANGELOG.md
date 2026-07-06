@@ -1,5 +1,23 @@
 # @mastra/deployer-cloud
 
+## 1.50.0-alpha.3
+
+### Patch Changes
+
+- Update `@mastra/core` peer dependency for the unified schedules API ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`528adbd`](https://github.com/mastra-ai/mastra/commit/528adbd03f1e16192f9a7b675d930ae37205034d), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`2e7b597`](https://github.com/mastra-ai/mastra/commit/2e7b597a600941994ac6ab1269f952bfdbbcfbdc), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/deployer@1.50.0-alpha.3
+
+## 1.50.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e)]:
+  - @mastra/deployer@1.50.0-alpha.2
+  - @mastra/core@1.50.0-alpha.2
+
 ## 1.50.0-alpha.1
 
 ### Patch Changes
