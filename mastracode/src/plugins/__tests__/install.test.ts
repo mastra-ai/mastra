@@ -190,6 +190,70 @@ describe('installGithubPlugin', () => {
     });
   });
 
+  it('installs checkout dependencies before loading and writing the registry record', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(homeDir, '.mastracode/plugins/sources/github/acme-dep-plugin');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.dep');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+      }
+      return { stdout: '' };
+    });
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/dep-plugin', 'global', { projectRoot, homeDir }),
+    ).resolves.toBe('acme.dep');
+
+    expect(execaMock).toHaveBeenNthCalledWith(
+      3,
+      'gh',
+      ['repo', 'clone', 'acme/dep-plugin', checkoutDir],
+      expect.anything(),
+    );
+    expect(execaMock).toHaveBeenNthCalledWith(
+      4,
+      'pnpm',
+      ['install', '--frozen-lockfile'],
+      expect.objectContaining({ cwd: checkoutDir }),
+    );
+    expect(
+      loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins['acme.dep'],
+    ).toMatchObject({
+      source: 'github',
+      path: 'sources/github/acme-dep-plugin',
+    });
+  });
+
+  it('does not write a registry record when dependency installation fails', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const installError = new Error('dependency install failed');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.dep-fail');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+      }
+      if (cmd === 'pnpm') {
+        throw installError;
+      }
+      return { stdout: '' };
+    });
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/dep-fail', 'global', { projectRoot, homeDir }),
+    ).rejects.toThrow(installError);
+
+    expect(loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins).toEqual({});
+  });
+
   it('throws an actionable error when gh is unavailable', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
     const projectRoot = path.join(tempDir, 'project');
