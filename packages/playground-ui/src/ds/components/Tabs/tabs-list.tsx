@@ -1,5 +1,6 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const tabListVariants = cva('flex items-center relative text-ui-lg', {
@@ -15,15 +16,18 @@ const tabListVariants = cva('flex items-center relative text-ui-lg', {
   },
 });
 
+type TabListVariantsProps = VariantProps<typeof tabListVariants>;
+type TabListVariantValue = NonNullable<TabListVariantsProps['variant']>;
+
 /**
  * @deprecated `line` remains the omitted fallback for backward compatibility.
  * Pass `variant="pill"` or `variant="pill-ghost"` for new tabs.
  */
-export type DeprecatedLineTabListVariant = 'line';
+export type DeprecatedLineTabListVariant = Extract<TabListVariantValue, 'line'>;
 
-export type TabListVariant = DeprecatedLineTabListVariant | 'pill' | 'pill-ghost';
+export type TabListVariant = DeprecatedLineTabListVariant | Exclude<TabListVariantValue, DeprecatedLineTabListVariant>;
 
-export type TabListProps = {
+export type TabListProps = Omit<TabListVariantsProps, 'variant'> & {
   children: React.ReactNode;
   className?: string;
   sticky?: boolean;
@@ -33,7 +37,7 @@ export type TabListProps = {
    * Defaults to `line` only for backward compatibility. New tabs should pass
    * `variant="pill"` or `variant="pill-ghost"` explicitly.
    */
-  variant?: TabListVariant;
+  variant?: TabListVariant | null;
   /**
    * Optional inline styles applied to the underlying tab list element.
    * To override the active tab indicator color, set the `--tab-indicator-color`
