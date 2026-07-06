@@ -262,13 +262,11 @@ export function SelectDataFilter({
         <DropdownMenu.Separator />
 
         {grouped.map(group => {
-          if (group.items.length === 1 && !group.label) {
-            return renderCategory(group.items[0]);
-          }
+          const firstItem = group.items[0];
 
-          if (group.label && group.items.length === 1) {
-            // Single item in a named group — render directly with group as context
-            return renderCategory(group.items[0]);
+          if (group.items.length === 1 && firstItem) {
+            // A single category (grouped or not) renders directly, without a sub-trigger.
+            return renderCategory(firstItem);
           }
 
           // Multiple items under a group label — nest under a sub-trigger
