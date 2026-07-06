@@ -111,6 +111,9 @@ const BUILDER_BASELINE_DEFAULTS: Partial<Record<(typeof BUILDER_DEFAULT_FIELDS)[
   memory: { observationalMemory: true } satisfies SerializedMemoryConfig,
 };
 
+/** Model used for observational memory when a builder agent stores `observationalMemory: true`. */
+const BUILDER_DEFAULT_OM_MODEL = 'openai/gpt-5.4-mini';
+
 /**
  * Apply builder defaults to agent creation input.
  * Only applies for fields where input is `undefined` (not `null` — null is explicit disable).
@@ -412,6 +415,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ...workspaceRef.config,
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted inline workspace '${workspaceId}' to DB`);
+      } else if (workspaceRef.type === 'provider') {
+        // Provider-based workspaces are resolved at hydration time via the editor's
+        // workspace provider registry. The provider ref is stored directly in the
+        // agent snapshot — no separate workspace record needed.
       }
     } catch (error) {
       // Don't fail agent creation if workspace persistence fails
@@ -1455,7 +1462,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       if (memoryConfig.observationalMemory) {
         options = {
           ...options,
-          observationalMemory: memoryConfig.observationalMemory,
+          // A literal `true` means "use the builder default OM model"; an explicit
+          // object (user/admin choice) passes through untouched.
+          observationalMemory:
+            memoryConfig.observationalMemory === true
+              ? { model: BUILDER_DEFAULT_OM_MODEL }
+              : memoryConfig.observationalMemory,
         };
       }
 
@@ -1739,6 +1751,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       // duplicate workspace instances on repeated calls.
       const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
       return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+    }
+
+    if (workspaceRef.type === 'provider') {
+      return workspaceNs.resolveWorkspaceProvider(workspaceRef.provider, workspaceRef.config);
     }
 
     return undefined;

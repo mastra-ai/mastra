@@ -11,11 +11,16 @@ import type {
   NotificationSignalAttributes,
   NotificationStatus,
   UpdateNotificationInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 const statusTimestamp = (status: NotificationStatus, now: Date) => {
   if (status === 'delivered') return { deliveredAt: now };
@@ -89,6 +94,11 @@ function addArrayFilter<T extends string>(conditions: string[], args: InValue[],
 }
 
 export class NotificationsLibSQL extends NotificationsStorage {
+  /** The notification feed grows unbounded. Single table, anchored on `createdAt`. */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    notifications: { table: TABLE_NOTIFICATIONS, column: 'createdAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -126,6 +136,16 @@ export class NotificationsLibSQL extends NotificationsStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_NOTIFICATIONS });
+  }
+
+  /** Delete notifications older than the `notifications` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: NotificationsLibSQL.retentionTables,
+      order: ['notifications'],
+    });
+    return runPrune({ db: this.#db, domain: 'notifications', targets, options, logger: this.logger });
   }
 
   async createNotification(input: CreateNotificationInput): Promise<NotificationRecord> {

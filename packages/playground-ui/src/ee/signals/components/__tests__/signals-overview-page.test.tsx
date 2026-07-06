@@ -1,0 +1,203 @@
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import type { ReactNode } from 'react';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { EntityLearningTopicsResponse } from '../../services';
+import {
+  behaviorTopicsResponse,
+  entitiesResponse,
+  topicsResponse,
+} from '../../services/__tests__/fixtures/entity-learning';
+import type { SelectedEntity } from '../../types';
+import { SignalsOverviewPage } from '../signals-overview-page';
+
+const BASE_URL = 'https://observability.test';
+const ROOT = `${BASE_URL}/api/learning`;
+
+const server = setupServer();
+
+type EntityLearningWindow = typeof globalThis & {
+  MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
+};
+const w = window as EntityLearningWindow;
+
+// `react-resizable-panels` drives layout through a ResizeObserver-backed group
+// controller that throws under jsdom. Stub it to plain elements and keep every
+// first-party component (TopicsLayout, the entity filter, sections) real.
+vi.mock('react-resizable-panels', () => ({
+  Group: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Panel: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Separator: () => null,
+  usePanelRef: () => ({ current: null }),
+}));
+
+/**
+ * Mirrors the real API: each signal resolves to its own latest run, and a
+ * runId pinned to another signal's run matches no topics.
+ */
+function useTopicsBySignalHandlers() {
+  const latestBySignal: Record<string, EntityLearningTopicsResponse> = {
+    sentiment: topicsResponse,
+    behavior: behaviorTopicsResponse,
+  };
+
+  server.use(
+    http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+    http.get(`${ROOT}/entities/:entityId/topics`, ({ request }) => {
+      const url = new URL(request.url);
+      const signalName = url.searchParams.get('signalName') ?? '';
+      const latest = latestBySignal[signalName];
+      const runId = url.searchParams.get('runId');
+
+      if (!latest || (runId && runId !== latest.run.runId)) {
+        const empty: EntityLearningTopicsResponse = {
+          run: {
+            runId: runId ?? 'none',
+            signalName,
+            topicCount: 0,
+            sourceItemCount: 0,
+            groupedItemCount: 0,
+            outlierItemCount: 0,
+          },
+          topics: [],
+        };
+        return HttpResponse.json(empty);
+      }
+
+      return HttpResponse.json(latest);
+    }),
+  );
+}
+
+function renderOverview(
+  selectedEntity: SelectedEntity | null,
+  onSignalSelect: (signalName: string, topicId?: string) => void = () => {},
+) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <SignalsOverviewPage selectedEntity={selectedEntity} onEntityChange={() => {}} onSignalSelect={onSignalSelect} />
+    </QueryClientProvider>,
+  );
+}
+
+beforeAll(() => {
+  window.matchMedia ??= (query: string) =>
+    ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      addListener: () => {},
+      removeListener: () => {},
+      dispatchEvent: () => false,
+    }) as unknown as MediaQueryList;
+
+  server.listen({ onUnhandledRequest: 'error' });
+});
+
+beforeEach(() => {
+  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
+});
+
+afterEach(() => {
+  cleanup();
+  server.resetHandlers();
+  delete w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT;
+});
+
+afterAll(() => server.close());
+
+describe('SignalsOverviewPage', () => {
+  describe('when no entity is selected', () => {
+    it('prompts the user to select an entity', async () => {
+      server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
+
+      renderOverview(null);
+
+      expect(await screen.findByText('Select an entity to inspect its signals and clusters.')).not.toBeNull();
+    });
+
+    it('offers the agent picker as the empty-state CTA', async () => {
+      server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
+
+      renderOverview(null);
+
+      // The empty-state prompt renders, and the agent picker is its CTA.
+      const prompt = await screen.findByText('Select an entity to inspect its signals and clusters.');
+      expect(prompt).not.toBeNull();
+      expect(screen.getByLabelText('Agent')).not.toBeNull();
+    });
+
+    it('hides the top filter bar until an agent is selected', async () => {
+      server.use(http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)));
+
+      renderOverview(null);
+
+      await screen.findByText('Select an entity to inspect its signals and clusters.');
+
+      // Before selection there is exactly one agent picker — the empty-state CTA.
+      // The top filter bar (a second picker) is not rendered.
+      expect(screen.getAllByLabelText('Agent')).toHaveLength(1);
+    });
+  });
+
+  describe('when an entity is selected', () => {
+    it('renders a section per available signal with that signal own latest-run clusters', async () => {
+      useTopicsBySignalHandlers();
+
+      renderOverview({ entityType: 'agent', entityId: 'entity_support' });
+
+      // entity_support exposes the `sentiment` and `behavior` signals.
+      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
+      expect(screen.getByRole('heading', { name: 'Behavior' })).not.toBeNull();
+
+      // Each section shows its own signal's clusters. `behavior`'s latest run
+      // ('31') differs from the entity-wide latestRunId ('32', a `sentiment`
+      // run), so pinning that run id would render the behavior section empty.
+      expect(await screen.findAllByRole('heading', { name: 'Frustrated escalations' })).not.toHaveLength(0);
+      expect(screen.getAllByRole('heading', { name: 'Satisfied resolutions' }).length).toBeGreaterThan(0);
+      expect(await screen.findAllByRole('heading', { name: 'Repeated retries' })).not.toHaveLength(0);
+    });
+
+    it('calls onSignalSelect with the signal name and topic id when a cluster card is clicked', async () => {
+      useTopicsBySignalHandlers();
+
+      const onSignalSelect = vi.fn();
+      renderOverview({ entityType: 'agent', entityId: 'entity_support' }, onSignalSelect);
+
+      const card = (await screen.findAllByRole('button', { name: /Frustrated escalations/ }))[0];
+      fireEvent.click(card);
+
+      expect(onSignalSelect).toHaveBeenCalledWith('sentiment', '89');
+    });
+
+    it('calls onSignalSelect with only the signal name when See details is clicked', async () => {
+      useTopicsBySignalHandlers();
+
+      const onSignalSelect = vi.fn();
+      renderOverview({ entityType: 'agent', entityId: 'entity_support' }, onSignalSelect);
+
+      const seeDetails = (await screen.findAllByRole('button', { name: /See details/ }))[0];
+      fireEvent.click(seeDetails);
+
+      expect(onSignalSelect).toHaveBeenCalledWith('sentiment');
+      expect(onSignalSelect).not.toHaveBeenCalledWith('sentiment', expect.any(String));
+    });
+  });
+
+  describe('when the entities request fails', () => {
+    it('shows the failure state', async () => {
+      server.use(http.get(`${ROOT}/entities`, () => new HttpResponse(null, { status: 500 })));
+
+      renderOverview(null);
+
+      expect(await screen.findByText('Failed to load entities from the observability endpoint.')).not.toBeNull();
+    });
+  });
+});

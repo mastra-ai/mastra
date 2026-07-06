@@ -1,3 +1,4 @@
 {
-  "attachment": ["umans-coder", "umans-flash", "umans-kimi-k2.7"]
+  "attachment": ["umans-coder", "umans-flash", "umans-kimi-k2.7"],
+  "temperature": ["umans-glm-5.1", "umans-glm-5.2"]
 }

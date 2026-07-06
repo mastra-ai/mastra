@@ -126,5 +126,6 @@
     "xai/grok-4.1-fast-reasoning",
     "xai/grok-4.20-multi-agent",
     "xai/grok-code-fast-1"
-  ]
+  ],
+  "temperature": ["novita/deepseek-v3.2", "novita/glm-5", "novita/kimi-k2.5", "novita/kimi-k2.6"]
 }

@@ -104,7 +104,7 @@ import type { MastraVoice } from '../voice';
 import { DefaultVoice } from '../voice';
 import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
-import type { OutputWriter, WorkflowResult, WorkflowRunState } from '../workflows/types';
+import type { OutputWriter, WorkflowResult, WorkflowRunState, WorkflowRunStatus } from '../workflows/types';
 import { waitForSuspendedSnapshot } from '../workflows/utils';
 import type { AnyWorkflow } from '../workflows/workflow';
 import { createStep, isProcessor } from '../workflows/workflow';
@@ -129,6 +129,7 @@ import { buildMcpServerGuidance } from './mcp-guidance';
 import { MessageList } from './message-list';
 import type { MessageInput, MessageListInput, UIMessageWithMetadata, MastraDBMessage } from './message-list';
 import { SaveQueueManager } from './save-queue';
+import type { CreatedAgentSignal } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
 import type { SubAgent } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
@@ -243,6 +244,74 @@ type AgentSnapshotMemoryInfo = {
   threadId?: string;
   resourceId?: string;
 };
+
+/**
+ * A suspended tool call inside a suspended agent run — either waiting on a
+ * tool-call approval (`requireApproval` / `requireToolApproval`) or on resume
+ * data for a tool that called `suspend()`.
+ */
+export interface AgentRunToolCall {
+  toolCallId?: string;
+  toolName?: string;
+  /** Arguments the model supplied for the tool call (approval suspensions only). */
+  args?: unknown;
+  /** True when the run is waiting on a tool-call approval. */
+  requiresApproval: boolean;
+  /** The tool-defined suspend payload when the tool itself called `suspend()`. */
+  suspendPayload?: unknown;
+}
+
+/**
+ * Statuses of agent runs discoverable via {@link Agent.listSuspendedRuns}.
+ *
+ * Agent run snapshots are only persisted while a run is waiting on input and
+ * are deleted when the run reaches a terminal state, so `'suspended'` is the
+ * only status discoverable from storage today.
+ */
+export type AgentRunStatus = Extract<WorkflowRunStatus, 'suspended'>;
+
+/**
+ * Filters for {@link Agent.listSuspendedRuns}. Mirrors the `listWorkflowRuns`
+ * filter contract, plus the agent-level `threadId` filter.
+ */
+export interface AgentListSuspendedRunsOptions {
+  /** Only return runs that belong to this memory thread. */
+  threadId?: string;
+  /** Only return runs that belong to this memory resource. */
+  resourceId?: string;
+  /** Only return runs created at or after this date. */
+  fromDate?: Date;
+  /** Only return runs created at or before this date. */
+  toDate?: Date;
+  /**
+   * Number of items per page. Pagination is applied when both `perPage` and
+   * `page` are provided; otherwise all matching runs are returned.
+   */
+  perPage?: number;
+  /** Zero-indexed page number. */
+  page?: number;
+}
+
+/**
+ * An agent run discovered from workflow snapshot storage.
+ */
+export interface AgentRun {
+  /** Run ID accepted by `resumeStream()`, `approveToolCall()`, and `declineToolCall()`. */
+  runId: string;
+  status: AgentRunStatus;
+  threadId?: string;
+  resourceId?: string;
+  /** When the run's snapshot was last persisted (i.e. when it suspended). */
+  suspendedAt: Date;
+  /** Suspended tool calls awaiting approval or resume data. */
+  toolCalls: AgentRunToolCall[];
+}
+
+export interface AgentListSuspendedRunsResult {
+  runs: AgentRun[];
+  /** Total number of matching runs, before pagination. */
+  total: number;
+}
 
 function getInvocationActor(context: unknown): ActorSignal | undefined {
   return (context as { actor?: ActorSignal } | undefined)?.actor;
@@ -813,6 +882,28 @@ export class Agent<
   }
 
   /**
+   * Returns a closure that drains pending signals for a given run from the
+   * shared `AgentThreadStreamRuntime`. Used by `prepareForDurableExecution` to
+   * store the drain function on the in-process `RunRegistryEntry`.
+   * @internal
+   */
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[] {
+    const pubsub = this.getPubSub();
+    return (runId, scope) => agentThreadStreamRuntime.drainPendingSignals(runId, pubsub, scope);
+  }
+
+  /**
+   * Returns the uncombined input processors suitable for `processLLMRequest`.
+   * Combined (workflow-wrapped) processors skip `processLLMRequest`; this
+   * method returns them individually so the `ProcessorRunner` can invoke
+   * each processor's `processLLMRequest` method.
+   * @internal — used by `DurableAgent` preparation to populate the registry.
+   */
+  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext);
+  }
+
+  /**
    * Set the durable objective for a thread. The objective is judged in the
    * execution loop until complete or the run budget is exhausted. Requires a
    * memory-backed thread and a Mastra storage instance; no-ops otherwise.
@@ -1369,6 +1460,7 @@ export class Agent<
       errorProcessors,
       logger: this.logger,
       agentName: this.name,
+      agent: this,
       processorStates,
     });
   }
@@ -3018,8 +3110,10 @@ export class Agent<
     this.#mastra = mastra;
 
     // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish.
+    // the background — we don't await to keep this hot path sync-ish. Release
+    // its global scorer hook synchronously so it can't outlive the instance.
     if (this.#ephemeralMastra) {
+      this.#ephemeralMastra.__unregisterHooks();
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
       this.#ephemeralMastra = undefined;
     }
@@ -4229,6 +4323,7 @@ export class Agent<
     toolsets,
     requestContext,
     mastraProxy,
+    outputWriter,
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
     ...rest
@@ -4239,6 +4334,7 @@ export class Agent<
     toolsets: ToolsetsInput;
     requestContext: RequestContext;
     mastraProxy?: MastraUnion;
+    outputWriter?: OutputWriter;
     autoResumeSuspendedTools?: boolean;
     backgroundTaskEnabled?: boolean;
   } & Partial<ObservabilityContext>) {
@@ -4270,6 +4366,7 @@ export class Agent<
             requestContext,
             ...observabilityContext,
             model: await this.getModel({ requestContext }),
+            outputWriter,
             tracingPolicy: this.#options?.tracingPolicy,
             requireApproval: (toolObj as any).requireApproval,
             backgroundConfig: (toolObj as any).background,
@@ -4439,9 +4536,14 @@ export class Agent<
 
         const toModelOutput = delegation?.includeSubAgentToolResultsInModelContext
           ? undefined
-          : (output: SubAgentToolOutput) => ({
+          : (output: SubAgentToolOutput | string) => ({
               type: 'text' as const,
-              value: output.text,
+              // When a sub-agent invocation is dispatched as a background task, the agentic loop
+              // hands `toModelOutput` the placeholder string from tool-call-step.ts ("Background
+              // task started...") instead of the agentOutputSchema object. Reading `output.text`
+              // off that string is undefined, which serializes to a tool message with null content
+              // that providers (e.g. Anthropic) reject with a 500. Use the string as-is in that case.
+              value: typeof output === 'string' ? output : (output.text ?? ''),
             });
 
         const toolObj = createTool({
@@ -4785,7 +4887,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4804,7 +4909,10 @@ export class Agent<
                             memory: {
                               resource: subAgentResourceId,
                               thread: subAgentThreadId,
-                              options: { lastMessages: false },
+                              // Title generation is a top-level thread concern. Ephemeral subagent
+                              // delegation threads are never surfaced, so suppress it here to avoid
+                              // an extra title-generation LLM call per delegation (issue #18738).
+                              options: { lastMessages: false, generateTitle: false },
                             },
                           }
                         : {}),
@@ -4920,6 +5028,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -4941,6 +5053,10 @@ export class Agent<
                               thread: subAgentThreadId,
                               options: {
                                 lastMessages: false,
+                                // Title generation is a top-level thread concern. Ephemeral subagent
+                                // delegation threads are never surfaced, so suppress it here to avoid
+                                // an extra title-generation LLM call per delegation (issue #18738).
+                                generateTitle: false,
                               },
                             },
                           }
@@ -5603,6 +5719,7 @@ export class Agent<
     resourceId?: string;
     runId?: string;
     requestContext?: RequestContext;
+    outputWriter?: OutputWriter;
     memoryConfig?: MemoryConfig;
     autoResumeSuspendedTools?: boolean;
     hooks?: ToolHooks;
@@ -5636,6 +5753,7 @@ export class Agent<
       resourceId: resourceIdFromContext || options.resourceId || optionMemory?.resource || mergedMemory?.resource,
       runId: mergedOptions.runId,
       requestContext,
+      outputWriter: mergedOptions.outputWriter,
       memoryConfig: options.memoryConfig ?? mergedMemory?.options,
       autoResumeSuspendedTools: mergedOptions.autoResumeSuspendedTools,
       // Use the deep-merged delegation so default callbacks (e.g. messageFilter)
@@ -5721,6 +5839,7 @@ export class Agent<
       ...observabilityContext,
       mastraProxy,
       toolsets: toolsets!,
+      outputWriter,
       autoResumeSuspendedTools,
       backgroundTaskEnabled,
     });
@@ -6196,9 +6315,19 @@ export class Agent<
     return undefined;
   }
 
-  #getSuspendedToolInfo(
-    existingSnapshot: WorkflowRunState | null | undefined,
-  ): { toolCallId?: string; toolName?: string } | undefined {
+  #getSnapshotAgentId(existingSnapshot: WorkflowRunState | null | undefined): string | undefined {
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step && step.status === 'suspended' && step.suspendPayload?.__agentId) {
+        return step.suspendPayload.__agentId;
+      }
+    }
+
+    return undefined;
+  }
+
+  #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
+    const toolCalls: AgentRunToolCall[] = [];
     for (const key in existingSnapshot?.context) {
       const step = existingSnapshot?.context[key];
       if (step?.status !== 'suspended') continue;
@@ -6206,20 +6335,42 @@ export class Agent<
       if (!payload) continue;
 
       if (payload.requireToolApproval) {
-        return {
+        toolCalls.push({
           toolCallId: payload.requireToolApproval.toolCallId,
           toolName: payload.requireToolApproval.toolName,
-        };
-      }
-      if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
-        return {
-          toolCallId: payload.toolCallId,
+          args: payload.requireToolApproval.args,
+          requiresApproval: true,
+        });
+      } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
+        toolCalls.push({
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, key),
           toolName: payload.toolName,
-        };
+          requiresApproval: false,
+          suspendPayload: payload.toolCallSuspended,
+        });
       }
     }
 
-    return undefined;
+    return toolCalls;
+  }
+
+  /**
+   * Suspend payloads persisted before they carried `toolCallId` only hold the
+   * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
+   * Recover it when exactly one label points at the suspended step.
+   */
+  #findResumeLabelForStep(existingSnapshot: WorkflowRunState | null | undefined, stepId: string): string | undefined {
+    const labels = Object.entries(existingSnapshot?.resumeLabels ?? {}).filter(
+      ([, target]) => target.stepId === stepId,
+    );
+    return labels.length === 1 ? labels[0]![0] : undefined;
+  }
+
+  #getSuspendedToolInfo(
+    existingSnapshot: WorkflowRunState | null | undefined,
+  ): { toolCallId?: string; toolName?: string } | undefined {
+    const [first] = this.#getSuspendedToolCalls(existingSnapshot);
+    return first ? { toolCallId: first.toolCallId, toolName: first.toolName } : undefined;
   }
 
   #getResumeSpanInput(resumeData: unknown, suspendedToolInfo?: { toolCallId?: string; toolName?: string }): unknown {
@@ -7292,6 +7443,121 @@ export class Agent<
     return agentThreadStreamRuntime.getActiveThreadRunId(options, this.getPubSub());
   }
 
+  /**
+   * Lists suspended agent runs from workflow snapshot storage — runs waiting on
+   * a tool-call approval (`requireApproval` / `requireToolApproval`) or on a
+   * tool that called `suspend()`.
+   *
+   * Unlike {@link getActiveThreadRunId}, which only knows about runs started by the
+   * current process, this is backed by storage: it works after a server restart and
+   * across multiple server instances. Pass the returned `runId` to `resumeStream()`,
+   * `approveToolCall()`, or `declineToolCall()`.
+   *
+   * Results are scoped to runs started by this agent: snapshots persist the owning
+   * agent's id, and runs whose snapshots carry a different id are skipped. Filter by
+   * `threadId`/`resourceId` to scope results to a conversation.
+   *
+   * @example
+   * ```typescript
+   * const { runs } = await agent.listSuspendedRuns({ threadId, resourceId });
+   * if (runs[0]) {
+   *   await agent.approveToolCall({ runId: runs[0].runId });
+   * }
+   * ```
+   */
+  async listSuspendedRuns(options: AgentListSuspendedRunsOptions = {}): Promise<AgentListSuspendedRunsResult> {
+    const { threadId, resourceId, fromDate, toDate, perPage, page } = options;
+
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PER_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" listSuspendedRuns() requires perPage to be a positive integer.`,
+        details: { agentName: this.name, perPage },
+      });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_INVALID_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" listSuspendedRuns() requires page to be a non-negative integer.`,
+        details: { agentName: this.name, page },
+      });
+    }
+
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `Agent "${this.name}" listSuspendedRuns() requires storage to discover suspended runs. ` +
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL).`,
+        details: { agentName: this.name },
+      });
+    }
+
+    // threadId/resourceId live inside the snapshot state rather than in storage
+    // columns, so fetch all matching rows and filter/paginate here to keep
+    // `total` accurate.
+    const { runs } = await workflowsStore.listWorkflowRuns({
+      workflowName: 'agentic-loop',
+      status: 'suspended',
+      fromDate,
+      toDate,
+    });
+
+    const matchedRuns: AgentRun[] = [];
+    for (const run of runs) {
+      let snapshot = run.snapshot;
+      if (typeof snapshot === 'string') {
+        try {
+          snapshot = JSON.parse(snapshot) as WorkflowRunState;
+        } catch {
+          continue;
+        }
+      }
+      if (snapshot?.status !== 'suspended') continue;
+
+      // Snapshots persist the owning agent's id, so runs started by other
+      // agents sharing the same agentic-loop snapshot storage are skipped.
+      // Default-deny: a snapshot whose owning agent id is missing or does not
+      // match is not surfaced, so runs cannot leak across agents.
+      const runAgentId = this.#getSnapshotAgentId(snapshot);
+      if (runAgentId !== this.id) continue;
+
+      // thread/resource info travels in the suspended stream state; the run row's
+      // resourceId column is used as the primary source when present.
+      const memoryInfo = this.#getSnapshotMemoryInfo(snapshot);
+      const runThreadId = memoryInfo?.threadId;
+      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+      if (threadId && runThreadId !== threadId) continue;
+      if (resourceId && runResourceId !== resourceId) continue;
+
+      matchedRuns.push({
+        runId: run.runId,
+        status: 'suspended',
+        threadId: runThreadId,
+        resourceId: runResourceId,
+        suspendedAt: run.updatedAt,
+        toolCalls: this.#getSuspendedToolCalls(snapshot),
+      });
+    }
+
+    const total = matchedRuns.length;
+    const paginatedRuns =
+      perPage !== undefined && page !== undefined
+        ? matchedRuns.slice(page * perPage, (page + 1) * perPage)
+        : matchedRuns;
+
+    return { runs: paginatedRuns, total };
+  }
+
   abortThreadStream(options: AgentSubscribeToThreadOptions): boolean {
     return agentThreadStreamRuntime.abortThread(options, this.getPubSub());
   }
@@ -8335,13 +8601,62 @@ export class Agent<
       return { accepted: continuation.accepted, runId: continuation.runId, toolCallId: options.toolCallId };
     }
 
-    const runId = this.getActiveThreadRunId({ threadId, resourceId });
+    let runId = this.getActiveThreadRunId({ threadId, resourceId });
+    // Tracks whether runId was recovered from storage (not the in-memory active-run
+    // map). Storage-discovered runs are not present in the in-memory thread runtime,
+    // so they must resume directly via resumeStream() rather than through
+    // sendStreamResume(), whose getResumableThreadRun() guard is in-memory only.
+    let resolvedFromStorage = false;
+
+    if (!runId) {
+      // The in-memory active-run map only knows about runs started by this process.
+      // After a server restart (or on another instance) fall back to storage-backed
+      // suspended-run discovery so approvals stay durable.
+      let suspendedRuns: AgentRun[] = [];
+      try {
+        ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
+      } catch (error) {
+        // Only swallow the expected no-storage case — storage outages and
+        // store-driver errors must surface instead of masquerading as
+        // "no suspended run exists".
+        if (!(error instanceof MastraError) || error.id !== 'AGENT_LIST_SUSPENDED_RUNS_NO_STORAGE') {
+          throw error;
+        }
+      }
+
+      const matchingRuns = options.toolCallId
+        ? suspendedRuns.filter(run => run.toolCalls.some(toolCall => toolCall.toolCallId === options.toolCallId))
+        : suspendedRuns;
+
+      if (matchingRuns.length > 1) {
+        throw new MastraError({
+          id: 'AGENT_SEND_TOOL_APPROVAL_AMBIGUOUS_SUSPENDED_RUNS',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text:
+            `Agent "${this.name}" sendToolApproval() found ${matchingRuns.length} suspended runs for thread "${threadId}". ` +
+            `Pass a toolCallId to disambiguate, or resume a specific run with approveToolCall()/declineToolCall() and an explicit runId.`,
+          details: {
+            threadId,
+            resourceId,
+            agentName: this.name,
+            runIds: matchingRuns.map(run => run.runId).join(', '),
+          },
+        });
+      }
+
+      runId = matchingRuns[0]?.runId;
+      resolvedFromStorage = runId !== undefined;
+    }
+
     if (!runId) {
       throw new MastraError({
         id: 'AGENT_SEND_TOOL_APPROVAL_NO_ACTIVE_THREAD_RUN',
         domain: ErrorDomain.AGENT,
         category: ErrorCategory.USER,
-        text: `Agent "${this.name}" sendToolApproval() could not find an active run for thread "${threadId}".`,
+        text:
+          `Agent "${this.name}" sendToolApproval() could not find an active or suspended run for thread "${threadId}". ` +
+          `The run may have already completed or been resumed.`,
         details: {
           threadId,
           resourceId,
@@ -8355,27 +8670,45 @@ export class Agent<
       executionOptions as Record<string, unknown>,
     ) as unknown as AgentExecutionOptions<OUTPUT>;
 
+    const resumeData =
+      customResumeData !== undefined
+        ? customResumeData
+        : approved
+          ? { approved }
+          : declineContext
+            ? { approved, ...declineContext }
+            : { approved };
+    const resumeStreamOptions = {
+      ...resumeOptions,
+      memory: {
+        ...(resumeOptions.memory ?? {}),
+        thread: resumeOptions.memory?.thread ?? threadId,
+        resource: resumeOptions.memory?.resource ?? resourceId,
+      },
+    };
+
+    if (resolvedFromStorage) {
+      // The run was recovered from storage and is not tracked by the in-memory
+      // thread runtime, so sendStreamResume()'s getResumableThreadRun() guard would
+      // reject it. Resume directly from the persisted snapshot, mirroring the
+      // explicit-runId approveToolCall()/declineToolCall() entry points.
+      // @ts-expect-error - resumeStream overloads don't narrow cleanly here; matches
+      // the same pattern used by approveToolCall()/declineToolCall() above.
+      await this.resumeStream(resumeData, {
+        ...resumeStreamOptions,
+        runId,
+        ...(options.toolCallId ? { toolCallId: options.toolCallId } : {}),
+      });
+      return { accepted: true, runId, toolCallId: options.toolCallId };
+    }
+
     return this.sendStreamResume({
       threadId,
       resourceId,
       runId,
       toolCallId: options.toolCallId,
-      resumeData:
-        customResumeData !== undefined
-          ? customResumeData
-          : approved
-            ? { approved }
-            : declineContext
-              ? { approved, ...declineContext }
-              : { approved },
-      streamOptions: {
-        ...resumeOptions,
-        memory: {
-          ...(resumeOptions.memory ?? {}),
-          thread: resumeOptions.memory?.thread ?? threadId,
-          resource: resumeOptions.memory?.resource ?? resourceId,
-        },
-      },
+      resumeData,
+      streamOptions: resumeStreamOptions,
     });
   }
 

@@ -41,6 +41,28 @@ export type OmCycleParts = {
   activation?: AugmentData<DataOmActivationPart>;
 };
 
+export type OmCycleStatus =
+  | 'observing'
+  | 'observed'
+  | 'buffering'
+  | 'buffering-complete'
+  | 'activated'
+  | 'failed'
+  | 'buffering-failed'
+  | 'disconnected';
+
+export type OmCycleViewModel = {
+  cycleId: string;
+  recordId?: string;
+  status: OmCycleStatus;
+  operationType?: unknown;
+  observations?: unknown;
+  extractedValues?: Record<string, unknown>;
+  extractionFailures?: Array<{ slug: string; error: string }>;
+  omData: Record<string, unknown>;
+  isLoading: boolean;
+};
+
 export type OmIndexablePart =
   | OmCycleParts['start']
   | OmCycleParts['end']

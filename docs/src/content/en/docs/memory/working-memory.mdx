@@ -20,6 +20,8 @@ Think of it as the agent's active thoughts or scratchpad – the key information
 
 This is useful for maintaining ongoing state that's always relevant and should always be available to the agent.
 
+If you use [Observational Memory](/docs/memory/observational-memory), `observationalMemory.observation.manageWorkingMemory` lets OM update working memory for the agent.
+
 Working memory can persist at two different scopes:
 
 - **Resource-scoped** (default): Memory persists across all conversation threads for the same user
@@ -418,7 +420,7 @@ const response = await agent.generate('What do you know about me?', {
 
 ## Opt in to state signals (experimental)
 
-By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/agents/signals) instead by setting `useStateSignals: true`:
+By default, working memory reaches the model as part of the system message. You can opt into delivering it as a [state signal](/docs/long-running-agents/signals) instead by setting `useStateSignals: true`:
 
 ```typescript
 const memory = new Memory({

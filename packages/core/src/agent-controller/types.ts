@@ -14,14 +14,14 @@ import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { TaskItemSnapshot } from './tools';
 
 // =============================================================================
-// Heartbeat Handlers
+// Interval Handlers
 // =============================================================================
 
 /**
  * A periodic task that the AgentController runs on a timer.
- * Heartbeat handlers start during `init()` and are cleaned up on `stopHeartbeats()`.
+ * Interval handlers start during `init()` and are cleaned up on `stopIntervals()`.
  */
-export interface HeartbeatHandler {
+export interface IntervalHandler {
   /** Unique identifier for this handler (used for dedup and logging) */
   id: string;
   /** Interval in milliseconds between invocations */
@@ -30,7 +30,7 @@ export interface HeartbeatHandler {
   handler: () => void | Promise<void>;
   /** Whether to run the handler immediately on start (default: true) */
   immediate?: boolean;
-  /** Called when the handler is removed or all heartbeats are stopped */
+  /** Called when the handler is removed or all intervals are stopped */
   shutdown?: () => void | Promise<void>;
 }
 
@@ -276,10 +276,10 @@ export interface AgentControllerConfig<TState = {}> {
   browser?: DynamicArgument<MastraBrowser | undefined>;
 
   /**
-   * Periodic heartbeat handlers started during `init()`.
+   * Periodic interval handlers started during `init()`.
    * Use for background tasks like gateway sync, cache refresh, etc.
    */
-  heartbeatHandlers?: HeartbeatHandler[];
+  intervalHandlers?: IntervalHandler[];
 
   /**
    * Custom ID generator for AgentController-managed IDs such as threads and mode-run identifiers.

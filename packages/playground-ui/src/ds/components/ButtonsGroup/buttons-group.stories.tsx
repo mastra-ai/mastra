@@ -174,7 +174,7 @@ export const WithText: Story = {
 };
 
 /**
- * Searchbar + dropdown fused into a single pill — the recommended composition. The search
+ * Search input + dropdown fused into a single pill — the recommended composition. The search
  * segment is an `InputGroup` (icon + input in one bordered box) nested inside the
  * `ButtonsGroup` merger; an interactive clear button would go in an `InputGroupAddon`
  * (`align="inline-end"`) with an `InputGroupButton`.

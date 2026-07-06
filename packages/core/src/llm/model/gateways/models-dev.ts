@@ -15,7 +15,13 @@ import { createGateway } from '@internal/ai-v6';
 import { createOpenRouter } from '@openrouter/ai-sdk-provider-v5';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
-import type { AttachmentCapabilities, GatewayLanguageModel, ProviderConfig } from './base.js';
+import type {
+  AttachmentCapabilities,
+  GatewayLanguageModel,
+  ModelProviderOverride,
+  ProviderConfig,
+  TemperatureCapabilities,
+} from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
 
 interface ModelsDevModelInfo {
@@ -24,6 +30,9 @@ interface ModelsDevModelInfo {
   status?: string;
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
+  temperature?: boolean;
+  // Per-model endpoint/shape/SDK override (models.dev model `provider` block).
+  provider?: { api?: string; shape?: 'responses' | 'completions'; npm?: string };
   [key: string]: unknown;
 }
 
@@ -110,6 +119,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
   private providerConfigs: Record<string, ProviderConfig> = {};
   private attachmentCapabilities: AttachmentCapabilities = {};
+  private temperatureCapabilities: TemperatureCapabilities = {};
 
   constructor(providerConfigs?: Record<string, ProviderConfig>) {
     super();
@@ -123,6 +133,10 @@ export class ModelsDevGateway extends MastraModelGateway {
     }
 
     const data = (await response.json()) as ModelsDevResponse;
+
+    // Reset capability maps so removed providers/models are not retained across syncs
+    this.attachmentCapabilities = {};
+    this.temperatureCapabilities = {};
 
     const providerConfigs: Record<string, ProviderConfig> = {};
 
@@ -160,6 +174,23 @@ export class ModelsDevGateway extends MastraModelGateway {
           .filter(([, modelInfo]) => modelInfo?.attachment === true)
           .map(([modelId]) => modelId)
           .sort();
+
+        // Collect model IDs that support temperature sampling
+        const temperatureModels = activeModels
+          .filter(([, modelInfo]) => modelInfo?.temperature === true)
+          .map(([modelId]) => modelId)
+          .sort();
+
+        // Collect per-model endpoint/shape/SDK overrides. Some providers serve
+        // individual models over a different endpoint or request shape than the
+        // provider default (e.g. OpenAI Responses vs chat-completions).
+        const modelOverrides: Record<string, ModelProviderOverride> = {};
+        for (const [modelId, modelInfo] of activeModels) {
+          const ov = modelInfo?.provider;
+          if (ov && (ov.api || ov.shape || ov.npm)) {
+            modelOverrides[modelId] = { api: ov.api, shape: ov.shape, npm: ov.npm };
+          }
+        }
 
         // Get the API URL - overrides take priority over models.dev data
         const url = PROVIDER_OVERRIDES[normalizedId]?.url || providerInfo.api;
@@ -199,9 +230,13 @@ export class ModelsDevGateway extends MastraModelGateway {
             providerInfo.npm !== '@ai-sdk/gateway'
               ? providerInfo.npm
               : undefined),
+          modelOverrides: Object.keys(modelOverrides).length > 0 ? modelOverrides : undefined,
         };
         if (attachmentModels.length > 0) {
           this.attachmentCapabilities[normalizedId] = attachmentModels;
+        }
+        if (temperatureModels.length > 0) {
+          this.temperatureCapabilities[normalizedId] = temperatureModels;
         }
       }
     }
@@ -220,20 +255,29 @@ export class ModelsDevGateway extends MastraModelGateway {
     return this.attachmentCapabilities;
   }
 
+  getTemperatureCapabilities(): TemperatureCapabilities {
+    return this.temperatureCapabilities;
+  }
+
   buildUrl(routerId: string, envVars?: typeof process.env): string | undefined {
-    const { providerId } = parseModelRouterId(routerId);
+    const { providerId, modelId } = parseModelRouterId(routerId);
 
     const config = this.providerConfigs[providerId];
 
-    if (!config?.url) {
+    // A per-model override may point this model at a different endpoint than the
+    // provider default; prefer it when present.
+    const perModelApi = config?.modelOverrides?.[modelId]?.api;
+    const template = perModelApi ?? config?.url;
+
+    if (!template) {
       return;
     }
 
-    // Check for custom base URL from env vars
+    // Check for custom base URL from env vars (explicit override still wins)
     const baseUrlEnvVar = `${providerId.toUpperCase().replace(/-/g, '_')}_BASE_URL`;
     const customBaseUrl = envVars?.[baseUrlEnvVar] || process.env[baseUrlEnvVar];
 
-    return customBaseUrl || interpolateUrlTemplate(config.url, envVars);
+    return customBaseUrl || interpolateUrlTemplate(template, envVars);
   }
 
   getApiKey(modelId: string): Promise<string> {
@@ -272,6 +316,14 @@ export class ModelsDevGateway extends MastraModelGateway {
 
     const mastraHeaders = { 'User-Agent': MASTRA_USER_AGENT, ...headers };
 
+    // Per-model override: a model may be served over a different request shape
+    // than its provider default (e.g. the OpenAI Responses API while the provider
+    // default is chat-completions). Honor `shape` for any provider.
+    const override = this.providerConfigs[providerId]?.modelOverrides?.[modelId];
+    if (override?.shape === 'responses') {
+      return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
+    }
+
     switch (providerId) {
       case 'openai':
         return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
@@ -309,9 +361,10 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       }
       default: {
-        // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic)
+        // Check if this provider uses a specific SDK package (e.g., kimi-for-coding uses @ai-sdk/anthropic).
+        // A per-model override wins over the provider default.
         const config = this.providerConfigs[providerId];
-        const npm = config?.npm;
+        const npm = override?.npm ?? config?.npm;
 
         // Pattern match for any alibaba variant (alibaba, alibaba-cn, alibaba-coding-plan, etc.)
         if (providerId.includes('alibaba')) {

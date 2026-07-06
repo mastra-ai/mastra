@@ -2,10 +2,10 @@ import { createHash } from 'node:crypto';
 import { hostname } from 'node:os';
 import path from 'node:path';
 
-import { Agent } from '@mastra/core/agent';
+import type { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type {
-  HeartbeatHandler,
+  IntervalHandler,
   AgentControllerConfig,
   AgentControllerEvent,
   AgentControllerMode,
@@ -13,6 +13,7 @@ import type {
   AgentControllerRequestContext,
   Session,
 } from '@mastra/core/agent-controller';
+import { createCodingAgent } from '@mastra/core/coding-agent';
 import type { PubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import type { ProviderConfig } from '@mastra/core/llm';
@@ -26,6 +27,7 @@ import {
 } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
+import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
@@ -70,6 +72,7 @@ import {
   saveSettings,
 } from './onboarding/settings.js';
 import { getToolCategory } from './permissions.js';
+import { PluginManager } from './plugins/manager.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
 import { setAuthStorage } from './providers/claude-max.js';
@@ -143,6 +146,20 @@ function applyEffectiveDefaultsToModes(
   });
 }
 
+function addPluginToolsToModeAllowlists(
+  modes: AgentControllerMode[],
+  pluginToolNames: string[],
+): AgentControllerMode[] {
+  if (pluginToolNames.length === 0) return modes;
+  return modes.map(mode => {
+    if (!mode.availableTools) return mode;
+    return {
+      ...mode,
+      availableTools: Array.from(new Set([...mode.availableTools, ...pluginToolNames])),
+    };
+  });
+}
+
 export interface MastraCodeConfig {
   /** Working directory for project detection. Default: process.cwd() */
   cwd?: string;
@@ -176,8 +193,8 @@ export interface MastraCodeConfig {
   initialState?: Partial<MastraCodeState>;
   /** Override id generation for threads/messages. Primarily useful for deterministic tests. */
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
-  /** Override heartbeat handlers. Default: gateway-sync */
-  heartbeatHandlers?: HeartbeatHandler[];
+  /** Override interval handlers. Default: gateway-sync */
+  intervalHandlers?: IntervalHandler[];
   /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
   workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
@@ -188,6 +205,10 @@ export interface MastraCodeConfig {
   disableMcp?: boolean;
   /** Disable hooks. Default: false */
   disableHooks?: boolean;
+  /** Disable plugin discovery/loading. Default: false */
+  disablePlugins?: boolean;
+  /** Override the plugin manager. Primarily useful for tests or embedding. */
+  pluginManager?: PluginManager;
   /**
    * Override the memory instance (or dynamic factory) passed to the AgentController.
    * When provided, this replaces the default `getDynamicMemory(storage, vectorStore)` which
@@ -454,6 +475,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ? undefined
     : new HookManager(project.rootPath, 'session-init', configDir, homeDir);
 
+  const pluginManager = config?.disablePlugins
+    ? undefined
+    : (config?.pluginManager ?? new PluginManager({ projectRoot: project.rootPath, configDir, homeDir }));
+  const loadedPlugins = pluginManager ? await pluginManager.reload() : [];
+  const pluginTools = pluginManager?.getPluginTools() ?? {};
+
   // Scorers (live evaluation with sampling)
   const outcomeScorer = createOutcomeScorer();
   const efficiencyScorer = createEfficiencyScorer();
@@ -518,12 +545,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         },
       })
     : undefined;
-  const codeAgent: Agent = new Agent({
+  const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
+    // Workspace is wired per-request at the AgentController level (see
+    // `config.workspace` below), so opt out of the factory's default local
+    // workspace. An explicit `undefined` is required: the factory only builds a
+    // default when the `workspace` key is absent.
+    workspace: undefined,
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage),
+    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
     hooks: createToolHooks(hookManager),
     scorers: {
       outcome: {
@@ -622,7 +654,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
   ];
 
-  const defaultHeartbeatHandlers: HeartbeatHandler[] = [
+  const defaultIntervalHandlers: IntervalHandler[] = [
     {
       id: 'gateway-sync',
       intervalMs: 5 * 60 * 1000,
@@ -630,7 +662,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       handler: () => syncGateways(),
     },
   ];
-  const heartbeatHandlers = config?.heartbeatHandlers ?? defaultHeartbeatHandlers;
+  const intervalHandlers = config?.intervalHandlers ?? defaultIntervalHandlers;
 
   // Build lightweight provider access for resolving built-in packs at startup.
   // Anthropic/OpenAI use AuthStorage; other providers use env API keys.
@@ -686,7 +718,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   const effectiveCavemanObservations = globalSettings.models.omCavemanObservations ?? undefined;
   const effectiveObserveAttachments = globalSettings.models.omObserveAttachments ?? 'auto';
 
-  const modes = applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults);
+  const modes = addPluginToolsToModeAllowlists(
+    applyEffectiveDefaultsToModes(config?.modes ? config.modes : defaultModes, effectiveDefaults),
+    Object.keys(pluginTools),
+  );
   const defaultModeId =
     modes.find(mode => mode.metadata?.default === true)?.id ??
     modes.find(mode => mode.id === 'build')?.id ??
@@ -757,6 +792,13 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       projectPath: project.rootPath,
       projectName: project.name,
       gitBranch: project.gitBranch,
+      pluginSkillPaths: loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : [])),
+      pluginCommandPaths: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
+      ),
+      pluginInstructions: loadedPlugins.flatMap(plugin =>
+        plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+      ),
       yolo: true,
       ...globalInitialState,
       ...config?.initialState,
@@ -765,7 +807,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       configDir,
     },
     modes,
-    heartbeatHandlers,
+    intervalHandlers,
     modelUseCountProvider: () => loadSettings().modelUseCounts,
     modelUseCountTracker: modelId => {
       try {
@@ -804,6 +846,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     memory,
     mcpManager,
     hookManager,
+    pluginManager,
+    loadedPlugins,
+    pluginTools,
     signalsPubSub,
     authStorage,
     resolveModel,
@@ -928,30 +973,85 @@ export type MountedMastraCode = MastraCodeAgentController & { mastra: Mastra };
  * durability is configured in one place.
  */
 export async function mountAgentControllerOnMastra(
-  config?: MastraCodeConfig & { mastra?: Mastra; controllerId?: string },
+  config?: MastraCodeConfig & {
+    mastra?: Mastra;
+    controllerId?: string;
+    buildApiRoutes?: (deps: { controller: MountedMastraCode['controller']; authStorage: AuthStorage }) => ApiRoute[];
+    /**
+     * Additional `server` config to fold onto the constructed Mastra alongside
+     * the assembled `apiRoutes` (e.g. `middleware`, `cors`). Used by the
+     * platform entry (`src/mastra/index.ts`) to own the WorkOS gate + tenant
+     * dispatcher + CORS on the instance the deployer generates its server from.
+     * Ignored when `mastra` is provided (mounting onto a caller-owned instance).
+     */
+    buildServerConfig?: (deps: {
+      controller: MountedMastraCode['controller'];
+      authStorage: AuthStorage;
+    }) => Omit<NonNullable<ConstructorParameters<typeof Mastra>[0]>['server'], 'apiRoutes'>;
+  },
 ): Promise<MountedMastraCode> {
-  const base = await createMastraCodeAgentController(config);
-  const { controller, storage } = base;
-  const controllerId = config?.controllerId ?? controller.id;
-
-  // Construct (or reuse) the Mastra and register the controller on it BEFORE init.
-  // The Mastra constructor calls controller.__registerMastra(this), so the
-  // subsequent init() takes the "inherit parent storage" branch rather than
-  // building a duplicate internal Mastra.
-  let mastra: Mastra;
+  const prepared = await prepareAgentControllerMount(config);
   if (config?.mastra) {
     // Mounting onto a Mastra the caller already built. Ensure the controller's
     // back-reference points at it (idempotent — only sets #externalMastra).
-    mastra = config.mastra;
-    controller.__registerMastra(mastra);
-  } else {
-    mastra = new Mastra({ agentControllers: { [controllerId]: controller }, storage });
+    prepared.base.controller.__registerMastra(config.mastra);
+    await prepared.finalize();
+    return { ...prepared.base, mastra: config.mastra };
   }
+  const mastra = new Mastra(prepared.mastraArgs);
+  await prepared.finalize();
+  return { ...prepared.base, mastra };
+}
 
-  await controller.init();
-  await controller.getMastra()?.startWorkers();
+/**
+ * Assemble everything needed to construct the server-owned Mastra WITHOUT
+ * constructing it, so a caller (the platform entry `src/mastra/index.ts`) can
+ * run the `new Mastra(...)` literal in its own module. The deployer's
+ * `checkConfigExport` Babel plugin only marks the config valid when it finds a
+ * top-level `new Mastra(...)` exported as `mastra` in the ENTRY file; hiding the
+ * construction inside this helper would trip the "Invalid Mastra config" warning.
+ *
+ * Returns the constructor args plus a `finalize()` that runs the post-construct
+ * boot (`controller.init()` + `startWorkers()`). The controller is registered on
+ * the Mastra via the `agentControllers` arg at construction time.
+ */
+export async function prepareAgentControllerMount(
+  config?: MastraCodeConfig & {
+    mastra?: Mastra;
+    controllerId?: string;
+    buildApiRoutes?: (deps: { controller: MountedMastraCode['controller']; authStorage: AuthStorage }) => ApiRoute[];
+    buildServerConfig?: (deps: {
+      controller: MountedMastraCode['controller'];
+      authStorage: AuthStorage;
+    }) => Omit<NonNullable<ConstructorParameters<typeof Mastra>[0]>['server'], 'apiRoutes'>;
+  },
+): Promise<{
+  base: Awaited<ReturnType<typeof createMastraCodeAgentController>>;
+  mastraArgs: NonNullable<ConstructorParameters<typeof Mastra>[0]>;
+  finalize: () => Promise<void>;
+}> {
+  const base = await createMastraCodeAgentController(config);
+  const { controller, storage, authStorage } = base;
+  const controllerId = config?.controllerId ?? controller.id;
+  const apiRoutes = config?.buildApiRoutes?.({ controller, authStorage });
+  const extraServerConfig = config?.buildServerConfig?.({ controller, authStorage });
 
-  return { ...base, mastra };
+  const serverConfig = {
+    ...extraServerConfig,
+    ...(apiRoutes?.length ? { apiRoutes } : {}),
+  };
+  const mastraArgs = {
+    agentControllers: { [controllerId]: controller },
+    storage,
+    ...(Object.keys(serverConfig).length ? { server: serverConfig } : {}),
+  };
+
+  const finalize = async () => {
+    await controller.init();
+    await controller.getMastra()?.startWorkers();
+  };
+
+  return { base, mastraArgs, finalize };
 }
 
 /**
@@ -961,3 +1061,34 @@ export async function mountAgentControllerOnMastra(
  * case: `bootLocalAgentController` (local) or {@link mountAgentControllerOnMastra} (server).
  */
 export const createMastraCode = bootLocalAgentController;
+
+/**
+ * Programmatic headless API. `runMC` runs an already-built controller/session
+ * (from {@link createMastraCode}) as an async-iterable run that also resolves to
+ * a typed result. Also available via the `mastracode/headless` subpath.
+ */
+export {
+  runMC,
+  runMCCli,
+  hasHeadlessFlag,
+  autoApprovePolicy,
+  denyPolicy,
+  permissionModeToPolicy,
+  formatHuman,
+  formatJsonl,
+  renderTextResult,
+  renderJsonResult,
+} from './headless/index.js';
+export type {
+  RunMCOptions,
+  RunMCResult,
+  RunMCStatus,
+  RunMCUsage,
+  RunMCToolCall,
+  RunMCToolResult,
+  RunMCError,
+  RunMCThreadOptions,
+  MCRun,
+  ResolutionPolicy,
+  PermissionMode,
+} from './headless/index.js';

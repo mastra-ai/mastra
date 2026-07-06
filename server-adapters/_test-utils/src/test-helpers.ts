@@ -798,8 +798,8 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
         updatedAt: now,
       });
       await schedules.createSchedule({
-        id: 'hb_test-heartbeat',
-        target: { type: 'heartbeat', agentId: 'test-agent', prompt: 'ping' },
+        id: 'agent_test-agent-schedule',
+        target: { type: 'agent', agentId: 'test-agent', prompt: 'ping' },
         cron: '* * * * *',
         status: 'active',
         nextFireAt: now + 60_000,

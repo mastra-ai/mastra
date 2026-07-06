@@ -11,6 +11,7 @@ export function getToNextItemFn({ entries, id, update }: getToItemFnParams) {
   if (thereIsNextItem) {
     return () => {
       const nextItem = entries[currentIndex + 1];
+      if (!nextItem) return;
       update(nextItem.id);
     };
   }
@@ -25,6 +26,7 @@ export function getToPreviousItemFn({ entries, id, update }: getToItemFnParams) 
   if (thereIsPreviousItem) {
     return () => {
       const previousItem = entries[currentIndex - 1];
+      if (!previousItem) return;
       update(previousItem.id);
     };
   }

@@ -157,6 +157,59 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('queued');
   });
 
+  it('shows active elapsed time directly after the model name', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(62_000);
+    const state = createState();
+    state.agentRunStartedAt = 1_000;
+    state.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('openai/gpt-5 1m1s');
+    expect(rendered).not.toContain('worked for');
+    vi.useRealTimers();
+  });
+
+  it('keeps successful completed run timing beside the model with a checkmark', () => {
+    const state = createState();
+    state.lastAgentRunDurationMs = 61_000;
+    state.lastAgentRunEndedAt = 1_000;
+    state.lastAgentRunEndReason = 'done';
+    state.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('openai/gpt-5 1m1s ✓');
+    expect(rendered).not.toContain('done in');
+  });
+
+  it('keeps aborted timing beside the model without an icon and errored timing with an x', () => {
+    const aborted = createState();
+    aborted.lastAgentRunDurationMs = 61_000;
+    aborted.lastAgentRunEndedAt = 1_000;
+    aborted.lastAgentRunEndReason = 'aborted';
+    aborted.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(aborted);
+
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m1s ×');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m1s ✓');
+
+    const errored = createState();
+    errored.lastAgentRunDurationMs = 61_000;
+    errored.lastAgentRunEndedAt = 1_000;
+    errored.lastAgentRunEndReason = 'error';
+    errored.controller.session.model.get.mockReturnValue('openai/gpt-5');
+
+    updateStatusLine(errored);
+
+    expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s ×');
+  });
+
   it('shows the active GitHub PR subscription beside the thread path', () => {
     const state = createState();
     state.activeGithubPrSubscriptions = [

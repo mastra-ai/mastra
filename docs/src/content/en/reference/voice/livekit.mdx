@@ -1,0 +1,460 @@
+---
+title: 'Reference: LiveKit | Voice'
+description: 'API reference for @mastra/livekit, which turns Mastra agents into realtime LiveKit voice agents.'
+packages:
+  - '@mastra/livekit'
+---
+
+# LiveKit
+
+The `@mastra/livekit` package connects Mastra agents to the LiveKit Agents framework. LiveKit runs the audio pipeline (voice activity detection, speech-to-text, turn detection, text-to-speech, barge-in) and the package bridges reply generation to a Mastra agent's `stream()` call.
+
+See [Using LiveKit with Mastra](/docs/voice/livekit) for setup and concepts.
+
+The package has two entry points, one per process:
+
+- `@mastra/livekit`: server-side APIs — [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), and [`serializeSessionMetadata()`](#livekitsessionmetadata). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
+- `@mastra/livekit/worker`: the worker runtime — [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), and [`chatContextToMessages()`](#chatcontexttomessages). Import it only from the worker entry file.
+
+## `createLiveKitWorker()`
+
+Builds a LiveKit agent definition that answers voice sessions with Mastra agents. Use it as the default export of your worker entry file.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { fileURLToPath } from 'node:url'
+import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  turnDetection: 'multilingual',
+})
+
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  runLiveKitWorker({ entry: import.meta.url, agentName: 'mastra-voice' })
+}
+```
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance whose agents handle voice sessions.',
+  },
+  {
+    name: 'agent',
+    type: 'string | (args) => string | Agent | Promise<string | Agent>',
+    description:
+      'Which Mastra agent answers each session: a fixed agent key or id, or a resolver called per session with the dispatch metadata and job context. Defaults to the agentId from the dispatch metadata.',
+    isOptional: true,
+  },
+  {
+    name: 'workflow',
+    type: 'string | Workflow | (args) => string | Promise<string>',
+    description:
+      "Generate each turn's reply with a Mastra workflow instead of an agent: a Workflow instance, a fixed workflow key or id, or a resolver that returns a workflow id per session. The workflow runs once to completion per turn (no suspend or resume). Mutually exclusive with agent; requires workflowInput.",
+    isOptional: true,
+  },
+  {
+    name: 'workflowInput',
+    type: '(args: VoiceTurnContext & { metadata }) => unknown | Promise<unknown>',
+    description:
+      'Maps a turn into the workflow inputData. Required when workflow is set. A stateless mapping that passes the full transcript each turn avoids carrying conversation state in the workflow.',
+    isOptional: true,
+  },
+  {
+    name: 'replyStep',
+    type: 'string',
+    description: 'Only stream text from this workflow step id. Defaults to every step that writes to its writer.',
+    isOptional: true,
+  },
+  {
+    name: 'resultText',
+    type: '(result: unknown) => string | undefined',
+    description:
+      'Fallback when the workflow streams no text via writer: derive the spoken reply from the final run result.',
+    isOptional: true,
+  },
+  {
+    name: 'generate',
+    type: 'VoiceReplyGenerator',
+    description:
+      'Lowest-level escape hatch: supply any reply generator directly (a custom workflow, remote bridge, and so on).',
+    isOptional: true,
+  },
+  {
+    name: 'stt',
+    type: 'STT | string',
+    description: "Speech-to-text: a LiveKit plugin instance or an inference model string such as 'deepgram/nova-3'.",
+    isOptional: true,
+  },
+  {
+    name: 'tts',
+    type: 'TTS | string',
+    description: "Text-to-speech: a LiveKit plugin instance or an inference model string such as 'cartesia/sonic-3'.",
+    isOptional: true,
+  },
+  {
+    name: 'vad',
+    type: "VAD | 'silero' | false",
+    description:
+      "Voice activity detection. 'silero' loads the Silero VAD from @livekit/agents-plugin-silero during prewarm. Pass an instance to bring your own, or false to disable.",
+    isOptional: true,
+    defaultValue: "'silero'",
+  },
+  {
+    name: 'turnDetection',
+    type: "'multilingual' | 'english' | TurnDetectionMode",
+    description:
+      "End-of-turn detection. 'multilingual' and 'english' load LiveKit's semantic turn detector from @livekit/agents-plugin-livekit. Other values such as 'vad', 'stt', or 'manual' pass through.",
+    isOptional: true,
+  },
+  {
+    name: 'turnHandling',
+    type: 'Partial<TurnHandlingOptions>',
+    description:
+      'Turn handling tuning: endpointing delays, interruption sensitivity, preemptive generation. The worker disables preemptiveGeneration unless set here — each preemptive attempt re-runs the Mastra agent and persists a duplicate user message.',
+    isOptional: true,
+  },
+  {
+    name: 'sessionOptions',
+    type: 'Partial<AgentSessionOptions>',
+    description: 'Extra LiveKit AgentSession options merged over what this helper builds.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: 'false | ((args) => { thread, resource } | false)',
+    description:
+      'Memory mapping. Defaults to { thread: metadata.threadId ?? room name, resource: metadata.resourceId ?? thread } when the resolved agent has memory configured. Pass false to disable, or a function to customize.',
+    isOptional: true,
+  },
+  {
+    name: 'toolFeedback',
+    type: '(toolCall) => string | undefined',
+    description:
+      'Called when the Mastra agent starts a tool call mid-reply. Return a short phrase to speak while the tool runs.',
+    isOptional: true,
+  },
+  {
+    name: 'greeting',
+    type: 'string',
+    description: 'Static greeting spoken when the session starts.',
+    isOptional: true,
+  },
+  {
+    name: 'persistGreeting',
+    type: 'boolean',
+    description:
+      'Save the spoken greeting to the memory thread as an assistant message, making the saved thread a faithful call transcript. Only applies when a greeting is set and memory is enabled.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'observability',
+    type: 'boolean',
+    description:
+      "Trace each call when the Mastra instance has observability configured. Opens a `voice call` span per session: every turn's agent run nests under it, LiveKit's STT, TTS, end-of-utterance, VAD, and LLM latency metrics become child spans, and the span closes with a per-model usage roll-up. Pass false to disable.",
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'inputOptions',
+    type: 'Partial<RoomInputOptions>',
+    description: 'LiveKit room input options passed to session.start().',
+    isOptional: true,
+  },
+  {
+    name: 'outputOptions',
+    type: 'Partial<RoomOutputOptions>',
+    description: 'LiveKit room output options passed to session.start().',
+    isOptional: true,
+  },
+  {
+    name: 'onSessionStart',
+    type: '(args: { session, ctx, agent, metadata }) => void | Promise<void>',
+    description: 'Called after the session starts. Attach event listeners or trigger replies here.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `runLiveKitWorker()`
+
+Starts the LiveKit worker CLI (`dev`, `start`, and `connect` subcommands) for a worker entry file. Call it from the file that default-exports the worker definition, guarded so it only runs when executed directly (the worker spawns a child process per session that re-imports the same file). Using this helper instead of `cli.runApp` from `@livekit/agents` guarantees the worker runtime and the bridge share one copy of the LiveKit SDK.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'entry',
+    type: 'string | URL',
+    description: 'The worker entry module whose default export is the agent definition. Pass import.meta.url.',
+  },
+  {
+    name: 'agentName',
+    type: 'string',
+    description: 'LiveKit agent name for explicit dispatch.',
+    isOptional: true,
+    defaultValue: "'mastra-voice'",
+  },
+  {
+    name: 'serverOptions',
+    type: 'Partial<ServerOptions>',
+    description: 'Extra LiveKit ServerOptions merged over what this helper builds.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `pipeAgentReplyToWriter()`
+
+Streams a Mastra agent's reply into a workflow step's `writer` on the workflow reply path. It forwards the agent's text deltas, so text-to-speech starts before the full reply is ready, and its tool-call chunks, so `toolFeedback` fires and `onTurnComplete` sees the tool list. Piping only `stream.textStream` silently drops tool calls. Pass the step's `abortSignal` to `agent.stream()` so barge-in stops generation promptly.
+
+```typescript title="src/mastra/workflows/phone-conversation.ts"
+import { pipeAgentReplyToWriter } from '@mastra/livekit'
+
+const generateResponse = createStep({
+  id: 'generateResponse',
+  // input and output schemas omitted
+  execute: async ({ inputData, mastra, writer, abortSignal }) => {
+    const stream = await mastra.getAgent('support').stream(inputData.turn, { abortSignal })
+    const reply = await pipeAgentReplyToWriter(stream, writer)
+    return { reply }
+  },
+})
+```
+
+Returns: `Promise<string>`, the accumulated reply text.
+
+### Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentStream',
+    type: 'AgentReplyStreamLike',
+    description: 'The stream returned by agent.stream() — anything exposing a fullStream async iterable.',
+  },
+  {
+    name: 'writer',
+    type: 'WritableStream<unknown>',
+    description: "The workflow step's writer.",
+  },
+]}
+/>
+
+## `chatContextToMessages()`
+
+Converts a LiveKit chat context into plain messages accepted by `agent.stream()`, excluding instructions and function calls. Use it in `workflowInput` to pass the full transcript into a stateless workflow.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
+
+export default createLiveKitWorker({
+  mastra,
+  workflow: 'phoneConversation',
+  workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }),
+})
+```
+
+Returns: `VoiceTurnMessage[]`, where each entry is `{ role: 'system' | 'user' | 'assistant'; content: string }`.
+
+## `liveKitConnectionRoute()`
+
+Returns an [API route](/docs/server/custom-api-routes) that mints a LiveKit access token with the voice agent dispatched into the room. Frontends call it to join a session.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { liveKitConnectionRoute } from '@mastra/livekit'
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [liveKitConnectionRoute({ agentName: 'mastra-voice' })],
+  },
+})
+```
+
+The route accepts a JSON body with optional `agentId`, `threadId`, and `resourceId` fields and responds with `{ serverUrl, roomName, participantName, participantToken }`. The `threadId` defaults to the generated room name.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Route path.',
+    isOptional: true,
+    defaultValue: "'/voice/livekit/connection-details'",
+  },
+  {
+    name: 'serverUrl',
+    type: 'string',
+    description: 'LiveKit server URL.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_URL',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'LiveKit API key.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_KEY',
+  },
+  {
+    name: 'apiSecret',
+    type: 'string',
+    description: 'LiveKit API secret.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_SECRET',
+  },
+  {
+    name: 'agentName',
+    type: 'string',
+    description: "LiveKit agent name for explicit dispatch. Must match the worker's agentName.",
+    isOptional: true,
+    defaultValue: "'mastra-voice'",
+  },
+  {
+    name: 'ttl',
+    type: 'string | number',
+    description: 'Token time-to-live.',
+    isOptional: true,
+    defaultValue: "'15m'",
+  },
+  {
+    name: 'requiresAuth',
+    type: 'boolean',
+    description: 'Whether the route requires authentication.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'roomName',
+    type: 'string | (args) => string',
+    description: 'Room name or a function that derives one from the request.',
+    isOptional: true,
+  },
+  {
+    name: 'participantIdentity',
+    type: 'string | (args) => string',
+    description: 'Participant identity or a function that derives one from the request.',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: '(args) => LiveKitSessionMetadata | Promise<LiveKitSessionMetadata>',
+    description:
+      'Builds the session metadata delivered to the worker. Defaults to passing through agentId, threadId, and resourceId from the request body.',
+    isOptional: true,
+  },
+]}
+/>
+
+## `dispatchVoiceSession()`
+
+Dispatches a Mastra voice agent into a LiveKit room programmatically — for server-initiated sessions such as outbound calls.
+
+```typescript
+import { dispatchVoiceSession } from '@mastra/livekit'
+
+await dispatchVoiceSession({
+  roomName: 'support-call-42',
+  agentName: 'mastra-voice',
+  metadata: { agentId: 'support', threadId: 'thread-42' },
+})
+```
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'roomName',
+    type: 'string',
+    description: 'Room to dispatch the agent into. Created on demand.',
+  },
+  {
+    name: 'agentName',
+    type: 'string',
+    description: "Must match the worker's agentName.",
+    isOptional: true,
+    defaultValue: "'mastra-voice'",
+  },
+  {
+    name: 'metadata',
+    type: 'LiveKitSessionMetadata',
+    description: 'Session metadata: agentId, threadId, resourceId, requestContext.',
+    isOptional: true,
+  },
+  {
+    name: 'serverUrl',
+    type: 'string',
+    description: 'LiveKit server URL.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_URL',
+  },
+  {
+    name: 'apiKey',
+    type: 'string',
+    description: 'LiveKit API key.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_KEY',
+  },
+  {
+    name: 'apiSecret',
+    type: 'string',
+    description: 'LiveKit API secret.',
+    isOptional: true,
+    defaultValue: 'process.env.LIVEKIT_API_SECRET',
+  },
+]}
+/>
+
+## `LiveKitSessionMetadata`
+
+The metadata passed from the Mastra server to the worker through LiveKit job dispatch.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'Mastra agent to run, by registered key or agent id.',
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Memory thread id. Defaults to the LiveKit room name.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Memory resource id, typically the end user id.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    description: 'Plain-object entries restored into a RequestContext for agent execution.',
+    isOptional: true,
+  },
+]}
+/>
+
+The metadata travels as a JSON string. `liveKitConnectionRoute()` and `dispatchVoiceSession()` serialize it for you; use `serializeSessionMetadata(metadata)` when dispatching through your own code, or write the JSON directly in LiveKit-side configuration such as a SIP dispatch rule. Entries in `requestContext` reach the agent's dynamic instructions, tools, and input processors on every turn of the call.
+
+## Related
+
+- [Using LiveKit with Mastra](/docs/voice/livekit)
+- [LiveKit Agents docs](https://docs.livekit.io/agents/)
