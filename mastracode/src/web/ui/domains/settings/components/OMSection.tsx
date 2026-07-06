@@ -12,6 +12,7 @@ import {
   useUpdateOMObserveAttachments,
   useUpdateOMThresholds,
 } from '../../../../../shared/hooks/use-om';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 type OMConfig = OMConfigInfo;
 
@@ -149,11 +150,7 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
   }
 
   if (loading) {
-    return (
-      <Txt as="p" variant="ui-sm" className="text-icon3">
-        Loading OM settings…
-      </Txt>
-    );
+    return <SkeletonRows label="Loading OM settings" rows={4} rowClassName="h-10 w-full" />;
   }
 
   const attachmentChoice: AttachmentChoice = config ? attachmentToChoice(config.observeAttachments) : 'auto';

@@ -12,6 +12,7 @@ import {
   useRemoveModelPack,
   useSaveModelPack,
 } from '../../../../../shared/hooks/use-model-packs';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 interface DraftPack {
   name: string;
@@ -176,9 +177,7 @@ export function ModelPacksSection({
       )}
 
       {loading ? (
-        <Txt as="p" variant="ui-sm" className="text-icon3">
-          Loading model packs…
-        </Txt>
+        <SkeletonRows label="Loading model packs" rows={3} rowClassName="h-9 w-full" />
       ) : packs.length === 0 && !draft ? (
         <Txt as="p" variant="ui-sm" className="text-icon3">
           No model packs available. Configure provider keys or add a custom pack.

@@ -374,6 +374,11 @@ const sidebars = {
       items: [
         {
           type: 'category',
+          label: 'Feedback',
+          items: [{ type: 'doc', id: 'observability/feedback', label: 'Feedback' }],
+        },
+        {
+          type: 'category',
           label: 'Logging',
           items: [{ type: 'doc', id: 'logging/pino-logger', label: 'PinoLogger' }],
         },

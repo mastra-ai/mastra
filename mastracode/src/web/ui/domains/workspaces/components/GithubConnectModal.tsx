@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useKeyDown } from '../../../lib/hooks';
 import { CloseIcon, FolderIcon, LogoMark, SearchIcon } from '../../../ui/icons';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubReposQuery } from '../hooks/useGithubRepos';
 import { useCreateGithubProjectMutation } from '../hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../services/github';
@@ -104,7 +105,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
 
             <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto">
               {loading ? (
-                <p className="m-0 text-ui-sm text-icon3">Loading repositories…</p>
+                <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-12 w-full rounded-xl" />
               ) : repos.length === 0 ? (
                 <p className="m-0 text-ui-sm text-icon3">No repositories found.</p>
               ) : (
