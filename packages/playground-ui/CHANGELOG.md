@@ -1,5 +1,18 @@
 # @mastra/playground-ui
 
+## 40.0.0-alpha.3
+
+### Patch Changes
+
+- Deprecated the legacy line TabList fallback for new tabs while keeping existing tabs compatible. ([#18978](https://github.com/mastra-ai/mastra/pull/18978))
+
+- Improved playground-ui's safety around array and object access. ([#18860](https://github.com/mastra-ai/mastra/pull/18860))
+  This release reduces the risk of undefined reads without changing behavior.
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`82f0f43`](https://github.com/mastra-ai/mastra/commit/82f0f439600871ca2d20ab6fced2c68db1e42536), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+  - @mastra/react@1.2.3-alpha.3
+  - @mastra/client-js@1.31.0-alpha.3
+
 ## 39.0.1-alpha.2
 
 ### Patch Changes
