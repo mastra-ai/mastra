@@ -219,6 +219,64 @@ describe('PluginManager', () => {
     );
   });
 
+  it('installs dependencies for nested GitHub entry package roots during updates', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria');
+    const nestedPluginDir = path.join(checkoutDir, '.mastracode/plugins/sources/local/alexandria');
+    writePlugin(nestedPluginDir, 'alexandria', 'github_tool', 'first');
+    fs.writeFileSync(path.join(nestedPluginDir, 'package.json'), JSON.stringify({ name: 'alexandria' }));
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          alexandria: {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/alexandria',
+            path: 'sources/github/acme-alexandria',
+            entry: '.mastracode/plugins/sources/local/alexandria/src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      if (cmd === 'npm') {
+        expect(options.cwd).toBe(nestedPluginDir);
+        return { stdout: '' };
+      }
+      expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return {
+          stdout:
+            execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse' && call[1][1] === 'HEAD').length === 1
+              ? 'old'
+              : 'new',
+        };
+      }
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') writePlugin(nestedPluginDir, 'alexandria', 'github_tool', 'second');
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+    expect(manager.getPluginTools().github_tool?.description).toBe('first');
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    expect(manager.getPluginTools().github_tool?.description).toBe('second');
+    expect(execaMock).toHaveBeenCalledWith('npm', ['install'], expect.objectContaining({ cwd: nestedPluginDir }));
+    expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
+      fs.realpathSync(mastracodePackageRoot),
+    );
+  });
+
   it('does not install dependencies for unchanged GitHub plugin checkouts', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

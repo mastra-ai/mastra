@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execa } from 'execa';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
-import { installPluginDependencies } from './dependencies.js';
+import { getEntryPackageRoot, installPluginDependenciesForEntry } from './dependencies.js';
 import { loadPluginFromEntry } from './loader.js';
 import { getSingleManifestPlugin } from './manifest.js';
 import { ensureMastraCodePackageLink } from './package-link.js';
@@ -80,9 +80,9 @@ export async function installGithubPlugin(
     await execa('git', ['checkout', ref], { cwd: checkoutDir, env: NON_INTERACTIVE_GIT_ENV });
   }
 
-  await installPluginDependencies(checkoutDir);
   const entry = detectEntry(checkoutDir, options.entry);
-  ensureMastraCodePackageLink(checkoutDir);
+  await installPluginDependenciesForEntry(checkoutDir, entry);
+  ensureMastraCodePackageLink(getEntryPackageRoot(checkoutDir, entry));
   const plugin = await loadPluginFromEntry(path.join(checkoutDir, entry));
   const registry = removePluginRecord(loadPluginRegistry(paths.registryPath), plugin.id);
   const relativePath = path.relative(getPluginRoot(scope, options), checkoutDir);

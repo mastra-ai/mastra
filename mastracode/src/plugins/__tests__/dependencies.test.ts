@@ -7,7 +7,7 @@ const execaMock = vi.hoisted(() => vi.fn());
 
 vi.mock('execa', () => ({ execa: execaMock }));
 
-import { installPluginDependencies } from '../dependencies.js';
+import { getEntryPackageRoot, getPluginDependencyRoots, installPluginDependencies } from '../dependencies.js';
 
 let tempDir: string | undefined;
 
@@ -110,5 +110,21 @@ describe('installPluginDependencies', () => {
     execaMock.mockRejectedValueOnce(error);
 
     await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(error);
+  });
+
+  it('finds dependency roots for nested entry packages', () => {
+    const pluginRoot = makePluginRoot();
+    const nestedRoot = path.join(pluginRoot, '.mastracode/plugins/sources/local/alexandria');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
+    fs.mkdirSync(path.join(nestedRoot, 'src'), { recursive: true });
+    writePackageJson(nestedRoot);
+
+    expect(getPluginDependencyRoots(pluginRoot, '.mastracode/plugins/sources/local/alexandria/src/index.ts')).toEqual([
+      pluginRoot,
+      nestedRoot,
+    ]);
+    expect(getEntryPackageRoot(pluginRoot, '.mastracode/plugins/sources/local/alexandria/src/index.ts')).toBe(
+      nestedRoot,
+    );
   });
 });

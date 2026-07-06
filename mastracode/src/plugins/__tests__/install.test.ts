@@ -284,7 +284,9 @@ describe('installGithubPlugin', () => {
       if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
         const checkoutDir = args[3];
         if (!checkoutDir) throw new Error('missing checkout dir');
-        writePlugin(path.join(checkoutDir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria'), 'alexandria');
+        const nestedPluginDir = path.join(checkoutDir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria');
+        writePlugin(nestedPluginDir, 'alexandria');
+        fs.writeFileSync(path.join(nestedPluginDir, 'package.json'), JSON.stringify({ name: 'alexandria' }));
         fs.writeFileSync(
           path.join(checkoutDir, '.mastracode-plugin.json'),
           JSON.stringify({
@@ -304,15 +306,16 @@ describe('installGithubPlugin', () => {
       installGithubPlugin('https://github.com/acme/alexandria', 'project', { projectRoot, homeDir }),
     ).resolves.toBe('alexandria');
 
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria');
+    const nestedPluginDir = path.join(checkoutDir, '.mastracode/plugins/sources/local/alexandria');
     expect(execaMock).toHaveBeenCalledWith(
       'gh',
-      [
-        'repo',
-        'clone',
-        'acme/alexandria',
-        path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria'),
-      ],
+      ['repo', 'clone', 'acme/alexandria', checkoutDir],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenCalledWith('npm', ['install'], expect.objectContaining({ cwd: nestedPluginDir }));
+    expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
+      fs.realpathSync(mastracodePackageRoot),
     );
     expect(
       loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins.alexandria,

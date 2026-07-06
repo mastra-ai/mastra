@@ -31,6 +31,46 @@ export async function installPluginDependencies(pluginRoot: string): Promise<boo
   return true;
 }
 
+export async function installPluginDependenciesForEntry(pluginRoot: string, entry: string): Promise<void> {
+  for (const dependencyRoot of getPluginDependencyRoots(pluginRoot, entry)) {
+    await installPluginDependencies(dependencyRoot);
+  }
+}
+
+export function getPluginDependencyRoots(pluginRoot: string, entry: string): string[] {
+  const roots = fs.existsSync(path.join(pluginRoot, 'package.json')) ? [pluginRoot] : [];
+  const entryPackageRoot = findEntryPackageRoot(pluginRoot, entry);
+  if (entryPackageRoot && entryPackageRoot !== pluginRoot) {
+    roots.push(entryPackageRoot);
+  }
+  return roots;
+}
+
+export function getEntryPackageRoot(pluginRoot: string, entry: string): string {
+  return findEntryPackageRoot(pluginRoot, entry) ?? pluginRoot;
+}
+
+function findEntryPackageRoot(pluginRoot: string, entry: string): string | undefined {
+  const root = path.resolve(pluginRoot);
+  let current = path.dirname(path.resolve(pluginRoot, entry));
+
+  while (isInsideDirectory(current, root)) {
+    if (fs.existsSync(path.join(current, 'package.json'))) {
+      return current;
+    }
+    if (current === root) break;
+    current = path.dirname(current);
+  }
+
+  return undefined;
+}
+
+function isInsideDirectory(targetPath: string, root: string): boolean {
+  const resolvedTarget = path.resolve(targetPath);
+  const resolvedRoot = path.resolve(root);
+  return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
+}
+
 function getInstallCommand(pluginRoot: string, packageManager?: string): InstallCommand {
   if (packageManager?.startsWith('pnpm@')) {
     return { command: 'pnpm', args: ['install', '--frozen-lockfile'] };
