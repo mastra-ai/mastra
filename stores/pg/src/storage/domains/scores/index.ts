@@ -1,7 +1,16 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ListScoresResponse, SaveScorePayload, ScoreRowData, ScoringSource } from '@mastra/core/evals';
 import { saveScorePayloadSchema } from '@mastra/core/evals';
-import type { StoragePagination, CreateIndexOptions } from '@mastra/core/storage';
+import type {
+  CreateIndexOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  ScoreTenancyFilters,
+  StoragePagination,
+  TABLE_NAMES,
+  TableRetentionPolicy,
+} from '@mastra/core/storage';
 import {
   calculatePagination,
   createStorageErrorId,
@@ -14,6 +23,29 @@ import {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
+
+/**
+ * Appends multi-tenant scope conditions to a query. Mutates `conditions`/`queryParams`.
+ * Returns the next positional parameter index.
+ */
+function applyTenancyFilters(
+  conditions: string[],
+  queryParams: any[],
+  startIndex: number,
+  filters?: ScoreTenancyFilters,
+): number {
+  let paramIndex = startIndex;
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`"organizationId" = $${paramIndex++}`);
+    queryParams.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`"projectId" = $${paramIndex++}`);
+    queryParams.push(filters.projectId);
+  }
+  return paramIndex;
+}
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -46,6 +78,14 @@ export class ScoresPG extends ScoresStorage {
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_SCORERS] as const;
 
+  /**
+   * Scorer results accumulate as evals run. Single table, anchored on the
+   * timezone-aware `createdAtZ` mirror column (kept in sync by triggers).
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    scorers: { table: TABLE_SCORERS, column: 'createdAtZ', indexed: true },
+  };
+
   constructor(config: PgDomainConfig) {
     super();
     const { client, schemaName, skipDefaultIndexes, indexes } = resolvePgConfig(config);
@@ -62,10 +102,35 @@ export class ScoresPG extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['spanId', 'requestContext'],
+      ifNotExists: ['spanId', 'requestContext', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ScoresPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
   }
 
   /**
@@ -157,6 +222,17 @@ export class ScoresPG extends ScoresStorage {
     await this.#db.clearTable({ tableName: TABLE_SCORERS });
   }
 
+  /** Delete scorer results older than the `scorers` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: ScoresPG.retentionTables,
+      order: ['scorers'],
+    });
+    return runPrune({ db: this.#db, domain: 'scores', targets, options });
+  }
+
   async getScoreById({ id }: { id: string }): Promise<ScoreRowData | null> {
     try {
       const result = await this.#db.client.oneOrNone<ScoreRowData>(
@@ -183,12 +259,14 @@ export class ScoresPG extends ScoresStorage {
     entityId,
     entityType,
     source,
+    filters,
   }: {
     scorerId: string;
     pagination: StoragePagination;
     entityId?: string;
     entityType?: string;
     source?: ScoringSource;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const conditions: string[] = [`"scorerId" = $1`];
@@ -209,6 +287,8 @@ export class ScoresPG extends ScoresStorage {
         conditions.push(`"source" = $${paramIndex++}`);
         queryParams.push(source);
       }
+
+      paramIndex = applyTenancyFilters(conditions, queryParams, paramIndex, filters);
 
       const whereClause = conditions.join(' AND ');
 
@@ -333,14 +413,21 @@ export class ScoresPG extends ScoresStorage {
   async listScoresByRunId({
     runId,
     pagination,
+    filters,
   }: {
     runId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
+      const conditions: string[] = [`"runId" = $1`];
+      const queryParams: any[] = [runId];
+      let paramIndex = applyTenancyFilters(conditions, queryParams, 2, filters);
+      const whereClause = conditions.join(' AND ');
+
       const total = await this.#db.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "runId" = $1`,
-        [runId],
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause}`,
+        queryParams,
       );
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -362,8 +449,8 @@ export class ScoresPG extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.#db.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "runId" = $1 LIMIT $2 OFFSET $3`,
-        [runId, limitValue, start],
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, limitValue, start],
       );
       return {
         pagination: {
@@ -385,20 +472,26 @@ export class ScoresPG extends ScoresStorage {
       );
     }
   }
-
   async listScoresByEntityId({
     entityId,
     entityType,
     pagination,
+    filters,
   }: {
     pagination: StoragePagination;
     entityId: string;
     entityType: string;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
+      const conditions: string[] = [`"entityId" = $1`, `"entityType" = $2`];
+      const queryParams: any[] = [entityId, entityType];
+      let paramIndex = applyTenancyFilters(conditions, queryParams, 3, filters);
+      const whereClause = conditions.join(' AND ');
+
       const total = await this.#db.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "entityId" = $1 AND "entityType" = $2`,
-        [entityId, entityType],
+        `SELECT COUNT(*) FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause}`,
+        queryParams,
       );
       const { page, perPage: perPageInput } = pagination;
       const perPage = normalizePerPage(perPageInput, 100);
@@ -420,8 +513,8 @@ export class ScoresPG extends ScoresStorage {
       const end = perPageInput === false ? Number(total?.count) : start + perPage;
 
       const result = await this.#db.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE "entityId" = $1 AND "entityType" = $2 LIMIT $3 OFFSET $4`,
-        [entityId, entityType, limitValue, start],
+        `SELECT * FROM ${getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) })} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, limitValue, start],
       );
       return {
         pagination: {
@@ -448,16 +541,23 @@ export class ScoresPG extends ScoresStorage {
     traceId,
     spanId,
     pagination,
+    filters,
   }: {
     traceId: string;
     spanId: string;
     pagination: StoragePagination;
+    filters?: ScoreTenancyFilters;
   }): Promise<ListScoresResponse> {
     try {
       const tableName = getTableName({ indexName: TABLE_SCORERS, schemaName: getSchemaName(this.#schema) });
+      const conditions: string[] = [`"traceId" = $1`, `"spanId" = $2`];
+      const queryParams: any[] = [traceId, spanId];
+      let paramIndex = applyTenancyFilters(conditions, queryParams, 3, filters);
+      const whereClause = conditions.join(' AND ');
+
       const countSQLResult = await this.#db.client.oneOrNone<{ count: string }>(
-        `SELECT COUNT(*) as count FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2`,
-        [traceId, spanId],
+        `SELECT COUNT(*) as count FROM ${tableName} WHERE ${whereClause}`,
+        queryParams,
       );
 
       const total = Number(countSQLResult?.count ?? 0);
@@ -467,8 +567,8 @@ export class ScoresPG extends ScoresStorage {
       const limitValue = perPageInput === false ? total : perPage;
       const end = perPageInput === false ? total : start + perPage;
       const result = await this.#db.client.manyOrNone<ScoreRowData>(
-        `SELECT * FROM ${tableName} WHERE "traceId" = $1 AND "spanId" = $2 ORDER BY "createdAt" DESC LIMIT $3 OFFSET $4`,
-        [traceId, spanId, limitValue, start],
+        `SELECT * FROM ${tableName} WHERE ${whereClause} ORDER BY "createdAt" DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`,
+        [...queryParams, limitValue, start],
       );
 
       const hasMore = end < total;

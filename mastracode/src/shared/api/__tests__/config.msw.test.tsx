@@ -11,7 +11,7 @@ const BASE_URL = 'http://localhost:4111';
 describe('ApiConfigProvider', () => {
   describe('when a hook reads the config', () => {
     it('exposes the injected base url and a client that hits it', async () => {
-      server.use(http.get(`${BASE_URL}/api/web/config/providers`, () => HttpResponse.json({ providers: [] })));
+      server.use(http.get(`${BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers: [] })));
 
       const wrapper = ({ children }: { children: ReactNode }) => (
         <ApiConfigProvider baseUrl={BASE_URL}>{children}</ApiConfigProvider>
@@ -19,7 +19,7 @@ describe('ApiConfigProvider', () => {
       const { result } = renderHook(() => useApiConfig(), { wrapper });
 
       expect(result.current.baseUrl).toBe(BASE_URL);
-      const body = await result.current.client.get<{ providers: unknown[] }>('/api/web/config/providers');
+      const body = await result.current.client.get<{ providers: unknown[] }>('/web/config/providers');
       expect(body.providers).toEqual([]);
     });
   });

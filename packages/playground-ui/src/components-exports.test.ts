@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 
 // Guards the @mastra/playground-ui/components/* contract: every folder under
 // src/ds/components is published as its own entrypoint (wired up dynamically
-// in vite.config.ts), so consumers can deep-import a single component instead
-// of the root barrel. The entry enumeration assumes one index.ts per folder —
+// in vite.config.ts), so consumers can deep-import a single component without
+// a root package entry. The entry enumeration assumes one index.ts per folder —
 // if that invariant breaks, the component silently disappears from dist.
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));

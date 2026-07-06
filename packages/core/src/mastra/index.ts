@@ -1,7 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import type { Agent } from '../agent';
-import { Heartbeats } from '../agent/heartbeat/heartbeats';
-import type { HeartbeatConfig, HeartbeatHooks } from '../agent/heartbeat/types';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
 import { isDurableAgentLike } from '../agent/types';
@@ -22,7 +20,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
-import { AvailableHooks, registerHook } from '../hooks';
+import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -45,6 +43,8 @@ import type {
 import { NoOpObservability, noOpLoggerContext, noOpMetricsContext } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
 import type { Processor } from '../processors';
+import { Schedules } from '../schedules/schedules';
+import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
@@ -499,14 +499,15 @@ export interface Config<
   };
 
   /**
-   * Heartbeat runtime configuration. A single lifecycle-hook bundle runs for
-   * every heartbeat fire and is invoked by the heartbeat worker around
-   * heartbeat-driven agent runs; hooks branch per agent via the `agentId` on
-   * each context. Configuring hooks here (rather than on the Agent) lets both
-   * code-defined and stored agents share the same hook surface, since stored
-   * agents cannot define functions in their serialized config.
+   * Schedules runtime configuration. A single lifecycle-hook bundle runs for
+   * every agent-schedule fire and is invoked by the agent-schedule worker
+   * around schedule-driven agent runs; hooks branch per agent via the
+   * `agentId` on each context. Configuring hooks here (rather than on the
+   * Agent) lets both code-defined and stored agents share the same hook
+   * surface, since stored agents cannot define functions in their serialized
+   * config.
    */
-  heartbeat?: HeartbeatConfig<Mastra>;
+  schedules?: SchedulesConfig<Mastra>;
 
   /**
    * Platform channels for messaging integrations (Slack, Discord, etc.).
@@ -619,6 +620,8 @@ export class Mastra<
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
+  #observabilityExplicit = false;
+  #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
   #serverMiddleware: Array<{
@@ -627,6 +630,7 @@ export class Mastra<
   }> = [];
 
   #storage?: MastraCompositeStore;
+  #storageExplicit = false;
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
@@ -636,7 +640,9 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #serverExplicit = false;
   #studio?: StudioConfig;
+  #studioExplicit = false;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -654,8 +660,8 @@ export class Mastra<
   #hasScheduledWorkflow = false;
   #gateways?: Record<string, MastraModelGatewayInterface>;
   #channels?: TChannels;
-  #heartbeats?: Heartbeats;
-  #heartbeatConfig?: HeartbeatConfig<Mastra>;
+  #schedules?: Schedules;
+  #schedulesConfig?: SchedulesConfig<Mastra>;
   #environment?: string;
   #toolPayloadTransform?: ToolPayloadTransformPolicy;
   #workers: MastraWorker[] = [];
@@ -663,25 +669,31 @@ export class Mastra<
   /**
    * Set when the user (or `MASTRA_WORKERS=false`) explicitly disabled all event
    * processing in this instance via `workers: false`. Gates lazy scheduler /
-   * heartbeat worker injection so runtime triggers (e.g. `heartbeats.create()`)
-   * don't resurrect workers the user opted out of.
+   * agent-schedule worker injection so runtime triggers (e.g.
+   * `schedules.create()`) don't resurrect workers the user opted out of.
    */
   #workersDisabled = false;
   /**
    * Tracks whether `startWorkers()` has already run. Used to decide whether
-   * lazy scheduler injection (e.g. from `mastra.heartbeats.create()` after boot)
+   * lazy scheduler injection (e.g. from `mastra.schedules.create()` after boot)
    * needs to also `init`/`start` the worker, or whether the normal
    * `startWorkers()` path will pick it up.
    */
   #workersStarted = false;
   /**
    * Set when something has signalled that the scheduler is needed at runtime
-   * (e.g. an agent registered a heartbeat via `__ensureHeartbeatRuntimeReady()`).
+   * (e.g. an agent schedule was registered via `__ensureScheduleRuntimeReady()`).
    * Causes `#shouldEnableScheduler()` to return `true` even when there are no
    * declarative scheduled workflows, unless the user explicitly set
    * `scheduler: { enabled: false }`.
    */
   #schedulerRequested = false;
+  /**
+   * In-flight promise for `#ensureSchedulingWorkersStarted()`. Serializes
+   * concurrent startup requests so two callers can't both pass the
+   * worker-existence checks and double-subscribe to the scheduling topics.
+   */
+  #schedulingWorkersStartPromise?: Promise<void>;
   // Lazily-constructed processor used by handleWorkflowEvent(). Shared between
   // pull-mode workers (OrchestrationWorker) and push-mode entry points
   // (in-process EventEmitter listener, the /api/workers/events HTTP route).
@@ -834,8 +846,12 @@ export class Mastra<
    * or undefined if the scheduler is not enabled / not yet started.
    *
    * The scheduler is created when `startWorkers()` initializes the
-   * SchedulerWorker (guarded by `#shouldEnableScheduler()`). Use it
-   * to create, pause, resume, or delete schedules imperatively.
+   * SchedulerWorker (guarded by `#shouldEnableScheduler()`).
+   *
+   * This is runtime plumbing (the cron tick loop). To create, list, pause,
+   * resume, or delete schedules use `mastra.schedules` instead.
+   *
+   * @internal
    */
   get scheduler(): Scheduler | undefined {
     return this.#findSchedulerWorker()?.scheduler;
@@ -912,16 +928,16 @@ export class Mastra<
   }
 
   /**
-   * Canonical entrypoint for heartbeats — recurring agent runs persisted as
-   * schedule rows with `target.type === 'heartbeat'`. Use to create, list,
-   * update, pause/resume, manually fire, or inspect trigger history for
-   * heartbeats across any agent.
+   * Canonical entrypoint for schedules — recurring agent or workflow runs
+   * persisted as schedule rows discriminated by `target.type` (`'agent'` or
+   * `'workflow'`). Use to create, list, update, pause/resume, manually fire,
+   * or inspect trigger history for schedules across any agent or workflow.
    *
    * Lazily constructed. Operates against `getStorage()?.getStore('schedules')`.
    *
    * @example
    * ```ts
-   * const hb = await mastra.heartbeats.create({
+   * const schedule = await mastra.schedules.create({
    *   agentId: 'pinger',
    *   name: 'morning-checkin',
    *   cron: '0 9 * * *',
@@ -929,25 +945,26 @@ export class Mastra<
    *   threadId: 't1',
    *   resourceId: 'u1',
    * });
-   * await mastra.heartbeats.list({ agentId: 'pinger' });
+   * await mastra.schedules.list({ agentId: 'pinger' });
    * ```
    */
-  public get heartbeats(): Heartbeats {
-    this.#heartbeats ??= new Heartbeats(this as unknown as Mastra);
-    return this.#heartbeats;
+  public get schedules(): Schedules {
+    this.#schedules ??= new Schedules(this as unknown as Mastra);
+    return this.#schedules;
   }
 
   /**
-   * Returns the heartbeat lifecycle hook bundle configured via
-   * `new Mastra({ heartbeat: { ... } })`, if any. A single bundle runs for
-   * every heartbeat fire; hooks branch per agent via the `agentId` on each
-   * context. Internal: consumed by the {@link HeartbeatWorker} to invoke
-   * `prepare`, `onFinish`, `onError`, and `onAbort` around heartbeat-driven runs.
+   * Returns the schedule lifecycle hook bundle configured via
+   * `new Mastra({ schedules: { ... } })`, if any. A single bundle runs for
+   * every agent-schedule fire; hooks branch per agent via the `agentId` on
+   * each context. Internal: consumed by the {@link AgentScheduleWorker} to
+   * invoke `prepare`, `onFinish`, `onError`, and `onAbort` around
+   * schedule-driven runs.
    *
    * @internal
    */
-  __getHeartbeatHooks(): HeartbeatHooks<Mastra> | undefined {
-    return this.#heartbeatConfig;
+  __getScheduleHooks(): ScheduleHooks<Mastra> | undefined {
+    return this.#schedulesConfig;
   }
 
   /**
@@ -1228,8 +1245,8 @@ export class Mastra<
     if (workersOption === false) {
       // Explicitly disabled — no event processing in this instance.
       // PubSub still exists for publishing events. Record the opt-out so
-      // runtime triggers (e.g. heartbeats.create()) don't lazily inject
-      // scheduler / heartbeat workers behind the user's back.
+      // runtime triggers (e.g. schedules.create()) don't lazily inject
+      // scheduler / agent-schedule workers behind the user's back.
       this.#workersDisabled = true;
     } else if (Array.isArray(workersOption)) {
       this.#workers = workersOption;
@@ -1284,6 +1301,7 @@ export class Mastra<
     let storage: MastraCompositeStore;
     if (config?.storage) {
       storage = config.storage;
+      this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
       this.#logger?.warn(
@@ -1314,6 +1332,7 @@ export class Mastra<
 
     // Validate and assign observability instance
     if (config?.observability) {
+      this.#observabilityExplicit = true;
       if (typeof config.observability.getDefaultInstance === 'function') {
         this.#observability = config.observability;
         // Set logger early
@@ -1378,7 +1397,7 @@ export class Mastra<
 
     this.#schedulerConfig = config?.scheduler;
     this.#notificationDispatchConfig = config?.notifications?.dispatch;
-    this.#heartbeatConfig = config?.heartbeat;
+    this.#schedulesConfig = config?.schedules;
 
     // Initialize all primitive storage objects first, we need to do this before adding primitives to avoid circular dependencies
     this.#vectors = {} as TVectors;
@@ -1500,10 +1519,12 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+      this.#serverExplicit = true;
     }
 
     if (config?.studio) {
       this.#studio = config.studio;
+      this.#studioExplicit = true;
     }
 
     // Register channels and merge their routes into server config
@@ -1555,7 +1576,12 @@ export class Mastra<
       agentController.__registerMastra(this);
     }
 
-    registerHook(AvailableHooks.ON_SCORER_RUN, createOnScorerHook(this));
+    // `registerHook` adds to a module-level emitter that never drops handlers on
+    // its own. Keep the reference so short-lived internal/ephemeral Mastras can
+    // release it on teardown (see `__unregisterHooks`); otherwise their handler
+    // fires on every scorer run for the lifetime of the process.
+    this.#onScorerHook = createOnScorerHook(this);
+    registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
 
     /*
       Initialize observability with Mastra context (after storage configured)
@@ -1664,9 +1690,9 @@ export class Mastra<
   #shouldEnableScheduler(): boolean {
     // Honour an explicit `workers: false` opt-out — the user disabled all
     // event processing in this instance, so never auto-inject scheduler /
-    // heartbeat workers (even when scheduler.enabled is true or a heartbeat
-    // is created at runtime). Standalone workers are expected to run the
-    // scheduler separately.
+    // agent-schedule workers (even when scheduler.enabled is true or a
+    // schedule is created at runtime). Standalone workers are expected to
+    // run the scheduler separately.
     if (this.#workersDisabled) return false;
     if (this.#schedulerConfig?.enabled === false) return false;
     if (this.#schedulerConfig?.enabled === true) return true;
@@ -1681,10 +1707,10 @@ export class Mastra<
   }
 
   /**
-   * Find the HeartbeatWorker from the workers list (if present).
+   * Find the AgentScheduleWorker from the workers list (if present).
    */
-  #findHeartbeatWorker(): MastraWorker | undefined {
-    return this.#workers.find(w => w.name === 'heartbeat');
+  #findAgentScheduleWorker(): MastraWorker | undefined {
+    return this.#workers.find(w => w.name === 'agent-schedule');
   }
 
   /**
@@ -2314,6 +2340,159 @@ export class Mastra<
       }
       this.addAgent(agent, key, { source: 'fs' });
     }
+  }
+
+  /**
+   * Registers a map of file-system routed workflows (discovered from
+   * `workflows/*.ts` files) into this Mastra instance.
+   *
+   * Code-registered workflows win on name collisions: if a workflow with the
+   * same key already exists, the file-system workflow is skipped and a warning
+   * is logged. Otherwise each workflow is added via {@link addWorkflow} with
+   * its key.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsWorkflows(fsWorkflows: Record<string, AnyWorkflow>): void {
+    if (!fsWorkflows) {
+      return;
+    }
+
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+    for (const [key, workflow] of Object.entries(fsWorkflows)) {
+      if (workflow == null) {
+        continue;
+      }
+      if (workflows[key]) {
+        this.getLogger().warn(
+          `File-system routed workflow "${key}" conflicts with a code-registered workflow of the same name. Keeping the code-registered workflow.`,
+        );
+        continue;
+      }
+      this.addWorkflow(workflow, key);
+    }
+  }
+
+  /**
+   * Registers a file-system routed storage instance (discovered from
+   * `storage.ts`) into this Mastra instance.
+   *
+   * Code-registered storage wins: if the user already passed `storage` to the
+   * `new Mastra({storage})` constructor, the file-system storage is skipped
+   * and a warning is logged. Otherwise the fs-provided storage replaces the
+   * default InMemoryStore via {@link setStorage}.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsStorage(fsStorage: MastraCompositeStore): void {
+    if (!fsStorage) {
+      return;
+    }
+
+    if (this.#storageExplicit) {
+      this.getLogger().warn(
+        `File-system routed storage conflicts with a code-registered storage. Keeping the code-registered storage.`,
+      );
+      return;
+    }
+
+    this.setStorage(fsStorage);
+  }
+
+  /**
+   * Registers a file-system routed observability instance (discovered from
+   * `observability.ts`) into this Mastra instance.
+   *
+   * Code-registered observability wins: if the user already passed
+   * `observability` to the `new Mastra({observability})` constructor, the
+   * file-system instance is skipped with a warning.
+   *
+   * @internal
+   */
+  public __registerFsObservability(fsObservability: ObservabilityEntrypoint): void {
+    if (!fsObservability) {
+      return;
+    }
+
+    if (this.#observabilityExplicit) {
+      this.getLogger().warn(
+        `File-system routed observability conflicts with a code-registered observability. Keeping the code-registered observability.`,
+      );
+      return;
+    }
+
+    if (typeof fsObservability.getDefaultInstance !== 'function') {
+      this.getLogger().warn(
+        `File-system routed observability.ts did not export a valid ObservabilityEntrypoint. Ignoring.`,
+      );
+      return;
+    }
+
+    this.#observability = fsObservability;
+    // Pass the raw logger (not the DualLogger) to observability to avoid
+    // circular forwarding, mirroring setLogger().
+    const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
+    this.#observability.setLogger({ logger: rawLogger as any });
+    this.#observability.setMastraContext({ mastra: this as any });
+  }
+
+  /**
+   * Registers a file-system routed server config (discovered from
+   * `server.ts`) into this Mastra instance.
+   *
+   * Code-registered server config wins on collision.
+   *
+   * @internal
+   */
+  public __registerFsServer(fsServer: ServerConfig): void {
+    if (!fsServer) {
+      return;
+    }
+
+    if (this.#serverExplicit) {
+      this.getLogger().warn(
+        `File-system routed server config conflicts with a code-registered server config. Keeping the code-registered server config.`,
+      );
+      return;
+    }
+
+    // Preserve apiRoutes accumulated during construction (e.g. channel
+    // webhook routes) — they live on #server even when the user never
+    // passed a server config explicitly.
+    const existingRoutes = this.#server?.apiRoutes ?? [];
+    const fsRoutes = fsServer.apiRoutes ?? [];
+    const mergedRoutes = [...existingRoutes, ...fsRoutes];
+    this.setServer({
+      ...fsServer,
+      ...(mergedRoutes.length > 0 ? { apiRoutes: mergedRoutes } : {}),
+    });
+  }
+
+  /**
+   * Registers a file-system routed studio config (discovered from
+   * `studio.ts`) into this Mastra instance.
+   *
+   * Code-registered studio config wins on collision.
+   *
+   * @internal
+   */
+  public __registerFsStudio(fsStudio: StudioConfig): void {
+    if (!fsStudio) {
+      return;
+    }
+
+    if (this.#studioExplicit) {
+      this.getLogger().warn(
+        `File-system routed studio config conflicts with a code-registered studio config. Keeping the code-registered studio config.`,
+      );
+      return;
+    }
+
+    this.setStudio(fsStudio);
   }
 
   /**
@@ -3978,14 +4157,14 @@ export class Mastra<
   }
 
   /**
-   * Signal that a heartbeat has been registered imperatively at runtime
-   * (e.g. `mastra.heartbeats.create()` after `startWorkers()`). Flips the
+   * Signal that a schedule has been registered imperatively at runtime
+   * (e.g. `mastra.schedules.create()` after `startWorkers()`). Flips the
    * scheduler-requested flag and, if workers are already running,
-   * lazily injects + starts both the scheduler and heartbeat workers.
+   * lazily injects + starts both the scheduler and agent-schedule workers.
    *
    * @internal
    */
-  async __ensureHeartbeatRuntimeReady(): Promise<void> {
+  async __ensureScheduleRuntimeReady(): Promise<void> {
     this.#schedulerRequested = true;
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
@@ -3993,15 +4172,27 @@ export class Mastra<
   }
 
   /**
-   * Lazily inject and start the SchedulerWorker (and HeartbeatWorker when
+   * Lazily inject and start the SchedulerWorker (and AgentScheduleWorker when
    * needed) after `startWorkers()` has already run. Used by features that
    * surface a need for the scheduler at runtime (e.g.
-   * `mastra.heartbeats.create()`). No-op when the scheduler is disabled, no
+   * `mastra.schedules.create()`). No-op when the scheduler is disabled, no
    * storage is configured, or the workers are already present.
    *
    * @internal
    */
   async #ensureSchedulingWorkersStarted(): Promise<void> {
+    // Memoize the in-flight startup so concurrent callers can't both pass the
+    // worker-existence checks and start duplicate workers (which would
+    // double-subscribe to the scheduling topics on push-based pubsubs).
+    if (!this.#schedulingWorkersStartPromise) {
+      this.#schedulingWorkersStartPromise = this.#startSchedulingWorkers().finally(() => {
+        this.#schedulingWorkersStartPromise = undefined;
+      });
+    }
+    await this.#schedulingWorkersStartPromise;
+  }
+
+  async #startSchedulingWorkers(): Promise<void> {
     if (!this.#shouldEnableScheduler()) return;
     if (!this.#storage) return;
 
@@ -4020,26 +4211,26 @@ export class Mastra<
       await sw.start();
     }
 
-    if (!this.#findHeartbeatWorker()) {
-      const { HeartbeatWorker } = await import('../agent/heartbeat/worker');
-      const hw = new HeartbeatWorker();
-      hw.__registerMastra(this);
-      this.#workers.push(hw);
-      await hw.init(deps);
-      await hw.start();
+    if (!this.#findAgentScheduleWorker()) {
+      const { AgentScheduleWorker } = await import('../schedules/worker');
+      const asw = new AgentScheduleWorker();
+      asw.__registerMastra(this);
+      this.#workers.push(asw);
+      await asw.init(deps);
+      await asw.start();
     }
   }
 
   /**
-   * Detect heartbeat schedule rows in storage on boot. Used by
+   * Detect agent-schedule rows in storage on boot. Used by
    * `#shouldEnableScheduler` to flip the scheduler-requested flag when
-   * imperative heartbeats persisted from a previous process exist —
-   * without this, a fresh boot with only DB-side heartbeats would skip
-   * starting the scheduler and heartbeat workers entirely.
+   * imperative agent schedules persisted from a previous process exist —
+   * without this, a fresh boot with only DB-side agent schedules would skip
+   * starting the scheduler and agent-schedule workers entirely.
    *
    * @internal
    */
-  async #detectExistingHeartbeats(): Promise<void> {
+  async #detectExistingAgentSchedules(): Promise<void> {
     if (this.#schedulerRequested) return;
     if (!this.#storage) return;
     try {
@@ -4049,7 +4240,7 @@ export class Mastra<
       if (existing.length === 0) return;
       this.#schedulerRequested = true;
     } catch (err) {
-      this.#logger?.warn?.('Failed to detect existing heartbeats on boot', err as any);
+      this.#logger?.warn?.('Failed to detect existing agent schedules on boot', err as any);
     }
   }
 
@@ -4722,17 +4913,17 @@ export class Mastra<
       await this.#storage.init();
     }
 
-    // Flip the scheduler-requested flag if any heartbeat schedule rows
+    // Flip the scheduler-requested flag if any agent-schedule rows
     // exist in storage from a previous boot. Without this, a process
-    // that boots with only DB-side heartbeats (no in-code declarative
-    // schedules and no imperative `heartbeats.create()` calls yet) would
-    // skip injecting the scheduler + heartbeat workers entirely. This reads
-    // the schedules store, so it must run after storage.init() above.
+    // that boots with only DB-side agent schedules (no in-code declarative
+    // schedules and no imperative `schedules.create()` calls yet) would
+    // skip injecting the scheduler + agent-schedule workers entirely. This
+    // reads the schedules store, so it must run after storage.init() above.
     if (!name) {
-      await this.#detectExistingHeartbeats();
+      await this.#detectExistingAgentSchedules();
     }
 
-    // Lazily inject the SchedulerWorker + HeartbeatWorker if the
+    // Lazily inject the SchedulerWorker + AgentScheduleWorker if the
     // scheduler should be enabled and they're not already registered.
     // This runs after all workflows have been registered (unlike the
     // constructor's default-workers block), so #hasScheduledWorkflow is
@@ -4743,11 +4934,11 @@ export class Mastra<
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
-      if (!this.#findHeartbeatWorker()) {
-        const { HeartbeatWorker } = await import('../agent/heartbeat/worker');
-        const hw = new HeartbeatWorker();
-        hw.__registerMastra(this);
-        this.#workers.push(hw);
+      if (!this.#findAgentScheduleWorker()) {
+        const { AgentScheduleWorker } = await import('../schedules/worker');
+        const asw = new AgentScheduleWorker();
+        asw.__registerMastra(this);
+        this.#workers.push(asw);
       }
     }
 
@@ -4873,7 +5064,7 @@ export class Mastra<
     }
 
     // Track that the boot path has executed at least once so subsequent
-    // runtime signals (e.g. `mastra.heartbeats.create()`) know whether they need
+    // runtime signals (e.g. `mastra.schedules.create()`) know whether they need
     // to lazily inject + start additional workers themselves.
     this.#workersStarted = true;
   }
@@ -4905,6 +5096,21 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#workersStarted = false;
+  }
+
+  /**
+   * Release the module-level hooks this instance registered in its constructor.
+   * The scorer hook is added to a shared emitter that never drops handlers on
+   * its own, so short-lived internal/ephemeral Mastras must call this on teardown
+   * or their handler keeps firing (and failing to resolve the scorer) on every
+   * scorer run for the rest of the process. Idempotent.
+   * @internal
+   */
+  __unregisterHooks(): void {
+    if (this.#onScorerHook) {
+      deregisterHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+      this.#onScorerHook = undefined;
+    }
   }
 
   /**
@@ -5208,7 +5414,7 @@ export class Mastra<
       }
     });
 
-    // Tear down hosted Harnesses (heartbeats, workspaces) before closing storage,
+    // Tear down hosted Harnesses (interval handlers, workspaces) before closing storage,
     // since teardown may still flush to the shared store.
     const harnessKeys = Object.keys(this.#harnesses);
     const harnessTeardown = await Promise.allSettled(harnessKeys.map(key => this.#harnesses[key]!.destroy()));

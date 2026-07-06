@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+
 import { SpanType } from '@mastra/core/observability';
 import type { TraceRecord } from '@mastra/core/storage';
 import { MastraReactProvider } from '@mastra/react';
@@ -7,7 +8,7 @@ import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDownloadTraceJson } from '../use-download-trace-json';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.
@@ -98,7 +99,9 @@ describe('useDownloadTraceJson', () => {
     await waitFor(() => expect(result.current.isPending).toBe(false));
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const firstCall = createObjectURL.mock.calls[0];
+    assert(firstCall, 'Expected createObjectURL call');
+    const [blob] = firstCall as [Blob];
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(traceFixture, null, 2));
     expect(clickedDownloadAttr).toBe(`trace-${TRACE_ID}.json`);
   });

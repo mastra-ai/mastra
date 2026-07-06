@@ -18,6 +18,22 @@ const outputPath = new URL('../vercel.json', import.meta.url)
 
 const INTERNAL_PREFIXES = ['/docs', '/guides', '/models', '/reference']
 
+const HEADERS = [
+  {
+    source: '/(.*)',
+    headers: [
+      {
+        key: 'Link',
+        value: '</llms.txt>; rel="llms-txt"',
+      },
+      {
+        key: 'X-Llms-Txt',
+        value: '/llms.txt',
+      },
+    ],
+  },
+]
+
 function isInternalDocsPath(value) {
   return INTERNAL_PREFIXES.some(prefix => value === prefix || value.startsWith(`${prefix}/`))
 }
@@ -85,6 +101,7 @@ async function main() {
   assertNoDuplicateSources(finalRedirects)
 
   const output = {
+    headers: HEADERS,
     redirects: finalRedirects,
   }
 

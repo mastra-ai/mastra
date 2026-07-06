@@ -1,6 +1,8 @@
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import type { MastraMemory } from '../../memory/memory';
+import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../../processors';
 import type { InlineSkill, SkillInput } from '../../skills/types';
+import type { DynamicArgument } from '../../types';
 import { Workspace, LocalFilesystem, LocalSandbox } from '../../workspace';
 import type { AnyWorkspace } from '../../workspace';
 import { Agent } from '../agent';
@@ -79,14 +81,33 @@ export interface FsAgentEntry {
    */
   defaultWorkspaceBasePath?: string;
   /**
+   * Input processors discovered under `processors/input/`, already loaded.
+   * Merged with `config.inputProcessors`; config takes precedence on collision.
+   */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Output processors discovered under `processors/output/`, already loaded.
+   * Merged with `config.outputProcessors`; config takes precedence on collision.
+   */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
    * Declared subagents discovered under `agents/<name>/subagents/<childId>/`.
    * Each entry is assembled into its own `Agent` and wired into the parent's
    * `agents` map under its directory name, becoming a model-visible delegation
-   * tool. Subagents are one level deep — entries here carry no further
-   * `subagents` of their own.
+   * tool. Subagents may declare their own `subagents`, up to
+   * `MAX_FS_SUBAGENT_DEPTH` levels below the top-level agent; deeper entries
+   * are ignored with a warning.
    */
   subagents?: FsAgentEntry[];
 }
+
+/**
+ * Maximum nesting depth for declared subagents. A top-level agent is depth 0;
+ * its subagents are depth 1, and so on. Subagents declared deeper than this
+ * are ignored with a warning. The cap keeps delegation trees a sane size and
+ * guards `assembleAgentFromFsEntry` against cyclic entry objects.
+ */
+export const MAX_FS_SUBAGENT_DEPTH = 3;
 
 /**
  * Assemble a single `Agent` from already-loaded file-system entries for one
@@ -116,12 +137,18 @@ export interface FsAgentEntry {
  * `new Agent(...)` without the loader trying to re-wrap the latter.
  */
 export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn?: (message: string) => void }): Agent {
+  return assembleAtDepth(entry, 0, options);
+}
+
+function assembleAtDepth(entry: FsAgentEntry, depth: number, options?: { onWarn?: (message: string) => void }): Agent {
   const {
     name,
     config = {},
     instructionsMd,
     tools = [],
     skills = [],
+    inputProcessors = [],
+    outputProcessors = [],
     workspace,
     memory,
     defaultWorkspaceBasePath,
@@ -154,6 +181,16 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
         `Agent "${name}": config.ts exports a new Agent(), so agents/${name}/memory.ts is ignored. Set the memory in the Agent config instead.`,
       );
     }
+    if (inputProcessors.length > 0) {
+      onWarn(
+        `Agent "${name}": config.ts exports a new Agent(), so discovered input processors under agents/${name}/processors/input/ are ignored.`,
+      );
+    }
+    if (outputProcessors.length > 0) {
+      onWarn(
+        `Agent "${name}": config.ts exports a new Agent(), so discovered output processors under agents/${name}/processors/output/ are ignored.`,
+      );
+    }
     if (subagents.length > 0) {
       onWarn(
         `Agent "${name}": config.ts exports a new Agent(), so discovered subagents under agents/${name}/subagents/ are ignored. Set 'agents' in the Agent config instead.`,
@@ -178,7 +215,9 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
   const mergedSkills = mergeSkills(name, skills, config.skills, onWarn);
   const mergedWorkspace = mergeWorkspace(name, workspace, config.workspace, defaultWorkspaceBasePath, onWarn);
   const mergedMemory = mergeMemory(name, memory, config.memory, onWarn);
-  const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, options);
+  const mergedAgents = mergeSubAgents(name, subagents, config.agents, mergedTools, depth, options);
+  const mergedInputProcessors = mergeProcessors(name, 'input', inputProcessors, config.inputProcessors, onWarn);
+  const mergedOutputProcessors = mergeProcessors(name, 'output', outputProcessors, config.outputProcessors, onWarn);
 
   const assembled = {
     ...config,
@@ -190,6 +229,8 @@ export function assembleAgentFromFsEntry(entry: FsAgentEntry, options?: { onWarn
     ...(mergedWorkspace !== undefined ? { workspace: mergedWorkspace } : {}),
     ...(mergedMemory !== undefined ? { memory: mergedMemory } : {}),
     ...(mergedAgents !== undefined ? { agents: mergedAgents } : {}),
+    ...(mergedInputProcessors !== undefined ? { inputProcessors: mergedInputProcessors } : {}),
+    ...(mergedOutputProcessors !== undefined ? { outputProcessors: mergedOutputProcessors } : {}),
   } as AgentConfig;
 
   return new Agent(assembled);
@@ -294,9 +335,9 @@ function mergeSkills(
 /**
  * Assemble discovered subagents and merge them into the parent's `agents` map.
  *
- * Each discovered subagent is assembled independently via
- * `assembleAgentFromFsEntry` (one level deep — its own `subagents` are not
- * threaded further). Rules:
+ * Each discovered subagent is assembled independently, recursing into its own
+ * `subagents` up to `MAX_FS_SUBAGENT_DEPTH` levels below the top-level agent
+ * (deeper entries are ignored with a warning). Rules:
  * - Each subagent's `config.ts` must resolve a non-empty `description`;
  *   otherwise a dir-scoped build error is thrown.
  * - A subagent id that collides with a resolved tool key on the same parent, or
@@ -310,9 +351,17 @@ function mergeSubAgents(
   fsSubAgents: FsAgentEntry[],
   configAgents: FsAgentConfig['agents'],
   mergedTools: ToolsInput | undefined,
+  depth: number,
   options?: { onWarn?: (message: string) => void },
 ): FsAgentConfig['agents'] | undefined {
   const onWarn = options?.onWarn ?? (() => {});
+
+  if (fsSubAgents.length > 0 && depth >= MAX_FS_SUBAGENT_DEPTH) {
+    onWarn(
+      `Agent "${name}": ignoring its subagents — subagents may only nest ${MAX_FS_SUBAGENT_DEPTH} levels below a top-level agent.`,
+    );
+    fsSubAgents = [];
+  }
 
   // Dynamic config.agents (a function) can't be statically merged; it wins
   // wholesale and discovered subagents are ignored with a warning.
@@ -353,8 +402,7 @@ function mergeSubAgents(
       });
     }
 
-    // One level deep: a subagent's own `subagents` are not threaded further.
-    const child = assembleAgentFromFsEntry({ ...childEntry, subagents: undefined }, options);
+    const child = assembleAtDepth(childEntry, depth + 1, options);
 
     const description = child.getDescription();
     if (!description || description.trim() === '') {
@@ -429,6 +477,37 @@ function createDefaultWorkspace(name: string, basePath: string): AnyWorkspace {
     filesystem: new LocalFilesystem({ basePath }),
     sandbox: new LocalSandbox({ workingDirectory: basePath }),
   });
+}
+
+/**
+ * Merge filesystem-discovered processors with config-defined ones.
+ *
+ * Precedence:
+ * - A dynamic (function) `config.inputProcessors`/`config.outputProcessors`
+ *   wins wholesale — discovered processors are ignored with a warning.
+ * - Otherwise discovered processors are concatenated after config processors
+ *   (config processors run first in the pipeline).
+ * - If neither source provides processors, returns `undefined`.
+ */
+function mergeProcessors<T extends InputProcessorOrWorkflow | OutputProcessorOrWorkflow>(
+  name: string,
+  type: 'input' | 'output',
+  fsProcessors: T[],
+  configProcessors: DynamicArgument<T[]> | undefined,
+  onWarn: (message: string) => void,
+): DynamicArgument<T[]> | undefined {
+  if (typeof configProcessors === 'function') {
+    if (fsProcessors.length > 0) {
+      onWarn(
+        `Agent "${name}": config.ts defines dynamic ${type}Processors (function), so discovered ${type} processors under agents/${name}/processors/${type}/ are ignored.`,
+      );
+    }
+    return configProcessors;
+  }
+
+  const fromConfig = Array.isArray(configProcessors) ? configProcessors : [];
+  const merged = [...fromConfig, ...fsProcessors];
+  return merged.length > 0 ? merged : undefined;
 }
 
 /**
