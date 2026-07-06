@@ -93,6 +93,12 @@ const mcp = new MCPClient({
 })
 ```
 
+:::note
+
+The underlying converter (`zod-from-json-schema`) does not support `$ref`, `$defs`, or `anyOf`/`oneOf` in JSON Schema. Tools with these constructs accept any input when `coerceSchemasTo` is `'zod'`. The MCP server still validates inputs on its side, so invalid arguments are caught before execution.
+
+:::
+
 ### `MastraMCPServerDefinition`
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
