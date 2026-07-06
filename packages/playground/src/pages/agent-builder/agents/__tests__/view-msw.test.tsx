@@ -1,3 +1,4 @@
+import type { GetAgentResponse, ListAgentsModelProvidersResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -52,6 +53,8 @@ const authHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderSettingsDisabled)),
+  http.get(`${BASE_URL}/api/agents/agent-123`, () => HttpResponse.json(runtimeAgent)),
+  http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(providerRegistry)),
 ];
 
 const emptyThread = () =>
@@ -95,6 +98,41 @@ const storedAgent = {
   updatedAt: '2026-04-29T10:00:00.000Z',
 };
 
+const runtimeAgent: GetAgentResponse = {
+  id: 'agent-123',
+  name: 'MSW Agent',
+  instructions: 'Do useful things',
+  tools: {},
+  workflows: {},
+  agents: {},
+  provider: 'openai',
+  modelId: 'gpt-4o-mini',
+  modelVersion: 'v2',
+  modelList: undefined,
+  defaultOptions: {},
+  defaultGenerateOptionsLegacy: {},
+  defaultStreamOptionsLegacy: {},
+};
+
+const providerRegistry: ListAgentsModelProvidersResponse = {
+  providers: [
+    {
+      connected: true,
+      envVar: 'OPENAI_API_KEY',
+      id: 'openai',
+      models: ['gpt-4o-mini'],
+      name: 'OpenAI',
+    },
+    {
+      connected: true,
+      envVar: 'ANTHROPIC_API_KEY',
+      id: 'anthropic',
+      models: ['claude-opus-4-7'],
+      name: 'Anthropic',
+    },
+  ],
+};
+
 describe('AgentBuilderAgentView MSW integration', () => {
   afterEach(() => {
     cleanup();
@@ -126,6 +164,23 @@ describe('AgentBuilderAgentView MSW integration', () => {
 
       await screen.findByTestId('agent-builder-agent-chat-empty-state');
       expect(screen.getAllByTestId(/agent-builder-agent-chat-starter-/)).toHaveLength(4);
+    });
+
+    it('renders the shared provider and model picker when testing the agent', async () => {
+      server.use(
+        ...authHandlers(),
+        http.get(`${BASE_URL}/api/stored/agents/agent-123`, () => HttpResponse.json(storedAgent)),
+        emptyThread(),
+      );
+
+      renderPage();
+
+      await screen.findByTestId('agent-builder-agent-chat-empty-state');
+      expect(await screen.findByText('OpenAI')).toBeTruthy();
+      expect(screen.getByText('gpt-4o-mini')).toBeTruthy();
+
+      fireEvent.click(screen.getByText('OpenAI'));
+      expect(await screen.findByText('Anthropic')).toBeTruthy();
     });
 
     it('autofills the input from a starter prompt without submitting', async () => {

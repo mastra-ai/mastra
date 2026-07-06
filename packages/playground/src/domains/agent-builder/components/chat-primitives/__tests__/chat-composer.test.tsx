@@ -83,4 +83,16 @@ describe('ChatComposer', () => {
     expect(container.className).toContain('focus-within:border-[var(--agent-color-bg)]');
     expect(container.className).not.toContain('focus-within:ring');
   });
+
+  it('renders optional footer controls before the submit action', () => {
+    const { getByTestId } = renderComposer({
+      footerNotice: <div data-testid="composer-footer-notice">Provider setup needed</div>,
+      footerStart: <button data-testid="composer-footer-control">OpenAI</button>,
+    });
+
+    const container = getByTestId('composer-container');
+    expect(getByTestId('composer-footer-notice').textContent).toBe('Provider setup needed');
+    expect(getByTestId('composer-footer-control').textContent).toBe('OpenAI');
+    expect(container.contains(getByTestId('composer-footer-control'))).toBe(true);
+  });
 });

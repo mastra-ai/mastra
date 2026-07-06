@@ -1,6 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ArrowUpIcon, Loader2 } from 'lucide-react';
-import type { CSSProperties } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { useEffect, useMemo, useRef } from 'react';
 import { useAgentColor } from '../../contexts/agent-color-context';
 import { ChatTextarea } from './chat-textarea';
@@ -17,6 +17,8 @@ interface ChatComposerProps {
   inputTestId?: string;
   submitTestId?: string;
   containerTestId?: string;
+  footerStart?: ReactNode;
+  footerNotice?: ReactNode;
 }
 
 export const ChatComposer = ({
@@ -31,6 +33,8 @@ export const ChatComposer = ({
   inputTestId,
   submitTestId,
   containerTestId,
+  footerStart,
+  footerNotice,
 }: ChatComposerProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const agentColor = useAgentColor();
@@ -64,7 +68,15 @@ export const ChatComposer = ({
           onKeyDown={onKeyDown}
           disabled={disabled}
         />
-        <div className="flex items-center justify-end pb-3">
+        {footerNotice}
+        <div
+          className={
+            footerStart
+              ? 'flex flex-wrap-reverse items-center justify-between gap-2 pb-3'
+              : 'flex items-center justify-end pb-3'
+          }
+        >
+          {footerStart ? <div className="flex min-w-0 items-center gap-1.5">{footerStart}</div> : null}
           <Button
             type="submit"
             variant="default"

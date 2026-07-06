@@ -10,6 +10,7 @@ import { useChatDraft } from '../../hooks/use-chat-draft';
 import { ChatComposer } from '../chat-primitives/chat-composer';
 import { MessageList } from '../chat-primitives/message-list';
 import { BrowserThumbnail } from '@/domains/agents/components/browser-view';
+import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { useBrowserSession } from '@/domains/agents/context/browser-session-context';
 import { useCurrentUser } from '@/domains/auth/hooks/use-current-user';
 import { useAgentMessages } from '@/hooks/use-agent-messages';
@@ -23,13 +24,14 @@ interface AgentChatPanelProviderProps {
 }
 
 interface AgentChatMeta {
+  agentId: string;
   isConversationLoading: boolean;
   agentName?: string;
   agentDescription?: string;
   agentAvatarUrl?: string;
 }
 
-const AgentChatMetaContext = createContext<AgentChatMeta>({ isConversationLoading: false });
+const AgentChatMetaContext = createContext<AgentChatMeta>({ agentId: '', isConversationLoading: false });
 
 const EMPTY_MESSAGES: never[] = [];
 
@@ -79,8 +81,8 @@ export const AgentChatPanelProvider = ({
   const storedMessages = data?.messages ?? EMPTY_MESSAGES;
 
   const meta = useMemo<AgentChatMeta>(
-    () => ({ isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
-    [isConversationLoading, agentName, agentDescription, agentAvatarUrl],
+    () => ({ agentId, isConversationLoading, agentName, agentDescription, agentAvatarUrl }),
+    [agentId, isConversationLoading, agentName, agentDescription, agentAvatarUrl],
   );
 
   return (
@@ -98,7 +100,18 @@ interface AgentChatPanelChatProps {
 export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatProps) => {
   const isRunning = useStreamRunning();
   const send = useStreamSend();
+  const { agentId } = useContext(AgentChatMetaContext);
   const { draft, setDraft, trimmed, handleFormSubmit, handleKeyDown } = useChatDraft({ onSubmit: send });
+  const modelWarning = useMemo(() => (agentId ? <ComposerModelWarning agentId={agentId} /> : undefined), [agentId]);
+  const modelPicker = useMemo(
+    () =>
+      agentId ? (
+        <div className="rounded-full border border-border1 bg-surface3 transition-colors duration-normal focus-within:border-border2">
+          <ComposerModelSwitcher agentId={agentId} />
+        </div>
+      ) : undefined,
+    [agentId],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -116,6 +129,8 @@ export const AgentChatPanelChat = ({ hasBrowser = false }: AgentChatPanelChatPro
         inputTestId="agent-builder-agent-chat-input"
         submitTestId="agent-builder-agent-chat-submit"
         containerTestId="agent-builder-agent-chat-composer"
+        footerNotice={modelWarning}
+        footerStart={modelPicker}
       />
     </div>
   );

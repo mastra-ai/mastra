@@ -1,3 +1,4 @@
+import type { GetAgentResponse, ListAgentsModelProvidersResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -59,6 +60,8 @@ const authHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(currentUser)),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabledCapabilities)),
   http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderSettingsDisabled)),
+  http.get(`${BASE_URL}/api/agents/agent-123`, () => HttpResponse.json(runtimeAgent)),
+  http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(providerRegistry)),
 ];
 
 const LocationProbe = () => {
@@ -107,6 +110,34 @@ const storedAgent = {
   authorId: 'user-1',
   createdAt: '2026-04-29T10:00:00.000Z',
   updatedAt: '2026-04-29T10:00:00.000Z',
+};
+
+const runtimeAgent: GetAgentResponse = {
+  id: 'agent-123',
+  name: 'View Page Agent',
+  instructions: 'Do things',
+  tools: {},
+  workflows: {},
+  agents: {},
+  provider: 'openai',
+  modelId: 'gpt-4o-mini',
+  modelVersion: 'v2',
+  modelList: undefined,
+  defaultOptions: {},
+  defaultGenerateOptionsLegacy: {},
+  defaultStreamOptionsLegacy: {},
+};
+
+const providerRegistry: ListAgentsModelProvidersResponse = {
+  providers: [
+    {
+      connected: true,
+      envVar: 'OPENAI_API_KEY',
+      id: 'openai',
+      models: ['gpt-4o-mini'],
+      name: 'OpenAI',
+    },
+  ],
 };
 
 describe('AgentBuilderAgentView — navigation and layout', () => {
