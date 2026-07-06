@@ -1,6 +1,6 @@
 name: Scheduled (Every 2 Hours)
 permissions:
-  contents: none
+  contents: read
 
 on:
   schedule:
@@ -21,7 +21,7 @@ jobs:
     with:
       workflow_name: discordSyncWorkflow
       input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra"},"requestContext":{}}'
-      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL || 'https://cloud.mastra.ai' }}
     secrets:
       MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
 
@@ -33,7 +33,7 @@ jobs:
     with:
       workflow_name: discordToGithubWorkflow
       input_data: '{"inputData":{"forumChannelId":"1349006916902191125","fetchLimit":1},"requestContext":{}}'
-      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL || 'https://cloud.mastra.ai' }}
     secrets:
       MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
 
@@ -45,6 +45,6 @@ jobs:
     with:
       workflow_name: githubIssueManagerWorkflow
       input_data: '{"inputData":{"owner":"mastra-ai","repo":"mastra","batchSize":100},"requestContext":{}}'
-      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL }}
+      base_url: ${{ vars.MASTRA_CLOUD_BASE_URL || 'https://cloud.mastra.ai' }}
     secrets:
       MASTRA_TRIAGE_JWT_KEY: ${{ secrets.MASTRA_TRIAGE_JWT_KEY }}
