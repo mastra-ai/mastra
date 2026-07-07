@@ -326,6 +326,7 @@ const updateMdxLinks = async (oldPaths: string[], newPath: string): Promise<void
       const fullPath = path.join(dir, entry.name)
 
       if (entry.isDirectory()) {
+        if (dir === CONTENT_ROOT && (GENERATED_ROUTE_PREFIXES as readonly string[]).includes(`/${entry.name}`)) continue
         await processDirectory(fullPath)
       } else if (entry.name.endsWith('.mdx')) {
         await processFile(fullPath)

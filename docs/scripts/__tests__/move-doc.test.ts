@@ -189,6 +189,15 @@ const item = { link: '/docs/auth/overview#array' }
     content: referenceSidebar,
   },
   {
+    path: 'src/content/en/models/embeddings.mdx',
+    content: `---
+title: Embeddings
+---
+# Generated embeddings page
+
+Generated pages are scanned but should not be rewritten.`,
+  },
+  {
     path: 'vercel.redirects.json',
     content: JSON.stringify(
       {
