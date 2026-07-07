@@ -3381,12 +3381,6 @@ ${formattedMessages}
    * instead of reading from storage. This allows external systems (e.g., opencode)
    * to pass conversation messages without duplicating them into Mastra's DB.
    *
-   * By default, observation only runs when the unobserved messages meet the
-   * configured token threshold. Pass `force: true` to bypass the threshold and
-   * distill whatever is pending — useful at the end of a session (e.g. a short
-   * voice call) where waiting for the threshold would leave the tail unobserved.
-   * A forced call with no unobserved messages is still a no-op.
-   *
    * Returns a result indicating whether observation and/or reflection occurred,
    * along with the updated record.
    */
@@ -3394,7 +3388,6 @@ ${formattedMessages}
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
-    force?: boolean;
     hooks?: ObserveHooks;
     agent?: ProcessorContext['agent'];
     requestContext?: RequestContext;
@@ -3428,15 +3421,12 @@ ${formattedMessages}
             freshRecord.lastObservedAt ? new Date(freshRecord.lastObservedAt) : undefined,
           );
 
-      // `force` bypasses the token threshold, not the "anything to observe" check:
-      // a forced flush of an already-observed conversation must not call the observer on nothing.
-      const shouldObserve = opts.force
-        ? unobservedMessages.length > 0
-        : this.meetsObservationThreshold({
-            record: freshRecord,
-            unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
-          });
-      if (!shouldObserve) {
+      if (
+        !this.meetsObservationThreshold({
+          record: freshRecord,
+          unobservedTokens: await this.tokenCounter.countMessagesAsync(unobservedMessages),
+        })
+      ) {
         return;
       }
 

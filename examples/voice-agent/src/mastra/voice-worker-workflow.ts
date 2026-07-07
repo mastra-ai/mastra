@@ -6,9 +6,9 @@
 // register as `mastra-voice`.
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
-import { hasSummaryConsent, recordContact, summaryStorageRequired } from './backend';
+import { recordContact } from './backend';
 import { mastra } from './index';
-import { callCenterMemory, flushObservationalMemory } from './memory';
+import { callCenterMemory, summarizeCall } from './memory';
 
 export default createLiveKitWorker({
   mastra,
@@ -34,14 +34,12 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
+  // Permissive default, same as the agent worker — no consent gating or re-disclosure here; every
+  // compliance safeguard is demonstrated in voice-worker-regulated.ts instead.
   configuration: {
     greeting: {
       text: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
-      // Re-disclose the AI status every ~3 minutes on long calls, at the next turn boundary.
-      repeatEvery: 3 * 60_000,
     },
-    // Require consent before storing a summary of the call (the end-of-call OM distillation).
-    requireConsent: { summaryStorage: true },
     // Agent-initiated hang-up — works on the workflow path too: the reply step pipes the agent's
     // fullStream, so the `endCall` tool call reaches the worker, which waits for the goodbye then
     // disconnects. Same detection as the agent worker.
@@ -73,14 +71,12 @@ export default createLiveKitWorker({
       interrupted: result.interrupted,
     });
   },
-  // Same consent-aware end-of-call OM flush as the agent worker — distill the call into durable
-  // memory once, after hang-up, off the audio path, and only when summary-storage consent isn't
-  // required or has been granted.
-  onCallEnd: async ({ memory, configuration }) => {
+  // Same permissive end-of-call summary as the agent worker — one `summarizeThread()` pass into
+  // the business's own records, after hang-up, off the audio path. Always runs; the consent-gated
+  // version lives in voice-worker-regulated.ts.
+  onCallEnd: async ({ memory }) => {
     if (!memory) return;
-    const callerId = memory.resource ?? memory.thread;
-    if (summaryStorageRequired(configuration?.requireConsent) && !hasSummaryConsent(callerId)) return;
-    await flushObservationalMemory(memory);
+    await summarizeCall(memory);
   },
 });
 

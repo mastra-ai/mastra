@@ -6,7 +6,7 @@ import {
   lookupCustomer,
   rescheduleAppointment,
 } from '../tools/call-center-tools';
-import { checkServiceArea, endCall, finalizeIntake, recordConsent } from '../tools/intake-tools';
+import { checkServiceArea, endCall, finalizeIntake } from '../tools/intake-tools';
 import { callCenterMemory } from '../memory';
 import { workspaceContextProcessor } from '../processors/workspace-context';
 
@@ -36,11 +36,10 @@ Every call follows one of these paths. Listen for which one it is, and remember 
 
 If you have spoken with this caller before, earlier calls and what you learned about them are recalled for you automatically — greet them by name and reference what you remember instead of asking again.
 
-Consent, early in the call: we keep a short summary of each call to help next time. Briefly tell the caller that, and ask if that is okay. As soon as they answer, call recordConsent with item "summaryStorage" and granted true if they agree or false if they decline. If they decline, respect it and do not ask again.
-
 Memory and pace, because this is a live call:
 - Always speak your reply to the caller FIRST. Only update your working memory after you have responded — never make the caller wait on a memory update.
 - Keep the working memory current with what you have collected (name, number, trade, address, zip, which path this is) so you never ask twice and so it is there next time they call.
+- After calling updateWorkingMemory, END YOUR TURN IN SILENCE: produce no further text. Never repeat, re-state, or re-phrase your reply after the memory update — the caller already heard it, and anything you write after the tool call is spoken aloud again.
 
 At the END of the call, once you have everything, call finalizeIntake exactly once with the scenario ("lead", "inspection", or "callback") and the collected fields. It reconciles and submits the record and returns a reference number to read back — or it tells you what is still missing or that the address is out of area, which you must resolve before saying goodbye. Existing-customer scheduling handled with the booking tools does not need finalizeIntake.
 
@@ -60,7 +59,6 @@ Stay warm and professional. If a request is outside trades work, scheduling, or 
     cancelAppointment,
     checkServiceArea,
     finalizeIntake,
-    recordConsent,
     endCall,
   },
   // Deterministic per-turn tenant context, injected before the model runs (mock "Firebase").

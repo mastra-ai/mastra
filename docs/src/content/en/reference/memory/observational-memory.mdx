@@ -1017,55 +1017,6 @@ The standalone `ObservationalMemory` class accepts all the same options as the `
 ]}
 />
 
-## Manual observation
-
-Observation normally runs on its own as token thresholds are crossed. Call `observe()` on the `ObservationalMemory` instance to trigger it yourself. When you configure OM through the `Memory` class, get the instance with `memory.omEngine`.
-
-The following example distills a finished session (for example, a voice call that just ended) into observations:
-
-```typescript
-const om = await memory.omEngine
-if (om) {
-  await om.observe({ threadId: 'thread-123', resourceId: 'user-456', force: true })
-}
-```
-
-By default, `observe()` only runs when the unobserved messages meet the `observation.messageTokens` threshold. Pass `force: true` to bypass the threshold and distill whatever is pending — useful at the end of a short session that never reached the threshold. A forced call with no unobserved messages doesn't call the Observer.
-
-### Parameters
-
-<PropertiesTable
-  content={[
-  {
-    name: 'threadId',
-    type: 'string',
-    description: 'Thread to observe.',
-  },
-  {
-    name: 'resourceId',
-    type: 'string',
-    isOptional: true,
-    description: 'Resource (user) the thread belongs to. Required when `scope` is `resource`.',
-  },
-  {
-    name: 'messages',
-    type: 'MastraDBMessage[]',
-    isOptional: true,
-    description: 'Messages to observe directly (filtered for unobserved ones) instead of reading them from storage.',
-  },
-  {
-    name: 'force',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'false',
-    description:
-      'Bypass the observation token threshold and observe whatever is pending. When nothing is unobserved, the call is still a no-op.',
-  },
-]}
-/>
-
-Returns: `Promise<{ observed: boolean; reflected: boolean; record: ObservationalMemoryRecord }>`
-
 ## Recall tool
 
 When `retrieval` is set (any truthy value), a `recall` tool is registered so the agent can page through raw messages behind observation group ranges. By default (scope `'resource'`), the tool supports listing threads (`mode: "threads"`), browsing other threads (`threadId`), and cross-thread search. With `retrieval: { vector: true }`, semantic search is available (`mode: "search"`). Set `scope: 'thread'` to restrict the tool to the current thread only. The tool is automatically added to the agent's tool list — no manual registration is needed.

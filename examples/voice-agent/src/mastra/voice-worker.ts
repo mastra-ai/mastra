@@ -3,9 +3,9 @@
 // voice-worker-workflow.ts. Run one worker at a time — both register as `mastra-voice`.
 import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
-import { hasSummaryConsent, recordContact, summaryStorageRequired } from './backend';
+import { recordContact } from './backend';
 import { mastra } from './index';
-import { flushObservationalMemory } from './memory';
+import { summarizeCall } from './memory';
 
 export default createLiveKitWorker({
   mastra,
@@ -13,24 +13,19 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-  // Grouped conversation & compliance config. `greeting.text` is spoken at call start. For a
-  // legally-required AI disclosure, set `greeting.allowInterruptions: false` (and `awaitPlayout:
-  // true`) so the caller can't talk over it — see the @mastra/livekit README. This is single-tenant,
-  // so the greeting is a fixed string; `text` also accepts a resolver — `({ metadata }) => string` —
-  // to open differently per tenant off the dispatch metadata when one agent serves many.
+  // Grouped conversation config. This default worker is deliberately PERMISSIVE — no consent
+  // gating, no periodic re-disclosure — so the demo flows friction-free; every compliance
+  // safeguard (`requireConsent`, `greeting.repeatEvery`, `allowInterruptions: false`, consent
+  // sweep) lives in voice-worker-regulated.ts, which exists to demonstrate them all at once.
+  // `greeting.text` is spoken at call start; it also accepts a resolver — `({ metadata }) =>
+  // string` — to open differently per tenant off the dispatch metadata when one agent serves many.
   configuration: {
     greeting: {
       text: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
-      // Re-disclose the AI status every ~3 minutes on long calls, spoken at the next turn boundary
-      // (never mid-sentence). California SB 243 and similar rules expect periodic re-disclosure.
-      repeatEvery: 3 * 60_000,
     },
-    // Consent this deployment requires — a named, extensible set (add more items over time). Here we
-    // require consent before storing a summary of the call (the end-of-call OM distillation).
-    requireConsent: { summaryStorage: true },
     // Let the agent hang up when the call is done. It calls the `endCall` tool (see intake-tools) as
     // its last action; the worker waits for the goodbye to play out, then disconnects (running the
-    // onCallEnd summary flush below). No `message` here — the agent speaks its own goodbye.
+    // onCallEnd summary below). No `message` here — the agent speaks its own goodbye.
     endCall: {},
   },
   // Scope memory for the call: `thread` is this call, `resource` is the caller so their
@@ -71,19 +66,16 @@ export default createLiveKitWorker({
       interrupted: result.interrupted,
     });
   },
-  // End-of-call hook: after the caller hangs up, distill the call into durable observational
-  // memory ONCE, off the audio path (awaited within LiveKit's shutdown window). This is the
-  // non-blocking home for OM — rather than paying for it inline on a turn. The flush passes
-  // `force: true`, so even a short call below the `messageTokens` threshold is distilled here.
-  //
-  // Consent-aware: `configuration.requireConsent.summaryStorage` DECLARES that storing a call
-  // summary needs consent; the `recordConsent` tool captures the caller's grant during the call (see
-  // tools/intake-tools). When consent is required and the caller hasn't granted it, skip the summary.
-  onCallEnd: async ({ memory, configuration }) => {
+  // End-of-call hook: after the caller hangs up, summarize the call ONCE into the business's own
+  // records — off the audio path, awaited within LiveKit's shutdown window so it finishes before
+  // the worker process exits. `summarizeCall` (memory.ts) runs `memory.summarizeThread()`: a
+  // standalone one-shot summarization + structured extraction over the whole call, deliberately
+  // outside observational memory's lifecycle (OM keeps doing cross-call facts on its own cadence).
+  // Permissive default: the summary ALWAYS runs. For the consent-gated version (no consent → no
+  // stored summary), see voice-worker-regulated.ts.
+  onCallEnd: async ({ memory }) => {
     if (!memory) return;
-    const callerId = memory.resource ?? memory.thread;
-    if (summaryStorageRequired(configuration?.requireConsent) && !hasSummaryConsent(callerId)) return;
-    await flushObservationalMemory(memory);
+    await summarizeCall(memory);
   },
 });
 

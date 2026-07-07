@@ -8,6 +8,7 @@
     "dev": "mastra dev",
     "worker": "node --env-file=.env --import tsx src/mastra/voice-worker.ts dev",
     "worker:workflow": "node --env-file=.env --import tsx src/mastra/voice-worker-workflow.ts dev",
+    "worker:regulated": "node --env-file=.env --import tsx src/mastra/voice-worker-regulated.ts dev",
     "worker:download-files": "pnpm --dir ../../integrations/livekit exec livekit-agents download-files",
     "dev:ui": "concurrently --kill-others-on-fail --names mastra,studio \"mastra dev\" \"pnpm --dir ../.. dev:playground\"",
     "typecheck": "tsc --noEmit",

@@ -1,6 +1,7 @@
 import { LibSQLVector } from '@mastra/libsql';
-import { Memory } from '@mastra/memory';
+import { Extractor, Memory } from '@mastra/memory';
 import { z } from 'zod';
+import { saveCallSummary } from './backend';
 import { voiceAgentDbUrl } from './db';
 
 /**
@@ -33,21 +34,23 @@ export const callCenterMemory = new Memory({
       scope: 'resource',
     },
     // Durable, free-form facts about the caller, distilled by an Observer agent and injected into
-    // later calls. IMPORTANT: despite the name, the observer runs INLINE as an input-step
-    // processor — it blocks the agent loop while it distills, so it IS on the caller's clock. Two
-    // settings keep that cost small:
-    //   - a fast, NON-reasoning model. The OM defaults are tuned for Gemini Flash with a tiny
-    //     thinking budget; pointing it at a reasoning model like gpt-5-mini made it spend ~25s
-    //     reasoning *inline* every time it fired (measured), stalling the reply.
-    //   - a `messageTokens` threshold high enough that it fires occasionally, not every turn.
-    //     Lower it to see OM fire sooner in a short demo; raise it (toward the 30k default) in
-    //     production. The workers also force-flush OM once at call end via `onCallEnd` +
-    //     `flushObservationalMemory` below, so this inline threshold is only a mid-call cap —
-    //     every call is distilled at hang-up regardless.
+    // later calls. OM's job here is CROSS-CALL memory — it is not the end-of-call summary (that's
+    // `summarizeCall` below, a separate one-shot concern). How OM fits this voice agent:
+    //   - `scope: 'resource'` (the caller) is what makes facts span calls — but async background
+    //     buffering is NOT yet supported with resource scope, so OM runs SYNCHRONOUSLY here: when
+    //     unobserved messages cross `messageTokens`, the observer runs INLINE during a turn, on
+    //     the caller's clock. Two settings keep that cost small: a fast, NON-reasoning observer
+    //     model (a reasoning model like gpt-5-mini measured ~25s per inline fire), and a
+    //     threshold sized so it fires rarely mid-call (3000 here — most demo calls end below it,
+    //     so distillation usually happens on a later call; size it to comfortably exceed a
+    //     typical call in production).
+    //   - A call that ends below the threshold costs nothing: its messages are already
+    //     persisted, and the observer distills them once a LATER call crosses the threshold —
+    //     the distilled facts then ride every subsequent call's context.
     observationalMemory: {
       scope: 'resource',
       model: 'openai/gpt-4.1-mini',
-      observation: { messageTokens: 1000 },
+      observation: { messageTokens: 3000 },
     },
     workingMemory: {
       enabled: true,
@@ -74,19 +77,47 @@ export const callCenterMemory = new Memory({
 });
 
 /**
- * Flush observational memory for a finished call — distill anything not yet observed into durable
- * facts for the caller's NEXT call. Meant to run from the LiveKit worker's `onCallEnd` hook, which
- * fires after the caller hangs up (off the audio path), so this never adds to in-call latency.
- *
- * `force: true` bypasses the `messageTokens` threshold above, so even a very short call is
- * distilled at hang-up (a call with nothing new to observe is still a no-op). With a guaranteed
- * end-of-call flush, the inline threshold can be raised high (toward the 30k default) for zero
- * in-call OM cost — the threshold then only matters for very long calls, where it caps how much
- * unobserved context accumulates mid-call.
+ * What the business wants on file for every finished call. The schema-backed extractor runs as a
+ * structured-output follow-up to the summarization pass, and its `onExtracted` hook writes the
+ * record to the app's OWN storage (`saveCallSummary` in the mock backend) — not into Mastra
+ * memory. `metadataKeyPath: false` keeps it out of memory metadata too, so the business owns the
+ * record's lifecycle end to end (querying, retention, deletion).
  */
-export async function flushObservationalMemory(mapping: { thread: string; resource?: string } | false): Promise<void> {
+const callSummaryExtractor = new Extractor({
+  name: 'call-summary',
+  instructions:
+    'Return a concise record of the call: who called, what they wanted, the caller sentiment, and any services they asked about.',
+  schema: z.object({
+    summary: z.string().describe('Two to three sentences: who called, what they wanted, any commitment or next step'),
+    sentiment: z.enum(['positive', 'neutral', 'negative']),
+    requestedServices: z.array(z.string()).describe('Services the caller asked about, e.g. "roof inspection"'),
+  }),
+  metadataKeyPath: false,
+  onExtracted: async ({ current, threadId, resourceId }) => {
+    await saveCallSummary({ callId: threadId, callerId: resourceId, ...current });
+  },
+});
+
+/**
+ * Summarize a finished call into the business's own records — one `summarizeThread()` call from
+ * the LiveKit worker's `onCallEnd` hook, which fires after the caller hangs up and is awaited
+ * within LiveKit's shutdown window (off the audio path, guaranteed to finish before the worker
+ * process exits).
+ *
+ * `summarizeThread()` loads the call's messages and distills them with the same Observer plumbing
+ * that powers observational memory — but as a standalone one-shot call, deliberately OUTSIDE the
+ * OM lifecycle. Nothing is observed, buffered, or activated; the result goes only where the
+ * extractor's hook puts it. That separation is the point: OM above owns durable cross-call facts
+ * on its own cadence, while the per-call summary is the app's record, produced exactly once per
+ * call regardless of length.
+ */
+export async function summarizeCall(mapping: { thread: string; resource?: string } | false): Promise<void> {
   if (!mapping) return;
-  const om = await callCenterMemory.omEngine;
-  if (!om) return;
-  await om.observe({ threadId: mapping.thread, resourceId: mapping.resource ?? mapping.thread, force: true });
+  await callCenterMemory.summarizeThread({
+    model: 'openai/gpt-4.1-mini',
+    threadId: mapping.thread,
+    resourceId: mapping.resource,
+    instructions: "Summarize this call for the contractor's office: who called, what they wanted, and any follow-up promised.",
+    extract: [callSummaryExtractor],
+  });
 }

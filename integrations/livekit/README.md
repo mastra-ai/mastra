@@ -14,7 +14,8 @@ caller speaks ─▶ VAD ─▶ STT ─▶ turn detection ─▶ [ Mastra agent 
 - **Two reply paths** — answer turns with a Mastra **agent** (the default, richest path) or a Mastra **workflow** (run-to-completion per turn, e.g. deterministic intent routing). A low-level `generate` escape hatch accepts any custom reply generator.
 - **Full speech stack, pluggable** — STT/TTS as LiveKit inference model strings (`'deepgram/nova-3'`, `'cartesia/sonic-3'`) or your own plugin instances; Silero VAD and LiveKit multilingual/English turn detection; barge-in cancels in-flight generation automatically.
 - **Memory, scoped to the call** — `thread` = call, `resource` = caller, so a returning caller is recognized across calls. Up-front thread creation and greeting persistence keep the saved thread a faithful transcript. Works on the agent path and the workflow path (via `memoryInstance`).
-- **Lifecycle hooks** — `toolFeedback` (speak filler while a tool runs), `onTurnComplete` (post-turn, fire-and-forget, off the audio path), and `onCallEnd` (end-of-call, awaited within LiveKit's shutdown window — the place to flush observational memory with `observe({ force: true })`).
+- **Lifecycle hooks** — `toolFeedback` (speak filler while a tool runs), `onTurnComplete` (post-turn, fire-and-forget, off the audio path), and `onCallEnd` (end-of-call, awaited within LiveKit's shutdown window — the place to summarize the finished call with `memory.summarizeThread()`).
+- **Compliance controls, grouped under `configuration`** — AI-disclosure greeting that can't be barged over (with a per-tenant resolver), periodic re-disclosure on long calls (`repeatEvery`), an extensible named consent model (`requireConsent` declared on the worker, captured at runtime with `createConsentTool`), and agent-initiated hang-up (`endCall` + `createEndCallTool`) that waits for the goodbye to play out before disconnecting.
 - **Observability** — one `voice call` trace per session with LiveKit pipeline metrics and every Mastra run nested under it.
 - **Connection + dispatch helpers** — `liveKitConnectionRoute` mints tokens and dispatches the worker so a frontend can join.
 
@@ -35,7 +36,7 @@ Peer dependencies (`@mastra/core` and `@livekit/agents` are required; the two pl
 
 The package has two entry points, one per process:
 
-- `@mastra/livekit` — server-side helpers (`liveKitConnectionRoute`, `dispatchVoiceSession`, `pipeAgentReplyToWriter`). Safe to import from Mastra server code; never loads the `@livekit/agents` runtime.
+- `@mastra/livekit` — server-side helpers (`liveKitConnectionRoute`, `dispatchVoiceSession`, `pipeAgentReplyToWriter`) and the agent tool factories (`createConsentTool`, `createEndCallTool` — they go on agents defined in server/shared code). Safe to import from Mastra server code; never loads the `@livekit/agents` runtime.
 - `@mastra/livekit/worker` — the worker runtime (`createLiveKitWorker`, `runLiveKitWorker`). Import it only from the worker entry file.
 
 ## Quick start
@@ -225,9 +226,9 @@ configuration: {
 ```
 
 **Consent.** `requireConsent` _declares_ which consents the call needs (starting with `summaryStorage`
-— consent to store a call summary, e.g. observational memory). Capture the caller's decision at
-runtime with **`createConsentTool`** (exported from `@mastra/livekit`) — add it to your agent, and it
-reads the caller identity from the tool context and hands each decision to your store:
+— consent to store a summary of the call). Capture the caller's decision at runtime with
+**`createConsentTool`** (exported from `@mastra/livekit`) — add it to your agent, and it reads the
+caller identity from the tool context and hands each decision to your store:
 
 ```typescript
 import { createConsentTool } from '@mastra/livekit';
@@ -242,9 +243,11 @@ recordConsent: createConsentTool({
 ```
 
 Then _enforce_ it: the requirements are surfaced on the `onCallEnd` hook (`args.configuration`), so
-you only run the consent-gated action (e.g. flush the call summary) when it isn't required or the
-caller granted it. Further controls (recording notice, data retention, human handoff) are planned to
-land here too.
+you only run the consent-gated action — e.g. the `memory.summarizeThread()` call that stores the
+summary — when it isn't required or the caller granted it. Whether to gate at all is your policy
+call: a permissive deployment skips `requireConsent` entirely and always summarizes, while a
+regulated one declares → captures → enforces (the runnable example ships both flavors). Further
+controls (recording notice, data retention, human handoff) are planned to land here too.
 
 **Agent-initiated hang-up.** `endCall` lets the agent end the call itself — say goodbye, then hang up.
 Enable it under `configuration`, and add a matching tool to the agent with **`createEndCallTool`**
@@ -293,14 +296,20 @@ createLiveKitWorker({
   },
 
   // 3. End-of-call: runs when the caller hangs up, AWAITED within LiveKit's shutdown grace window
-  //    (so it finishes before the process exits). The place for end-of-call memory maintenance —
-  //    e.g. flush observational memory once for the whole call instead of paying for it per turn.
-  //    `force: true` (@mastra/memory) distills even a short call below the token threshold, so the
-  //    inline threshold can sit high (zero in-call OM cost) with a guaranteed hang-up flush.
+  //    (so it finishes before the process exits). The place for end-of-call work — e.g. summarize
+  //    the finished call into your own records. `memory.summarizeThread()` (@mastra/memory) runs a
+  //    one-shot summarization + structured extraction over the whole call, outside observational
+  //    memory's lifecycle — nothing is written back to memory; you decide where the result goes
+  //    (return value and/or each Extractor's `onExtracted` hook).
   onCallEnd: async ({ memory }) => {
     if (!memory) return;
-    const om = await myMemory.omEngine; // your app's `Memory` (from @mastra/memory)
-    await om?.observe({ threadId: memory.thread, resourceId: memory.resource, force: true });
+    await myMemory.summarizeThread({
+      // your app's `Memory` (from @mastra/memory)
+      model: 'openai/gpt-4.1-mini',
+      threadId: memory.thread,
+      resourceId: memory.resource,
+      instructions: 'Summarize this call for the business owner.',
+    });
   },
 });
 ```
@@ -407,7 +416,8 @@ Single-process HTTP hosts run the **Mastra server** as-is (`node .mastra/output/
 
 A complete, runnable reference lives in the Mastra monorepo at **[`examples/voice-agent`](https://github.com/mastra-ai/mastra/tree/main/examples/voice-agent)** — a trades-contractor front-desk voice agent that exercises nearly every feature here:
 
-- **Both entrypoints** — an agent worker (`pnpm worker`) and a workflow worker (`pnpm worker:workflow`, deterministic intent routing → memory-backed reply).
+- **Three workers, one agent name** (run one at a time): the default **agent** worker (`pnpm worker`) and **workflow** worker (`pnpm worker:workflow`, deterministic intent routing → memory-backed reply) are deliberately **permissive** — no consent friction, the end-of-call summary always runs. The **regulated** worker (`pnpm worker:regulated`, a "Northwind Financial" line) demonstrates every compliance control at once: non-interruptible AI disclosure, 45-second re-disclosure, a four-item runtime consent sweep with an audit ledger, agent-initiated hang-up with a compliance sign-off, and a consent-gated summary (no consent → no stored summary).
+- **End-of-call summarization** — every finished call is distilled into a structured record (summary, sentiment, requested services) via `memory.summarizeThread()` + an `Extractor` whose `onExtracted` hook writes to the app's own store, from the `onCallEnd` hook.
 - **Three memory layers** — working memory, semantic recall, and observational memory, all scoped to the caller.
 - **Tools + deterministic reconciliation**, a tenant-context input processor, the `toolFeedback` / `onTurnComplete` / `onCallEnd` hooks, and full observability.
 
@@ -424,7 +434,7 @@ pnpm worker:download-files      # one-time model download
 
 # in two terminals:
 pnpm dev                        # Mastra server + Studio at http://localhost:4111
-pnpm worker                     # the voice worker (or `pnpm worker:workflow`)
+pnpm worker                     # the voice worker (or `pnpm worker:workflow` / `pnpm worker:regulated`)
 ```
 
 See the example's own [`README.md`](https://github.com/mastra-ai/mastra/tree/main/examples/voice-agent) for the scenario walkthrough and the memory/latency design notes.
