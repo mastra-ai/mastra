@@ -58,12 +58,13 @@ function toContextData(records: OMHistoryRecord[], markers: ExtractedOmMarker[],
     ts: String(getObservationTimestamp(r)),
     pendingMessageTokens: r.pendingMessageTokens,
   }));
-  const fromMarkers = markers
-    .filter(m => m.pendingTokens != null)
-    .map(m => ({
+  const fromMarkers = markers.flatMap(m => {
+    if (m.pendingTokens == null) return [];
+    return {
       ts: m.timestamp,
-      pendingMessageTokens: m.pendingTokens!,
-    }));
+      pendingMessageTokens: m.pendingTokens,
+    };
+  });
   return [...fromRecords, ...fromMarkers]
     .sort((a, b) => a.ts.localeCompare(b.ts))
     .map(d => ({ t: toT(d.ts, domain), pendingMessageTokens: d.pendingMessageTokens }));
@@ -75,12 +76,13 @@ function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedO
       ts: String(getObservationTimestamp(record)),
       observationTokenCount: record.observationTokenCount,
     })),
-    ...markers
-      .filter(marker => marker.type === 'status' && marker.observationTokens != null)
-      .map(marker => ({
+    ...markers.flatMap(marker => {
+      if (marker.type !== 'status' || marker.observationTokens == null) return [];
+      return {
         ts: marker.timestamp,
-        observationTokenCount: marker.observationTokens!,
-      })),
+        observationTokenCount: marker.observationTokens,
+      };
+    }),
   ].sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
@@ -92,14 +94,16 @@ function toActiveObservationData(records: OMHistoryRecord[], markers: ExtractedO
 
 function toBufferedObservationData(markers: ExtractedOmMarker[], domain: TDomain) {
   const points = markers
-    .filter(
-      marker => marker.observationTokens != null && (marker.type === 'buffering-end' || marker.type === 'activation'),
-    )
-    .map(marker => ({
-      ts: marker.timestamp,
-      bufferedObservationTokenCount:
-        marker.type === 'activation' ? -marker.observationTokens! : marker.observationTokens!,
-    }))
+    .flatMap(marker => {
+      if (marker.observationTokens == null || (marker.type !== 'buffering-end' && marker.type !== 'activation')) {
+        return [];
+      }
+      return {
+        ts: marker.timestamp,
+        bufferedObservationTokenCount:
+          marker.type === 'activation' ? -marker.observationTokens : marker.observationTokens,
+      };
+    })
     .sort((a, b) => a.ts.localeCompare(b.ts));
 
   let runningTotal = 0;
@@ -308,7 +312,11 @@ function CombinedRow({
   height = 44,
   onSelectT,
 }: CombinedRowProps) {
-  const areaValueByTime = new Map(areaData.map(point => [point.t, Number(point[areaDataKey] ?? 0)]));
+  const areaValueByTime = new Map<number, number>();
+  for (const point of areaData) {
+    if (point.t === undefined) continue;
+    areaValueByTime.set(point.t, Number(point[areaDataKey] ?? 0));
+  }
   const eventsByTime = eventData.reduce<Map<number, Array<(typeof eventData)[number]>>>((acc, event) => {
     const bucket = acc.get(event.t);
     if (bucket) {

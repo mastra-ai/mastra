@@ -29,9 +29,9 @@
   },
   "pnpm": {
     "overrides": {
-      "@mastra/core": "1.45.0",
-      "@mastra/editor": "0.13.2",
-      "@mastra/memory": "1.21.1",
+      "@mastra/core": "1.49.0",
+      "@mastra/editor": "0.13.4",
+      "@mastra/memory": "1.22.1",
       "@mastra/deployer-vercel": "link:../../deployers/vercel",
       "mastra": "link:../../packages/cli"
     }

@@ -9,6 +9,9 @@ vi.mock('@earendil-works/pi-tui', () => {
     addChild(child: any) {
       this.children.push(child);
     }
+    clear() {
+      this.children = [];
+    }
   }
   class Text {
     constructor(public text: string) {}
@@ -21,7 +24,14 @@ vi.mock('@earendil-works/pi-tui', () => {
     onCancel?: () => void;
     constructor(public items: any[]) {}
   }
-  return { Box, Text, Spacer, SelectList };
+  return {
+    Box,
+    Text,
+    Spacer,
+    SelectList,
+    matchesKey: (data: string, key: string) =>
+      (key === 'escape' && data === '\x1b') || (key === 'ctrl+c' && data === '\x03'),
+  };
 });
 
 const overlay = vi.hoisted(() => ({ showModalOverlay: vi.fn() }));
@@ -44,6 +54,13 @@ vi.mock('../../theme.js', () => ({
     bold: (text: string) => text,
   },
 }));
+
+async function waitForOverlayCalls(count: number): Promise<void> {
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (overlay.showModalOverlay.mock.calls.length >= count) return;
+    await new Promise(resolve => setImmediate(resolve));
+  }
+}
 
 describe('handlePluginsCommand', () => {
   beforeEach(() => {
@@ -403,6 +420,98 @@ describe('handlePluginsCommand', () => {
     expect(pluginManager.installLocal).toHaveBeenNthCalledWith(2, discoveredPath, 'project');
   });
 
+  it('shows progress while installing a GitHub plugin', async () => {
+    let resolveInstall: (id: string) => void = () => {};
+    const installPromise = new Promise<string>(resolve => {
+      resolveInstall = resolve;
+    });
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      discoverLocal: vi.fn(() => []),
+      installGithub: vi.fn(() => installPromise),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('GitHub URL')
+      .mockResolvedValueOnce('https://github.com/acme/foo')
+      .mockResolvedValueOnce('global')
+      .mockResolvedValueOnce('Install');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    const progressOverlay = { hide: vi.fn(), focus: vi.fn() };
+    overlay.showModalOverlay.mockReturnValueOnce({ hide: vi.fn() }).mockReturnValueOnce(progressOverlay);
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(2);
+
+    const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
+    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Installing GitHub plugin');
+    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Press Esc or Ctrl-C to cancel.');
+    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Waiting for clone output...');
+    expect(progressOverlay.focus).toHaveBeenCalledTimes(1);
+    expect(ctx.state.ui.requestRender).toHaveBeenCalled();
+    const installOptions = (pluginManager.installGithub as any).mock.calls[0]?.[2] as any;
+    expect(installOptions.signal).toBeInstanceOf(AbortSignal);
+    installOptions.onOutput('clone complete\ninstall complete\n');
+    expect(progress.children.map((child: any) => child.text).join('\n')).toContain('install complete');
+
+    resolveInstall('acme.foo');
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(ctx.showInfo).toHaveBeenCalledWith('Installed plugin acme.foo.');
+    expect(progressOverlay.hide).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels an in-progress GitHub plugin install', async () => {
+    let rejectInstall: (error: Error) => void = () => {};
+    const installPromise = new Promise<string>((_, reject) => {
+      rejectInstall = reject;
+    });
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => []),
+      discoverLocal: vi.fn(() => []),
+      installGithub: vi.fn(() => installPromise),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('GitHub URL')
+      .mockResolvedValueOnce('https://github.com/acme/foo')
+      .mockResolvedValueOnce('global')
+      .mockResolvedValueOnce('Install');
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn(), requestRender: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+    const progressOverlay = { hide: vi.fn(), focus: vi.fn() };
+    overlay.showModalOverlay.mockReturnValueOnce({ hide: vi.fn() }).mockReturnValueOnce(progressOverlay);
+
+    await handlePluginsCommand(ctx);
+    const container = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const list = container.children.find((child: any) => Array.isArray(child.items));
+    list.onSelect({ value: '__install__' });
+    await waitForOverlayCalls(2);
+
+    const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
+    progress.handleInput('\x03');
+    await new Promise(resolve => setImmediate(resolve));
+
+    const installOptions = (pluginManager.installGithub as any).mock.calls[0]?.[2] as any;
+    expect(installOptions.signal.aborted).toBe(true);
+    rejectInstall(new Error('AbortError'));
+    await new Promise(resolve => setImmediate(resolve));
+    expect(progressOverlay.hide).toHaveBeenCalledTimes(1);
+    expect(ctx.showError).toHaveBeenCalledWith('GitHub plugin install cancelled');
+  });
+
   it('asks for an entry path and retries GitHub install when auto-detection fails', async () => {
     const entryError = new Error('Could not find a plugin entry file. Tried: src/index.ts, index.ts');
     const pluginManager = {
@@ -435,10 +544,18 @@ describe('handlePluginsCommand', () => {
         'Plugins run code inside Mastra Code and can access your workspace. GitHub plugins also auto-update from their repository, so only install plugins from sources you trust. Continue?',
       options: [{ label: 'Install' }, { label: 'Cancel' }],
     });
-    expect(pluginManager.installGithub).toHaveBeenNthCalledWith(1, 'https://github.com/acme/foo', 'global');
-    expect(pluginManager.installGithub).toHaveBeenNthCalledWith(2, 'https://github.com/acme/foo', 'global', {
-      entry: 'plugin.ts',
-    });
+    expect(pluginManager.installGithub).toHaveBeenNthCalledWith(
+      1,
+      'https://github.com/acme/foo',
+      'global',
+      expect.objectContaining({ signal: expect.any(AbortSignal), onOutput: expect.any(Function) }),
+    );
+    expect(pluginManager.installGithub).toHaveBeenNthCalledWith(
+      2,
+      'https://github.com/acme/foo',
+      'global',
+      expect.objectContaining({ entry: 'plugin.ts', signal: expect.any(AbortSignal), onOutput: expect.any(Function) }),
+    );
     expect(modal.askModalQuestion).toHaveBeenLastCalledWith(ctx.state.ui, {
       question: 'Could not auto-detect plugin entry. Entry file or directory path:',
       allowCustomResponse: true,

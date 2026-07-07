@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const execaMock = vi.hoisted(() => vi.fn());
@@ -9,6 +10,8 @@ vi.mock('execa', () => ({ execa: execaMock }));
 
 import { PluginManager } from '../manager.js';
 import { loadPluginRegistry } from '../registry.js';
+
+const mastracodePackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
 let tempDir: string | undefined;
 
@@ -152,6 +155,7 @@ describe('PluginManager', () => {
     const homeDir = path.join(tempDir, 'home');
     const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
     writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.writeFileSync(path.join(checkoutDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
     fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
     fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
     fs.writeFileSync(
@@ -205,6 +209,116 @@ describe('PluginManager', () => {
       ['reset', '--hard', 'origin/main'],
       expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
+    expect(execaMock).toHaveBeenCalledWith(
+      'pnpm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(
+      fs.realpathSync(mastracodePackageRoot),
+    );
+  });
+
+  it('installs dependencies for nested GitHub entry package roots during updates', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria');
+    const nestedPluginDir = path.join(checkoutDir, '.mastracode/plugins/sources/local/alexandria');
+    writePlugin(nestedPluginDir, 'alexandria', 'github_tool', 'first');
+    fs.writeFileSync(path.join(nestedPluginDir, 'package.json'), JSON.stringify({ name: 'alexandria' }));
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          alexandria: {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/alexandria',
+            path: 'sources/github/acme-alexandria',
+            entry: '.mastracode/plugins/sources/local/alexandria/src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      if (cmd === 'npm') {
+        expect(options.cwd).toBe(nestedPluginDir);
+        return { stdout: '' };
+      }
+      expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') {
+        return {
+          stdout:
+            execaMock.mock.calls.filter(call => call[1][0] === 'rev-parse' && call[1][1] === 'HEAD').length === 1
+              ? 'old'
+              : 'new',
+        };
+      }
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset') writePlugin(nestedPluginDir, 'alexandria', 'github_tool', 'second');
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+    expect(manager.getPluginTools().github_tool?.description).toBe('first');
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
+
+    expect(manager.getPluginTools().github_tool?.description).toBe('second');
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: nestedPluginDir }),
+    );
+    expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
+      fs.realpathSync(mastracodePackageRoot),
+    );
+  });
+
+  it('does not install dependencies for unchanged GitHub plugin checkouts', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.writeFileSync(path.join(checkoutDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (_cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      expect(options.cwd).toBe(checkoutDir);
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: 'same' };
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t0' };
+      if (args[0] === 'status') return { stdout: '' };
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+
+    await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
+
+    expect(execaMock.mock.calls.some(call => call[0] === 'pnpm')).toBe(false);
   });
 
   it('backs up divergent GitHub plugin checkouts before forcing them to origin', async () => {
@@ -213,6 +327,7 @@ describe('PluginManager', () => {
     const homeDir = path.join(tempDir, 'home');
     const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
     writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.writeFileSync(path.join(checkoutDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
     fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
     fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
     fs.writeFileSync(
@@ -266,6 +381,7 @@ describe('PluginManager', () => {
     const homeDir = path.join(tempDir, 'home');
     const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
     writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.writeFileSync(path.join(checkoutDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
     fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
     fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
     fs.writeFileSync(
@@ -311,6 +427,7 @@ describe('PluginManager', () => {
       '-c',
       'switch',
       'reset',
+      'install',
       'rev-parse',
     ]);
     expect(execaMock.mock.calls.find(call => call[1][0] === 'switch')?.[1][2]).toMatch(
@@ -324,6 +441,57 @@ describe('PluginManager', () => {
     expect(execaMock).toHaveBeenCalledWith(
       'git',
       ['reset', '--hard', 'origin/main'],
+      expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+  });
+
+  it('rejects update polling without reloading when dependency installation fails', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-plugin');
+    const installError = new Error('dependency install failed');
+    writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+    fs.writeFileSync(path.join(checkoutDir, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+    fs.mkdirSync(path.join(checkoutDir, '.git'), { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, '.mastracode/plugins'), { recursive: true });
+    fs.writeFileSync(
+      path.join(projectRoot, '.mastracode/plugins/plugins.json'),
+      JSON.stringify({
+        plugins: {
+          'acme.github': {
+            enabled: true,
+            source: 'github',
+            specifier: 'https://github.com/acme/plugin',
+            path: 'sources/github/acme-plugin',
+            entry: 'src/index.ts',
+          },
+        },
+      }),
+    );
+    execaMock.mockImplementation(async (cmd: string, args: string[], options: { cwd?: string } = {}) => {
+      expect(options.cwd).toBe(checkoutDir);
+      if (cmd === 'pnpm') throw installError;
+      if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: 'old' };
+      if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
+      if (args[0] === 'rev-list') return { stdout: '0\t1' };
+      if (args[0] === 'status') return { stdout: '' };
+      if (args[0] === 'reset' && args[2] === 'origin/main')
+        writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+      if (args[0] === 'reset' && args[2] === 'old') writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
+      return { stdout: '' };
+    });
+
+    const manager = new PluginManager({ projectRoot, homeDir });
+    await manager.reload();
+    expect(manager.getPluginTools().github_tool?.description).toBe('first');
+
+    await expect(manager.pollGithubSourcesForUpdates()).rejects.toThrow(installError);
+
+    expect(manager.getPluginTools().github_tool?.description).toBe('first');
+    expect(execaMock).toHaveBeenCalledWith(
+      'git',
+      ['reset', '--hard', 'old'],
       expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
   });

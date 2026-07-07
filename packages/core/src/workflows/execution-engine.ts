@@ -11,6 +11,7 @@ import type {
   SerializedStepFlowEntry,
   StepResult,
   WorkflowRunStatus,
+  WorkflowRunState,
   WorkflowFinishCallbackResult,
   WorkflowErrorCallbackInfo,
 } from './types';
@@ -32,6 +33,12 @@ export interface ExecutionEngineOptions {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     workflowStatus: WorkflowRunStatus;
   }) => boolean;
+
+  /**
+   * Transforms the run snapshot immediately before it is persisted.
+   * Must be pure and return JSON-safe data. Defaults to identity.
+   */
+  pruneSnapshot?: (params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState;
 
   /**
    * Called when workflow execution completes (success, failed, suspended, or tripwire).

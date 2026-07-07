@@ -7,7 +7,7 @@ services:
       - '6379:6379'
 
   inngest:
-    image: inngest/inngest:v1.12.1
+    image: inngest/inngest:v1.34.0
     command: inngest dev -p 8288 -u http://host.docker.internal:4111/inngest/api --poll-interval=1
     ports:
       - '8288:8288'

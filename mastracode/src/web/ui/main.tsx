@@ -3,19 +3,24 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import { RouterProvider } from 'react-router/dom';
 
 import { ApiConfigProvider } from '../../shared/api/config';
 import { createQueryClient } from '../../shared/query-client';
-import App from './App';
+import { createAppRouter } from './router';
 import '@mastra/playground-ui/style.css';
 import './tailwind.css';
-import './styles.css';
-import { ToastProvider } from './toast';
+import { ToastProvider } from './ui';
 
-// The web app talks to the Mastra server same-origin (Vite proxies `/api`), so
-// it injects an empty base URL. A future React Native entry mounts the same
-// providers with its own absolute base URL and fetch implementation.
+// The web app talks to the Mastra server same-origin (`baseUrl=""`): in prod
+// the server serves this build itself, and in dev Vite proxies `/api` + `/auth`
+// to :4111. The served index.html also carries `window.__MASTRACODE_CONFIG__`
+// (injected by the server in prod, by the Vite plugin in dev) so the UI knows
+// whether auth is enabled without probing `/auth/me`. A future React Native
+// entry mounts the same providers with its own absolute base URL and fetch
+// implementation.
 const queryClient = createQueryClient();
+const router = createAppRouter();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -24,7 +29,7 @@ createRoot(document.getElementById('root')!).render(
         <QueryClientProvider client={queryClient}>
           <ApiConfigProvider baseUrl="">
             <ToastProvider>
-              <App />
+              <RouterProvider router={router} />
             </ToastProvider>
           </ApiConfigProvider>
         </QueryClientProvider>

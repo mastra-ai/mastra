@@ -363,6 +363,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kenari',
+          label: 'Kenari',
+        },
+        {
+          type: 'doc',
           id: 'providers/kilo',
           label: 'Kilo Gateway',
         },
@@ -400,6 +405,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lmstudio',
           label: 'LMStudio',
+        },
+        {
+          type: 'doc',
+          id: 'providers/longcat',
+          label: 'LongCat',
         },
         {
           type: 'doc',
@@ -645,6 +655,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/tencent-coding-plan',
           label: 'Tencent Coding Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
         },
         {
           type: 'doc',
