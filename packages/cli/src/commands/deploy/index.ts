@@ -797,7 +797,7 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
 
   // Pre-upload validation
   if (!skipPreflight) {
-    const issues = await preflightBuildOutput(targetDir, envVars);
+    const issues = await preflightBuildOutput(targetDir, envVars, { hasEnvFile: hasAmbientEnvFile });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');
