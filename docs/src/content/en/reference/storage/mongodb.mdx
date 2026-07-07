@@ -19,7 +19,7 @@ npm install @mastra/mongodb@latest
 
 ## Usage
 
-Ensure you have a MongoDB Atlas Local (via Docker) or MongoDB Atlas Cloud instance with Atlas Search enabled. MongoDB 7.0+ is recommended.
+Ensure you have a [MongoDB Atlas Local (via Docker)](https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-deploy-docker/) or [MongoDB Atlas Cloud](https://www.mongodb.com/docs/atlas/cli/current/atlas-cli-getting-started/) instance with Atlas Search enabled. MongoDB 7.0+ is recommended.
 
 ```typescript
 import { MongoDBStore } from '@mastra/mongodb'
@@ -27,7 +27,7 @@ import { MongoDBStore } from '@mastra/mongodb'
 const storage = new MongoDBStore({
   id: 'mongodb-storage',
   uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+  dbName: process.env.MONGODB_DB_NAME,
 })
 ```
 
@@ -48,12 +48,6 @@ const storage = new MongoDBStore({
     isOptional: false,
   },
   {
-    name: 'url',
-    type: 'string',
-    description: 'Deprecated. Use uri instead. MongoDB connection string (supported for backward compatibility).',
-    isOptional: true,
-  },
-  {
     name: 'dbName',
     type: 'string',
     description: 'The name of the database you want the storage to use.',
@@ -62,15 +56,40 @@ const storage = new MongoDBStore({
   {
     name: 'options',
     type: 'MongoClientOptions',
-    description: 'MongoDB client options for advanced configuration (SSL, connection pooling, etc.).',
+    description:
+      'MongoDB client options for advanced configuration (SSL, connection pooling, etc.). See [Connection Options](https://www.mongodb.com/docs/drivers/node/current/fundamentals/connection/connection-options/)',
+    isOptional: true,
+  },
+  {
+    name: 'disableInit',
+    type: 'boolean',
+    description:
+      'When true, automatic initialization (collection creation) is disabled. Useful for CI/CD pipelines where you want to run migrations explicitly. You must call storage.init() manually when this is true.',
+    isOptional: true,
+  },
+  {
+    name: 'skipDefaultIndexes',
+    type: 'boolean',
+    description:
+      'When true, default indexes will not be created during initialization. Useful when managing indexes separately or using only custom indexes.',
+    isOptional: true,
+  },
+  {
+    name: 'indexes',
+    type: 'MongoDBIndexConfig[]',
+    description:
+      'Custom indexes to create during initialization. Each index must specify a collection, keys, and optional index options. See [Indexes](https://www.mongodb.com/docs/manual/indexes/)',
+    isOptional: true,
+  },
+  {
+    name: 'connectorHandler',
+    type: 'ConnectorHandler',
+    description:
+      'Custom connection handler for advanced connection management. Alternative to providing uri/dbName directly.',
     isOptional: true,
   },
 ]}
 />
-
-:::note[Deprecation Notice]
-The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
-:::
 
 ## Constructor examples
 
@@ -98,6 +117,26 @@ const store2 = new MongoDBStore({
     socketTimeoutMS: 45000,
   },
 })
+
+// With custom indexes
+const store3 = new MongoDBStore({
+  id: 'mongodb-storage-03',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  indexes: [
+    { collection: 'mastra_threads', keys: { 'metadata.type': 1 } },
+    { collection: 'mastra_messages', keys: { 'metadata.status': 1 }, options: { sparse: true } },
+  ],
+})
+
+// For CI/CD with explicit initialization
+const store4 = new MongoDBStore({
+  id: 'mongodb-storage-04',
+  uri: 'mongodb+srv://user:password@cluster.mongodb.net',
+  dbName: 'mastra_storage',
+  disableInit: true, // Disable auto-init
+})
+await store4.init() // Call init explicitly
 ```
 
 ## Additional notes
@@ -128,7 +167,7 @@ import { MongoDBStore } from '@mastra/mongodb'
 const storage = new MongoDBStore({
   id: 'mongodb-storage',
   uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+  dbName: process.env.MONGODB_DB_NAME,
 })
 
 const mastra = new Mastra({
@@ -144,7 +183,7 @@ import { MongoDBStore } from '@mastra/mongodb'
 const storage = new MongoDBStore({
   id: 'mongodb-storage',
   uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+  dbName: process.env.MONGODB_DB_NAME,
 })
 
 // Required when using storage directly
@@ -159,57 +198,28 @@ const thread = await memoryStore?.getThreadById({ threadId: '...' })
 If `init()` isn't called, collections won't be created and storage operations will fail silently or throw errors.
 :::
 
-## Vector search capabilities
+### Connection Management
 
-MongoDB storage includes built-in vector search capabilities for AI applications:
-
-### Vector Index Creation
+The `close()` method closes the MongoDB client connection. Call this when shutting down your application:
 
 ```typescript
-import { MongoDBVector } from '@mastra/mongodb'
+import { MongoDBStore } from '@mastra/mongodb'
 
-const vectorStore = new MongoDBVector({
-  id: 'mongodb-vector',
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
   uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+  dbName: process.env.MONGODB_DB_NAME,
 })
 
-// Create a vector index for embeddings
-await vectorStore.createIndex({
-  indexName: 'document_embeddings',
-  dimension: 1536,
-})
+// Use storage...
+
+// Clean up on shutdown
+await storage.close()
 ```
 
-### Vector Operations
+## Vector search capabilities
 
-```typescript prettier:false
-// Store vectors with metadata
-await vectorStore.upsert({
-  indexName: "document_embeddings",
-  vectors: [
-    {
-      id: "doc-1",
-      values: [0.1, 0.2, 0.3, ...], // 1536-dimensional vector
-      metadata: {
-        title: "Document Title",
-        category: "technical",
-        source: "api-docs",
-      },
-    },
-  ],
-});
-
-// Similarity search
-const results = await vectorStore.query({
-  indexName: "document_embeddings",
-  vector: queryEmbedding,
-  topK: 5,
-  filter: {
-    category: "technical",
-  },
-});
-```
+MongoDB storage includes built-in vector search capabilities for AI applications. For detailed vector operations including index creation, upserting embeddings, similarity search, and metadata filtering, see the [MongoDB vector reference](/reference/vectors/mongodb).
 
 ## Usage example
 
@@ -230,6 +240,7 @@ export const mongodbAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new MongoDBStore({
+      id: 'mongodb-storage',
       uri: process.env.MONGODB_URI!,
       dbName: process.env.MONGODB_DB_NAME!,
     }),

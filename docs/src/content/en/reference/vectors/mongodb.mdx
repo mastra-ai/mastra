@@ -6,6 +6,7 @@ packages:
   - "@mastra/fastembed"
   - "@mastra/memory"
   - "@mastra/mongodb"
+  - "@mastra/voyageai"
 ---
 
 # MongoDB vector store
@@ -26,7 +27,7 @@ import { MongoDBVector } from '@mastra/mongodb'
 const store = new MongoDBVector({
   id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+  dbName: process.env.MONGODB_DB_NAME,
 })
 ```
 
@@ -40,7 +41,7 @@ import { MongoDBVector } from '@mastra/mongodb'
 const store = new MongoDBVector({
   id: 'mongodb-vector',
   uri: process.env.MONGODB_URI,
-  dbName: process.env.MONGODB_DATABASE,
+  dbName: process.env.MONGODB_DB_NAME,
   embeddingFieldPath: 'text.contentEmbedding', // Store embeddings at text.contentEmbedding
 })
 ```
@@ -83,6 +84,14 @@ const store = new MongoDBVector({
 
 ## Methods
 
+### `connect()`
+
+Establishes connection to the MongoDB server. This is called automatically on first use, but can be called explicitly if needed.
+
+```typescript
+await store.connect()
+```
+
 ### `createIndex()`
 
 Creates a new vector index (collection) in MongoDB.
@@ -105,6 +114,34 @@ Creates a new vector index (collection) in MongoDB.
     isOptional: true,
     defaultValue: 'cosine',
     description: 'Distance metric for similarity search',
+  },
+]}
+/>
+
+### `waitForIndexReady()`
+
+Waits for an index to become ready after creation. Useful when you need to ensure an index is ready before performing operations.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'indexName',
+    type: 'string',
+    description: 'Name of the index to wait for',
+  },
+  {
+    name: 'timeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description: 'Maximum time to wait in milliseconds',
+  },
+  {
+    name: 'checkIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '2000',
+    description: 'Interval between status checks in milliseconds',
   },
 ]}
 />
@@ -136,6 +173,12 @@ Adds or updates vectors and their metadata in the collection.
     type: 'string[]',
     isOptional: true,
     description: 'Optional vector IDs (auto-generated if not provided)',
+  },
+  {
+    name: 'documents',
+    type: 'string[]',
+    isOptional: true,
+    description: 'Optional document text content to store alongside vectors',
   },
 ]}
 />
@@ -181,6 +224,14 @@ Searches for similar vectors with optional metadata filtering.
     isOptional: true,
     defaultValue: 'false',
     description: 'Whether to include vector data in results',
+  },
+  {
+    name: 'numCandidates',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '20 * topK (capped at 10000)',
+    description:
+      'Number of candidates the HNSW graph considers before selecting top-K results. Higher values improve recall at the cost of latency. See: https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-stage/',
   },
 ]}
 />
@@ -372,7 +423,7 @@ Embeddings are numeric vectors used by memory's `semanticRecall` to retrieve rel
 
 :::note
 
-You must use a deployment hosted on MongoDB Atlas to successfully use the MongoDB Vector database.
+MongoDB Atlas Vector Search is recommended for production use. For self-hosted deployments, Vector Search is available with [MongoDB Enterprise Server](https://www.mongodb.com/docs/atlas/architecture/current/solutions-library/search-enterprise-server/).
 
 :::
 
@@ -421,6 +472,53 @@ export const mongodbAgent = new Agent({
 })
 ```
 
+### Vector embeddings with VoyageAI
+
+VoyageAI provides specialized embedding models optimized for retrieval tasks. VoyageAI is also integrated with MongoDB Atlas for multimodal embeddings.
+
+```bash npm2yarn
+npm install @mastra/voyageai@latest
+```
+
+Basic usage example:
+
+```typescript title="src/mastra/agents/example-mongodb-voyageai-agent.ts"
+import { Memory } from '@mastra/memory'
+import { Agent } from '@mastra/core/agent'
+import { MongoDBStore, MongoDBVector } from '@mastra/mongodb'
+import { voyage } from '@mastra/voyageai'
+
+export const mongodbVoyageAgent = new Agent({
+  id: 'mongodb-voyage-agent',
+  name: 'MongoDB VoyageAI Agent',
+  instructions: 'You are an AI agent with semantic recall powered by VoyageAI and MongoDB.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new MongoDBStore({
+      id: 'mongodb-storage',
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    vector: new MongoDBVector({
+      id: 'mongodb-vector',
+      uri: process.env.MONGODB_URI!,
+      dbName: process.env.MONGODB_DB_NAME!,
+    }),
+    embedder: voyage, // VoyageAI's default model (voyage-3.5, 1024 dimensions)
+    options: {
+      lastMessages: 10,
+      semanticRecall: {
+        topK: 5,
+        messageRange: 2,
+      },
+    },
+  }),
+})
+```
+
+For comprehensive VoyageAI embedding examples including specialized models, multimodal embeddings, and retrieval optimization, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai).
+
 ## Related
 
 - [Metadata Filters](../rag/metadata-filters)
+- [VoyageAI Embeddings Documentation](/models/embeddings#voyageai)
