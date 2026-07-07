@@ -286,6 +286,8 @@ export type ProviderModelsMap = {
     'alibaba/wan-v2.6-r2v',
     'alibaba/wan-v2.6-r2v-flash',
     'alibaba/wan-v2.6-t2v',
+    'alibaba/wan-v2.7-r2v',
+    'alibaba/wan-v2.7-t2v',
     'amazon/nova-2-lite',
     'amazon/nova-lite',
     'amazon/nova-micro',
@@ -602,6 +604,7 @@ export type ProviderModelsMap = {
     'moonshotai/Kimi-K2.6',
     'moonshotai/Kimi-K2.7-Code',
     'openai/gpt-oss-120b',
+    'openai/gpt-oss-20b',
     'stepfun-ai/Step-3.5-Flash',
     'stepfun-ai/Step-3.7-Flash',
     'zai-org/GLM-4.5',
@@ -1245,7 +1248,7 @@ export type ProviderModelsMap = {
     'stable-diffusion-3.5-large',
     'wan2-2-t2v-a14b',
   ];
-  readonly subconscious: readonly ['subconscious/tim-qwen3.6-27b'];
+  readonly subconscious: readonly ['subconscious/glm-5.2', 'subconscious/tim-qwen3.6-27b'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-xs.2'];
   readonly zenmux: readonly [
@@ -3397,6 +3400,7 @@ export type ProviderModelsMap = {
     'moonshotai/kimi-k2.7-code',
     'morph/morph-v3-fast',
     'morph/morph-v3-large',
+    'nex-agi/nex-n2-mini',
     'nex-agi/nex-n2-pro',
     'nousresearch/hermes-3-llama-3.1-405b',
     'nousresearch/hermes-3-llama-3.1-405b:free',
@@ -3555,7 +3559,9 @@ export type ProviderModelsMap = {
     'stepfun/step-3.7-flash',
     'switchpoint/router',
     'tencent/hunyuan-a13b-instruct',
+    'tencent/hy3',
     'tencent/hy3-preview',
+    'tencent/hy3:free',
     'thedrummer/cydonia-24b-v4.1',
     'thedrummer/rocinante-12b',
     'thedrummer/skyfall-36b-v2',
