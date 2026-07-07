@@ -1,5 +1,16 @@
 # mastracode
 
+## 0.30.0-alpha.3
+
+### Patch Changes
+
+- Fixed GitHub plugin setup when running Mastra Code from a source-built bundle and installing plugins that require a different pnpm version. ([#19067](https://github.com/mastra-ai/mastra/pull/19067))
+
+- Updated dependencies [[`27492f2`](https://github.com/mastra-ai/mastra/commit/27492f24ee4960afefb1268a4d38201cd0779566)]:
+  - @mastra/memory@1.22.2-alpha.0
+  - @mastra/hono@1.5.6-alpha.2
+  - @mastra/server@1.50.1-alpha.2
+
 ## 0.30.0-alpha.2
 
 ### Minor Changes
