@@ -1,5 +1,6 @@
 import * as React from 'react';
 import { TreeProvider, TreeDepthProvider } from './tree-context';
+import { useIsomorphicLayoutEffect } from '@/hooks/use-isomorphic-layout-effect';
 import { cn } from '@/lib/utils';
 
 const TREE_FOCUSABLE_ITEM_SELECTOR = '[data-tree-item-kind="folder"], [data-tree-item-kind="file"]';
@@ -11,8 +12,6 @@ export interface TreeRootProps {
   className?: string;
   children: React.ReactNode;
 }
-
-const useIsomorphicLayoutEffect = typeof window === 'undefined' ? React.useEffect : React.useLayoutEffect;
 
 function assignRef<T>(ref: React.ForwardedRef<T>, value: T | null) {
   if (typeof ref === 'function') {
