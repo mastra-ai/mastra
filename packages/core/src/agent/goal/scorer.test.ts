@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
+import type { MastraDBMessage, MastraMessageContentV2 } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
 
@@ -25,7 +26,26 @@ const viewTool = createTool({
   execute: async () => ({ content: '' }),
 });
 
-async function captureJudgePromptForMessages(messages: Array<Record<string, unknown>>) {
+function createUserMessage(content: MastraMessageContentV2): MastraDBMessage {
+  return {
+    id: 'msg-user',
+    role: 'user',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    content,
+  };
+}
+
+function createSignalMessage(content: MastraMessageContentV2, id = 'msg-signal'): MastraDBMessage {
+  return {
+    id,
+    role: 'signal',
+    createdAt: new Date('2026-01-01T00:00:00.000Z'),
+    type: 'user',
+    content,
+  };
+}
+
+async function captureJudgePromptForMessages(messages: MastraDBMessage[]) {
   let prompt = '';
   const scorer = createGoalScorer({
     judgeModel: createMockModel({
@@ -51,10 +71,7 @@ async function captureJudgePromptForMessages(messages: Array<Record<string, unkn
 describe('createGoalScorer latest user message text extraction', () => {
   it('includes text from DB-shaped latest user content instead of stringifying the object', async () => {
     const prompt = await captureJudgePromptForMessages([
-      {
-        role: 'user',
-        content: { format: 2, parts: [{ type: 'text', text: 'actual user text' }] },
-      },
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'actual user text' }] }),
     ]);
 
     expect(prompt).toContain('Latest user message');
@@ -64,20 +81,54 @@ describe('createGoalScorer latest user message text extraction', () => {
 
   it('joins all DB-shaped text parts from the latest user content with newlines', async () => {
     const prompt = await captureJudgePromptForMessages([
-      {
-        role: 'user',
-        content: {
-          format: 2,
-          parts: [
-            { type: 'text', text: 'first text part' },
-            { type: 'text', text: 'second text part' },
-          ],
-        },
-      },
+      createUserMessage({
+        format: 2,
+        parts: [
+          { type: 'text', text: 'first text part' },
+          { type: 'text', text: 'second text part' },
+        ],
+      }),
     ]);
 
     expect(prompt).toContain('first text part\\nsecond text part');
     expect(prompt).not.toContain('[object Object]');
+  });
+
+  it('uses user signal rows as latest user content for signal-delivered messages', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'previous user text' }] }),
+      createSignalMessage({
+        format: 2,
+        parts: [{ type: 'text', text: 'received your message user' }],
+        metadata: { signal: { type: 'user', tagName: 'user' } },
+      }),
+    ]);
+
+    expect(prompt).toContain('received your message user');
+    expect(prompt).not.toContain('previous user text');
+    expect(prompt).not.toContain('[object Object]');
+  });
+
+  it('skips synthetic system reminders when selecting the latest user content', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'actual human message' }] }),
+      createUserMessage({
+        format: 2,
+        parts: [{ type: 'text', text: '<system-reminder>Please continue naturally</system-reminder>' }],
+      }),
+    ]);
+
+    expect(prompt).toContain('actual human message');
+    expect(prompt).not.toContain('<system-reminder>Please continue naturally</system-reminder>');
+  });
+
+  it('skips empty user rows when selecting the latest user content', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: 'actual human message' }] }),
+      createUserMessage({ format: 2, parts: [{ type: 'text', text: '' }] }),
+    ]);
+
+    expect(prompt).toContain('actual human message');
   });
 });
 
