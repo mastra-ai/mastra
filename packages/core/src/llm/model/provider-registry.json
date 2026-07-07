@@ -321,6 +321,8 @@
         "alibaba/wan-v2.6-r2v",
         "alibaba/wan-v2.6-r2v-flash",
         "alibaba/wan-v2.6-t2v",
+        "alibaba/wan-v2.7-r2v",
+        "alibaba/wan-v2.7-t2v",
         "amazon/nova-2-lite",
         "amazon/nova-lite",
         "amazon/nova-micro",
@@ -1546,9 +1548,10 @@
       "apiKeyEnvVar": "SUBCONSCIOUS_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Subconscious",
-      "models": ["subconscious/tim-qwen3.6-27b"],
+      "models": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"],
       "docUrl": "https://docs.subconscious.dev",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "lmstudio": {
       "url": "http://127.0.0.1:1234/v1",
@@ -4560,6 +4563,7 @@
         "moonshotai/kimi-k2.7-code",
         "morph/morph-v3-fast",
         "morph/morph-v3-large",
+        "nex-agi/nex-n2-mini",
         "nex-agi/nex-n2-pro",
         "nousresearch/hermes-3-llama-3.1-405b",
         "nousresearch/hermes-3-llama-3.1-405b:free",
@@ -6449,6 +6453,8 @@
       "alibaba/wan-v2.6-r2v",
       "alibaba/wan-v2.6-r2v-flash",
       "alibaba/wan-v2.6-t2v",
+      "alibaba/wan-v2.7-r2v",
+      "alibaba/wan-v2.7-t2v",
       "amazon/nova-2-lite",
       "amazon/nova-lite",
       "amazon/nova-micro",
@@ -7403,7 +7409,7 @@
       "stable-diffusion-3.5-large",
       "wan2-2-t2v-a14b"
     ],
-    "subconscious": ["subconscious/tim-qwen3.6-27b"],
+    "subconscious": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"],
     "lmstudio": ["openai/gpt-oss-20b", "qwen/qwen3-30b-a3b-2507", "qwen/qwen3-coder-30b"],
     "poolside": ["poolside/laguna-m.1", "poolside/laguna-xs.2"],
     "zenmux": [
@@ -9555,6 +9561,7 @@
       "moonshotai/kimi-k2.7-code",
       "morph/morph-v3-fast",
       "morph/morph-v3-large",
+      "nex-agi/nex-n2-mini",
       "nex-agi/nex-n2-pro",
       "nousresearch/hermes-3-llama-3.1-405b",
       "nousresearch/hermes-3-llama-3.1-405b:free",

@@ -93,16 +93,6 @@ export type EntityLearningTopicExample = {
   y: number;
 };
 
-export type EntityLearningPoint = {
-  exampleId: string;
-  runId: string;
-  signalName: string;
-  topicId?: string;
-  isOutlier: boolean;
-  x: number;
-  y: number;
-};
-
 export type EntityLearningOutliers = {
   runId: string;
   itemCount: number;
@@ -142,11 +132,6 @@ export type EntityLearningTopicExamplesResponse = {
   runId: string;
   examples: EntityLearningTopicExample[];
   nextOffset: number | null;
-};
-
-export type EntityLearningPointsResponse = {
-  runId: string;
-  points: EntityLearningPoint[];
 };
 
 export type EntityLearningOutliersResponse = {

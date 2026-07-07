@@ -7,7 +7,6 @@ import {
   entitiesResponse,
   learningResponse,
   outliersResponse,
-  pointsResponse,
   runResponse,
   runsResponse,
   topicExamplesResponse,
@@ -208,25 +207,6 @@ describe('createEntityLearningService', () => {
 
       expect(result).toEqual(topicExamplesResponse);
       expect(capturedUrl?.searchParams.get('limit')).toBe('25');
-    });
-
-    it('passes includeOutliers to /points', async () => {
-      let capturedUrl: URL | undefined;
-      server.use(
-        http.get(`${ROOT}/entities/:entityId/points`, ({ request }) => {
-          capturedUrl = new URL(request.url);
-          return HttpResponse.json(pointsResponse);
-        }),
-      );
-
-      const result = await service.getEntityPoints('entity_support', {
-        signalName: 'sentiment',
-        runId: '32',
-        includeOutliers: true,
-      });
-
-      expect(result).toEqual(pointsResponse);
-      expect(capturedUrl?.searchParams.get('includeOutliers')).toBe('true');
     });
 
     it('fetches outliers', async () => {
