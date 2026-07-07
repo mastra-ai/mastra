@@ -256,8 +256,14 @@ export class SessionRunEngine {
     return state.currentMessage.content.parts.length > 0;
   }
 
+  /**
+   * Snapshot a message for emission. The engine mutates parts in place
+   * (text/reasoning deltas, tool-invocation upgrades) and `setStopReason` /
+   * `setErrorMessage` mutate `content.metadata`, so emitted snapshots must
+   * deep-clone the content or later mutations rewrite earlier snapshots.
+   */
   private cloneMessage(message: MastraDBMessage): MastraDBMessage {
-    return { ...message, content: { ...message.content, parts: [...message.content.parts] } };
+    return { ...message, content: structuredClone(message.content) };
   }
 
   private setStopReason(message: MastraDBMessage, stopReason: string, force = false): void {

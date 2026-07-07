@@ -187,6 +187,37 @@ describe('SessionRunEngine — MastraDBMessage contract', () => {
     expect(messageEnds[1].message.createdAt.toISOString()).toBe('2026-01-02T03:04:05.000Z');
   });
 
+  it('Given an emitted snapshot, When later chunks mutate the message in place, Then the snapshot is unchanged', async () => {
+    const { engine, events } = createHarness();
+    const state = engine.createStreamState();
+    const ctx = requestContext();
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-start', payload: { id: 't1' } }), ctx);
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: 'Hello' } }), ctx);
+    const textSnapshot = lastMessageEvent(events);
+
+    await engine.processStreamChunk(state, chunk({ type: 'text-delta', payload: { id: 't1', text: ' world' } }), ctx);
+    expect(textSnapshot.content.parts).toEqual([{ type: 'text', text: 'Hello' }]);
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-call', payload: { toolCallId: 'tc1', toolName: 'read', args: { path: 'a.ts' } } }),
+      ctx,
+    );
+    const callSnapshot = lastMessageEvent(events);
+
+    await engine.processStreamChunk(
+      state,
+      chunk({ type: 'tool-result', payload: { toolCallId: 'tc1', toolName: 'read', result: 'ok' } }),
+      ctx,
+    );
+
+    const callPart = callSnapshot.content.parts.find(part => part.type === 'tool-invocation');
+    if (!callPart || callPart.type !== 'tool-invocation') throw new Error('no tool invocation part in snapshot');
+    expect(callPart.toolInvocation.state).toBe('call');
+    expect(callPart.toolInvocation).not.toHaveProperty('result');
+  });
+
   it('Given a non-success finish reason, When the stream finishes, Then terminal state lives on message metadata', async () => {
     const { engine, events } = createHarness();
 
