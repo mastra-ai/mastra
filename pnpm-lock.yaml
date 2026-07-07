@@ -594,7 +594,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.9.0
+        version: 13.9.0(encoding@0.1.13)
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -11207,6 +11207,7 @@ packages:
 
   '@clickhouse/client-common@1.20.0':
     resolution: {integrity: sha512-s0oDSwxQyJO/Xwne6sNE7xTAlms72Hq2AHzHAB9oSOBfiaXTzQOyHQrhufJ9ldPJTwr4L47/RxG1i6I0I8Xy9A==}
+    deprecated: 'Deprecated: import from @clickhouse/client or @clickhouse/client-web instead.'
 
   '@clickhouse/client@1.20.0':
     resolution: {integrity: sha512-LfHZ9bZZhc7KrNFVa9v73JMqwsP+m/5SgwdKMmxze4Urcw6pE0F7RNog3Lzx3GKRnJr3Hd15uDlIbqaDa9BbgA==}
@@ -35411,7 +35412,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/firestore@7.11.6':
+  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
@@ -36439,7 +36440,7 @@ snapshots:
 
   '@livekit/agents@1.4.11(@livekit/rtc-node@0.13.30)(bufferutil@4.1.0)(typescript@6.0.3)(zod@4.4.3)':
     dependencies:
-      '@bufbuild/protobuf': 1.10.0
+      '@bufbuild/protobuf': 1.10.1
       '@ffmpeg-installer/ffmpeg': 1.1.0
       '@livekit/local-inference': 0.2.6
       '@livekit/mutex': 1.1.1
@@ -36511,11 +36512,11 @@ snapshots:
 
   '@livekit/protocol@1.46.6':
     dependencies:
-      '@bufbuild/protobuf': 1.10.0
+      '@bufbuild/protobuf': 1.10.1
 
   '@livekit/protocol@1.48.2':
     dependencies:
-      '@bufbuild/protobuf': 1.10.0
+      '@bufbuild/protobuf': 1.10.1
 
   '@livekit/rtc-ffi-bindings-darwin-arm64@0.12.60':
     optional: true
@@ -46138,7 +46139,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.9.0
 
-  firebase-admin@13.9.0:
+  firebase-admin@13.9.0(encoding@0.1.13):
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -46151,7 +46152,7 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.1
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6
+      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
       '@google-cloud/storage': 7.19.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
