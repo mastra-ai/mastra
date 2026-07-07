@@ -213,7 +213,7 @@ const RefBlockContent = ({
               value={localContent}
               onChange={handleContentChange}
               placeholder="Referenced block is empty..."
-              className="border-none rounded-none bg-transparent min-h-12"
+              className="border-none rounded-none bg-transparent min-h-12 [&_.cm-editor.cm-focused]:outline-hidden"
               language="markdown"
               highlightVariables
               showCopyButton={false}

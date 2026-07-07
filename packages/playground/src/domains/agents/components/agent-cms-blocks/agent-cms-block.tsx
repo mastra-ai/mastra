@@ -251,7 +251,7 @@ const InlineBlockContent = ({
           value={block.content}
           onChange={handleContentChange}
           placeholder={placeholder}
-          className="border-none rounded-none bg-transparent min-h-12"
+          className="border-none rounded-none bg-transparent min-h-12 [&_.cm-editor.cm-focused]:outline-hidden"
           language="markdown"
           highlightVariables
           showCopyButton={false}
