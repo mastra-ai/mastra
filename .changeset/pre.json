@@ -168,12 +168,20 @@
   },
   "changesets": [
     "automated-provider-registry-20260706-184844",
+    "daytona-gcs-implicit-dirs",
     "deploy-optional-env-file",
+    "duckdb-list-traces-light",
+    "every-cities-drum",
     "fair-boxes-tan",
+    "famous-moles-taste",
+    "fiery-pianos-learn",
     "fix-stopwhen-discarded-with-maxsteps",
+    "fluffy-coins-wish",
     "funky-falcons-sin",
     "green-birds-knock",
     "jolly-towns-pump",
+    "perky-ghosts-doubt",
+    "vast-facts-lead",
     "whole-meals-camp"
   ]
 }
