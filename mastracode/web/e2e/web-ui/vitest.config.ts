@@ -32,6 +32,10 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
+    // playground-ui ships `.css` imports in its ESM dist; when installed from
+    // the registry it lives in node_modules, so vitest must inline it for Vite
+    // to transform those imports instead of Node loading them natively.
+    server: { deps: { inline: [/@mastra\/playground-ui/] } },
     // Co-located with source under `src/**`, never the node scenario suite.
     include: ['src/**/*.msw.test.tsx'],
     setupFiles: [resolve(here, 'vitest.setup.ts')],

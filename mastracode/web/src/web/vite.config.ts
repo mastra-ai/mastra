@@ -11,8 +11,8 @@ const here = dirname(fileURLToPath(import.meta.url));
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html, from
  * the same WORKOS env vars the server reads (`isWebAuthEnabled()` in auth.ts).
- * `web:dev` only passes `src/web/.env` to the API server, so the plugin loads
- * that file itself via `loadEnv`. Production builds are untouched
+ * `web:dev` only passes the package-root `.env` to the API server, so the
+ * plugin loads that file itself via `loadEnv`. Production builds are untouched
  * (`apply: 'serve'`) — the statically hosted SPA has no flag and falls back to
  * probing `/auth/me` (see ui/runtime-config.ts).
  */
@@ -21,7 +21,7 @@ function runtimeConfigPlugin(mode: string): Plugin {
     name: 'mastracode-runtime-config',
     apply: 'serve',
     transformIndexHtml() {
-      const env = { ...loadEnv(mode, here, ''), ...process.env };
+      const env = { ...loadEnv(mode, resolve(here, '../..'), ''), ...process.env };
       const authEnabled = Boolean(env.WORKOS_API_KEY && env.WORKOS_CLIENT_ID);
       return [
         {
@@ -41,10 +41,12 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * `src/mastra/index.ts` on :4111) and Vite (:5173) side by side; API paths are
  * proxied to that server so the browser uses same-origin requests in dev.
  *
- * The production build outputs the static SPA to `dist/web/ui`. `web:build`
- * copies it into `.mastra/output/ui`, and the API server serves it same-origin
- * at `/` (see src/web/spa-static.ts). Hosting the SPA separately (static host
- * / CDN, cross-origin via MASTRACODE_ALLOWED_ORIGINS) remains possible.
+ * The production build outputs the static SPA to `src/mastra/public/ui`.
+ * `mastra build` copies the `public/` dir next to the Mastra entry into
+ * `.mastra/output/` automatically, so the build output is self-contained and
+ * the API server serves the SPA same-origin at `/` (see src/web/spa-static.ts).
+ * Hosting the SPA separately (static host / CDN, cross-origin via
+ * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
 export default defineConfig(({ mode }) => ({
   root: resolve(here, 'ui'),
@@ -55,7 +57,7 @@ export default defineConfig(({ mode }) => ({
     dedupe: ['react', 'react-dom', '@tanstack/react-query'],
   },
   build: {
-    outDir: resolve(here, '../../dist/web/ui'),
+    outDir: resolve(here, '../mastra/public/ui'),
     emptyOutDir: true,
   },
   server: {

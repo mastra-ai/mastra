@@ -2,7 +2,7 @@
 # standalone lockfile and the project never joins the monorepo workspace.
 # Monorepo packages are consumed through `link:` dependencies, which resolve to
 # workspace directories — run `pnpm install` at the monorepo root and build
-# @mastra/code-sdk (`pnpm --filter ./mastracode/core build:lib`) first.
+# @mastra/code-sdk (`pnpm --filter ./mastracode/sdk build:lib`) first.
 packages:
   - '.'
 # Share pnpm's machine-global virtual store (same setting as the monorepo
@@ -17,6 +17,25 @@ enableGlobalVirtualStore: true
 # Listing them here (even as false) also prevents pnpm v10 from exiting with
 # ERR_PNPM_IGNORED_BUILDS when the deployer copies this file to .mastra/output.
 allowBuilds:
+  '@google/genai': true
+  agent-browser: true
+  bufferutil: true
+  edgedriver: false
   esbuild: false
+  geckodriver: false
   msw: false
   onnxruntime-node: false
+  protobufjs: true
+minimumReleaseAgeExclude:
+  - '@mastra/agent-browser@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/code-sdk@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/core@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/duckdb@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/github-signals@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/libsql@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/mcp@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/memory@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/observability@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/pg@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/stagehand@0.0.0-mastracode-cloud-20260706153555'
+  - '@mastra/tavily@0.0.0-mastracode-cloud-20260706153555'
