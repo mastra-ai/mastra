@@ -244,7 +244,7 @@ describe('SubmitPlanBadge', () => {
       expect(screen.queryByText('Resolved')).toBeNull();
       expect(screen.queryByText('Plan approved')).toBeNull();
       expect(within(badge()).queryByRole('button', { name: /approve/i })).toBeNull();
-      expect(badge().className).toContain('bg-surface1');
+      expect(badge().className).toContain('bg-surface3');
       expect(badge().className).not.toContain('border-border1');
       expect(badge().className).not.toContain('shadow-');
     });
