@@ -555,6 +555,7 @@ export const WithSubheader: Story = {
 };
 
 type ToggleableColumn = 'input' | 'entity';
+const TOGGLEABLE_COLUMNS: ToggleableColumn[] = ['input', 'entity'];
 const COLUMN_LABELS: Record<ToggleableColumn, string> = { input: 'Input', entity: 'Entity' };
 
 const SCORE_ENTITIES = [
@@ -573,22 +574,44 @@ const SCORE_SAMPLE_INPUTS = [
   'Explain supervised vs unsupervised learning.',
 ];
 
+const LONG_INPUT = JSON.stringify({
+  messages: [
+    {
+      role: 'system',
+      content:
+        'You are a highly capable AI assistant with deep expertise in data analysis, business intelligence, financial summarisation, multilingual translation, and multi-step reasoning. You always respond in a structured, concise, and actionable format, citing evidence from the provided context where possible.',
+    },
+    {
+      role: 'user',
+      content:
+        'Please analyse the following dataset in full detail and provide a comprehensive executive summary that includes: (1) overall revenue trends across Q1 and Q2, (2) top-performing and underperforming regions, (3) anomalies or outliers that may indicate data quality issues or exceptional market conditions, (4) year-over-year growth comparisons where data is available, and (5) at least three concrete, prioritised, actionable recommendations for the sales leadership team based on your findings.',
+    },
+  ],
+  model: 'claude-sonnet-4-5',
+  temperature: 0.7,
+  max_tokens: 4096,
+  metadata: { source: 'dashboard', requestId: 'req_abc123xyz', region: 'us-east-1' },
+});
+
 const SAMPLE_SCORES = Array.from({ length: 25 }, (_, i) => ({
   id: `score_${String(i + 1).padStart(4, '0')}`,
   createdAt: new Date(Date.now() - i * 1_800_000).toISOString(),
   score: Number((0.4 + (i % 7) * 0.08).toFixed(2)),
   entityId: SCORE_ENTITIES[i % SCORE_ENTITIES.length],
-  input: JSON.stringify({
-    messages: [{ role: 'user', content: SCORE_SAMPLE_INPUTS[i % SCORE_SAMPLE_INPUTS.length] }],
-    model: 'claude-sonnet-4-5',
-    temperature: 0.7,
-  }),
+  input:
+    i === 2
+      ? LONG_INPUT
+      : JSON.stringify({
+          messages: [{ role: 'user', content: SCORE_SAMPLE_INPUTS[i % SCORE_SAMPLE_INPUTS.length] }],
+          model: 'claude-sonnet-4-5',
+          temperature: 0.7,
+        }),
 }));
 
 function buildScoresColumns(visible: Set<ToggleableColumn>): string {
   const parts = ['auto', 'auto', 'minmax(0, 10rem)'];
   if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 1fr)');
+  if (visible.has('input')) parts.push('minmax(0, 100rem)');
   return parts.join(' ');
 }
 
@@ -600,7 +623,7 @@ export const ScoresTable: Story = {
     const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
 
     const visibleColumns = useMemo(
-      () => new Set<ToggleableColumn>((['input', 'entity'] as ToggleableColumn[]).filter(c => !hiddenColumns.has(c))),
+      () => new Set<ToggleableColumn>(TOGGLEABLE_COLUMNS.filter(c => !hiddenColumns.has(c))),
       [hiddenColumns],
     );
     const columns = useMemo(() => buildScoresColumns(visibleColumns), [visibleColumns]);
@@ -626,7 +649,7 @@ export const ScoresTable: Story = {
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
               <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
-              {(['input', 'entity'] as ToggleableColumn[]).map(col => (
+              {TOGGLEABLE_COLUMNS.map(col => (
                 <DropdownMenu.CheckboxItem
                   key={col}
                   checked={visibleColumns.has(col)}

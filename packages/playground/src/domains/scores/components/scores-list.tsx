@@ -10,6 +10,8 @@ import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 
 type ToggleableColumn = 'input' | 'entity';
 
+const TOGGLEABLE_COLUMNS: ToggleableColumn[] = ['input', 'entity'];
+
 const COLUMN_LABELS: Record<ToggleableColumn, string> = {
   input: 'Input',
   entity: 'Entity',
@@ -18,7 +20,7 @@ const COLUMN_LABELS: Record<ToggleableColumn, string> = {
 function buildColumns(visible: Set<ToggleableColumn>): string {
   const parts: string[] = ['auto', 'auto', 'minmax(0, 10rem)'];
   if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 1fr)');
+  if (visible.has('input')) parts.push('minmax(0, 100rem)');
   return parts.join(' ');
 }
 
@@ -56,10 +58,7 @@ export function ScoresList({
 
   const [hiddenColumns, setHiddenColumns] = useState<Set<ToggleableColumn>>(new Set());
   const visibleColumns = useMemo(
-    () =>
-      new Set<ToggleableColumn>(
-        ['input', 'entity'].filter(c => !hiddenColumns.has(c as ToggleableColumn)) as ToggleableColumn[],
-      ),
+    () => new Set<ToggleableColumn>(TOGGLEABLE_COLUMNS.filter(c => !hiddenColumns.has(c))),
     [hiddenColumns],
   );
   const columns = useMemo(() => buildColumns(visibleColumns), [visibleColumns]);
@@ -165,7 +164,7 @@ export function ScoresList({
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end">
               <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
-              {(['input', 'entity'] as ToggleableColumn[]).map(col => (
+              {TOGGLEABLE_COLUMNS.map(col => (
                 <DropdownMenu.CheckboxItem
                   key={col}
                   checked={visibleColumns.has(col)}

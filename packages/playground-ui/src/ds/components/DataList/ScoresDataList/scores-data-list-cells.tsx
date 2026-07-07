@@ -53,10 +53,11 @@ export interface ScoresDataListInputCellProps {
 }
 
 export function ScoresDataListInputCell({ input }: ScoresDataListInputCellProps) {
+  const display = input != null ? JSON.stringify(input) : '-';
   return (
-    <DataListCell height="compact" className="min-w-0">
-      <span className="block text-neutral3 text-ui-smd font-mono truncate">
-        {input != null ? JSON.stringify(input) : '-'}
+    <DataListCell height="compact">
+      <span className="block min-w-0 max-w-full text-neutral3 text-ui-smd font-mono truncate" title={display}>
+        {display}
       </span>
     </DataListCell>
   );
@@ -72,8 +73,8 @@ export interface ScoresDataListEntityCellProps {
 
 export function ScoresDataListEntityCell({ entityId }: ScoresDataListEntityCellProps) {
   return (
-    <DataListCell height="compact" className="min-w-0">
-      <span className="block text-ui-smd truncate">{entityId || '-'}</span>
+    <DataListCell height="compact">
+      <span className="block min-w-0 max-w-full text-ui-smd truncate">{entityId || '-'}</span>
     </DataListCell>
   );
 }
@@ -89,8 +90,8 @@ export interface ScoresDataListScoreCellProps {
 export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps) {
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
-    <DataListCell height="compact" className="min-w-0 text-ui-smd font-mono text-neutral3">
-      <span className="block truncate" title={display}>
+    <DataListCell height="compact">
+      <span className="block min-w-0 max-w-full text-ui-smd font-mono text-neutral3 truncate" title={display}>
         {display}
       </span>
     </DataListCell>
