@@ -620,6 +620,7 @@ export class Mastra<
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
   #observability: ObservabilityEntrypoint;
+  #observabilityExplicit = false;
   #onScorerHook?: ReturnType<typeof createOnScorerHook>;
   #tts?: TTTS;
   #deployer?: MastraDeployer;
@@ -639,7 +640,9 @@ export class Mastra<
   #workspace?: Workspace;
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
+  #serverExplicit = false;
   #studio?: StudioConfig;
+  #studioExplicit = false;
   #serverAdapter?: MastraServerBase;
   #mcpServers?: TMCPServers;
   #bundler?: BundlerConfig;
@@ -1329,6 +1332,7 @@ export class Mastra<
 
     // Validate and assign observability instance
     if (config?.observability) {
+      this.#observabilityExplicit = true;
       if (typeof config.observability.getDefaultInstance === 'function') {
         this.#observability = config.observability;
         // Set logger early
@@ -1515,10 +1519,12 @@ export class Mastra<
 
     if (config?.server) {
       this.#server = config.server;
+      this.#serverExplicit = true;
     }
 
     if (config?.studio) {
       this.#studio = config.studio;
+      this.#studioExplicit = true;
     }
 
     // Register channels and merge their routes into server config
@@ -2395,6 +2401,98 @@ export class Mastra<
     }
 
     this.setStorage(fsStorage);
+  }
+
+  /**
+   * Registers a file-system routed observability instance (discovered from
+   * `observability.ts`) into this Mastra instance.
+   *
+   * Code-registered observability wins: if the user already passed
+   * `observability` to the `new Mastra({observability})` constructor, the
+   * file-system instance is skipped with a warning.
+   *
+   * @internal
+   */
+  public __registerFsObservability(fsObservability: ObservabilityEntrypoint): void {
+    if (!fsObservability) {
+      return;
+    }
+
+    if (this.#observabilityExplicit) {
+      this.getLogger().warn(
+        `File-system routed observability conflicts with a code-registered observability. Keeping the code-registered observability.`,
+      );
+      return;
+    }
+
+    if (typeof fsObservability.getDefaultInstance !== 'function') {
+      this.getLogger().warn(
+        `File-system routed observability.ts did not export a valid ObservabilityEntrypoint. Ignoring.`,
+      );
+      return;
+    }
+
+    this.#observability = fsObservability;
+    // Pass the raw logger (not the DualLogger) to observability to avoid
+    // circular forwarding, mirroring setLogger().
+    const rawLogger = this.#logger instanceof DualLogger ? this.#logger.baseLogger : this.#logger;
+    this.#observability.setLogger({ logger: rawLogger as any });
+    this.#observability.setMastraContext({ mastra: this as any });
+  }
+
+  /**
+   * Registers a file-system routed server config (discovered from
+   * `server.ts`) into this Mastra instance.
+   *
+   * Code-registered server config wins on collision.
+   *
+   * @internal
+   */
+  public __registerFsServer(fsServer: ServerConfig): void {
+    if (!fsServer) {
+      return;
+    }
+
+    if (this.#serverExplicit) {
+      this.getLogger().warn(
+        `File-system routed server config conflicts with a code-registered server config. Keeping the code-registered server config.`,
+      );
+      return;
+    }
+
+    // Preserve apiRoutes accumulated during construction (e.g. channel
+    // webhook routes) — they live on #server even when the user never
+    // passed a server config explicitly.
+    const existingRoutes = this.#server?.apiRoutes ?? [];
+    const fsRoutes = fsServer.apiRoutes ?? [];
+    const mergedRoutes = [...existingRoutes, ...fsRoutes];
+    this.setServer({
+      ...fsServer,
+      ...(mergedRoutes.length > 0 ? { apiRoutes: mergedRoutes } : {}),
+    });
+  }
+
+  /**
+   * Registers a file-system routed studio config (discovered from
+   * `studio.ts`) into this Mastra instance.
+   *
+   * Code-registered studio config wins on collision.
+   *
+   * @internal
+   */
+  public __registerFsStudio(fsStudio: StudioConfig): void {
+    if (!fsStudio) {
+      return;
+    }
+
+    if (this.#studioExplicit) {
+      this.getLogger().warn(
+        `File-system routed studio config conflicts with a code-registered studio config. Keeping the code-registered studio config.`,
+      );
+      return;
+    }
+
+    this.setStudio(fsStudio);
   }
 
   /**

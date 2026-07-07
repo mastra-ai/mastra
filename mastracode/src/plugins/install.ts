@@ -4,6 +4,8 @@ import path from 'node:path';
 import { execa } from 'execa';
 
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
+import { getEntryPackageRoot, installPluginDependenciesForEntry } from './dependencies.js';
+import type { PluginInstallExecutionOptions } from './dependencies.js';
 import { loadPluginFromEntry } from './loader.js';
 import { getSingleManifestPlugin } from './manifest.js';
 import { ensureMastraCodePackageLink } from './package-link.js';
@@ -12,11 +14,12 @@ import type { PluginPathOptions } from './paths.js';
 import { loadPluginRegistry, removePluginRecord, savePluginRegistry, setPluginRecord } from './registry.js';
 import type { InstalledPluginRecord, PluginScope } from './types.js';
 
-export type InstallPluginOptions = PluginPathOptions & {
-  entry?: string;
-  ref?: string;
-  githubCliPath?: string;
-};
+export type InstallPluginOptions = PluginPathOptions &
+  PluginInstallExecutionOptions & {
+    entry?: string;
+    ref?: string;
+    githubCliPath?: string;
+  };
 
 export type DiscoveredLocalPlugin = {
   name: string;
@@ -73,14 +76,21 @@ export async function installGithubPlugin(
 
   fs.rmSync(checkoutDir, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(checkoutDir), { recursive: true });
-  await execa(githubCli, ['repo', 'clone', parsed.repoSpec, checkoutDir], NON_INTERACTIVE_EXEC_OPTIONS);
   const ref = options.ref ?? parsed.ref;
+  const cloneArgs = ['repo', 'clone', parsed.repoSpec, checkoutDir, ...(ref ? [] : ['--', '--depth', '1'])];
+  await runPluginInstallCommand(githubCli, cloneArgs, { env: NON_INTERACTIVE_GIT_ENV }, options);
   if (ref) {
-    await execa('git', ['checkout', ref], { cwd: checkoutDir, env: NON_INTERACTIVE_GIT_ENV });
+    await runPluginInstallCommand(
+      'git',
+      ['checkout', ref],
+      { cwd: checkoutDir, env: NON_INTERACTIVE_GIT_ENV },
+      options,
+    );
   }
 
   const entry = detectEntry(checkoutDir, options.entry);
-  ensureMastraCodePackageLink(checkoutDir);
+  await installPluginDependenciesForEntry(checkoutDir, entry, options);
+  ensureMastraCodePackageLink(getEntryPackageRoot(checkoutDir, entry));
   const plugin = await loadPluginFromEntry(path.join(checkoutDir, entry));
   const registry = removePluginRecord(loadPluginRegistry(paths.registryPath), plugin.id);
   const relativePath = path.relative(getPluginRoot(scope, options), checkoutDir);
@@ -175,6 +185,25 @@ export function detectEntry(pluginDir: string, explicitEntry?: string): string {
 
 function isInsideDirectory(targetPath: string, root: string): boolean {
   return targetPath === root || targetPath.startsWith(root + path.sep);
+}
+
+async function runPluginInstallCommand(
+  command: string,
+  args: string[],
+  execaOptions: typeof NON_INTERACTIVE_EXEC_OPTIONS & { cwd?: string },
+  options: PluginInstallExecutionOptions,
+): Promise<void> {
+  const child = execa(command, args, {
+    ...execaOptions,
+    stdout: options.onOutput ? 'pipe' : 'ignore',
+    stderr: options.onOutput ? 'pipe' : 'ignore',
+    cancelSignal: options.signal,
+  });
+  if (options.onOutput) {
+    child.stdout?.on('data', options.onOutput);
+    child.stderr?.on('data', options.onOutput);
+  }
+  await child;
 }
 
 async function assertGithubCliAvailable(githubCli: string): Promise<void> {

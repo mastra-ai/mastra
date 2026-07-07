@@ -663,7 +663,11 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             registryEntry.memory &&
             durableState?.threadId &&
             durableState?.resourceId &&
-            !durableState.observationalMemory
+            !durableState.observationalMemory &&
+            // Respect readOnly memory config ("read memory but don't save new
+            // messages"). Mirrors the non-durable executeOnFinish `!readOnlyMemory`
+            // guard and the MessageHistory output processor's readOnly check.
+            !durableState.memoryConfig?.readOnly
           ) {
             try {
               const memoryMessageList = new MessageList();

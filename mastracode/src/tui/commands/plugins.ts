@@ -1,4 +1,4 @@
-import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
+import { Box, SelectList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 
 import type { MastraCodePluginConfigOption, MastraCodePluginConfigValue } from '../../plugin.js';
@@ -13,6 +13,55 @@ import type { SlashCommandContext } from './types.js';
 
 const INSTALL_VALUE = '__install__';
 const BACK_VALUE = '__back__';
+
+class PluginInstallProgress extends Box {
+  private lines: string[] = [];
+  private _focused = false;
+
+  constructor(
+    private specifier: string,
+    private onCancel: () => void,
+  ) {
+    super(4, 2, text => theme.bg('overlayBg', text));
+    this.rebuild();
+  }
+
+  get focused(): boolean {
+    return this._focused;
+  }
+
+  set focused(value: boolean) {
+    this._focused = value;
+  }
+
+  handleInput(data: string): void {
+    if (matchesKey(data, 'escape') || matchesKey(data, 'ctrl+c') || data === '\x1b' || data === '\x1b\x1b') {
+      this.onCancel();
+    }
+  }
+
+  addOutput(chunk: Buffer | string): void {
+    const lines = chunk
+      .toString()
+      .split(/\r?\n/)
+      .map(line => line.trimEnd())
+      .filter(Boolean);
+    this.lines = [...this.lines, ...lines].slice(-8);
+    this.rebuild();
+  }
+
+  private rebuild(): void {
+    this.clear();
+    this.addChild(new Text(theme.bold(theme.fg('accent', 'Installing GitHub plugin')), 0, 0));
+    this.addChild(new Text(this.specifier, 0, 0));
+    this.addChild(new Text(theme.fg('dim', 'Press Esc or Ctrl-C to cancel.'), 0, 0));
+    this.addChild(new Spacer(1));
+    const output = this.lines.length > 0 ? this.lines : ['Waiting for clone output...'];
+    for (const line of output) {
+      this.addChild(new Text(line, 0, 0));
+    }
+  }
+}
 
 export async function handlePluginsCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
   if (!ctx.pluginManager) {
@@ -97,6 +146,39 @@ function showPluginsList(ctx: SlashCommandContext): void {
 function reportPluginMutationError(ctx: SlashCommandContext, action: string, error: unknown): void {
   const message = error instanceof Error ? error.message : String(error);
   ctx.showError(`${action} failed: ${message}`);
+}
+
+async function withGithubPluginInstallProgress<T>(
+  ctx: SlashCommandContext,
+  specifier: string,
+  install: (options: { onOutput: (chunk: Buffer | string) => void; signal: AbortSignal }) => Promise<T>,
+): Promise<T> {
+  const controller = new AbortController();
+  let rejectCancelled: (error: Error) => void = () => {};
+  const cancelled = new Promise<never>((_, reject) => {
+    rejectCancelled = reject;
+  });
+  const progress = new PluginInstallProgress(specifier, () => {
+    controller.abort();
+    rejectCancelled(new Error('GitHub plugin install cancelled'));
+  });
+  const overlay = showModalOverlay(ctx.state.ui, progress, { maxHeight: '70%' });
+  overlay?.focus?.();
+  ctx.state.ui.requestRender?.();
+  try {
+    const installPromise = install({
+      onOutput: chunk => {
+        progress.addOutput(chunk);
+        ctx.state.ui.requestRender?.();
+      },
+      signal: controller.signal,
+    });
+    installPromise.catch(() => undefined);
+    return await Promise.race([installPromise, cancelled]);
+  } finally {
+    overlay?.hide?.();
+    ctx.state.ui.requestRender?.();
+  }
 }
 
 function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void {
@@ -369,9 +451,11 @@ async function installPluginWithOptionalEntryPrompt(
         ? ctx.pluginManager!.installLocal(specifier, scope, { entry })
         : ctx.pluginManager!.installLocal(specifier, scope);
     }
-    return entry
-      ? ctx.pluginManager!.installGithub(specifier, scope, { entry })
-      : ctx.pluginManager!.installGithub(specifier, scope);
+    return withGithubPluginInstallProgress(ctx, specifier, options =>
+      entry
+        ? ctx.pluginManager!.installGithub(specifier, scope, { entry, ...options })
+        : ctx.pluginManager!.installGithub(specifier, scope, options),
+    );
   };
 
   try {

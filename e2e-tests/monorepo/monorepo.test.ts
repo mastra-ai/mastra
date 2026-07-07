@@ -89,6 +89,13 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
       expect(body).toEqual({ message: 'Hello, POST!' });
     });
 
+    it('should resolve transitive workspace dependencies', async () => {
+      const res = await fetch(`http://localhost:${port}/transitive-workspace`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ value: 'a -> b -> c' });
+    });
+
     it('should return tools from the api', async () => {
       const res = await fetch(`http://localhost:${port}/api/tools`);
       const body = await res.json();
@@ -299,8 +306,12 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
     runApiTests(port);
   });
 
-  describe.sequential('build without externals', () => {
+  describe.sequential('build without externals', async () => {
     let originalConfig: string;
+    let port = await getPort();
+    let proc: ReturnType<typeof execaNode> | undefined;
+    const controller = new AbortController();
+    const cancelSignal = controller.signal;
     const mastraConfigPath = () => join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
 
     beforeAll(async () => {
@@ -313,12 +324,58 @@ describe.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
 
       // Run build with modified config (no bundler.externals)
       await runBuild(fixturePath);
+
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output');
+      proc = execaNode('index.mjs', {
+        cwd: inputFile,
+        cancelSignal,
+        env: {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          MASTRA_PORT: port.toString(),
+        },
+      });
+
+      activeProcesses.push({ controller, proc });
+
+      await new Promise<void>((resolve, reject) => {
+        proc!.stderr?.on('data', data => {
+          const errMsg = data?.toString();
+          if (errMsg && errMsg.includes('punycode')) {
+            return;
+          }
+          if (errMsg && errMsg.includes('falling back to an in-memory store')) {
+            return;
+          }
+
+          reject(new Error('failed to start without externals: ' + errMsg));
+        });
+        proc!.stdout?.on('data', data => {
+          console.log(data?.toString());
+          if (data?.toString()?.includes(`http://localhost:${port}`)) {
+            resolve();
+          }
+        });
+      });
     }, timeout);
 
     afterAll(async () => {
+      if (proc) {
+        try {
+          setImmediate(() => controller.abort());
+          await proc;
+        } catch (err) {
+          // @ts-expect-error - isCanceled is not typed
+          if (!err.isCanceled) {
+            console.log('failed to kill build without externals proc', err);
+          }
+        }
+      }
+
       // Restore original config
       await writeFile(mastraConfigPath(), originalConfig);
     });
+
+    runApiTests(port);
 
     it('should resolve dependency versions correctly (not "latest")', async () => {
       const packageJsonPath = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'package.json');

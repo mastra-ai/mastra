@@ -1,5 +1,112 @@
 # @mastra/client-js
 
+## 1.31.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000)]:
+  - @mastra/core@1.50.1-alpha.0
+
+## 1.31.0
+
+### Minor Changes
+
+- **Added unified schedule methods and deprecated heartbeat methods.** The client now manages agent schedules (previously heartbeats) and workflow schedules through one set of methods backed by `/api/schedules`. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+  Added `createSchedule()`, `updateSchedule()`, `deleteSchedule()`, and `runSchedule()`, alongside the existing `listSchedules()`, `getSchedule()`, `pauseSchedule()`, `resumeSchedule()`, and `listScheduleTriggers()`. `ScheduleResponse.target` is now a discriminated union of agent and workflow targets.
+
+  ```ts
+  // Schedule an agent (was createHeartbeat)
+  const schedule = await client.createSchedule({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  // Schedule a workflow with the same method
+  await client.createSchedule({
+    workflowId: 'daily-report',
+    cron: '0 6 * * *',
+  });
+  ```
+
+  Deprecated `listHeartbeats()`, `getHeartbeat()`, `createHeartbeat()`, `updateHeartbeat()`, `deleteHeartbeat()`, `pauseHeartbeat()`, `resumeHeartbeat()`, and `runHeartbeat()`. They now delegate to the schedule methods and will be removed in a future release.
+
+### Patch Changes
+
+- Added workspace-level provider registry to MastraEditor. You can now register WorkspaceProvider factories that build complete Workspace instances as a single unit, instead of composing from separate filesystem and sandbox providers. Stored agents can reference a workspace provider via `{ type: 'provider', provider: 'my-cloud', config: { ... } }` and the editor will call the registered factory during agent hydration. ([#18781](https://github.com/mastra-ai/mastra/pull/18781))
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+  import { Workspace } from '@mastra/core/workspace';
+
+  const editor = new MastraEditor({
+    workspaces: {
+      'my-cloud': {
+        id: 'my-cloud',
+        name: 'My Cloud Workspace',
+        createWorkspace: config =>
+          new Workspace({
+            id: 'cloud-ws',
+            name: 'Cloud WS',
+            filesystem: new MyCloudFilesystem(config),
+            sandbox: new MyCloudSandbox(config),
+          }),
+      },
+    },
+  });
+
+  // Stored agent workspace reference using the provider:
+  // { type: 'provider', provider: 'my-cloud', config: { region: 'us-east-1' } }
+  ```
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`3ffb8b7`](https://github.com/mastra-ai/mastra/commit/3ffb8b720e90f5e6977129ec1f6707d43c2bebe0), [`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739), [`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`a51c63d`](https://github.com/mastra-ai/mastra/commit/a51c63d8ee639e4daeba2a0be093efa6a1b5e52f), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`5ea76a7`](https://github.com/mastra-ai/mastra/commit/5ea76a723d966c72da9aa3ab30ae20276e049765), [`6445560`](https://github.com/mastra-ai/mastra/commit/6445560327045d20b239585fc63fed72e9ce36ec), [`e2b9f33`](https://github.com/mastra-ai/mastra/commit/e2b9f33456fd638eca555f9466c6519d8d049666), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36), [`a2ba369`](https://github.com/mastra-ai/mastra/commit/a2ba369e796dfab610f41c6875965b488272fa55), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`02705fd`](https://github.com/mastra-ai/mastra/commit/02705fd2f5a9062210d64ea061adeeb10dc9452e), [`ae51e81`](https://github.com/mastra-ai/mastra/commit/ae51e818825582d42500338dfc1929a082eff0ba), [`6f304ef`](https://github.com/mastra-ai/mastra/commit/6f304ef319e99725e884bdb8d3193c001b6e5964), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0
+
+## 1.31.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`a0085fa`](https://github.com/mastra-ai/mastra/commit/a0085fa0934e52c37c8c8b3d75a6bb5cd199af36)]:
+  - @mastra/core@1.50.0-alpha.5
+
+## 1.31.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`4039488`](https://github.com/mastra-ai/mastra/commit/403948898af7293198d9e8b3e7fb47f623c78b94), [`b2c9d70`](https://github.com/mastra-ai/mastra/commit/b2c9d70757207fb01a9069549e69b6f0d73a6636), [`252f63d`](https://github.com/mastra-ai/mastra/commit/252f63d8fec723955adb2202be2f01a75ad0e69c), [`c547a77`](https://github.com/mastra-ai/mastra/commit/c547a7729bdf64dfc2df29c965046c0712a18f10), [`81542c1`](https://github.com/mastra-ai/mastra/commit/81542c1835c35bc32f2ce4fa9136ee11993cd299), [`cb24ce7`](https://github.com/mastra-ai/mastra/commit/cb24ce76bd16ca88eb6a963f6277f8780e703029), [`5f9858f`](https://github.com/mastra-ai/mastra/commit/5f9858f791f1137ca7d52d23559fb4568f7a9026)]:
+  - @mastra/core@1.50.0-alpha.4
+
+## 1.31.0-alpha.3
+
+### Minor Changes
+
+- **Added unified schedule methods and deprecated heartbeat methods.** The client now manages agent schedules (previously heartbeats) and workflow schedules through one set of methods backed by `/api/schedules`. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+  Added `createSchedule()`, `updateSchedule()`, `deleteSchedule()`, and `runSchedule()`, alongside the existing `listSchedules()`, `getSchedule()`, `pauseSchedule()`, `resumeSchedule()`, and `listScheduleTriggers()`. `ScheduleResponse.target` is now a discriminated union of agent and workflow targets.
+
+  ```ts
+  // Schedule an agent (was createHeartbeat)
+  const schedule = await client.createSchedule({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  // Schedule a workflow with the same method
+  await client.createSchedule({
+    workflowId: 'daily-report',
+    cron: '0 6 * * *',
+  });
+  ```
+
+  Deprecated `listHeartbeats()`, `getHeartbeat()`, `createHeartbeat()`, `updateHeartbeat()`, `deleteHeartbeat()`, `pauseHeartbeat()`, `resumeHeartbeat()`, and `runHeartbeat()`. They now delegate to the schedule methods and will be removed in a future release.
+
+### Patch Changes
+
+- Updated dependencies [[`b291760`](https://github.com/mastra-ai/mastra/commit/b291760df9d6c7e4fc72606c8f0a4af2cf6e946c), [`29b7ea6`](https://github.com/mastra-ai/mastra/commit/29b7ea64e72b5523d5bdcbd34ee03d2b854d54e1), [`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5), [`ffc3c17`](https://github.com/mastra-ai/mastra/commit/ffc3c17274ea17c11aa6f73d3140649cd7fc8abc), [`3908e53`](https://github.com/mastra-ai/mastra/commit/3908e53ce04bbea04f5e0c097d7aa298c35fabee)]:
+  - @mastra/core@1.50.0-alpha.3
+
 ## 1.30.1-alpha.2
 
 ### Patch Changes
