@@ -8,8 +8,8 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
-import { Braces, Wrench, Cpu, Eye, Pencil } from 'lucide-react';
-import { useState, useMemo } from 'react';
+import { Braces, Wrench, Cpu } from 'lucide-react';
+import { useMemo } from 'react';
 
 import { useAgentEditFormContext } from '../../context/agent-edit-form-context';
 import { useCompareAgentVersions } from '../../hooks/use-agent-versions';
@@ -669,7 +669,6 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const instructionBlocks = form.watch('instructionBlocks');
   const variables = form.watch('variables') as JsonSchema | undefined;
   const toolCount = tools ? Object.keys(tools).length : 0;
-  const [showPreview, setShowPreview] = useState(false);
 
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);
 
@@ -743,26 +742,9 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
                     </PopoverContent>
                   </HoverPopover>
                 </Txt>
-
-                {!readOnly && (
-                  <div className="flex items-center justify-between">
-                    <button
-                      type="button"
-                      onClick={() => setShowPreview(prev => !prev)}
-                      className="flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors text-neutral3 hover:text-neutral5 hover:bg-surface3"
-                    >
-                      <Icon size="sm">{showPreview ? <Pencil /> : <Eye />}</Icon>
-                      {showPreview ? 'Edit' : 'Preview'}
-                    </button>
-                  </div>
-                )}
               </div>
 
-              {readOnly || showPreview ? (
-                <ReadOnlyInstructions blocks={instructionBlocks} />
-              ) : (
-                <InstructionBlocksPage />
-              )}
+              {readOnly ? <ReadOnlyInstructions blocks={instructionBlocks} /> : <InstructionBlocksPage />}
             </TabContent>
 
             <TabContent value="tools" className="px-4 py-0 pb-4">
