@@ -657,6 +657,10 @@ export function createDurableToolCallStep() {
       // so execution continues past the suspend call).
       let wasSuspended = false;
 
+      // Forward abort signal from the run registry so tools can observe
+      // cancellation (mirrors the non-durable tool-call-step).
+      const toolAbortSignal = registryEntry?.abortSignal;
+
       const toolOptions = {
         toolCallId,
         messages: [],
@@ -667,6 +671,7 @@ export function createDurableToolCallStep() {
         // see the same actor as the non-durable Agent path.
         actor: agentOptions?.actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
+        ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).
         outputWriter: pubsub

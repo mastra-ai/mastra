@@ -396,7 +396,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(onError ? { onError } : {}),
     ...(savePerStep !== undefined ? { savePerStep } : {}),
     ...(actor ? { actor } : {}),
-    ...(abortSignal && !isDurable ? { abortSignal } : {}),
+    ...(abortSignal ? { abortSignal } : {}),
     ...(providerOptions ? { providerOptions } : {}),
     ...(modelSettings ? { modelSettings } : {}),
     ...(toolsets ? { toolsets } : {}),

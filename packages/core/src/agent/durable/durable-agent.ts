@@ -20,6 +20,7 @@ import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
 import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 /**
  * Internal flag used by `generate()`/`resumeGenerate()` to tell the stream
@@ -765,6 +766,17 @@ export class DurableAgent<
       trackedEntry.workflowExecution = workflowExecution;
     }
 
+    // 4b. Register with the thread-stream runtime so subscribeToThread /
+    // sendMessage subscribers receive run-registered events and stream parts.
+    // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
+    // CachingPubSub (this.pubsub) which carries durable workflow chunks.
+    await agentThreadStreamRuntime.registerRun(
+      this as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+    );
+
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = () => {
       if (autoCleanupTimer) {
@@ -1025,6 +1037,20 @@ export class DurableAgent<
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
+
+    // Register the resumed run with the thread-stream runtime so
+    // subscribeToThread subscribers are notified of the new stream.
+    const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
+      ...options,
+      runId,
+      memory: memoryInfo?.threadId ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId } : options?.memory,
+    } as AgentExecutionOptions<TOutput>;
+    await agentThreadStreamRuntime.registerRun(
+      this as Agent<any, any, any, any>,
+      output,
+      resumeStreamOptions,
+      this.getPubSub(),
+    );
 
     const cleanup = () => {
       if (autoCleanupTimer) {
