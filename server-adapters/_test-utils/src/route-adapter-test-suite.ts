@@ -475,23 +475,28 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
                 const testField = 'testBodyField';
                 const testValue = 'testValue123';
 
+                const body = {
+                  ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
+                  [testField]: testValue,
+                };
+                const strictBody = !route.bodySchema.safeParse(body).success;
+
                 const httpRequest: HttpRequest = {
                   method: request.method,
                   path: request.path,
                   query: request.query,
-                  body: {
-                    ...(typeof request.body === 'object' && request.body !== null ? request.body : {}),
-                    [testField]: testValue,
-                  },
+                  body,
                 };
 
                 const response = await executeHttpRequest(app, httpRequest);
 
-                // Body fields should be spread correctly without causing server errors.
-                // Routes with strict schemas (z.strictObject / .strict()) will
-                // reject the unknown testBodyField with 400 — that is correct
-                // validation behavior, not a server bug, so we assert < 500.
-                expect(response.status).toBeLessThan(500);
+                if (strictBody) {
+                  // strict schema: adapter must surface the validation rejection, exactly 400
+                  expect(response.status).toBe(400);
+                } else {
+                  // lenient schema: unknown field must be ignored, request must succeed
+                  expect(response.status).toBeLessThan(400);
+                }
               });
             }
           });
