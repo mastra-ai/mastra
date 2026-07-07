@@ -4,7 +4,7 @@
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 21 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 22 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -23,7 +23,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | 5        | Rendering Performance     | MEDIUM                        | 2          |
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 6          |
-| 8        | Testing                   | MEDIUM-HIGH (correctness)     | 1          |
+| 8        | Testing                   | MEDIUM-HIGH (correctness)     | 2          |
 | 9        | Type Safety               | HIGH                          | 1          |
 
 ## Category Focus
@@ -37,7 +37,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | Rendering Performance     | Optimizing the rendering process reduces the work the browser needs to do.                                                                                                                     |
 | JavaScript Performance    | Micro-optimizations for hot paths can add up to meaningful improvements.                                                                                                                       |
 | Component Structure       | Bloated components are hard to test, review, and reuse, and unrelated state changes re-render everything.                                                                                      |
-| Testing                   | Drive the real client + React Query stack and mock only the network, so a green test proves production behavior, not the mock.                                                                 |
+| Testing                   | Drive the real client + React Query stack and mock only the network; assert behavior or computed styles instead of implementation class strings.                                               |
 | Type Safety               | Never cast with `as`; let production boundary types flow through and narrow with real type guards, query generics, typed factories, or `implements` so the compiler still catches shape drift. |
 
 ## Rules
@@ -98,9 +98,10 @@ This catalog is an index for React performance and quality guidance used by agen
 
 ### 8. Testing
 
-| Rule                   | Title                                | Impact      | Summary                                                                                                                 | Canonical file                             |
-| ---------------------- | ------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `testing-bdd-no-mocks` | BDD Tests That Mock Only the Network | MEDIUM-HIGH | Drive the real `@mastra/client-js` + React Query stack and mock only the network; write tests BDD-style. Lint-enforced. | `references/rules/testing-bdd-no-mocks.md` |
+| Rule                              | Title                                          | Impact      | Summary                                                                                                                   | Canonical file                                        |
+| --------------------------------- | ---------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| `testing-bdd-no-mocks`            | BDD Tests That Mock Only the Network           | MEDIUM-HIGH | Drive the real `@mastra/client-js` + React Query stack and mock only the network; write tests BDD-style. Lint-enforced.   | `references/rules/testing-bdd-no-mocks.md`            |
+| `testing-no-classname-assertions` | Avoid ClassName Assertions for Visual Behavior | MEDIUM-HIGH | Prefer computed styles, behavior, or browser validation over class-name assertions that duplicate implementation strings. | `references/rules/testing-no-classname-assertions.md` |
 
 ### 9. Type Safety
 
