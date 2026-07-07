@@ -576,10 +576,10 @@ describe('LocalSandbox', () => {
       expect(info.metadata?.isolation).toBe('none');
     });
 
-    describe('readOnlyWorkspace option', () => {
-      it('should generate a bwrap command with --ro-bind when readOnlyWorkspace is true', () => {
+    describe('readOnly option', () => {
+      it('should generate a bwrap command with --ro-bind when readOnly is true', () => {
         const workspacePath = '/path/to/workspace';
-        const { args } = buildBwrapCommand('echo 1', workspacePath, { readOnlyWorkspace: true });
+        const { args } = buildBwrapCommand('echo 1', workspacePath, { readOnly: true });
 
         // Should use --ro-bind for the workspace path
         let foundRoBind = false;
@@ -603,7 +603,7 @@ describe('LocalSandbox', () => {
         }
       });
 
-      it('should generate a bwrap command with --bind when readOnlyWorkspace is false or undefined', () => {
+      it('should generate a bwrap command with --bind when readOnly is false or undefined', () => {
         const workspacePath = '/path/to/workspace';
         const { args } = buildBwrapCommand('echo 1', workspacePath, {});
 
@@ -618,9 +618,9 @@ describe('LocalSandbox', () => {
         expect(foundBind).toBe(true);
       });
 
-      it('should generate a seatbelt profile without file-write* for workspace when readOnlyWorkspace is true', () => {
+      it('should generate a seatbelt profile without file-write* for workspace when readOnly is true', () => {
         const workspacePath = '/path/to/workspace';
-        const profile = generateSeatbeltProfile(workspacePath, { readOnlyWorkspace: true });
+        const profile = generateSeatbeltProfile(workspacePath, { readOnly: true });
 
         // Should not allow write to the workspace
         expect(profile).not.toContain(`(allow file-write* (subpath "${workspacePath}"))`);
@@ -628,7 +628,7 @@ describe('LocalSandbox', () => {
         expect(profile).toContain('(allow file-write* (subpath "/private/tmp"))');
       });
 
-      it('should generate a seatbelt profile with file-write* for workspace when readOnlyWorkspace is false or undefined', () => {
+      it('should generate a seatbelt profile with file-write* for workspace when readOnly is false or undefined', () => {
         const workspacePath = '/path/to/workspace';
         const profile = generateSeatbeltProfile(workspacePath, {});
 

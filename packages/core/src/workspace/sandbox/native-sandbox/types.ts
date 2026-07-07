@@ -58,11 +58,12 @@ export interface NativeSandboxConfig {
   bwrapArgs?: string[];
 
   /**
-   * Mount the workspace directory as read-only.
-   * Only used when isolation is 'seatbelt' or 'bwrap'.
+   * Restrict the sandbox's working directory to read-only access.
+   * Spawned processes can read but not write files in the working directory.
+   * Enforced at the OS level (seatbelt profile / bwrap --ro-bind); ignored when isolation is 'none'.
    * @default false
    */
-  readOnlyWorkspace?: boolean;
+  readOnly?: boolean;
 }
 
 /**

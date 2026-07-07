@@ -5,6 +5,8 @@
  * https://github.com/containers/bubblewrap
  */
 
+import * as path from 'node:path';
+
 import type { NativeSandboxConfig } from './types';
 
 /**
@@ -83,7 +85,7 @@ export function buildBwrapCommand(
   if (config.allowSystemBinaries !== false) {
     // Include the Node.js binary location
     const nodePath = process.execPath;
-    const nodeDir = nodePath.includes('\\') ? nodePath.substring(0, nodePath.lastIndexOf('\\')) : nodePath.substring(0, nodePath.lastIndexOf('/'));
+    const nodeDir = path.dirname(nodePath);
 
     // Mount the node directory if it's not already covered
     if (!DEFAULT_READONLY_BINDS.some(p => nodeDir.startsWith(p))) {
@@ -96,7 +98,7 @@ export function buildBwrapCommand(
   }
 
   // Mount workspace (read-only or read-write)
-  if (config.readOnlyWorkspace) {
+  if (config.readOnly) {
     bwrapArgs.push('--ro-bind', workspacePath, workspacePath);
   } else {
     bwrapArgs.push('--bind', workspacePath, workspacePath);
