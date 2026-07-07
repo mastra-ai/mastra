@@ -72,9 +72,12 @@ export interface ScoresDataListEntityCellProps {
 }
 
 export function ScoresDataListEntityCell({ entityId }: ScoresDataListEntityCellProps) {
+  const display = entityId || '-';
   return (
     <DataListCell height="compact">
-      <span className="block min-w-0 max-w-full text-ui-smd truncate">{entityId || '-'}</span>
+      <span className="block min-w-0 max-w-full text-ui-smd truncate" title={display}>
+        {display}
+      </span>
     </DataListCell>
   );
 }
