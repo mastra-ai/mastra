@@ -115,8 +115,14 @@ export function calculatePagination(
 /**
  * Configuration for individual domain overrides.
  * Each domain can be sourced from a different storage adapter.
+ *
+ * Set a domain to `false` to disable it entirely: the domain resolves to
+ * `undefined` instead of falling back to the `editor`/`default` stores, so
+ * nothing can read from or write to it through this composite.
  */
-export type MastraStorageDomains = Partial<StorageDomains>;
+export type MastraStorageDomains = {
+  [K in keyof StorageDomains]?: StorageDomains[K] | false;
+};
 
 /**
  * Configuration options for MastraCompositeStore.
@@ -334,10 +340,11 @@ export class MastraCompositeStore extends MastraBase {
       this.parentDefault = config.default;
       this.parentEditor = config.editor;
 
-      // Validate that at least one storage source is provided
+      // Validate that at least one storage source is provided (a `false`
+      // override disables a domain, so it doesn't count as a source)
       const hasDefaultDomains = defaultStores && Object.values(defaultStores).some(v => v !== undefined);
       const hasEditorDomains = editorStores && Object.values(editorStores).some(v => v !== undefined);
-      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined);
+      const hasOverrideDomains = Object.values(domainOverrides).some(v => v !== undefined && v !== false);
 
       if (!hasDefaultDomains && !hasEditorDomains && !hasOverrideDomains) {
         throw new Error(
@@ -347,9 +354,13 @@ export class MastraCompositeStore extends MastraBase {
 
       const editorDomainSet = new Set<string>(EDITOR_DOMAINS);
 
-      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default
+      // Helper: resolve a domain with priority: domains > editor (for editor domains) > default.
+      // A `false` override disables the domain — it resolves to undefined
+      // instead of falling through to the editor/default stores.
       const resolve = <K extends keyof StorageDomains>(key: K): StorageDomains[K] | undefined => {
-        if (domainOverrides[key] !== undefined) return domainOverrides[key];
+        const override: StorageDomains[K] | false | undefined = domainOverrides[key];
+        if (override === false) return undefined;
+        if (override !== undefined) return override;
         if (editorDomainSet.has(key) && editorStores?.[key] !== undefined) return editorStores[key];
         return defaultStores?.[key];
       };

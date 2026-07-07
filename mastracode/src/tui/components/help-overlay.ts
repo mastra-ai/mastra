@@ -41,6 +41,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },
+    { key: '/prune', description: 'Prune old storage data — closes the TUI (add "vacuum" to reclaim disk)' },
     { key: '/diff', description: 'Modified files or git diff' },
     { key: '/sandbox', description: 'Manage sandbox allowed paths' },
     { key: '/hooks', description: 'Show/reload configured hooks' },

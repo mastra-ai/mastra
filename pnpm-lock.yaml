@@ -2163,6 +2163,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.14(hono@4.12.25)
+      '@libsql/client':
+        specifier: ^0.17.4
+        version: 0.17.4(bufferutil@4.1.0)
       '@mastra/agent-browser':
         specifier: workspace:*
         version: link:../browser/agent-browser
@@ -2265,6 +2268,9 @@ importers:
       hono:
         specifier: ^4.12.8
         version: 4.12.25
+      libsql:
+        specifier: ^0.5.29
+        version: 0.5.29
       lucide-react:
         specifier: ^0.474.0
         version: 0.474.0(react@19.2.6)

@@ -45,6 +45,7 @@ import {
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handlePruneCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -199,6 +200,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'cost':
       handleCostCommand(ctx);
+      return true;
+    case 'prune':
+      await handlePruneCommand(ctx, args);
       return true;
     case 'diff':
       await handleDiffCommand(ctx, args[0]);

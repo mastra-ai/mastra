@@ -106,6 +106,45 @@ describe('MastraCompositeStore — default delegation (issue #16782)', () => {
   });
 });
 
+describe('MastraCompositeStore — disabled domains (`false` override)', () => {
+  it('resolves a `false` domain to undefined instead of falling through to default', async () => {
+    const inner = new InMemoryStore({ id: 'inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      default: inner,
+      domains: { observability: false },
+    });
+
+    expect(await composite.getStore('observability')).toBeUndefined();
+    // Other domains still fall through to the default store.
+    expect(await composite.getStore('memory')).toBe(inner.stores?.memory);
+  });
+
+  it('resolves a `false` domain to undefined instead of falling through to editor', async () => {
+    const editor = new InMemoryStore({ id: 'editor-inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      editor,
+      domains: { agents: false },
+    });
+
+    expect(await composite.getStore('agents')).toBeUndefined();
+    expect(await composite.getStore('skills')).toBe(editor.stores?.skills);
+  });
+
+  it('does not count `false` overrides as a storage source', () => {
+    expect(
+      () =>
+        new MastraCompositeStore({
+          id: 'outer',
+          domains: { observability: false },
+        }),
+    ).toThrow(/requires at least one storage source/);
+  });
+});
+
 describe('MastraCompositeStore.__registerMastra', () => {
   const mastra: StorageMastraRef = { getAgentById: () => undefined };
 

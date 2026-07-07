@@ -96,6 +96,32 @@ export const mastra = new Mastra({
 })
 ```
 
+### Disabling a domain
+
+Set a domain to `false` to disable it. A disabled domain doesn't fall back to `default`, so data for that domain isn't persisted:
+
+```typescript title="src/mastra/index.ts"
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { PostgresStore } from '@mastra/pg'
+import { Mastra } from '@mastra/core'
+
+const pgStore = new PostgresStore({
+  id: 'pg',
+  connectionString: process.env.DATABASE_URL,
+})
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite',
+    default: pgStore,
+    domains: {
+      // don't persist traces and spans
+      observability: false,
+    },
+  }),
+})
+```
+
 ## Options
 
 <PropertiesTable
@@ -123,7 +149,7 @@ export const mastra = new Mastra({
     name: 'domains',
     type: 'object',
     description:
-      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage.',
+      'Individual domain overrides. Each domain can come from a different storage adapter. These take precedence over both `editor` and `default` storage. Set a domain to `false` to disable it entirely; a disabled domain does not fall back to `editor` or `default`.',
     isOptional: true,
     properties: [
       {

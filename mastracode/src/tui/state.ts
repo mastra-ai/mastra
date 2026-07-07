@@ -19,6 +19,7 @@ import type { PluginManager } from '../plugins/manager.js';
 import { detectProject } from '../utils/project.js';
 import type { ProjectInfo } from '../utils/project.js';
 import type { SlashCommandMetadata } from '../utils/slash-command-loader.js';
+import type { StorageMaintenance } from '../utils/storage-maintenance.js';
 import type { AskQuestionInlineComponent } from './components/ask-question-inline.js';
 import type { AssistantMessageComponent } from './components/assistant-message.js';
 import { CustomEditor } from './components/custom-editor.js';
@@ -138,6 +139,9 @@ export interface MastraTUIOptions {
 
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
+
+  /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
+  storageMaintenance?: StorageMaintenance;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
