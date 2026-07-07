@@ -31,11 +31,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/project-structure',
-          label: 'Project Structure',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },

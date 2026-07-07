@@ -919,6 +919,11 @@
       "source": "/docs/getting-started/model-providers",
       "destination": "/models",
       "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
     }
   ]
 }

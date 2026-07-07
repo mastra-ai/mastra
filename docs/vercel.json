@@ -936,6 +936,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
       "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
@@ -1588,6 +1593,11 @@
     {
       "source": "/docs/getting-started/model-providers/llms.txt",
       "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure/llms.txt",
+      "destination": "/reference/project-structure/llms.txt",
       "permanent": true
     }
   ]
