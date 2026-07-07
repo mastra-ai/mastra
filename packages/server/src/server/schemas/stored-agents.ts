@@ -132,10 +132,15 @@ const skillConfigSchema = z.object({
 /** Skills config: skill IDs mapped to per-skill config */
 const skillsConfigSchema = z.record(z.string(), skillConfigSchema);
 
-/** Workspace reference: either a stored workspace ID or an inline config */
+/** Workspace reference: a stored workspace ID, inline config, or a registered workspace provider */
 const workspaceRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('id'), workspaceId: z.string() }),
   z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
+  z.object({
+    type: z.literal('provider'),
+    provider: z.string().describe('Workspace provider identifier'),
+    config: z.record(z.string(), z.unknown()).describe('Provider-specific configuration'),
+  }),
 ]);
 
 /** Screencast options for streaming browser frames */

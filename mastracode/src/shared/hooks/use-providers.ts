@@ -17,7 +17,7 @@ export function useProvidersQuery() {
   return useQuery<ProviderInfo[]>({
     queryKey: queryKeys.providers(),
     queryFn: async () => {
-      const body = await client.get<ProvidersResponse>('/api/web/config/providers');
+      const body = await client.get<ProvidersResponse>('/web/config/providers');
       return body.providers;
     },
   });
@@ -35,7 +35,7 @@ export function useSaveProviderKey() {
   return useMutation({
     mutationFn: ({ provider, key, envVar }: SaveProviderKeyArgs) =>
       client.put<SaveProviderKeyResponse>(
-        `/api/web/config/providers/${encodeURIComponent(provider)}/key`,
+        `/web/config/providers/${encodeURIComponent(provider)}/key`,
         envVar !== undefined ? { key, envVar } : { key },
       ),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
@@ -51,7 +51,7 @@ export function useRemoveProviderKey() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ provider }: RemoveProviderKeyArgs) =>
-      client.del<SaveProviderKeyResponse>(`/api/web/config/providers/${encodeURIComponent(provider)}/key`),
+      client.del<SaveProviderKeyResponse>(`/web/config/providers/${encodeURIComponent(provider)}/key`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
   });
 }

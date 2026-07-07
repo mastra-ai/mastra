@@ -274,6 +274,9 @@ export interface StudioInjectionConfig {
   experimentalUI: string;
   agentSignals: string;
   signalsUI: string;
+  organizationId: string;
+  platformProjectId: string;
+  platformObservabilityEndpoint: string;
   autoDetectUrl?: string;
 }
 
@@ -308,12 +311,33 @@ export function injectStudioHtmlConfig(html: string, config: StudioInjectionConf
   replace(`'%%MASTRA_EXPERIMENTAL_UI%%'`, config.experimentalUI);
   replace(`'%%MASTRA_AGENT_SIGNALS%%'`, config.agentSignals);
   replace(`'%%MASTRA_SIGNALS_UI%%'`, config.signalsUI);
+  replace(`'%%MASTRA_ORGANIZATION_ID%%'`, config.organizationId);
+  replace(`'%%MASTRA_PLATFORM_PROJECT_ID%%'`, config.platformProjectId);
+  replace(`'%%MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT%%'`, config.platformObservabilityEndpoint);
   if (config.autoDetectUrl) {
     replace(`'%%MASTRA_AUTO_DETECT_URL%%'`, config.autoDetectUrl);
   }
   html = html.replaceAll('%%MASTRA_STUDIO_BASE_PATH%%', () => config.basePath);
 
   return html;
+}
+
+/**
+ * Escape a dynamic value for embedding inside a single-quoted JavaScript
+ * string literal in the Studio `index.html` (e.g. `window.X = '<value>'`).
+ * Without it, an env-derived value containing `'` or `</script>` breaks out
+ * of the literal and corrupts (or injects into) the served page.
+ */
+export function escapeStudioHtmlValue(value: string): string {
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/'/g, "\\'")
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 /**

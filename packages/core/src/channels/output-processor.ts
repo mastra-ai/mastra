@@ -128,7 +128,7 @@ interface RenderSession {
  * 1. Fast path — `CHAT_CHANNEL_RENDER_CONTEXT_KEY` on `requestContext`, stashed
  *    by `AgentChannels` on inbound platform events (`processChatMessage`,
  *    approve/decline). This is the original webhook path and is unchanged.
- * 2. Fallback — when no render context is on `requestContext` (heartbeat,
+ * 2. Fallback — when no render context is on `requestContext` (schedule fire,
  *    Studio, custom UI, user code) but the processor is bound to its owning
  *    `AgentChannels`, it reconstructs the render context from the run's
  *    `threadId` via `agentChannels.buildRenderContextForThread(threadId)`,
@@ -200,7 +200,7 @@ export class ChatChannelOutputProcessor {
    * run's `threadId` via the bound `AgentChannels`. The `threadId` is read from
    * the memory context the framework stashes on `requestContext` under the
    * `MastraMemory` key (populated on every run that resolves a thread, including
-   * heartbeat / signal-wake runs). The resolved value (or `null` for
+   * schedule / signal-wake runs). The resolved value (or `null` for
    * non-channel runs) is cached on `state.render` so we don't reload thread
    * metadata on every chunk.
    */

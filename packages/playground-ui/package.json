@@ -1,11 +1,8 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "38.0.1-alpha.2",
+  "version": "40.0.1-alpha.0",
   "description": "Mastra Playground components",
-  "main": "dist/index.umd.js",
-  "module": "dist/index.es.js",
-  "types": "dist/index.d.ts",
   "sideEffects": [
     "**/*.css"
   ],
@@ -15,13 +12,7 @@
     "CHANGELOG.md"
   ],
   "exports": {
-    ".": {
-      "import": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.es.js"
-      }
-    },
-    "./style.css": "./dist/index.css",
+    "./style.css": "./dist/style.css",
     "./theme.css": "./theme.css",
     "./tokens": {
       "import": {
@@ -31,16 +22,6 @@
       "require": {
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.cjs.js"
-      }
-    },
-    "./utils": {
-      "import": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.es.js"
-      },
-      "require": {
-        "types": "./dist/utils.d.ts",
-        "default": "./dist/utils.cjs.js"
       }
     },
     "./utils/*": {

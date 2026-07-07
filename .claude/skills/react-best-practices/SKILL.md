@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 17 rules across 8 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 20 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -33,6 +33,7 @@ Rules are prioritized by impact:
 | 6        | JavaScript Performance    | LOW-MEDIUM                    |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) |
 | 8        | Testing                   | MEDIUM-HIGH (correctness)     |
+| 9        | Type Safety               | HIGH                          |
 
 ## Quick Reference
 
@@ -52,6 +53,7 @@ Rules are prioritized by impact:
 **Client-Side Data Fetching:**
 
 - Use Tanstack Query for automatic request deduplication (`client-request-dedupe`)
+- Dependent query params are the value or `undefined`, never `| null` or a fake fallback; narrow at the caller so hooks stay strict, or guard with `skipToken` when the hook must accept an optional param (`client-request-dedupe`)
 
 **Re-render Optimization:**
 
@@ -65,10 +67,16 @@ Rules are prioritized by impact:
 - One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
+- Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
+- For a fixed set of items, write one component per item with explicit props that owns its data and loading — don't map a config-object array onto a component shape (`structure-composition-over-config`)
 
 **Testing:**
 
 - BDD tests that drive the real `@mastra/client-js` + React Query stack and mock only the network; never `vi.mock` our own hooks/services/auth gating or the SDK (`testing-bdd-no-mocks`)
+
+**Type Safety:**
+
+- No `as` type assertions anywhere — production **or tests**; narrow with real type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form. Do not replace a cast with a domain-type predicate that only checks `typeof value === 'object'`; call that an `isRecord` helper or validate the fields used (`types-no-type-assertions`)
 
 ### Rendering Patterns
 
@@ -106,5 +114,6 @@ grep -l "Tanstack" references/rules/
 - `rerender-*` - Re-render optimization (4 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
-- `structure-*` - Component/hook structure (3 rules)
+- `types-*` - Type-safety / no-`as`-cast rules (1 rule)
+- `structure-*` - Component/hook structure (5 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy (1 rule)

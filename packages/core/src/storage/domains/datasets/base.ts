@@ -8,6 +8,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -16,6 +17,7 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '../../types';
 import { StorageDomain } from '../base';
 
@@ -41,8 +43,17 @@ export abstract class DatasetsStorage extends StorageDomain {
 
   // Dataset CRUD
   abstract createDataset(input: CreateDatasetInput): Promise<DatasetRecord>;
-  abstract getDatasetById(args: { id: string }): Promise<DatasetRecord | null>;
-  abstract deleteDataset(args: { id: string }): Promise<void>;
+  /**
+   * Fetch a dataset by ID. When `filters` is provided, the row is only returned
+   * if it also matches the tenancy filters — returns `null` on mismatch (never
+   * throws, to avoid leaking existence across tenants via error timing/text).
+   */
+  abstract getDatasetById(args: { id: string; filters?: DatasetTenancyFilters }): Promise<DatasetRecord | null>;
+  /**
+   * Delete a dataset. When `filters` is provided, the delete is a silent no-op
+   * if the row does not match the tenancy filters. Never throws on mismatch.
+   */
+  abstract deleteDataset(args: { id: string; filters?: DatasetTenancyFilters }): Promise<void>;
   abstract listDatasets(args: ListDatasetsInput): Promise<ListDatasetsOutput>;
 
   /**
@@ -50,7 +61,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doUpdateDataset for actual storage operation.
    */
   async updateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
-    const existing = await this.getDatasetById({ id: args.id });
+    const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
     if (!existing) {
       throw new Error(`Dataset not found: ${args.id}`);
     }
@@ -105,7 +116,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doAddItem which handles SCD-2 versioning internally.
    */
   async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
-    const dataset = await this.getDatasetById({ id: args.datasetId });
+    const dataset = await this.getDatasetById({ id: args.datasetId, filters: args.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
@@ -133,7 +144,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doUpdateItem which handles SCD-2 versioning internally.
    */
   async updateItem(args: UpdateDatasetItemInput): Promise<DatasetItem> {
-    const dataset = await this.getDatasetById({ id: args.datasetId });
+    const dataset = await this.getDatasetById({ id: args.datasetId, filters: args.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${args.datasetId}`);
     }
@@ -159,13 +170,21 @@ export abstract class DatasetsStorage extends StorageDomain {
   /**
    * Delete an item from a dataset. Creates a tombstone row via SCD-2.
    * Subclasses implement _doDeleteItem which handles SCD-2 versioning internally.
+   *
+   * When `args.filters` is set, the delete is a silent no-op if the parent
+   * dataset row does not match the tenancy filters — prevents deleting items
+   * from a dataset in another tenant via a leaked datasetId.
    */
-  async deleteItem(args: { id: string; datasetId: string }): Promise<void> {
+  async deleteItem(args: DeleteDatasetItemInput): Promise<void> {
+    if (args.filters) {
+      const dataset = await this.getDatasetById({ id: args.datasetId, filters: args.filters });
+      if (!dataset) return;
+    }
     return this._doDeleteItem(args);
   }
 
   /** Subclasses implement actual storage delete logic with SCD-2 versioning */
-  protected abstract _doDeleteItem(args: { id: string; datasetId: string }): Promise<void>;
+  protected abstract _doDeleteItem(args: DeleteDatasetItemInput): Promise<void>;
 
   abstract listItems(args: ListDatasetItemsInput): Promise<ListDatasetItemsOutput>;
   abstract getItemById(args: { id: string; datasetVersion?: number }): Promise<DatasetItem | null>;
@@ -183,7 +202,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * then delegates to subclass which handles SCD-2 versioning internally.
    */
   async batchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]> {
-    const dataset = await this.getDatasetById({ id: input.datasetId });
+    const dataset = await this.getDatasetById({ id: input.datasetId, filters: input.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }
@@ -212,7 +231,7 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doBatchDeleteItems which handles SCD-2 versioning internally.
    */
   async batchDeleteItems(input: BatchDeleteItemsInput): Promise<void> {
-    const dataset = await this.getDatasetById({ id: input.datasetId });
+    const dataset = await this.getDatasetById({ id: input.datasetId, filters: input.filters });
     if (!dataset) {
       throw new Error(`Dataset not found: ${input.datasetId}`);
     }

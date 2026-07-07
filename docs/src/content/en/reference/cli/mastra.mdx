@@ -203,7 +203,154 @@ Path to a JSON file containing named [request context](/docs/server/request-cont
 mastra studio --request-context-presets ./presets.json
 ```
 
+## `mastra deploy`
+
+Builds and deploys your project to a named environment on Mastra platform. This is the recommended command for all new deploys and replaces both [`mastra studio deploy`](#mastra-studio-deploy) and [`mastra server deploy`](#mastra-server-deploy), which continue to work but should no longer be used for new setups.
+
+Requires authentication via [`mastra auth login`](#mastra-auth-login) or a `MASTRA_API_TOKEN` environment variable.
+
+```bash
+mastra deploy
+mastra deploy --env staging
+mastra deploy --env production --region eu
+```
+
+The command runs `mastra build`, zips the output, uploads it to the selected environment, and then polls the deploy status while streaming build logs until the deploy reaches a terminal state.
+
+Organization, project, and environment are resolved in order from: environment variable (`MASTRA_ORG_ID`, `MASTRA_PROJECT_ID`), CLI flag (`--org`, `--project`, `--env`), `.mastra-project.json` config file, current org from credentials, and lastly interactive prompt. On first deploy, the CLI saves the resolved org and project IDs to `.mastra-project.json` so subsequent deploys skip the prompts.
+
+If the project doesn't exist yet, the CLI creates it from the `package.json` `name` field after confirmation. If the target environment doesn't exist, the CLI creates it (defaulting to `type: staging` for anything other than `production`) after confirmation. Combined with `--yes`, this creates and deploys everything in one non-interactive command:
+
+```bash
+mastra deploy --env staging --yes
+```
+
+When `--env <name>` is set and `--env-file` is not, the CLI auto-selects `.env.<name>` from the project directory if present (for example `.env.staging`). The `<name>` value is validated against a strict allowlist before being interpolated into a file path.
+
+### Arguments
+
+#### `[dir]`
+
+Project directory. Defaults to the current directory.
+
+### Flags
+
+#### `--env`
+
+Target environment name. Defaults to `production`. Auto-selects `.env.<name>` from the project directory when `--env-file` is not set. If the environment doesn't exist, the CLI creates it after confirmation.
+
+#### `--org`
+
+Organization ID. Can also be set via the `MASTRA_ORG_ID` environment variable.
+
+#### `--project`
+
+Project ID, slug, or name. Can also be set via the `MASTRA_PROJECT_ID` environment variable. If no project matches, the value is used as the name of a new project to create on deploy.
+
+#### `-y, --yes`
+
+Auto-accept defaults without confirmation prompts, including creating projects and environments.
+
+#### `-c, --config`
+
+Path to the project config file. Defaults to `.mastra-project.json`.
+
+#### `--env-file`
+
+Path to the env file to bundle with the deploy (relative to the project directory). When set, disables the `.env.<name>` auto-selection based on `--env`.
+
+```bash
+mastra deploy --env staging --env-file .env.staging.local
+```
+
+#### `--region`
+
+Region for a newly created environment (for example `eu`). Applied only when the CLI creates the environment.
+
+#### `--skip-build`
+
+Skip the build step and deploy the existing `.mastra/output` directory. The CLI warns if the existing build is stale relative to the current source.
+
+#### `--skip-preflight`
+
+Skip the pre-upload validation of the built output.
+
+#### `--debug`
+
+Enable debug logs during the build step.
+
+### CI/CD usage
+
+Set `MASTRA_API_TOKEN`, `MASTRA_ORG_ID`, and `MASTRA_PROJECT_ID` as environment variables for headless deploys. Interactive prompts are skipped automatically when `MASTRA_API_TOKEN` is set. Combine with `--yes` to auto-accept environment creation.
+
+```bash
+export MASTRA_API_TOKEN="..."
+export MASTRA_ORG_ID="..."
+export MASTRA_PROJECT_ID="..."
+mastra deploy --env staging --yes
+```
+
+## `mastra env`
+
+Manages environments on Mastra platform. Environments are named deploy targets (for example `production`, `staging`, `preview-42`) that belong to a project. Every subcommand takes a `<project>` argument (name, slug, or ID) and resolves the current organization from stored credentials.
+
+### `mastra env list`
+
+Lists environments for a project.
+
+```bash
+mastra env list <project>
+```
+
+#### `--json`
+
+Emit machine-readable JSON. Only non-sensitive metadata (id, name, slug, type, region, branch, and URLs) is included so the output is safe to log in CI.
+
+### `mastra env create`
+
+Creates a new environment for a project.
+
+```bash
+mastra env create <project> --name staging --type staging --region eu
+```
+
+#### `-n, --name`
+
+Environment name (required).
+
+#### `-t, --type`
+
+Environment type. One of `production`, `staging`, or `preview`. Defaults to `staging`.
+
+#### `-r, --region`
+
+Region for the environment (for example `eu`).
+
+#### `--json`
+
+Emit machine-readable JSON. Sensitive fields are omitted, as with [`mastra env list`](#mastra-env-list).
+
+### `mastra env delete`
+
+Deletes an environment.
+
+```bash
+mastra env delete <project> <env>
+```
+
+`<env>` can be an environment name, slug, or ID. The CLI prompts for confirmation unless `--yes` is passed.
+
+#### `-y, --yes`
+
+Skip the confirmation prompt.
+
 ## `mastra studio deploy`
+
+:::info
+
+`mastra studio deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which supports named environments (`--env staging`, `--env production`) on a single project. New setups should use `mastra deploy`.
+
+:::
 
 Builds and deploys your project to Mastra platform. Requires authentication via [`mastra auth login`](#mastra-auth-login) or a `MASTRA_API_TOKEN` environment variable.
 
@@ -320,6 +467,12 @@ Lists all projects in the current organization.
 Creates a new project through an interactive prompt. This command doesn't accept a `--name` flag; for non-interactive project creation, use [`mastra studio deploy --project <name> --yes`](#mastra-studio-deploy) instead, which creates the project and deploys to it in one step.
 
 ## `mastra server deploy`
+
+:::info
+
+`mastra server deploy` continues to work but is superseded by [`mastra deploy`](#mastra-deploy), which deploys a single project to multiple named environments instead of separate Studio and Server commands. New setups should use `mastra deploy`.
+
+:::
 
 Builds and deploys your project to Server on Mastra platform. Works the same as [`mastra studio deploy`](#mastra-studio-deploy) with the same flags, arguments, and resolution logic.
 

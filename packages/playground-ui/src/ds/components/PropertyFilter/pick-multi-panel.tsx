@@ -33,8 +33,9 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
   // show their default option pre-selected before the user explicitly picks one.
   const selectedValue = typeof token?.value === 'string' ? token.value : !field.multi ? field.defaultValue : undefined;
   const selectedValues = useMemo<string[]>(() => {
-    if (Array.isArray(token?.value)) return token!.value as string[];
-    if (typeof token?.value === 'string') return [token.value];
+    const value = token?.value;
+    if (Array.isArray(value)) return value;
+    if (typeof value === 'string') return [value];
     return [];
   }, [token]);
 

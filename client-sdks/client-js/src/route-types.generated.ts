@@ -4443,6 +4443,15 @@ export type PostAgentsAgentIdClone_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -4557,6 +4566,15 @@ export type PostAgentsAgentIdClone_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -15244,6 +15262,11 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
     spanId?: string | undefined;
     resourceId?: string | undefined;
     threadId?: string | undefined;
+    organizationId?: (string | null) | undefined;
+    projectId?: (string | null) | undefined;
+    batchId?: (string | null) | undefined;
+    datasetId?: (string | null) | undefined;
+    datasetItemId?: (string | null) | undefined;
     preprocessStepResult?:
       | {
           [key: string]: unknown;
@@ -25997,6 +26020,15 @@ export type GetStoredAgents_Response = {
                     operationTimeout?: number | undefined;
                   };
                 }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
+                  };
+                }
             )
           | {
               value:
@@ -26111,6 +26143,15 @@ export type GetStoredAgents_Response = {
                       autoSync?: boolean | undefined;
                       /** Operation timeout in milliseconds */
                       operationTimeout?: number | undefined;
+                    };
+                  }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
                     };
                   };
               rules?:
@@ -30573,6 +30614,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -30687,6 +30737,15 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -35017,6 +35076,15 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -35131,6 +35199,15 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -39446,6 +39523,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -39560,6 +39646,15 @@ export type GetStoredAgentsStoredAgentId_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -43835,6 +43930,15 @@ export type PostStoredAgents_Body = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -43949,6 +44053,15 @@ export type PostStoredAgents_Body = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -48213,6 +48326,15 @@ export type PostStoredAgents_Response = {
                   operationTimeout?: number | undefined;
                 };
               }
+            | {
+                type: 'provider';
+                /** Workspace provider identifier */
+                provider: string;
+                /** Provider-specific configuration */
+                config: {
+                  [key: string]: unknown;
+                };
+              }
           )
         | {
             value:
@@ -48327,6 +48449,15 @@ export type PostStoredAgents_Response = {
                     autoSync?: boolean | undefined;
                     /** Operation timeout in milliseconds */
                     operationTimeout?: number | undefined;
+                  };
+                }
+              | {
+                  type: 'provider';
+                  /** Workspace provider identifier */
+                  provider: string;
+                  /** Provider-specific configuration */
+                  config: {
+                    [key: string]: unknown;
                   };
                 };
             rules?:
@@ -52651,6 +52782,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -52765,6 +52905,15 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -57054,6 +57203,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                       operationTimeout?: number | undefined;
                     };
                   }
+                | {
+                    type: 'provider';
+                    /** Workspace provider identifier */
+                    provider: string;
+                    /** Provider-specific configuration */
+                    config: {
+                      [key: string]: unknown;
+                    };
+                  }
               )
             | {
                 value:
@@ -57168,6 +57326,15 @@ export type PatchStoredAgentsStoredAgentId_Response =
                         autoSync?: boolean | undefined;
                         /** Operation timeout in milliseconds */
                         operationTimeout?: number | undefined;
+                      };
+                    }
+                  | {
+                      type: 'provider';
+                      /** Workspace provider identifier */
+                      provider: string;
+                      /** Provider-specific configuration */
+                      config: {
+                        [key: string]: unknown;
                       };
                     };
                 rules?:
@@ -86277,6 +86444,13 @@ export type GetDatasetsDatasetId_PathParams = {
   datasetId: string;
 };
 
+export type GetDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
+};
+
 export type GetDatasetsDatasetId_Response = {
   id: string;
   name: string;
@@ -86315,13 +86489,17 @@ export type GetDatasetsDatasetId_Response = {
 
 export type GetDatasetsDatasetId_Request = Simplify<
   (GetDatasetsDatasetId_PathParams extends never ? {} : { params: GetDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (GetDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends GetDatasetsDatasetId_QueryParams
+        ? { query?: GetDatasetsDatasetId_QueryParams }
+        : { query: GetDatasetsDatasetId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetId_RouteContract {
   pathParams: GetDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: GetDatasetsDatasetId_QueryParams;
   body: never;
   request: GetDatasetsDatasetId_Request;
   response: GetDatasetsDatasetId_Response;
@@ -86334,6 +86512,13 @@ export interface GetDatasetsDatasetId_RouteContract {
 export type PatchDatasetsDatasetId_PathParams = {
   /** Unique identifier for the dataset */
   datasetId: string;
+};
+
+export type PatchDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
 };
 
 export type PatchDatasetsDatasetId_Body = {
@@ -86413,7 +86598,11 @@ export type PatchDatasetsDatasetId_Response = {
 
 export type PatchDatasetsDatasetId_Request = Simplify<
   (PatchDatasetsDatasetId_PathParams extends never ? {} : { params: PatchDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends PatchDatasetsDatasetId_QueryParams
+        ? { query?: PatchDatasetsDatasetId_QueryParams }
+        : { query: PatchDatasetsDatasetId_QueryParams }) &
     (PatchDatasetsDatasetId_Body extends never
       ? {}
       : {} extends PatchDatasetsDatasetId_Body
@@ -86423,7 +86612,7 @@ export type PatchDatasetsDatasetId_Request = Simplify<
 
 export interface PatchDatasetsDatasetId_RouteContract {
   pathParams: PatchDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: PatchDatasetsDatasetId_QueryParams;
   body: PatchDatasetsDatasetId_Body;
   request: PatchDatasetsDatasetId_Request;
   response: PatchDatasetsDatasetId_Response;
@@ -86438,19 +86627,30 @@ export type DeleteDatasetsDatasetId_PathParams = {
   datasetId: string;
 };
 
+export type DeleteDatasetsDatasetId_QueryParams = {
+  /** Restrict lookup to the given organization */
+  organizationId?: string | undefined;
+  /** Restrict lookup to the given project */
+  projectId?: string | undefined;
+};
+
 export type DeleteDatasetsDatasetId_Response = {
   success: boolean;
 };
 
 export type DeleteDatasetsDatasetId_Request = Simplify<
   (DeleteDatasetsDatasetId_PathParams extends never ? {} : { params: DeleteDatasetsDatasetId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (DeleteDatasetsDatasetId_QueryParams extends never
+      ? {}
+      : {} extends DeleteDatasetsDatasetId_QueryParams
+        ? { query?: DeleteDatasetsDatasetId_QueryParams }
+        : { query: DeleteDatasetsDatasetId_QueryParams }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetId_RouteContract {
   pathParams: DeleteDatasetsDatasetId_PathParams;
-  queryParams: never;
+  queryParams: DeleteDatasetsDatasetId_QueryParams;
   body: never;
   request: DeleteDatasetsDatasetId_Request;
   response: DeleteDatasetsDatasetId_Response;
@@ -90307,165 +90507,32 @@ export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
 // Route: GET /schedules
 // ============================================================================
 export type GetSchedules_QueryParams = {
+  agentId?: string | undefined;
   workflowId?: string | undefined;
   status?: ('active' | 'paused') | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
+  threadId?: string | undefined;
+  resourceId?: string | undefined;
+  name?: string | undefined;
 };
 
 export type GetSchedules_Response = {
-  schedules: {
-    id: string;
-    target:
-      | {
-          type: 'workflow';
-          workflowId: string;
-          inputData?: unknown | undefined;
-          initialState?: unknown | undefined;
-          requestContext?:
-            | {
-                [key: string]: unknown;
-              }
-            | undefined;
-        }
-      | {
-          type: 'heartbeat';
-          agentId: string;
-          prompt: string;
-          threadId?: string | undefined;
-          resourceId?: string | undefined;
-          signalType?: string | undefined;
-          tagName?: string | undefined;
-          attributes?:
-            | {
-                [key: string]: (string | number | boolean | null) | undefined;
-              }
-            | undefined;
-          ifActive?:
-            | {
-                behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-                attributes?:
-                  | {
-                      [key: string]: (string | number | boolean | null) | undefined;
-                    }
-                  | undefined;
-              }
-            | undefined;
-          ifIdle?:
-            | {
-                behavior?: ('wake' | 'persist' | 'discard') | undefined;
-                attributes?:
-                  | {
-                      [key: string]: (string | number | boolean | null) | undefined;
-                    }
-                  | undefined;
-                streamOptions?:
-                  | {
-                      requestContext?:
-                        | {
-                            [key: string]: unknown;
-                          }
-                        | undefined;
-                    }
-                  | undefined;
-              }
-            | undefined;
-          providerOptions?:
-            | {
-                [key: string]: unknown;
-              }
-            | undefined;
-          requestContext?:
-            | {
-                [key: string]: unknown;
-              }
-            | undefined;
-        };
-    cron: string;
-    timezone?: string | undefined;
-    status: 'active' | 'paused';
-    nextFireAt: number;
-    lastFireAt?: number | undefined;
-    lastRunId?: string | undefined;
-    lastRun?:
-      | {
-          status:
-            | 'running'
-            | 'success'
-            | 'failed'
-            | 'tripwire'
-            | 'suspended'
-            | 'waiting'
-            | 'pending'
-            | 'canceled'
-            | 'bailed'
-            | 'paused'
-            | 'skipped';
-          startedAt?: number | undefined;
-          completedAt?: number | undefined;
-          durationMs?: number | undefined;
-          error?: string | undefined;
-        }
-      | undefined;
-    metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-    ownerType?: string | undefined;
-    ownerId?: string | undefined;
-    createdAt: number;
-    updatedAt: number;
-  }[];
-};
-
-export type GetSchedules_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (GetSchedules_QueryParams extends never
-      ? {}
-      : {} extends GetSchedules_QueryParams
-        ? { query?: GetSchedules_QueryParams }
-        : { query: GetSchedules_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetSchedules_RouteContract {
-  pathParams: never;
-  queryParams: GetSchedules_QueryParams;
-  body: never;
-  request: GetSchedules_Request;
-  response: GetSchedules_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /schedules/:scheduleId
-// ============================================================================
-export type GetSchedulesScheduleId_PathParams = {
-  scheduleId: string;
-};
-
-export type GetSchedulesScheduleId_Response = {
-  id: string;
-  target:
+  schedules: (
     | {
-        type: 'workflow';
-        workflowId: string;
-        inputData?: unknown | undefined;
-        initialState?: unknown | undefined;
-        requestContext?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      }
-    | {
-        type: 'heartbeat';
+        id: string;
         agentId: string;
-        prompt: string;
+        workflowId?: undefined | undefined;
+        lastRun?: undefined | undefined;
+        name?: string | undefined;
         threadId?: string | undefined;
         resourceId?: string | undefined;
-        signalType?: string | undefined;
+        prompt: string;
+        cron: string;
+        timezone?: string | undefined;
+        status: 'active' | 'paused';
+        nextFireAt: number;
+        lastFireAt?: number | undefined;
+        lastRunId?: string | undefined;
+        signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
         tagName?: string | undefined;
         attributes?:
           | {
@@ -90506,48 +90573,198 @@ export type GetSchedulesScheduleId_Response = {
               [key: string]: unknown;
             }
           | undefined;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        createdAt: number;
+        updatedAt: number;
+      }
+    | {
+        id: string;
+        workflowId: string;
+        agentId?: undefined | undefined;
+        cron: string;
+        timezone?: string | undefined;
+        status: 'active' | 'paused';
+        nextFireAt: number;
+        lastFireAt?: number | undefined;
+        lastRunId?: string | undefined;
+        lastRun?:
+          | {
+              status:
+                | 'running'
+                | 'success'
+                | 'failed'
+                | 'tripwire'
+                | 'suspended'
+                | 'waiting'
+                | 'pending'
+                | 'canceled'
+                | 'bailed'
+                | 'paused'
+                | 'skipped';
+              startedAt?: number | undefined;
+              completedAt?: number | undefined;
+              durationMs?: number | undefined;
+              error?: string | undefined;
+            }
+          | undefined;
+        inputData?: unknown | undefined;
+        initialState?: unknown | undefined;
         requestContext?:
           | {
               [key: string]: unknown;
             }
           | undefined;
-      };
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
+        metadata?:
+          | {
+              [key: string]: unknown;
+            }
+          | undefined;
+        createdAt: number;
+        updatedAt: number;
       }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
-  createdAt: number;
-  updatedAt: number;
+  )[];
 };
+
+export type GetSchedules_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (GetSchedules_QueryParams extends never
+      ? {}
+      : {} extends GetSchedules_QueryParams
+        ? { query?: GetSchedules_QueryParams }
+        : { query: GetSchedules_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetSchedules_RouteContract {
+  pathParams: never;
+  queryParams: GetSchedules_QueryParams;
+  body: never;
+  request: GetSchedules_Request;
+  response: GetSchedules_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /schedules/:scheduleId
+// ============================================================================
+export type GetSchedulesScheduleId_PathParams = {
+  scheduleId: string;
+};
+
+export type GetSchedulesScheduleId_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
 
 export type GetSchedulesScheduleId_Request = Simplify<
   (GetSchedulesScheduleId_PathParams extends never ? {} : { params: GetSchedulesScheduleId_PathParams }) &
@@ -90561,6 +90778,439 @@ export interface GetSchedulesScheduleId_RouteContract {
   body: never;
   request: GetSchedulesScheduleId_Request;
   response: GetSchedulesScheduleId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /schedules
+// ============================================================================
+export type PostSchedules_Body =
+  | {
+      id?: string | undefined;
+      agentId: string;
+      cron: string;
+      timezone?: string | undefined;
+      prompt: string;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+    }
+  | {
+      id?: string | undefined;
+      workflowId: string;
+      cron: string;
+      timezone?: string | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+    };
+
+export type PostSchedules_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
+
+export type PostSchedules_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostSchedules_Body extends never
+      ? {}
+      : {} extends PostSchedules_Body
+        ? { body?: PostSchedules_Body }
+        : { body: PostSchedules_Body })
+>;
+
+export interface PostSchedules_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostSchedules_Body;
+  request: PostSchedules_Request;
+  response: PostSchedules_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: PATCH /schedules/:scheduleId
+// ============================================================================
+export type PatchSchedulesScheduleId_PathParams = {
+  scheduleId: string;
+};
+
+export type PatchSchedulesScheduleId_Body = {
+  cron?: string | undefined;
+  timezone?: string | undefined;
+  status?: ('active' | 'paused') | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  prompt?: string | undefined;
+  name?: string | undefined;
+  signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+  tagName?: string | undefined;
+  attributes?:
+    | {
+        [key: string]: (string | number | boolean | null) | undefined;
+      }
+    | undefined;
+  ifActive?:
+    | {
+        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  ifIdle?:
+    | {
+        behavior?: ('wake' | 'persist' | 'discard') | undefined;
+        attributes?:
+          | {
+              [key: string]: (string | number | boolean | null) | undefined;
+            }
+          | undefined;
+        streamOptions?:
+          | {
+              requestContext?:
+                | {
+                    [key: string]: unknown;
+                  }
+                | undefined;
+            }
+          | undefined;
+      }
+    | undefined;
+  providerOptions?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  inputData?: unknown | undefined;
+  initialState?: unknown | undefined;
+  requestContext?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+export type PatchSchedulesScheduleId_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
+
+export type PatchSchedulesScheduleId_Request = Simplify<
+  (PatchSchedulesScheduleId_PathParams extends never ? {} : { params: PatchSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PatchSchedulesScheduleId_Body extends never
+      ? {}
+      : {} extends PatchSchedulesScheduleId_Body
+        ? { body?: PatchSchedulesScheduleId_Body }
+        : { body: PatchSchedulesScheduleId_Body })
+>;
+
+export interface PatchSchedulesScheduleId_RouteContract {
+  pathParams: PatchSchedulesScheduleId_PathParams;
+  queryParams: never;
+  body: PatchSchedulesScheduleId_Body;
+  request: PatchSchedulesScheduleId_Request;
+  response: PatchSchedulesScheduleId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: DELETE /schedules/:scheduleId
+// ============================================================================
+export type DeleteSchedulesScheduleId_PathParams = {
+  scheduleId: string;
+};
+
+export type DeleteSchedulesScheduleId_Response = {
+  message: string;
+};
+
+export type DeleteSchedulesScheduleId_Request = Simplify<
+  (DeleteSchedulesScheduleId_PathParams extends never ? {} : { params: DeleteSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface DeleteSchedulesScheduleId_RouteContract {
+  pathParams: DeleteSchedulesScheduleId_PathParams;
+  queryParams: never;
+  body: never;
+  request: DeleteSchedulesScheduleId_Request;
+  response: DeleteSchedulesScheduleId_Response;
   responseType: 'json';
 }
 
@@ -90659,109 +91309,116 @@ export type PostSchedulesScheduleIdPause_PathParams = {
   scheduleId: string;
 };
 
-export type PostSchedulesScheduleIdPause_Response = {
-  id: string;
-  target:
-    | {
-        type: 'workflow';
-        workflowId: string;
-        inputData?: unknown | undefined;
-        initialState?: unknown | undefined;
-        requestContext?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      }
-    | {
-        type: 'heartbeat';
-        agentId: string;
-        prompt: string;
-        threadId?: string | undefined;
-        resourceId?: string | undefined;
-        signalType?: string | undefined;
-        tagName?: string | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        ifActive?:
-          | {
-              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-              attributes?:
-                | {
-                    [key: string]: (string | number | boolean | null) | undefined;
-                  }
-                | undefined;
-            }
-          | undefined;
-        ifIdle?:
-          | {
-              behavior?: ('wake' | 'persist' | 'discard') | undefined;
-              attributes?:
-                | {
-                    [key: string]: (string | number | boolean | null) | undefined;
-                  }
-                | undefined;
-              streamOptions?:
-                | {
-                    requestContext?:
-                      | {
-                          [key: string]: unknown;
-                        }
-                      | undefined;
-                  }
-                | undefined;
-            }
-          | undefined;
-        providerOptions?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContext?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      };
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
+export type PostSchedulesScheduleIdPause_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
 
 export type PostSchedulesScheduleIdPause_Request = Simplify<
   (PostSchedulesScheduleIdPause_PathParams extends never ? {} : { params: PostSchedulesScheduleIdPause_PathParams }) &
@@ -90785,109 +91442,116 @@ export type PostSchedulesScheduleIdResume_PathParams = {
   scheduleId: string;
 };
 
-export type PostSchedulesScheduleIdResume_Response = {
-  id: string;
-  target:
-    | {
-        type: 'workflow';
-        workflowId: string;
-        inputData?: unknown | undefined;
-        initialState?: unknown | undefined;
-        requestContext?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      }
-    | {
-        type: 'heartbeat';
-        agentId: string;
-        prompt: string;
-        threadId?: string | undefined;
-        resourceId?: string | undefined;
-        signalType?: string | undefined;
-        tagName?: string | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        ifActive?:
-          | {
-              behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-              attributes?:
-                | {
-                    [key: string]: (string | number | boolean | null) | undefined;
-                  }
-                | undefined;
-            }
-          | undefined;
-        ifIdle?:
-          | {
-              behavior?: ('wake' | 'persist' | 'discard') | undefined;
-              attributes?:
-                | {
-                    [key: string]: (string | number | boolean | null) | undefined;
-                  }
-                | undefined;
-              streamOptions?:
-                | {
-                    requestContext?:
-                      | {
-                          [key: string]: unknown;
-                        }
-                      | undefined;
-                  }
-                | undefined;
-            }
-          | undefined;
-        providerOptions?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-        requestContext?:
-          | {
-              [key: string]: unknown;
-            }
-          | undefined;
-      };
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  ownerType?: string | undefined;
-  ownerId?: string | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
+export type PostSchedulesScheduleIdResume_Response =
+  | {
+      id: string;
+      agentId: string;
+      workflowId?: undefined | undefined;
+      lastRun?: undefined | undefined;
+      name?: string | undefined;
+      threadId?: string | undefined;
+      resourceId?: string | undefined;
+      prompt: string;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      signalType?: ('user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder') | undefined;
+      tagName?: string | undefined;
+      attributes?:
+        | {
+            [key: string]: (string | number | boolean | null) | undefined;
+          }
+        | undefined;
+      ifActive?:
+        | {
+            behavior?: ('deliver' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      ifIdle?:
+        | {
+            behavior?: ('wake' | 'persist' | 'discard') | undefined;
+            attributes?:
+              | {
+                  [key: string]: (string | number | boolean | null) | undefined;
+                }
+              | undefined;
+            streamOptions?:
+              | {
+                  requestContext?:
+                    | {
+                        [key: string]: unknown;
+                      }
+                    | undefined;
+                }
+              | undefined;
+          }
+        | undefined;
+      providerOptions?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    }
+  | {
+      id: string;
+      workflowId: string;
+      agentId?: undefined | undefined;
+      cron: string;
+      timezone?: string | undefined;
+      status: 'active' | 'paused';
+      nextFireAt: number;
+      lastFireAt?: number | undefined;
+      lastRunId?: string | undefined;
+      lastRun?:
+        | {
+            status:
+              | 'running'
+              | 'success'
+              | 'failed'
+              | 'tripwire'
+              | 'suspended'
+              | 'waiting'
+              | 'pending'
+              | 'canceled'
+              | 'bailed'
+              | 'paused'
+              | 'skipped';
+            startedAt?: number | undefined;
+            completedAt?: number | undefined;
+            durationMs?: number | undefined;
+            error?: string | undefined;
+          }
+        | undefined;
+      inputData?: unknown | undefined;
+      initialState?: unknown | undefined;
+      requestContext?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      metadata?:
+        | {
+            [key: string]: unknown;
+          }
+        | undefined;
+      createdAt: number;
+      updatedAt: number;
+    };
 
 export type PostSchedulesScheduleIdResume_Request = Simplify<
   (PostSchedulesScheduleIdResume_PathParams extends never ? {} : { params: PostSchedulesScheduleIdResume_PathParams }) &
@@ -90905,813 +91569,30 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
 }
 
 // ============================================================================
-// Route: GET /heartbeats
+// Route: POST /schedules/:scheduleId/run
 // ============================================================================
-export type GetHeartbeats_QueryParams = {
-  agentId?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  name?: string | undefined;
+export type PostSchedulesScheduleIdRun_PathParams = {
+  scheduleId: string;
 };
 
-export type GetHeartbeats_Response = {
-  heartbeats: {
-    id: string;
-    agentId: string;
-    name?: string | undefined;
-    threadId?: string | undefined;
-    resourceId?: string | undefined;
-    prompt: string;
-    cron: string;
-    timezone?: string | undefined;
-    status: 'active' | 'paused';
-    nextFireAt: number;
-    lastFireAt?: number | undefined;
-    lastRunId?: string | undefined;
-    lastRun?:
-      | {
-          status:
-            | 'running'
-            | 'success'
-            | 'failed'
-            | 'tripwire'
-            | 'suspended'
-            | 'waiting'
-            | 'pending'
-            | 'canceled'
-            | 'bailed'
-            | 'paused'
-            | 'skipped';
-          startedAt?: number | undefined;
-          completedAt?: number | undefined;
-          durationMs?: number | undefined;
-          error?: string | undefined;
-        }
-      | undefined;
-    signalType?: string | undefined;
-    tagName?: string | undefined;
-    attributes?:
-      | {
-          [key: string]: (string | number | boolean | null) | undefined;
-        }
-      | undefined;
-    ifActive?:
-      | {
-          behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-          attributes?:
-            | {
-                [key: string]: (string | number | boolean | null) | undefined;
-              }
-            | undefined;
-        }
-      | undefined;
-    ifIdle?:
-      | {
-          behavior?: ('wake' | 'persist' | 'discard') | undefined;
-          attributes?:
-            | {
-                [key: string]: (string | number | boolean | null) | undefined;
-              }
-            | undefined;
-          streamOptions?:
-            | {
-                requestContext?:
-                  | {
-                      [key: string]: unknown;
-                    }
-                  | undefined;
-              }
-            | undefined;
-        }
-      | undefined;
-    providerOptions?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-    metadata?:
-      | {
-          [key: string]: unknown;
-        }
-      | undefined;
-    createdAt: number;
-    updatedAt: number;
-  }[];
-};
-
-export type GetHeartbeats_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (GetHeartbeats_QueryParams extends never
-      ? {}
-      : {} extends GetHeartbeats_QueryParams
-        ? { query?: GetHeartbeats_QueryParams }
-        : { query: GetHeartbeats_QueryParams }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetHeartbeats_RouteContract {
-  pathParams: never;
-  queryParams: GetHeartbeats_QueryParams;
-  body: never;
-  request: GetHeartbeats_Request;
-  response: GetHeartbeats_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: GET /heartbeats/:heartbeatId
-// ============================================================================
-export type GetHeartbeatsHeartbeatId_PathParams = {
-  heartbeatId: string;
-};
-
-export type GetHeartbeatsHeartbeatId_Response = {
-  id: string;
-  agentId: string;
-  name?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  prompt: string;
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type GetHeartbeatsHeartbeatId_Request = Simplify<
-  (GetHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: GetHeartbeatsHeartbeatId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface GetHeartbeatsHeartbeatId_RouteContract {
-  pathParams: GetHeartbeatsHeartbeatId_PathParams;
-  queryParams: never;
-  body: never;
-  request: GetHeartbeatsHeartbeatId_Request;
-  response: GetHeartbeatsHeartbeatId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /heartbeats
-// ============================================================================
-export type PostHeartbeats_Body = {
-  id?: string | undefined;
-  agentId: string;
-  cron: string;
-  timezone?: string | undefined;
-  prompt: string;
-  name?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-};
-
-export type PostHeartbeats_Response = {
-  id: string;
-  agentId: string;
-  name?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  prompt: string;
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type PostHeartbeats_Request = Simplify<
-  (never extends never ? {} : { params: never }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PostHeartbeats_Body extends never
-      ? {}
-      : {} extends PostHeartbeats_Body
-        ? { body?: PostHeartbeats_Body }
-        : { body: PostHeartbeats_Body })
->;
-
-export interface PostHeartbeats_RouteContract {
-  pathParams: never;
-  queryParams: never;
-  body: PostHeartbeats_Body;
-  request: PostHeartbeats_Request;
-  response: PostHeartbeats_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: PATCH /heartbeats/:heartbeatId
-// ============================================================================
-export type PatchHeartbeatsHeartbeatId_PathParams = {
-  heartbeatId: string;
-};
-
-export type PatchHeartbeatsHeartbeatId_Body = {
-  cron?: string | undefined;
-  timezone?: string | undefined;
-  prompt?: string | undefined;
-  name?: string | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-};
-
-export type PatchHeartbeatsHeartbeatId_Response = {
-  id: string;
-  agentId: string;
-  name?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  prompt: string;
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type PatchHeartbeatsHeartbeatId_Request = Simplify<
-  (PatchHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: PatchHeartbeatsHeartbeatId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (PatchHeartbeatsHeartbeatId_Body extends never
-      ? {}
-      : {} extends PatchHeartbeatsHeartbeatId_Body
-        ? { body?: PatchHeartbeatsHeartbeatId_Body }
-        : { body: PatchHeartbeatsHeartbeatId_Body })
->;
-
-export interface PatchHeartbeatsHeartbeatId_RouteContract {
-  pathParams: PatchHeartbeatsHeartbeatId_PathParams;
-  queryParams: never;
-  body: PatchHeartbeatsHeartbeatId_Body;
-  request: PatchHeartbeatsHeartbeatId_Request;
-  response: PatchHeartbeatsHeartbeatId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: DELETE /heartbeats/:heartbeatId
-// ============================================================================
-export type DeleteHeartbeatsHeartbeatId_PathParams = {
-  heartbeatId: string;
-};
-
-export type DeleteHeartbeatsHeartbeatId_Response = {
-  message: string;
-};
-
-export type DeleteHeartbeatsHeartbeatId_Request = Simplify<
-  (DeleteHeartbeatsHeartbeatId_PathParams extends never ? {} : { params: DeleteHeartbeatsHeartbeatId_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface DeleteHeartbeatsHeartbeatId_RouteContract {
-  pathParams: DeleteHeartbeatsHeartbeatId_PathParams;
-  queryParams: never;
-  body: never;
-  request: DeleteHeartbeatsHeartbeatId_Request;
-  response: DeleteHeartbeatsHeartbeatId_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /heartbeats/:heartbeatId/pause
-// ============================================================================
-export type PostHeartbeatsHeartbeatIdPause_PathParams = {
-  heartbeatId: string;
-};
-
-export type PostHeartbeatsHeartbeatIdPause_Response = {
-  id: string;
-  agentId: string;
-  name?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  prompt: string;
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type PostHeartbeatsHeartbeatIdPause_Request = Simplify<
-  (PostHeartbeatsHeartbeatIdPause_PathParams extends never
-    ? {}
-    : { params: PostHeartbeatsHeartbeatIdPause_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostHeartbeatsHeartbeatIdPause_RouteContract {
-  pathParams: PostHeartbeatsHeartbeatIdPause_PathParams;
-  queryParams: never;
-  body: never;
-  request: PostHeartbeatsHeartbeatIdPause_Request;
-  response: PostHeartbeatsHeartbeatIdPause_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /heartbeats/:heartbeatId/resume
-// ============================================================================
-export type PostHeartbeatsHeartbeatIdResume_PathParams = {
-  heartbeatId: string;
-};
-
-export type PostHeartbeatsHeartbeatIdResume_Response = {
-  id: string;
-  agentId: string;
-  name?: string | undefined;
-  threadId?: string | undefined;
-  resourceId?: string | undefined;
-  prompt: string;
-  cron: string;
-  timezone?: string | undefined;
-  status: 'active' | 'paused';
-  nextFireAt: number;
-  lastFireAt?: number | undefined;
-  lastRunId?: string | undefined;
-  lastRun?:
-    | {
-        status:
-          | 'running'
-          | 'success'
-          | 'failed'
-          | 'tripwire'
-          | 'suspended'
-          | 'waiting'
-          | 'pending'
-          | 'canceled'
-          | 'bailed'
-          | 'paused'
-          | 'skipped';
-        startedAt?: number | undefined;
-        completedAt?: number | undefined;
-        durationMs?: number | undefined;
-        error?: string | undefined;
-      }
-    | undefined;
-  signalType?: string | undefined;
-  tagName?: string | undefined;
-  attributes?:
-    | {
-        [key: string]: (string | number | boolean | null) | undefined;
-      }
-    | undefined;
-  ifActive?:
-    | {
-        behavior?: ('deliver' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  ifIdle?:
-    | {
-        behavior?: ('wake' | 'persist' | 'discard') | undefined;
-        attributes?:
-          | {
-              [key: string]: (string | number | boolean | null) | undefined;
-            }
-          | undefined;
-        streamOptions?:
-          | {
-              requestContext?:
-                | {
-                    [key: string]: unknown;
-                  }
-                | undefined;
-            }
-          | undefined;
-      }
-    | undefined;
-  providerOptions?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  metadata?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type PostHeartbeatsHeartbeatIdResume_Request = Simplify<
-  (PostHeartbeatsHeartbeatIdResume_PathParams extends never
-    ? {}
-    : { params: PostHeartbeatsHeartbeatIdResume_PathParams }) &
-    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
-    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
->;
-
-export interface PostHeartbeatsHeartbeatIdResume_RouteContract {
-  pathParams: PostHeartbeatsHeartbeatIdResume_PathParams;
-  queryParams: never;
-  body: never;
-  request: PostHeartbeatsHeartbeatIdResume_Request;
-  response: PostHeartbeatsHeartbeatIdResume_Response;
-  responseType: 'json';
-}
-
-// ============================================================================
-// Route: POST /heartbeats/:heartbeatId/run
-// ============================================================================
-export type PostHeartbeatsHeartbeatIdRun_PathParams = {
-  heartbeatId: string;
-};
-
-export type PostHeartbeatsHeartbeatIdRun_Response = {
+export type PostSchedulesScheduleIdRun_Response = {
   scheduleId: string;
   claimId: string;
   scheduledFireAt: number;
 };
 
-export type PostHeartbeatsHeartbeatIdRun_Request = Simplify<
-  (PostHeartbeatsHeartbeatIdRun_PathParams extends never ? {} : { params: PostHeartbeatsHeartbeatIdRun_PathParams }) &
+export type PostSchedulesScheduleIdRun_Request = Simplify<
+  (PostSchedulesScheduleIdRun_PathParams extends never ? {} : { params: PostSchedulesScheduleIdRun_PathParams }) &
     (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
-export interface PostHeartbeatsHeartbeatIdRun_RouteContract {
-  pathParams: PostHeartbeatsHeartbeatIdRun_PathParams;
+export interface PostSchedulesScheduleIdRun_RouteContract {
+  pathParams: PostSchedulesScheduleIdRun_PathParams;
   queryParams: never;
   body: never;
-  request: PostHeartbeatsHeartbeatIdRun_Request;
-  response: PostHeartbeatsHeartbeatIdRun_Response;
+  request: PostSchedulesScheduleIdRun_Request;
+  response: PostSchedulesScheduleIdRun_Response;
   responseType: 'json';
 }
 
@@ -93532,17 +93413,13 @@ export interface RouteTypes {
   'POST /agent-builder/:actionId/runs/:runId/cancel': PostAgentBuilderActionIdRunsRunIdCancel_RouteContract;
   'GET /schedules': GetSchedules_RouteContract;
   'GET /schedules/:scheduleId': GetSchedulesScheduleId_RouteContract;
+  'POST /schedules': PostSchedules_RouteContract;
+  'PATCH /schedules/:scheduleId': PatchSchedulesScheduleId_RouteContract;
+  'DELETE /schedules/:scheduleId': DeleteSchedulesScheduleId_RouteContract;
   'GET /schedules/:scheduleId/triggers': GetSchedulesScheduleIdTriggers_RouteContract;
   'POST /schedules/:scheduleId/pause': PostSchedulesScheduleIdPause_RouteContract;
   'POST /schedules/:scheduleId/resume': PostSchedulesScheduleIdResume_RouteContract;
-  'GET /heartbeats': GetHeartbeats_RouteContract;
-  'GET /heartbeats/:heartbeatId': GetHeartbeatsHeartbeatId_RouteContract;
-  'POST /heartbeats': PostHeartbeats_RouteContract;
-  'PATCH /heartbeats/:heartbeatId': PatchHeartbeatsHeartbeatId_RouteContract;
-  'DELETE /heartbeats/:heartbeatId': DeleteHeartbeatsHeartbeatId_RouteContract;
-  'POST /heartbeats/:heartbeatId/pause': PostHeartbeatsHeartbeatIdPause_RouteContract;
-  'POST /heartbeats/:heartbeatId/resume': PostHeartbeatsHeartbeatIdResume_RouteContract;
-  'POST /heartbeats/:heartbeatId/run': PostHeartbeatsHeartbeatIdRun_RouteContract;
+  'POST /schedules/:scheduleId/run': PostSchedulesScheduleIdRun_RouteContract;
   'GET /channels/platforms': GetChannelsPlatforms_RouteContract;
   'GET /channels/:platform/installations': GetChannelsPlatformInstallations_RouteContract;
   'POST /channels/:platform/connect': PostChannelsPlatformConnect_RouteContract;
@@ -94016,24 +93893,6 @@ export interface Client {
   '/experiments/review-summary': {
     GET: GetExperimentsReviewSummary_RouteContract;
   };
-  '/heartbeats': {
-    GET: GetHeartbeats_RouteContract;
-    POST: PostHeartbeats_RouteContract;
-  };
-  '/heartbeats/:heartbeatId': {
-    DELETE: DeleteHeartbeatsHeartbeatId_RouteContract;
-    GET: GetHeartbeatsHeartbeatId_RouteContract;
-    PATCH: PatchHeartbeatsHeartbeatId_RouteContract;
-  };
-  '/heartbeats/:heartbeatId/pause': {
-    POST: PostHeartbeatsHeartbeatIdPause_RouteContract;
-  };
-  '/heartbeats/:heartbeatId/resume': {
-    POST: PostHeartbeatsHeartbeatIdResume_RouteContract;
-  };
-  '/heartbeats/:heartbeatId/run': {
-    POST: PostHeartbeatsHeartbeatIdRun_RouteContract;
-  };
   '/logs': {
     GET: GetLogs_RouteContract;
   };
@@ -94258,15 +94117,21 @@ export interface Client {
   };
   '/schedules': {
     GET: GetSchedules_RouteContract;
+    POST: PostSchedules_RouteContract;
   };
   '/schedules/:scheduleId': {
+    DELETE: DeleteSchedulesScheduleId_RouteContract;
     GET: GetSchedulesScheduleId_RouteContract;
+    PATCH: PatchSchedulesScheduleId_RouteContract;
   };
   '/schedules/:scheduleId/pause': {
     POST: PostSchedulesScheduleIdPause_RouteContract;
   };
   '/schedules/:scheduleId/resume': {
     POST: PostSchedulesScheduleIdResume_RouteContract;
+  };
+  '/schedules/:scheduleId/run': {
+    POST: PostSchedulesScheduleIdRun_RouteContract;
   };
   '/schedules/:scheduleId/triggers': {
     GET: GetSchedulesScheduleIdTriggers_RouteContract;
