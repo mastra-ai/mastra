@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
+import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useCopyToClipboard } from '@mastra/playground-ui/hooks/use-copy-to-clipboard';
@@ -284,46 +285,44 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
                 <div className="flex justify-start gap-2">
                   {!isResolved && (
                     <>
-                      <div className="relative">
-                        <Button
-                          type="button"
-                          variant="primary"
-                          size="icon-sm"
-                          tooltip={trimmedComment ? 'Edit comment' : 'Add comment'}
-                          aria-label={trimmedComment ? 'Edit comment' : 'Add comment'}
-                          aria-pressed={isCommentOpen}
-                          onClick={() => setIsCommentOpen(current => !current)}
-                          disabled={isRunning}
-                        >
-                          <MessageSquareText />
-                        </Button>
-
-                        {isCommentOpen && (
-                          <div className="absolute bottom-full right-0 z-20 mb-2 w-72 rounded-xl border border-border1 bg-surface2 p-3 shadow-dialog">
-                            <Textarea
-                              placeholder="Add an optional comment..."
-                              value={comment}
-                              onChange={event => setComment(event.target.value)}
-                              disabled={isRunning}
-                              rows={3}
-                              variant="outline"
+                      <Popover open={isCommentOpen} onOpenChange={setIsCommentOpen}>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="primary"
+                            size="icon-sm"
+                            tooltip={trimmedComment ? 'Edit comment' : 'Add comment'}
+                            aria-label={trimmedComment ? 'Edit comment' : 'Add comment'}
+                            aria-pressed={isCommentOpen}
+                            disabled={isRunning}
+                          >
+                            <MessageSquareText />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent side="top" align="end" sideOffset={8} className="w-72 p-3">
+                          <Textarea
+                            placeholder="Add an optional comment..."
+                            value={comment}
+                            onChange={event => setComment(event.target.value)}
+                            disabled={isRunning}
+                            rows={3}
+                            variant="outline"
+                            size="sm"
+                            className="min-h-20 resize-y rounded-lg bg-surface1"
+                          />
+                          <div className="mt-2 flex justify-end">
+                            <Button
+                              type="button"
+                              variant="primary"
                               size="sm"
-                              className="min-h-20 resize-y rounded-lg bg-surface1"
-                            />
-                            <div className="mt-2 flex justify-end">
-                              <Button
-                                type="button"
-                                variant="primary"
-                                size="sm"
-                                onClick={() => setIsCommentOpen(false)}
-                                disabled={isRunning}
-                              >
-                                Done
-                              </Button>
-                            </div>
+                              onClick={() => setIsCommentOpen(false)}
+                              disabled={isRunning}
+                            >
+                              Done
+                            </Button>
                           </div>
-                        )}
-                      </div>
+                        </PopoverContent>
+                      </Popover>
 
                       <Button
                         type="button"

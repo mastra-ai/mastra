@@ -131,7 +131,7 @@ describe('SubmitPlanBadge', () => {
 
       fireEvent.click(within(badge()).getByRole('button', { name: /add comment/i }));
 
-      fireEvent.change(within(badge()).getByPlaceholderText('Add an optional comment...'), {
+      fireEvent.change(screen.getByPlaceholderText('Add an optional comment...'), {
         target: { value: '  Keep the rollout narrow.  ' },
       });
 
@@ -152,7 +152,7 @@ describe('SubmitPlanBadge', () => {
 
       fireEvent.click(within(badge()).getByRole('button', { name: /add comment/i }));
 
-      fireEvent.change(within(badge()).getByPlaceholderText('Add an optional comment...'), {
+      fireEvent.change(screen.getByPlaceholderText('Add an optional comment...'), {
         target: { value: '  Add rollback steps.  ' },
       });
 
