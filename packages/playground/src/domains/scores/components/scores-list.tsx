@@ -5,7 +5,7 @@ import { ScoresDataList, DataListSkeleton } from '@mastra/playground-ui/componen
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Columns3Icon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ScoreDataPanel } from '@/domains/traces/components/score-data-panel';
 
 type ToggleableColumn = 'input' | 'entity';
@@ -71,29 +71,6 @@ export function ScoresList({
       else next.add(col);
       return next;
     });
-  }, []);
-
-  const scrollViewportRef = useRef<HTMLDivElement>(null);
-  const topScrollRef = useRef<HTMLDivElement>(null);
-  const [contentScrollWidth, setContentScrollWidth] = useState(0);
-
-  useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      if (scrollViewportRef.current) {
-        setContentScrollWidth(scrollViewportRef.current.scrollWidth);
-      }
-    });
-    return () => cancelAnimationFrame(id);
-  }, [scores, visibleColumns]);
-
-  useEffect(() => {
-    const viewport = scrollViewportRef.current;
-    if (!viewport) return;
-    const onScroll = () => {
-      if (topScrollRef.current) topScrollRef.current.scrollLeft = viewport.scrollLeft;
-    };
-    viewport.addEventListener('scroll', onScroll, { passive: true });
-    return () => viewport.removeEventListener('scroll', onScroll);
   }, []);
 
   // Sync internal selection when parent updates the controlled prop
@@ -201,20 +178,7 @@ export function ScoresList({
           </DropdownMenu>
         </div>
 
-        <div
-          ref={topScrollRef}
-          className="overflow-x-auto overflow-y-hidden shrink-0"
-          style={{ height: 8 }}
-          onScroll={() => {
-            if (scrollViewportRef.current && topScrollRef.current) {
-              scrollViewportRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-            }
-          }}
-        >
-          <div style={{ width: contentScrollWidth, height: 1 }} />
-        </div>
-
-        <ScoresDataList columns={columns} scrollRef={scrollViewportRef} className="flex-1 min-h-0">
+        <ScoresDataList columns={columns} className="flex-1 min-h-0">
           {header}
 
           {scores.map(score => (

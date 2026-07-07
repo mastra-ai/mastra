@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Columns3Icon, Pencil, Trash2 } from 'lucide-react';
-import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useCallback, useMemo, useState } from 'react';
 import { DataList } from './data-list';
 import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
@@ -592,7 +592,7 @@ function buildScoresColumns(visible: Set<ToggleableColumn>): string {
   return parts.join(' ');
 }
 
-/** Scorer data table: Score is always visible, Input/Entity are toggleable, top and bottom scrollbars stay in sync. */
+/** Scorer data table: Score is always visible, Input/Entity are toggleable. */
 export const ScoresTable: Story = {
   parameters: { layout: 'padded', controls: { exclude: ['variant', 'stickyHeaderBackground'] } },
   render: function ScoresTableStory() {
@@ -612,27 +612,6 @@ export const ScoresTable: Story = {
         else next.add(col);
         return next;
       });
-    }, []);
-
-    const scrollViewportRef = useRef<HTMLDivElement>(null);
-    const topScrollRef = useRef<HTMLDivElement>(null);
-    const [contentScrollWidth, setContentScrollWidth] = useState(0);
-
-    useEffect(() => {
-      const id = requestAnimationFrame(() => {
-        if (scrollViewportRef.current) setContentScrollWidth(scrollViewportRef.current.scrollWidth);
-      });
-      return () => cancelAnimationFrame(id);
-    }, [visibleColumns]);
-
-    useEffect(() => {
-      const viewport = scrollViewportRef.current;
-      if (!viewport) return;
-      const onScroll = () => {
-        if (topScrollRef.current) topScrollRef.current.scrollLeft = viewport.scrollLeft;
-      };
-      viewport.addEventListener('scroll', onScroll, { passive: true });
-      return () => viewport.removeEventListener('scroll', onScroll);
     }, []);
 
     return (
@@ -660,20 +639,7 @@ export const ScoresTable: Story = {
           </DropdownMenu>
         </div>
 
-        <div
-          ref={topScrollRef}
-          className="overflow-x-auto overflow-y-hidden shrink-0"
-          style={{ height: 8 }}
-          onScroll={() => {
-            if (scrollViewportRef.current && topScrollRef.current) {
-              scrollViewportRef.current.scrollLeft = topScrollRef.current.scrollLeft;
-            }
-          }}
-        >
-          <div style={{ width: contentScrollWidth, height: 1 }} />
-        </div>
-
-        <ScoresDataList columns={columns} scrollRef={scrollViewportRef} className="flex-1 min-h-0">
+        <ScoresDataList columns={columns} className="flex-1 min-h-0">
           <ScoresDataList.Top>
             <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
             <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>
