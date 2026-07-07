@@ -9,20 +9,11 @@ packages:
 
 A file-based agent can declare **subagents**, specialist child agents it delegates to. The parent model sees each subagent as a delegation tool named after the subagent directory, calls that tool to hand off a task, and receives the subagent's result back in the parent conversation.
 
-Each subagent is assembled as its own agent. It has its own [`config.ts`](/docs/filesystem/config), [`instructions.md`](/docs/filesystem/instructions), [`tools/`](/docs/filesystem/tools), [`skills/`](/docs/filesystem/skills), `memory.ts`, `workspace.ts`, `workspace/`, and `processors/`.
+Use this page for the filesystem convention. For broader delegation patterns, hooks, memory isolation, tool approval propagation, and scoring, see [Supervisor agents](/docs/agents/supervisor-agents).
 
 ## When to use subagents
 
-Use subagents when one agent would become too broad, too tool-heavy, or too context-heavy.
-
-| Need | Why subagents help |
-| - | - |
-| Split complex work into specialists | A supervisor can delegate research, writing, review, or execution to focused child agents. |
-| Give specialists different tools | Each subagent gets only the tools declared in its own directory. |
-| Give specialists different workspaces | Each subagent can define its own `workspace.ts` or use its own default workspace. |
-| Isolate context | Each subagent is a separate agent with its own conversation window. |
-
-Putting every tool, skill, and instruction on one agent can make routing less focused. Subagents keep the parent focused on coordination while each child handles a specific job.
+Use subagents when one agent would become too broad, too tool-heavy, or too context-heavy. Subagents keep the parent focused on coordination while each child handles a specific job.
 
 ## Quickstart
 
@@ -56,7 +47,7 @@ export default agentConfig({
 
 ## How the model delegates
 
-A subagent's `description` is routing text for the parent model. Write it like a [tool description](/docs/filesystem/tools#writing-good-tool-descriptions): explain what the subagent does and when to delegate to it.
+A subagent's `description` is routing text for the parent model. Write it like a [tool description](/docs/filesystem/tools#tool-options): explain what the subagent does and when to delegate to it.
 
 The build fails when a discovered subagent doesn't provide a non-empty description.
 
@@ -64,7 +55,7 @@ The build fails when a discovered subagent doesn't provide a non-empty descripti
 
 Subagents are isolated. A subagent doesn't inherit its parent's tools, skills, workspace, memory, processors, or subagents. Each child is a self-contained agent with its own directory.
 
-This is intentional: it keeps specialists focused. Add only the files a subagent needs. If multiple agents should share the same dependency, define it in code and assign it through each agent's config.
+If multiple agents should share the same dependency, define it in code and assign it through each agent's config.
 
 ## Nesting
 

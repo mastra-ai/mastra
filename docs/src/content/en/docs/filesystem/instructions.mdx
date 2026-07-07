@@ -21,25 +21,14 @@ You are a helpful weather assistant. Answer questions about current conditions a
 
 ## What goes in instructions
 
-Effective instructions cover the parts of an agent's behavior that never change:
+Effective instructions cover the parts of an agent's behavior that don't change between requests:
 
-- **Role and identity:** Who the agent is and what it does.
-- **Tone and style:** How it should sound, and any language or formatting conventions.
-- **Standing rules:** Behavior that applies every turn, such as always citing sources or asking for clarification when a request is ambiguous.
-- **Output format:** Preferred structure for responses, such as short answers, tables, or fenced code.
+- Role and identity
+- Tone and style
+- Standing rules
+- Output format
 
-A realistic prompt reads like a short brief rather than a one-liner:
-
-```markdown title="src/mastra/agents/support/instructions.md"
-You are a support agent for an online bookstore. You help customers with orders,
-returns, and account questions.
-
-Be concise and friendly. Confirm the customer's order number before discussing
-order-specific details, and ask for clarification when a request is ambiguous.
-
-Never invent policy. When you're unsure, say so and offer to escalate to a human
-agent. Format multi-step instructions as a numbered list.
-```
+Move conditional, large, or action-oriented guidance into [`tools/`](/docs/filesystem/tools) or [`skills/`](/docs/filesystem/skills), which the model uses only when relevant.
 
 ## Dynamic instructions
 

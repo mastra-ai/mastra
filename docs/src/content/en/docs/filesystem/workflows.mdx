@@ -9,17 +9,11 @@ packages:
 
 Mastra discovers project-level workflows from `.ts` and `.js` files under `src/mastra/workflows/`. This convention isn't scoped to one agent: every file with a default export becomes a registered workflow, and the filename becomes the workflow key.
 
+Use this page for the filesystem convention. For steps, schemas, control flow, streaming, state, and workflow execution, see [Workflows overview](/docs/workflows/overview).
+
 ## When to use file-based workflows
 
-Use file-based workflows when you want each workflow to live in its own module and be registered automatically.
-
-| Need | Use file-based workflows when |
-| - | - |
-| Separate workflow files | Each workflow should be straightforward to find, test, and review on its own. |
-| Automatic registration | You don't want to import every workflow into `src/mastra/index.ts` manually. |
-| Mixed registration | You already register some workflows in code and want file-based workflows to coexist with them. |
-
-Use the workflow itself for orchestration logic: steps, schemas, branching, suspension, and resume behavior stay in the workflow module. The filesystem convention only controls discovery and registration.
+Use file-based workflows when you want each workflow to live in its own module and be registered automatically. Keep manually registered workflows in code when they need custom wiring in `src/mastra/index.ts`.
 
 ## Quickstart
 
@@ -65,8 +59,6 @@ Mastra registers this workflow under the `daily-report` key.
 ## Precedence with code
 
 File-based workflows merge with workflows registered in [`new Mastra()`](/reference/core/mastra-class). On a key collision, the code-registered workflow wins.
-
-This lets you move convention-friendly workflows into `src/mastra/workflows/` while keeping custom-wired workflows in code.
 
 ## Related
 

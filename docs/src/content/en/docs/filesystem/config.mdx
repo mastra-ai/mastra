@@ -65,36 +65,12 @@ export default agentConfig({
 
 ## Set runtime options
 
-`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the filesystem convention.
+`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the filesystem convention. Use the Agent reference for the full option list.
 
-| Option | Use it for |
-| - | - |
-| `description` | Describes the agent's purpose. File-based subagents require a non-empty description because the parent model uses it for delegation routing. |
-| `defaultOptions` | Sets defaults for `generate()` and `stream()`, including execution options such as `maxSteps`. |
-| `defaultGenerateOptionsLegacy` | Sets defaults for `generateLegacy()`. |
-| `defaultStreamOptionsLegacy` | Sets defaults for `streamLegacy()`. |
-| `scorers` | Configures runtime scoring for evaluation and observability. |
-| `maxRetries` | Sets how many times model calls retry after failure. |
+Filesystem-specific notes:
 
-The following example sets a description, a default step limit, retry behavior, and scorers in `config.ts`:
-
-```typescript title="src/mastra/agents/weather/config.ts"
-import { agentConfig } from '@mastra/core/agent'
-
-export default agentConfig({
-  model: '__GATEWAY_OPENAI_MODEL__',
-  description: 'Answers questions about weather and forecasts.',
-  defaultOptions: {
-    maxSteps: 5,
-  },
-  maxRetries: 2,
-  scorers: {},
-})
-```
-
-:::note
-Visit the [`Agent` reference](/reference/agents/agent#constructor-parameters) for the full constructor option list.
-:::
+- File-based subagents require a non-empty `description` because the parent model uses it for delegation routing.
+- `defaultOptions`, `maxRetries`, `scorers`, and other Agent options can live in `config.ts` when they don't need their own file.
 
 ## Where adjacent settings live
 
@@ -112,20 +88,7 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 
 ## When to use a coded agent instead
 
-Use `agentConfig()` when you want Mastra to merge sibling files into the agent. With this approach, `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, `processors/`, and `subagents/` can all contribute to the final agent.
-
-Use a fully coded [`new Agent()`](/reference/agents/agent) when you need complete programmatic control and don't want sibling files merged. When `config.ts` exports an `Agent` instance, Mastra uses that instance as-is and ignores sibling files with warnings.
-
-```typescript title="src/mastra/agents/weather/config.ts"
-import { Agent } from '@mastra/core/agent'
-
-export default new Agent({
-  id: 'weather',
-  name: 'weather',
-  instructions: 'You are a helpful weather assistant.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-})
-```
+Use `agentConfig()` when you want Mastra to merge sibling files into the agent. Use a fully coded [`new Agent()`](/reference/agents/agent) when you need complete programmatic control and don't want sibling files merged. When `config.ts` exports an `Agent` instance, Mastra uses that instance as-is and ignores sibling files with warnings.
 
 ## Precedence
 

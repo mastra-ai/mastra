@@ -7,27 +7,17 @@ packages:
 
 # Processors
 
-A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Processors transform, validate, or block messages as they move through the agent pipeline.
+A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Use this page for the filesystem convention; use the processors guide for built-in processors, custom processors, streaming behavior, and advanced patterns.
 
 Files under `processors/input/` run before messages reach the model. Files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its discovery key.
 
 ## When to use processors
 
-Use processors when message handling should happen outside the main prompt or tool logic.
-
-| Use case | Processor type |
-| - | - |
-| Block harmful or disallowed input | Input processor |
-| Detect and redact PII before the model sees it | Input processor |
-| Detect prompt injection or jailbreak attempts | Input processor |
-| Redact sensitive data from generated responses | Output processor |
-| Filter, validate, or transform final responses | Output processor |
-
-Mastra includes built-in processors for moderation, PII detection, prompt-injection detection, token limiting, language detection, structured output, and more. See the [processors concept guide](/docs/agents/processors) for the full overview.
+Use processors when message handling should happen outside the main prompt or tool logic. See [Processors](/docs/agents/processors) for use cases such as moderation, PII detection, prompt-injection detection, token limiting, response validation, and caching.
 
 ## Quickstart
 
-Add the simplest input processor by placing a processor file under `processors/input/`:
+Add an input processor by placing a processor file under `processors/input/`:
 
 ```typescript title="src/mastra/agents/weather/processors/input/pii.ts"
 import { PIIDetector } from '@mastra/core/processors'
@@ -38,21 +28,6 @@ export default new PIIDetector({
 ```
 
 This processor runs before user messages reach the model.
-
-## Add an input processor
-
-Input processors are good for guardrails that should run before the model sees a message. This example blocks unsafe weather requests before the model call.
-
-```typescript title="src/mastra/agents/weather/processors/input/moderation.ts"
-import { ModerationProcessor } from '@mastra/core/processors'
-
-export default new ModerationProcessor({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  categories: ['hate', 'harassment', 'violence'],
-  threshold: 0.7,
-  strategy: 'block',
-})
-```
 
 ## Add an output processor
 

@@ -9,7 +9,7 @@ packages:
 
 A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time, the file must default-export a [`createTool()`](/reference/tools/create-tool) result, and the filename without its extension becomes the tool key the model can call.
 
-Use tools for actions the model can choose during a turn: calling APIs, reading application data, calculating values, or performing side effects.
+Use this page for the filesystem convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).
 
 ## When to use tools
 
@@ -50,128 +50,20 @@ Use one file per tool. Name the file after the action the model should take:
 
 Because nested directories aren't discovered as tools, group related tools with clear filename prefixes instead of subfolders, such as `calendar_create_event.ts` and `calendar_list_events.ts`.
 
-## Writing good tool descriptions
+## Tool options
 
-The `description` field is routing text for the model. The model reads it to decide whether to call the tool, so describe when to use the tool and what result it returns.
+The filesystem convention only controls where the tool lives and how it's registered. The tool API still comes from `createTool()`:
 
-Vague:
+- Use `description` to tell the model when to call the tool.
+- Use `inputSchema` and `outputSchema` for structured inputs and outputs.
+- Use `toModelOutput` when the model should see a different shape than the raw value returned from `execute`.
+- Use `requireApproval` when a tool needs human confirmation before execution.
 
-```typescript
-createTool({
-  id: 'weather',
-  description: 'Weather tool',
-})
-```
-
-Specific:
-
-```typescript
-createTool({
-  id: 'get_weather',
-  description: 'Get the current temperature and conditions for a city.',
-})
-```
-
-Prefer descriptions that answer these questions:
-
-- What action does the tool perform?
-- When should the model call it?
-- What data does it need?
-- What does it return?
+See the [`createTool()` reference](/reference/tools/create-tool) for all options and [tool approval](/docs/agent-controller/tool-approvals) for the approval flow.
 
 ## Runtime boundary
 
 Tool code runs in your app/server runtime when the agent calls the tool. If a tool needs filesystem or shell isolation, call [workspace](/docs/filesystem/workspace) or sandbox APIs explicitly.
-
-## Call an external API
-
-The following tool calls an external weather API and returns a typed result. It throws when the API request fails so the agent receives a tool error instead of misleading data.
-
-```typescript title="src/mastra/agents/weather/tools/get_weather.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export default createTool({
-  id: 'get_weather',
-  description: 'Get the current temperature and conditions for a city.',
-  inputSchema: z.object({
-    city: z.string().describe('City name, such as Austin or Tokyo'),
-  }),
-  outputSchema: z.object({
-    city: z.string(),
-    tempC: z.number(),
-    condition: z.string(),
-  }),
-  execute: async ({ context }) => {
-    const url = new URL('https://api.example.com/weather')
-    url.searchParams.set('city', context.city)
-
-    const response = await fetch(url)
-
-    if (!response.ok) {
-      throw new Error(`Weather API request failed: ${response.status}`)
-    }
-
-    const data = (await response.json()) as {
-      temperature_c: number
-      condition: string
-    }
-
-    return {
-      city: context.city,
-      tempC: data.temperature_c,
-      condition: data.condition,
-    }
-  },
-})
-```
-
-## Shape tool output for the model
-
-Use `toModelOutput` when the model should see a different shape than the raw value returned from `execute`. For example, keep structured data for your application while sending concise text back to the model.
-
-```typescript title="src/mastra/agents/weather/tools/get_weather.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export default createTool({
-  id: 'get_weather',
-  description: 'Get the current temperature and conditions for a city.',
-  inputSchema: z.object({ city: z.string() }),
-  execute: async ({ context }) => ({
-    city: context.city,
-    tempC: 21,
-    condition: 'sunny',
-  }),
-  toModelOutput: output => ({
-    type: 'text',
-    value: `${output.city}: ${output.tempC}°C and ${output.condition}`,
-  }),
-})
-```
-
-See [`toModelOutput`](/reference/tools/create-tool#parameters) in the `createTool()` reference for the supported output shapes.
-
-## Require approval
-
-Set `requireApproval: true` for tools that need human confirmation before execution, such as sending email, deleting data, or making purchases.
-
-```typescript title="src/mastra/agents/support/tools/refund_order.ts"
-import { createTool } from '@mastra/core/tools'
-import { z } from 'zod'
-
-export default createTool({
-  id: 'refund_order',
-  description: 'Refund a customer order after a human approves the action.',
-  inputSchema: z.object({ orderId: z.string() }),
-  requireApproval: true,
-  execute: async ({ context }) => {
-    return { orderId: context.orderId, refunded: true }
-  },
-})
-```
-
-See [tool approval](/docs/agent-controller/tool-approvals) for the approval flow and [`requireApproval`](/reference/tools/create-tool#parameters) for the tool option.
 
 ## Precedence with config
 

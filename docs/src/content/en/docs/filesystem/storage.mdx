@@ -10,20 +10,11 @@ packages:
 
 Mastra sets the project's default [storage](/docs/memory/storage) from a `storage.ts` file directly under `src/mastra/`. The file default-exports a store, which replaces the built-in in-memory store used for memory, workflows, observability, and other storage domains.
 
-Without `storage.ts` or a code-registered store, Mastra falls back to in-memory storage. That default is useful for quick local tests, but data is lost on restart and isn't safe for production.
+Use this page for the filesystem convention. For backend choice, storage domains, retention, and provider details, see [Memory storage](/docs/memory/storage) and the [Storage reference](/reference/storage/overview).
 
 ## When to set storage
 
-Add `storage.ts` when your project needs durable state beyond one process lifetime.
-
-| Need | Why storage matters |
-| - | - |
-| Production persistence | Threads, workflow snapshots, traces, scores, and other records survive restarts. |
-| Multi-instance deployments | Every process reads and writes through the same database. |
-| Long-running workflows | Suspended and resumed runs need durable workflow snapshots. |
-| Local development with history | A file-backed database keeps memory and workflow state between `mastra dev` restarts. |
-
-See [Memory storage](/docs/memory/storage) for setup patterns and [Storage reference](/reference/storage/overview) for domain and schema details.
+Add `storage.ts` when your project needs durable state beyond one process lifetime. Without `storage.ts` or a code-registered store, Mastra falls back to in-memory storage, which is useful for quick local tests but isn't safe for production.
 
 ## Quickstart
 
@@ -42,9 +33,7 @@ Mastra registers the store before file-based agents and workflows, so storage-de
 
 ## Production backends
 
-`storage.ts` can export any Mastra storage adapter, such as LibSQL, PostgreSQL, or MongoDB. Keep this page focused on the filesystem convention, then use [Memory storage](/docs/memory/storage) for setup patterns and the [storage reference](/reference/storage/overview) to inspect adapter schemas and domain support.
-
-For production, use a backend shared by every deployed instance. For local development, a file-backed LibSQL database is usually the smallest durable setup.
+`storage.ts` can export any Mastra storage adapter, such as LibSQL, PostgreSQL, or MongoDB. For setup patterns, provider support, and schema details, see [Memory storage](/docs/memory/storage), [Observability storage](/docs/observability/storage), and the [Storage reference](/reference/storage/overview).
 
 ## Precedence with code
 
@@ -54,5 +43,6 @@ Code-registered storage wins over `storage.ts`. Use `storage.ts` when one projec
 
 - [Filesystem overview](/docs/filesystem/overview)
 - [Memory storage](/docs/memory/storage)
+- [Observability storage](/docs/observability/storage)
 - [Storage reference](/reference/storage/overview)
 - [`Mastra` reference](/reference/core/mastra-class)

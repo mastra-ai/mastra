@@ -10,20 +10,11 @@ packages:
 
 Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up tracing, logging, metrics, and feedback for the project.
 
-Without `observability.ts` or a code-registered observability instance, the project runs without observability collection. Agent runs and workflow executions still work, but Mastra doesn't collect traces, spans, logs, or metrics for inspection.
+Use this page for the filesystem convention. For the signal model, exporters, storage, and multi-config setup, see [Observability overview](/docs/observability/overview) and [Observability configuration](/docs/observability/config).
 
 ## When to configure observability
 
-Add observability when you need to understand how the application behaves at runtime.
-
-| Need | What observability helps with |
-| - | - |
-| Debug agent behavior | Inspect model interactions, tool calls, workflow steps, and the spans around them. |
-| Monitor production | Track latency, token usage, cost, and error patterns over time. |
-| Review quality | Store scores and feedback linked to traces and spans. |
-| Connect external tools | Export traces and logs to Mastra Platform or OpenTelemetry-compatible systems. |
-
-Use the [observability overview](/docs/observability/overview) for the signal model and [observability configuration](/docs/observability/config) for the full API.
+Add observability when you need to inspect runtime behavior, monitor production, collect quality signals, or export traces and logs to another system.
 
 ## Quickstart
 
@@ -44,12 +35,7 @@ export default new Observability({
 
 ## Observability and storage
 
-Observability collection and observability persistence are separate pieces:
-
-- `observability.ts` configures which signals are collected and where they're exported.
-- [`storage.ts`](/docs/filesystem/storage) configures the project store that can persist observability records.
-
-The quickstart uses `MastraStorageExporter`, which writes observability events to the configured Mastra storage. For details on which storage backends support traces, logs, metrics, and feedback queries, see [Observability storage](/docs/observability/storage).
+`observability.ts` configures which signals are collected and where they're exported. [`storage.ts`](/docs/filesystem/storage) configures the project store that can persist observability records. For storage support by signal, see [Observability storage](/docs/observability/storage).
 
 ## Precedence with code
 

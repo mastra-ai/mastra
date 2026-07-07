@@ -10,20 +10,11 @@ packages:
 
 Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object for Studio authentication and authorization: who can access Studio, and what authenticated users can do.
 
-Without `studio.ts` or a code-registered Studio config, Studio runs without authentication. That's useful for local development, but production Studio deployments should add an auth provider.
+Use this page for the filesystem convention. For auth providers, role-based access control (RBAC), and fine-grained authorization (FGA), see [Studio auth](/docs/studio/auth).
 
 ## When to configure Studio
 
-Use `studio.ts` when Studio needs access controls that are separate from your project code.
-
-| Need | Use `studio.ts` for |
-| - | - |
-| Local development | Skip `studio.ts` and run `mastra dev` for an unauthenticated local Studio. |
-| Production access | Add an auth provider so only approved users can open Studio. |
-| Team permissions | Add RBAC or FGA providers to control what users can do in Studio. |
-| Separate UI auth | Use Studio-specific auth instead of coupling Studio access to API auth. |
-
-See [Studio](/docs/studio/overview) for the UI overview and [Studio auth](/docs/studio/auth) for deeper auth guidance.
+For local development, you don't need `studio.ts`; Studio runs without authentication. Add `studio.ts` when a shared or production Studio deployment needs access control.
 
 ## Quickstart
 
@@ -48,21 +39,7 @@ export default {
 } satisfies StudioConfig
 ```
 
-The auth provider handles who the user is. For what the user can do after sign-in, add an RBAC or FGA provider to the same config.
-
-```typescript title="src/mastra/studio.ts"
-import { DEFAULT_ROLES, StaticRBACProvider } from '@mastra/core/auth/ee'
-import type { StudioConfig } from '@mastra/core/server'
-import { MastraAuthWorkos } from '@mastra/auth-workos'
-
-export default {
-  auth: new MastraAuthWorkos(),
-  rbac: new StaticRBACProvider({
-    roles: DEFAULT_ROLES,
-    getUserRoles: user => [user.role],
-  }),
-} satisfies StudioConfig
-```
+The auth provider handles who the user is. For what the user can do after sign-in, add RBAC or FGA in the same config. See [Studio auth](/docs/studio/auth) for full examples.
 
 ## Precedence with code
 

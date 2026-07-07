@@ -9,7 +9,7 @@ packages:
 
 A [workspace](/docs/workspace/overview) gives an agent filesystem access and command execution. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`, so they can read and write files and run shell commands without extra configuration.
 
-Customize the workspace when the agent needs a different filesystem root, sandbox provider, search configuration, or shared workspace setup.
+Use this page for the filesystem convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Workspaces](/docs/workspace/overview).
 
 ## Default workspace
 
@@ -30,8 +30,6 @@ src/mastra/agents/weather/
 └── instructions.md
 ```
 
-Mastra creates the default workspace during filesystem assembly.
-
 Add `workspace.ts` only when you need to customize the workspace:
 
 ```typescript title="src/mastra/agents/weather/workspace.ts"
@@ -48,30 +46,22 @@ Visit the [`Workspace` reference](/reference/workspace/workspace-class) for the 
 
 ## When to customize the workspace
 
-Customize the workspace when the default local directory isn't enough.
+Customize the workspace when the default local directory isn't enough. Common reasons include:
 
-| Need | What to customize |
-| - | - |
-| Point file tools at a different root | Set `filesystem` to a `LocalFilesystem` or another filesystem provider. |
-| Run commands somewhere other than the local default | Set `sandbox` to another sandbox provider, such as [Docker](/reference/workspace/docker-sandbox) or [E2B](/reference/workspace/e2b-sandbox). |
-| Add workspace search | Configure `bm25`, `vectorStore`, and `embedder` on the workspace. |
-| Share one workspace across agents | Define a shared workspace in code and assign it through `config.workspace` or regular agent config. |
+- Point file tools at a different filesystem root.
+- Run shell commands in a different sandbox provider.
+- Add workspace search with BM25 or vector search.
+- Share one workspace across multiple agents.
 
-For more workspace patterns, see the [workspace overview](/docs/workspace/overview).
+For provider patterns and runtime behavior, see the [workspace overview](/docs/workspace/overview), [sandbox guide](/docs/workspace/sandbox), and [workspace search](/docs/workspace/search).
 
-## Security and runtime boundaries
+## Runtime boundary
 
-The workspace filesystem controls what file tools can read and write. The sandbox controls where shell commands run. With the default file-based workspace, both are local providers rooted at the same per-agent workspace directory.
-
-Application runtime code still runs in your app/server process. For example, code in [`tools/`](/docs/filesystem/tools) runs as normal application code unless it explicitly calls workspace tools or sandbox-backed APIs.
-
-Provider-specific isolation, credentials, cleanup, and command behavior depend on the workspace providers you choose. Check the relevant workspace reference page before using a provider in production.
+The workspace filesystem controls what file tools can read and write. The sandbox controls where shell commands run. Application runtime code, including code in [`tools/`](/docs/filesystem/tools), still runs in your app/server process unless it explicitly calls workspace or sandbox APIs.
 
 ## Seed files
 
 Add a `workspace/` directory to ship starting files with the agent. Mastra mirrors files under `workspace/` into the agent's default runtime workspace at build time, so the agent starts with those files on disk.
-
-Use seed files for reference data, templates, configuration files, or any file the agent should read at startup.
 
 ```text title="Seed files"
 src/mastra/agents/weather/
@@ -82,16 +72,7 @@ src/mastra/agents/weather/
         └── cities.json
 ```
 
-For example, `cities.json` can contain the city identifiers your agent should use when calling a weather API:
-
-```json title="src/mastra/agents/weather/workspace/data/cities.json"
-{
-  "austin": { "country": "US", "timezone": "America/Chicago" },
-  "tokyo": { "country": "JP", "timezone": "Asia/Tokyo" }
-}
-```
-
-The file is copied into the bundled workspace path, where workspace file tools and sandbox commands can read it. Symlinked seed files are skipped during mirroring.
+The files are copied into the bundled workspace path, where workspace file tools and sandbox commands can read them. Symlinked seed files are skipped during mirroring.
 
 ## Precedence with config
 
@@ -103,4 +84,5 @@ The file is copied into the bundled workspace path, where workspace file tools a
 - [Filesystem overview](/docs/filesystem/overview)
 - [Tools](/docs/filesystem/tools)
 - [Workspace overview](/docs/workspace/overview)
+- [Workspace search](/docs/workspace/search)
 - [`Workspace` reference](/reference/workspace/workspace-class)

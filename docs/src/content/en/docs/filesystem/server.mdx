@@ -9,20 +9,11 @@ packages:
 
 Mastra configures its HTTP [server](/docs/server/mastra-server) from a `server.ts` file directly under `src/mastra/`. The server exposes agents, workflows, and other registered primitives as REST endpoints, and the file default-exports the same `ServerConfig` shape you'd pass to [`new Mastra()`](/reference/core/mastra-class).
 
-Without `server.ts` or a code-registered server config, Mastra runs with server defaults, including the standard API routes, the default API prefix, and the default port behavior documented in the [server overview](/docs/server/mastra-server).
+Use this page for the filesystem convention. For server features, middleware, custom routes, generated API docs, and deployment behavior, see [Server overview](/docs/server/mastra-server).
 
 ## When to customize the server
 
-Add `server.ts` when the default HTTP server needs project-specific settings.
-
-| Need | Use `server.ts` for |
-| - | - |
-| Production deployment | Bind to the host and port required by your runtime. |
-| Browser access control | Restrict CORS to trusted origins. |
-| Custom endpoints | Add webhooks, health checks, or project-specific API routes. |
-| Server behavior | Configure middleware, request limits, API prefixes, or generated API docs. |
-
-For the full server model, see [Mastra server](/docs/server/mastra-server), [middleware](/docs/server/middleware), and [custom API routes](/docs/server/custom-api-routes).
+Add `server.ts` when the default HTTP server needs project-specific settings, such as host and port, CORS, middleware, request limits, API prefixes, generated API docs, or custom routes.
 
 ## Quickstart
 
@@ -39,66 +30,16 @@ export default {
 
 ## Common configurations
 
-### Set host and port
+`server.ts` can configure the same server options as code registration:
 
-Use host and port settings when your deployment platform requires a specific bind address.
+| Need | Use |
+| - | - |
+| Bind to a deployment platform address | `host` and `port` |
+| Restrict browser access | `cors` |
+| Add webhooks or health checks | `apiRoutes` |
+| Enable generated API docs | `build.openAPIDocs` and `build.swaggerUI` |
 
-```typescript title="src/mastra/server.ts"
-import type { ServerConfig } from '@mastra/core/server'
-
-export default {
-  host: '0.0.0.0',
-  port: Number(process.env.PORT ?? 4111),
-} satisfies ServerConfig
-```
-
-### Restrict CORS
-
-Use `cors` to limit which browser origins can call the server.
-
-```typescript title="src/mastra/server.ts"
-import type { ServerConfig } from '@mastra/core/server'
-
-export default {
-  cors: {
-    origin: ['https://app.example.com'],
-    credentials: true,
-  },
-} satisfies ServerConfig
-```
-
-### Add a custom API route
-
-Use `apiRoutes` for project-specific endpoints such as health checks or webhooks.
-
-```typescript title="src/mastra/server.ts"
-import type { ServerConfig } from '@mastra/core/server'
-
-export default {
-  apiRoutes: [
-    {
-      path: '/health',
-      method: 'GET',
-      handler: c => c.json({ ok: true }),
-    },
-  ],
-} satisfies ServerConfig
-```
-
-### Enable generated API docs
-
-Use `build.openAPIDocs` and `build.swaggerUI` when you want generated OpenAPI output and an interactive Swagger UI.
-
-```typescript title="src/mastra/server.ts"
-import type { ServerConfig } from '@mastra/core/server'
-
-export default {
-  build: {
-    openAPIDocs: true,
-    swaggerUI: true,
-  },
-} satisfies ServerConfig
-```
+See [Mastra server](/docs/server/mastra-server), [middleware](/docs/server/middleware), and [custom API routes](/docs/server/custom-api-routes) for examples.
 
 ## Precedence with code
 
