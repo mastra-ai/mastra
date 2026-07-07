@@ -56,15 +56,17 @@ the rendered border, or that another class does not override it.
 ### Correct
 
 ```tsx
-it('removes the focused editor outline', () => {
+it('removes the focused editor outline', async () => {
+  const user = userEvent.setup();
   const { container } = render(<CodeEditor value="content" />);
+  const textbox = screen.getByRole('textbox');
   const editor = container.querySelector<HTMLElement>('.cm-editor');
 
   if (!editor) {
     throw new Error('Expected CodeMirror editor');
   }
 
-  editor.classList.add('cm-focused');
+  await user.click(textbox);
 
   expect(getComputedStyle(editor).outline).toBe('none');
 });
