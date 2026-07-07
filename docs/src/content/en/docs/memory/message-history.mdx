@@ -14,7 +14,7 @@ Message history is the most basic and important form of memory. It gives the LLM
 You can also retrieve message history to display past conversations in your UI.
 
 :::info
-Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/memory/storage#threads-and-resources) for more detail.
+Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/storage/overview#threads-and-resources) for more detail.
 :::
 
 :::warning
@@ -27,7 +27,7 @@ For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui
 
 ## Getting started
 
-Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
+Install the Mastra memory module along with a [storage adapter](/docs/storage/overview#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
 
 ```bash npm2yarn
 npm install @mastra/memory@latest @mastra/libsql@latest

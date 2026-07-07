@@ -32,7 +32,7 @@ For a one-off completion check within a single `stream()` call, use [`isTaskComp
 
 ## Quickstart
 
-Goals require a configured [storage](/docs/memory/storage) backend and a memory-backed thread. Add a `goal` config to the agent — a judge model is required for the goal to do anything — then set an objective for a thread:
+Goals require a configured [storage](/docs/storage/overview) backend and a memory-backed thread. Add a `goal` config to the agent — a judge model is required for the goal to do anything — then set an objective for a thread:
 
 ```typescript title="src/mastra/agents/worker.ts" {8-11}
 import { Agent } from '@mastra/core/agent'
@@ -125,4 +125,4 @@ See the [`GoalEvaluationPayload` in the ChunkType reference](/reference/streamin
 
 - [Supervisor agents](/docs/agents/supervisor-agents) — `isTaskComplete` and the rubric scorer
 - [Signal providers](/docs/long-running-agents/signal-providers) — how the objective is projected into context
-- [Memory storage](/docs/memory/storage) — the storage backend goals require
+- [Memory storage](/docs/storage/overview) — the storage backend goals require

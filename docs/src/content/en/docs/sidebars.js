@@ -223,11 +223,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'memory/storage',
-              label: 'Storage',
-            },
-            {
-              type: 'doc',
               id: 'memory/message-history',
               label: 'Message History',
             },
@@ -324,6 +319,11 @@ const sidebars = {
               ],
             },
           ],
+        },
+        {
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
         },
       ],
     },

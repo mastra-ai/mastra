@@ -57,7 +57,7 @@ for await (const chunk of stream.fullStream) {
 
 :::note
 
-Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/memory/storage) on your Mastra instance or you'll see a "snapshot not found" error.
+Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/storage/overview) on your Mastra instance or you'll see a "snapshot not found" error.
 
 Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
 
@@ -420,7 +420,7 @@ The same discovery is available over HTTP as `GET /agents/:agentId/suspended-run
 
 :::note
 
-Suspended runs only survive restarts when your Mastra instance is configured with a persistent [storage provider](/docs/memory/storage). The default in-memory store loses snapshots when the process exits.
+Suspended runs only survive restarts when your Mastra instance is configured with a persistent [storage provider](/docs/storage/overview). The default in-memory store loses snapshots when the process exits.
 
 :::
 

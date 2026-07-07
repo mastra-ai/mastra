@@ -952,7 +952,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
 
 ## `generate()` memory options
 
-Pass `memory` when you call `agent.generate()` to choose which conversation thread the run should read from and write to. The common shape is `memory: { resource: string, thread: string }`, where `resource` identifies the owner and `thread` identifies the conversation. See [Threads and resources](/docs/memory/storage#threads-and-resources) for the concept model.
+Pass `memory` when you call `agent.generate()` to choose which conversation thread the run should read from and write to. The common shape is `memory: { resource: string, thread: string }`, where `resource` identifies the owner and `thread` identifies the conversation. See [Threads and resources](/docs/storage/overview#threads-and-resources) for the concept model.
 
 ```typescript title="src/mastra/run.ts"
 const response = await agent.generate('What did we decide about retries?', {
