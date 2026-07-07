@@ -228,12 +228,16 @@ const codeEditorVariants = cva('p-1 font-mono relative overflow-hidden', {
   variants: {
     variant: {
       default: 'rounded-md bg-surface3 border border-border1',
-      embedded: 'rounded-none border-none bg-transparent [&_.cm-editor.cm-focused]:outline-hidden',
+      embedded: 'rounded-none border-none bg-transparent',
     },
   },
   defaultVariants: {
     variant: 'default',
   },
+});
+
+const embeddedEditorAttributes = EditorView.editorAttributes.of({
+  style: 'outline: none',
 });
 
 export type CodeEditorProps = {
@@ -288,6 +292,10 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(EditorView.lineWrapping);
       }
 
+      if (variant === 'embedded') {
+        exts.push(embeddedEditorAttributes);
+      }
+
       if (language === 'json') {
         exts.push(jsonLanguage);
       } else if (language === 'markdown') {
@@ -307,7 +315,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable, lineWrapping]);
+    }, [language, highlightVariables, schema, editable, lineWrapping, variant]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
