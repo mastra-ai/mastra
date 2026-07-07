@@ -4,9 +4,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { ensureMastraCodePackageLink } from '../package-link.js';
+import { ensureMastraCodePackageLink, findMastraCodePackageRoot } from '../package-link.js';
 
-const mastracodePackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
 
 let tempDir: string | undefined;
 
@@ -22,6 +22,13 @@ function makePluginRoot(): string {
   tempDir = pluginRoot;
   return pluginRoot;
 }
+
+describe('findMastraCodePackageRoot', () => {
+  it('finds the mastracode package root from source and bundled dist paths', () => {
+    expect(findMastraCodePackageRoot(path.join(mastracodePackageRoot, 'src', 'plugins'))).toBe(mastracodePackageRoot);
+    expect(findMastraCodePackageRoot(path.join(mastracodePackageRoot, 'dist'))).toBe(mastracodePackageRoot);
+  });
+});
 
 describe('ensureMastraCodePackageLink', () => {
   it('links mastracode when it is not declared as an installable dependency', () => {
