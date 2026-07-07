@@ -197,7 +197,12 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
 export function localStorageDetector(rootDir?: string): Plugin {
   const userModuleMatches = new Map<string, ModuleMatch[]>();
   const userModuleEnvRefs = new Map<string, Set<string>>();
-  const normalizedRoot = rootDir ? rootDir.replace(/\\/g, '/').replace(/\/+$/, '') + '/' : undefined;
+  let normalizedRoot: string | undefined;
+  if (rootDir) {
+    let root = rootDir.replace(/\\/g, '/');
+    while (root.endsWith('/')) root = root.slice(0, -1);
+    normalizedRoot = root + '/';
+  }
 
   return {
     name: 'mastra-local-storage-detector',
