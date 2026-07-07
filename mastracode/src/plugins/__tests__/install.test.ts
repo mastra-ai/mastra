@@ -224,7 +224,7 @@ describe('installGithubPlugin', () => {
     expect(execaMock).toHaveBeenNthCalledWith(
       4,
       'pnpm',
-      ['install', '--frozen-lockfile', '--ignore-scripts'],
+      ['install', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: checkoutDir }),
     );
     expect(
