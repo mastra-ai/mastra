@@ -134,10 +134,7 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
   const isContentClickable = shouldClipContent;
 
   return (
-    <div
-      data-testid="submit-plan-badge"
-      className="mb-4 w-full max-w-full overflow-hidden rounded-xl border border-border1 bg-surface1 shadow-[0_1px_1px_rgba(0,0,0,0.03)]"
-    >
+    <div data-testid="submit-plan-badge" className="mb-4 w-full max-w-full overflow-hidden rounded-xl bg-surface1">
       <div className="flex min-h-10 items-center justify-between gap-3 px-4 pt-3">
         <div className="flex min-w-0 items-center gap-2">
           <Icon size="sm" className="text-icon3">

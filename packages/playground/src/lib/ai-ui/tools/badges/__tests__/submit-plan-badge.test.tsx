@@ -225,7 +225,7 @@ describe('SubmitPlanBadge', () => {
   });
 
   describe('when the plan is already resolved', () => {
-    it('shows the approved state and hides actions without changing the card border', () => {
+    it('shows the approved state and hides actions without adding card chrome', () => {
       renderBadge({
         toolCallId: 'call-3',
         suspendPayload: {
@@ -244,8 +244,9 @@ describe('SubmitPlanBadge', () => {
       expect(screen.queryByText('Resolved')).toBeNull();
       expect(screen.queryByText('Plan approved')).toBeNull();
       expect(within(badge()).queryByRole('button', { name: /approve/i })).toBeNull();
-      expect(badge().className).toContain('border-border1');
-      expect(badge().className).not.toContain('border-notice-success');
+      expect(badge().className).toContain('bg-surface1');
+      expect(badge().className).not.toContain('border-border1');
+      expect(badge().className).not.toContain('shadow-');
     });
 
     it('shows the rejected state when the submitted plan was rejected', () => {
@@ -266,7 +267,7 @@ describe('SubmitPlanBadge', () => {
       expect(screen.getByText('Rejected')).toBeTruthy();
       expect(screen.queryByText('Resolved')).toBeNull();
       expect(within(badge()).queryByRole('button', { name: /approve/i })).toBeNull();
-      expect(badge().className).toContain('border-border1');
+      expect(badge().className).not.toContain('border-border1');
     });
   });
 });
