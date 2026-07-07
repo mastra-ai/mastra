@@ -8,6 +8,8 @@ import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
@@ -222,6 +224,18 @@ export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 
+const codeEditorVariants = cva('p-1 font-mono relative overflow-hidden', {
+  variants: {
+    variant: {
+      default: 'rounded-md bg-surface3 border border-border1',
+      embedded: 'rounded-none border-none bg-transparent [&_.cm-editor.cm-focused]:outline-hidden',
+    },
+  },
+  defaultVariants: {
+    variant: 'default',
+  },
+});
+
 export type CodeEditorProps = {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   value?: string;
@@ -240,7 +254,8 @@ export type CodeEditorProps = {
   lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
-} & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
+} & VariantProps<typeof codeEditorVariants> &
+  Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
   (
@@ -258,6 +273,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineNumbers = true,
       lineWrapping = true,
       editable,
+      variant,
       ...props
     },
     ref,
@@ -294,10 +310,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
-      <div
-        className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
-        {...props}
-      >
+      <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
         {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
         <CodeMirror
           ref={ref}

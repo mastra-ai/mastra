@@ -31,4 +31,14 @@ describe('CodeEditor', () => {
 
     expect(codeMirrorProps.at(-1)?.extensions).not.toContain(EditorView.lineWrapping);
   });
+
+  it('can render as an embedded borderless editor surface', () => {
+    const { container } = render(<CodeEditor value="embedded content" showCopyButton={false} variant="embedded" />);
+
+    const editorRoot = container.firstElementChild;
+
+    expect(editorRoot?.className).toContain('bg-transparent');
+    expect(editorRoot?.className).toContain('border-none');
+    expect(editorRoot?.className).toContain('[&_.cm-editor.cm-focused]:outline-hidden');
+  });
 });
