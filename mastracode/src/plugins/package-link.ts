@@ -2,7 +2,27 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const MASTRACODE_PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const MASTRACODE_PACKAGE_ROOT = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
+
+export function findMastraCodePackageRoot(startDir: string): string {
+  let currentDir = path.resolve(startDir);
+
+  while (true) {
+    const packageJsonPath = path.join(currentDir, 'package.json');
+    if (fs.existsSync(packageJsonPath)) {
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { name?: string };
+      if (packageJson.name === 'mastracode') {
+        return currentDir;
+      }
+    }
+
+    const parentDir = path.dirname(currentDir);
+    if (parentDir === currentDir) {
+      throw new Error(`Could not find mastracode package root from ${startDir}`);
+    }
+    currentDir = parentDir;
+  }
+}
 
 export function ensureMastraCodePackageLink(pluginDir: string): void {
   if (declaresInstallableMastraCodeDependency(pluginDir)) {

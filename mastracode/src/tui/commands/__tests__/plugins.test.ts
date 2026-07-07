@@ -451,6 +451,14 @@ describe('handlePluginsCommand', () => {
     list.onSelect({ value: '__install__' });
     await waitForOverlayCalls(2);
 
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(1, ctx.state.ui, {
+      question: 'Install plugin from:',
+      options: [{ label: 'GitHub URL' }, { label: 'Local path' }],
+    });
+    expect(modal.askModalQuestion).toHaveBeenNthCalledWith(3, ctx.state.ui, {
+      question: 'Install scope:',
+      options: [{ label: 'global' }, { label: 'project' }],
+    });
     const progress = overlay.showModalOverlay.mock.calls[1]?.[1] as any;
     expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Installing GitHub plugin');
     expect(progress.children.map((child: any) => child.text).join('\n')).toContain('Press Esc or Ctrl-C to cancel.');
