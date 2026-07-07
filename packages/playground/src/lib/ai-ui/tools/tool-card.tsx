@@ -8,6 +8,7 @@ import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { SubmitPlanTool } from './submit-plan-tool';
 import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
 import {
   isBrowserTool,
@@ -185,6 +186,11 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   // ask_user tool renders a dedicated interactive component for answering questions.
   if (toolName === 'ask_user') {
     return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+  }
+
+  // submit_plan suspensions render an inline plan review with resume data.
+  if (toolName === 'submit_plan') {
+    return <SubmitPlanTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
   }
 
   if (isBackgroundTaskResult) {

@@ -1,4 +1,4 @@
-import { createTool } from '@mastra/core/tools';
+import { createTool, submitPlanTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 export const cookingTool = createTool({
@@ -14,6 +14,27 @@ export const cookingTool = createTool({
     const userId = requestContext?.get('userId');
     console.log('My cooking tool is running!', inputData.ingredient, userId);
     return `My tool result: ${inputData.ingredient} from ${userId}`;
+  },
+});
+
+export const submitPlanReviewTool = createTool({
+  id: 'submit_plan',
+  description:
+    'Submit an inline markdown plan for review. Use this only when the user asks for a plan that should be reviewed before proceeding.',
+  inputSchema: z.object({
+    title: z.string().min(1).describe('Short title for the plan.'),
+    plan: z.string().min(1).describe('Markdown body of the plan to review.'),
+  }),
+  suspendSchema: submitPlanTool.suspendSchema,
+  resumeSchema: submitPlanTool.resumeSchema,
+  execute: async ({ title, plan }, context) => {
+    return submitPlanTool.execute?.(
+      {
+        title,
+        plan,
+      },
+      context,
+    );
   },
 });
 

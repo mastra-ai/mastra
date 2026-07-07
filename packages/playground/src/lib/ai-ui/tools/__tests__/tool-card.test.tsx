@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { useContext } from 'react';
+import { use } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ToolCard, ToolCardInner } from '../tool-card';
@@ -54,7 +54,7 @@ const renderToolCard = (props: ToolCardProps) => render(<ToolCard {...props} />,
 
 /** Reads the live WorkflowRunContext result so the streaming wiring is observable. */
 const WorkflowResultProbe = ({ onResult }: { onResult: (r: unknown) => void }) => {
-  const { result } = useContext(WorkflowRunContext);
+  const { result } = use(WorkflowRunContext);
   onResult(result);
   return null;
 };
@@ -173,6 +173,32 @@ describe('ToolCard dispatch', () => {
   it('renders a generic tool badge as a fallback', () => {
     renderToolCard(baseProps({ toolName: 'searchDocs' }));
     expect(screen.getByText('searchDocs')).toBeTruthy();
+  });
+
+  it('routes submit_plan tools to the dedicated plan review renderer', () => {
+    renderToolCard(
+      baseProps({
+        toolName: 'submit_plan',
+        toolCallId: 'submit-plan-call',
+        output: undefined,
+        metadata: {
+          mode: 'stream',
+          suspendedTools: {
+            'submit-plan-call': {
+              suspendPayload: {
+                path: '/workspace/plan.md',
+                title: 'Review plan',
+                plan: 'Plan body',
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    expect(screen.getByTestId('submit-plan-badge')).toBeTruthy();
+    expect(screen.getByText('Review plan')).toBeTruthy();
+    expect(screen.queryByText('submit_plan')).toBeNull();
   });
 
   it('treats background-task string results as a generic tool badge', () => {

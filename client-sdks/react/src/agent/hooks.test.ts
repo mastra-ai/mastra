@@ -26,6 +26,13 @@ const approveToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: approveToolCallProcessDataStreamMock,
 }));
+const resumeStreamProcessDataStreamMock = vi.fn(async (_options: { onChunk: (chunk: any) => Promise<void> | void }) => {
+  /* no chunks */
+});
+const resumeStreamMock = vi.fn(async () => ({
+  body: { cancel: vi.fn() },
+  processDataStream: resumeStreamProcessDataStreamMock,
+}));
 const sendToolApprovalMock = vi.fn(async () => ({
   accepted: true,
   runId: 'run-approval',
@@ -104,6 +111,7 @@ vi.mock('@mastra/client-js', () => ({
         sendSignal: sendSignalMock,
         sendMessage: sendMessageMock,
         approveToolCall: approveToolCallMock,
+        resumeStream: resumeStreamMock,
         sendToolApproval: sendToolApprovalMock,
         declineToolCall: declineToolCallMock,
         stream: streamMock,
@@ -153,6 +161,8 @@ describe('useChat forwards clientTools', () => {
     sendToolApprovalMock.mockClear();
     declineToolCallMock.mockClear();
     approveToolCallProcessDataStreamMock.mockClear();
+    resumeStreamMock.mockClear();
+    resumeStreamProcessDataStreamMock.mockClear();
     streamMock.mockClear();
     subscribeToThreadMock.mockClear();
     threadSubscriptionAbortMock.mockClear();
@@ -360,6 +370,61 @@ describe('useChat forwards clientTools', () => {
     expect(approveToolCallMock).not.toHaveBeenCalled();
     expect(approveToolCallProcessDataStreamMock).not.toHaveBeenCalled();
     expect(result.current.isAwaitingToolApproval).toBe(false);
+
+    unmount();
+  });
+
+  it('keeps custom resume data on subscription-native approval', async () => {
+    nextSubscribeChunks = [
+      {
+        type: 'start',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { messageId: 'msg-approval' },
+      },
+      {
+        type: 'tool-call-approval',
+        runId: 'run-approval',
+        from: 'AGENT',
+        payload: { toolName: 'submit_plan', toolCallId: 'tool-call-approval-1', args: {} },
+      },
+    ];
+    keepSubscriptionOpen = true;
+
+    const { result, unmount } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: true,
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.isAwaitingToolApproval).toBe(true));
+
+    const resumeData = {
+      action: 'approved',
+      path: '/workspace/plan.md',
+      title: 'Review plan',
+      plan: 'Plan body',
+    };
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1', resumeData);
+    });
+
+    expect(sendToolApprovalMock).toHaveBeenCalledWith({
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      toolCallId: 'tool-call-approval-1',
+      approved: true,
+      resumeData,
+      requestContext: undefined,
+    });
+    expect(approveToolCallMock).not.toHaveBeenCalled();
+    expect(resumeStreamMock).not.toHaveBeenCalled();
 
     unmount();
   });
@@ -912,6 +977,79 @@ describe('useChat forwards clientTools', () => {
     expect(subscribeToThreadMock).not.toHaveBeenCalled();
     expect(sendSignalMock).not.toHaveBeenCalled();
     expect(streamMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('uses resumeStream for fallback approval when custom resume data is provided', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: false,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+        requestContext: { userId: 'user-123' } as any,
+      });
+    });
+
+    const resumeData = {
+      action: 'rejected',
+      feedback: 'Add rollback steps.',
+      path: '/workspace/plan.md',
+      title: 'Review plan',
+      plan: 'Plan body',
+    };
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1', resumeData);
+    });
+
+    expect(resumeStreamMock).toHaveBeenCalledWith(resumeData, {
+      runId: expect.any(String),
+      toolCallId: 'tool-call-approval-1',
+      requestContext: { userId: 'user-123' },
+    });
+    expect(approveToolCallMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps approveToolCall for fallback approval when custom resume data is absent', async () => {
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          enableThreadSignals: false,
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+        threadId: 'thread-1',
+      });
+    });
+
+    await act(async () => {
+      await result.current.approveToolCall('tool-call-approval-1');
+    });
+
+    expect(approveToolCallMock).toHaveBeenCalledWith({
+      runId: expect.any(String),
+      toolCallId: 'tool-call-approval-1',
+      requestContext: undefined,
+    });
+    expect(resumeStreamMock).not.toHaveBeenCalled();
   });
 
   it('keeps hook-prop clientTools on sendMessage when threadId is provided', async () => {

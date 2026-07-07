@@ -7,6 +7,7 @@ The example is intentionally serverless-friendly:
 - in-memory storage only — no file-backed storage, no LibSQL or DuckDB dependency
 - one deterministic tool
 - one memory-enabled agent that can be opened at `/agents/studio-preview-agent/chat/new`
+- one recipe agent with `submit_plan` enabled that can be opened at `/agents/recipe-agent/chat/new`
 - deterministic demo data seeded on startup so most Studio surfaces render populated
 
 ## Seeded demo data
@@ -74,6 +75,7 @@ Recommended preview URLs:
 - `/` for the Studio shell
 - `/agents` for the agent list
 - `/agents/studio-preview-agent/chat/new` for the working agent chat (seeded threads in the sidebar)
+- `/agents/recipe-agent/chat/new` for the recipe agent with `submit_plan` enabled
 - `/observability` for seeded traces
 - `/metrics` for seeded usage, cost, latency, and memory metrics
 - `/scorers` for seeded scorers and scores
