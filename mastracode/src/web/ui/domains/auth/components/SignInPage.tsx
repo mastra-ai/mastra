@@ -13,7 +13,7 @@ import { redirectToLogin } from '../services/auth';
  */
 function safeReturnTo(raw?: string): string {
   if (raw && raw.startsWith('/') && !raw.startsWith('//')) return raw;
-  return '/chat';
+  return '/';
 }
 
 /**

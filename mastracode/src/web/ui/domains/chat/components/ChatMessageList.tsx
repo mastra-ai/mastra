@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { Wordmark } from '../../../ui';
+import { SkeletonRows, Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatSessionApi } from '../context/ChatSessionProvider';
@@ -21,15 +21,13 @@ const transcriptScrollClass =
 const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm leading-relaxed text-icon3';
 
 /**
- * The actual chat: the scrollable column holding the goal panel, connection
- * notice, transcript entries (or the empty-thread welcome), and the working
- * indicator. Propless — must render inside `ChatSessionProvider` with an
- * active project (the composition root guarantees it).
+ * Persisted thread transcript page. `/new` is handled by NewPage, so this
+ * component only renders existing thread history, loading, and run state.
  */
 export function ChatMessageList() {
   const { activeProject } = useActiveProjectContext();
   const session = useChatSession();
-  const { transcript, status, showWorkingIndicator, onApprove, onRespond } = session;
+  const { transcript, status, showWorkingIndicator, messagesPending, onApprove, onRespond } = session;
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
 
   // Parent only renders this component with an active project; TS narrowing.
@@ -53,6 +51,7 @@ export function ChatMessageList() {
         activeProject={activeProject}
         transcript={transcript}
         showWorkingIndicator={showWorkingIndicator}
+        messagesPending={messagesPending || status === 'connecting'}
         threadRef={threadRef}
         onApprove={onApprove}
         onRespond={onRespond}
@@ -83,6 +82,7 @@ type TranscriptPanelProps = {
   activeProject: Project;
   transcript: TranscriptState;
   showWorkingIndicator: boolean;
+  messagesPending: boolean;
   threadRef: RefObject<HTMLDivElement | null>;
   onApprove: ChatSessionApi['onApprove'];
   onRespond: ChatSessionApi['onRespond'];
@@ -92,14 +92,15 @@ function TranscriptPanel({
   activeProject,
   transcript,
   showWorkingIndicator,
+  messagesPending,
   threadRef,
   onApprove,
   onRespond,
 }: TranscriptPanelProps) {
-  if (transcript.entries.length === 0 && !showWorkingIndicator) {
+  if (transcript.entries.length === 0 && messagesPending) {
     return (
-      <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-3 py-8 md:px-5" ref={threadRef}>
-        <EmptyThreadState activeProject={activeProject} />
+      <div className={transcriptScrollClass} ref={threadRef}>
+        <SkeletonRows label="Loading messages" rows={6} />
       </div>
     );
   }
