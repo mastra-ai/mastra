@@ -2768,4 +2768,31 @@ describe('Memory', () => {
       expect(childSpan.error).not.toHaveBeenCalled();
     });
   });
+
+  describe('per-call observationalMemory override (#18943)', () => {
+    const withOMEnabled = () =>
+      new Memory({
+        storage: new InMemoryStore(),
+        options: { observationalMemory: { enabled: true } },
+      });
+
+    it('adds the observational-memory input processor when OM is enabled on the instance', async () => {
+      const memory = withOMEnabled();
+      const processors = await memory.getInputProcessors([], new RequestContext());
+      expect(processors.find(p => p.id === 'observational-memory')).toBeDefined();
+    });
+
+    it('honors a per-call observationalMemory:false and does not add the OM processor', async () => {
+      const memory = withOMEnabled();
+      const requestContext = new RequestContext();
+      // Per-call disable, even though OM is enabled on the instance. Before the
+      // fix this was silently ignored (the override normalizes to undefined, so
+      // the code fell back to the instance config) and the processor was still
+      // added.
+      requestContext.set('MastraMemory', { memoryConfig: { observationalMemory: false } });
+
+      const processors = await memory.getInputProcessors([], requestContext);
+      expect(processors.find(p => p.id === 'observational-memory')).toBeUndefined();
+    });
+  });
 });
