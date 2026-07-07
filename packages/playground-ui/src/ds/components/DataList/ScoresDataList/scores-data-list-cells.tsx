@@ -89,8 +89,10 @@ export interface ScoresDataListScoreCellProps {
 export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps) {
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
-    <DataListCell height="compact" className="text-ui-smd font-mono text-neutral3">
-      {display}
+    <DataListCell height="compact" className="min-w-0 text-ui-smd font-mono text-neutral3">
+      <span className="block truncate" title={display}>
+        {display}
+      </span>
     </DataListCell>
   );
 }

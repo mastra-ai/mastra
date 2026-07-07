@@ -1,11 +1,13 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Pencil, Trash2 } from 'lucide-react';
-import { forwardRef, useState } from 'react';
+import { Columns3Icon, Pencil, Trash2 } from 'lucide-react';
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DataList } from './data-list';
 import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
+import { ScoresDataList } from './ScoresDataList/scores-data-list';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 type DataListStoryArgs = {
@@ -550,4 +552,145 @@ export const WithSubheader: Story = {
       ))}
     </DataList>
   ),
+};
+
+type ToggleableColumn = 'input' | 'entity';
+const COLUMN_LABELS: Record<ToggleableColumn, string> = { input: 'Input', entity: 'Entity' };
+
+const SCORE_ENTITIES = ['weather-agent', 'summarise-workflow', 'translation-agent', 'recipe-generator', 'sentiment-scorer'];
+
+const SCORE_SAMPLE_INPUTS = [
+  'What is the current weather in Tokyo?',
+  'Summarise the Q2 sales report.',
+  'Translate this paragraph to Japanese.',
+  'Generate a recipe for banana bread.',
+  'Explain supervised vs unsupervised learning.',
+];
+
+const SAMPLE_SCORES = Array.from({ length: 25 }, (_, i) => ({
+  id: `score_${String(i + 1).padStart(4, '0')}`,
+  createdAt: new Date(Date.now() - i * 1_800_000).toISOString(),
+  score: Number((0.4 + (i % 7) * 0.08).toFixed(2)),
+  entityId: SCORE_ENTITIES[i % SCORE_ENTITIES.length],
+  input: JSON.stringify({
+    messages: [{ role: 'user', content: SCORE_SAMPLE_INPUTS[i % SCORE_SAMPLE_INPUTS.length] }],
+    model: 'claude-sonnet-4-5',
+    temperature: 0.7,
+  }),
+}));
+
+function buildScoresColumns(visible: Set<ToggleableColumn>): string {
+  const parts = ['auto', 'auto', 'minmax(0, 10rem)'];
+  if (visible.has('entity')) parts.push('minmax(0, 14rem)');
+  if (visible.has('input')) parts.push('minmax(0, 1fr)');
+  return parts.join(' ');
+}
+
+/** Scorer data table: Score is always visible, Input/Entity are toggleable, top and bottom scrollbars stay in sync. */
+export const ScoresTable: Story = {
+  parameters: { layout: 'padded', controls: { exclude: ['variant', 'stickyHeaderBackground'] } },
+  render: function ScoresTableStory() {
+    const [hiddenColumns, setHiddenColumns] = useState<Set<ToggleableColumn>>(new Set());
+    const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+
+    const visibleColumns = useMemo(
+      () => new Set<ToggleableColumn>((['input', 'entity'] as ToggleableColumn[]).filter(c => !hiddenColumns.has(c))),
+      [hiddenColumns],
+    );
+    const columns = useMemo(() => buildScoresColumns(visibleColumns), [visibleColumns]);
+
+    const toggleColumn = useCallback((col: ToggleableColumn) => {
+      setHiddenColumns(prev => {
+        const next = new Set(prev);
+        if (next.has(col)) next.delete(col);
+        else next.add(col);
+        return next;
+      });
+    }, []);
+
+    const scrollViewportRef = useRef<HTMLDivElement>(null);
+    const topScrollRef = useRef<HTMLDivElement>(null);
+    const [contentScrollWidth, setContentScrollWidth] = useState(0);
+
+    useEffect(() => {
+      const id = requestAnimationFrame(() => {
+        if (scrollViewportRef.current) setContentScrollWidth(scrollViewportRef.current.scrollWidth);
+      });
+      return () => cancelAnimationFrame(id);
+    }, [visibleColumns]);
+
+    useEffect(() => {
+      const viewport = scrollViewportRef.current;
+      if (!viewport) return;
+      const onScroll = () => {
+        if (topScrollRef.current) topScrollRef.current.scrollLeft = viewport.scrollLeft;
+      };
+      viewport.addEventListener('scroll', onScroll, { passive: true });
+      return () => viewport.removeEventListener('scroll', onScroll);
+    }, []);
+
+    return (
+      <div className="flex flex-col h-[480px] min-h-0 gap-0">
+        <div className="flex items-center justify-end pb-2 shrink-0">
+          <DropdownMenu>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="outline" size="sm">
+                <Columns3Icon className="size-3.5" />
+                Columns
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
+              {(['input', 'entity'] as ToggleableColumn[]).map(col => (
+                <DropdownMenu.CheckboxItem
+                  key={col}
+                  checked={visibleColumns.has(col)}
+                  onClick={() => toggleColumn(col)}
+                >
+                  {COLUMN_LABELS[col]}
+                </DropdownMenu.CheckboxItem>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        </div>
+
+        <div
+          ref={topScrollRef}
+          className="overflow-x-auto overflow-y-hidden shrink-0"
+          style={{ height: 8 }}
+          onScroll={() => {
+            if (scrollViewportRef.current && topScrollRef.current) {
+              scrollViewportRef.current.scrollLeft = topScrollRef.current.scrollLeft;
+            }
+          }}
+        >
+          <div style={{ width: contentScrollWidth, height: 1 }} />
+        </div>
+
+        <ScoresDataList columns={columns} scrollRef={scrollViewportRef} className="flex-1 min-h-0">
+          <ScoresDataList.Top>
+            <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+            <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>
+            <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+            {visibleColumns.has('entity') && <ScoresDataList.TopCell>Entity</ScoresDataList.TopCell>}
+            {visibleColumns.has('input') && <ScoresDataList.TopCell>Input</ScoresDataList.TopCell>}
+          </ScoresDataList.Top>
+
+          {SAMPLE_SCORES.map(score => (
+            <ScoresDataList.RowButton
+              key={score.id}
+              onClick={() => setSelectedId(id => (id === score.id ? undefined : score.id))}
+              className={selectedId === score.id ? 'bg-surface4' : ''}
+            >
+              <ScoresDataList.DateCell timestamp={score.createdAt} />
+              <ScoresDataList.TimeCell timestamp={score.createdAt} />
+              <ScoresDataList.ScoreCell score={score.score} />
+              {visibleColumns.has('entity') && <ScoresDataList.EntityCell entityId={score.entityId} />}
+              {visibleColumns.has('input') && <ScoresDataList.InputCell input={score.input} />}
+            </ScoresDataList.RowButton>
+          ))}
+        </ScoresDataList>
+      </div>
+    );
+  },
 };
