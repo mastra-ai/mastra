@@ -1,6 +1,6 @@
 ---
 title: Extract Complex Derived Logic
-impact: MEDIUM
+impact: MEDIUM-HIGH
 impactDescription: dense derived logic hides business rules inside operator soup, makes review harder, and turns declarative composition into step-by-step state tracking
 tags: structure, readability, control-flow, mutation, conditions, maintainability
 ---
