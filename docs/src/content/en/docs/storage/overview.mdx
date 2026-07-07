@@ -1,20 +1,68 @@
 ---
 title: "Storage overview"
-description: Configure storage for Mastra to persist conversations and other runtime state.
+description: Configure storage for Mastra to persist runtime state across agents, workflows, observability, evals, schedules, and memory.
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
   - "@mastra/memory"
   - "@mastra/pg"
-  - "@mastra/pinecone"
 ---
 
-import Tabs from "@theme/Tabs";
-import TabItem from "@theme/TabItem";
+# Storage overview
 
-# Storage
+Storage is the persistence layer for the Mastra runtime. It keeps memory, workflow state, observability data, eval results, schedules, and long-running agent state available after a process restarts.
 
-For agents to remember previous interactions, Mastra needs a storage adapter. Use one of the [supported providers](#supported-providers) and pass it to your Mastra instance.
+Storage powers:
+
+- [Memory](/docs/memory/overview): Message history, threads, resources, and working memory.
+- [Workflows](/docs/workflows/overview): Durable snapshots for suspended and resumed workflow runs.
+- [Observability](/docs/observability/overview): Traces, spans, metrics, logs, and feedback.
+- [Evals](/docs/evals/overview): Scores, datasets, experiments, and evaluation results.
+- [Long-running agents](/docs/long-running-agents/durable-agents): Background tasks, schedules, goals, and thread state.
+
+## When to configure storage
+
+Configure a persistent storage adapter when state must survive restarts, be shared across processes, or be visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
+
+Use storage when your application needs any of these behaviors:
+
+- Agents remember past messages or user facts.
+- Workflows suspend and resume after a restart.
+- Traces, metrics, logs, scores, or feedback stay available for analysis.
+- Schedules and background tasks continue across deployments.
+- Multiple runtime processes read and write the same state.
+
+## How storage works
+
+Mastra storage is organized into **domains**. A domain owns one type of runtime data, and a storage adapter implements one or more domains.
+
+| Domain | What it stores |
+| - | - |
+| `memory` | Threads, messages, resources, working memory, and other agent memory state. |
+| `workflows` | Workflow snapshots used to suspend and resume runs. |
+| `observability` | Traces, spans, metrics, logs, and feedback. |
+| `scores` | Eval score records. |
+| `datasets` | Dataset records and dataset items used by evals and experiments. |
+| `experiments` | Experiment runs and per-item experiment results. |
+| `schedules` | Schedule definitions and trigger history. |
+
+Adapter support varies by domain. For the full domain list and built-in schemas, see the [storage overview reference](/reference/storage/overview).
+
+## Choose a backend by data shape
+
+Different domains write and query different kinds of data. Pick a backend based on the domain's access pattern:
+
+- `memory`: Reads and writes rows during every remembered agent call. Use a transactional database such as libSQL, PostgreSQL, or MongoDB.
+- `observability`: Writes high-volume telemetry and often queries aggregations. Use a dedicated observability store or an online analytical processing (OLAP) backend such as ClickHouse or DuckDB.
+- `workflows`: Stores durable snapshots that must be available when a run resumes. Use a reliable persistent database.
+- `scores`, `datasets`, and `experiments`: Store lower-frequency evaluation data that is often read later for analysis.
+- `schedules`: Stores schedule definitions and fire history. Use an adapter that implements the schedules domain.
+
+When domains have different operational needs, use [composite storage](#composite-storage) to route each domain to the right backend.
+
+## Get started locally
+
+For local development, use libSQL with a file-backed database. It doesn't require a separate database server and persists state between restarts.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -29,18 +77,107 @@ export const mastra = new Mastra({
 ```
 
 :::tip[Sharing the database with Studio]
-When running `mastra dev` alongside your application (e.g., Next.js), use an absolute path to ensure both processes access the same database:
+
+When running `mastra dev` alongside your application, use an absolute path so both processes access the same database:
 
 ```typescript
 url: 'file:/absolute/path/to/your/project/mastra.db'
 ```
 
 Relative paths like `file:./mastra.db` resolve based on each process's working directory, which may differ.
+
 :::
 
-This configures instance-level storage, which all agents share by default. You can also configure [agent-level storage](#agent-level-storage) for isolated data boundaries.
+Mastra initializes the required storage structures on first use.
 
-Mastra automatically initializes the necessary storage structures on first interaction. See [Storage Overview](/reference/storage/overview) for domain coverage and the schema used by the built-in database-backed domains.
+## Configure for production
+
+For production, use a persistent managed database. PostgreSQL is a good default for most teams because it works well for transactional runtime state and is widely available as a managed service.
+
+Production guidance:
+
+- Use a managed database with backups, monitoring, and connection pooling.
+- Keep local file databases such as `file:./mastra.db` out of multi-process production deployments.
+- Route high-volume domains, especially `observability`, to a dedicated backend with [composite storage](#composite-storage).
+- Configure [retention](/reference/storage/retention) for growth-heavy tables, then call `storage.prune()` from a scheduler or maintenance job.
+- Choose providers based on the domains your application uses. For example, schedules require an adapter that implements the `schedules` domain.
+
+## Configuration scope
+
+Storage can be configured at the Mastra instance level or at the agent level.
+
+### Instance-level storage
+
+Instance-level storage is shared by agents, workflows, observability, evals, schedules, and other runtime features registered on the same Mastra instance.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
+})
+```
+
+Use instance-level storage when most runtime domains can share the same database.
+
+### Agent-level storage
+
+Agent-level storage is configured on a `Memory` instance. It overrides instance-level storage for that agent's memory data only.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { PostgresStore } from '@mastra/pg'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer customer support questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'support-agent-storage',
+      connectionString: process.env.SUPPORT_AGENT_DATABASE_URL,
+    }),
+  }),
+})
+```
+
+Use agent-level storage when an agent needs an isolated memory boundary or a different memory backend.
+
+## Composite storage
+
+[`MastraCompositeStore`](/reference/storage/composite) routes domains to different backends. Use it when one database isn't the right fit for every domain.
+
+The following example uses libSQL as the default store and routes workflow state to PostgreSQL:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { LibSQLStore } from '@mastra/libsql'
+import { WorkflowsPG } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'default-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      workflows: new WorkflowsPG({
+        connectionString: process.env.DATABASE_URL,
+      }),
+    },
+  }),
+})
+```
+
+You can also route `observability` to a dedicated analytics backend. See [observability storage](/docs/observability/storage) for an observability-specific example.
 
 ## Supported providers
 
@@ -60,229 +197,15 @@ Each provider page includes installation instructions, configuration parameters,
 - [Google Cloud Spanner](/reference/storage/spanner)
 
 :::tip
-libSQL is the easiest way to get started because it doesn’t require running a separate database server.
+
+libSQL is the fastest path for local development because it doesn't require running a separate database server.
+
 :::
 
-## Configuration scope
+## Next steps
 
-Storage can be configured at the instance level (shared by all agents) or at the agent level (isolated to a specific agent).
-
-### Instance-level storage
-
-Add storage to your Mastra instance so all agents, workflows, observability traces, and scores share the same storage backend:
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { PostgresStore } from '@mastra/pg'
-
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: process.env.DATABASE_URL,
-  }),
-})
-
-// Both agents inherit storage from the Mastra instance above
-const agent1 = new Agent({ id: 'agent-1', memory: new Memory() })
-const agent2 = new Agent({ id: 'agent-2', memory: new Memory() })
-```
-
-This is useful when all primitives share the same storage backend and have similar performance, scaling, and operational requirements.
-
-#### Composite storage
-
-[Composite storage](/reference/storage/composite) is an alternative way to configure instance-level storage. Use `MastraCompositeStore` to route `memory` and any other [supported domains](/reference/storage/composite#storage-domains) to different storage providers.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { MastraCompositeStore } from '@mastra/core/storage'
-import { MemoryLibSQL } from '@mastra/libsql'
-import { WorkflowsPG } from '@mastra/pg'
-import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
-
-export const mastra = new Mastra({
-  storage: new MastraCompositeStore({
-    id: 'composite',
-    domains: {
-      // highlight-next-line
-      memory: new MemoryLibSQL({ url: 'file:./memory.db' }),
-      workflows: new WorkflowsPG({ connectionString: process.env.DATABASE_URL }),
-      observability: new ObservabilityStorageClickhouse({
-        url: process.env.CLICKHOUSE_URL,
-        username: process.env.CLICKHOUSE_USERNAME,
-        password: process.env.CLICKHOUSE_PASSWORD,
-      }),
-    },
-  }),
-})
-```
-
-This is useful when different types of data have different performance or operational requirements, such as low-latency storage for memory, durable storage for workflows, and high-throughput storage for observability.
-
-#### Retention
-
-Storage grows without bound by default. To cap growth, declare per-table `maxAge` policies in the `retention` config and call `storage.prune()` from your own scheduler to delete old rows. Anything you don't configure is kept forever. See [Storage retention](/reference/storage/retention) for `prune()` and the full config shape.
-
-### Agent-level storage
-
-Agent-level storage overrides storage configured at the instance level. Add storage to a specific agent when you need to keep data separate or use different providers per agent.
-
-```typescript title="src/mastra/agents/your-agent.ts"
-import { Agent } from '@mastra/core/agent'
-import { Memory } from '@mastra/memory'
-import { PostgresStore } from '@mastra/pg'
-
-export const agent = new Agent({
-  id: 'agent',
-  memory: new Memory({
-    storage: new PostgresStore({
-      id: 'agent-storage',
-      connectionString: process.env.AGENT_DATABASE_URL,
-    }),
-  }),
-})
-```
-
-## Threads and resources
-
-Mastra organizes conversations using two identifiers:
-
-- **Thread**: A conversation session containing a sequence of messages.
-- **Resource**: The entity that owns the thread, such as a user, organization, project, or any other domain entity in your application.
-
-Both identifiers are required for agents to store information:
-
-<Tabs>
-  <TabItem value="generate" label=".generate()">
-    ```typescript
-    const response = await agent.generate('hello', {
-      memory: {
-        thread: 'conversation-abc-123',
-        resource: 'user_123',
-      },
-    })
-    ```
-  </TabItem>
-
-  <TabItem value="stream" label=".stream()">
-    ```typescript
-    const stream = await agent.stream('hello', {
-      memory: {
-        thread: 'conversation-abc-123',
-        resource: 'user_123',
-      },
-    })
-    ```
-  </TabItem>
-</Tabs>
-
-:::note
-[Studio](/docs/studio/overview) automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, remember to provide these identifiers explicitly.
-:::
-
-### Thread title generation
-
-Mastra can automatically generate descriptive thread titles based on the user's first message when `generateTitle` is enabled.
-
-Use this option when implementing a ChatGPT-style chat interface to render a title alongside each thread in the conversation list (for example, in a sidebar) derived from the thread’s initial user message.
-
-```typescript title="src/mastra/agents/my-agent.ts"
-export const agent = new Agent({
-  id: 'agent',
-  memory: new Memory({
-    options: {
-      generateTitle: true,
-    },
-  }),
-})
-```
-
-Title generation runs asynchronously after the agent responds and doesn't affect response time.
-
-To optimize cost or behavior, provide a smaller [`model`](/models) and custom `instructions`:
-
-```typescript title="src/mastra/agents/my-agent.ts"
-export const agent = new Agent({
-  id: 'agent',
-  memory: new Memory({
-    options: {
-      generateTitle: {
-        model: '__GATEWAY_OPENAI_MODEL_MINI__',
-        instructions: 'Generate a 1 word title',
-      },
-    },
-  }),
-})
-```
-
-## Semantic recall
-
-Semantic recall has different storage requirements - it needs a vector database in addition to the standard storage adapter. See [Semantic recall](/docs/memory/semantic-recall) for setup and supported vector providers.
-
-## Handling large attachments
-
-Some storage providers enforce record size limits that base64-encoded file attachments (such as images) can exceed:
-
-| Provider | Record size limit |
-| - | - |
-| [DynamoDB](/reference/storage/dynamodb) | 400 KB |
-| [Convex](/reference/storage/convex) | 1 MiB |
-| [Cloudflare D1](/reference/storage/cloudflare-d1) | 1 MiB |
-
-PostgreSQL, MongoDB, and libSQL have higher limits and are generally unaffected.
-
-To avoid this, use an input processor to upload attachments to external storage (S3, R2, GCS, [Convex file storage](https://docs.convex.dev/file-storage), etc.) and replace them with URL references before persistence.
-
-```typescript title="src/mastra/processors/attachment-uploader.ts"
-import type { Processor } from '@mastra/core/processors'
-import type { MastraDBMessage } from '@mastra/core/memory'
-
-export class AttachmentUploader implements Processor {
-  id = 'attachment-uploader'
-
-  async processInput({ messages }: { messages: MastraDBMessage[] }) {
-    return Promise.all(messages.map(msg => this.processMessage(msg)))
-  }
-
-  async processMessage(msg: MastraDBMessage) {
-    const attachments = msg.content.experimental_attachments
-    if (!attachments?.length) return msg
-
-    const uploaded = await Promise.all(
-      attachments.map(async att => {
-        // Skip if already a URL
-        if (!att.url?.startsWith('data:')) return att
-
-        // Upload base64 data and replace with URL
-        const url = await this.upload(att.url, att.contentType)
-        return { ...att, url }
-      }),
-    )
-
-    return { ...msg, content: { ...msg.content, experimental_attachments: uploaded } }
-  }
-
-  async upload(dataUri: string, contentType?: string): Promise<string> {
-    const base64 = dataUri.split(',')[1]
-    const buffer = Buffer.from(base64, 'base64')
-
-    // Replace with your storage provider (S3, R2, GCS, Convex, etc.)
-    // return await s3.upload(buffer, contentType);
-    throw new Error('Implement upload() with your storage provider')
-  }
-}
-```
-
-Use the processor with your agent:
-
-```typescript
-import { Agent } from '@mastra/core/agent'
-import { Memory } from '@mastra/memory'
-import { AttachmentUploader } from './processors/attachment-uploader'
-
-const agent = new Agent({
-  id: 'my-agent',
-  memory: new Memory({ storage: yourStorage }),
-  inputProcessors: [new AttachmentUploader()],
-})
-```
+- [Composite storage](/reference/storage/composite)
+- [Storage retention](/reference/storage/retention)
+- [Storage schemas](/reference/storage/overview)
+- [Memory](/docs/memory/overview)
+- [Observability storage](/docs/observability/storage)
