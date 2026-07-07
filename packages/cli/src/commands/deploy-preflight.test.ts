@@ -193,6 +193,16 @@ describe('preflightBuildOutput', () => {
       expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
     });
 
+    it('treats an empty-string guard value as missing (runtime || still takes the fallback)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, { TURSO_DATABASE_URL: '' }, { hasEnvFile: true });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('error');
+      expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
+    });
+
     it('errors with an actionable message when the guarding var is missing and an env file is present', async () => {
       writeBundle(`export {};`);
       writeMetadata({ localPaths: [guardedDetection] });

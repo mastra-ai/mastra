@@ -363,8 +363,9 @@ async function checkLocalStoragePaths(
     }
 
     // The literal is a dead fallback when the guarding env var is set in the
-    // deploy environment.
-    if (d.guardedBy in envVars) continue;
+    // deploy environment. An empty value doesn't count: `process.env.X || 'file:...'`
+    // still takes the fallback at runtime when X is blank.
+    if (envVars[d.guardedBy]) continue;
 
     if (hasEnvFile) {
       issues.push({

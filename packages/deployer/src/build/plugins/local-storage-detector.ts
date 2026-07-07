@@ -57,6 +57,10 @@ const PROCESS_ENV_DOT = /\bprocess\.env\.([A-Z_][A-Z0-9_]*)\b/g;
 const PROCESS_ENV_BRACKET = /\bprocess\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/g;
 
 /** Names of the metadata assets emitted into the output dir. */
+// TODO(preflight-metadata): stop emitting the legacy file in the next minor
+// after @mastra/deployer 1.50 — every CLI released alongside 1.50+ reads
+// preflight-metadata.json. Also remove the legacy fallback in the CLI's
+// deploy-preflight.ts at the same time.
 const LEGACY_LOCAL_PATHS_FILE = 'preflight-local-paths.json';
 const PREFLIGHT_METADATA_FILE = 'preflight-metadata.json';
 
