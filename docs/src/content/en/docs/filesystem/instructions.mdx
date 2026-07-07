@@ -1,23 +1,73 @@
 ---
 title: "Instructions | Filesystem"
-description: Author a file-based agent's always-on system prompt with instructions.md.
+description: Write a file-based agent's always-on system prompt with instructions.md, and learn when to reach for tools or skills instead.
 packages:
   - "@mastra/core"
 ---
 
 # Instructions
 
-An agent's `instructions.md` holds its always-on system prompt. Use it for the agent's permanent identity, tone, and standing rules. Mastra inlines the file contents into the generated code at build time.
+An agent's `instructions.md` holds its always-on system prompt: the model reads it on every turn. Use it to define the agent's identity, tone, role, and standing rules.
 
-## Author instructions
+## When to use instructions
 
-Add an `instructions.md` at the agent root. Whatever you write becomes the prompt.
+Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into tools or skills, which the model pulls in only when they're relevant.
+
+| Content type | Where it goes | Why |
+| - | - | - |
+| Agent identity, tone, standing rules | `instructions.md` | Always on, read every turn |
+| A callable action with inputs | [`tools/`](/docs/filesystem/tools) | The model decides when to invoke it |
+| Detailed reference loaded on demand | [`skills/`](/docs/filesystem/skills) | Injected only when relevant |
+
+## Quickstart
+
+Add an `instructions.md` at the agent root. Whatever you write becomes the prompt, so the shortest version is a single sentence.
 
 ```markdown title="src/mastra/agents/weather/instructions.md"
 You are a helpful weather assistant. Answer questions about current conditions and forecasts.
 ```
 
-Keep this file to stable behavior. Use [tools](/docs/filesystem/tools) for actions and [skills](/docs/filesystem/skills) for procedures the agent loads only when relevant.
+## What goes in instructions
+
+Effective instructions cover the parts of an agent's behavior that never change:
+
+- **Role and identity:** Who the agent is and what it does.
+- **Tone and style:** How it should sound, and any language or formatting conventions.
+- **Standing rules:** Behavior that applies every turn, such as always citing sources or asking for clarification when a request is ambiguous.
+- **Output format:** Preferred structure for responses, such as short answers, tables, or fenced code.
+
+A realistic prompt reads like a short brief rather than a one-liner:
+
+```markdown title="src/mastra/agents/support/instructions.md"
+You are a support agent for an online bookstore. You help customers with orders,
+returns, and account questions.
+
+Be concise and friendly. Confirm the customer's order number before discussing
+order-specific details, and ask for clarification when a request is ambiguous.
+
+Never invent policy. When you're unsure, say so and offer to escalate to a human
+agent. Format multi-step instructions as a numbered list.
+```
+
+## Dynamic instructions
+
+When the prompt needs to change per request, for example based on the current user or runtime context, set a dynamic `instructions` function in [`config.ts`](/docs/filesystem/config) instead of using `instructions.md`. A function `instructions` wins over `instructions.md`, so the static file is ignored when both are present.
+
+```typescript title="src/mastra/agents/support/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: ({ runtimeContext }) => {
+    const tier = runtimeContext.get('tier') ?? 'standard'
+    return `You are a support agent. Treat this as a ${tier}-tier customer.`
+  },
+})
+```
+
+## Build-time behavior
+
+Mastra reads `instructions.md` and inlines its contents into the generated code when the bundler builds your project. The deployed agent doesn't read the file at runtime, so changes to `instructions.md` take effect only after the next build.
 
 ## Precedence with config
 
@@ -30,6 +80,7 @@ Instructions can come from `instructions.md` or from the `instructions` field in
 ## Related
 
 - [config.ts](/docs/filesystem/config)
+- [Tools](/docs/filesystem/tools)
 - [Skills](/docs/filesystem/skills)
 - [Filesystem overview](/docs/filesystem/overview)
 - [`Agent` reference](/reference/agents/agent)
