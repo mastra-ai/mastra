@@ -9,9 +9,10 @@ const execaMock = vi.hoisted(() => vi.fn());
 vi.mock('execa', () => ({ execa: execaMock }));
 
 import { detectEntry, discoverLocalPlugins, installGithubPlugin, installLocalPlugin } from '../install.js';
+import { findMastraCodePackageRoot } from '../package-link.js';
 import { loadPluginRegistry } from '../registry.js';
 
-const mastracodePackageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
+const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
 
 let tempDir: string | undefined;
 
