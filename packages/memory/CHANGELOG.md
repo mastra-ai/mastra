@@ -1,5 +1,11 @@
 # @mastra/memory
 
+## 1.22.2-alpha.0
+
+### Patch Changes
+
+- Fixed the recall tool throwing "Either cursor or threadId is required" when browsing messages with thread-scoped retrieval. In thread scope, the tool now falls back to the current thread when no cursor is given, and error messages explain how to proceed when no thread context can be resolved. ([#19065](https://github.com/mastra-ai/mastra/pull/19065))
+
 ## 1.22.1
 
 ### Patch Changes
