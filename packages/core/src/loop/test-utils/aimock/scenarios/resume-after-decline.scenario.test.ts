@@ -47,6 +47,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { deleteFileTool },
         memory: sharedMemory,
+        engine,
       });
 
       const threadId = 'resume-after-decline-thread';
@@ -173,6 +174,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { sensitiveTool },
         memory: sharedMemory,
+        engine,
       });
 
       const threadId = 'decline-result-thread';
@@ -210,10 +212,10 @@ describeForAllEngines(
       const declineResult = await shared.agent.resumeStream({ approved: false }, { runId: output.runId, toolCallId });
 
       // Drain
-      for await (const _chunk of declineResult.fullStream) {
-        // drain
+      const declineChunks: any[] = [];
+      for await (const chunk of declineResult.fullStream) {
+        declineChunks.push(chunk);
       }
-
       // A declined tool no longer emits a tool-result chunk: it is persisted as `output-denied`
       // with the not-approved reason on its approval metadata (issue #17218). So it must NOT
       // surface as a live tool-result...
@@ -233,5 +235,5 @@ describeForAllEngines(
       expect(declined?.approval?.reason?.toLowerCase()).toContain('not approved');
     });
   },
-  { skip: ['durable', 'fs'] },
+  { skip: ['fs'] },
 );

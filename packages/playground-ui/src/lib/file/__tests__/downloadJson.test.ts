@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 import { downloadJson } from '../downloadJson';
 
 // jsdom's Blob exposes no `.text()`, and the global `Response` doesn't recognize it.
@@ -27,7 +28,9 @@ describe('downloadJson', () => {
     downloadJson('trace-abc.json', data);
 
     expect(createObjectURL).toHaveBeenCalledTimes(1);
-    const blob = createObjectURL.mock.calls[0]![0] as Blob;
+    const firstCall = createObjectURL.mock.calls[0];
+    assert(firstCall, 'Expected createObjectURL call');
+    const [blob] = firstCall as [Blob];
     expect(blob.type).toBe('application/json');
     await expect(readBlobText(blob)).resolves.toBe(JSON.stringify(data, null, 2));
 

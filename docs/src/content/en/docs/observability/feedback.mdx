@@ -1,0 +1,142 @@
+---
+title: "Feedback | Observability"
+description: "Collect, list, and query human feedback records in Mastra observability."
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Feedback
+
+Feedback records capture human-in-the-loop signals such as thumbs, ratings, comments, and corrections. Use feedback when you need to attach user, QA, Studio, or system review data to a trace or span and query that data alongside other observability signals.
+
+Unlike metrics and scores, feedback is usually supplied by a person or review workflow. Numeric feedback values can be aggregated, grouped, charted over time, and queried for percentiles.
+
+## When to use feedback
+
+- Collect user satisfaction ratings for agent responses.
+- Store QA comments or corrections next to the trace they review.
+- Build dashboards for ratings by agent, environment, or experiment.
+
+## Add feedback
+
+Use `mastra.observability.addFeedback()` when you want to annotate a persisted trace or span from app code. The helper is optional on the observability entrypoint, so check that the active observability implementation supports it. See the [client SDK observability reference](/reference/client-js/observability) for all client methods.
+
+```typescript title="src/mastra/feedback.ts"
+if (!mastra.observability.addFeedback) {
+  throw new Error('Feedback is not supported by the active observability implementation')
+}
+
+await mastra.observability.addFeedback({
+  traceId: 'trace-123',
+  spanId: 'span-456',
+  feedback: {
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+    comment: 'The answer solved my issue.',
+  },
+})
+```
+
+## Create feedback
+
+Every `createFeedback()` requires `feedbackType` and `value`. Add `traceId` or `spanId` when the feedback should be anchored to a trace or a specific span. Use `feedbackSource` as optional string metadata, such as `user`, `qa`, `studio`, or `system`.
+
+For storage-level writes, include `timestamp` because the method writes directly to the store.
+
+```typescript
+const observability = await mastra.getStorage()!.getStore('observability')
+
+await observability!.createFeedback({
+  feedback: {
+    feedbackId: 'feedback-rating-1',
+    timestamp: new Date(),
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+    comment: 'The answer solved my issue.',
+    tags: ['production'],
+  },
+})
+
+await observability!.createFeedback({
+  feedback: {
+    feedbackId: 'feedback-comment-1',
+    timestamp: new Date(),
+    feedbackSource: 'qa',
+    feedbackType: 'comment',
+    value: 'Needs a citation before shipping.',
+    experimentId: 'support-agent-eval',
+  },
+})
+```
+
+## List feedback
+
+Use `listFeedback()` to page through raw records or poll with delta mode.
+
+```typescript
+const result = await observability!.listFeedback({
+  filters: {
+    feedbackType: 'rating',
+    feedbackSource: 'user',
+    timestamp: { start: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+  },
+  pagination: { page: 0, perPage: 20 },
+  orderBy: { field: 'timestamp', direction: 'DESC' },
+})
+
+console.log(result.feedback, result.pagination?.hasMore)
+```
+
+Filters include target fields such as `traceId` and `spanId`, feedback fields such as `feedbackType`, `feedbackSource`, and `feedbackUserId`, and shared context fields such as `entityName`, `environment`, `experimentId`, and `tags`.
+
+```typescript
+await observability!.listFeedback({
+  filters: {
+    traceId: 'trace-123',
+    feedbackType: ['rating', 'thumbs'],
+    tags: ['production'],
+  },
+})
+```
+
+## Query feedback analytics
+
+OLAP feedback queries operate on numeric `value` fields. Use them for ratings, thumbs encoded as `1` and `-1`, numeric QA scores, or other numeric feedback types.
+
+```typescript
+const rating = await observability!.getFeedbackAggregate({
+  feedbackType: 'rating',
+  feedbackSource: 'user',
+  aggregation: 'avg',
+  comparePeriod: 'previous_day',
+})
+
+const byAgent = await observability!.getFeedbackBreakdown({
+  feedbackType: 'rating',
+  groupBy: ['entityName'],
+  aggregation: 'avg',
+  filters: { environment: 'production' },
+})
+
+const ratingsOverTime = await observability!.getFeedbackTimeSeries({
+  feedbackType: 'rating',
+  aggregation: 'avg',
+  interval: '1h',
+  groupBy: ['feedbackSource'],
+})
+```
+
+See the [feedback reference](/reference/observability/feedback) for all fields, filters, return types, and percentile query parameters.
+
+## Related
+
+- [Observability overview](/docs/observability/overview)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Metrics overview](/docs/observability/metrics/overview)
+- [Client SDK observability reference](/reference/client-js/observability)
+- [Feedback reference](/reference/observability/feedback)

@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 const Popover = PopoverPrimitive.Root;
 
 type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 

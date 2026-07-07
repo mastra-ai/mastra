@@ -16,7 +16,7 @@ import type { SelectedEntity } from '../../types';
 import { SignalsOverviewPage } from '../signals-overview-page';
 
 const BASE_URL = 'https://observability.test';
-const ROOT = `${BASE_URL}/entity-learning`;
+const ROOT = `${BASE_URL}/api/learning`;
 
 const server = setupServer();
 

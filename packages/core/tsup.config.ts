@@ -98,6 +98,7 @@ export default defineConfig({
         '@internal/ai-sdk-v4',
         '@internal/ai-sdk-v5',
         '@internal/ai-v6',
+        '@internal/ai-v7',
         '@internal/external-types',
         '@internal/core',
         '@internal/voice',

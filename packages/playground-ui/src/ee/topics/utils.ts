@@ -8,7 +8,7 @@ import type {
   TopicWithCounts,
 } from './types';
 
-const TOPIC_COLORS = ['#7C3AED', '#2563EB', '#0891B2', '#059669', '#CA8A04', '#EA580C', '#DC2626', '#DB2777'];
+const TOPIC_COLORS = ['#7C3AED', '#2563EB', '#0891B2', '#059669', '#CA8A04', '#EA580C', '#DC2626', '#DB2777'] as const;
 
 function hashString(value: string): number {
   let hash = 0;
@@ -20,7 +20,7 @@ function hashString(value: string): number {
 }
 
 export function getTopicColor(id: string): string {
-  return TOPIC_COLORS[hashString(id) % TOPIC_COLORS.length];
+  return TOPIC_COLORS[hashString(id) % TOPIC_COLORS.length] ?? TOPIC_COLORS[0];
 }
 
 export function getTraceCount(subtopic: Pick<TopicSubtopic, 'traceSummaries'>): number {

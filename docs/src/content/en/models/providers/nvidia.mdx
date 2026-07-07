@@ -1042,13 +1042,13 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": null
   },
   {
-    "model": "nvidia/z-ai/glm-5.1",
+    "model": "nvidia/z-ai/glm-5.2",
     "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131072,
+    "contextWindow": 1000000,
     "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
@@ -1084,7 +1084,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "nvidia/z-ai/glm-5.1"
+      ? "nvidia/z-ai/glm-5.2"
       : "nvidia/abacusai/dracarys-llama-3_1-70b-instruct";
   }
 });

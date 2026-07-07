@@ -106,7 +106,7 @@ export class MastraLLMVNext extends MastraBase {
   stream<Tools extends ToolSet, OUTPUT = undefined>({
     resumeContext,
     runId,
-    stopWhen = stepCountIs(5),
+    stopWhen,
     maxSteps,
     tools = {} as Tools,
     modelSettings,
@@ -143,12 +143,16 @@ export class MastraLLMVNext extends MastraBase {
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
+    // `maxSteps` is sugar for the stop condition `stepCountIs(maxSteps)`. When a
+    // custom `stopWhen` is also provided, compose the two (the loop ORs stop
+    // conditions) instead of letting the maxSteps cap replace the user's
+    // condition. The default cap only applies when neither is set.
     let stopWhenToUse;
-
     if (maxSteps && typeof maxSteps === 'number') {
-      stopWhenToUse = stepCountIs(maxSteps);
+      const userConditions = stopWhen ? (Array.isArray(stopWhen) ? stopWhen : [stopWhen]) : [];
+      stopWhenToUse = [stepCountIs(maxSteps), ...userConditions];
     } else {
-      stopWhenToUse = stopWhen;
+      stopWhenToUse = stopWhen ?? stepCountIs(5);
     }
 
     const messages = messageList.get.all.aiV5.model();

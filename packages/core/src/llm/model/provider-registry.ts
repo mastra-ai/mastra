@@ -12,7 +12,7 @@ import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js
 import { MastraGateway } from './gateways/mastra.js';
 import { ModelsDevGateway } from './gateways/models-dev.js';
 import { NetlifyGateway } from './gateways/netlify.js';
-import staticRegistry from './provider-registry.json';
+import staticRegistryJson from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
 // Re-export types for convenience
@@ -24,6 +24,10 @@ interface RegistryData {
   models: Record<string, string[]>;
   version: string;
 }
+
+// JSON imports widen string literals to `string`, so fields like
+// `modelOverrides[*].shape` don't match their literal-union types.
+const staticRegistry = staticRegistryJson as RegistryData;
 
 /**
  * Check if running in offline/air-gapped mode.

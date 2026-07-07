@@ -92,17 +92,47 @@ function parseItem(line: string): ParsedItem | null {
     const text = trimmed.replace(/^-\s*/, '').trim();
     return text ? { text, time: null, priority: null, children: [] } : null;
   }
-  const match = trimmed.match(/^\*\s*(🔴|🟡|🟢|✅)?\s*(?:\((\d{1,2}:\d{2})\))?\s*(.+)$/);
-  if (match) {
-    const [, p, t, text] = match;
-    return { text: text.trim(), time: t ?? null, priority: getPriorityFromEmoji(p), children: [] };
+  // Extracts a root observation line of the form `* 🔴 (11:55) some text`,
+  // where the priority emoji and `(HH:MM)` timestamp are both optional:
+  // → { priority: high, time: '11:55', text: 'some text' }.
+  // Parsed incrementally instead of with a single regex: adjacent `\s*` runs
+  // around optional groups backtrack polynomially on adversarial input
+  // (CodeQL js/polynomial-redos).
+  if (trimmed.startsWith('*')) {
+    let rest = trimmed.slice(1).trimStart();
+    let priority: ParsedItem['priority'] = null;
+    for (const emoji of ['🔴', '🟡', '🟢', '✅']) {
+      if (rest.startsWith(emoji)) {
+        priority = getPriorityFromEmoji(emoji);
+        rest = rest.slice(emoji.length).trimStart();
+        break;
+      }
+    }
+    let time: string | null = null;
+    const timeMatch = rest.match(/^\((\d{1,2}:\d{2})\)/);
+    if (timeMatch) {
+      const [matchedText, matchedTime] = timeMatch;
+      if (matchedText !== undefined && matchedTime !== undefined) {
+        time = matchedTime;
+        rest = rest.slice(matchedText.length).trimStart();
+      }
+    }
+    if (rest) {
+      return { text: rest, time, priority, children: [] };
+    }
   }
   return { text: trimmed, time: null, priority: null, children: [] };
 }
 
 function parseObservations(raw: string): ParsedSection[] {
-  const obsMatch = raw.match(/<observations>\s*([\s\S]*?)\s*<\/observations>/);
-  const content = (obsMatch ? obsMatch[1] : raw).trim();
+  // Extracts the text between `<observations>` and `</observations>` (falls
+  // back to the whole string when the tags are absent). indexOf instead of a
+  // lazy regex to avoid polynomial backtracking on adversarial input
+  // (CodeQL js/polynomial-redos).
+  const openTag = '<observations>';
+  const openIdx = raw.indexOf(openTag);
+  const closeIdx = openIdx === -1 ? -1 : raw.indexOf('</observations>', openIdx + openTag.length);
+  const content = (closeIdx === -1 ? raw : raw.slice(openIdx + openTag.length, closeIdx)).trim();
   if (!content) return [];
   const lines = content.split('\n');
   const sections: ParsedSection[] = [];
@@ -111,18 +141,35 @@ function parseObservations(raw: string): ParsedSection[] {
   for (const line of lines) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    const dateMatch = trimmed.match(/^Date:\s*(.+?)(?:\s*\(([^)]+)\))?$/);
-    if (dateMatch) {
-      current = { title: dateMatch[1].trim(), relativeTime: dateMatch[2]?.trim() ?? null, items: [] };
-      sections.push(current);
-      lastRoot = null;
-      continue;
+    // Extracts a section header of the form `Date: Jul 2, 2026 (today)`,
+    // where the parenthesized relative time is optional:
+    // → { title: 'Jul 2, 2026', relativeTime: 'today' }.
+    // Parsed with string ops instead of a lazy regex with an optional trailing
+    // group, which backtracks polynomially (CodeQL js/polynomial-redos).
+    if (trimmed.startsWith('Date:')) {
+      let title = trimmed.slice('Date:'.length).trim();
+      let relativeTime: string | null = null;
+      if (title.endsWith(')')) {
+        const openParen = title.lastIndexOf('(');
+        const inner = openParen === -1 ? '' : title.slice(openParen + 1, -1);
+        // `inner` must not contain ')' — mirrors the original `\(([^)]+)\)$` semantics
+        if (openParen > 0 && inner && !inner.includes(')')) {
+          relativeTime = inner.trim();
+          title = title.slice(0, openParen).trim();
+        }
+      }
+      if (title) {
+        current = { title, relativeTime, items: [] };
+        sections.push(current);
+        lastRoot = null;
+        continue;
+      }
     }
     if (!current) {
       current = { title: 'Recent', relativeTime: null, items: [] };
       sections.push(current);
     }
-    const indent = line.match(/^(\s*)/)?.[1].length ?? 0;
+    const indent = line.match(/^(\s*)/)?.[1]?.length ?? 0;
     const isNested = indent >= 2 && (trimmed.startsWith('* ->') || trimmed.startsWith('->') || trimmed.startsWith('-'));
     const item = parseItem(line);
     if (!item) continue;
@@ -254,8 +301,9 @@ export function ObservationDetailView({
   const previousRecord = selectedIndex > 0 ? sorted[selectedIndex - 1] : null;
 
   useEffect(() => {
-    if (!selectedRecordId && sorted.length > 0) {
-      onSelectRecord(sorted[sorted.length - 1].id);
+    const last = sorted.at(-1);
+    if (!selectedRecordId && last) {
+      onSelectRecord(last.id);
     }
   }, [selectedRecordId, sorted, onSelectRecord]);
 
