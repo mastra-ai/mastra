@@ -179,7 +179,7 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 
 :::note
 
-Title generation (`generateTitle`) is a top-level thread concern and is **not** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
+Title generation (`generateTitle`) is a top-level thread concern and **isn't** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
 
 :::
 
