@@ -6324,7 +6324,7 @@ export class Agent<
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId,
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, key),
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
@@ -6333,6 +6333,18 @@ export class Agent<
     }
 
     return toolCalls;
+  }
+
+  /**
+   * Suspend payloads persisted before they carried `toolCallId` only hold the
+   * id as the workflow resume label (`resumeLabels[toolCallId] = { stepId }`).
+   * Recover it when exactly one label points at the suspended step.
+   */
+  #findResumeLabelForStep(existingSnapshot: WorkflowRunState | null | undefined, stepId: string): string | undefined {
+    const labels = Object.entries(existingSnapshot?.resumeLabels ?? {}).filter(
+      ([, target]) => target.stepId === stepId,
+    );
+    return labels.length === 1 ? labels[0]![0] : undefined;
   }
 
   #getSuspendedToolInfo(
@@ -7641,6 +7653,10 @@ export class Agent<
     }
 
     const results: SendAgentNotificationSignalResult<OUTPUT>[] = [];
+    // Set when a record stays pending with a scheduled deliverAt/summaryAt —
+    // those are delivered later by the notification dispatch workflow, so the
+    // dispatcher schedule (and scheduler) must be lazily activated.
+    let needsDispatcher = false;
     for (const { record, decision } of planned) {
       if (decision.action === 'discard') {
         const updated = await notifications.updateNotification({
@@ -7681,6 +7697,10 @@ export class Agent<
               : (decision.summaryAt ?? record.summaryAt),
           deliveryReason: decision.reason,
         });
+
+        if (updated.deliverAt != null || updated.summaryAt != null) {
+          needsDispatcher = true;
+        }
 
         if (shouldEmitSummaryNow) {
           const signal = createNotificationSummarySignal(summarizeNotifications([updated]));
@@ -7790,6 +7810,10 @@ export class Agent<
         persisted: result.persisted,
         accepted: result.accepted,
       });
+    }
+
+    if (needsDispatcher) {
+      await this.#mastra?.__ensureNotificationDispatchReady();
     }
 
     return results;

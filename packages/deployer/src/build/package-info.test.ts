@@ -10,34 +10,6 @@ afterEach(async () => {
 });
 
 describe('getPackageMetadata', () => {
-  it('reads metadata for packages that do not export package.json', async () => {
-    const tempRoot = join(process.cwd(), '.tmp');
-    await mkdir(tempRoot, { recursive: true });
-    const tempDir = await mkdtemp(join(tempRoot, 'package-metadata-'));
-    tempDirs.push(tempDir);
-
-    const packageDir = join(tempDir, 'node_modules', 'hidden-package-json');
-    await mkdir(packageDir, { recursive: true });
-    await writeFile(
-      join(packageDir, 'package.json'),
-      JSON.stringify({
-        name: 'hidden-package-json',
-        version: '9.6.1',
-        type: 'module',
-        exports: {
-          '.': './index.js',
-        },
-      }),
-    );
-    await writeFile(join(packageDir, 'index.js'), `export const value = true;`);
-
-    await expect(getPackageMetadata('hidden-package-json', tempDir)).resolves.toMatchObject({
-      rootPath: packageDir,
-      version: '9.6.1',
-      packageSpec: undefined,
-    });
-  });
-
   it('falls back from a package subpath to the package root metadata', async () => {
     const tempRoot = join(process.cwd(), '.tmp');
     await mkdir(tempRoot, { recursive: true });

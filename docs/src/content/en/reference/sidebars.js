@@ -546,6 +546,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Schedules',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'schedules/overview', label: 'Overview' }],
+    },
+    {
+      type: 'category',
       label: 'Server',
       collapsed: true,
       items: [
@@ -659,6 +665,7 @@ const sidebars = {
       label: 'Tools and MCP',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'tools/ask-user-tool', label: 'askUserTool' },
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
         {
           type: 'doc',
@@ -673,6 +680,8 @@ const sidebars = {
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
+        { type: 'doc', id: 'tools/submit-plan-tool', label: 'submitPlanTool' },
+        { type: 'doc', id: 'tools/task-tools', label: 'Task tools' },
         { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
@@ -716,6 +725,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/google-gemini-live', label: 'Google Gemini Live' },
         { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
         { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
+        { type: 'doc', id: 'voice/livekit', label: 'LiveKit' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },

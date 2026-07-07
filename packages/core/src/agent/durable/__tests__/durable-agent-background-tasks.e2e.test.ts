@@ -13,7 +13,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { defaultNameGenerator, getLLMRecordingsDir, getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys, shouldSkipLLMTest } from '@internal/test-utils';
+import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { Mastra } from '../../../mastra';
@@ -25,9 +25,6 @@ import { createDurableAgent } from '../create-durable-agent';
 
 const MODE = getLLMTestMode();
 setupDummyApiKeys(MODE, ['openai']);
-
-const RECORDING_BASE = 'core-src-agent-durable-__tests__-durable-agent-background-tasks.e2e';
-const skipSuite = shouldSkipLLMTest(MODE, 'openai', RECORDING_BASE);
 
 function normalizeDynamicBackgroundFields({ url, body }: { url: string; body: unknown }): {
   url: string;
@@ -52,7 +49,7 @@ beforeEach(async c => {
   mockGateway = createGatewayMock({
     maxChunkDelay: 100,
     name: `test-${Buffer.from(createHash('sha256').update(c.task.name).digest('hex').slice(0, 8))}`,
-    exactMatch: true,
+    exactMatch: false, // Memory recall may include varying background-task tool invocations across runs
     transformRequest: normalizeDynamicBackgroundFields,
     recordingsDir: join(getLLMRecordingsDir(c.task.file.filepath), defaultNameGenerator(c.task.file.filepath)),
   });
@@ -63,7 +60,7 @@ afterEach(async () => {
   if (mockGateway) await mockGateway.saveAndStop();
 });
 
-describe.skipIf(skipSuite)('DurableAgent Background Tasks E2E', () => {
+describe('DurableAgent Background Tasks E2E', () => {
   let mastra: Mastra;
 
   const researchTool = createTool({

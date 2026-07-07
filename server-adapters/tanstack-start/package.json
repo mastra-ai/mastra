@@ -1,6 +1,6 @@
 {
   "name": "@mastra/tanstack-start",
-  "version": "0.2.4-alpha.2",
+  "version": "0.2.5-alpha.1",
   "description": "Mastra TanStack Start server adapter — drop your Mastra instance into a TanStack Start app",
   "type": "module",
   "main": "dist/index.js",

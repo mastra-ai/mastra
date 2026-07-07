@@ -1,9 +1,5 @@
 import { skipToken, useQuery } from '@tanstack/react-query';
-import type {
-  EntityLearningPointsParams,
-  EntityLearningTopicExamplesParams,
-  EntityLearningOutlierExamplesParams,
-} from '../services';
+import type { EntityLearningTopicExamplesParams, EntityLearningOutlierExamplesParams } from '../services';
 import { useEntityLearningConfig } from './use-entity-learning-config';
 
 const KEY = 'entity-learning';
@@ -107,28 +103,6 @@ export function useEntityTopicExamples(
     queryFn:
       service && entityId && topicId && params?.signalName && params?.runId
         ? () => service.getEntityTopicExamples(entityId, topicId, params)
-        : skipToken,
-    retry: false,
-  });
-}
-
-/** GET /entity-learning/entities/:entityId/points?signalName=&runId=&includeOutliers=&limit= */
-export function useEntityPoints(entityId: string | undefined, params: EntityLearningPointsParams | undefined) {
-  const { service } = useEntityLearningConfig();
-
-  return useQuery({
-    queryKey: [
-      KEY,
-      'points',
-      entityId,
-      params?.signalName,
-      params?.runId,
-      params?.includeOutliers ?? null,
-      params?.limit ?? null,
-    ],
-    queryFn:
-      service && entityId && params?.signalName && params?.runId
-        ? () => service.getEntityPoints(entityId, params)
         : skipToken,
     retry: false,
   });
