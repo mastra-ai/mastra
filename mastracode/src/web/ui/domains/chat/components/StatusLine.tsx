@@ -58,7 +58,10 @@ export function StatusLine({
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
   return (
-    <div aria-label="Session status line" className="flex shrink-0 items-center gap-3 py-2 text-ui-sm text-icon3">
+    <div
+      aria-label="Session status line"
+      className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 py-2 text-ui-sm text-icon3"
+    >
       {modes && modes.length > 0 && onModeChange && (
         <div role="group" aria-label="Session mode" className="shrink-0">
           <ButtonsGroup spacing="close">

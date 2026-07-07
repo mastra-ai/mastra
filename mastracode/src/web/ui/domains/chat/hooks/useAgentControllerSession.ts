@@ -8,14 +8,17 @@ import type {
   PermissionPolicy,
   ToolCategory,
 } from '@mastra/client-js';
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
+import { queryKeys } from '../../../../../shared/api/keys';
 import { initialTranscript, transcriptReducer } from '../services/transcript';
 import type { TranscriptState } from '../services/transcript';
 import {
   useAgentControllerModelsQuery,
   useAgentControllerPermissionsQuery,
   useAgentControllerSettingsQuery,
+  useAgentControllerThreadMessagesQuery,
   useAgentControllerThreadsQuery,
   useCloneAgentControllerThreadMutation,
   useCreateAgentControllerThreadMutation,
@@ -72,11 +75,16 @@ export interface AgentControllerSessionApi {
   ) => Promise<void>;
   switchMode: (modeId: string) => Promise<void>;
   switchModel: (modelId: string) => Promise<void>;
+  /** Rebind the session to a thread. Rethrows on failure so callers (route sync) can react. */
   switchThread: (threadId: string) => Promise<void>;
-  createThread: (title?: string) => Promise<void>;
+  /** Create a new thread and bind the session to it. Resolves with the new thread id. */
+  createThread: (title?: string) => Promise<string>;
   deleteThread: (threadId: string) => Promise<void>;
   renameThread: (threadId: string, title: string) => Promise<void>;
-  cloneThread: (sourceThreadId?: string) => Promise<void>;
+  /** Clone a thread (with messages) and bind to the clone. Resolves with the new thread id. */
+  cloneThread: (sourceThreadId?: string) => Promise<string>;
+  /** True while the bound thread's persisted history is loading. */
+  messagesPending: boolean;
   refreshThreads: () => Promise<void>;
   setGoal: (objective: string) => Promise<void>;
   pauseGoal: () => Promise<void>;
@@ -116,12 +124,23 @@ export function useAgentControllerSession({
   const [querySession, setQuerySession] = useState<Session | null>(null);
 
   const sessionRef = useRef<Session | null>(null);
+  // Mirrors the latest transcript so stable callbacks can read current values.
+  const transcriptRef = useRef(transcript);
+  transcriptRef.current = transcript;
+  /**
+   * Thread id whose persisted history has been folded into the transcript.
+   * Guards the hydration effect so background refetches of the messages query
+   * never clobber a transcript that is accumulating live stream events.
+   */
+  const hydratedThreadRef = useRef<string | undefined>(undefined);
+  const queryClient = useQueryClient();
 
   const queryScope = { agentControllerId, resourceId };
   const modelsQuery = useAgentControllerModelsQuery(controller, enabled, { agentControllerId });
   const settingsQuery = useAgentControllerSettingsQuery(querySession, enabled, queryScope);
   const permissionsQuery = useAgentControllerPermissionsQuery(querySession, enabled, queryScope);
   const threadsQuery = useAgentControllerThreadsQuery(querySession, projectPath, enabled, queryScope);
+  const messagesQuery = useAgentControllerThreadMessagesQuery(querySession, transcript.threadId, enabled, queryScope);
   const setStateMutation = useSetAgentControllerStateMutation(querySession, queryScope);
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(querySession, queryScope);
   const createThreadMutation = useCreateAgentControllerThreadMutation(querySession, projectPath, queryScope);
@@ -135,6 +154,21 @@ export function useAgentControllerSession({
   const permissions = permissionsQuery.data ?? null;
   const pendingPermissionCategory = setPermissionForCategoryMutation.variables?.category ?? null;
   const threads = threadsQuery.data ?? [];
+
+  const messagesPending = Boolean(transcript.threadId) && messagesQuery.isPending;
+
+  // Fold persisted history into the transcript exactly once per thread binding.
+  // Live SSE events layer on top afterwards; a running turn defers hydration so
+  // the query can never clobber an in-flight stream.
+  const messagesData = messagesQuery.data;
+  useEffect(() => {
+    const threadId = transcript.threadId;
+    if (!threadId || !messagesData) return;
+    if (hydratedThreadRef.current === threadId) return;
+    if (transcript.running || transcript.pending) return;
+    hydratedThreadRef.current = threadId;
+    dispatch({ type: 'hydrateMessages', messages: messagesData, threadId });
+  }, [messagesData, transcript.threadId, transcript.running, transcript.pending]);
 
   const refreshSettings = useCallback(async () => {
     await settingsQuery.refetch();
@@ -150,6 +184,7 @@ export function useAgentControllerSession({
       setStatus('connecting');
       setController(null);
       setQuerySession(null);
+      hydratedThreadRef.current = undefined;
       dispatch({ type: 'reset' });
       return;
     }
@@ -180,29 +215,24 @@ export function useAgentControllerSession({
 
       if (isReconnect) {
         setStatus('reconnecting');
-        // Re-sync authoritative state and re-hydrate the thread history. Events
-        // streamed during the disconnect are lost, so reload the persisted
-        // messages instead of wiping the transcript to empty.
+        // Re-sync authoritative state. Events streamed during the disconnect
+        // are lost, so drop the cached history and clear the hydration guard:
+        // the messages query refetches and the hydration effect re-applies the
+        // persisted history on top of the reset transcript.
         try {
           const state = await session.state();
           if (disposed) return;
-          const threadId = state.threadId;
-          const messages = threadId
-            ? await session.listMessages(threadId).catch(() => {
-                // History reload failed — fall back to a state-only hydrate
-                // (empty transcript) rather than failing the whole reconnect.
-                return [];
-              })
-            : [];
-          if (disposed) return;
           dispatch({
-            type: 'hydrate',
-            messages,
+            type: 'reset',
             modeId: state.modeId,
             modelId: state.modelId,
-            threadId,
+            threadId: state.threadId,
             omProgress: state.omProgress,
             usage: state.tokenUsage,
+          });
+          hydratedThreadRef.current = undefined;
+          queryClient.removeQueries({
+            queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, state.threadId),
           });
         } catch {
           // State re-sync failed — still try to subscribe.
@@ -249,31 +279,18 @@ export function useAgentControllerSession({
         setModes(agentControllerModes);
 
         const state = await session.state();
-        // Resuming a thread that already has history: load and render it so the
-        // view isn't empty until new events arrive. Falls back to a clean reset.
+        if (disposed) return;
+        // Bind the transcript to the resumed thread; the messages query loads
+        // its persisted history and the hydration effect folds it in.
         const threadId = created.threadId ?? state.threadId;
-        try {
-          const messages = threadId ? await session.listMessages(threadId) : [];
-          if (disposed) return;
-          dispatch({
-            type: 'hydrate',
-            messages,
-            modeId: state.modeId,
-            modelId: state.modelId,
-            threadId,
-            omProgress: state.omProgress,
-            usage: state.tokenUsage,
-          });
-        } catch {
-          dispatch({
-            type: 'reset',
-            modeId: state.modeId,
-            modelId: state.modelId,
-            threadId,
-            omProgress: state.omProgress,
-            usage: state.tokenUsage,
-          });
-        }
+        dispatch({
+          type: 'reset',
+          modeId: state.modeId,
+          modelId: state.modelId,
+          threadId,
+          omProgress: state.omProgress,
+          usage: state.tokenUsage,
+        });
 
         await subscribe(session, false);
       } catch {
@@ -337,23 +354,39 @@ export function useAgentControllerSession({
   const switchThread = useCallback(async (threadId: string) => {
     const session = sessionRef.current;
     if (!session) return;
-    // Optimistically reflect the switch so the UI responds immediately, then
-    // load the thread's history (it isn't replayed over the event stream).
-    dispatch({ type: 'reset', threadId });
+    // Optimistically reflect the switch so the UI responds immediately; the
+    // messages query loads the thread's history (it isn't replayed over the
+    // event stream) and the hydration effect folds it in.
+    const prev = transcriptRef.current;
+    // Force re-hydration even if this thread was visited before — the reset
+    // below clears any previously applied history.
+    hydratedThreadRef.current = undefined;
+    dispatch({ type: 'reset', threadId, modeId: prev.modeId, modelId: prev.modelId });
     try {
       await session.switchThread(threadId);
-      const [messages, state] = await Promise.all([session.listMessages(threadId), session.state()]);
+      // Patch mode/model/usage from authoritative state WITHOUT touching the
+      // timeline: the messages query may already have hydrated the thread's
+      // history by the time this resolves, and a reset here would wipe it.
+      const state = await session.state();
       dispatch({
-        type: 'hydrate',
-        messages,
+        type: 'syncState',
         modeId: state.modeId,
         modelId: state.modelId,
-        threadId,
         omProgress: state.omProgress,
         usage: state.tokenUsage,
       });
     } catch (err) {
+      // Unbind the transcript (the server is still on the previous thread) so
+      // route sync can settle on /new without redirect loops.
+      dispatch({
+        type: 'reset',
+        modeId: prev.modeId,
+        modelId: prev.modelId,
+        usage: prev.usage,
+        omProgress: prev.omProgress,
+      });
       dispatch({ type: 'localNotice', level: 'error', text: `Failed to switch thread: ${errorText(err)}` });
+      throw err;
     }
   }, []);
 
@@ -367,7 +400,10 @@ export function useAgentControllerSession({
   const createThread = useCallback(
     async (title?: string) => {
       const thread = await createThreadMutation.mutateAsync(title);
-      dispatch({ type: 'reset', threadId: thread.id });
+      hydratedThreadRef.current = undefined;
+      const prev = transcriptRef.current;
+      dispatch({ type: 'reset', threadId: thread.id, modeId: prev.modeId, modelId: prev.modelId });
+      return thread.id;
     },
     [createThreadMutation],
   );
@@ -375,6 +411,12 @@ export function useAgentControllerSession({
   const deleteThread = useCallback(
     async (threadId: string) => {
       await deleteThreadMutation.mutateAsync(threadId);
+      // Deleting the bound thread unbinds the session server-side — mirror
+      // that locally so the UI (and route sync) treats the session as unbound.
+      const prev = transcriptRef.current;
+      if (prev.threadId === threadId) {
+        dispatch({ type: 'reset', modeId: prev.modeId, modelId: prev.modelId });
+      }
     },
     [deleteThreadMutation],
   );
@@ -389,7 +431,10 @@ export function useAgentControllerSession({
   const cloneThread = useCallback(
     async (sourceThreadId?: string) => {
       const thread = await cloneThreadMutation.mutateAsync(sourceThreadId ? { sourceThreadId } : undefined);
-      dispatch({ type: 'reset', threadId: thread.id });
+      hydratedThreadRef.current = undefined;
+      const prev = transcriptRef.current;
+      dispatch({ type: 'reset', threadId: thread.id, modeId: prev.modeId, modelId: prev.modelId });
+      return thread.id;
     },
     [cloneThreadMutation],
   );
@@ -455,6 +500,7 @@ export function useAgentControllerSession({
     deleteThread,
     renameThread,
     cloneThread,
+    messagesPending,
     refreshThreads,
     setGoal,
     pauseGoal,

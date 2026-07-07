@@ -127,6 +127,8 @@ describe('MastraCode web routing', () => {
     const { router } = renderRoutes('/chat', AUTH_DISABLED);
 
     expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    // /chat is the draft page: it stays on /chat and never redirects to a
+    // thread page until the user sends a first message.
     await expectPathname(router, '/chat');
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();

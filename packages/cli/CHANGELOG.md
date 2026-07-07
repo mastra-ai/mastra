@@ -1,5 +1,15 @@
 # mastra
 
+## 1.18.2-alpha.2
+
+### Patch Changes
+
+- Warn before overwriting existing environment variables during `mastra deploy`. When an env file provides variables whose values differ from those already stored on the target environment, the CLI now lists the affected keys and asks for confirmation before uploading (skipped with `--yes` or in headless mode). ([#19060](https://github.com/mastra-ai/mastra/pull/19060))
+
+- Updated dependencies [[`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1-alpha.2
+  - @mastra/deployer@1.50.1-alpha.2
+
 ## 1.18.2-alpha.1
 
 ### Patch Changes

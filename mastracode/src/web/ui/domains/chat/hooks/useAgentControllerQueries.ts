@@ -91,6 +91,23 @@ export function useAgentControllerThreadsQuery(
   });
 }
 
+export function useAgentControllerThreadMessagesQuery(
+  session: AgentControllerSession | null | undefined,
+  threadId: string | undefined,
+  enabled: boolean,
+  scope?: AgentControllerQueryScope,
+) {
+  const keyScope = scoped(scope);
+  return useQuery({
+    queryKey: queryKeys.agentControllerThreadMessages(keyScope.agentControllerId, keyScope.resourceId, threadId),
+    queryFn: () => session!.listMessages(threadId!),
+    enabled: enabled && Boolean(session) && Boolean(threadId),
+    // Live SSE events keep the transcript current; a focus refetch must never
+    // clobber an in-flight stream with stale persisted history.
+    refetchOnWindowFocus: false,
+  });
+}
+
 export function useSetAgentControllerStateMutation(
   session: AgentControllerSession | null | undefined,
   scope?: AgentControllerQueryScope,
