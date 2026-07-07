@@ -22,6 +22,7 @@ import { createOpenAI } from '@ai-sdk/openai-v5';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { Mastra } from '../../../../mastra';
+import { InMemoryStore } from '../../../../storage';
 import { assembleAgentFromFsEntry } from '../../../../agent/fs-routing';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
@@ -57,7 +58,7 @@ describeForAllEngines(
 
       // Register through the real file-routing path so the scenario exercises how
       // the bundler injects file-based agents.
-      const mastra = new Mastra({ agents: {}, logger: false });
+      const mastra = new Mastra({ agents: {}, logger: false, storage: new InMemoryStore() });
       mastra.__registerFsAgents({ supervisor: supervisor as any });
       const parent = mastra.getAgent('supervisor');
 
@@ -113,5 +114,6 @@ describeForAllEngines(
       expect(requests.length).toBeGreaterThanOrEqual(3);
     });
   },
-  { skip: ['durable', 'fs'] },
+  // fs: no FS engine variant for this test (it's already FS-assembled).
+  { skip: ['fs'] },
 );

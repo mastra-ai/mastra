@@ -659,7 +659,7 @@ export class AgentChannels {
    * originating chat platform. The processor resolves its render context from
    * the inbound `requestContext` marker set by `processChatMessage` when
    * present, and otherwise reconstructs it from the run's thread via the bound
-   * `AgentChannels` (so heartbeat / Studio / custom-UI runs on a channel-backed
+   * `AgentChannels` (so schedule / Studio / custom-UI runs on a channel-backed
    * thread still post back). Non-channel runs pass through untouched.
    *
    * Skipped if the user already added a processor with the same id.
@@ -1180,7 +1180,7 @@ export class AgentChannels {
    * The inbound webhook paths (`processChatMessage`, approve/decline) stash a
    * render context on `requestContext` because they already hold the live
    * `Thread` handle from `event.thread`. Runs that did NOT originate from a
-   * platform message (heartbeats, Studio, custom UI, user code) have no such
+   * platform message (schedule fires, Studio, custom UI, user code) have no such
    * handle, so `ChatChannelOutputProcessor` calls this to rebuild it from the
    * thread's persisted channel coordinates.
    *

@@ -1,13 +1,15 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
 import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
+import { cva } from 'class-variance-authority';
+import type { VariantProps } from 'class-variance-authority';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
@@ -222,6 +224,52 @@ export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 
+const codeEditorVariants = cva(
+  cn(
+    'font-mono relative overflow-hidden outline-hidden focus:outline-hidden focus-within:outline-hidden',
+    'transition-colors duration-normal ease-out-custom',
+  ),
+  {
+    variants: {
+      variant: {
+        default: 'rounded-md bg-surface3 border border-border1 p-1 focus-within:border-neutral6/20',
+        embedded: 'rounded-none border-none bg-transparent p-0',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
+    },
+  },
+);
+
+const editorFocusAttributes = Prec.highest(
+  EditorView.editorAttributes.of({
+    style: 'outline: none',
+  }),
+);
+
+const editorFocusTheme = Prec.highest(
+  EditorView.theme({
+    '&': {
+      outline: 'none',
+    },
+    '&.cm-focused': {
+      outline: 'none',
+    },
+    '.cm-scroller': {
+      outline: 'none',
+    },
+    '.cm-content': {
+      outline: 'none',
+    },
+    '.cm-content:focus': {
+      outline: 'none',
+    },
+  }),
+);
+
+const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
+
 export type CodeEditorProps = {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
   value?: string;
@@ -240,7 +288,8 @@ export type CodeEditorProps = {
   lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
-} & Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
+} & VariantProps<typeof codeEditorVariants> &
+  Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
 export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
   (
@@ -258,6 +307,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineNumbers = true,
       lineWrapping = true,
       editable,
+      variant,
       ...props
     },
     ref,
@@ -266,7 +316,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
-      const exts: Extension[] = [];
+      const exts: Extension[] = [...editorFocusExtensions];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
@@ -294,10 +344,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
-      <div
-        className={cn('rounded-md bg-surface3 p-1 font-mono relative border border-border1 overflow-hidden', className)}
-        {...props}
-      >
+      <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
         {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
         <CodeMirror
           ref={ref}

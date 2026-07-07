@@ -67,6 +67,6 @@ const otherSpanType: UISpanStyle = {
 };
 
 export function getSpanTypeUi(type: string) {
-  const typePrefix = type?.toLowerCase().split('_')[0];
+  const typePrefix = type?.toLowerCase().split('_')[0] ?? '';
   return spanTypeToUiElements[typePrefix] ?? otherSpanType;
 }

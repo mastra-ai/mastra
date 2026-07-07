@@ -5,23 +5,27 @@ import { GitBranch, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 
+// Deep import (not the chat barrel) to keep the cross-domain graph acyclic.
+import { useChatSession } from '../../chat/context/ChatSessionProvider';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
+import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
-import type { WorkspaceSession } from '../hooks/useWorkspaces';
-import type { Project, Worktree } from '../services/projects';
+import type { Worktree } from '../services/projects';
 
-interface WorkspacesSectionProps {
-  activeProject: Project | null | undefined;
-  session: WorkspaceSession;
-  agentControllerId?: string;
-  resourceId?: string;
-}
-
-export function WorkspacesSection({ activeProject, session, agentControllerId, resourceId }: WorkspacesSectionProps) {
+/**
+ * Propless workspaces section: reads the active project from context and the
+ * agent session from the chat domain, so worktree switches rebind the live
+ * session without prop wiring.
+ */
+export function WorkspacesSection() {
+  const { activeProject, resourceId } = useActiveProjectContext();
+  const session = useChatSession();
   const [creating, setCreating] = useState(false);
   const [branch, setBranch] = useState('');
   const workspaces = useWorkspacesQuery(activeProject);
-  const selectWorkspace = useSelectWorkspaceMutation(activeProject, session, { agentControllerId, resourceId });
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, session, { agentControllerId, resourceId });
+  const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
+  const selectWorkspace = useSelectWorkspaceMutation(activeProject, session, scope);
+  const createWorkspace = useCreateWorkspaceMutation(activeProject, session, scope);
 
   if (activeProject?.source !== 'github') return null;
 

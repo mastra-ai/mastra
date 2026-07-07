@@ -98,6 +98,12 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   /** Output processors to run in MastraModelOutput's stream pipeline */
   outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Optional external MessageList to use instead of creating a fresh empty one.
+   * When provided (e.g. the registry's live MessageList), MastraModelOutput can
+   * resolve step content from messages added during the workflow execution.
+   */
+  messageList?: MessageList;
 }
 
 /**
@@ -142,6 +148,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     closeOnSuspend = false,
     structuredOutput,
     outputProcessors,
+    messageList: externalMessageList,
   } = options;
 
   // Helper to log errors (uses logger if available, falls back to console)
@@ -153,11 +160,16 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
 
-  // Create a message list for the output
-  const messageList = new MessageList({
-    threadId,
-    resourceId,
-  });
+  // Use an external MessageList if provided (e.g. the live registry one that
+  // llm-execution.ts keeps in sync), otherwise create a fresh empty one.
+  // This lets MastraModelOutput resolve step content from the real assistant
+  // messages added during the workflow execution.
+  const messageList =
+    externalMessageList ??
+    new MessageList({
+      threadId,
+      resourceId,
+    });
 
   // Track subscription state
   let isSubscribed = false;
