@@ -557,7 +557,13 @@ export const WithSubheader: Story = {
 type ToggleableColumn = 'input' | 'entity';
 const COLUMN_LABELS: Record<ToggleableColumn, string> = { input: 'Input', entity: 'Entity' };
 
-const SCORE_ENTITIES = ['weather-agent', 'summarise-workflow', 'translation-agent', 'recipe-generator', 'sentiment-scorer'];
+const SCORE_ENTITIES = [
+  'weather-agent',
+  'summarise-workflow',
+  'translation-agent',
+  'recipe-generator',
+  'sentiment-scorer',
+];
 
 const SCORE_SAMPLE_INPUTS = [
   'What is the current weather in Tokyo?',
