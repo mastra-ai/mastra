@@ -17,34 +17,21 @@ With filesystem routing, the directory is the agent. Each folder under `src/mast
 
 A file-based project starts with `config.ts` and `instructions.md`. Add more files only when the agent needs more capabilities.
 
-## Grow by adding files
+## Agent files
 
-File-based agents use a default-first model. Start with the files required to run, then add folders as the agent grows.
+File-based agents use a default-first model. Start with the files required to run, then add folders as the agent grows. Each file in `src/mastra/agents/<name>/` maps to one part of the agent.
 
 | File or folder | What it adds |
 | - | - |
-| `config.ts` | Model selection and runtime options |
-| `instructions.md` | The always-on system prompt |
-| `tools/` | Typed functions the model can call |
-| `skills/` | Procedures loaded on demand |
-| `memory.ts` | Persistent conversation memory |
-| `workspace.ts` | A filesystem and sandbox |
-| `workspace/` | Seed files shipped with the agent |
-| `processors/` | Input/output processing pipeline |
-| `subagents/` | Specialist child agents for delegation |
-
-## Agent files
-
-An agent is a directory under `src/mastra/agents/<name>/`. Each file in it maps to one part of the agent.
-
-- [Agent config (`config.ts`)](/docs/filesystem/config): choose the model and set runtime options
-- [Instructions](/docs/filesystem/instructions): author the always-on system prompt
-- [Tools](/docs/filesystem/tools): add typed functions the model can call
-- [Skills](/docs/filesystem/skills): add procedures the model loads when useful
-- [Memory](/docs/filesystem/memory): give the agent persistent memory
-- [Workspace](/docs/filesystem/workspace): give the agent a filesystem and sandbox
-- [Processors](/docs/filesystem/processors): sanitize or reshape input and output
-- [Subagents](/docs/filesystem/subagents): declare specialist agents to delegate to
+| [`config.ts`](/docs/filesystem/config) | Model selection and runtime options |
+| [`instructions.md`](/docs/filesystem/instructions) | The always-on system prompt |
+| [`tools/`](/docs/filesystem/tools) | Typed functions the model can call |
+| [`skills/`](/docs/filesystem/skills) | Procedures loaded on demand |
+| [`memory.ts`](/docs/filesystem/memory) | Persistent conversation memory |
+| [`workspace.ts`](/docs/filesystem/workspace) | A filesystem and sandbox |
+| [`workspace/`](/docs/filesystem/workspace#seed-files) | Seed files shipped with the agent |
+| [`processors/`](/docs/filesystem/processors) | Input/output processing pipeline |
+| [`subagents/`](/docs/filesystem/subagents) | Specialist child agents for delegation |
 
 ## Project files
 

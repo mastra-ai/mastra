@@ -9,12 +9,6 @@ packages:
 
 A file-based agent discovers skills from its `skills/` directory and bundles them at build time. Skills are reusable procedures or reference material that the agent can load when relevant, instead of putting every detail into the always-on prompt.
 
-Skills differ from instructions and tools:
-
-- [`instructions.md`](/docs/filesystem/instructions) is always injected as the agent's base behavior.
-- [`tools/`](/docs/filesystem/tools) are callable actions with structured inputs and runtime code.
-- `skills/` are on-demand guidance. The agent sees each skill's short `description`, then loads the full skill instructions and references when the skill is useful.
-
 ## When to use skills
 
 Use skills for detailed guidance that should be available to the agent without filling the context window every turn. Good skill candidates include style guides, review checklists, API usage rules, troubleshooting procedures, and multi-step workflows the agent only needs for certain requests.

@@ -38,7 +38,7 @@ export default new LibSQLStore({
 })
 ```
 
-Mastra discovers the file during `mastra dev` or `mastra build` and registers the store before file-based agents and workflows are registered. This lets storage-dependent primitives bind to the file-based store instead of the default in-memory store.
+Mastra registers the store before file-based agents and workflows, so storage-dependent primitives bind to this store instead of the default in-memory store.
 
 ## Production backends
 
@@ -48,9 +48,7 @@ For production, use a backend shared by every deployed instance. For local devel
 
 ## Precedence with code
 
-Code-registered storage wins. If you pass `storage` to [`new Mastra()`](/reference/core/mastra-class), the file-based store is skipped and a warning is logged.
-
-Use code registration when storage setup depends on runtime wiring in `src/mastra/index.ts`. Use `storage.ts` when one project-wide store is enough and you want it discovered by convention.
+Code-registered storage wins over `storage.ts`. Use `storage.ts` when one project-wide store is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.
 
 ## Related
 

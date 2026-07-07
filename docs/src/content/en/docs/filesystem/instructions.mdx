@@ -11,13 +11,7 @@ An agent's `instructions.md` holds its always-on system prompt: the model reads 
 
 ## When to use instructions
 
-Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into tools or skills, which the model pulls in only when they're relevant.
-
-| Content type | Where it goes | Why |
-| - | - | - |
-| Agent identity, tone, standing rules | `instructions.md` | Always on, read every turn |
-| A callable action with inputs | [`tools/`](/docs/filesystem/tools) | The model decides when to invoke it |
-| Detailed reference loaded on demand | [`skills/`](/docs/filesystem/skills) | Injected only when relevant |
+Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into [`tools/`](/docs/filesystem/tools) or [`skills/`](/docs/filesystem/skills), which the model uses only when relevant.
 
 ## Quickstart
 

@@ -60,13 +60,13 @@ const dailyReport = createWorkflow({
 export default dailyReport
 ```
 
-Mastra registers this workflow under the `daily-report` key when you run the app through `mastra dev` or `mastra build`.
+Mastra registers this workflow under the `daily-report` key.
 
 ## Precedence with code
 
-File-based workflows merge with workflows registered in [`new Mastra()`](/reference/core/mastra-class). On a key collision, the code-registered workflow wins and a warning is logged.
+File-based workflows merge with workflows registered in [`new Mastra()`](/reference/core/mastra-class). On a key collision, the code-registered workflow wins.
 
-This lets you move workflows gradually. Keep manually registered workflows in code when they need custom wiring, and move convention-friendly workflows into `src/mastra/workflows/` when automatic registration is enough.
+This lets you move convention-friendly workflows into `src/mastra/workflows/` while keeping custom-wired workflows in code.
 
 ## Related
 

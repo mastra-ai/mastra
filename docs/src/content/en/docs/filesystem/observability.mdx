@@ -42,8 +42,6 @@ export default new Observability({
 })
 ```
 
-Mastra discovers the file during `mastra dev` or `mastra build` and registers it before file-based agents and workflows run.
-
 ## Observability and storage
 
 Observability collection and observability persistence are separate pieces:
@@ -55,9 +53,7 @@ The quickstart uses `MastraStorageExporter`, which writes observability events t
 
 ## Precedence with code
 
-Code-registered observability wins. If you pass `observability` to [`new Mastra()`](/reference/core/mastra-class), the file-based instance is skipped and a warning is logged.
-
-Use code registration when observability setup depends on runtime logic in `src/mastra/index.ts`. Use `observability.ts` when one project-wide configuration is enough and you want it discovered by convention.
+Code-registered observability wins over `observability.ts`. Use `observability.ts` when one project-wide configuration is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.
 
 ## Related
 

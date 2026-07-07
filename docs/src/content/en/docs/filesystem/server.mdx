@@ -37,8 +37,6 @@ export default {
 } satisfies ServerConfig
 ```
 
-Mastra discovers the file during `mastra dev` or `mastra build` and applies it to the generated HTTP server.
-
 ## Common configurations
 
 ### Set host and port
@@ -104,9 +102,7 @@ export default {
 
 ## Precedence with code
 
-Code-registered server config wins. If you pass `server` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged.
-
-Routes added during startup, such as channel webhooks, are preserved when file-based server config is applied. If code-registered server config wins, Mastra keeps the code-registered config.
+Code-registered server config wins over `server.ts`. Routes added during startup, such as channel webhooks, are preserved when file-based server config is applied.
 
 ## Related
 

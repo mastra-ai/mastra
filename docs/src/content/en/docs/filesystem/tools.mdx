@@ -13,16 +13,7 @@ Use tools for actions the model can choose during a turn: calling APIs, reading 
 
 ## When to use tools
 
-Add a tool when the agent needs a callable capability with structured inputs and runtime logic. Tools are always available to the agent once registered, so keep each tool focused and give it a specific description.
-
-Use other filesystem files for different concerns:
-
-| Need | Use |
-| - | - |
-| Always-on behavior guidance | [`instructions.md`](/docs/filesystem/instructions) |
-| On-demand procedures or reference material | [`skills/`](/docs/filesystem/skills) |
-| Agent runtime options | [`config.ts`](/docs/filesystem/config) |
-| Message processing before or after the model call | [`processors/`](/docs/filesystem/processors) |
+Add a tool when the agent needs a callable capability with structured inputs and runtime logic. Use [`instructions.md`](/docs/filesystem/instructions) for always-on behavior guidance and [`skills/`](/docs/filesystem/skills) for on-demand procedures or reference material.
 
 ## Quickstart
 
@@ -92,9 +83,7 @@ Prefer descriptions that answer these questions:
 
 ## Runtime boundary
 
-Filesystem discovery happens at build time, but tool code runs in the app/server runtime when the agent calls the tool. A tool can call APIs, databases, and application services available to that runtime.
-
-Workspace and sandbox file or shell operations are separate from ordinary tool execution. Don't assume a tool runs inside a workspace or sandbox unless the tool explicitly calls workspace APIs or delegates work to a sandbox-backed capability.
+Tool code runs in your app/server runtime when the agent calls the tool. If a tool needs filesystem or shell isolation, call [workspace](/docs/filesystem/workspace) or sandbox APIs explicitly.
 
 ## Call an external API
 

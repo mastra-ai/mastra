@@ -56,23 +56,7 @@ export default agentConfig({
 
 ## How the model delegates
 
-A subagent's `description` is routing text for the parent model. Write it like a tool description: explain what the subagent does and when to use it.
-
-Vague:
-
-```typescript
-agentConfig({
-  description: 'Writer agent.',
-})
-```
-
-Specific:
-
-```typescript
-agentConfig({
-  description: 'Use to turn research notes into a structured draft with headings and citations.',
-})
-```
+A subagent's `description` is routing text for the parent model. Write it like a [tool description](/docs/filesystem/tools#writing-good-tool-descriptions): explain what the subagent does and when to delegate to it.
 
 The build fails when a discovered subagent doesn't provide a non-empty description.
 

@@ -118,9 +118,7 @@ For example, you can keep recent conversation history but use processors to remo
 
 ## Precedence with config
 
-You can also set `memory` in [`config.ts`](/docs/filesystem/config). `config.memory` wins over `memory.ts`, and a warning is logged when both are present.
-
-If neither `config.memory` nor `memory.ts` is present, the assembled file-based agent has no memory.
+`config.memory` wins over `memory.ts`. If neither is present, the assembled file-based agent has no memory. See [`config.ts` precedence](/docs/filesystem/config#precedence) for the full merge table.
 
 ## Related
 

@@ -95,13 +95,7 @@ The file is copied into the bundled workspace path, where workspace file tools a
 
 ## Precedence with config
 
-Workspace precedence is explicit:
-
-1. `config.workspace` from [`config.ts`](/docs/filesystem/config)
-1. `workspace.ts`
-1. Default file-based workspace
-
-If both `config.workspace` and `workspace.ts` are present, `config.workspace` wins and a warning is logged.
+`config.workspace` wins over `workspace.ts`; otherwise the default file-based workspace is used. See [`config.ts` precedence](/docs/filesystem/config#precedence) for the full merge table.
 
 ## Related
 
