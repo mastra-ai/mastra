@@ -7,6 +7,7 @@ const Collapsible = CollapsiblePrimitive.Root;
 
 type CollapsibleTriggerProps = Omit<CollapsiblePrimitive.Trigger.Props, 'className'> & {
   className?: string;
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 

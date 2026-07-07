@@ -1,5 +1,14 @@
 # @mastra/duckdb
 
+## 1.5.1-alpha.0
+
+### Patch Changes
+
+- Fixed listing lightweight traces on DuckDB storage. Calling `listTracesLight` on a DuckDB observability store previously threw "This storage provider does not support listing lightweight traces" because the lazy-loading store facade was missing the forwarding method, even though DuckDB fully supports the operation. The call now returns lightweight traces as expected. Fixes #18942. ([#18955](https://github.com/mastra-ai/mastra/pull/18955))
+
+- Updated dependencies [[`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1-alpha.2
+
 ## 1.5.0
 
 ### Minor Changes

@@ -47,6 +47,7 @@ createTestSuite(
     binding: d1Database,
     tablePrefix: 'test_',
   }),
+  { deterministicScorePagination: true },
 );
 
 // Pre-configured client acceptance tests (using binding)

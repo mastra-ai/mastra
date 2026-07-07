@@ -7,6 +7,10 @@ import {
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
   WorkflowRun,
   WorkflowRuns,
   StorageListWorkflowRunsInput,
@@ -15,6 +19,7 @@ import type {
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { MongoDBConnector } from '../../connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from '../../db';
+import { resolveTargets, runPrune } from '../../retention';
 import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 
 export class WorkflowsStorageMongoDB extends WorkflowsStorage {
@@ -25,6 +30,14 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
   /** Collections managed by this domain */
   static readonly MANAGED_COLLECTIONS = [TABLE_WORKFLOW_SNAPSHOT] as const;
 
+  /**
+   * Anchor is `updatedAt` (BSON date), so the policy reads as inactivity:
+   * a run is pruned only after its snapshot has not been touched for `maxAge`.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAt', indexed: true },
+  };
+
   constructor(config: MongoDBDomainConfig) {
     super();
     this.#connector = resolveMongoDBConfig(config);
@@ -33,6 +46,16 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
     this.#indexes = config.indexes?.filter(idx =>
       (WorkflowsStorageMongoDB.MANAGED_COLLECTIONS as readonly string[]).includes(idx.collection),
     );
+  }
+
+  /** Delete workflow snapshots idle for longer than the policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: WorkflowsStorageMongoDB.retentionTables,
+      order: ['workflowSnapshot'],
+    });
+    return runPrune({ connector: this.#connector, domain: 'workflows', targets, options, logger: this.logger });
   }
 
   supportsConcurrentUpdates(): boolean {

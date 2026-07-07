@@ -59,6 +59,8 @@ for await (const chunk of stream.fullStream) {
 
 Agent approval uses snapshots to capture request state. Configure a [storage provider](/docs/memory/storage) on your Mastra instance or you'll see a "snapshot not found" error.
 
+Snapshots for agent runs are minimal resume artifacts: they hold only what's needed to resume the suspended run and are deleted once the run finishes. Use [tracing](/docs/observability/overview) for the execution record and [memory](/docs/memory/overview) for the conversation history.
+
 :::
 
 ## How approval works
@@ -122,6 +124,29 @@ Function-based `requireToolApproval` is only available on regular `stream()` / `
 A tool can also pause _during_ its `execute` function by calling `suspend()`. This is useful when the tool starts running and then discovers it needs additional user input or confirmation before it can finish.
 
 The stream emits a `tool-call-suspended` chunk with a custom payload defined by the tool's `suspendSchema`. You resume by calling `resumeStream()` with data matching the tool's `resumeSchema`.
+
+```typescript
+const weatherTool = createTool({
+  id: 'get-weather',
+  inputSchema: z.object({
+    location: z.string().optional(),
+  }),
+  suspendSchema: z.object({
+    question: z.string(),
+  }),
+  resumeSchema: z.object({
+    location: z.string(),
+  }),
+  execute: async ({ location }, context) => {
+    if (!location) {
+      return await context?.agent?.suspend({
+        question: 'Which city would you like the weather for?',
+      })
+    }
+    return await fetchWeather(location)
+  },
+})
+```
 
 :::note
 

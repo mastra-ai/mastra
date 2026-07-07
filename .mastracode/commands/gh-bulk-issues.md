@@ -31,7 +31,7 @@ For each issue number in the list:
 
 3. **Spawn an `mc` headless instance** in each worktree with a generous timeout (30 minutes):
    ```
-   cd ../$(basename $PWD)-issue-<NUMBER> && pnpx tsx <path-to-mastracode>/src/main.ts --timeout 1800 --prompt "/gh-debug-issue <NUMBER>"
+   cd ../$(basename $PWD)-issue-<NUMBER> && pnpx tsx <path-to-mastracode>/src/main.ts --timeout 1800 --prompt "/understand-issue <NUMBER>"
    ```
    Run all instances as background processes with a matching `timeout` on `execute_command`. Track each PID.
 

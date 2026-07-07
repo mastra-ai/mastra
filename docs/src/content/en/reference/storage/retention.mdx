@@ -15,7 +15,7 @@ Storage grows without bound by default. Retention is an opt-in, age-based cleanu
 
 Retention covers **growth tables** only — tables that accumulate rows unbounded as a side effect of normal operation (conversation history, telemetry, job and run records, schedule fire history, event feeds). User-authored artifacts and config (agents, skills, workspaces, prompt blocks, datasets, schedule definitions, channel installations, and so on) grow with user intent and are edited or deleted explicitly, so they are not valid retention keys.
 
-The reference implementations are [libSQL](/reference/storage/libsql) and [PostgreSQL](/reference/storage/postgresql). Other adapters keep rows forever until they implement retention.
+The reference implementations are [libSQL](/reference/storage/libsql), [PostgreSQL](/reference/storage/postgresql), and [MongoDB](/reference/storage/mongodb). Other adapters keep rows forever until they implement retention.
 
 ## Usage example
 
@@ -135,7 +135,7 @@ Each domain declares which of its tables can be age-pruned and which timestamp c
 - Experiments prune as whole units: an aged experiment's result rows are deleted together with it (results cascade with their parent), so a run is never left partially deleted. There is no separate `results` key.
 - For `schedules`, the growth table is the fire history (`schedule_triggers`, one row per fire) — schedule definitions are config and are not pruned.
 - On PostgreSQL, timestamp anchors use the timezone-aware mirror columns (for example `createdAtZ`, `completedAtZ`).
-- LibSQL supports all domains above; PostgreSQL supports all except `threadState` and `harness`, which have no PostgreSQL implementation.
+- LibSQL supports all domains above; PostgreSQL and MongoDB support all except `threadState` and `harness`, which they don't implement.
 - The v-next PostgreSQL observability domain stores signal events in day-partitioned tables (`spans`, `metrics`, `logs`, `scores`, `feedback`). For it, `prune()` drops whole day partitions (or TimescaleDB chunks) that are entirely older than the cutoff instead of deleting rows — effective granularity is one day, and a partition is only dropped once its entire day is past `maxAge`. `PruneResult.deleted` reports the number of rows in the dropped partitions.
 
 :::

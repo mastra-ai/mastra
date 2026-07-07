@@ -90,7 +90,7 @@ jobs:
 
       - name: Checkout for local action
         if: steps.check_major.outputs.has_major_changeset == 'true'
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           # Always check out the local action from the trusted default branch.
           # Never use PR-derived refs here: this privileged workflow (issue_comment)
@@ -101,7 +101,7 @@ jobs:
 
       - name: Generate GitHub App token
         if: steps.check_major.outputs.has_major_changeset == 'true'
-        id: app_token
+        id: app-auth
         uses: ./.github/actions/app-auth
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
@@ -116,7 +116,7 @@ jobs:
         id: check_approval
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3
         with:
-          github-token: ${{ steps.app_token.outputs.token }}
+          github-token: ${{ steps.app-auth.outputs.token }}
           script: |
             const prNumber = context.payload?.pull_request?.number || context.payload?.issue?.number;
             const { owner, repo } = context.repo;

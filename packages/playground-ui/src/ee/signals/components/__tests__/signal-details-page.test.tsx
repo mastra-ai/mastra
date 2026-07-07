@@ -1,24 +1,24 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  behaviorTopicsResponse,
   entitiesResponse,
   topicExamplesResponse,
   topicsResponse,
-  pointsResponse,
 } from '../../services/__tests__/fixtures/entity-learning';
 import type { SelectedEntity } from '../../types';
 import { SignalDetailsPage } from '../signal-details-page';
 
 const BASE_URL = 'http://localhost:4111';
 const OBSERVABILITY_ENDPOINT = 'https://observability.test';
-const ROOT = `${OBSERVABILITY_ENDPOINT}/entity-learning`;
+const ROOT = `${OBSERVABILITY_ENDPOINT}/api/learning`;
 
 const server = setupServer();
 
@@ -88,13 +88,12 @@ function renderSignalDetailsPage(options: RenderSignalDetailsPageOptions = {}) {
   };
 }
 
-/** Entity-learning happy path: entities, topics, the selected topic's examples, points. */
+/** Entity-learning happy path: entities, topics, and the selected topic's examples. */
 function useLiveDataHandlers() {
   server.use(
     http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
     http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
     http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, () => HttpResponse.json(topicExamplesResponse)),
-    http.get(`${ROOT}/entities/:entityId/points`, () => HttpResponse.json(pointsResponse)),
   );
 }
 
@@ -142,18 +141,6 @@ describe('SignalDetailsPage', () => {
 
       // The first topic's examples (signalText) drive the trace list.
       expect(await screen.findByText('This is taking forever.')).not.toBeNull();
-    });
-
-    it('keeps the Chart tab cluster filters', async () => {
-      useLiveDataHandlers();
-
-      renderSignalDetailsPage();
-
-      await screen.findByText('Frustrated escalations');
-
-      fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
-
-      expect(screen.getByLabelText('Chart cluster filters')).not.toBeNull();
     });
   });
 
@@ -208,7 +195,7 @@ describe('SignalDetailsPage', () => {
   });
 
   describe('when navigating between signal topic sets', () => {
-    it('does not keep stale sidebar or chart selections', async () => {
+    it('does not keep stale sidebar selections', async () => {
       server.use(
         http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
         http.get(`${ROOT}/entities/:entityId/topics`, ({ params }) => {
@@ -249,30 +236,11 @@ describe('SignalDetailsPage', () => {
             ],
           });
         }),
-        http.get(`${ROOT}/entities/:entityId/points`, ({ params }) =>
-          HttpResponse.json({
-            ...pointsResponse,
-            runId: params.entityId === 'entity_search' ? '7' : '32',
-            points: [
-              {
-                ...pointsResponse.points[0],
-                exampleId: params.entityId === 'entity_search' ? 'ex-search-1' : 'ex-89',
-                runId: params.entityId === 'entity_search' ? '7' : '32',
-                signalName: params.entityId === 'entity_search' ? 'outcome' : 'sentiment',
-                topicId: params.entityId === 'entity_search' ? 'search-1' : '89',
-              },
-            ],
-          }),
-        ),
       );
 
       const { rerenderSignalDetailsPage } = renderSignalDetailsPage({ initialTopicId: '90' });
 
       expect(await screen.findByRole('button', { name: /Satisfied resolutions/, pressed: true })).not.toBeNull();
-      fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
-      fireEvent.click(screen.getByRole('checkbox', { name: /Satisfied resolutions/, checked: true }));
-      expect(screen.getByRole('checkbox', { name: /Satisfied resolutions/, checked: false })).not.toBeNull();
-
       rerenderSignalDetailsPage({
         entity: { entityType: 'tool', entityId: 'entity_search' },
         signalId: 'outcome',
@@ -281,11 +249,44 @@ describe('SignalDetailsPage', () => {
 
       expect(await screen.findByText('Search successes')).not.toBeNull();
       expect(screen.queryByText('Satisfied resolutions')).toBeNull();
-      expect(screen.getByRole('checkbox', { name: /Search successes/, checked: true })).not.toBeNull();
-
-      fireEvent.click(screen.getByRole('tab', { name: 'Trace list' }));
       expect(await screen.findByRole('button', { name: /Search successes/, pressed: true })).not.toBeNull();
       expect(await screen.findByText('Example for search-1')).not.toBeNull();
+    });
+  });
+
+  describe('when the signal latest run differs from the entity-wide latestRunId', () => {
+    it('queries examples with the run resolved by /topics', async () => {
+      const capturedRunIds: { examples?: string | null } = {};
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        // `behavior`'s latest run is '31'; entity_support.latestRunId is '32'.
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(behaviorTopicsResponse)),
+        http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, ({ request }) => {
+          capturedRunIds.examples = new URL(request.url).searchParams.get('runId');
+          return HttpResponse.json({ ...topicExamplesResponse, runId: '31' });
+        }),
+      );
+
+      renderSignalDetailsPage({ signalId: 'behavior' });
+
+      expect(await screen.findByText('Repeated retries')).not.toBeNull();
+      await waitFor(() => expect(capturedRunIds.examples).toBe('31'));
+    });
+  });
+
+  describe('when the signal has no completed learning run', () => {
+    it('shows the not-found fallback instead of crashing on the missing run', async () => {
+      server.use(
+        http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
+        // Matches the platform contract: no run for the signal → `{ topics: [] }`
+        // without a `run` field. Examples must stay disabled (any request
+        // to them would trip onUnhandledRequest: 'error').
+        http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json({ topics: [] })),
+      );
+
+      renderSignalDetailsPage({ signalId: 'behavior' });
+
+      expect(await screen.findByText('Signal not found')).not.toBeNull();
     });
   });
 
@@ -303,22 +304,17 @@ describe('SignalDetailsPage', () => {
     });
   });
 
-  describe('when the trace list tab is active', () => {
-    it('shows the trace panel only on the trace list tab', async () => {
+  describe('when signal details load', () => {
+    it('renders the trace list directly without tab chrome and keeps the trace panel visible', async () => {
       useLiveDataHandlers();
 
       renderSignalDetailsPage();
 
-      await screen.findByText('Frustrated escalations');
-
-      expect(screen.getByRole('complementary', { name: 'Trace details' })).not.toBeNull();
-
-      fireEvent.click(screen.getByRole('tab', { name: 'Chart' }));
-
-      expect(screen.queryByRole('complementary', { name: 'Trace details' })).toBeNull();
-
-      fireEvent.click(screen.getByRole('tab', { name: 'Trace list' }));
-
+      expect(await screen.findByText('Frustrated escalations')).not.toBeNull();
+      expect(await screen.findByText('This is taking forever.')).not.toBeNull();
+      expect(screen.queryByRole('tablist')).toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Trace list' })).toBeNull();
+      expect(screen.queryByRole('tab', { name: 'Chart' })).toBeNull();
       expect(screen.getByRole('complementary', { name: 'Trace details' })).not.toBeNull();
     });
   });
@@ -328,7 +324,6 @@ describe('SignalDetailsPage', () => {
       server.use(
         http.get(`${ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
         http.get(`${ROOT}/entities/:entityId/topics`, () => HttpResponse.json(topicsResponse)),
-        http.get(`${ROOT}/entities/:entityId/points`, () => HttpResponse.json(pointsResponse)),
         // Topics resolve but the selected topic's examples never settle.
         http.get(`${ROOT}/entities/:entityId/topics/:topicId/examples`, () => new Promise(() => {})),
       );
@@ -352,7 +347,7 @@ describe('SignalDetailsPage', () => {
       renderSignalDetailsPage();
 
       expect(await screen.findByText('Failed to load this signal from the observability endpoint.')).not.toBeNull();
-      expect(screen.queryByRole('tab', { name: 'Chart' })).toBeNull();
+      expect(screen.queryByRole('tablist')).toBeNull();
     });
   });
 
