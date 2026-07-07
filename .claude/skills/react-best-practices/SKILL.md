@@ -67,7 +67,7 @@ Rules are prioritized by impact:
 - One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
-- Extract derived composition into pure helpers with early returns instead of mutating locals with `let`; reserve `let` for real sequential algorithms, counters, loops, or resource handles (`structure-derived-composition`)
+- Extract complex derived logic into named predicates or pure helpers with early returns: oversized conditions, nested ternaries, fallback chains, and mutating `let` composition should not sit inline at the render callsite (`structure-complex-derived-logic`)
 - Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
 - For a fixed set of items, write one component per item with explicit props that owns its data and loading — don't map a config-object array onto a component shape (`structure-composition-over-config`)
 
