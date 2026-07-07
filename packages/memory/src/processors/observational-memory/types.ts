@@ -952,6 +952,18 @@ export interface ObservationalMemoryConfig {
    */
   onDebugEvent?: (event: ObservationDebugEvent) => void;
 
+  /**
+   * Lifecycle hooks fired for every observation/reflection cycle, including
+   * the automatic pipeline paths — turn-engine sync observation and
+   * fire-and-forget async buffering — that per-call `observe()` hooks never
+   * see. Callbacks receive `threadId` / `resourceId` / `trigger` context,
+   * plus `usage` and `providerMetadata` on cycle end, so consumers can
+   * account for OM model economics without wrapping the observer/reflector
+   * models in middleware. Errors thrown by these hooks are caught and logged;
+   * they never fail the cycle.
+   */
+  hooks?: ObserveHooks;
+
   obscureThreadIds?: boolean;
 
   /**
@@ -1067,24 +1079,46 @@ export interface ObserveHookUsage {
   totalTokens?: number;
 }
 
+/** Which pipeline path initiated the observation/reflection cycle a hook fires for. */
+export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer';
+
+/**
+ * Call context passed to config-level `ObserveHooks` callbacks. Config-level
+ * hooks are shared across all threads/resources of an ObservationalMemory
+ * instance, so every invocation carries the identifiers of the cycle it fires
+ * for. Per-call `observe()` hooks do not receive these fields — the caller
+ * already knows its own thread.
+ */
+export interface ObserveHookContext {
+  threadId?: string;
+  resourceId?: string;
+  trigger?: ObserveTrigger;
+}
+
 export interface ObserveHooks {
-  onObservationStart?: () => void;
+  onObservationStart?: (info?: ObserveHookContext) => void;
   /**
    * Fires when an observation cycle ends. `providerMetadata` carries the OM
    * observer model call's full provider metadata (e.g. AI Gateway cost and
    * generation id under `providerMetadata.gateway`); it is undefined when the
    * provider emits none. For batched resource-scoped observations it reflects
    * the last batch that emitted provider metadata (per-call values are not
-   * summed/merged).
+   * summed/merged). The `ObserveHookContext` fields are populated for
+   * config-level hooks only.
    */
-  onObservationEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
-  onReflectionStart?: () => void;
+  onObservationEnd?: (
+    result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
+  ) => void;
+  onReflectionStart?: (info?: ObserveHookContext) => void;
   /**
    * Fires when a reflection cycle ends. `providerMetadata` carries the OM
    * reflector model call's full provider metadata; it is undefined when the
    * provider emits none. Across retry attempts `usage` is summed but
    * `providerMetadata` reflects the last attempt that emitted it (per-call
-   * values are not merged).
+   * values are not merged). The `ObserveHookContext` fields are populated for
+   * config-level hooks only.
    */
-  onReflectionEnd?: (result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata }) => void;
+  onReflectionEnd?: (
+    result: { usage?: ObserveHookUsage; error?: Error; providerMetadata?: ProviderMetadata } & ObserveHookContext,
+  ) => void;
 }
