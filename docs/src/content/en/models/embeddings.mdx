@@ -52,12 +52,15 @@ npm install @mastra/voyageai
 
 **Available models:**
 
-- `voyage-3.5` - 1024 dimensions (default), supports 256-2048 dimensions
-- `voyage-3-large` - 1024 dimensions (default), supports 256-2048 dimensions, higher quality
-- `voyage-code-3` - 1024 dimensions, optimized for code
-- `voyage-4` - 1024 dimensions, highest throughput (320k batch tokens)
-- `voyage-4-large` - 1024 dimensions (120k batch tokens)
-- `voyage-4-lite` - 1024 dimensions (1M batch tokens)
+- `voyage-4-large` - 1024 dimensions (default), supports 256-2048 dimensions, best general-purpose and multilingual retrieval quality (120k max tokens per batch)
+- `voyage-4` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for general-purpose and multilingual retrieval (320k max tokens per batch)
+- `voyage-4-lite` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for latency and cost (1M max tokens per batch)
+- `voyage-code-3` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for code retrieval
+- `voyage-finance-2` - 1024 dimensions, optimized for finance retrieval and RAG
+- `voyage-law-2` - 1024 dimensions, optimized for legal retrieval and RAG (16k context)
+- `voyage-3-large` - 1024 dimensions (default), supports 256-2048 dimensions (previous generation)
+- `voyage-3.5` - 1024 dimensions (default), supports 256-2048 dimensions (previous generation)
+- `voyage-3.5-lite` - 1024 dimensions (default), supports 256-2048 dimensions, optimized for latency and cost (previous generation)
 - `voyage-multimodal-3.5` - 1024 dimensions, supports text + images
 
 ```typescript
@@ -68,7 +71,7 @@ const { embeddings } = await voyage.doEmbed({
   values: ["Hello world"],
 });
 
-// Use specific model
+// Use specific model (voyage-3-large)
 const largeEmbeddings = await voyage.large.doEmbed({
   values: ["More complex content"],
 });

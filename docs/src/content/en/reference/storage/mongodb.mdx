@@ -48,6 +48,12 @@ const storage = new MongoDBStore({
     isOptional: false,
   },
   {
+    name: 'url',
+    type: 'string',
+    description: 'Deprecated. Use `uri` instead. MongoDB connection string (supported for backward compatibility).',
+    isOptional: true,
+  },
+  {
     name: 'dbName',
     type: 'string',
     description: 'The name of the database you want the storage to use.',
@@ -90,6 +96,10 @@ const storage = new MongoDBStore({
   },
 ]}
 />
+
+:::note[Deprecation Notice]
+The `url` parameter is deprecated but still supported for backward compatibility. Please use `uri` instead in all new code.
+:::
 
 ## Constructor examples
 

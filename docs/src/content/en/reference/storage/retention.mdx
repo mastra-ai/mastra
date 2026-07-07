@@ -281,7 +281,7 @@ const storage = new MongoDBStore({
     },
     // Spans expire after 7 days
     {
-      collection: 'mastra_traces',
+      collection: 'mastra_ai_spans',
       keys: { startedAt: 1 },
       options: { expireAfterSeconds: 7 * 24 * 60 * 60 }, // 7 days
     },
