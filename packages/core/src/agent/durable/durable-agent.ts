@@ -1,5 +1,6 @@
 import type { MastraServerCache } from '../../cache/base';
 import { InMemoryServerCache } from '../../cache/inmemory';
+import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
@@ -8,12 +9,13 @@ import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } fro
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
+import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
 import type { ToolsInput } from '../types';
 
-import { AGENT_STREAM_TOPIC } from './constants';
+import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
@@ -277,6 +279,96 @@ export interface DurableAgentConfig<
  * cleanup();
  * ```
  */
+
+/**
+ * Statuses of durable agent runs discoverable via {@link DurableAgent.listActiveRuns}.
+ *
+ * `running` is the status reported by the workflow engine while the durable
+ * agent's agentic loop is actively executing (i.e. between suspend
+ * boundaries). Persisted `running` snapshots are the recovery source for runs
+ * orphaned by a process restart.
+ */
+export type DurableAgentActiveRunStatus = Extract<WorkflowRunStatus, 'running'>;
+
+/**
+ * Filters for {@link DurableAgent.listActiveRuns}. Mirrors the
+ * `listWorkflowRuns` filter contract, plus the agent-level `threadId` /
+ * `resourceId` filters used by the base {@link Agent.listSuspendedRuns}.
+ */
+export interface DurableAgentListActiveRunsOptions {
+  /** Only return runs that belong to this memory thread. */
+  threadId?: string;
+  /** Only return runs that belong to this memory resource. */
+  resourceId?: string;
+  /** Only return runs created at or after this date. */
+  fromDate?: Date;
+  /** Only return runs created at or before this date. */
+  toDate?: Date;
+  /**
+   * Number of items per page. Pagination is applied when both `perPage` and
+   * `page` are provided; otherwise all matching runs are returned.
+   */
+  perPage?: number;
+  /** Zero-indexed page number. */
+  page?: number;
+}
+
+/**
+ * A durable agent run currently reported as `running` in workflow snapshot
+ * storage. These are the runs that a boot-time or operator-initiated
+ * recovery would re-drive after a process restart.
+ */
+export interface DurableAgentActiveRun {
+  /** Run ID accepted by {@link DurableAgent.recoverActiveRuns} and workflow `restart`. */
+  runId: string;
+  status: DurableAgentActiveRunStatus;
+  threadId?: string;
+  resourceId?: string;
+  /** When the run's snapshot was last persisted while running. */
+  updatedAt: Date;
+}
+
+export interface DurableAgentListActiveRunsResult {
+  runs: DurableAgentActiveRun[];
+  /** Total number of matching runs, before pagination. */
+  total: number;
+}
+
+/**
+ * Outcome of a single run restart attempted by
+ * {@link DurableAgent.recoverActiveRuns}. `success` means `run.restart()`
+ * returned; `failed` means it threw and the error was captured so recovery
+ * of remaining runs could proceed.
+ */
+export interface DurableAgentRecoveredRun {
+  runId: string;
+  status: 'success' | 'failed';
+  /** Populated only when `status === 'failed'`. */
+  error?: Error;
+}
+
+/**
+ * Filters for {@link DurableAgent.recoverActiveRuns}. Reuses the
+ * {@link DurableAgentListActiveRunsOptions} discovery filters and adds an
+ * escape hatch for targeting a specific run ID.
+ */
+export interface DurableAgentRecoverActiveRunsOptions extends DurableAgentListActiveRunsOptions {
+  /**
+   * Recover a specific run by ID. When set, the discovery filters and
+   * pagination fields are ignored. Useful when the caller already knows the
+   * run ID from another source (e.g. their own bookkeeping).
+   */
+  runId?: string;
+}
+
+export interface DurableAgentRecoverActiveRunsResult {
+  recovered: DurableAgentRecoveredRun[];
+  /** Number of runs that restarted successfully. */
+  succeeded: number;
+  /** Number of runs whose restart threw. */
+  failed: number;
+}
+
 export class DurableAgent<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -588,6 +680,13 @@ export class DurableAgent<
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
       await this.emitError(runId, error);
     }
+    // Reaching any non-suspended terminal status means the run is done and its
+    // persisted snapshot rows will never be resumed. Delete them so snapshot
+    // storage doesn't grow one stale row per completed run. Suspended runs
+    // keep their snapshots so `resume()` / `recoverActiveRuns()` can find them.
+    if (result?.status && result.status !== 'suspended') {
+      await this.deleteRunSnapshots(runId);
+    }
   }
 
   /**
@@ -616,6 +715,37 @@ export class DurableAgent<
     // End the root spans on error so the trace exports (mirrors the non-durable map-results-step).
     endRunSpansWithError(runId, error);
     await emitErrorEvent(this.pubsub, runId, error);
+  }
+
+  /**
+   * Delete the persisted workflow snapshot rows for a completed durable run.
+   *
+   * A durable agent write two rows per run: one for the outer `AGENTIC_LOOP`
+   * workflow and one for the nested `AGENTIC_EXECUTION` workflow (persisted
+   * under the same `runId`). Once the run reaches a non-suspended terminal
+   * state neither row is needed again — leaving them behind fills snapshot
+   * storage with stale `pending`/`running` rows for every completed run and
+   * pollutes `listActiveRuns` / `recoverActiveRuns` on the next boot.
+   *
+   * Best-effort: a cleanup failure must never turn a finished run into an
+   * error — a stale row is preferable to a broken exit path.
+   *
+   * @internal
+   */
+  protected async deleteRunSnapshots(runId: string): Promise<void> {
+    try {
+      const workflow = this.getWorkflow();
+      await workflow.deleteWorkflowRunById(runId);
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.deleteWorkflowRunById({
+        runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
+    } catch (error) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(`[DurableAgent] Failed to delete workflow snapshot rows after terminal state`, { runId, error });
+    }
   }
 
   // ===========================================================================
@@ -1017,6 +1147,13 @@ export class DurableAgent<
           const error = new Error((result as any).error?.message || 'Workflow resume failed');
           void this.emitError(runId, error);
         }
+        // Same snapshot cleanup as the initial `start()` path: once resume
+        // settles on any non-suspended terminal status the persisted rows are
+        // no longer needed. A resume that re-suspends must keep them so the
+        // next resume/recover can find the snapshot.
+        if (result?.status && result.status !== 'suspended') {
+          await this.deleteRunSnapshots(runId);
+        }
       })
       .catch(error => {
         void this.emitError(runId, error);
@@ -1345,6 +1482,190 @@ export class DurableAgent<
         result.cleanup();
       }
     }
+  }
+
+  /**
+   * List durable agent runs currently reported as `running` in workflow
+   * snapshot storage.
+   *
+   * A `running` snapshot is a durable agent run whose agentic loop was
+   * mid-execution the last time the workflow engine persisted its state. On a
+   * healthy process these transition to `suspended` (waiting on
+   * tool approval / resume) or a terminal status. On a crashed / restarted
+   * process they are orphaned in the `running` state with no in-process
+   * driver — this is the discovery API used to enumerate them for recovery
+   * (see {@link DurableAgent.recoverActiveRuns} and workflow `restart`).
+   *
+   * Requires persistent workflow storage. Filters `agentId` against the
+   * persisted `DurableAgenticWorkflowInput.agentId`, so runs started by other
+   * durable agents sharing the same storage are not surfaced.
+   *
+   * @example
+   * ```typescript
+   * const { runs } = await durableAgent.listActiveRuns({ resourceId });
+   * for (const run of runs) {
+   *   await durableAgent.recoverActiveRuns({ runId: run.runId });
+   * }
+   * ```
+   */
+  async listActiveRuns(options: DurableAgentListActiveRunsOptions = {}): Promise<DurableAgentListActiveRunsResult> {
+    const { threadId, resourceId, fromDate, toDate, perPage, page } = options;
+
+    if (perPage !== undefined && (!Number.isInteger(perPage) || perPage <= 0)) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PER_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" listActiveRuns() requires perPage to be a positive integer.`,
+        details: { agentName: this.name, perPage },
+      });
+    }
+    if (page !== undefined && (!Number.isInteger(page) || page < 0)) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_INVALID_PAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" listActiveRuns() requires page to be a non-negative integer.`,
+        details: { agentName: this.name, page },
+      });
+    }
+
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_LIST_ACTIVE_RUNS_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${this.name}" listActiveRuns() requires storage to discover running runs. ` +
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL).`,
+        details: { agentName: this.name },
+      });
+    }
+
+    const { runs } = await workflowsStore.listWorkflowRuns({
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+      status: 'running',
+      fromDate,
+      toDate,
+    });
+
+    const matchedRuns: DurableAgentActiveRun[] = [];
+    for (const run of runs) {
+      let snapshot = run.snapshot;
+      if (typeof snapshot === 'string') {
+        try {
+          snapshot = JSON.parse(snapshot) as WorkflowRunState;
+        } catch {
+          continue;
+        }
+      }
+      if (snapshot?.status !== 'running') continue;
+
+      // The persisted workflow input carries the owning agentId. Default-deny:
+      // a snapshot without an input or whose agentId does not match this agent
+      // is skipped so runs cannot leak across agents sharing the same storage.
+      const input = snapshot.context?.input as
+        | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
+        | undefined;
+      const runAgentId = input?.agentId;
+      if (runAgentId !== this.id) continue;
+
+      const memoryInfo = input?.messageListState?.memoryInfo;
+      const runThreadId = memoryInfo?.threadId;
+      const runResourceId = run.resourceId ?? memoryInfo?.resourceId;
+      if (threadId && runThreadId !== threadId) continue;
+      if (resourceId && runResourceId !== resourceId) continue;
+
+      matchedRuns.push({
+        runId: run.runId,
+        status: 'running',
+        threadId: runThreadId,
+        resourceId: runResourceId,
+        updatedAt: run.updatedAt,
+      });
+    }
+
+    const total = matchedRuns.length;
+    const paginatedRuns =
+      perPage !== undefined && page !== undefined
+        ? matchedRuns.slice(page * perPage, (page + 1) * perPage)
+        : matchedRuns;
+
+    return { runs: paginatedRuns, total };
+  }
+
+  /**
+   * Re-drive durable agent runs whose in-process agentic loop was orphaned by
+   * a process restart. This is the recovery half of the discovery API paired
+   * with {@link DurableAgent.listActiveRuns}.
+   *
+   * For each discovered (or explicitly targeted) run this method calls
+   * `workflow.createRun({ runId }).restart()`, which the workflow engine
+   * replays from the last persisted snapshot. The durable agentic workflow's
+   * steps are self-contained on serialized input, so no in-memory `runScope`
+   * needs to be pre-populated — the steps rehydrate everything they need from
+   * the persisted `DurableAgenticWorkflowInput`.
+   *
+   * Failures are captured per-run so a single bad run does not block
+   * recovery of the rest.
+   *
+   * Callers who want to see events from a recovered run should attach with
+   * {@link DurableAgent.observe} using the returned `runId`.
+   *
+   * @example
+   * ```typescript
+   * // Recover every orphaned run for this agent (typical boot-time hook).
+   * const { recovered, succeeded, failed } = await durableAgent.recoverActiveRuns();
+   * logger.info('Recovered durable agent runs', { succeeded, failed });
+   *
+   * // Recover a single run by ID.
+   * await durableAgent.recoverActiveRuns({ runId });
+   * ```
+   */
+  async recoverActiveRuns(
+    options: DurableAgentRecoverActiveRunsOptions = {},
+  ): Promise<DurableAgentRecoverActiveRunsResult> {
+    const { runId, ...discoveryOptions } = options;
+
+    let targetRunIds: string[];
+    if (runId) {
+      targetRunIds = [runId];
+    } else {
+      const { runs } = await this.listActiveRuns(discoveryOptions);
+      targetRunIds = runs.map(r => r.runId);
+    }
+
+    const workflow = this.getWorkflow();
+    const recovered: DurableAgentRecoveredRun[] = [];
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const targetRunId of targetRunIds) {
+      try {
+        const run = await workflow.createRun({ runId: targetRunId, pubsub: this.pubsub });
+        const result = await run.restart();
+        // Recovered runs follow the same snapshot-cleanup contract as start()
+        // and resume(): only suspended terminals keep their persisted rows so
+        // a later resume/recover can find them. Every other terminal drops
+        // the rows to keep snapshot storage bounded across process restarts.
+        if (result?.status && result.status !== 'suspended') {
+          await this.deleteRunSnapshots(targetRunId);
+        }
+        recovered.push({ runId: targetRunId, status: 'success' });
+        succeeded++;
+      } catch (error) {
+        const err = error instanceof Error ? error : new Error(String(error));
+        recovered.push({ runId: targetRunId, status: 'failed', error: err });
+        failed++;
+        this.#mastra
+          ?.getLogger?.()
+          ?.error?.(`[DurableAgent] Failed to recover run ${targetRunId}: ${err.message}`, { error: err });
+      }
+    }
+
+    return { recovered, succeeded, failed };
   }
 
   /**
