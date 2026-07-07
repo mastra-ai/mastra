@@ -16,8 +16,8 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@composio/core": "^0.6.3",
-    "@composio/mastra": "^0.6.3",
+    "@composio/core": "0.11.0",
+    "@composio/mastra": "0.10.1",
     "@mastra/core": "latest",
     "@mastra/fastembed": "latest",
     "@mastra/libsql": "latest",

@@ -230,14 +230,20 @@ export class ComposioToolProvider extends BaseToolProvider {
     // for authorize we treat it as the Composio `userId` so the new connected
     // account lands under the same bucket as the agent's resolved identity.
     const internalUserId = opts.connectionId || DEFAULT_INTERNAL_USER_ID;
+    const hasConfig = Boolean(opts.config && Object.keys(opts.config).length > 0);
+    const useLink = shouldUseConnectedAccountLink(authScheme, hasConfig);
+
     // `allowMultiple: true` — we explicitly support N connected accounts per
     // (user, auth config) and disambiguate at runtime via per-connection labels.
     // `config` carries provider-specific user-supplied fields (e.g. Confluence
-    // subdomain) collected by the picker via `listConnectionFields`. Composio
-    // expects a discriminated `{ authScheme, val }` shape; we cast through
-    // `unknown` because our generic interface keeps it Record-shaped.
+    // subdomain) collected by the picker via `listConnectionFields`.
+    // `connectedAccounts.link()` is the supported 0.10.x replacement for
+    // redirectable OAuth flows, but Composio does not expose a config-capable
+    // replacement yet and the higher-level authorize helpers still route through
+    // `initiate()` internally. Until that changes, config-bearing and non-OAuth
+    // flows must keep using `initiate()`.
     const initiateConfig =
-      opts.config && Object.keys(opts.config).length > 0 && authScheme
+      hasConfig && authScheme
         ? ({ authScheme, val: opts.config } as unknown as Parameters<
             typeof composio.connectedAccounts.initiate
           >[2] extends infer O
@@ -246,13 +252,18 @@ export class ComposioToolProvider extends BaseToolProvider {
               : never
             : never)
         : undefined;
-    const request = await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
-      allowMultiple: true,
-      ...(initiateConfig ? { config: initiateConfig } : {}),
-    });
+    const linkOptions = { allowMultiple: true } as unknown as Parameters<typeof composio.connectedAccounts.link>[2];
+    const request = useLink
+      ? await composio.connectedAccounts.link(internalUserId, authConfigId, linkOptions)
+      : await composio.connectedAccounts.initiate(internalUserId, authConfigId, {
+          allowMultiple: true,
+          ...(initiateConfig ? { config: initiateConfig } : {}),
+        });
 
     if (!request.redirectUrl) {
-      throw new Error(`[composio] initiate did not return a redirectUrl for toolkit "${opts.toolkit}"`);
+      throw new Error(
+        `[composio] ${useLink ? 'link' : 'initiate'} did not return a redirectUrl for toolkit "${opts.toolkit}"`,
+      );
     }
 
     return { url: request.redirectUrl, authId: request.id };
@@ -352,9 +363,8 @@ export class ComposioToolProvider extends BaseToolProvider {
       connectionId: account.id,
       status: mapComposioStatus(account.status, account.isDisabled),
       createdAt: account.createdAt,
-      // `user_id` is preserved by the Composio SDK transform via spread but
-      // isn't on the typed shape. Read it via a narrow cast.
-      authorId: (account as unknown as { user_id?: string }).user_id,
+      // Composio 0.10.x surfaces the external user bucket as `wordId`.
+      authorId: account.wordId ?? undefined,
     }));
 
     const nextCursor = (list as { nextCursor?: string | null }).nextCursor ?? null;
@@ -428,6 +438,18 @@ export class ComposioToolProvider extends BaseToolProvider {
 type ComposioAuthScheme = NonNullable<
   Awaited<ReturnType<Composio['authConfigs']['list']>>['items'][number]['authScheme']
 >;
+
+/**
+ * Composio 0.10.x deprecates `connectedAccounts.initiate()` for redirectable
+ * OAuth flows in favor of `connectedAccounts.link()`. We can only use `link()`
+ * when no extra connection config is required because 0.10.1 does not expose a
+ * config-capable replacement for those flows, and `toolkits.authorize()` still
+ * delegates to `initiate()` internally.
+ */
+function shouldUseConnectedAccountLink(authScheme: ComposioAuthScheme | undefined, hasConfig: boolean): boolean {
+  if (hasConfig) return false;
+  return authScheme === 'OAUTH1' || authScheme === 'OAUTH2' || authScheme === 'DCR_OAUTH';
+}
 
 /**
  * Best-effort 404 detection across the various error shapes the Composio

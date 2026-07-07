@@ -13,6 +13,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
     toolkits: { get: ReturnType<typeof vi.fn>; getConnectedAccountInitiationFields: ReturnType<typeof vi.fn> };
     tools: { get: ReturnType<typeof vi.fn>; getRawComposioTools: ReturnType<typeof vi.fn> };
     connectedAccounts: {
+      link: ReturnType<typeof vi.fn>;
       initiate: ReturnType<typeof vi.fn>;
       get: ReturnType<typeof vi.fn>;
       list: ReturnType<typeof vi.fn>;
@@ -29,7 +30,7 @@ const { composioInstances, makeFakeComposio } = vi.hoisted(() => {
       hasProvider: Boolean(opts.provider),
       toolkits: { get: vi.fn(), getConnectedAccountInitiationFields: vi.fn() },
       tools: { get: vi.fn(), getRawComposioTools: vi.fn() },
-      connectedAccounts: { initiate: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn() },
+      connectedAccounts: { link: vi.fn(), initiate: vi.fn(), get: vi.fn(), list: vi.fn(), delete: vi.fn() },
       authConfigs: { list: vi.fn() },
     };
     instances.push(inst);
@@ -305,16 +306,17 @@ describe('ComposioToolProvider — authorize', () => {
 
     raw.authConfigs.list.mockResolvedValue({
       items: [
-        { id: 'ac_1', status: 'ENABLED' },
-        { id: 'ac_2', status: 'DISABLED' },
+        { id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' },
+        { id: 'ac_2', status: 'DISABLED', authScheme: 'OAUTH2' },
       ],
     });
-    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+    raw.connectedAccounts.link.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
 
     const result = await integration.authorize({ toolkit: 'gmail', connectionId: 'author_1' });
 
     expect(raw.authConfigs.list).toHaveBeenCalledWith({ toolkit: 'gmail' });
-    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1', { allowMultiple: true });
+    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('author_1', 'ac_1', { allowMultiple: true });
+    expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
     expect(result).toEqual({ url: 'https://oauth', authId: 'ca_new' });
   });
 
@@ -345,7 +347,7 @@ describe('ComposioToolProvider — authorize', () => {
     );
   });
 
-  it('forwards config to connectedAccounts.initiate as { authScheme, val }', async () => {
+  it('falls back to connectedAccounts.initiate when config must be forwarded', async () => {
     const integration = new ComposioToolProvider({ apiKey: 'k' });
     await integration.authorize({ toolkit: 'confluence', connectionId: 'a' }).catch(() => undefined);
     const raw = getRawInstance();
@@ -361,9 +363,28 @@ describe('ComposioToolProvider — authorize', () => {
       config: { subdomain: 'acme' },
     });
 
+    expect(raw.connectedAccounts.link).not.toHaveBeenCalled();
     expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1', {
       allowMultiple: true,
       config: { authScheme: 'OAUTH2', val: { subdomain: 'acme' } },
+    });
+  });
+
+  it('falls back to connectedAccounts.initiate for non-OAuth auth schemes', async () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+    await integration.authorize({ toolkit: 'notion', connectionId: 'a' }).catch(() => undefined);
+    const raw = getRawInstance();
+
+    raw.authConfigs.list.mockResolvedValue({
+      items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'API_KEY' }],
+    });
+    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+
+    await integration.authorize({ toolkit: 'notion', connectionId: 'author_1' });
+
+    expect(raw.connectedAccounts.link).not.toHaveBeenCalled();
+    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('author_1', 'ac_1', {
+      allowMultiple: true,
     });
   });
 
@@ -375,11 +396,12 @@ describe('ComposioToolProvider — authorize', () => {
     raw.authConfigs.list.mockResolvedValue({
       items: [{ id: 'ac_1', status: 'ENABLED', authScheme: 'OAUTH2' }],
     });
-    raw.connectedAccounts.initiate.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
+    raw.connectedAccounts.link.mockResolvedValue({ id: 'ca_new', redirectUrl: 'https://oauth' });
 
     await integration.authorize({ toolkit: 'gmail', connectionId: 'a', config: {} });
 
-    expect(raw.connectedAccounts.initiate).toHaveBeenCalledWith('a', 'ac_1', { allowMultiple: true });
+    expect(raw.connectedAccounts.link).toHaveBeenCalledWith('a', 'ac_1', { allowMultiple: true });
+    expect(raw.connectedAccounts.initiate).not.toHaveBeenCalled();
   });
 });
 
@@ -587,7 +609,7 @@ describe('ComposioToolProvider — listConnections', () => {
           status: 'ACTIVE',
           isDisabled: false,
           createdAt: '2026-01-01T00:00:00Z',
-          user_id: 'user_42',
+          wordId: 'user_42',
         },
       ],
       nextCursor: 'next_page',
