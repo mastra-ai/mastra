@@ -9,6 +9,19 @@ afterEach(() => {
 });
 
 describe('CodeEditor styles', () => {
+  it('removes the focused editor outline from the default surface', () => {
+    const { container } = render(<CodeEditor value="default content" showCopyButton={false} />);
+    const editor = container.querySelector<HTMLElement>('.cm-editor');
+
+    if (!editor) {
+      throw new Error('Expected CodeMirror editor to render.');
+    }
+
+    editor.classList.add('cm-focused');
+
+    expect(getComputedStyle(editor).outline).toBe('none');
+  });
+
   it('removes the focused editor outline from the embedded surface', () => {
     const { container } = render(<CodeEditor value="embedded content" showCopyButton={false} variant="embedded" />);
     const editor = container.querySelector<HTMLElement>('.cm-editor');

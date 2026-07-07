@@ -17,6 +17,7 @@ import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { inputFocusBorderWithin } from '@/ds/primitives/form-element';
 import type { JsonSchema } from '@/lib/json-schema';
 import { cn } from '@/lib/utils';
 
@@ -224,19 +225,22 @@ export const useCodemirrorTheme = (): Extension => {
   return useMemo(() => (isDark ? buildDarkTheme() : buildLightTheme()), [isDark]);
 };
 
-const codeEditorVariants = cva('p-1 font-mono relative overflow-hidden', {
-  variants: {
-    variant: {
-      default: 'rounded-md bg-surface3 border border-border1',
-      embedded: 'rounded-none border-none bg-transparent',
+const codeEditorVariants = cva(
+  cn('p-1 font-mono relative overflow-hidden', 'transition-colors duration-normal ease-out-custom'),
+  {
+    variants: {
+      variant: {
+        default: cn('rounded-md bg-surface3 border border-border1', inputFocusBorderWithin),
+        embedded: 'rounded-none border-none bg-transparent',
+      },
+    },
+    defaultVariants: {
+      variant: 'default',
     },
   },
-  defaultVariants: {
-    variant: 'default',
-  },
-});
+);
 
-const embeddedEditorAttributes = EditorView.editorAttributes.of({
+const editorFocusAttributes = EditorView.editorAttributes.of({
   style: 'outline: none',
 });
 
@@ -286,14 +290,10 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
-      const exts: Extension[] = [];
+      const exts: Extension[] = [editorFocusAttributes];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
-      }
-
-      if (variant === 'embedded') {
-        exts.push(embeddedEditorAttributes);
       }
 
       if (language === 'json') {
@@ -315,7 +315,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       }
 
       return exts;
-    }, [language, highlightVariables, schema, editable, lineWrapping, variant]);
+    }, [language, highlightVariables, schema, editable, lineWrapping]);
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
