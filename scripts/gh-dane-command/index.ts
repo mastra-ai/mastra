@@ -9,12 +9,12 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createMastraCode } from '../../mastracode/core/src/index.js';
-import { runMC, createHumanFormatState, formatHuman } from '../../mastracode/core/src/headless/index.js';
-import { processSlashCommand } from '../../mastracode/core/src/utils/slash-command-processor.js';
-import type { SlashCommandMetadata } from '../../mastracode/core/src/utils/slash-command-loader.js';
-import { releaseAllThreadLocks } from '../../mastracode/core/src/utils/thread-lock.js';
-import { setupDebugLogging } from '../../mastracode/core/src/utils/debug-log.js';
+import { createMastraCode } from '../../mastracode/sdk/src/index.js';
+import { runMC, createHumanFormatState, formatHuman } from '../../mastracode/sdk/src/headless/index.js';
+import { processSlashCommand } from '../../mastracode/sdk/src/utils/slash-command-processor.js';
+import type { SlashCommandMetadata } from '../../mastracode/sdk/src/utils/slash-command-loader.js';
+import { releaseAllThreadLocks } from '../../mastracode/sdk/src/utils/thread-lock.js';
+import { setupDebugLogging } from '../../mastracode/sdk/src/utils/debug-log.js';
 
 // Supported commands and their corresponding .claude/commands/ file names
 const SUPPORTED_COMMANDS: Record<string, string> = {

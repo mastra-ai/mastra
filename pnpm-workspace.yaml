@@ -1,5 +1,5 @@
 packages:
-  - mastracode/core
+  - mastracode/sdk
   - mastracode/tui
   - docs
   - packages/_vendored/*

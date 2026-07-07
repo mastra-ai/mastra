@@ -2134,7 +2134,7 @@ importers:
         specifier: 'catalog:'
         version: 4.4.3
 
-  mastracode/core:
+  mastracode/sdk:
     dependencies:
       '@agentclientprotocol/sdk':
         specifier: ^0.21.0
@@ -2280,7 +2280,7 @@ importers:
         version: link:../../browser/agent-browser
       '@mastra/code-sdk':
         specifier: workspace:^
-        version: link:../core
+        version: link:../sdk
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core

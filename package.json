@@ -79,7 +79,7 @@
     "test:durable:core": "pnpm --filter @mastra/core test src/agent/durable/",
     "test:durable:inngest": "pnpm --filter @mastra/inngest test:suite",
     "test:durable:inngest:unit": "pnpm --filter @mastra/inngest test:unit",
-    "test:mastracode": "pnpm --filter ./mastracode/core --filter ./mastracode/tui test",
+    "test:mastracode": "pnpm --filter ./mastracode/sdk --filter ./mastracode/tui test",
     "test:agent-builder": "pnpm --filter ./packages/agent-builder test",
     "test:agent-builder:integration": "pnpm --filter @mastra/agent-builder-integration-tests test",
     "test:observability": "node scripts/test-observability.cjs",
