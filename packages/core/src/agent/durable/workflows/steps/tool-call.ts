@@ -811,6 +811,10 @@ export function createDurableToolCallStep() {
                         await toolOptions.suspend?.(data, options);
                         return taskContext?.suspend?.(data, options);
                       },
+                      outputWriter: async (chunk: any) => {
+                        await taskContext?.onProgress?.(chunk);
+                        return toolOptions.outputWriter?.(chunk);
+                      },
                     });
                   },
                 },
@@ -885,6 +889,7 @@ export function createDurableToolCallStep() {
                       },
                     },
                     {
+                      mode: 'stream',
                       backgroundTasks: {
                         [params.toolCallId]: {
                           startedAt: params.startedAt,
@@ -945,6 +950,7 @@ export function createDurableToolCallStep() {
                   if (!messageList) return;
 
                   messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    mode: 'stream',
                     backgroundTasks: {
                       [params.toolCallId]: {
                         startedAt: params.startedAt,

@@ -327,6 +327,8 @@ async function runWithIdleWrapper<OUTPUT>(
   });
 
   // --- Subscribe to background task events ---
+  // Background tasks are dispatched with the DurableAgent's public ID
+  // (set via preparation.ts durableAgentId), so filter on the same ID.
   const bgStream = deps.bgManager.stream({
     agentId: agent.id,
     threadId,
@@ -344,7 +346,6 @@ async function runWithIdleWrapper<OUTPUT>(
         if (!chunk || typeof chunk !== 'object' || typeof chunk.type !== 'string') continue;
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
-
         const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
         if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
