@@ -16,7 +16,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
@@ -769,5 +769,77 @@ describe('Mock OM Agent Integration', () => {
       const userMsgs = messages.filter(m => m.role === 'user');
       expect(userMsgs.length).toBeGreaterThanOrEqual(2);
     });
+  });
+});
+
+// =============================================================================
+// Config-level ObserveHooks through Memory options + the turn engine
+// =============================================================================
+
+describe('config-level hooks through Memory options', () => {
+  it('fires hooks from the turn engine with trigger turn-sync, wired via observationalMemory options', async () => {
+    const store = new InMemoryStore();
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+      onReflectionStart: vi.fn(),
+      onReflectionEnd: vi.fn(),
+    };
+
+    const memory = new Memory({
+      storage: store,
+      options: {
+        observationalMemory: {
+          enabled: true,
+          hooks,
+          observation: {
+            model: createMockObserverModel() as any,
+            messageTokens: 20, // Very low threshold to ensure observation triggers
+            bufferTokens: false, // Synchronous observation through the turn engine
+          },
+          reflection: {
+            model: createMockReflectorModel() as any,
+            observationTokens: 5, // Very low so the observation also triggers reflection
+          },
+        },
+      },
+    });
+
+    const agent = new Agent({
+      id: 'test-om-agent-hooks',
+      name: 'Test OM Agent Hooks',
+      instructions: 'You are a helpful assistant. Always use the test tool first.',
+      model: createMockOmModel(longResponseText) as any,
+      tools: { test: omTriggerTool },
+      memory,
+    });
+
+    const result = await agent.generate('Hello, I need help with something important.', {
+      memory: { thread: 'test-thread-config-hooks', resource: 'test-resource' },
+    });
+    expect(result.text).toBeTruthy();
+
+    // The Memory-options hooks reached the engine, and the turn engine labeled
+    // its synchronous observation cycle.
+    expect(hooks.onObservationStart).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: 'test-thread-config-hooks', trigger: 'turn-sync' }),
+    );
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'test-thread-config-hooks',
+        trigger: 'turn-sync',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
+
+    // The observation pushed past the tiny reflection threshold, so the
+    // turn-initiated reflection reports with the same trigger.
+    expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId: 'test-thread-config-hooks',
+        trigger: 'turn-sync',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
   });
 });

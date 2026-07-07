@@ -953,14 +953,23 @@ export interface ObservationalMemoryConfig {
   onDebugEvent?: (event: ObservationDebugEvent) => void;
 
   /**
-   * Lifecycle hooks fired for every observation/reflection cycle, including
-   * the automatic pipeline paths — turn-engine sync observation and
-   * fire-and-forget async buffering — that per-call `observe()` hooks never
-   * see. Callbacks receive `threadId` / `resourceId` / `trigger` context,
-   * plus `usage` and `providerMetadata` on cycle end, so consumers can
-   * account for OM model economics without wrapping the observer/reflector
-   * models in middleware. Errors thrown by these hooks are caught and logged;
-   * they never fail the cycle.
+   * Lifecycle hooks fired for every observation/reflection cycle: the manual
+   * APIs (`observe()` / `reflect()`), turn-engine sync observation, and
+   * fire-and-forget async buffering — the automatic paths that per-call
+   * `observe()` hooks never see. Callbacks receive `threadId` / `resourceId`
+   * / `trigger` context, plus `usage` and `providerMetadata` on cycle end,
+   * so consumers can account for OM model economics without wrapping the
+   * observer/reflector models in middleware.
+   *
+   * Semantics worth knowing:
+   * - Failed async-buffer cycles never throw (fire-and-forget), so the
+   *   failure is reported via the end hook's `error` field instead.
+   * - An end hook may fire with neither `usage` nor `error` when a cycle
+   *   concludes without a model call (e.g. a concurrent-observation
+   *   stale-record check skips the work).
+   * - Errors thrown (or promise rejections returned) by these hooks are
+   *   caught and logged at OM debug level (`OM_DEBUG`); they never fail the
+   *   cycle.
    */
   hooks?: ObserveHooks;
 
@@ -1079,7 +1088,15 @@ export interface ObserveHookUsage {
   totalTokens?: number;
 }
 
-/** Which pipeline path initiated the observation/reflection cycle a hook fires for. */
+/**
+ * Which pipeline path INITIATED the observation/reflection cycle a hook fires
+ * for — not whether the cycle itself ran synchronously:
+ * - 'manual': direct API calls (`observe()`, `reflect()`).
+ * - 'turn-sync': the observation turn engine's synchronous lane, including
+ *   reflections it initiates (even when those buffer asynchronously).
+ * - 'async-buffer': the buffered-observation lane (`buffer()` /
+ *   `triggerAsyncBuffering`), whether awaited or fire-and-forget.
+ */
 export type ObserveTrigger = 'manual' | 'turn-sync' | 'async-buffer';
 
 /**

@@ -3340,16 +3340,62 @@ describe('config-level hooks', () => {
     const result = await om.observe({ threadId, messages });
 
     expect(result.observed).toBe(true);
-    if (result.reflected) {
-      expect(hooks.onReflectionStart).toHaveBeenCalled();
-      expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
-        expect.objectContaining({
-          threadId,
-          trigger: 'manual',
-          usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
-        }),
-      );
-    }
+    expect(result.reflected).toBe(true);
+    expect(hooks.onReflectionStart).toHaveBeenCalled();
+    expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'manual',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
+  });
+
+  it('fires config-level reflection hooks from manual reflect()', async () => {
+    const hooks = {
+      onReflectionStart: vi.fn(),
+      onReflectionEnd: vi.fn(),
+    };
+    const om = createOM(storage, { hooks });
+    // Seed active observations so reflect() has something to compress.
+    await om.observe({ threadId, messages: createBulkMessages(10, threadId) });
+    hooks.onReflectionStart.mockClear();
+    hooks.onReflectionEnd.mockClear();
+
+    const result = await om.reflect(threadId);
+
+    expect(result.reflected).toBe(true);
+    expect(hooks.onReflectionStart).toHaveBeenCalledOnce();
+    expect(hooks.onReflectionStart).toHaveBeenCalledWith(expect.objectContaining({ threadId, trigger: 'manual' }));
+    expect(hooks.onReflectionEnd).toHaveBeenCalledOnce();
+    expect(hooks.onReflectionEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'manual',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
+      }),
+    );
+  });
+
+  it('never fails the cycle when a config-level hook returns a rejected promise', async () => {
+    const hooks = {
+      onObservationStart: vi.fn(async () => {
+        throw new Error('async consumer hook exploded');
+      }),
+      onObservationEnd: vi.fn(async () => {
+        throw new Error('async consumer hook exploded');
+      }),
+    };
+    const om = createOM(storage, { hooks });
+
+    const result = await om.observe({ threadId, messages: createBulkMessages(10, threadId) });
+
+    expect(result.observed).toBe(true);
+    expect(hooks.onObservationStart).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    // Let the rejected hook promises settle; an unhandled rejection here would
+    // fail the test run.
+    await new Promise(resolve => setTimeout(resolve, 0));
   });
 
   it('fires config-level hooks for async-buffered cycles with usage and providerMetadata', async () => {
@@ -3366,9 +3412,10 @@ describe('config-level hooks', () => {
     });
     await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
 
+    // buffer() runs the cycle inline when awaited; the fire-and-forget lane is
+    // covered by the triggerAsyncBuffering test below.
     const result = await om.buffer({ threadId });
     expect(result.buffered).toBe(true);
-    await om.waitForBuffering(threadId, undefined, 5000);
 
     expect(hooks.onObservationStart).toHaveBeenCalledWith(
       expect.objectContaining({ threadId, trigger: 'async-buffer' }),
@@ -3379,6 +3426,70 @@ describe('config-level hooks', () => {
         trigger: 'async-buffer',
         usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
         providerMetadata: gatewayMetadata,
+      }),
+    );
+  });
+
+  it('reports failed async-buffered cycles through onObservationEnd.error instead of swallowing them', async () => {
+    const failingModel = new MockLanguageModelV2({
+      doGenerate: async () => {
+        throw new Error('Observer failed');
+      },
+      doStream: async () => {
+        throw new Error('Observer failed');
+      },
+    });
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2, observerModel: failingModel, hooks });
+    await storage.saveMessages({ messages: createBulkMessages(5, threadId) });
+
+    // The async-buffer strategy swallows failures (fire-and-forget contract),
+    // so buffer() resolves — the failure must surface on the end hook.
+    await om.buffer({ threadId });
+
+    expect(hooks.onObservationStart).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'async-buffer',
+        usage: undefined,
+        error: expect.any(Error),
+      }),
+    );
+    expect(hooks.onObservationEnd.mock.calls[0]![0].error.message).toMatch(/Observer failed/);
+  });
+
+  it('fires config-level hooks on the fire-and-forget triggerAsyncBuffering lane', async () => {
+    const hooks = {
+      onObservationStart: vi.fn(),
+      onObservationEnd: vi.fn(),
+    };
+    const om = createOM(storage, { messageTokens: 500, bufferTokens: 0.2, hooks });
+    const messages = createBulkMessages(5, threadId);
+    await storage.saveMessages({ messages });
+
+    const status = await om.getStatus({ threadId, messages });
+    const triggered = await om.triggerAsyncBuffering({
+      threadId,
+      record: status.record,
+      pendingTokens: status.pendingTokens,
+      unbufferedPendingTokens: status.pendingTokens,
+      unobservedMessages: messages,
+      threshold: status.threshold,
+    });
+    expect(triggered).toBe(true);
+    await om.waitForBuffering(threadId, undefined, 5000);
+
+    expect(hooks.onObservationEnd).toHaveBeenCalledOnce();
+    expect(hooks.onObservationEnd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        threadId,
+        trigger: 'async-buffer',
+        usage: expect.objectContaining({ inputTokens: expect.any(Number), outputTokens: expect.any(Number) }),
       }),
     );
   });

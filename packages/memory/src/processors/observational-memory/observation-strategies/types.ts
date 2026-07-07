@@ -48,6 +48,12 @@ export interface ObservationRunResult {
   observed: boolean;
   usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
   providerMetadata?: ProviderMetadata;
+  /**
+   * The failure that ended the cycle, for strategies that swallow errors
+   * instead of rethrowing (async buffering). Lets callers report the failure
+   * (e.g. to ObserveHooks) even though the fire-and-forget path never throws.
+   */
+  error?: Error;
 }
 
 /** Processed observation ready for persistence. */
