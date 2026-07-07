@@ -232,7 +232,7 @@ const codeEditorVariants = cva(
   {
     variants: {
       variant: {
-        default: 'rounded-md bg-surface3 border border-border1 p-1 focus-within:border-border2',
+        default: 'rounded-md bg-surface3 border border-border1 p-1 focus-within:border-neutral6/10',
         embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },
