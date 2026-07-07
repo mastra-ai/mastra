@@ -7,9 +7,26 @@ packages:
 
 # Server
 
-Mastra configures its HTTP [server](/docs/server/mastra-server) from a `server.ts` file directly under `src/mastra/`. The file default-exports a `ServerConfig` object, the same shape you'd pass to the `server` field of [`new Mastra()`](/reference/core/mastra-class).
+Mastra configures its HTTP [server](/docs/server/mastra-server) from a `server.ts` file directly under `src/mastra/`. The server exposes agents, workflows, and other registered primitives as REST endpoints, and the file default-exports the same `ServerConfig` shape you'd pass to [`new Mastra()`](/reference/core/mastra-class).
 
-## Add server config
+Without `server.ts` or a code-registered server config, Mastra runs with server defaults, including the standard API routes, the default API prefix, and the default port behavior documented in the [server overview](/docs/server/mastra-server).
+
+## When to customize the server
+
+Add `server.ts` when the default HTTP server needs project-specific settings.
+
+| Need | Use `server.ts` for |
+| - | - |
+| Production deployment | Bind to the host and port required by your runtime. |
+| Browser access control | Restrict CORS to trusted origins. |
+| Custom endpoints | Add webhooks, health checks, or project-specific API routes. |
+| Server behavior | Configure middleware, request limits, API prefixes, or generated API docs. |
+
+For the full server model, see [Mastra server](/docs/server/mastra-server), [middleware](/docs/server/middleware), and [custom API routes](/docs/server/custom-api-routes).
+
+## Quickstart
+
+Create `src/mastra/server.ts` and default-export a `ServerConfig` object:
 
 ```typescript title="src/mastra/server.ts"
 import type { ServerConfig } from '@mastra/core/server'
@@ -20,14 +37,81 @@ export default {
 } satisfies ServerConfig
 ```
 
-Only a file with a default export is treated as file-based server config. A `server.ts` that uses named exports is assumed to be imported in code, so it's left alone.
+Mastra discovers the file during `mastra dev` or `mastra build` and applies it to the generated HTTP server.
+
+## Common configurations
+
+### Set host and port
+
+Use host and port settings when your deployment platform requires a specific bind address.
+
+```typescript title="src/mastra/server.ts"
+import type { ServerConfig } from '@mastra/core/server'
+
+export default {
+  host: '0.0.0.0',
+  port: Number(process.env.PORT ?? 4111),
+} satisfies ServerConfig
+```
+
+### Restrict CORS
+
+Use `cors` to limit which browser origins can call the server.
+
+```typescript title="src/mastra/server.ts"
+import type { ServerConfig } from '@mastra/core/server'
+
+export default {
+  cors: {
+    origin: ['https://app.example.com'],
+    credentials: true,
+  },
+} satisfies ServerConfig
+```
+
+### Add a custom API route
+
+Use `apiRoutes` for project-specific endpoints such as health checks or webhooks.
+
+```typescript title="src/mastra/server.ts"
+import type { ServerConfig } from '@mastra/core/server'
+
+export default {
+  apiRoutes: [
+    {
+      path: '/health',
+      method: 'GET',
+      handler: c => c.json({ ok: true }),
+    },
+  ],
+} satisfies ServerConfig
+```
+
+### Enable generated API docs
+
+Use `build.openAPIDocs` and `build.swaggerUI` when you want generated OpenAPI output and an interactive Swagger UI.
+
+```typescript title="src/mastra/server.ts"
+import type { ServerConfig } from '@mastra/core/server'
+
+export default {
+  build: {
+    openAPIDocs: true,
+    swaggerUI: true,
+  },
+} satisfies ServerConfig
+```
 
 ## Precedence with code
 
-Code-registered server config wins. If you pass `server` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged. Routes added during startup, such as channel webhooks, are preserved.
+Code-registered server config wins. If you pass `server` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged.
+
+Routes added during startup, such as channel webhooks, are preserved when file-based server config is applied. If code-registered server config wins, Mastra keeps the code-registered config.
 
 ## Related
 
 - [Filesystem overview](/docs/filesystem/overview)
 - [Mastra server](/docs/server/mastra-server)
+- [Middleware](/docs/server/middleware)
+- [Custom API routes](/docs/server/custom-api-routes)
 - [`Mastra` reference](/reference/core/mastra-class)

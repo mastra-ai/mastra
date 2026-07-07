@@ -3,31 +3,76 @@ title: "Studio | Filesystem"
 description: Configure Mastra Studio by file convention with studio.ts.
 packages:
   - "@mastra/core"
+  - "@mastra/auth-workos"
 ---
 
 # Studio
 
-Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object, the same shape you'd pass to the `studio` field of [`new Mastra()`](/reference/core/mastra-class). Use it to set who can access Studio and what they can do.
+Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object for Studio authentication and authorization: who can access Studio, and what authenticated users can do.
 
-## Add studio config
+Without `studio.ts` or a code-registered Studio config, Studio runs without authentication. That's useful for local development, but production Studio deployments should add an auth provider.
+
+## When to configure Studio
+
+Use `studio.ts` when Studio needs access controls that are separate from your project code.
+
+| Need | Use `studio.ts` for |
+| - | - |
+| Local development | Skip `studio.ts` and run `mastra dev` for an unauthenticated local Studio. |
+| Production access | Add an auth provider so only approved users can open Studio. |
+| Team permissions | Add RBAC or FGA providers to control what users can do in Studio. |
+| Separate UI auth | Use Studio-specific auth instead of coupling Studio access to API auth. |
+
+See [Studio](/docs/studio/overview) for the UI overview and [Studio auth](/docs/studio/auth) for deeper auth guidance.
+
+## Quickstart
+
+For local development, you don't need `studio.ts`. Start the dev server and open Studio:
+
+```bash npm2yarn
+npm run dev
+```
+
+Studio opens without authentication in local development. Add `studio.ts` when you're ready to secure a shared or production deployment.
+
+## Add authentication
+
+Use an auth provider to require sign-in before users can access Studio. This example uses [WorkOS](/docs/server/auth/workos):
 
 ```typescript title="src/mastra/studio.ts"
-import type { StudioConfig } from '@mastra/core/server'
 import { MastraAuthWorkos } from '@mastra/auth-workos'
+import type { StudioConfig } from '@mastra/core/server'
 
 export default {
   auth: new MastraAuthWorkos(),
 } satisfies StudioConfig
 ```
 
-Without an `auth` provider, Studio runs without authentication, which suits local development. Only a file with a default export is treated as file-based studio config; a `studio.ts` that uses named exports is left alone.
+The auth provider handles who the user is. For what the user can do after sign-in, add an RBAC or FGA provider to the same config.
+
+```typescript title="src/mastra/studio.ts"
+import { DEFAULT_ROLES, StaticRBACProvider } from '@mastra/core/auth/ee'
+import type { StudioConfig } from '@mastra/core/server'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+export default {
+  auth: new MastraAuthWorkos(),
+  rbac: new StaticRBACProvider({
+    roles: DEFAULT_ROLES,
+    getUserRoles: user => [user.role],
+  }),
+} satisfies StudioConfig
+```
 
 ## Precedence with code
 
-Code-registered studio config wins. If you pass `studio` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged.
+Code-registered Studio config wins. If you pass `studio` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged.
+
+Use code registration when Studio auth depends on runtime wiring in `src/mastra/index.ts`. Use `studio.ts` when one project-wide Studio config is enough and you want it discovered by convention.
 
 ## Related
 
 - [Filesystem overview](/docs/filesystem/overview)
 - [Studio overview](/docs/studio/overview)
+- [Studio auth](/docs/studio/auth)
 - [`Mastra` reference](/reference/core/mastra-class)

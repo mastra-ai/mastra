@@ -8,12 +8,29 @@ packages:
 
 # Observability
 
-Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up traces, logs, and metrics for the project. See [observability configuration](/docs/observability/config) for the full setup.
+Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up tracing, logging, metrics, and feedback for the project.
 
-## Add observability
+Without `observability.ts` or a code-registered observability instance, the project runs without observability collection. Agent runs and workflow executions still work, but Mastra doesn't collect traces, spans, logs, or metrics for inspection.
+
+## When to configure observability
+
+Add observability when you need to understand how the application behaves at runtime.
+
+| Need | What observability helps with |
+| - | - |
+| Debug agent behavior | Inspect model interactions, tool calls, workflow steps, and the spans around them. |
+| Monitor production | Track latency, token usage, cost, and error patterns over time. |
+| Review quality | Store scores and feedback linked to traces and spans. |
+| Connect external tools | Export traces and logs to Mastra Platform or OpenTelemetry-compatible systems. |
+
+Use the [observability overview](/docs/observability/overview) for the signal model and [observability configuration](/docs/observability/config) for the full API.
+
+## Quickstart
+
+Create `src/mastra/observability.ts` and default-export an `Observability` instance:
 
 ```typescript title="src/mastra/observability.ts"
-import { Observability, MastraStorageExporter } from '@mastra/observability'
+import { MastraStorageExporter, Observability } from '@mastra/observability'
 
 export default new Observability({
   configs: {
@@ -25,14 +42,27 @@ export default new Observability({
 })
 ```
 
-Only a file with a default export is treated as file-based observability. An `observability.ts` that uses named exports is assumed to be imported in code, so it's left alone.
+Mastra discovers the file during `mastra dev` or `mastra build` and registers it before file-based agents and workflows run.
+
+## Observability and storage
+
+Observability collection and observability persistence are separate pieces:
+
+- `observability.ts` configures which signals are collected and where they're exported.
+- [`storage.ts`](/docs/filesystem/storage) configures the project store that can persist observability records.
+
+The quickstart uses `MastraStorageExporter`, which writes observability events to the configured Mastra storage. For details on which storage backends support traces, logs, metrics, and feedback queries, see [Observability storage](/docs/observability/storage).
 
 ## Precedence with code
 
 Code-registered observability wins. If you pass `observability` to [`new Mastra()`](/reference/core/mastra-class), the file-based instance is skipped and a warning is logged.
 
+Use code registration when observability setup depends on runtime logic in `src/mastra/index.ts`. Use `observability.ts` when one project-wide configuration is enough and you want it discovered by convention.
+
 ## Related
 
 - [Filesystem overview](/docs/filesystem/overview)
 - [Observability overview](/docs/observability/overview)
+- [Observability configuration](/docs/observability/config)
+- [Observability storage](/docs/observability/storage)
 - [`Mastra` reference](/reference/core/mastra-class)

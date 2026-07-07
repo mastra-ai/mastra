@@ -106,7 +106,7 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 | Processors | [`processors/`](/docs/filesystem/processors) | Separates input and output processing pipelines |
 | Subagents | [`subagents/`](/docs/filesystem/subagents) | Gives each specialist child agent its own directory |
 
-## When to use a coded Agent instead
+## When to use a coded agent instead
 
 Use `agentConfig()` when you want Mastra to merge sibling files into the agent. With this approach, `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, `processors/`, and `subagents/` can all contribute to the final agent.
 

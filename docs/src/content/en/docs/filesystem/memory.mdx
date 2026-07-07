@@ -3,14 +3,32 @@ title: "Memory | Filesystem"
 description: Give a file-based agent persistent memory with a memory.ts module.
 packages:
   - "@mastra/core"
+  - "@mastra/libsql"
   - "@mastra/memory"
 ---
 
 # Memory
 
-A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` that default-exports a [`Memory`](/reference/memory/memory-class) instance.
+A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` file that default-exports a [`Memory`](/reference/memory/memory-class) instance. Memory lets the agent keep conversation history across turns, track threads and resources, maintain working memory, and optionally recall relevant past context with semantic search.
 
-## Add memory
+Without `memory.ts` or `config.memory`, the agent has no memory by default. Each `generate()` or `stream()` call starts without remembered conversation state unless you pass the prior context yourself.
+
+## When you need memory
+
+Add memory when the agent needs to remember context beyond a single call.
+
+| Need | Why memory helps |
+| - | - |
+| Multi-turn conversations | The agent can include prior user messages, assistant replies, and tool results in later turns. |
+| Per-user isolation | `resource` separates users or entities, while `thread` separates conversations for the same resource. |
+| Semantic recall | The agent can retrieve relevant past messages by meaning instead of only using recent messages. |
+| Working memory | The agent can maintain a structured scratchpad, such as user preferences or long-running task state. |
+
+Skip memory for one-shot agents where every request is independent.
+
+## Quickstart
+
+Create `memory.ts` next to the agent's `config.ts`:
 
 ```typescript title="src/mastra/agents/weather/memory.ts"
 import { Memory } from '@mastra/memory'
@@ -18,15 +36,97 @@ import { Memory } from '@mastra/memory'
 export default new Memory()
 ```
 
-The exported instance becomes the agent's `memory`. If no `memory.ts` and no `config.memory` are present, the agent has no memory, which is the default.
+The exported instance becomes the agent's `memory`. If your app configures a storage provider on the main Mastra instance, memory data is stored there. See [memory storage](/docs/memory/storage) for storage setup.
+
+Use the same `resource` and `thread` values when calling the agent to continue a conversation:
+
+```typescript title="src/app/weather-chat.ts"
+const response = await weatherAgent.generate('Remember that I prefer Celsius.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'weather-chat',
+  },
+})
+```
+
+## Configure memory
+
+Pass options to `new Memory()` when the default behavior isn't enough.
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { Memory } from '@mastra/memory'
+
+export default new Memory({
+  options: {
+    lastMessages: 20,
+    workingMemory: {
+      enabled: true,
+      scope: 'resource',
+    },
+    semanticRecall: {
+      topK: 4,
+      messageRange: 2,
+      scope: 'resource',
+    },
+  },
+})
+```
+
+Common options include:
+
+| Option | Use it for |
+| - | - |
+| `lastMessages` | Controls how many recent messages are loaded into context. |
+| `workingMemory` | Enables a structured scratchpad the agent can maintain across turns. |
+| `semanticRecall` | Retrieves relevant past messages by semantic meaning. Requires a vector store and embedder. |
+| `generateTitle` | Generates a thread title from the first user message. |
+
+Visit the [`Memory` reference](/reference/memory/memory-class) for the full constructor option list.
+
+## Semantic recall
+
+Semantic recall needs both normal memory storage and vector search. Configure a vector store and embedder when enabling `semanticRecall`.
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { LibSQLVector } from '@mastra/libsql'
+import { Memory } from '@mastra/memory'
+
+export default new Memory({
+  vector: new LibSQLVector({
+    id: 'weather-vector',
+    url: 'file:./weather-vector.db',
+  }),
+  embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  options: {
+    semanticRecall: {
+      topK: 5,
+      messageRange: 2,
+      scope: 'resource',
+    },
+  },
+})
+```
+
+See [semantic recall](/docs/memory/semantic-recall) for setup guidance and provider options.
+
+## Memory processors
+
+Memory processors can filter, trim, or transform messages before memory adds them to model context. Use them when conversations can grow large, include attachments, or need filtering before recall.
+
+For example, you can keep recent conversation history but use processors to remove data that shouldn't be sent back to the model. See [memory processors](/docs/memory/memory-processors) for available processors and examples.
 
 ## Precedence with config
 
 You can also set `memory` in [`config.ts`](/docs/filesystem/config). `config.memory` wins over `memory.ts`, and a warning is logged when both are present.
+
+If neither `config.memory` nor `memory.ts` is present, the assembled file-based agent has no memory.
 
 ## Related
 
 - [config.ts](/docs/filesystem/config)
 - [Filesystem overview](/docs/filesystem/overview)
 - [Memory overview](/docs/memory/overview)
+- [Message history](/docs/memory/message-history)
+- [Semantic recall](/docs/memory/semantic-recall)
 - [`Memory` reference](/reference/memory/memory-class)

@@ -7,13 +7,47 @@ packages:
 
 # Skills
 
-A file-based agent discovers skills from its `skills/` directory. Skills are reusable procedures the model loads when they're useful. Mastra inlines them into the bundle at build time, so the deployed agent doesn't read them from disk at runtime.
+A file-based agent discovers skills from its `skills/` directory and bundles them at build time. Skills are reusable procedures or reference material that the agent can load when relevant, instead of putting every detail into the always-on prompt.
 
-Three layouts are supported.
+Skills differ from instructions and tools:
 
-## createSkill module
+- [`instructions.md`](/docs/filesystem/instructions) is always injected as the agent's base behavior.
+- [`tools/`](/docs/filesystem/tools) are callable actions with structured inputs and runtime code.
+- `skills/` are on-demand guidance. The agent sees each skill's short `description`, then loads the full skill instructions and references when the skill is useful.
 
-A `.ts` or `.js` file can default-export [`createSkill()`](/reference/agents/createSkill).
+## When to use skills
+
+Use skills for detailed guidance that should be available to the agent without filling the context window every turn. Good skill candidates include style guides, review checklists, API usage rules, troubleshooting procedures, and multi-step workflows the agent only needs for certain requests.
+
+Use a tool instead when the agent needs to call code or perform an action. Use instructions instead when the guidance defines the agent's identity or must apply to every response.
+
+## Quickstart
+
+The simplest skill is one markdown file under `skills/`. The filename becomes the skill name, and `description` tells the agent when to load it.
+
+```markdown title="src/mastra/agents/weather/skills/temperature-units.md"
+---
+description: Use when reporting temperatures or comparing forecast units.
+---
+
+Always report temperatures in Celsius and Fahrenheit. Include the user's preferred unit first when known.
+```
+
+## Skills vs tools vs instructions
+
+| Need | Use | Why |
+| - | - | - |
+| Always-on identity, tone, or rules | [`instructions.md`](/docs/filesystem/instructions) | The model should see the guidance every turn. |
+| Callable action with inputs and outputs | [`tools/`](/docs/filesystem/tools) | The model needs to execute code, call APIs, or perform side effects. |
+| Detailed reference or procedure loaded when relevant | `skills/` | The model only needs the full guidance for specific tasks. |
+
+## Skill formats
+
+Mastra supports three filesystem skill formats: TypeScript/JavaScript modules, packaged `SKILL.md` directories, and flat markdown files.
+
+### createSkill module
+
+Use a module when the skill should be defined in TypeScript or JavaScript. This is useful when you want to generate instructions, include references from code, or share skill definitions outside the filesystem layout.
 
 ```typescript title="src/mastra/agents/weather/skills/forecasting.ts"
 import { createSkill } from '@mastra/core/skills'
@@ -25,13 +59,18 @@ export default createSkill({
 })
 ```
 
-:::note
 Visit the [`createSkill()` reference](/reference/agents/createSkill) for the full API.
-:::
 
-## Packaged SKILL.md
+### Packaged SKILL.md
 
-A `<skill>/SKILL.md` directory uses frontmatter for the name and description. Files under `references/` are inlined with the skill. The `description` is required, so a `SKILL.md` without one fails the build.
+Use a packaged skill when the skill has instructions plus supporting reference files. The directory contains `SKILL.md` and can include a `references/` folder.
+
+```text title="Packaged skill"
+src/mastra/agents/weather/skills/severe-weather/
+├── SKILL.md
+└── references/
+    └── alert-levels.md
+```
 
 ```markdown title="src/mastra/agents/weather/skills/severe-weather/SKILL.md"
 ---
@@ -40,11 +79,23 @@ description: Use when conditions include storms, flooding, or other hazards.
 ---
 
 Lead with the active alert, then give safety guidance.
+
+Use the alert-level reference before explaining risk.
 ```
 
-## Flat markdown
+```markdown title="src/mastra/agents/weather/skills/severe-weather/references/alert-levels.md"
+# Alert levels
 
-A flat `<skill>.md` file uses the filename as the skill name. It also requires a `description` in frontmatter.
+- Watch: Conditions are possible.
+- Warning: Conditions are happening or imminent.
+- Emergency: Immediate protective action is needed.
+```
+
+The `description` is required. A packaged `SKILL.md` without `description` fails the build.
+
+### Flat markdown
+
+Use a flat markdown skill for the smallest possible skill: one `.md` file with frontmatter and instructions. The filename becomes the skill name.
 
 ```markdown title="src/mastra/agents/weather/skills/units.md"
 ---
@@ -54,13 +105,66 @@ description: Use when reporting temperatures.
 Always report temperatures in both Celsius and Fahrenheit.
 ```
 
+Flat markdown skills also require `description` in frontmatter.
+
+## The description is the routing key
+
+:::tip
+The `description` is what the model reads to decide whether to load the skill. Write when to use the skill, not only what the skill contains.
+:::
+
+Vague:
+
+```markdown
+---
+description: Forecasting notes.
+---
+```
+
+Specific:
+
+```markdown
+---
+description: Use when the user asks for a multi-day forecast, weather trend, or precipitation outlook.
+---
+```
+
+## What gets loaded
+
+Filesystem skills are read at build time and added to the generated bundle. The deployed agent doesn't need to read those skill files from disk at runtime.
+
+For packaged skills, Mastra reads:
+
+- `SKILL.md` for metadata and instructions.
+- Files directly under `references/` as supporting reference content.
+
+Reference files are keyed by filename. Symlinked files and directories under `references/` are skipped during discovery.
+
+For `createSkill()` modules, references come from the `references` object:
+
+```typescript title="src/mastra/agents/weather/skills/forecasting.ts"
+import { createSkill } from '@mastra/core/skills'
+
+export default createSkill({
+  name: 'forecasting',
+  description: 'Use when the user asks about multi-day forecasts.',
+  instructions: 'Use the forecast checklist before answering.',
+  references: {
+    'checklist.md': '- Compare each day\n- Mention precipitation\n- Note uncertainty',
+  },
+})
+```
+
 ## Precedence with config
 
-Discovered skills merge with any `skills` in [`config.ts`](/docs/filesystem/config). On a name collision, `config.skills` wins and a warning is logged. If `config.skills` is a function, discovered skills are ignored with a warning because they can't be statically merged.
+Discovered skills merge with any `skills` in [`config.ts`](/docs/filesystem/config). On a name collision, `config.skills` wins and a warning is logged.
+
+If `config.skills` is a function, discovered skills are ignored with a warning because function-valued skills can't be statically merged.
 
 ## Related
 
 - [config.ts](/docs/filesystem/config)
+- [Instructions](/docs/filesystem/instructions)
 - [Tools](/docs/filesystem/tools)
 - [Filesystem overview](/docs/filesystem/overview)
 - [`createSkill()` reference](/reference/agents/createSkill)

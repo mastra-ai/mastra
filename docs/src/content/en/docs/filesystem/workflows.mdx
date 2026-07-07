@@ -7,21 +7,45 @@ packages:
 
 # Workflows
 
-Mastra discovers workflows from `.ts` and `.js` files under `src/mastra/workflows/`. Only files with a default export are treated as file-based workflows, and the filename becomes the workflow key. Files that use named exports are assumed to be imported and registered in code, so they're left alone.
+Mastra discovers project-level workflows from `.ts` and `.js` files under `src/mastra/workflows/`. This convention isn't scoped to one agent: every file with a default export becomes a registered workflow, and the filename becomes the workflow key.
 
-## Add a workflow
+## When to use file-based workflows
 
-Build the workflow with [`createWorkflow()`](/reference/workflows/workflow) and default-export it.
+Use file-based workflows when you want each workflow to live in its own module and be registered automatically.
+
+| Need | Use file-based workflows when |
+| - | - |
+| Separate workflow files | Each workflow should be straightforward to find, test, and review on its own. |
+| Automatic registration | You don't want to import every workflow into `src/mastra/index.ts` manually. |
+| Mixed registration | You already register some workflows in code and want file-based workflows to coexist with them. |
+
+Use the workflow itself for orchestration logic: steps, schemas, branching, suspension, and resume behavior stay in the workflow module. The filesystem convention only controls discovery and registration.
+
+## Quickstart
+
+Create a file under `src/mastra/workflows/`, build the workflow with [`createWorkflow()`](/reference/workflows/workflow), and default-export it.
 
 ```typescript title="src/mastra/workflows/daily-report.ts"
-import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { createStep, createWorkflow } from '@mastra/core/workflows'
 import { z } from 'zod'
 
-const summarize = createStep({
-  id: 'summarize',
+const collectInputs = createStep({
+  id: 'collect-inputs',
   inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ topic: z.string(), audience: z.string() }),
+  execute: async ({ inputData }) => ({
+    topic: inputData.topic,
+    audience: 'engineering',
+  }),
+})
+
+const writeSummary = createStep({
+  id: 'write-summary',
+  inputSchema: z.object({ topic: z.string(), audience: z.string() }),
   outputSchema: z.object({ report: z.string() }),
-  execute: async ({ inputData }) => ({ report: `Report on ${inputData.topic}` }),
+  execute: async ({ inputData }) => ({
+    report: `Daily report about ${inputData.topic} for ${inputData.audience}.`,
+  }),
 })
 
 const dailyReport = createWorkflow({
@@ -29,21 +53,20 @@ const dailyReport = createWorkflow({
   inputSchema: z.object({ topic: z.string() }),
   outputSchema: z.object({ report: z.string() }),
 })
-  .then(summarize)
+  .then(collectInputs)
+  .then(writeSummary)
   .commit()
 
 export default dailyReport
 ```
 
-The discovered workflow is registered under its key when you run the app through `mastra dev` or `mastra build`.
-
-:::note
-Visit the [`createWorkflow()` reference](/reference/workflows/workflow) for the full API.
-:::
+Mastra registers this workflow under the `daily-report` key when you run the app through `mastra dev` or `mastra build`.
 
 ## Precedence with code
 
 File-based workflows merge with workflows registered in [`new Mastra()`](/reference/core/mastra-class). On a key collision, the code-registered workflow wins and a warning is logged.
+
+This lets you move workflows gradually. Keep manually registered workflows in code when they need custom wiring, and move convention-friendly workflows into `src/mastra/workflows/` when automatic registration is enough.
 
 ## Related
 

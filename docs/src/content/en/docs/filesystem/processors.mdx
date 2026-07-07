@@ -7,9 +7,41 @@ packages:
 
 # Processors
 
-A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Files under `processors/input/` run before messages reach the model, and files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its key.
+A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Processors transform, validate, or block messages as they move through the agent pipeline.
+
+Files under `processors/input/` run before messages reach the model. Files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its discovery key.
+
+## When to use processors
+
+Use processors when message handling should happen outside the main prompt or tool logic.
+
+| Use case | Processor type |
+| - | - |
+| Block harmful or disallowed input | Input processor |
+| Detect and redact PII before the model sees it | Input processor |
+| Detect prompt injection or jailbreak attempts | Input processor |
+| Redact sensitive data from generated responses | Output processor |
+| Filter, validate, or transform final responses | Output processor |
+
+Mastra includes built-in processors for moderation, PII detection, prompt-injection detection, token limiting, language detection, structured output, and more. See the [processors concept guide](/docs/agents/processors) for the full overview.
+
+## Quickstart
+
+Add the simplest input processor by placing a processor file under `processors/input/`:
+
+```typescript title="src/mastra/agents/weather/processors/input/pii.ts"
+import { PIIDetector } from '@mastra/core/processors'
+
+export default new PIIDetector({
+  strategy: 'block',
+})
+```
+
+This processor runs before user messages reach the model.
 
 ## Add an input processor
+
+Input processors are good for guardrails that should run before the model sees a message. This example blocks unsafe weather requests before the model call.
 
 ```typescript title="src/mastra/agents/weather/processors/input/moderation.ts"
 import { ModerationProcessor } from '@mastra/core/processors'
@@ -24,6 +56,8 @@ export default new ModerationProcessor({
 
 ## Add an output processor
 
+Output processors are good for filtering or transforming model responses before they're returned. This example redacts PII from the final response.
+
 ```typescript title="src/mastra/agents/weather/processors/output/redact.ts"
 import { PIIDetector } from '@mastra/core/processors'
 
@@ -32,15 +66,28 @@ export default new PIIDetector({
 })
 ```
 
-Test files named `*.test.ts`, `*.spec.ts`, `*.test.js`, and `*.spec.js` are ignored during discovery.
+## Ordering
 
-:::note
-Visit the [`Processor` reference](/reference/processors/processor-interface) for the full interface.
-:::
+Discovered processors are added after any processors defined in [`config.ts`](/docs/filesystem/config). That means config processors run first.
+
+```text title="Ordering"
+config.inputProcessors → processors/input/* → model
+model → config.outputProcessors → processors/output/* → response
+```
+
+If `config.inputProcessors` or `config.outputProcessors` is a function, discovered processors of that type are ignored with a warning because function-valued processors can't be statically merged.
 
 ## Precedence with config
 
-Discovered processors are added after any `inputProcessors` or `outputProcessors` set in [`config.ts`](/docs/filesystem/config), so config processors run first. If `config.inputProcessors` or `config.outputProcessors` is a function, discovered processors of that type are ignored with a warning.
+Use `config.ts` for processors that need to be created dynamically or shared across agents. Use filesystem processors for static, per-agent processors that should be reviewed alongside the agent.
+
+Precedence is:
+
+1. Function-valued `config.inputProcessors` or `config.outputProcessors`
+1. Array-valued `config.inputProcessors` or `config.outputProcessors`
+1. Discovered files under `processors/input/` or `processors/output/`
+
+Visit the [`Processor` reference](/reference/processors/processor-interface) for the full interface.
 
 ## Related
 

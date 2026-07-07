@@ -7,26 +7,43 @@ packages:
 
 # Subagents
 
-A file-based agent can declare **subagents**, specialist child agents it delegates to. Add a `subagents/` directory with one directory per subagent. Each subagent directory has the same layout as a top-level agent: [`config.ts`](/docs/filesystem/config), [`instructions.md`](/docs/filesystem/instructions), [`tools/`](/docs/filesystem/tools), [`skills/`](/docs/filesystem/skills), `memory.ts`, `workspace.ts`, `workspace/`, and `processors/`.
+A file-based agent can declare **subagents**, specialist child agents it delegates to. The parent model sees each subagent as a delegation tool named after the subagent directory, calls that tool to hand off a task, and receives the subagent's result back in the parent conversation.
 
-## Declare a subagent
+Each subagent is assembled as its own agent. It has its own [`config.ts`](/docs/filesystem/config), [`instructions.md`](/docs/filesystem/instructions), [`tools/`](/docs/filesystem/tools), [`skills/`](/docs/filesystem/skills), `memory.ts`, `workspace.ts`, `workspace/`, and `processors/`.
 
-```text
+## When to use subagents
+
+Use subagents when one agent would become too broad, too tool-heavy, or too context-heavy.
+
+| Need | Why subagents help |
+| - | - |
+| Split complex work into specialists | A supervisor can delegate research, writing, review, or execution to focused child agents. |
+| Give specialists different tools | Each subagent gets only the tools declared in its own directory. |
+| Give specialists different workspaces | Each subagent can define its own `workspace.ts` or use its own default workspace. |
+| Isolate context | Each subagent is a separate agent with its own conversation window. |
+
+Putting every tool, skill, and instruction on one agent can make routing less focused. Subagents keep the parent focused on coordination while each child handles a specific job.
+
+## Quickstart
+
+Declare one directory per subagent under `subagents/`:
+
+```text title="Subagent layout"
 src/mastra/agents/
-  supervisor/
-    config.ts
-    instructions.md
-    subagents/
-      researcher/
-        config.ts
-        instructions.md
-        tools/
-          search.ts
+└── supervisor/
+    ├── config.ts
+    ├── instructions.md
+    └── subagents/
+        └── researcher/
+            ├── config.ts
+            ├── instructions.md
+            └── tools/
+                └── search.ts
 ```
 
-Mastra assembles each subagent as its own agent and wires it into the parent's `agents` map. The agent loop lowers it into a model-visible delegation tool named after the directory, so the example above exposes `researcher` to the supervisor.
+Mastra assembles `researcher` as its own agent and wires it into the supervisor's `agents` map. The parent model can delegate to it by using the generated `researcher` delegation tool.
 
-A subagent's `config.ts` must set a non-empty `description`. The model reads this when deciding whether to delegate, so the build fails if it's missing.
+A subagent's `config.ts` must set a non-empty `description`. The parent model reads this when deciding whether to delegate.
 
 ```typescript title="src/mastra/agents/supervisor/subagents/researcher/config.ts"
 import { agentConfig } from '@mastra/core/agent'
@@ -37,21 +54,45 @@ export default agentConfig({
 })
 ```
 
+## How the model delegates
+
+A subagent's `description` is routing text for the parent model. Write it like a tool description: explain what the subagent does and when to use it.
+
+Vague:
+
+```typescript
+agentConfig({
+  description: 'Writer agent.',
+})
+```
+
+Specific:
+
+```typescript
+agentConfig({
+  description: 'Use to turn research notes into a structured draft with headings and citations.',
+})
+```
+
+The build fails when a discovered subagent doesn't provide a non-empty description.
+
 ## Isolation
 
-Subagents are isolated. A subagent inherits nothing from its parent. Its tools, skills, and workspace come only from its own directory, and any absent slot falls back to the same framework defaults as a top-level agent.
+Subagents are isolated. A subagent doesn't inherit its parent's tools, skills, workspace, memory, processors, or subagents. Each child is a self-contained agent with its own directory.
+
+This is intentional: it keeps specialists focused. Add only the files a subagent needs. If multiple agents should share the same dependency, define it in code and assign it through each agent's config.
 
 ## Nesting
 
 Subagents can declare their own `subagents/` directories, nesting up to three levels below the top-level agent. A `subagents/` directory nested deeper is ignored with a warning.
 
-```text
+```text title="Nested subagents"
 src/mastra/agents/
-  supervisor/            # depth 0
-    subagents/
-      researcher/        # depth 1
-        subagents/
-          summarizer/    # depth 2
+└── supervisor/            # depth 0
+    └── subagents/
+        └── researcher/    # depth 1
+            └── subagents/
+                └── summarizer/ # depth 2
 ```
 
 ## Naming rules
@@ -60,6 +101,60 @@ src/mastra/agents/
 - A duplicate subagent id under the same parent is a build error.
 - If a subagent id also exists in the parent's `config.agents`, the `config.agents` entry wins and logs a warning.
 - If `config.agents` is a function, discovered subagents are ignored with a warning because they can't be statically merged.
+
+## Example
+
+This supervisor coordinates a research-and-writing flow. The `researcher` subagent owns search tools, while the `writer` subagent owns a workspace for drafting files.
+
+```text title="Research supervisor"
+src/mastra/agents/
+└── research-supervisor/
+    ├── config.ts
+    ├── instructions.md
+    └── subagents/
+        ├── researcher/
+        │   ├── config.ts
+        │   ├── instructions.md
+        │   └── tools/
+        │       └── search_web.ts
+        └── writer/
+            ├── config.ts
+            ├── instructions.md
+            └── workspace/
+                └── draft-template.md
+```
+
+```typescript title="src/mastra/agents/research-supervisor/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/research-supervisor/instructions.md"
+You coordinate research and writing.
+
+Delegate fact gathering to `researcher`. Delegate final drafting to `writer`.
+```
+
+```typescript title="src/mastra/agents/research-supervisor/subagents/researcher/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  description: 'Use to gather facts, sources, and concise research notes for a topic.',
+})
+```
+
+```typescript title="src/mastra/agents/research-supervisor/subagents/writer/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  description: 'Use to turn research notes into a structured draft.',
+})
+```
 
 ## Related
 
