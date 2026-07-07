@@ -1,5 +1,12 @@
 # @mastra/client-js
 
+## 1.31.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000)]:
+  - @mastra/core@1.50.1-alpha.0
+
 ## 1.31.0
 
 ### Minor Changes
