@@ -11,6 +11,7 @@ import { ChunkFrom } from '../../stream/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC } from './constants';
@@ -18,7 +19,6 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
@@ -1043,7 +1043,9 @@ export class DurableAgent<
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...options,
       runId,
-      memory: memoryInfo?.threadId ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId } : (options as any)?.memory,
+      memory: memoryInfo?.threadId
+        ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId }
+        : (options as any)?.memory,
     } as AgentExecutionOptions<TOutput>;
     await agentThreadStreamRuntime.registerRun(
       this as unknown as Agent<any, any, any, any>,
