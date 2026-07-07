@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 20 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 21 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -67,6 +67,7 @@ Rules are prioritized by impact:
 - One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
+- Extract complex derived logic into named locals plus predicates or pure helpers with early returns: oversized conditions, nested ternaries, fallback chains, and `let`-based render prep are code smells (`structure-complex-derived-logic`)
 - Pick the view with early `if` guards but keep the layout wrapper in one place — branch a body component, don't ternary or duplicate the shell (`structure-early-return-render-branches`)
 - For a fixed set of items, write one component per item with explicit props that owns its data and loading — don't map a config-object array onto a component shape (`structure-composition-over-config`)
 
@@ -115,5 +116,5 @@ grep -l "Tanstack" references/rules/
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
 - `types-*` - Type-safety / no-`as`-cast rules (1 rule)
-- `structure-*` - Component/hook structure (5 rules)
+- `structure-*` - Component/hook structure (6 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy (1 rule)
