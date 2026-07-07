@@ -4,8 +4,9 @@ import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
 import type { RefObject } from 'react';
+import { useLocation } from 'react-router';
 
-import { Wordmark } from '../../../ui';
+import { SkeletonRows, Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatSessionApi } from '../context/ChatSessionProvider';
@@ -26,11 +27,14 @@ const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm l
  * indicator. Propless — must render inside `ChatSessionProvider` with an
  * active project (the composition root guarantees it).
  */
-export function ChatMessageList() {
+export function ChatMessageList({ routeErrorNotice }: { routeErrorNotice?: string | null } = {}) {
   const { activeProject } = useActiveProjectContext();
   const session = useChatSession();
-  const { transcript, status, showWorkingIndicator, onApprove, onRespond } = session;
+  const { transcript, status, showWorkingIndicator, messagesPending, onApprove, onRespond } = session;
+  const location = useLocation();
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
+
+  const draft = location.pathname === '/new';
 
   // Parent only renders this component with an active project; TS narrowing.
   if (!activeProject) return null;
@@ -53,6 +57,9 @@ export function ChatMessageList() {
         activeProject={activeProject}
         transcript={transcript}
         showWorkingIndicator={showWorkingIndicator}
+        messagesPending={!draft && (messagesPending || status === 'connecting')}
+        draft={draft}
+        routeErrorNotice={routeErrorNotice}
         threadRef={threadRef}
         onApprove={onApprove}
         onRespond={onRespond}
@@ -83,6 +90,9 @@ type TranscriptPanelProps = {
   activeProject: Project;
   transcript: TranscriptState;
   showWorkingIndicator: boolean;
+  messagesPending: boolean;
+  draft: boolean;
+  routeErrorNotice?: string | null;
   threadRef: RefObject<HTMLDivElement | null>;
   onApprove: ChatSessionApi['onApprove'];
   onRespond: ChatSessionApi['onRespond'];
@@ -92,10 +102,46 @@ function TranscriptPanel({
   activeProject,
   transcript,
   showWorkingIndicator,
+  messagesPending,
+  draft,
+  routeErrorNotice,
   threadRef,
   onApprove,
   onRespond,
 }: TranscriptPanelProps) {
+  // The /new draft page: a fresh composer regardless of what thread the
+  // session is bound to under the hood. Keep local notices visible so route-sync
+  // failures can explain why a persisted deep link fell back to the draft page.
+  if (draft) {
+    const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
+
+    if (routeErrorNotice || noticeEntries.length > 0) {
+      return (
+        <div className={transcriptScrollClass} ref={threadRef}>
+          <EmptyThreadState activeProject={activeProject} />
+          {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
+          <Transcript entries={noticeEntries} onApprove={onApprove} onRespond={onRespond} />
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-3 py-8 md:px-5" ref={threadRef}>
+        <EmptyThreadState activeProject={activeProject} />
+      </div>
+    );
+  }
+
+  // Persisted history is still loading (or the session is still connecting) —
+  // show the shared skeleton instead of flashing the empty-thread welcome.
+  if (transcript.entries.length === 0 && messagesPending) {
+    return (
+      <div className={transcriptScrollClass} ref={threadRef}>
+        <SkeletonRows label="Loading messages" rows={6} />
+      </div>
+    );
+  }
+
   if (transcript.entries.length === 0 && !showWorkingIndicator) {
     return (
       <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-3 py-8 md:px-5" ref={threadRef}>

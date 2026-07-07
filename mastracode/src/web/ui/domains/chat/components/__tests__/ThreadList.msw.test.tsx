@@ -10,6 +10,7 @@ import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@ma
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -132,18 +133,26 @@ function SidebarOverlayProbe() {
   );
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}</span>;
+}
+
 function renderThreadList() {
   return renderWithProviders(
-    <ToastProvider>
-      <ActiveProjectProvider>
-        <ChatSessionProvider>
-          <OverlaysProvider>
-            <ThreadList />
-            <SidebarOverlayProbe />
-          </OverlaysProvider>
-        </ChatSessionProvider>
-      </ActiveProjectProvider>
-    </ToastProvider>,
+    <MemoryRouter initialEntries={['/chat']}>
+      <ToastProvider>
+        <ActiveProjectProvider>
+          <ChatSessionProvider>
+            <OverlaysProvider>
+              <ThreadList />
+              <SidebarOverlayProbe />
+              <LocationProbe />
+            </OverlaysProvider>
+          </ChatSessionProvider>
+        </ActiveProjectProvider>
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -183,19 +192,19 @@ describe('ThreadList', () => {
     expect(screen.getByText('+2 more')).toBeInTheDocument();
   });
 
-  it('when a thread is clicked, then the switch request fires and the sidebar closes', async () => {
+  it('when a thread is clicked, then the app navigates to its page and the sidebar closes', async () => {
     seedProject();
-    const captured = useAgentControllerHandlers([threadOne, threadTwo]);
+    useAgentControllerHandlers([threadOne, threadTwo]);
     renderThreadList();
 
     await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
     await userEvent.click(await screen.findByText('Second thread'));
 
-    await waitFor(() => expect(captured.switched).toEqual(['thread-two']));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-two'));
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 
-  it('when "New thread" is clicked, then the create request fires, a toast shows, and the sidebar closes', async () => {
+  it('when "New thread" is clicked, then it opens the /chat draft page without persisting a thread and the sidebar closes', async () => {
     seedProject();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
@@ -204,8 +213,8 @@ describe('ThreadList', () => {
     await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
     await userEvent.click(screen.getByRole('button', { name: 'New thread' }));
 
-    await waitFor(() => expect(captured.created).toBe(1));
-    expect(await screen.findByText('New thread created')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat'));
+    expect(captured.created).toBe(0);
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 
@@ -252,6 +261,7 @@ describe('ThreadList', () => {
     await waitFor(() => expect(captured.cloned).toHaveLength(1));
     expect(captured.cloned[0]).toMatchObject({ sourceThreadId: 'thread-one' });
     expect(await screen.findByText('Thread cloned')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-new'));
   });
 
   it('when Delete is picked, then the delete request fires and a toast shows', async () => {
