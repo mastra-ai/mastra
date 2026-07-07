@@ -27,19 +27,21 @@ export interface LocalStorageDetection {
 
 /**
  * Matches the deployer's own intermediate dependency shims emitted under
- * `.mastra/.build/` (e.g. `@mastra__core.mjs`, `@mastra__core__mastra.mjs`).
+ * `.mastra/.build/` (e.g. `@mastra__core.mjs`, `@ag-ui__mastra.mjs`).
  * These pre-bundled chunks preserve JSDoc examples from the original library
  * source (e.g. `LibSQLStore({ url: 'file:./data.db' })`) which would otherwise
- * trip the host-local detector even though they're not user code.
+ * trip the host-local detector even though they're not user code. Everything
+ * in this directory is deployer-generated dependency output, never user
+ * source, so the whole directory is excluded.
  */
-const MASTRA_SHIM_PATH = /[\\/]\.mastra[\\/]\.build[\\/]@mastra__/;
+const MASTRA_BUILD_DIR = /[\\/]\.mastra[\\/]\.build[\\/]/;
 
 /**
  * Rollup plugin that detects host-local storage URLs (e.g. `file:./mastra.db`,
  * `postgres://localhost`) in **user source modules** during bundling.
  *
  * Only modules outside `node_modules` (and the deployer's own
- * `.mastra/.build/@mastra__*` shim files) are inspected, so library code
+ * `.mastra/.build/` shim files) are inspected, so library code
  * (like Agent Builder prompt templates or JSDoc examples in `@mastra/core`)
  * is naturally excluded.  Tree-shaken modules are excluded via
  * `generateBundle` — only modules that actually contribute rendered code to
@@ -56,7 +58,7 @@ export function localStorageDetector(): Plugin {
 
     transform(_code, id) {
       if (id.includes('node_modules')) return null;
-      if (MASTRA_SHIM_PATH.test(id)) return null;
+      if (MASTRA_BUILD_DIR.test(id)) return null;
 
       const matches: Array<{ value: string; hint: string }> = [];
       for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {

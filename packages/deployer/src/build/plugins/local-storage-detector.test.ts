@@ -64,17 +64,20 @@ describe('localStorageDetector', () => {
     expect(detections).toHaveLength(0);
   });
 
-  it('ignores deployer .mastra/.build shim files for @mastra/* packages', () => {
+  it('ignores all deployer .mastra/.build shim files', () => {
     // Reproduces the false positive triggered when a user sets a `bundler:` field
     // in `new Mastra({...})`, which causes the optimizer to pre-bundle
-    // `@mastra/core` into `.mastra/.build/@mastra__core__*.mjs` shims. These
-    // shims preserve JSDoc examples like `url: 'file:./data.db'`.
+    // dependencies into `.mastra/.build/*.mjs` shims. These shims preserve
+    // JSDoc examples like `url: 'file:./data.db'`. Non-@mastra shims (e.g.
+    // `@ag-ui__mastra.mjs`) can carry the same JSDoc, so the whole directory
+    // must be excluded.
     const plugin = getPlugin();
     plugin.transform(
       `const example = "storage: new LibSQLStore({ url: 'file:./data.db' })";`,
       '/project/.mastra/.build/@mastra__core__mastra.mjs',
     );
     plugin.transform(`const example = "url: 'file:./data.db'";`, '/project/.mastra/.build/@mastra__core.mjs');
+    plugin.transform(`const example = "url: 'file:./data.db'";`, '/project/.mastra/.build/@ag-ui__mastra.mjs');
 
     const emitted: Array<{ fileName: string; source: string }> = [];
     const ctx = {
@@ -91,6 +94,7 @@ describe('localStorageDetector', () => {
           modules: {
             '/project/.mastra/.build/@mastra__core__mastra.mjs': { renderedLength: 5000 },
             '/project/.mastra/.build/@mastra__core.mjs': { renderedLength: 5000 },
+            '/project/.mastra/.build/@ag-ui__mastra.mjs': { renderedLength: 5000 },
           },
         },
       },
