@@ -2429,6 +2429,7 @@ export type ProviderModelsMap = {
     'gpt-5.5',
     'gpt-5.5-pro',
     'grok-build-0.1',
+    'hy3-free',
     'kimi-k2.5',
     'kimi-k2.6',
     'kimi-k2.7-code',
