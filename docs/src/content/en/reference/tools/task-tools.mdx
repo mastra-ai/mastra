@@ -1,0 +1,291 @@
+---
+title: "Reference: Task tools | Tools"
+description: "API reference for the built-in task tools (task_write, task_update, task_complete, task_check) that add structured task tracking to any agent."
+packages:
+  - "@mastra/core"
+---
+
+# Task tools
+
+Four built-in, agent-agnostic tools that manage a structured task list for an agent run. The task list is persisted in the thread-scoped `threadState` storage domain and projected onto the agent [state-signal](/docs/long-running-agents/signals) lane so it survives [observational-memory](/docs/memory/observational-memory) truncation.
+
+Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the tools return an error explaining that task tracking requires agent memory.
+
+The recommended setup is [`TaskSignalProvider`](/reference/signals/task-signal-provider), which bundles all four tools and the `TaskStateProcessor` in a single registration. See [Built-in tools](/docs/agents/built-in-tools#task-tracking) for the conceptual guide.
+
+## Usage example
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { TaskSignalProvider } from '@mastra/core/signals'
+
+const agent = new Agent({
+  id: 'coder',
+  name: 'Coder',
+  instructions: 'Track your progress with the task tools.',
+  model,
+  memory: new Memory(),
+  signals: [new TaskSignalProvider()],
+})
+```
+
+Or import the tools directly:
+
+```typescript title="src/mastra/agents/index.ts"
+import {
+  taskWriteTool,
+  taskUpdateTool,
+  taskCompleteTool,
+  taskCheckTool,
+} from '@mastra/core/tools'
+
+const agent = new Agent({
+  id: 'coder',
+  name: 'Coder',
+  instructions: 'Track your progress with the task tools.',
+  model,
+  memory: new Memory(),
+  tools: { taskWriteTool, taskUpdateTool, taskCompleteTool, taskCheckTool },
+})
+```
+
+## `task_write`
+
+Create or replace the entire task list. Each call replaces the previous list.
+
+### Input schema
+
+<PropertiesTable
+  content={[
+  {
+    name: 'tasks',
+    type: 'TaskItemInput[]',
+    description: 'The complete updated task list.',
+    isOptional: false,
+    properties: [
+      {
+        type: 'TaskItemInput',
+        parameters: [
+          {
+            name: 'id',
+            type: 'string',
+            description: "Stable task identifier (e.g. 'task_investigate_tests'). Keep this unchanged across updates. Auto-generated when omitted.",
+            isOptional: true,
+          },
+          {
+            name: 'content',
+            type: 'string',
+            description: "Task description in imperative form (e.g. 'Fix authentication bug').",
+          },
+          {
+            name: 'status',
+            type: "'pending' | 'in_progress' | 'completed'",
+            description: 'Current task status.',
+          },
+          {
+            name: 'activeForm',
+            type: 'string',
+            description: "Present continuous form shown during execution (e.g. 'Fixing authentication bug').",
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### Output
+
+Returns a `TaskToolResult` with a human-readable `content` summary, the full `tasks` array with assigned IDs, and an `isError` flag.
+
+### Behavior
+
+- IDs must be unique within a call. Duplicate explicit IDs get a generated fallback.
+- When an ID is omitted while rewriting an existing list, one unambiguous matching task reuses its previous ID for stability.
+- Only one task can have `in_progress` status at a time. Submitting multiple `in_progress` tasks returns an error.
+
+## `task_update`
+
+Update one task by its stable ID. Include only the fields that changed.
+
+### Input schema
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The stable task identifier to update.',
+    isOptional: false,
+  },
+  {
+    name: 'content',
+    type: 'string',
+    description: 'New task description in imperative form.',
+    isOptional: true,
+  },
+  {
+    name: 'status',
+    type: "'pending' | 'in_progress' | 'completed'",
+    description: 'New task status.',
+    isOptional: true,
+  },
+  {
+    name: 'activeForm',
+    type: 'string',
+    description: 'New present continuous form.',
+    isOptional: true,
+  },
+]}
+/>
+
+At least one of `content`, `status`, or `activeForm` is required.
+
+### Behavior
+
+- When the update sets a task to `in_progress`, any other `in_progress` task is automatically demoted to `pending`.
+- Returns an error with available task IDs when the ID is not found.
+
+## `task_complete`
+
+Mark one task completed by its stable ID.
+
+### Input schema
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'The stable task identifier to mark completed.',
+    isOptional: false,
+  },
+]}
+/>
+
+### Behavior
+
+Returns an error with available task IDs when the ID is not found.
+
+## `task_check`
+
+Check the completion status of the task list. Takes no input parameters.
+
+### Output
+
+Returns a `TaskCheckResult` with:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'content',
+    type: 'string',
+    description: 'Human-readable summary with task counts and incomplete task IDs.',
+  },
+  {
+    name: 'tasks',
+    type: 'TaskItem[]',
+    description: 'Full task list snapshot with stable IDs.',
+  },
+  {
+    name: 'summary',
+    type: 'TaskCheckSummary',
+    description: 'Structured counts.',
+    properties: [
+      {
+        type: 'TaskCheckSummary',
+        parameters: [
+          { name: 'total', type: 'number', description: 'Total tracked tasks.' },
+          { name: 'completed', type: 'number', description: 'Completed tasks.' },
+          { name: 'inProgress', type: 'number', description: 'In-progress tasks.' },
+          { name: 'pending', type: 'number', description: 'Pending tasks.' },
+          { name: 'incomplete', type: 'number', description: 'Tasks not yet completed (in-progress + pending).' },
+          { name: 'hasTasks', type: 'boolean', description: 'True when at least one task exists.' },
+          { name: 'allCompleted', type: 'boolean', description: 'True when at least one task exists and every task is completed.' },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'incompleteTasks',
+    type: 'TaskItem[]',
+    description: 'Tasks that still need work (in-progress and pending).',
+  },
+  {
+    name: 'isError',
+    type: 'boolean',
+    description: 'Whether the check encountered an error.',
+  },
+]}
+/>
+
+## Types
+
+### `TaskItem`
+
+```typescript
+interface TaskItem {
+  id: string
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm: string
+}
+```
+
+### `TaskItemInput`
+
+Same as `TaskItem` but `id` is optional. The tools assign a deterministic ID when omitted.
+
+```typescript
+interface TaskItemInput {
+  id?: string
+  content: string
+  status: 'pending' | 'in_progress' | 'completed'
+  activeForm: string
+}
+```
+
+### `TaskCheckSummary`
+
+```typescript
+interface TaskCheckSummary {
+  total: number
+  completed: number
+  inProgress: number
+  pending: number
+  incomplete: number
+  hasTasks: boolean
+  allCompleted: boolean
+}
+```
+
+## Exports
+
+All tools, types, and utility functions are exported from `@mastra/core/tools`:
+
+```typescript
+import {
+  taskWriteTool,
+  taskUpdateTool,
+  taskCompleteTool,
+  taskCheckTool,
+  assignTaskIds,
+  formatTaskListResult,
+  demoteExtraInProgress,
+  hasMultipleInProgress,
+  summarizeTaskCheck,
+  getTasksFromRequestContext,
+  TASKS_REQUEST_CONTEXT_KEY,
+  TASKS_STATE_ID,
+  TASK_STATE_TYPE,
+} from '@mastra/core/tools'
+
+import type {
+  TaskItem,
+  TaskItemInput,
+  TaskItemSnapshot,
+  TaskCheckSummary,
+  TaskCheckResult,
+} from '@mastra/core/tools'
+```

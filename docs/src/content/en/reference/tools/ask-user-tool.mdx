@@ -1,0 +1,181 @@
+---
+title: "Reference: askUserTool | Tools"
+description: "API reference for askUserTool, a built-in tool that suspends an agent run to ask the user a question and resumes with their answer."
+packages:
+  - "@mastra/core"
+---
+
+# askUserTool
+
+A built-in, agent-agnostic tool that asks the user a question and waits for their response. The tool supports free-text questions, single-select prompts, and multi-select prompts.
+
+The tool pauses through the native [tool suspension](/docs/agents/agent-approval#runtime-suspension-with-suspend) primitive: it calls `suspend()` with the question payload, which makes the agent emit a `tool-call-suspended` event and persist run state. Resume the run with `agent.resumeStream(answer, { runId })`.
+
+When executed outside an agent run (no `suspend` available), the tool returns a readable fallback string containing the question and choices.
+
+## Usage example
+
+Add `askUserTool` to an agent's toolset:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { askUserTool } from '@mastra/core/tools'
+
+const agent = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'Ask the user for clarification when the request is ambiguous.',
+  model,
+  tools: { askUserTool },
+})
+```
+
+Handle the suspension and resume:
+
+```typescript title="src/run.ts"
+const stream = await agent.stream('Summarize my project')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-suspended') {
+    const { question, options, selectionMode } = chunk.payload.suspendPayload
+    // Present the question to the user, collect their answer, then resume:
+    const resumed = await agent.resumeStream('The main repo', { runId: stream.runId })
+    for await (const c of resumed.textStream) process.stdout.write(c)
+  }
+}
+```
+
+For multi-select prompts, resume with a string array:
+
+```typescript
+await agent.resumeStream(['Add tests', 'Update docs'], { runId: stream.runId })
+```
+
+## Input schema
+
+The model calls this tool with the following parameters:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'question',
+    type: 'string',
+    description: 'The question to ask the user. Must be non-empty.',
+    isOptional: false,
+  },
+  {
+    name: 'options',
+    type: 'AskUserOption[]',
+    description: 'Structured choices for the user. When omitted, the prompt is free-text.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'AskUserOption',
+        parameters: [
+          {
+            name: 'label',
+            type: 'string',
+            description: 'Short display text for this option (1-5 words). This value is returned to the model when selected.',
+          },
+          {
+            name: 'description',
+            type: 'string',
+            description: 'Explanation of what this option means.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'selectionMode',
+    type: "'single_select' | 'multi_select'",
+    description: "Controls how many options the user can select. Defaults to 'single_select' when options are provided. Requires options.",
+    isOptional: true,
+  },
+]}
+/>
+
+## Suspend payload
+
+The `tool-call-suspended` event carries a `suspendPayload` with the same shape as the input:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'question',
+    type: 'string',
+    description: 'The question being asked.',
+  },
+  {
+    name: 'options',
+    type: 'AskUserOption[]',
+    description: 'The structured choices, if any.',
+    isOptional: true,
+  },
+  {
+    name: 'selectionMode',
+    type: "'single_select' | 'multi_select'",
+    description: 'The resolved selection mode. Omitted for free-text prompts.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Resume data
+
+Pass the user's answer to `agent.resumeStream()`:
+
+- **Free-text and single-select:** A `string`.
+- **Multi-select:** A `string[]` of selected option labels.
+
+## Types
+
+### `AskUserOption`
+
+```typescript
+interface AskUserOption {
+  label: string
+  description?: string
+}
+```
+
+### `AskUserSelectionMode`
+
+```typescript
+type AskUserSelectionMode = 'single_select' | 'multi_select'
+```
+
+### `AskUserAnswer`
+
+```typescript
+type AskUserAnswer = string | string[]
+```
+
+### `AskUserSuspendPayload`
+
+```typescript
+interface AskUserSuspendPayload {
+  question: string
+  options?: AskUserOption[]
+  selectionMode?: AskUserSelectionMode
+}
+```
+
+## Exports
+
+All types and the tool are exported from `@mastra/core/tools`:
+
+```typescript
+import {
+  askUserTool,
+  formatQuestionAnswer,
+} from '@mastra/core/tools'
+
+import type {
+  AskUserAnswer,
+  AskUserOption,
+  AskUserSelectionMode,
+  AskUserSuspendPayload,
+} from '@mastra/core/tools'
+```

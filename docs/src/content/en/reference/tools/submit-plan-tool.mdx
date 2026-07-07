@@ -1,0 +1,191 @@
+---
+title: "Reference: submitPlanTool | Tools"
+description: "API reference for submitPlanTool, a built-in tool that suspends an agent run to submit a plan file for user approval."
+packages:
+  - "@mastra/core"
+---
+
+# submitPlanTool
+
+A built-in, agent-agnostic tool that submits an implementation plan for user review. The agent writes a plan to a markdown file and passes the file path to this tool. The tool suspends the run until the user approves or rejects the plan.
+
+The tool pauses through the native [tool suspension](/docs/agents/agent-approval#runtime-suspension-with-suspend) primitive: it calls `suspend({ path })`, which makes the agent emit a `tool-call-suspended` event. The host reads the plan file, presents it to the user, and resumes with an approval or rejection.
+
+When executed outside an agent run (no `suspend` available), the tool returns a readable fallback string containing the file path.
+
+## Usage example
+
+Add `submitPlanTool` to an agent's toolset:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { submitPlanTool } from '@mastra/core/tools'
+
+const agent = new Agent({
+  id: 'planner',
+  name: 'Planner',
+  instructions: 'Write a plan to a file before starting work, then submit it for approval.',
+  model,
+  tools: { submitPlanTool },
+})
+```
+
+Handle the suspension and resume:
+
+```typescript title="src/run.ts"
+import fs from 'node:fs'
+
+const stream = await agent.stream('Refactor the auth module')
+
+for await (const chunk of stream.fullStream) {
+  if (
+    chunk.type === 'tool-call-suspended' &&
+    chunk.payload.toolName === 'submit_plan'
+  ) {
+    const { path } = chunk.payload.suspendPayload
+    const plan = fs.readFileSync(path, 'utf-8')
+    console.log(plan)
+
+    // Approve:
+    const resumed = await agent.resumeStream(
+      { action: 'approved' },
+      { runId: stream.runId },
+    )
+    for await (const c of resumed.textStream) process.stdout.write(c)
+  }
+}
+```
+
+To reject with feedback:
+
+```typescript
+await agent.resumeStream(
+  { action: 'rejected', feedback: 'Add error handling steps' },
+  { runId: stream.runId },
+)
+```
+
+## Input schema
+
+The model calls this tool with the following parameters:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'path',
+    type: 'string',
+    description: "Path to the plan markdown file on disk (e.g. '.mastracode/plans/add-dark-mode.md').",
+    isOptional: false,
+  },
+]}
+/>
+
+## Suspend payload
+
+The `tool-call-suspended` event carries a `suspendPayload`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'path',
+    type: 'string',
+    description: 'Path to the plan file the agent wrote.',
+  },
+  {
+    name: 'title',
+    type: 'string',
+    description: 'Plan title, filled by the host after reading the file.',
+    isOptional: true,
+  },
+  {
+    name: 'plan',
+    type: 'string',
+    description: 'Plan body, filled by the host after reading the file.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Resume data
+
+Pass an object to `agent.resumeStream()`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'action',
+    type: "'approved' | 'rejected'",
+    description: "Whether the user approved or rejected the plan.",
+    isOptional: false,
+  },
+  {
+    name: 'feedback',
+    type: 'string',
+    description: 'Revision instructions when the plan is rejected. Surfaced to the model so it can revise and resubmit.',
+    isOptional: true,
+  },
+  {
+    name: 'path',
+    type: 'string',
+    description: 'The plan file path, echoed back for history replay.',
+    isOptional: true,
+  },
+  {
+    name: 'title',
+    type: 'string',
+    description: 'The plan title, echoed back for history replay.',
+    isOptional: true,
+  },
+  {
+    name: 'plan',
+    type: 'string',
+    description: 'The plan body, echoed back for history replay.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Approval behavior
+
+- **Approved:** The tool returns `"Plan approved. Proceed with implementation following the approved plan."` to the model.
+- **Rejected with feedback:** The tool returns the feedback and asks the model to revise the plan and submit again.
+- **Rejected without feedback:** The tool tells the model to wait for the user's next message before revising.
+
+When used inside an [AgentController](/docs/agent-controller/overview), plan approval triggers an automatic mode switch from the planning mode to the default execution mode. See [Modes](/docs/agent-controller/modes) for details.
+
+## Types
+
+### `SubmitPlanSuspendPayload`
+
+```typescript
+interface SubmitPlanSuspendPayload {
+  path: string
+  title?: string
+  plan?: string
+}
+```
+
+### `SubmitPlanResumeData`
+
+```typescript
+interface SubmitPlanResumeData {
+  action: 'approved' | 'rejected'
+  feedback?: string
+  path?: string
+  title?: string
+  plan?: string
+}
+```
+
+## Exports
+
+All types and the tool are exported from `@mastra/core/tools`:
+
+```typescript
+import { submitPlanTool } from '@mastra/core/tools'
+
+import type {
+  SubmitPlanResumeData,
+  SubmitPlanSuspendPayload,
+} from '@mastra/core/tools'
+```
