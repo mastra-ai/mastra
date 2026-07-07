@@ -32,6 +32,7 @@ import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
+import { getOverwrittenEnvKeys } from './env-vars.js';
 
 /**
  * Derive the public studio/server URLs from the environment slug.
@@ -766,6 +767,32 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     p.log.step('No env vars found in selected env file');
   } else {
     p.log.step('No local env file — using env vars stored on the environment');
+  }
+
+  // Warn before overwriting env vars that already exist on the environment
+  // with a different value. The platform merges request envVars over the
+  // stored environment.envVars (request wins), so these keys get replaced.
+  // Only relevant when deploying to a pre-existing environment.
+  if (envCount > 0 && envResolution.existing) {
+    const overwrittenKeys = getOverwrittenEnvKeys(environment.envVars, envVars);
+    if (overwrittenKeys.length > 0) {
+      p.log.warn(
+        `This deploy will overwrite ${overwrittenKeys.length} existing env var(s) on "${environment.name}":\n` +
+          overwrittenKeys.map(key => `  • ${key}`).join('\n'),
+      );
+
+      if (!autoAccept) {
+        const confirmed = await p.confirm({
+          message: 'Overwrite these env vars?',
+          initialValue: true,
+        });
+
+        if (p.isCancel(confirmed) || !confirmed) {
+          p.cancel('Deploy cancelled.');
+          process.exit(0);
+        }
+      }
+    }
   }
 
   // Pre-upload validation
