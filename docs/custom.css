@@ -1332,7 +1332,7 @@ article p {
   .menu__link--active:not(.menu__link--sublist)::before {
     content: '';
     position: absolute;
-    left: calc(0.25rem * -2.5);
+    left: calc(0.25rem * -3);
     top: calc(0.25rem * 1);
     bottom: 0;
     width: 1.5px;
