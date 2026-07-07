@@ -14,6 +14,8 @@ import type { RouteObject } from 'react-router';
 
 import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
+import { NewPage } from './domains/chat/NewPage';
+import { ThreadPage } from './domains/chat/ThreadPage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -77,10 +79,8 @@ export function createAppRoutes(): RouteObject[] {
           // never tears down or reconnects the session.
           element: <Chat />,
           children: [
-            // The leaf renders nothing itself (explicit null element): <Chat />
-            // reads the route and renders the whole page.
-            { path: 'new', element: null },
-            { path: 'threads/:threadId', element: null },
+            { path: 'new', element: <NewPage /> },
+            { path: 'threads/:threadId', element: <ThreadPage /> },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).

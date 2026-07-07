@@ -44,12 +44,8 @@ const newThread = thread('thread-new', 'New thread', '2026-06-05T00:00:00.000Z')
 
 /** Persisted history per thread; unknown threads have no messages. */
 const MESSAGES: Record<string, AgentControllerMessage[]> = {
-  [threadOne.id]: [
-    { id: 'm-one', role: 'assistant', content: [{ type: 'text', text: 'Reply from thread one' }] },
-  ],
-  [threadTwo.id]: [
-    { id: 'm-two', role: 'assistant', content: [{ type: 'text', text: 'Reply from thread two' }] },
-  ],
+  [threadOne.id]: [{ id: 'm-one', role: 'assistant', content: [{ type: 'text', text: 'Reply from thread one' }] }],
+  [threadTwo.id]: [{ id: 'm-two', role: 'assistant', content: [{ type: 'text', text: 'Reply from thread two' }] }],
 };
 
 afterEach(() => {
@@ -182,6 +178,7 @@ describe('MastraCode thread pages', () => {
     expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
 
     expect(await screen.findByText('Reply from thread one')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Thread composer' })).toHaveClass('max-w-[80ch]');
     expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
   });
 
@@ -205,7 +202,9 @@ describe('MastraCode thread pages', () => {
 
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText(/Message the agent/)).toHaveLength(1);
-    expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
+    const draftRegion = screen.getByRole('region', { name: 'What do you want to work on?' });
+    expect(within(draftRegion).getByRole('textbox')).toHaveAttribute('rows', '4');
+    expect(within(draftRegion).getByText('MastraCode Test')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/new');
     expect(screen.queryByText('Reply from thread one')).not.toBeInTheDocument();
     expect(captured.created).toBe(0);

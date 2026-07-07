@@ -7,11 +7,10 @@ import { useChatSession } from '../context/ChatSessionProvider';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 
-const footerComposerPanelClass = 'mx-auto w-full max-w-[80ch] shrink-0';
-const centeredComposerPanelClass = 'w-full shrink-0 rounded-xl border border-border1 bg-surface2 p-3 shadow-sm';
+const composerPanelClass = 'w-full shrink-0';
 
 type ComposerPanelProps = {
-  variant?: 'footer' | 'centered';
+  composerVariant?: 'inline' | 'textarea';
 };
 
 /**
@@ -19,7 +18,7 @@ type ComposerPanelProps = {
  * palette/composer command hand-off. Must render inside `ChatSessionProvider`
  * with an active project.
  */
-export function ComposerPanel({ variant = 'footer' }: ComposerPanelProps) {
+export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
   const { activeProject } = useActiveProjectContext();
   const session = useChatSession();
   const { composerCommandName, clearComposerCommand } = useChatCommands();
@@ -44,11 +43,10 @@ export function ComposerPanel({ variant = 'footer' }: ComposerPanelProps) {
   // Parent only renders this component with an active project; TS narrowing.
   if (!activeProject) return null;
 
-  const className = variant === 'centered' ? centeredComposerPanelClass : footerComposerPanelClass;
-
   return (
-    <div className={className}>
+    <div className={composerPanelClass}>
       <Composer
+        variant={composerVariant}
         activeProject={activeProject}
         transcript={transcript}
         status={status}
