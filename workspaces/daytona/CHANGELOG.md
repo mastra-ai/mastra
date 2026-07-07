@@ -1,5 +1,25 @@
 # @mastra/daytona
 
+## 0.5.2-alpha.0
+
+### Patch Changes
+
+- Pass `--implicit-dirs` to gcsfuse in Daytona GCS mounts. Without it, objects written directly to the bucket via the GCS API (no placeholder "directory" object) are unreachable in the mount — not listed and not readable by full path. This is common when the mount reads bucket contents produced by another process (SDK uploads, other services, gsutil). ([#19003](https://github.com/mastra-ai/mastra/pull/19003))
+
+- Fixed Daytona GCS mounts ignoring the `prefix` option. Mounting a bucket with a prefix now scopes the mount to that subdirectory via gcsfuse `--only-dir`, so writes land under the prefix and sandboxes mounting the same bucket with different prefixes are isolated from each other. ([#18963](https://github.com/mastra-ai/mastra/pull/18963))
+
+  Before, every GCS mount used the bucket root regardless of prefix:
+
+  ```ts
+  await sandbox.mount(new GCSFilesystem({ bucket: 'my-bucket', prefix: 'a/b/threadA', credentials }), '/gcs-data');
+  await sandbox.executeCommand('bash', ['-lc', 'echo hi > /gcs-data/probe.txt']);
+  // Before: object lands at gs://my-bucket/probe.txt
+  // After:  object lands at gs://my-bucket/a/b/threadA/probe.txt
+  ```
+
+- Updated dependencies [[`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1-alpha.2
+
 ## 0.5.1
 
 ### Patch Changes
