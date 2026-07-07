@@ -182,8 +182,6 @@
   ],
   "temperature": [
     "ai21/jamba-large-1.7",
-    "aion-labs/aion-1.0",
-    "aion-labs/aion-1.0-mini",
     "aion-labs/aion-2.0",
     "aion-labs/aion-rp-llama-3.1-8b",
     "allenai/olmo-3-32b-think",
@@ -199,6 +197,7 @@
     "anthropic/claude-opus-4.1",
     "anthropic/claude-opus-4.5",
     "anthropic/claude-opus-4.6",
+    "anthropic/claude-opus-4.8",
     "anthropic/claude-sonnet-4",
     "anthropic/claude-sonnet-4.5",
     "anthropic/claude-sonnet-4.6",
@@ -469,6 +468,7 @@
     "z-ai/glm-5.2",
     "z-ai/glm-5v-turbo",
     "~anthropic/claude-haiku-latest",
+    "~anthropic/claude-opus-latest",
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest"

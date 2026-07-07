@@ -386,7 +386,7 @@ async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {
   if (!ctx.pluginManager) return;
   const source = await askModalQuestion(ctx.state.ui, {
     question: 'Install plugin from:',
-    options: [{ label: 'Local path' }, { label: 'GitHub URL' }],
+    options: [{ label: 'GitHub URL' }, { label: 'Local path' }],
   });
   if (!source) return;
 
@@ -401,7 +401,7 @@ async function installPluginFlow(ctx: SlashCommandContext): Promise<void> {
 
   const scopeAnswer = await askModalQuestion(ctx.state.ui, {
     question: 'Install scope:',
-    options: [{ label: 'project' }, { label: 'global' }],
+    options: [{ label: 'global' }, { label: 'project' }],
   });
   if (scopeAnswer !== 'project' && scopeAnswer !== 'global') return;
 
