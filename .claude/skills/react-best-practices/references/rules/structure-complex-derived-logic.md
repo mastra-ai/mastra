@@ -18,7 +18,7 @@ Do not fix one smell while leaving another. Extracting a reassigned `let` into `
 **Incorrect:**
 
 ```tsx
-function Sidebar({ orgId, projectId, isSettingsActive }: SidebarProps) {
+function Sidebar({ orgId, projectId, isSettingsActive, product, pathname }: SidebarProps) {
   const isProjectsHeaderActive =
     (product === 'studio' && !projectId && !isSettingsActive && pathname === `/orgs/${orgId}`) ||
     (product === 'gateway' && !projectId && !isSettingsActive);
@@ -48,7 +48,7 @@ function shouldHighlightProjects({
   return pathname === projectsHref;
 }
 
-function Sidebar({ orgId, projectId, isSettingsActive }: SidebarProps) {
+function Sidebar({ orgId, projectId, isSettingsActive, product, pathname }: SidebarProps) {
   const projectsHref = `/orgs/${orgId}`;
   const isProjectsHeaderActive = shouldHighlightProjects({
     product,
@@ -169,7 +169,7 @@ Move fallback behavior and link selection into named helpers. The render prep sh
 **Incorrect:**
 
 ```tsx
-function Sidebar({ orgId, projectId, isSettingsActive }: SidebarProps) {
+function Sidebar({ orgId, projectId, isSettingsActive, product }: SidebarProps) {
   let sections = getBaseSections({
     orgId: orgId ?? fallbackOrgId,
     projectId,
@@ -211,7 +211,7 @@ function getSidebarSections({
   return prependLinkToFirstSection(baseSections, getProjectsEntryLink({ orgId, projectId }));
 }
 
-function Sidebar({ orgId, projectId, isSettingsActive }: SidebarProps) {
+function Sidebar({ orgId, projectId, isSettingsActive, product }: SidebarProps) {
   const sections = getSidebarSections({
     orgId,
     projectId,
