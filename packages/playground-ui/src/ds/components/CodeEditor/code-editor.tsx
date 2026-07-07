@@ -226,14 +226,14 @@ export const useCodemirrorTheme = (): Extension => {
 
 const codeEditorVariants = cva(
   cn(
-    'p-1 font-mono relative overflow-hidden outline-hidden focus:outline-hidden focus-within:outline-hidden',
+    'font-mono relative overflow-hidden outline-hidden focus:outline-hidden focus-within:outline-hidden',
     'transition-colors duration-normal ease-out-custom',
   ),
   {
     variants: {
       variant: {
-        default: 'rounded-md bg-surface3 border border-border1 focus-within:border-border2',
-        embedded: 'rounded-none border-none bg-transparent',
+        default: 'rounded-md bg-surface3 border border-border1 p-1 focus-within:border-border2',
+        embedded: 'rounded-none border-none bg-transparent p-0',
       },
     },
     defaultVariants: {

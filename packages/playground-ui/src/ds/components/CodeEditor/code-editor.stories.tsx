@@ -124,11 +124,6 @@ export const FocusedEmbedded: Story = {
     showCopyButton: false,
     className: 'min-h-24 w-150',
   },
-  render: args => (
-    <div className="w-150 rounded-md bg-surface3 p-3">
-      <CodeEditor {...args} />
-    </div>
-  ),
   play: async ({ canvasElement }) => {
     canvasElement.querySelector<HTMLElement>('[role="textbox"]')?.focus();
   },
