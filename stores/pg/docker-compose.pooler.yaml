@@ -1,6 +1,6 @@
 services:
   db:
-    image: pgvector/pgvector:0.8.2-pg16
+    image: pgvector/pgvector:0.8.4-pg16
     container_name: 'pg-pooler-test-db'
     ports:
       # Direct port (bypassing pgBouncer) so cleanup/teardown can run
