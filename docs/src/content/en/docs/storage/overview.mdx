@@ -44,7 +44,9 @@ Mastra storage is organized into **domains**. A domain owns one type of runtime 
 | `scores` | Eval score records. |
 | `datasets` | Dataset records and dataset items used by evals and experiments. |
 | `experiments` | Experiment runs and per-item experiment results. |
+| `backgroundTasks` | Background task records and execution state. |
 | `schedules` | Schedule definitions and trigger history. |
+| `threadState` | Durable task, goal, and thread state. |
 
 Adapter support varies by domain. For the full domain list and built-in schemas, see the [storage overview reference](/reference/storage/overview).
 
@@ -55,7 +57,7 @@ Different domains write and query different kinds of data. Pick a backend based 
 - `memory`: Reads and writes rows during every remembered agent call. Use a transactional database such as libSQL, PostgreSQL, or MongoDB.
 - `observability`: Writes high-volume telemetry and often queries aggregations. Use a dedicated observability store or an online analytical processing (OLAP) backend such as ClickHouse or DuckDB.
 - `workflows`: Stores durable snapshots that must be available when a run resumes. Use a reliable persistent database.
-- `scores`, `datasets`, and `experiments`: Store lower-frequency evaluation data that is often read later for analysis.
+- `scores`, `datasets`, and `experiments`: Store lower-frequency evaluation data that's often read later for analysis.
 - `schedules`: Stores schedule definitions and fire history. Use an adapter that implements the schedules domain.
 
 When domains have different operational needs, use [composite storage](#composite-storage) to route each domain to the right backend.
@@ -99,7 +101,7 @@ Production guidance:
 - Use a managed database with backups, monitoring, and connection pooling.
 - Keep local file databases such as `file:./mastra.db` out of multi-process production deployments.
 - Route high-volume domains, especially `observability`, to a dedicated backend with [composite storage](#composite-storage).
-- Configure [retention](/reference/storage/retention) for growth-heavy tables, then call `storage.prune()` from a scheduler or maintenance job.
+- Configure [retention](/reference/storage/retention) policies on the storage adapter or composite store, then call `storage.prune()` from a scheduler or maintenance job.
 - Choose providers based on the domains your application uses. For example, schedules require an adapter that implements the `schedules` domain.
 
 ## Configuration scope
