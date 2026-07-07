@@ -81,11 +81,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/built-in-tools',
-              label: 'Built-in Tools',
-            },
-            {
-              type: 'doc',
               id: 'agents/agent-approval',
               label: 'Agent Approval',
             },
