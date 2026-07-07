@@ -3,8 +3,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
-import type { RefObject } from 'react';
-import { useLocation } from 'react-router';
+import type { ReactNode, RefObject } from 'react';
 
 import { SkeletonRows, Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
@@ -20,6 +19,7 @@ type TranscriptState = ChatSessionApi['transcript'];
 const transcriptScrollClass =
   'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]';
 const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm leading-relaxed text-icon3';
+const draftStartClass = 'mx-auto flex w-full max-w-[80ch] flex-col items-stretch gap-4 px-3 md:px-5';
 
 /**
  * The actual chat: the scrollable column holding the goal panel, connection
@@ -27,14 +27,17 @@ const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm l
  * indicator. Propless — must render inside `ChatSessionProvider` with an
  * active project (the composition root guarantees it).
  */
-export function ChatMessageList({ routeErrorNotice }: { routeErrorNotice?: string | null } = {}) {
+type ChatMessageListProps = {
+  draft?: boolean;
+  draftComposer?: ReactNode;
+  routeErrorNotice?: string | null;
+};
+
+export function ChatMessageList({ draft = false, draftComposer, routeErrorNotice }: ChatMessageListProps = {}) {
   const { activeProject } = useActiveProjectContext();
   const session = useChatSession();
   const { transcript, status, showWorkingIndicator, messagesPending, onApprove, onRespond } = session;
-  const location = useLocation();
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
-
-  const draft = location.pathname === '/new';
 
   // Parent only renders this component with an active project; TS narrowing.
   if (!activeProject) return null;
@@ -59,6 +62,7 @@ export function ChatMessageList({ routeErrorNotice }: { routeErrorNotice?: strin
         showWorkingIndicator={showWorkingIndicator}
         messagesPending={!draft && (messagesPending || status === 'connecting')}
         draft={draft}
+        draftComposer={draftComposer}
         routeErrorNotice={routeErrorNotice}
         threadRef={threadRef}
         onApprove={onApprove}
@@ -92,6 +96,7 @@ type TranscriptPanelProps = {
   showWorkingIndicator: boolean;
   messagesPending: boolean;
   draft: boolean;
+  draftComposer?: ReactNode;
   routeErrorNotice?: string | null;
   threadRef: RefObject<HTMLDivElement | null>;
   onApprove: ChatSessionApi['onApprove'];
@@ -104,6 +109,7 @@ function TranscriptPanel({
   showWorkingIndicator,
   messagesPending,
   draft,
+  draftComposer,
   routeErrorNotice,
   threadRef,
   onApprove,
@@ -115,19 +121,15 @@ function TranscriptPanel({
   if (draft) {
     const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
 
-    if (routeErrorNotice || noticeEntries.length > 0) {
-      return (
-        <div className={transcriptScrollClass} ref={threadRef}>
-          <EmptyThreadState activeProject={activeProject} />
-          {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-          <Transcript entries={noticeEntries} onApprove={onApprove} onRespond={onRespond} />
-        </div>
-      );
-    }
-
     return (
-      <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-3 py-8 md:px-5" ref={threadRef}>
-        <EmptyThreadState activeProject={activeProject} />
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto py-8" ref={threadRef}>
+        <DraftStart activeProject={activeProject} composer={draftComposer} />
+        {(routeErrorNotice || noticeEntries.length > 0) && (
+          <div className={transcriptScrollClass}>
+            {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
+            <Transcript entries={noticeEntries} onApprove={onApprove} onRespond={onRespond} />
+          </div>
+        )}
       </div>
     );
   }
@@ -156,6 +158,24 @@ function TranscriptPanel({
       <Transcript entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />
       {showWorkingIndicator && <WorkingIndicator />}
     </div>
+  );
+}
+
+function DraftStart({ activeProject, composer }: { activeProject: Project; composer?: ReactNode }) {
+  return (
+    <section className={draftStartClass} aria-labelledby="draft-start-heading">
+      <div className="text-center">
+        <Wordmark className="mx-auto mb-6" />
+        <h1 id="draft-start-heading" className="m-0 text-2xl font-semibold text-icon6">
+          What do you want to work on?
+        </h1>
+        <p className="mx-auto mb-0 mt-3 max-w-[60ch] text-sm text-icon3">
+          Starting from {activeProject.name}
+          {activeProject.gitBranch ? ` on ${activeProject.gitBranch}` : ''} in {activeProject.path}
+        </p>
+      </div>
+      {composer}
+    </section>
   );
 }
 

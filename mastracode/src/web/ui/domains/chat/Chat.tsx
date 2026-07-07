@@ -44,6 +44,7 @@ function ChatPage() {
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
   const locationRouteErrorNotice = (location.state as { routeErrorNotice?: string } | null)?.routeErrorNotice ?? null;
   const [routeErrorNotice, setRouteErrorNotice] = useState<string | null>(null);
+  const draft = location.pathname === '/new';
 
   useGlobalShortcuts();
 
@@ -69,12 +70,16 @@ function ChatPage() {
         onSidebarClose={() => overlays.close('sidebar')}
         content={
           activeProject ? (
-            <ChatMessageList routeErrorNotice={locationRouteErrorNotice ?? routeErrorNotice} />
+            <ChatMessageList
+              draft={draft}
+              draftComposer={<ComposerPanel variant="centered" />}
+              routeErrorNotice={locationRouteErrorNotice ?? routeErrorNotice}
+            />
           ) : (
             <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
           )
         }
-        footer={activeProject ? <ComposerPanel /> : null}
+        footer={activeProject && !draft ? <ComposerPanel /> : null}
       />
 
       <ChatOverlays />

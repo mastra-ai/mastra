@@ -7,14 +7,19 @@ import { useChatSession } from '../context/ChatSessionProvider';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 
-const composerPanelClass = 'mx-auto w-full max-w-[80ch] shrink-0';
+const footerComposerPanelClass = 'mx-auto w-full max-w-[80ch] shrink-0';
+const centeredComposerPanelClass = 'w-full shrink-0 rounded-xl border border-border1 bg-surface2 p-3 shadow-sm';
+
+type ComposerPanelProps = {
+  variant?: 'footer' | 'centered';
+};
 
 /**
- * The pinned composer region: input + status line, wired to the chat session
- * and palette/composer command hand-off. Propless — must render inside
- * `ChatSessionProvider` with an active project.
+ * The composer region: input + status line, wired to the chat session and
+ * palette/composer command hand-off. Must render inside `ChatSessionProvider`
+ * with an active project.
  */
-export function ComposerPanel() {
+export function ComposerPanel({ variant = 'footer' }: ComposerPanelProps) {
   const { activeProject } = useActiveProjectContext();
   const session = useChatSession();
   const { composerCommandName, clearComposerCommand } = useChatCommands();
@@ -39,8 +44,10 @@ export function ComposerPanel() {
   // Parent only renders this component with an active project; TS narrowing.
   if (!activeProject) return null;
 
+  const className = variant === 'centered' ? centeredComposerPanelClass : footerComposerPanelClass;
+
   return (
-    <div className={composerPanelClass}>
+    <div className={className}>
       <Composer
         activeProject={activeProject}
         transcript={transcript}

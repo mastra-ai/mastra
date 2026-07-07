@@ -199,11 +199,13 @@ describe('MastraCode thread pages', () => {
     expect(captured.sessionsCreated).toBe(1);
   });
 
-  it('given the session resumes a bound thread, when visiting /new, then it stays on /new and shows the draft welcome instead of the old thread', async () => {
+  it('given the session resumes a bound thread, when visiting /new, then it stays on /new and shows a centered draft composer instead of the old thread', async () => {
     const captured = useAgentControllerHandlers({ boundThreadId: threadOne.id });
     const { router } = renderRoutes('/new');
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText(/Message the agent/)).toHaveLength(1);
+    expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/new');
     expect(screen.queryByText('Reply from thread one')).not.toBeInTheDocument();
     expect(captured.created).toBe(0);
@@ -213,7 +215,7 @@ describe('MastraCode thread pages', () => {
     const captured = useAgentControllerHandlers();
     const { router } = renderRoutes('/new');
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
 
     const composer = await screen.findByPlaceholderText(/Message the agent/);
     await userEvent.type(composer, 'Hello draft{Enter}');
@@ -233,7 +235,8 @@ describe('MastraCode thread pages', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'New thread' }));
 
     await expectPathname(router, '/new');
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(screen.getAllByPlaceholderText(/Message the agent/)).toHaveLength(1);
     expect(captured.created).toBe(0);
   });
 
