@@ -19,7 +19,7 @@ import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Check, ChevronDown, Clock, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -131,10 +131,6 @@ export function AgentPlaygroundVersionBar({
   return {
     versionSelector: (
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface3">
-        <Icon size="sm" className="text-neutral3 shrink-0">
-          <Clock />
-        </Icon>
-
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
