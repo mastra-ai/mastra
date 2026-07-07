@@ -5,7 +5,7 @@ packages:
   - "@mastra/core"
 ---
 
-# `config.ts`
+# config.ts
 
 An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, memory, and workspace configuration.
 
@@ -25,6 +25,10 @@ import { agentConfig } from '@mastra/core/agent'
 export default agentConfig({
   model: '__GATEWAY_OPENAI_MODEL__',
 })
+```
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
 ```
 
 Mastra uses the `weather` directory name as the default agent `id` and `name`. The sibling `instructions.md` supplies the required instructions.

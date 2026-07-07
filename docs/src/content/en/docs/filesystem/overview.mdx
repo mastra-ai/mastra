@@ -107,7 +107,21 @@ After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents
 
 ## Get started
 
-Create an agent directory with a `config.ts` and an `instructions.md`, then run `mastra dev`. See [agent config](/docs/filesystem/config) for the shortest working example.
+Create an agent directory with a `config.ts` and an `instructions.md`, then run `mastra dev`. The following `config.ts` plus an `instructions.md` file creates a working file-based agent:
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+Mastra uses the `weather` directory name as the default agent `id` and `name`. The sibling `instructions.md` supplies the required instructions.
 
 ## Next steps
 

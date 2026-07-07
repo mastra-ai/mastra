@@ -9,8 +9,6 @@ packages:
 
 An agent's `instructions.md` holds its always-on system prompt: the model reads it on every turn. Use it to define the agent's identity, tone, role, and standing rules.
 
-## When to use instructions
-
 Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into [`tools/`](/docs/filesystem/tools) or [`skills/`](/docs/filesystem/skills), which the model uses only when relevant.
 
 ## Quickstart
