@@ -246,7 +246,8 @@ const isJSONValue = (value: unknown): value is JSONValue => {
   if (value === null) return true;
 
   const type = typeof value;
-  if (type === 'string' || type === 'number' || type === 'boolean') return true;
+  if (type === 'number') return Number.isFinite(value);
+  if (type === 'string' || type === 'boolean') return true;
   if (type !== 'object') return false;
 
   if (Array.isArray(value)) {

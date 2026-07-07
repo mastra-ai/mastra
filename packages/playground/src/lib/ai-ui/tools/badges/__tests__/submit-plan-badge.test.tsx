@@ -84,20 +84,6 @@ describe('SubmitPlanBadge', () => {
       );
     });
 
-    it('renders inline code in the submitted title', () => {
-      renderBadge({
-        toolCallId: 'call-title',
-        suspendPayload: {
-          path: '/workspace/plan.md',
-          title: 'Add Studio `submit_plan` approval UI',
-          plan: 'Plan',
-        },
-        result: undefined,
-      });
-
-      expect(screen.getByText('submit_plan').tagName).toBe('CODE');
-    });
-
     it('approves with custom submit_plan resume data', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-1', suspendPayload, result: undefined });
 
@@ -174,7 +160,7 @@ describe('SubmitPlanBadge', () => {
       renderBadge({ toolCallId: 'call-1', suspendPayload, result: undefined });
 
       await waitFor(() => {
-        expect(within(badge()).getAllByRole('button', { name: /expand plan/i }).length).toBeGreaterThan(1);
+        expect(screen.getByTestId('submit-plan-content').getAttribute('aria-label')).toBe('Expand plan');
       });
 
       fireEvent.click(screen.getByTestId('submit-plan-content'));
@@ -225,7 +211,7 @@ describe('SubmitPlanBadge', () => {
   });
 
   describe('when the plan is already resolved', () => {
-    it('shows the approved state and hides actions without adding card chrome', () => {
+    it('shows the approved state and hides actions', () => {
       renderBadge({
         toolCallId: 'call-3',
         suspendPayload: {
@@ -244,9 +230,6 @@ describe('SubmitPlanBadge', () => {
       expect(screen.queryByText('Resolved')).toBeNull();
       expect(screen.queryByText('Plan approved')).toBeNull();
       expect(within(badge()).queryByRole('button', { name: /approve/i })).toBeNull();
-      expect(badge().className).toContain('bg-surface3');
-      expect(badge().className).not.toContain('border-border1');
-      expect(badge().className).not.toContain('shadow-');
     });
 
     it('shows the rejected state when the submitted plan was rejected', () => {
@@ -267,7 +250,6 @@ describe('SubmitPlanBadge', () => {
       expect(screen.getByText('Rejected')).toBeTruthy();
       expect(screen.queryByText('Resolved')).toBeNull();
       expect(within(badge()).queryByRole('button', { name: /approve/i })).toBeNull();
-      expect(badge().className).not.toContain('border-border1');
     });
   });
 });

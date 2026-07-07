@@ -1,8 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { ModelRouterModelId } from '@mastra/core/llm';
-import { createTool, submitPlanTool } from '@mastra/core/tools';
+import { submitPlanTool } from '@mastra/core/tools';
 import { Memory } from '@mastra/memory';
-import { z } from 'zod';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
 import { previewScorers } from '../scorers/preview-scorers';
 import { storage } from '../store';
@@ -21,27 +20,6 @@ function resolvePreviewModel() {
 }
 
 const model = resolvePreviewModel() as ModelRouterModelId;
-
-const submitPlanPreviewTool = createTool({
-  id: 'submit_plan',
-  description:
-    'Submit an inline markdown plan for review. Use this only when the user asks for a plan that should be reviewed before proceeding.',
-  inputSchema: z.object({
-    title: z.string().min(1).describe('Short title for the plan.'),
-    plan: z.string().min(1).describe('Markdown body of the plan to review.'),
-  }),
-  suspendSchema: submitPlanTool.suspendSchema,
-  resumeSchema: submitPlanTool.resumeSchema,
-  execute: async ({ title, plan }, context) => {
-    return submitPlanTool.execute?.(
-      {
-        title,
-        plan,
-      },
-      context,
-    );
-  },
-});
 
 export const studioPreviewAgent = new Agent({
   id: 'studio-preview-agent',
@@ -87,7 +65,7 @@ Explain cooking steps clearly and offer substitutions when needed, maintaining a
   model,
   tools: {
     cookingTool,
-    submit_plan: submitPlanPreviewTool,
+    submit_plan: submitPlanTool,
   },
   memory: new Memory({
     storage,

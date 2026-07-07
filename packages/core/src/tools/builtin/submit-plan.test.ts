@@ -2,78 +2,109 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { submitPlanTool } from './submit-plan';
 
-function makeAgentContext(overrides: Record<string, any> = {}) {
+type SubmitPlanExecute = NonNullable<typeof submitPlanTool.execute>;
+type SubmitPlanInput = Parameters<SubmitPlanExecute>[0];
+type SubmitPlanContext = Parameters<SubmitPlanExecute>[1];
+type SubmitPlanAgentContext = NonNullable<SubmitPlanContext['agent']>;
+
+const executeSubmitPlan = async (input: SubmitPlanInput, context: SubmitPlanContext) => {
+  const execute = submitPlanTool.execute;
+  if (!execute) {
+    throw new Error('submitPlanTool must define execute');
+  }
+
+  return execute(input, context);
+};
+
+function makeAgentContext(overrides: Partial<SubmitPlanAgentContext> = {}) {
+  const suspend = vi.fn<SubmitPlanAgentContext['suspend']>(async () => undefined);
+
   return {
-    agent: {
-      agentId: 'agent-1',
-      toolCallId: 'tc-1',
-      messages: [],
-      suspend: vi.fn(async () => undefined),
-      ...overrides,
+    context: {
+      agent: {
+        agentId: 'agent-1',
+        toolCallId: 'tc-1',
+        messages: [],
+        suspend,
+        ...overrides,
+      },
     },
+    suspend,
+  };
+}
+
+function makeDirectContext(): SubmitPlanContext {
+  return {
+    requestContext: undefined,
   };
 }
 
 describe('submitPlanTool (native suspend)', () => {
   it('suspends with the submitted path when no resumeData is present', async () => {
-    const ctx = makeAgentContext();
+    const { context, suspend } = makeAgentContext();
 
-    const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
+    const result = await executeSubmitPlan({ path: '.mastracode/plans/ship-it.md' }, context);
 
-    expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
-    expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({ path: '.mastracode/plans/ship-it.md' });
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(suspend).toHaveBeenCalledWith({ path: '.mastracode/plans/ship-it.md' }, undefined);
     // suspend short-circuits the step; the tool returns no output.
     expect(result).toBeUndefined();
   });
 
   it('suspends with optional title and plan body when provided', async () => {
-    const ctx = makeAgentContext();
+    const { context, suspend } = makeAgentContext();
 
-    const result = await (submitPlanTool as any).execute(
+    const result = await executeSubmitPlan(
       {
         path: '.mastracode/plans/ship-it.md',
         title: 'Ship it',
         plan: '## Plan\n\n- Build it\n- Verify it',
       },
-      ctx,
+      context,
     );
 
-    expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
-    expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
-      path: '.mastracode/plans/ship-it.md',
-      title: 'Ship it',
-      plan: '## Plan\n\n- Build it\n- Verify it',
-    });
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(suspend).toHaveBeenCalledWith(
+      {
+        path: '.mastracode/plans/ship-it.md',
+        title: 'Ship it',
+        plan: '## Plan\n\n- Build it\n- Verify it',
+      },
+      undefined,
+    );
     expect(result).toBeUndefined();
   });
 
   it('suspends with an inline plan body when no path is provided', async () => {
-    const ctx = makeAgentContext();
+    const { context, suspend } = makeAgentContext();
 
-    const result = await (submitPlanTool as any).execute(
+    const result = await executeSubmitPlan(
       {
         title: 'Inline plan',
         plan: '## Plan\n\n- Build it\n- Verify it',
       },
-      ctx,
+      context,
     );
 
-    expect(ctx.agent.suspend).toHaveBeenCalledTimes(1);
-    expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
-      title: 'Inline plan',
-      plan: '## Plan\n\n- Build it\n- Verify it',
-    });
+    expect(suspend).toHaveBeenCalledTimes(1);
+    expect(suspend).toHaveBeenCalledWith(
+      {
+        title: 'Inline plan',
+        plan: '## Plan\n\n- Build it\n- Verify it',
+      },
+      undefined,
+    );
     expect(result).toBeUndefined();
   });
 
   it('reports approval back to the model from resumeData', async () => {
-    const ctx = makeAgentContext({
+    const { context, suspend } = makeAgentContext({
       resumeData: { action: 'approved', path: '.mastracode/plans/ship-it.md', title: 'Ship it', plan: 'Do it' },
     });
 
-    const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
+    const result = await executeSubmitPlan({ path: '.mastracode/plans/ship-it.md' }, context);
 
-    expect(ctx.agent.suspend).not.toHaveBeenCalled();
+    expect(suspend).not.toHaveBeenCalled();
     expect(result).toEqual({
       content: 'Plan approved. Proceed with implementation following the approved plan.',
       isError: false,
@@ -83,9 +114,9 @@ describe('submitPlanTool (native suspend)', () => {
   });
 
   it('reports approval with a comment back to the model from resumeData', async () => {
-    const ctx = makeAgentContext({ resumeData: { action: 'approved', feedback: 'Start with the migration.' } });
+    const { context } = makeAgentContext({ resumeData: { action: 'approved', feedback: 'Start with the migration.' } });
 
-    const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
+    const result = await executeSubmitPlan({ path: '.mastracode/plans/ship-it.md' }, context);
 
     expect(result.isError).toBe(false);
     expect(result.action).toBe('approved');
@@ -95,9 +126,9 @@ describe('submitPlanTool (native suspend)', () => {
   });
 
   it('reports rejection with a comment back to the model from resumeData', async () => {
-    const ctx = makeAgentContext({ resumeData: { action: 'rejected', feedback: 'Add tests' } });
+    const { context } = makeAgentContext({ resumeData: { action: 'rejected', feedback: 'Add tests' } });
 
-    const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
+    const result = await executeSubmitPlan({ path: '.mastracode/plans/ship-it.md' }, context);
 
     expect(result.isError).toBe(false);
     expect(result.action).toBe('rejected');
@@ -107,9 +138,9 @@ describe('submitPlanTool (native suspend)', () => {
   });
 
   it('tells the model to stop and wait when rejected without feedback', async () => {
-    const ctx = makeAgentContext({ resumeData: { action: 'rejected' } });
+    const { context } = makeAgentContext({ resumeData: { action: 'rejected' } });
 
-    const result = await (submitPlanTool as any).execute({ path: '.mastracode/plans/ship-it.md' }, ctx);
+    const result = await executeSubmitPlan({ path: '.mastracode/plans/ship-it.md' }, context);
 
     expect(result.isError).toBe(false);
     expect(result.action).toBe('rejected');
@@ -120,10 +151,7 @@ describe('submitPlanTool (native suspend)', () => {
   });
 
   it('falls back to readable text when no agent suspend is available', async () => {
-    const result = await (submitPlanTool as any).execute(
-      { path: '.mastracode/plans/ship-it.md' },
-      { requestContext: undefined },
-    );
+    const result = await executeSubmitPlan({ path: '.mastracode/plans/ship-it.md' }, makeDirectContext());
 
     expect(result).toEqual({
       content: '[Plan submitted for review]\n\nPath: .mastracode/plans/ship-it.md',
@@ -132,9 +160,9 @@ describe('submitPlanTool (native suspend)', () => {
   });
 
   it('falls back to readable text for inline plans when no agent suspend is available', async () => {
-    const result = await (submitPlanTool as any).execute(
+    const result = await executeSubmitPlan(
       { title: 'Inline plan', plan: '## Plan\n\n- Build it' },
-      { requestContext: undefined },
+      makeDirectContext(),
     );
 
     expect(result).toEqual({

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
@@ -980,6 +981,7 @@ describe('useChat forwards clientTools', () => {
   });
 
   it('uses resumeStream for fallback approval when custom resume data is provided', async () => {
+    const requestContext = new RequestContext({ userId: 'user-123' });
     const { result } = renderHook(
       () =>
         useChat({
@@ -996,7 +998,7 @@ describe('useChat forwards clientTools', () => {
         mode: 'stream',
         message: 'hi',
         threadId: 'thread-1',
-        requestContext: { userId: 'user-123' } as any,
+        requestContext,
       });
     });
 
@@ -1015,7 +1017,7 @@ describe('useChat forwards clientTools', () => {
     expect(resumeStreamMock).toHaveBeenCalledWith(resumeData, {
       runId: expect.any(String),
       toolCallId: 'tool-call-approval-1',
-      requestContext: { userId: 'user-123' },
+      requestContext,
     });
     expect(approveToolCallMock).not.toHaveBeenCalled();
   });

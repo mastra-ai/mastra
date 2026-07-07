@@ -44,9 +44,27 @@ const resumeSchema = z.object({
   action: z.enum(['approved', 'rejected']),
   feedback: z.string().optional(),
   path: z.string().optional(),
-  title: z.string().optional(),
+  title: z.string().min(1).optional(),
   plan: z.string().optional(),
 });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isSubmitPlanResumeData(value: unknown): value is SubmitPlanResumeData {
+  if (!isRecord(value)) return false;
+
+  const { action, feedback, path, title, plan } = value;
+
+  return (
+    (action === 'approved' || action === 'rejected') &&
+    (feedback === undefined || typeof feedback === 'string') &&
+    (path === undefined || typeof path === 'string') &&
+    (title === undefined || (typeof title === 'string' && title.length > 0)) &&
+    (plan === undefined || typeof plan === 'string')
+  );
+}
 
 /**
  * Built-in, agent-agnostic tool: submit an implementation plan for user review.
@@ -80,7 +98,7 @@ export const submitPlanTool = createTool({
         .min(1)
         .optional()
         .describe('Optional path to a host-owned plan markdown file (e.g. `plans/add-dark-mode.md`).'),
-      title: z.string().optional().describe('Optional display title for the submitted plan.'),
+      title: z.string().min(1).optional().describe('Optional display title for the submitted plan.'),
       plan: z.string().min(1).optional().describe('Optional markdown body to render inline in approval UIs.'),
     })
     .refine(data => data.path !== undefined || data.plan !== undefined, {
@@ -94,8 +112,12 @@ export const submitPlanTool = createTool({
   resumeSchema,
   execute: async ({ path, title, plan }: SubmitPlanInput, context) => {
     try {
-      const resumeData = context?.agent?.resumeData as SubmitPlanResumeData | undefined;
+      const resumeData = context?.agent?.resumeData;
       if (resumeData !== undefined) {
+        if (!isSubmitPlanResumeData(resumeData)) {
+          return { content: 'Invalid submit_plan resume data.', isError: true };
+        }
+
         if (resumeData.action === 'approved') {
           return {
             content: [

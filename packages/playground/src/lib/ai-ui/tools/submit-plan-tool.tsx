@@ -9,25 +9,61 @@ export interface SubmitPlanToolProps {
   metadata?: MessageMetadata;
 }
 
-function isSubmitPlanSuspendPayload(payload: unknown): payload is SubmitPlanSuspendPayload {
-  if (typeof payload !== 'object' || payload === null) return false;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
-  const candidate = payload as Partial<SubmitPlanSuspendPayload>;
-  const hasPath = typeof candidate.path === 'string' && candidate.path.length > 0;
-  const hasPlan = typeof candidate.plan === 'string' && candidate.plan.length > 0;
+function isOptionalString(value: unknown): value is string | undefined {
+  return value === undefined || typeof value === 'string';
+}
+
+function isOptionalNonEmptyString(value: unknown): value is string | undefined {
+  return value === undefined || (typeof value === 'string' && value.length > 0);
+}
+
+function isSubmitPlanSuspendPayload(payload: unknown): payload is SubmitPlanSuspendPayload {
+  if (!isRecord(payload)) return false;
+
+  const { path, title, plan } = payload;
+  const hasPath = typeof path === 'string' && path.length > 0;
+  const hasPlan = typeof plan === 'string' && plan.length > 0;
 
   return (
     (hasPath || hasPlan) &&
-    (candidate.path === undefined || typeof candidate.path === 'string') &&
-    (candidate.title === undefined || typeof candidate.title === 'string') &&
-    (candidate.plan === undefined || typeof candidate.plan === 'string')
+    isOptionalNonEmptyString(path) &&
+    isOptionalNonEmptyString(title) &&
+    isOptionalNonEmptyString(plan)
   );
 }
 
 function asSubmitPlanResult(output: unknown): SubmitPlanResult | undefined {
-  if (typeof output === 'object' && output !== null && typeof (output as SubmitPlanResult).content === 'string') {
-    return output as SubmitPlanResult;
+  if (!isRecord(output)) return undefined;
+
+  const { content, isError, action, feedback, submittedPlan } = output;
+
+  const hasValidSubmittedPlan =
+    submittedPlan === undefined ||
+    (isRecord(submittedPlan) &&
+      isOptionalString(submittedPlan.path) &&
+      isOptionalString(submittedPlan.title) &&
+      isOptionalString(submittedPlan.plan));
+
+  if (
+    typeof content === 'string' &&
+    typeof isError === 'boolean' &&
+    (action === undefined || action === 'approved' || action === 'rejected') &&
+    isOptionalString(feedback) &&
+    hasValidSubmittedPlan
+  ) {
+    return {
+      content,
+      isError,
+      ...(action !== undefined ? { action } : {}),
+      ...(feedback !== undefined ? { feedback } : {}),
+      ...(submittedPlan !== undefined ? { submittedPlan } : {}),
+    };
   }
+
   return undefined;
 }
 

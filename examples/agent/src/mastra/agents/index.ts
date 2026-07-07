@@ -4,7 +4,8 @@ import { z } from 'zod';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
-import { cookingTool, submitPlanReviewTool } from '../tools/index.js';
+import { submitPlanTool } from '@mastra/core/tools';
+import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { calculatorWithUI, greetUserWithUI } from '../mcp/app-tools';
 import { PIIDetector, LanguageDetector, PromptInjectionDetector, ModerationProcessor } from '@mastra/core/processors';
@@ -103,7 +104,7 @@ export const chefAgent = new Agent({
   tools: {
     cookingTool,
     weatherInfo,
-    submit_plan: submitPlanReviewTool,
+    submit_plan: submitPlanTool,
   },
   workflows: {
     myWorkflow,
