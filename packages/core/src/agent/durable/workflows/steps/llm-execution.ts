@@ -834,6 +834,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // Wrap with ModelSpanTracker to create/close MODEL_STEP and MODEL_CHUNK spans
             const trackedStream = modelSpanTracker?.wrapStream(stepBoundaryStream) ?? stepBoundaryStream;
 
+            let deferredStepFinishChunk: any = null;
             try {
               let stepStartEmitted = false;
               for await (const rawChunk of trackedStream) {
@@ -926,8 +927,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // logic and must not be emitted to the client stream. When all models are
                 // exhausted the fatal error is propagated via emitError (mirrors the regular
                 // agent's deferredErrorChunk pattern).
+                //
+                // Defer 'step-finish': for intermediate steps (hasToolCalls) we save it
+                // on the output so llm-mapping can emit it AFTER tool-result chunks,
+                // matching the regular agent's ordering (tool-result → step-finish).
+                // For final steps (no tool calls) we emit it after the assistant message
+                // is added to messageList.
                 if (pubsub && rawChunk.type !== 'error') {
-                  await emitChunkEvent(pubsub, runId, clientChunk);
+                  if (rawChunk.type === 'step-finish') {
+                    deferredStepFinishChunk = clientChunk;
+                  } else {
+                    await emitChunkEvent(pubsub, runId, clientChunk);
+                  }
                 }
 
                 // Collect every chunk for post-stream processLLMResponse hook.
@@ -1230,6 +1241,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               };
 
               messageList.add(assistantMessage, 'response');
+
+              // Sync the updated messageList to the in-process registry so
+              // downstream steps (e.g. tool-call.ts's doFlush()) see the
+              // assistant message when persisting before suspension.
+              if (registryEntry) {
+                registryEntry.messageList = messageList;
+              }
             }
 
             // 13. Determine if we should continue (has tool calls)
@@ -1307,6 +1325,40 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
             }
 
+            // 13.9. step-finish emission strategy:
+            //
+            // For FINAL steps (no tool calls): emit step-finish now. The assistant
+            // message is in messageList and there are no tool-results to wait for.
+            //
+            // For INTERMEDIATE steps (hasToolCalls): save the step-finish chunk
+            // on the output so llm-mapping can emit it AFTER tool-call.ts has
+            // emitted tool-result chunks. This matches the regular agent's chunk
+            // ordering (tool-result → step-finish) which MastraModelOutput relies
+            // on for correct step content reconstruction.
+            if (pubsub && deferredStepFinishChunk) {
+              if (!hasToolCalls) {
+                // Final step: emit immediately with pre-computed content
+                // Build step content directly from the current step's data rather
+                // than relying on messageList which may contain response messages
+                // from previous iterations after deserialization.
+                const stepContent: Array<{ type: string; [key: string]: unknown }> = [];
+                const currentText = textDeltas.join('');
+                if (currentText) {
+                  stepContent.push({ type: 'text', text: currentText });
+                }
+                deferredStepFinishChunk = {
+                  ...deferredStepFinishChunk,
+                  payload: {
+                    ...deferredStepFinishChunk.payload,
+                    _durableStepContent: stepContent,
+                  },
+                };
+                await emitChunkEvent(pubsub, runId, deferredStepFinishChunk);
+                deferredStepFinishChunk = null;
+              }
+              // else: intermediate step — saved in output.deferredStepFinishChunk below
+            }
+
             // 14. Export spans if there are tool calls (so tools can be children of model_step)
             // Don't end the spans yet - they will be ended after tool execution
             const stepSpanData = hasToolCalls ? modelSpanTracker?.exportCurrentStep() : undefined;
@@ -1338,6 +1390,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               modelSpanData: hasToolCalls ? modelSpan?.exportSpan?.() : undefined,
               stepSpanData,
               stepFinishPayload,
+              // For intermediate steps (hasToolCalls), save the deferred step-finish
+              // chunk so llm-mapping can emit it AFTER tool-result chunks.
+              deferredStepFinishChunk: hasToolCalls ? deferredStepFinishChunk : undefined,
             };
 
             // 16. End step span only if there are NO tool calls

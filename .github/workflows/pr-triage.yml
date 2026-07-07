@@ -28,7 +28,7 @@ jobs:
       summary: ${{ steps.issue_link.outputs.summary }}
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -79,7 +79,7 @@ jobs:
       summary: ${{ steps.complexity.outputs.summary }}
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -128,7 +128,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -174,7 +174,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           persist-credentials: false
           sparse-checkout: |

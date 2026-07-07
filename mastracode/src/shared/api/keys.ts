@@ -32,4 +32,15 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'threads', projectPath ?? null] as const,
+  agentControllerThreadMessages: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    threadId: string | undefined,
+  ) =>
+    [
+      ...queryKeys.agentControllerSession(agentControllerId, resourceId),
+      'threads',
+      threadId ?? null,
+      'messages',
+    ] as const,
 } as const;

@@ -157,88 +157,83 @@ describeForAllEngines(
       expect(result.path).toBe('/tmp/test.conf');
     });
 
-    // TODO(durable-parity): durable agent does not persist tool-invocation
-    // parts with output-denied state to memory yet.
-    it.skipIf(engine === 'durable')(
-      'declined tool is recorded as output-denied with the not-approved reason',
-      async () => {
-        const sensitiveTool = createTool({
-          id: 'sensitive-op',
-          description: 'Performs a sensitive operation',
-          inputSchema: z.object({
-            action: z.string(),
-          }),
-          requireApproval: true,
-          execute: async (inputData: { action: string }) => {
-            return { performed: inputData.action };
-          },
-        });
+    it('declined tool is recorded as output-denied with the not-approved reason', async () => {
+      const sensitiveTool = createTool({
+        id: 'sensitive-op',
+        description: 'Performs a sensitive operation',
+        inputSchema: z.object({
+          action: z.string(),
+        }),
+        requireApproval: true,
+        execute: async (inputData: { action: string }) => {
+          return { performed: inputData.action };
+        },
+      });
 
-        const sharedMemory = new MockMemory();
-        const shared = await createSharedAgent(getMock(), {
-          tools: { sensitiveTool },
-          memory: sharedMemory,
-          engine,
-        });
+      const sharedMemory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { sensitiveTool },
+        memory: sharedMemory,
+        engine,
+      });
 
-        const threadId = 'decline-result-thread';
-        const resourceId = 'test-resource';
+      const threadId = 'decline-result-thread';
+      const resourceId = 'test-resource';
 
-        // Agent calls the tool
-        const { output, chunks } = await runLoopScenario({
-          engine,
-          llm: getMock(),
-          sharedAgent: shared,
-          prompt: 'Perform action-123',
-          memory: sharedMemory,
-          threadId,
-          resourceId,
-          fixtures: llm => {
-            llm.onMessage(/perform/i, {
-              toolCalls: [
-                {
-                  id: 'call-sens-1',
-                  name: 'sensitive-op',
-                  arguments: { action: 'action-123' },
-                },
-              ],
-            });
-          },
-          collectChunks: true,
-        });
+      // Agent calls the tool
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Perform action-123',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/perform/i, {
+            toolCalls: [
+              {
+                id: 'call-sens-1',
+                name: 'sensitive-op',
+                arguments: { action: 'action-123' },
+              },
+            ],
+          });
+        },
+        collectChunks: true,
+      });
 
-        // Find the approval chunk
-        const approvalChunks = chunks!.filter(c => c.type === 'tool-call-approval');
-        expect(approvalChunks.length).toBeGreaterThan(0);
-        const toolCallId = (approvalChunks[0] as any).payload.toolCallId;
+      // Find the approval chunk
+      const approvalChunks = chunks!.filter(c => c.type === 'tool-call-approval');
+      expect(approvalChunks.length).toBeGreaterThan(0);
+      const toolCallId = (approvalChunks[0] as any).payload.toolCallId;
 
-        // Decline via resumeStream
-        const declineResult = await shared.agent.resumeStream({ approved: false }, { runId: output.runId, toolCallId });
+      // Decline via resumeStream
+      const declineResult = await shared.agent.resumeStream({ approved: false }, { runId: output.runId, toolCallId });
 
-        // Drain
-        for await (const _chunk of declineResult.fullStream) {
-          // drain
-        }
+      // Drain
+      const declineChunks: any[] = [];
+      for await (const chunk of declineResult.fullStream) {
+        declineChunks.push(chunk);
+      }
+      // A declined tool no longer emits a tool-result chunk: it is persisted as `output-denied`
+      // with the not-approved reason on its approval metadata (issue #17218). So it must NOT
+      // surface as a live tool-result...
+      const toolResults = await declineResult.toolResults;
+      const sensResult = toolResults?.find((r: any) => r.payload.toolName === 'sensitive-op');
+      expect(sensResult).toBeUndefined();
 
-        // A declined tool no longer emits a tool-result chunk: it is persisted as `output-denied`
-        // with the not-approved reason on its approval metadata (issue #17218). So it must NOT
-        // surface as a live tool-result...
-        const toolResults = await declineResult.toolResults;
-        const sensResult = toolResults?.find((r: any) => r.payload.toolName === 'sensitive-op');
-        expect(sensResult).toBeUndefined();
-
-        // ...and the recalled invocation must carry the decline as `output-denied` + the reason.
-        const { messages } = await sharedMemory.recall({ threadId, resourceId });
-        const declined = messages
-          .flatMap((m: any) => m.content?.parts ?? [])
-          .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'sensitive-op')
-          ?.toolInvocation as { state?: string; approval?: { approved?: boolean; reason?: string } } | undefined;
-        expect(declined).toBeDefined();
-        expect(declined?.state).toBe('output-denied');
-        expect(declined?.approval?.approved).toBe(false);
-        expect(declined?.approval?.reason?.toLowerCase()).toContain('not approved');
-      },
-    );
+      // ...and the recalled invocation must carry the decline as `output-denied` + the reason.
+      const { messages } = await sharedMemory.recall({ threadId, resourceId });
+      const declined = messages
+        .flatMap((m: any) => m.content?.parts ?? [])
+        .find((p: any) => p.type === 'tool-invocation' && p.toolInvocation?.toolName === 'sensitive-op')
+        ?.toolInvocation as { state?: string; approval?: { approved?: boolean; reason?: string } } | undefined;
+      expect(declined).toBeDefined();
+      expect(declined?.state).toBe('output-denied');
+      expect(declined?.approval?.approved).toBe(false);
+      expect(declined?.approval?.reason?.toLowerCase()).toContain('not approved');
+    });
   },
   { skip: ['fs'] },
 );

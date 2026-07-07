@@ -6,7 +6,6 @@ import type {
   EntityLearningTopicsResponse,
   EntityLearningTopicResponse,
   EntityLearningTopicExamplesResponse,
-  EntityLearningPointsResponse,
   EntityLearningOutliersResponse,
 } from '../../entity-learning-types';
 
@@ -173,29 +172,6 @@ export const topicExamplesResponse: EntityLearningTopicExamplesResponse = {
     },
   ],
   nextOffset: null,
-};
-
-export const pointsResponse: EntityLearningPointsResponse = {
-  runId: '32',
-  points: [
-    {
-      exampleId: 'ex-1',
-      runId: '32',
-      signalName: 'sentiment',
-      topicId: '89',
-      isOutlier: false,
-      x: 0.1,
-      y: 0.2,
-    },
-    {
-      exampleId: 'ex-2',
-      runId: '32',
-      signalName: 'sentiment',
-      isOutlier: true,
-      x: 0.9,
-      y: 0.8,
-    },
-  ],
 };
 
 export const outliersResponse: EntityLearningOutliersResponse = {
