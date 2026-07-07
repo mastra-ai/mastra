@@ -1,5 +1,188 @@
 # @mastra/core
 
+## 1.50.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000))
+
+## 1.50.0
+
+### Minor Changes
+
+- Added file-system-routed observability singleton. Place an `observability.ts` file in your mastra directory that default-exports an `ObservabilityEntrypoint`, and it will be auto-discovered and registered when running `mastra dev` or `mastra build`. Code-registered observability takes precedence if both are present. ([#18887](https://github.com/mastra-ai/mastra/pull/18887))
+
+  ```ts
+  // src/mastra/observability.ts
+  import { Observability, MastraStorageExporter } from '@mastra/observability';
+
+  export default new Observability({
+    configs: { default: { serviceName: 'mastra', exporters: [new MastraStorageExporter()] } },
+  });
+  ```
+
+- Added file-system routed storage support. A `storage.ts` file under the mastra directory is now auto-discovered and registered during `mastra dev` / `mastra build`. The default export replaces the InMemoryStore fallback. Code-registered storage (passed to `new Mastra({storage})`) wins on collision. ([#18885](https://github.com/mastra-ai/mastra/pull/18885))
+
+  ```ts
+  // src/mastra/storage.ts
+  import { LibSQLStore } from '@mastra/libsql';
+
+  export default new LibSQLStore({ url: 'file:local.db' });
+  ```
+
+- Added file-system-routed workflows support. Workflows placed in `workflows/*.ts` under the mastra directory are now auto-discovered and registered during `mastra dev` / `mastra build`, matching the existing file-based agents convention. Code-registered workflows win on name collisions. ([#18883](https://github.com/mastra-ai/mastra/pull/18883))
+
+  ```ts
+  // src/mastra/workflows/onboarding.ts
+  import { createWorkflow } from '@mastra/core/workflows';
+
+  export default createWorkflow({ id: 'onboarding' /* ...steps */ });
+  ```
+
+- Added workspace-level provider registry to MastraEditor. You can now register WorkspaceProvider factories that build complete Workspace instances as a single unit, instead of composing from separate filesystem and sandbox providers. Stored agents can reference a workspace provider via `{ type: 'provider', provider: 'my-cloud', config: { ... } }` and the editor will call the registered factory during agent hydration. ([#18781](https://github.com/mastra-ai/mastra/pull/18781))
+
+  ```ts
+  import { MastraEditor } from '@mastra/editor';
+  import { Workspace } from '@mastra/core/workspace';
+
+  const editor = new MastraEditor({
+    workspaces: {
+      'my-cloud': {
+        id: 'my-cloud',
+        name: 'My Cloud Workspace',
+        createWorkspace: config =>
+          new Workspace({
+            id: 'cloud-ws',
+            name: 'Cloud WS',
+            filesystem: new MyCloudFilesystem(config),
+            sandbox: new MyCloudSandbox(config),
+          }),
+      },
+    },
+  });
+
+  // Stored agent workspace reference using the provider:
+  // { type: 'provider', provider: 'my-cloud', config: { region: 'us-east-1' } }
+  ```
+
+- models.dev gateway: honor per-model `provider` overrides (endpoint, request shape, SDK). ([`10959d5`](https://github.com/mastra-ai/mastra/commit/10959d509d824f682d40ff96e05ee044aec3b0e5))
+
+  A provider can now serve individual models over a different base URL / request shape than the provider default — e.g. a model served over the OpenAI **Responses** API while the provider default is chat-completions. The models.dev gateway now reads each model's `provider` block (`api`, `shape`, `npm`), so `resolveLanguageModel` routes `shape: "responses"` models via the OpenAI Responses API and `buildUrl` prefers a per-model `api` when present. Providers without per-model overrides are unaffected.
+
+- Added file-system routed server config singleton. Place a server.ts file in your mastra directory that default-exports a ServerConfig object, and it will be auto-discovered and registered when running mastra dev or mastra build. Code-registered server config takes precedence if both are present. ([#18888](https://github.com/mastra-ai/mastra/pull/18888))
+
+- Added file-system-routed agent processors. Place input and output processor files under `agents/<name>/processors/input/` and `agents/<name>/processors/output/`. Each file default-exports a processor, and they are auto-discovered and merged with config-defined processors when running `mastra dev` or `mastra build`. Config-defined processors run first, and a dynamic (function) `inputProcessors`/`outputProcessors` in `config.ts` takes precedence over discovered files. ([#18890](https://github.com/mastra-ai/mastra/pull/18890))
+
+  ```
+  src/mastra/agents/support/
+  ├── config.ts
+  ├── instructions.md
+  └── processors/
+      ├── input/
+      │   └── moderation.ts
+      └── output/
+          └── redact-pii.ts
+  ```
+
+  ```ts
+  // src/mastra/agents/support/processors/input/moderation.ts
+  import { ModerationProcessor } from '@mastra/core/processors';
+
+  export default new ModerationProcessor({ model: 'openai/gpt-5-nano' });
+  ```
+
+- **Renamed heartbeats to schedules.** Agent heartbeats and workflow schedules are now one unified Schedules API: `mastra.schedules` manages both. The name "heartbeat" implied a liveness check; these are cron-based agent schedules, so they are now simply called schedules. ([#18874](https://github.com/mastra-ai/mastra/pull/18874))
+
+  **Before**
+
+  ```ts
+  const hb = await mastra.heartbeats.create({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  await mastra.heartbeats.pause(hb.id);
+  ```
+
+  **After**
+
+  ```ts
+  // Schedule an agent (was a heartbeat)
+  const schedule = await mastra.schedules.create({
+    agentId: 'chef',
+    cron: '0 9 * * *',
+    prompt: 'Suggest a dish of the day',
+  });
+
+  // Schedule a workflow with the same API
+  await mastra.schedules.create({
+    workflowId: 'daily-report',
+    cron: '0 6 * * *',
+    inputData: { region: 'us' },
+  });
+
+  await mastra.schedules.pause(schedule.id);
+  ```
+
+  What changed:
+  - `mastra.heartbeats` is now `mastra.schedules` and also creates, lists, updates, pauses, resumes, runs, and deletes workflow schedules. Results are discriminated by `agentId` vs `workflowId`.
+  - The Mastra config option `heartbeat: { ... }` (lifecycle hooks) is now `schedules: { ... }`, and hook types were renamed (`HeartbeatHooks` → `ScheduleHooks`, `HeartbeatPrepareContext` → `SchedulePrepareContext`, and so on).
+  - New agent schedule ids use the `agent_` prefix instead of `hb_`. Existing `hb_` ids keep working.
+  - The default signal tag an agent receives on a fire is now `<schedule>` instead of `<heartbeat>`.
+  - Types renamed: `Heartbeat` → `AgentSchedule`, `CreateHeartbeatInput` → `CreateAgentScheduleInput`, `HeartbeatScheduleTarget` → `AgentScheduleTarget` (persisted `target.type` is now `'agent'` instead of `'heartbeat'`).
+
+  Existing schedules stored in your database keep working: rows persisted with the old `target.type: 'heartbeat'` are read as `'agent'` automatically and keep firing.
+
+- Added file-system routed studio config singleton. Place a studio.ts file in your mastra directory that default-exports a StudioConfig object, and it will be auto-discovered and registered when running mastra dev or mastra build. Code-registered studio config takes precedence if both are present. ([#18889](https://github.com/mastra-ai/mastra/pull/18889))
+
+### Patch Changes
+
+- Fix workflow snapshot bloat on agent HITL tool-approval suspensions (#18647). Agent-run snapshots previously grew with thread length × number of historical suspensions because completed steps retained stale `suspendPayload`s (each embedding a full serialized message list) and duplicated message arrays across step payloads and outputs. Snapshots could balloon to 5MB+ on long threads and hit storage row-size limits. ([#18862](https://github.com/mastra-ai/mastra/pull/18862))
+
+  Agent-loop snapshots are now pruned to minimal resume artifacts before persist: completed steps drop suspension payloads and heavy message/step data, while suspended steps keep their full resume state intact. Snapshot size now stays flat across sequential approvals — O(thread) instead of O(suspensions × thread).
+
+  This also adds an optional `pruneSnapshot` workflow option (alongside `shouldPersistSnapshot`) that transforms a snapshot immediately before it is persisted. User-authored workflows are unaffected and persist full snapshots by default.
+
+- Add unit test coverage for agent utility functions in `packages/core/src/agent/utils.ts`. ([#18896](https://github.com/mastra-ai/mastra/pull/18896))
+
+- Update provider registry and model documentation with latest models and providers ([`6ef59fe`](https://github.com/mastra-ai/mastra/commit/6ef59fef1da52ed8da5fbb2a892c71cf4fb6c739))
+
+- Fixed cross-pod signal routing to dead runIds in multi-pod deployments without sticky sessions ([#18614](https://github.com/mastra-ai/mastra/pull/18614))
+
+- Fix `DurableAgent` persisting messages when `memory.options.readOnly` is `true`. The durable finish path saved via the save queue directly, bypassing the `MessageHistory` processor that enforces `readOnly` in the non-durable path, so messages were written against the caller's explicit "read but don't save" instruction. The durable path now honors `readOnly` and skips persistence, matching the non-durable agent. Closes #18771. ([#18921](https://github.com/mastra-ai/mastra/pull/18921))
+
+- Added `flush()` to `ObservabilityEntrypoint` so `mastra.observability.flush()` works directly in serverless environments. ([#18873](https://github.com/mastra-ai/mastra/pull/18873))
+
+  Previously, `flush()` only existed on individual `ObservabilityInstance` objects, requiring users to call `mastra.observability.getDefaultInstance()?.flush()`. The entrypoint-level `flush()` delegates to all registered instances, matching the existing `shutdown()` pattern.
+
+  ```ts
+  // Before (broken — getObservability() didn't exist, flush() wasn't on the entrypoint)
+  const observability = mastra.getObservability();
+  await observability.flush();
+
+  // After
+  await mastra.observability.flush();
+  ```
+
+  Fixed the serverless flush docs in the observability config guide and Vercel deployment guide to use the correct API.
+
+- Fixed durable agent parity gaps for structured output, output processors, callbacks, error processors, suspend/resume, and tool lifecycle hooks. Durable agents now support structured output schemas, per-chunk output processor streaming, onStepFinish/onFinish/onError callbacks, error processor retry loops, tool context.writer chunks, and suspend/resume with proper data flow. These fixes bring durable agent scenario test coverage from 43% to over 90%. ([#18857](https://github.com/mastra-ai/mastra/pull/18857))
+
+- Add unit test coverage for storage utility functions in `packages/core/src/storage/utils.ts`. ([#18895](https://github.com/mastra-ai/mastra/pull/18895))
+
+- Fixed `listSuspendedRuns()` reporting `toolCallId: undefined` for tool calls parked via `suspend()`. The id was only stored as the workflow resume label, so discovery dropped it and `sendToolApproval({ toolCallId })` could never match the run once it had to be resolved from storage. The suspend payload now carries the id (agentic and durable loops), and discovery recovers it from resume labels for snapshots persisted before this change. ([#18940](https://github.com/mastra-ai/mastra/pull/18940))
+
+- Fixed `agent.generate()` and `agent.stream()` rejecting AI SDK v7 messages under strict TypeScript. AI SDK v7 `ModelMessage` and `UIMessage` inputs are now accepted, matching the existing v4-v6 support. (#18956) ([#18997](https://github.com/mastra-ai/mastra/pull/18997))
+
+- Fixed message hydration to backfill resource IDs when thread IDs are already present. ([#18931](https://github.com/mastra-ai/mastra/pull/18931))
+
+- Fixed an issue where writes to a shared RequestContext inside tools were lost because the tool received a cloned context instead of the original. Tool writes are now preserved by reusing the shared context instance. ([#18872](https://github.com/mastra-ai/mastra/pull/18872))
+
+- Hardened several string-parsing code paths against regular-expression denial of service (ReDoS). Path normalization, URL trimming, LLM token stripping, and observation parsing now use linear-time string scanning instead of regexes that could back-track polynomially on adversarial input. No behavior changes. ([#18801](https://github.com/mastra-ai/mastra/pull/18801))
+
+- Fixed a TypeScript build error caused by the regenerated provider registry adding per-model shape overrides ([#18995](https://github.com/mastra-ai/mastra/pull/18995))
+
 ## 1.50.0-alpha.5
 
 ### Minor Changes
