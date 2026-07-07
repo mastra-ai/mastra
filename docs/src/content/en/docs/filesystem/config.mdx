@@ -7,27 +7,72 @@ packages:
 
 # `config.ts`
 
-An agent's `config.ts` sets its runtime configuration, including the model and any [`Agent`](/reference/agents/agent) options. Mastra merges this partial config with the agent's sibling files.
+An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, memory, and workspace configuration.
 
-## Set the model
+## What belongs in `config.ts`
 
-Use [`agentConfig()`](/reference/agents/agent) so the partial config is typed while sibling files supply the rest. The `model` is required, and the build fails for an agent directory that omits it.
+`config.ts` is the required entry point for a file-based agent's model and runtime options. Put agent-level settings here when they don't need their own file, such as the model, description, default execution options, retry behavior, scorers, and display identity.
+
+Keep adjacent concerns in sibling files when you want filesystem routing to merge them into the agent. For example, use `instructions.md` for the always-on prompt and `tools/` for model-callable actions.
+
+## Quickstart
+
+The following `config.ts` plus an `instructions.md` file creates a working file-based agent:
 
 ```typescript title="src/mastra/agents/weather/config.ts"
 import { agentConfig } from '@mastra/core/agent'
 
 export default agentConfig({
   model: '__GATEWAY_OPENAI_MODEL__',
-  // instructions omitted -> taken from instructions.md
-  // tools omitted -> taken from tools/*.ts
 })
 ```
 
-The agent's `id` and `name` default to the directory name, so the example above registers an agent named `weather`. Set `id` or `name` in the config to override them.
+Mastra uses the `weather` directory name as the default agent `id` and `name`. The sibling `instructions.md` supplies the required instructions.
+
+## Set the model
+
+The `model` field is the only required field in `agentConfig()`. The build fails when an agent directory doesn't provide a model.
+
+Other capabilities either come from sibling files or have defaults. For example, `instructions.md` supplies instructions, `tools/` supplies tools, `skills/` supplies skills, and a default workspace is created when neither `config.workspace` nor `workspace.ts` provides one.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Identity from the directory
+
+A file-based agent's `id` and `name` default to the directory name. For `src/mastra/agents/weather/`, Mastra registers the agent as `weather` unless you override those fields.
+
+Override `id` or `name` when the stable routing key and the display name should differ.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  id: 'weather-assistant',
+  name: 'Weather Assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
 
 ## Set runtime options
 
-`agentConfig()` accepts any [`Agent`](/reference/agents/agent) option, such as `description`, `defaultGenerateOptions`, or `defaultStreamOptions`.
+`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the filesystem convention.
+
+| Option | Use it for |
+| - | - |
+| `description` | Describes the agent's purpose. File-based subagents require a non-empty description because the parent model uses it for delegation routing. |
+| `defaultOptions` | Sets defaults for `generate()` and `stream()`, including execution options such as `maxSteps`. |
+| `defaultGenerateOptionsLegacy` | Sets defaults for `generateLegacy()`. |
+| `defaultStreamOptionsLegacy` | Sets defaults for `streamLegacy()`. |
+| `scorers` | Configures runtime scoring for evaluation and observability. |
+| `maxRetries` | Sets how many times model calls retry after failure. |
+
+The following example sets a description, a default step limit, retry behavior, and scorers in `config.ts`:
 
 ```typescript title="src/mastra/agents/weather/config.ts"
 import { agentConfig } from '@mastra/core/agent'
@@ -35,12 +80,37 @@ import { agentConfig } from '@mastra/core/agent'
 export default agentConfig({
   model: '__GATEWAY_OPENAI_MODEL__',
   description: 'Answers questions about weather and forecasts.',
+  defaultOptions: {
+    maxSteps: 5,
+  },
+  maxRetries: 2,
+  scorers: {},
 })
 ```
 
-## Export a coded agent
+:::note
+Visit the [`Agent` reference](/reference/agents/agent#constructor-parameters) for the full constructor option list.
+:::
 
-A `config.ts` can also default-export a fully constructed [`new Agent()`](/reference/agents/agent). Mastra uses that instance as-is, and sibling files (`instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, `processors/`, and `subagents/`) are ignored with a warning.
+## Where adjacent settings live
+
+Keep `config.ts` focused on runtime options. Use sibling files for concerns that benefit from their own location.
+
+| Setting | File or folder | Why it lives there |
+| - | - | - |
+| Instructions | [`instructions.md`](/docs/filesystem/instructions) | Keeps the always-on prompt readable as markdown |
+| Tools | [`tools/`](/docs/filesystem/tools) | Gives each callable action its own typed module |
+| Skills | [`skills/`](/docs/filesystem/skills) | Keeps load-on-demand procedures separate from always-on instructions |
+| Memory | [`memory.ts`](/docs/filesystem/memory) | Configures persistent memory without crowding runtime options |
+| Workspace | [`workspace.ts`](/docs/filesystem/workspace) | Configures files and sandbox behavior separately from model settings |
+| Processors | [`processors/`](/docs/filesystem/processors) | Separates input and output processing pipelines |
+| Subagents | [`subagents/`](/docs/filesystem/subagents) | Gives each specialist child agent its own directory |
+
+## When to use a coded Agent instead
+
+Use `agentConfig()` when you want Mastra to merge sibling files into the agent. With this approach, `instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, `processors/`, and `subagents/` can all contribute to the final agent.
+
+Use a fully coded [`new Agent()`](/reference/agents/agent) when you need complete programmatic control and don't want sibling files merged. When `config.ts` exports an `Agent` instance, Mastra uses that instance as-is and ignores sibling files with warnings.
 
 ```typescript title="src/mastra/agents/weather/config.ts"
 import { Agent } from '@mastra/core/agent'
@@ -53,23 +123,27 @@ export default new Agent({
 })
 ```
 
-:::note
-Visit the [`Agent` reference](/reference/agents/agent) for the full config.
-:::
-
 ## Precedence
 
-`config.ts` merges with the agent's other files, with these rules:
+`config.ts` merges with the agent's other files according to these rules:
 
-- **Instructions:** A dynamic (function) `instructions` in `config.ts` wins over [`instructions.md`](/docs/filesystem/instructions). Otherwise `instructions.md` wins over a static `instructions` string. Missing both fails the build.
-- **Tools:** [`tools/*.ts`](/docs/filesystem/tools) merge with `config.tools`. On a key collision, `config.tools` wins. A function `config.tools` ignores discovered tools.
-- **Skills:** [`skills/`](/docs/filesystem/skills) merge with `config.skills`. On a name collision, `config.skills` wins.
-- **Memory:** `config.memory` wins over [`memory.ts`](/docs/filesystem/memory).
-- **Workspace:** `config.workspace` wins over [`workspace.ts`](/docs/filesystem/workspace).
+| Domain | Source A | Source B | Winner |
+| - | - | - | - |
+| Instructions | Dynamic `config.instructions` | [`instructions.md`](/docs/filesystem/instructions) | Dynamic `config.instructions` |
+| Instructions | Static `config.instructions` | [`instructions.md`](/docs/filesystem/instructions) | `instructions.md` |
+| Tools | `config.tools` | [`tools/`](/docs/filesystem/tools) | Both merge; `config.tools` wins on key collisions |
+| Tools | Function `config.tools` | [`tools/`](/docs/filesystem/tools) | Function `config.tools`; discovered tools are ignored |
+| Skills | `config.skills` | [`skills/`](/docs/filesystem/skills) | Both merge; `config.skills` wins on name collisions |
+| Skills | Function `config.skills` | [`skills/`](/docs/filesystem/skills) | Function `config.skills`; discovered skills are ignored |
+| Memory | `config.memory` | [`memory.ts`](/docs/filesystem/memory) | `config.memory` |
+| Workspace | `config.workspace` | [`workspace.ts`](/docs/filesystem/workspace) | `config.workspace` |
+
+Missing both `instructions.md` and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.
 
 ## Related
 
+- [Filesystem overview](/docs/filesystem/overview)
 - [Instructions](/docs/filesystem/instructions)
 - [Tools](/docs/filesystem/tools)
-- [Filesystem overview](/docs/filesystem/overview)
+- [Skills](/docs/filesystem/skills)
 - [`Agent` reference](/reference/agents/agent)
