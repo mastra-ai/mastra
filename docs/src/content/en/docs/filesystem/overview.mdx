@@ -13,9 +13,25 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 :::
 
-Mastra can build a fully functioning project from files and folders, without a single central configuration object. The bundler discovers a known layout under `src/mastra/` and assembles it into your [`Mastra`](/reference/core/mastra-class) instance.
+With filesystem routing, the directory is the agent. Each folder under `src/mastra/agents/` becomes an [`Agent`](/reference/agents/agent) instance, its directory name becomes the default `id` and `name`, and each file inside the folder adds one capability.
 
-Each primitive gets a clear home. Agents live in `agents/<name>/` directories, workflows in `workflows/`, and project-wide config in single files like `storage.ts`. A file's location determines what it does, and its path determines its name.
+A file-based project starts with `config.ts` and `instructions.md`. Add more files only when the agent needs more capabilities.
+
+## Grow by adding files
+
+File-based agents use a default-first model. Start with the files required to run, then add folders as the agent grows.
+
+| File or folder | What it adds |
+| - | - |
+| `config.ts` | Model selection and runtime options |
+| `instructions.md` | The always-on system prompt |
+| `tools/` | Typed functions the model can call |
+| `skills/` | Procedures loaded on demand |
+| `memory.ts` | Persistent conversation memory |
+| `workspace.ts` | A filesystem and sandbox |
+| `workspace/` | Seed files shipped with the agent |
+| `processors/` | Input/output processing pipeline |
+| `subagents/` | Specialist child agents for delegation |
 
 ## Agent files
 
@@ -51,12 +67,26 @@ src/mastra/
       config.ts
       instructions.md
       tools/
+        get-weather.ts
       skills/
+        forecast-review/
+          SKILL.md
+          references/
+            weather-codes.md
       memory.ts
       workspace.ts
       workspace/
+        templates/
+          report.md
       processors/
+        input/
+          redact-secrets.ts
+        output/
+          format-report.ts
       subagents/
+        researcher/
+          config.ts
+          instructions.md
   workflows/
     daily-report.ts
   storage.ts
@@ -68,13 +98,15 @@ src/mastra/
 
 ## When to use the filesystem
 
-Use file convention when you want one place per concern, with an agent's configuration, instructions, tools, and skills grouped in a single directory.
+Use file convention when you want one place per concern, with an agent's configuration, instructions, tools, and skills grouped in a single directory. It works well when capabilities grow over time because each file or folder adds one focused behavior.
 
 Keep using code, such as [`new Agent()`](/reference/agents/agent) and [`new Mastra()`](/reference/core/mastra-class), when you need dynamic configuration, programmatic registration, or a shared instance across modules. Both approaches coexist: code-registered primitives are always present, and the bundler adds file-based ones. On a name collision, the code-registered version wins and a warning is logged.
 
 ## How discovery works
 
-File-based primitives are discovered by the Mastra **bundler**, which runs under `mastra dev` and `mastra build`. Start your app through the Mastra CLI so discovery runs:
+File-based primitives are discovered by the Mastra **bundler**, which runs under `mastra dev` and `mastra build`. Markdown files are read during bundling, and `workspace/` seed files are copied into the bundled workspace so the agent starts with those files on disk.
+
+Start your app through the Mastra CLI so discovery runs:
 
 ```bash npm2yarn
 npx mastra dev
@@ -82,14 +114,21 @@ npx mastra dev
 
 If you import your `mastra` instance directly, `agents/<name>/` directories and the other conventions aren't discovered. When you consume Mastra as a library, register those primitives in code instead.
 
+Discovery is source-based and conservative. It skips symlinks, ignores test files, treats workflow and singleton files as file-routed only when they have a default export, and ignores directories that aren't agent directories.
+
+After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). The filesystem layout is an authoring convention; the assembled agent uses the same runtime as a code-defined agent.
+
 ## Get started
 
 Create an agent directory with a `config.ts` and an `instructions.md`, then run `mastra dev`. See [agent config](/docs/filesystem/config) for the shortest working example.
 
 ## Next steps
 
-- [Agent config](/docs/filesystem/config)
-- [Instructions](/docs/filesystem/instructions)
-- [Tools](/docs/filesystem/tools)
-- [Workflows](/docs/filesystem/workflows)
-- [`Agent` reference](/reference/agents/agent)
+- [Agent config](/docs/filesystem/config): Choose the model and define runtime options
+- [Instructions](/docs/filesystem/instructions): Write the agent's always-on prompt
+- [Tools](/docs/filesystem/tools): Add typed actions the model can call
+- [Skills](/docs/filesystem/skills): Add detailed procedures loaded on demand
+- [Workspace](/docs/filesystem/workspace): Give the agent files, shell access, and seed content
+- [Subagents](/docs/filesystem/subagents): Split work across specialist child agents
+- [Workflows](/docs/filesystem/workflows): Register project-level workflows by file convention
+- [`Agent` reference](/reference/agents/agent): Review the runtime API used after assembly
