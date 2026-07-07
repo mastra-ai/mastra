@@ -9,7 +9,7 @@ tags: structure, readability, control-flow, mutation, conditions, maintainabilit
 
 When a component derives a final render value, nav model, visibility flag, active state, or route target, keep that derivation readable. If a few lines combine large boolean conditions, nested ternaries, local mutation, `||`, `??`, optional chaining, spreads, and default fallbacks, move the logic into named predicates or small pure helpers with guard clauses and explicit returns.
 
-This is not a ban on `let`. Use `let` for real sequential algorithms, counters, loops, resource handles, or cases where each step intentionally depends on the previous step. Avoid it when the local represents a final derived UI/data shape; mutation there makes the final value harder to anticipate.
+Treat `let` in render prep as a code smell by default. Prefer a named helper that returns the final value through guard clauses and explicit returns. Reserve `let` for real sequential algorithms, counters, loops, resource handles, or cases where each step intentionally depends on the previous step. Avoid it when the local represents a final derived UI/data shape; mutation there makes the final value harder to anticipate.
 
 Do not fix one smell while leaving another. Extracting a reassigned `let` into `const base = condition ? a : b` is still a problem when the ternary is choosing structural data. The cleaned-up version should remove the operator soup, nested control flow, and mutation together.
 
@@ -50,22 +50,19 @@ function shouldHighlightProjects({
 
 function Sidebar({ orgId, projectId, isSettingsActive }: SidebarProps) {
   const projectsHref = `/orgs/${orgId}`;
+  const isProjectsHeaderActive = shouldHighlightProjects({
+    product,
+    projectId,
+    isSettingsActive,
+    pathname,
+    projectsHref,
+  });
 
-  return (
-    <Nav
-      activeProjects={shouldHighlightProjects({
-        product,
-        projectId,
-        isSettingsActive,
-        pathname,
-        projectsHref,
-      })}
-    />
-  );
+  return <Nav activeProjects={isProjectsHeaderActive} />;
 }
 ```
 
-The callsite names what the condition means; the helper owns the ordering of the rules.
+The callsite names the derived boolean before JSX; the helper owns the ordering of the rules.
 
 ### Nested Structural Ternaries
 
@@ -230,4 +227,4 @@ The callsite receives the final value directly. The reader does not have to trac
 
 Keep helpers local to the file unless multiple domains genuinely share the same concept. The point is to name the condition or derivation and remove useless complexity, not to create a generic utility layer.
 
-Smells: very large `&&`/`||` conditions inline in JSX or render prep; nested ternaries that choose structural data; `let result = ...` followed by `if (...) result = ...`; four-line blocks mixing `? :`, `||`, `??`, `?.`, spreads, and default objects; comments explaining mutation order; review comments like "feels intense", "can we simplify this?", or "why do we need let?"; derived arrays/objects that are later rendered or passed as props.
+Smells: very large `&&`/`||` conditions inline in JSX or render prep; nested ternaries that choose structural data; `let result = ...` followed by `if (...) result = ...`; derived props passed as `propName={complexHelper({ ... })}` instead of a named local; four-line blocks mixing `? :`, `||`, `??`, `?.`, spreads, and default objects; comments explaining mutation order; review comments like "feels intense", "can we simplify this?", or "why do we need let?"; derived arrays/objects that are later rendered or passed as props.
