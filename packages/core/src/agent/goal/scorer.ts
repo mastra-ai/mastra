@@ -61,6 +61,9 @@ function extractTextContent(content: unknown): string {
       .filter((text: string | null): text is string => Boolean(text))
       .join('\n');
   }
+  if (content && typeof content === 'object' && Array.isArray((content as any).parts)) {
+    return extractTextContent((content as any).parts);
+  }
   return String(content ?? '');
 }
 

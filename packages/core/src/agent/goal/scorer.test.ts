@@ -25,6 +25,62 @@ const viewTool = createTool({
   execute: async () => ({ content: '' }),
 });
 
+async function captureJudgePromptForMessages(messages: Array<Record<string, unknown>>) {
+  let prompt = '';
+  const scorer = createGoalScorer({
+    judgeModel: createMockModel({
+      objectGenerationMode: 'json',
+      mockText: { decision: 'continue', reason: 'keep going' },
+      spyGenerate: props => {
+        prompt = JSON.stringify(props.prompt);
+      },
+      spyStream: props => {
+        prompt = JSON.stringify(props.prompt);
+      },
+    }) as any,
+  });
+
+  await scorer.run({
+    input: { originalTask: 'do the thing', currentText: 'still working', messages },
+    output: 'still working',
+  } as any);
+
+  return prompt;
+}
+
+describe('createGoalScorer latest user message text extraction', () => {
+  it('includes text from DB-shaped latest user content instead of stringifying the object', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      {
+        role: 'user',
+        content: { format: 2, parts: [{ type: 'text', text: 'actual user text' }] },
+      },
+    ]);
+
+    expect(prompt).toContain('Latest user message');
+    expect(prompt).toContain('actual user text');
+    expect(prompt).not.toContain('[object Object]');
+  });
+
+  it('joins all DB-shaped text parts from the latest user content with newlines', async () => {
+    const prompt = await captureJudgePromptForMessages([
+      {
+        role: 'user',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'first text part' },
+            { type: 'text', text: 'second text part' },
+          ],
+        },
+      },
+    ]);
+
+    expect(prompt).toContain('first text part\\nsecond text part');
+    expect(prompt).not.toContain('[object Object]');
+  });
+});
+
 describe('createGoalScorer tool support', () => {
   it('omits tools from the judge config by default (portable, text-only)', () => {
     const scorer = createGoalScorer({ judgeModel });
