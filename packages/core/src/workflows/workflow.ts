@@ -1894,6 +1894,18 @@ export class Workflow<
             requestContextPath: m.requestContextPath,
             schema: m.schema,
           };
+        } else if (m.initData !== undefined) {
+          // `mapVariable({ initData: <workflow> })` keeps a live Workflow instance
+          // by reference. Serializing it here would deep-walk the whole workflow
+          // (logger, nested step graph, …) into `mapConfig` — a multi-hundred-MB
+          // string that OOMs at .commit() before the length guard below can trim
+          // it (#19018). The execute path only reads `m.initData` for truthiness
+          // (it calls getInitData()), so a slim id reference is behaviourally
+          // identical at runtime.
+          a[key] = {
+            initData: m.initData?.id ?? true,
+            path: m.path,
+          };
         } else {
           a[key] = m;
         }
