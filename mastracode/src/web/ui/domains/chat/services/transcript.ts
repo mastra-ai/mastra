@@ -292,8 +292,12 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return withTool(state, event.toolCallId, t => ({ ...t, toolName: event.toolName }), {
         toolName: event.toolName,
       });
-    case 'tool_input_delta':
-      return withTool(state, event.toolCallId, t => ({ ...t, argsText: t.argsText + event.argsTextDelta }));
+    case 'tool_input_delta': {
+      // Display processors may transform argsTextDelta to a non-string payload.
+      if (typeof event.argsTextDelta !== 'string') return state;
+      const argsTextDelta = event.argsTextDelta;
+      return withTool(state, event.toolCallId, t => ({ ...t, argsText: t.argsText + argsTextDelta }));
+    }
     case 'tool_start':
       return withTool(
         state,

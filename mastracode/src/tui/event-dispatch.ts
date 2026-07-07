@@ -160,7 +160,10 @@ export async function dispatchEvent(
       break;
 
     case 'tool_input_delta':
-      handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      // Display processors may transform argsTextDelta to a non-string payload.
+      if (typeof event.argsTextDelta === 'string') {
+        handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      }
       break;
 
     case 'tool_input_end':
