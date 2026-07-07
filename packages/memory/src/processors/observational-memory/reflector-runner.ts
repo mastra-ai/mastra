@@ -619,18 +619,28 @@ export class ReflectorRunner {
         },
         async error => {
           if (writer) {
-            const failedMarker = createBufferingFailedMarker({
-              cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
-              operationType: 'reflection',
-              startedAt: new Date().toISOString(),
-              tokensAttempted: observationTokens,
-              error: error instanceof Error ? error.message : String(error),
-              recordId: record.id,
-              threadId: record.threadId ?? '',
-            });
-            // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
-            void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-            await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
+            // Guarded so a failing marker write cannot skip the end hook and
+            // the boundary cleanup below — a stuck boundary would block all
+            // future async reflection attempts.
+            try {
+              const failedMarker = createBufferingFailedMarker({
+                cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
+                operationType: 'reflection',
+                startedAt: new Date().toISOString(),
+                tokensAttempted: observationTokens,
+                error: error instanceof Error ? error.message : String(error),
+                recordId: record.id,
+                threadId: record.threadId ?? '',
+              });
+              // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+              void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
+              await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
+            } catch (markerError) {
+              omError(
+                '[OM] Failed to persist buffering-failed marker after async buffered reflection failure',
+                markerError,
+              );
+            }
           }
           omError('[OM] Async buffered reflection failed', error);
           try {
@@ -1268,12 +1278,19 @@ export class ReflectorRunner {
       omError('[OM] Reflection failed', error);
     } finally {
       await this.storage.setReflectingFlag(record.id, false);
-      reflectionHooks?.onReflectionEnd?.({
-        usage: reflectionUsage,
-        error: reflectionError,
-        ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
-      });
-      unregisterOp(record.id, 'reflecting');
+      // Config-level hooks are already guarded inside composeHooks; a throw
+      // here can only come from a per-call hook, whose propagation semantics
+      // are deliberately preserved. try/finally guarantees the op registry is
+      // cleaned up either way.
+      try {
+        reflectionHooks?.onReflectionEnd?.({
+          usage: reflectionUsage,
+          error: reflectionError,
+          ...(reflectionProviderMetadata ? { providerMetadata: reflectionProviderMetadata } : {}),
+        });
+      } finally {
+        unregisterOp(record.id, 'reflecting');
+      }
     }
   }
 }
