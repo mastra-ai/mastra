@@ -18,9 +18,9 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
-import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 
 /**
  * Internal flag used by `generate()`/`resumeGenerate()` to tell the stream
@@ -771,7 +771,7 @@ export class DurableAgent<
     // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
     // CachingPubSub (this.pubsub) which carries durable workflow chunks.
     await agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
+      this as unknown as Agent<any, any, any, any>,
       output,
       options as AgentExecutionOptions<TOutput>,
       this.getPubSub(),
@@ -1043,10 +1043,10 @@ export class DurableAgent<
     const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
       ...options,
       runId,
-      memory: memoryInfo?.threadId ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId } : options?.memory,
+      memory: memoryInfo?.threadId ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId } : (options as any)?.memory,
     } as AgentExecutionOptions<TOutput>;
     await agentThreadStreamRuntime.registerRun(
-      this as Agent<any, any, any, any>,
+      this as unknown as Agent<any, any, any, any>,
       output,
       resumeStreamOptions,
       this.getPubSub(),

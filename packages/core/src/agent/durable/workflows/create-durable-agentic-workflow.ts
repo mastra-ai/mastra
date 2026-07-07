@@ -319,7 +319,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         // the correct finishReason.
         if (registryEntry?.abortSignal?.aborted) {
           if (state.lastStepResult) {
-            (state.lastStepResult as any).reason = 'abort';
+            state.lastStepResult.reason = 'abort';
             state.lastStepResult.isContinued = false;
           }
           return false;

@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed durable agent abortSignal forwarding and handling. The abort signal is now correctly passed to both LLM execution and tool execution steps, and the workflow stops cleanly with a proper 'abort' finish reason instead of crashing. Also fixed sendMessage-wake flow for durable agents by registering runs with AgentThreadStreamRuntime, enabling subscribeToThread and sendMessage to work correctly.
+Durable agents now stop cleanly when cancelled via an abort signal, reporting the correct `abort` finish reason instead of crashing. The `sendMessage` and `sendSignal` wake flows also work reliably for durable agents, so thread subscribers receive streamed chunks as expected.

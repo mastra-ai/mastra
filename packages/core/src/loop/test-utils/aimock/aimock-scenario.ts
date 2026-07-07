@@ -373,8 +373,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor, not call-time options;
-  // abortSignal is inapplicable (durable workflows manage their own lifecycle).
+  // inputProcessors are on the agent constructor, not call-time options.
   const isDurable = engine === 'durable';
 
   const streamOptions = {
