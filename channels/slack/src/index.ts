@@ -35,6 +35,28 @@ export { SlackManifestClient } from './client';
 export { verifySlackRequest, parseSlackFormBody } from './crypto';
 export { buildManifest, DEFAULT_BOT_SCOPES, DEFAULT_BOT_EVENTS } from './manifest';
 
+// User-token auth against a pre-existing Slack app (PKCE public client).
+// Used by SlackSignals; distinct from SlackProvider's bot-token credentials.
+export {
+  SlackUserAuth,
+  SlackAuthRequiredError,
+  SlackAuthReconnectRequiredError,
+  SlackRefreshTokenDeadError,
+  DEFAULT_SLACK_USER_SCOPES,
+  SLACK_CALLBACK_PORTS,
+  FileSlackCredentialStorage,
+  InMemorySlackCredentialStorage,
+  defaultSlackCredentialPath,
+  resolveSlackClientId,
+} from './user-auth';
+export type {
+  SlackUserAuthOptions,
+  SlackConnectCallbacks,
+  SlackAuthStatus,
+  SlackCredentialStorage,
+  SlackUserCredentials,
+} from './user-auth';
+
 // Re-export from @chat-adapter/slack for convenience
 export { createSlackAdapter } from '@chat-adapter/slack';
 export type { SlackAdapter } from '@chat-adapter/slack';
