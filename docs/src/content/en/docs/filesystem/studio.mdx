@@ -1,0 +1,33 @@
+---
+title: "Studio | Filesystem"
+description: Configure Mastra Studio by file convention with studio.ts.
+packages:
+  - "@mastra/core"
+---
+
+# Studio
+
+Mastra configures [Studio](/docs/studio/overview) from a `studio.ts` file directly under `src/mastra/`. The file default-exports a `StudioConfig` object, the same shape you'd pass to the `studio` field of [`new Mastra()`](/reference/core/mastra-class). Use it to set who can access Studio and what they can do.
+
+## Add studio config
+
+```typescript title="src/mastra/studio.ts"
+import type { StudioConfig } from '@mastra/core/server'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+
+export default {
+  auth: new MastraAuthWorkos(),
+} satisfies StudioConfig
+```
+
+Without an `auth` provider, Studio runs without authentication, which suits local development. Only a file with a default export is treated as file-based studio config; a `studio.ts` that uses named exports is left alone.
+
+## Precedence with code
+
+Code-registered studio config wins. If you pass `studio` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged.
+
+## Related
+
+- [Filesystem overview](/docs/filesystem/overview)
+- [Studio overview](/docs/studio/overview)
+- [`Mastra` reference](/reference/core/mastra-class)

@@ -1,0 +1,69 @@
+---
+title: "Subagents | Filesystem"
+description: Declare specialist child agents for a file-based agent under subagents/.
+packages:
+  - "@mastra/core"
+---
+
+# Subagents
+
+A file-based agent can declare **subagents**, specialist child agents it delegates to. Add a `subagents/` directory with one directory per subagent. Each subagent directory has the same layout as a top-level agent: [`config.ts`](/docs/filesystem/config), [`instructions.md`](/docs/filesystem/instructions), [`tools/`](/docs/filesystem/tools), [`skills/`](/docs/filesystem/skills), `memory.ts`, `workspace.ts`, `workspace/`, and `processors/`.
+
+## Declare a subagent
+
+```text
+src/mastra/agents/
+  supervisor/
+    config.ts
+    instructions.md
+    subagents/
+      researcher/
+        config.ts
+        instructions.md
+        tools/
+          search.ts
+```
+
+Mastra assembles each subagent as its own agent and wires it into the parent's `agents` map. The agent loop lowers it into a model-visible delegation tool named after the directory, so the example above exposes `researcher` to the supervisor.
+
+A subagent's `config.ts` must set a non-empty `description`. The model reads this when deciding whether to delegate, so the build fails if it's missing.
+
+```typescript title="src/mastra/agents/supervisor/subagents/researcher/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  description: 'Researches a topic and returns cited findings.',
+})
+```
+
+## Isolation
+
+Subagents are isolated. A subagent inherits nothing from its parent. Its tools, skills, and workspace come only from its own directory, and any absent slot falls back to the same framework defaults as a top-level agent.
+
+## Nesting
+
+Subagents can declare their own `subagents/` directories, nesting up to three levels below the top-level agent. A `subagents/` directory nested deeper is ignored with a warning.
+
+```text
+src/mastra/agents/
+  supervisor/            # depth 0
+    subagents/
+      researcher/        # depth 1
+        subagents/
+          summarizer/    # depth 2
+```
+
+## Naming rules
+
+- A subagent id that collides with one of the parent's tool keys is a build error.
+- A duplicate subagent id under the same parent is a build error.
+- If a subagent id also exists in the parent's `config.agents`, the `config.agents` entry wins and logs a warning.
+- If `config.agents` is a function, discovered subagents are ignored with a warning because they can't be statically merged.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Filesystem overview](/docs/filesystem/overview)
+- [Supervisor agents](/docs/agents/supervisor-agents)
+- [`Agent` reference](/reference/agents/agent)

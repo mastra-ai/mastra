@@ -1,0 +1,66 @@
+---
+title: "Skills | Filesystem"
+description: Add skills to a file-based agent under skills/ using modules, packaged SKILL.md, or flat markdown.
+packages:
+  - "@mastra/core"
+---
+
+# Skills
+
+A file-based agent discovers skills from its `skills/` directory. Skills are reusable procedures the model loads when they're useful. Mastra inlines them into the bundle at build time, so the deployed agent doesn't read them from disk at runtime.
+
+Three layouts are supported.
+
+## createSkill module
+
+A `.ts` or `.js` file can default-export [`createSkill()`](/reference/agents/createSkill).
+
+```typescript title="src/mastra/agents/weather/skills/forecasting.ts"
+import { createSkill } from '@mastra/core/skills'
+
+export default createSkill({
+  name: 'forecasting',
+  description: 'Use when the user asks about multi-day forecasts.',
+  instructions: 'Summarize the forecast day by day and call out precipitation.',
+})
+```
+
+:::note
+Visit the [`createSkill()` reference](/reference/agents/createSkill) for the full API.
+:::
+
+## Packaged SKILL.md
+
+A `<skill>/SKILL.md` directory uses frontmatter for the name and description. Files under `references/` are inlined with the skill. The `description` is required, so a `SKILL.md` without one fails the build.
+
+```markdown title="src/mastra/agents/weather/skills/severe-weather/SKILL.md"
+---
+name: severe-weather
+description: Use when conditions include storms, flooding, or other hazards.
+---
+
+Lead with the active alert, then give safety guidance.
+```
+
+## Flat markdown
+
+A flat `<skill>.md` file uses the filename as the skill name. It also requires a `description` in frontmatter.
+
+```markdown title="src/mastra/agents/weather/skills/units.md"
+---
+description: Use when reporting temperatures.
+---
+
+Always report temperatures in both Celsius and Fahrenheit.
+```
+
+## Precedence with config
+
+Discovered skills merge with any `skills` in [`config.ts`](/docs/filesystem/config). On a name collision, `config.skills` wins and a warning is logged. If `config.skills` is a function, discovered skills are ignored with a warning because they can't be statically merged.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Tools](/docs/filesystem/tools)
+- [Filesystem overview](/docs/filesystem/overview)
+- [`createSkill()` reference](/reference/agents/createSkill)

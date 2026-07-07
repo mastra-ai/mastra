@@ -1,0 +1,50 @@
+---
+title: "Processors | Filesystem"
+description: Add input and output processors to a file-based agent under processors/input/ and processors/output/.
+packages:
+  - "@mastra/core"
+---
+
+# Processors
+
+A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Files under `processors/input/` run before messages reach the model, and files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its key.
+
+## Add an input processor
+
+```typescript title="src/mastra/agents/weather/processors/input/moderation.ts"
+import { ModerationProcessor } from '@mastra/core/processors'
+
+export default new ModerationProcessor({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  categories: ['hate', 'harassment', 'violence'],
+  threshold: 0.7,
+  strategy: 'block',
+})
+```
+
+## Add an output processor
+
+```typescript title="src/mastra/agents/weather/processors/output/redact.ts"
+import { PIIDetector } from '@mastra/core/processors'
+
+export default new PIIDetector({
+  strategy: 'redact',
+})
+```
+
+Test files named `*.test.ts`, `*.spec.ts`, `*.test.js`, and `*.spec.js` are ignored during discovery.
+
+:::note
+Visit the [`Processor` reference](/reference/processors/processor-interface) for the full interface.
+:::
+
+## Precedence with config
+
+Discovered processors are added after any `inputProcessors` or `outputProcessors` set in [`config.ts`](/docs/filesystem/config), so config processors run first. If `config.inputProcessors` or `config.outputProcessors` is a function, discovered processors of that type are ignored with a warning.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Filesystem overview](/docs/filesystem/overview)
+- [Processors](/docs/agents/processors)
+- [`Processor` reference](/reference/processors/processor-interface)

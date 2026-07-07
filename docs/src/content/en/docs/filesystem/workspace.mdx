@@ -1,0 +1,53 @@
+---
+title: "Workspace | Filesystem"
+description: Give a file-based agent a workspace with workspace.ts and seed files under workspace/.
+packages:
+  - "@mastra/core"
+---
+
+# Workspace
+
+A file-based agent gets a default [workspace](/docs/workspace/overview) when it's discovered through `mastra dev` or `mastra build`, unless `config.workspace` or `workspace.ts` supplies one. The default workspace uses a contained filesystem and shell sandbox rooted at a per-agent directory in the bundle, so the agent has file and shell tools automatically.
+
+## Customize the workspace
+
+Add a `workspace.ts` that default-exports a [`Workspace`](/reference/workspace/workspace-class).
+
+```typescript title="src/mastra/agents/weather/workspace.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+export default new Workspace({
+  name: 'weather-workspace',
+  filesystem: new LocalFilesystem({ basePath: './data/weather' }),
+  sandbox: new LocalSandbox({ workingDirectory: './data/weather' }),
+})
+```
+
+:::note
+Visit the [`Workspace` reference](/reference/workspace/workspace-class) for the full config.
+:::
+
+## Seed files
+
+Add a `workspace/` directory to ship files with the agent. Mastra mirrors every file under it into the agent's default workspace at build time, so the agent starts with those files on disk.
+
+```text
+src/mastra/agents/weather/
+  config.ts
+  workspace/
+    README.md
+    data/cities.json
+```
+
+Commit the starting files alongside the agent that uses them.
+
+## Precedence with config
+
+`config.workspace` wins over `workspace.ts`, which wins over the default workspace.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Filesystem overview](/docs/filesystem/overview)
+- [Workspace overview](/docs/workspace/overview)
+- [`Workspace` reference](/reference/workspace/workspace-class)

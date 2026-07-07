@@ -1,0 +1,35 @@
+---
+title: "Instructions | Filesystem"
+description: Author a file-based agent's always-on system prompt with instructions.md.
+packages:
+  - "@mastra/core"
+---
+
+# Instructions
+
+An agent's `instructions.md` holds its always-on system prompt. Use it for the agent's permanent identity, tone, and standing rules. Mastra inlines the file contents into the generated code at build time.
+
+## Author instructions
+
+Add an `instructions.md` at the agent root. Whatever you write becomes the prompt.
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+Keep this file to stable behavior. Use [tools](/docs/filesystem/tools) for actions and [skills](/docs/filesystem/skills) for procedures the agent loads only when relevant.
+
+## Precedence with config
+
+Instructions can come from `instructions.md` or from the `instructions` field in [`config.ts`](/docs/filesystem/config):
+
+- A dynamic (function) `instructions` in `config.ts` wins over `instructions.md`.
+- Otherwise `instructions.md` wins over a static `instructions` string.
+- If neither is present, the build fails and names the agent directory.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Skills](/docs/filesystem/skills)
+- [Filesystem overview](/docs/filesystem/overview)
+- [`Agent` reference](/reference/agents/agent)

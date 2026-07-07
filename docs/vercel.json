@@ -16,6 +16,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/filesystem/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -933,6 +938,11 @@
     {
       "source": "/docs/getting-started/model-providers",
       "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents/llms.txt",
+      "destination": "/docs/filesystem/overview/llms.txt",
       "permanent": true
     },
     {

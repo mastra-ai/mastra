@@ -1,0 +1,38 @@
+---
+title: "Observability | Filesystem"
+description: Configure observability by file convention with observability.ts.
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Observability
+
+Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up traces, logs, and metrics for the project. See [observability configuration](/docs/observability/config) for the full setup.
+
+## Add observability
+
+```typescript title="src/mastra/observability.ts"
+import { Observability, MastraStorageExporter } from '@mastra/observability'
+
+export default new Observability({
+  configs: {
+    default: {
+      serviceName: 'mastra',
+      exporters: [new MastraStorageExporter()],
+    },
+  },
+})
+```
+
+Only a file with a default export is treated as file-based observability. An `observability.ts` that uses named exports is assumed to be imported in code, so it's left alone.
+
+## Precedence with code
+
+Code-registered observability wins. If you pass `observability` to [`new Mastra()`](/reference/core/mastra-class), the file-based instance is skipped and a warning is logged.
+
+## Related
+
+- [Filesystem overview](/docs/filesystem/overview)
+- [Observability overview](/docs/observability/overview)
+- [`Mastra` reference](/reference/core/mastra-class)

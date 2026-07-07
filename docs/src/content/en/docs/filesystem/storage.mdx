@@ -1,0 +1,33 @@
+---
+title: "Storage | Filesystem"
+description: Set the default Mastra store by file convention with storage.ts.
+packages:
+  - "@mastra/core"
+---
+
+# Storage
+
+Mastra sets the project's default [storage](/docs/observability/storage) from a `storage.ts` file directly under `src/mastra/`. The file default-exports a store, which replaces the built-in in-memory store for agents, memory, and workflows.
+
+## Add storage
+
+```typescript title="src/mastra/storage.ts"
+import { LibSQLStore } from '@mastra/libsql'
+
+export default new LibSQLStore({
+  id: 'mastra-storage',
+  url: 'file:./mastra.db',
+})
+```
+
+Only a file with a default export is treated as file-based storage. A `storage.ts` that uses named exports is assumed to be imported in code, so it's left alone.
+
+## Precedence with code
+
+Code-registered storage wins. If you pass `storage` to [`new Mastra()`](/reference/core/mastra-class), the file-based store is skipped and a warning is logged.
+
+## Related
+
+- [Filesystem overview](/docs/filesystem/overview)
+- [Storage](/docs/observability/storage)
+- [`Mastra` reference](/reference/core/mastra-class)

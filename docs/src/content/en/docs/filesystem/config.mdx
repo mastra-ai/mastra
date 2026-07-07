@@ -1,0 +1,75 @@
+---
+title: "config.ts | Filesystem"
+description: Set a file-based agent's model and runtime options in config.ts with agentConfig.
+packages:
+  - "@mastra/core"
+---
+
+# `config.ts`
+
+An agent's `config.ts` sets its runtime configuration, including the model and any [`Agent`](/reference/agents/agent) options. Mastra merges this partial config with the agent's sibling files.
+
+## Set the model
+
+Use [`agentConfig()`](/reference/agents/agent) so the partial config is typed while sibling files supply the rest. The `model` is required, and the build fails for an agent directory that omits it.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // instructions omitted -> taken from instructions.md
+  // tools omitted -> taken from tools/*.ts
+})
+```
+
+The agent's `id` and `name` default to the directory name, so the example above registers an agent named `weather`. Set `id` or `name` in the config to override them.
+
+## Set runtime options
+
+`agentConfig()` accepts any [`Agent`](/reference/agents/agent) option, such as `description`, `defaultGenerateOptions`, or `defaultStreamOptions`.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  description: 'Answers questions about weather and forecasts.',
+})
+```
+
+## Export a coded agent
+
+A `config.ts` can also default-export a fully constructed [`new Agent()`](/reference/agents/agent). Mastra uses that instance as-is, and sibling files (`instructions.md`, `tools/`, `skills/`, `memory.ts`, `workspace.ts`, `processors/`, and `subagents/`) are ignored with a warning.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { Agent } from '@mastra/core/agent'
+
+export default new Agent({
+  id: 'weather',
+  name: 'weather',
+  instructions: 'You are a helpful weather assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+:::note
+Visit the [`Agent` reference](/reference/agents/agent) for the full config.
+:::
+
+## Precedence
+
+`config.ts` merges with the agent's other files, with these rules:
+
+- **Instructions:** A dynamic (function) `instructions` in `config.ts` wins over [`instructions.md`](/docs/filesystem/instructions). Otherwise `instructions.md` wins over a static `instructions` string. Missing both fails the build.
+- **Tools:** [`tools/*.ts`](/docs/filesystem/tools) merge with `config.tools`. On a key collision, `config.tools` wins. A function `config.tools` ignores discovered tools.
+- **Skills:** [`skills/`](/docs/filesystem/skills) merge with `config.skills`. On a name collision, `config.skills` wins.
+- **Memory:** `config.memory` wins over [`memory.ts`](/docs/filesystem/memory).
+- **Workspace:** `config.workspace` wins over [`workspace.ts`](/docs/filesystem/workspace).
+
+## Related
+
+- [Instructions](/docs/filesystem/instructions)
+- [Tools](/docs/filesystem/tools)
+- [Filesystem overview](/docs/filesystem/overview)
+- [`Agent` reference](/reference/agents/agent)

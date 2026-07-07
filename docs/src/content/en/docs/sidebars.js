@@ -106,14 +106,6 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'agents/file-based-agents',
-              label: 'File-based Agents',
-              customProps: {
-                tags: ['beta'],
-              },
-            },
-            {
-              type: 'doc',
               id: 'agents/code-mode',
               label: 'Code Mode',
               customProps: {
@@ -157,6 +149,85 @@ const sidebars = {
                   ],
                 },
               ],
+            },
+          ],
+        },
+        {
+          type: 'category',
+          label: 'Filesystem',
+          customProps: {
+            tags: ['beta'],
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'filesystem/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/config',
+              label: 'config.ts',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/instructions',
+              label: 'Instructions',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/tools',
+              label: 'Tools',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/skills',
+              label: 'Skills',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/memory',
+              label: 'Memory',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/workspace',
+              label: 'Workspace',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/processors',
+              label: 'Processors',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/subagents',
+              label: 'Subagents',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/workflows',
+              label: 'Workflows',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/storage',
+              label: 'Storage',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/observability',
+              label: 'Observability',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/server',
+              label: 'Server',
+            },
+            {
+              type: 'doc',
+              id: 'filesystem/studio',
+              label: 'Studio',
             },
           ],
         },

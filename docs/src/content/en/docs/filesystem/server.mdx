@@ -1,0 +1,33 @@
+---
+title: "Server | Filesystem"
+description: Configure the Mastra HTTP server by file convention with server.ts.
+packages:
+  - "@mastra/core"
+---
+
+# Server
+
+Mastra configures its HTTP [server](/docs/server/mastra-server) from a `server.ts` file directly under `src/mastra/`. The file default-exports a `ServerConfig` object, the same shape you'd pass to the `server` field of [`new Mastra()`](/reference/core/mastra-class).
+
+## Add server config
+
+```typescript title="src/mastra/server.ts"
+import type { ServerConfig } from '@mastra/core/server'
+
+export default {
+  port: 4111,
+  host: '0.0.0.0',
+} satisfies ServerConfig
+```
+
+Only a file with a default export is treated as file-based server config. A `server.ts` that uses named exports is assumed to be imported in code, so it's left alone.
+
+## Precedence with code
+
+Code-registered server config wins. If you pass `server` to [`new Mastra()`](/reference/core/mastra-class), the file-based config is skipped and a warning is logged. Routes added during startup, such as channel webhooks, are preserved.
+
+## Related
+
+- [Filesystem overview](/docs/filesystem/overview)
+- [Mastra server](/docs/server/mastra-server)
+- [`Mastra` reference](/reference/core/mastra-class)

@@ -1,0 +1,52 @@
+---
+title: "Workflows | Filesystem"
+description: Register workflows by file convention under src/mastra/workflows.
+packages:
+  - "@mastra/core"
+---
+
+# Workflows
+
+Mastra discovers workflows from `.ts` and `.js` files under `src/mastra/workflows/`. Only files with a default export are treated as file-based workflows, and the filename becomes the workflow key. Files that use named exports are assumed to be imported and registered in code, so they're left alone.
+
+## Add a workflow
+
+Build the workflow with [`createWorkflow()`](/reference/workflows/workflow) and default-export it.
+
+```typescript title="src/mastra/workflows/daily-report.ts"
+import { createWorkflow, createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
+const summarize = createStep({
+  id: 'summarize',
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ report: z.string() }),
+  execute: async ({ inputData }) => ({ report: `Report on ${inputData.topic}` }),
+})
+
+const dailyReport = createWorkflow({
+  id: 'daily-report',
+  inputSchema: z.object({ topic: z.string() }),
+  outputSchema: z.object({ report: z.string() }),
+})
+  .then(summarize)
+  .commit()
+
+export default dailyReport
+```
+
+The discovered workflow is registered under its key when you run the app through `mastra dev` or `mastra build`.
+
+:::note
+Visit the [`createWorkflow()` reference](/reference/workflows/workflow) for the full API.
+:::
+
+## Precedence with code
+
+File-based workflows merge with workflows registered in [`new Mastra()`](/reference/core/mastra-class). On a key collision, the code-registered workflow wins and a warning is logged.
+
+## Related
+
+- [Filesystem overview](/docs/filesystem/overview)
+- [Workflows overview](/docs/workflows/overview)
+- [`createWorkflow()` reference](/reference/workflows/workflow)

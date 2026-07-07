@@ -1,0 +1,95 @@
+---
+title: "Filesystem overview | Filesystem"
+description: Define agents and project primitives by file convention under src/mastra, discovered by the Mastra bundler.
+packages:
+  - "@mastra/core"
+---
+
+# Filesystem overview
+
+Mastra can build parts of your project from files and folders instead of a single configuration object. The bundler discovers a known layout under `src/mastra/` and wires it into your [`Mastra`](/reference/core/mastra-class) instance.
+
+:::experimental
+
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+Each primitive gets a clear home. Agents live in `agents/<name>/` directories, workflows in `workflows/`, and project-wide config in single files like `storage.ts`. A file's location determines what it does, and its path determines its name.
+
+## Agent files
+
+An agent is a directory under `src/mastra/agents/<name>/`. Each file in it maps to one part of the agent.
+
+- [Agent config (`config.ts`)](/docs/filesystem/config): choose the model and set runtime options
+- [Instructions](/docs/filesystem/instructions): author the always-on system prompt
+- [Tools](/docs/filesystem/tools): add typed functions the model can call
+- [Skills](/docs/filesystem/skills): add procedures the model loads when useful
+- [Memory](/docs/filesystem/memory): give the agent persistent memory
+- [Workspace](/docs/filesystem/workspace): give the agent a filesystem and sandbox
+- [Processors](/docs/filesystem/processors): sanitize or reshape input and output
+- [Subagents](/docs/filesystem/subagents): declare specialist agents to delegate to
+
+## Project files
+
+Other conventions configure the project as a whole.
+
+- [Workflows](/docs/filesystem/workflows): register workflows from `workflows/*.ts`
+- [Storage](/docs/filesystem/storage): set the default store from `storage.ts`
+- [Observability](/docs/filesystem/observability): configure traces, logs, and metrics from `observability.ts`
+- [Server](/docs/filesystem/server): configure the HTTP server from `server.ts`
+- [Studio](/docs/filesystem/studio): configure Mastra Studio from `studio.ts`
+
+## Project layout
+
+The following tree shows the conventions Mastra discovers under `src/mastra/`:
+
+```text
+src/mastra/
+  agents/
+    weather/
+      config.ts
+      instructions.md
+      tools/
+      skills/
+      memory.ts
+      workspace.ts
+      workspace/
+      processors/
+      subagents/
+  workflows/
+    daily-report.ts
+  storage.ts
+  observability.ts
+  server.ts
+  studio.ts
+  index.ts
+```
+
+## When to use the filesystem
+
+Use file convention when you want one place per concern, with an agent's configuration, instructions, tools, and skills grouped in a single directory.
+
+Keep using code, such as [`new Agent()`](/reference/agents/agent) and [`new Mastra()`](/reference/core/mastra-class), when you need dynamic configuration, programmatic registration, or a shared instance across modules. Both approaches coexist: code-registered primitives are always present, and the bundler adds file-based ones. On a name collision, the code-registered version wins and a warning is logged.
+
+## How discovery works
+
+File-based primitives are discovered by the Mastra **bundler**, which runs under `mastra dev` and `mastra build`. Start your app through the Mastra CLI so discovery runs:
+
+```bash npm2yarn
+npx mastra dev
+```
+
+If you import your `mastra` instance directly, `agents/<name>/` directories and the other conventions aren't discovered. When you consume Mastra as a library, register those primitives in code instead.
+
+## Get started
+
+Create an agent directory with a `config.ts` and an `instructions.md`, then run `mastra dev`. See [agent config](/docs/filesystem/config) for the shortest working example.
+
+## Next steps
+
+- [Agent config](/docs/filesystem/config)
+- [Instructions](/docs/filesystem/instructions)
+- [Tools](/docs/filesystem/tools)
+- [Workflows](/docs/filesystem/workflows)
+- [`Agent` reference](/reference/agents/agent)

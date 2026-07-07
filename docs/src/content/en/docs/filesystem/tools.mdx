@@ -1,0 +1,43 @@
+---
+title: "Tools | Filesystem"
+description: Add tools to a file-based agent by placing createTool modules under tools/.
+packages:
+  - "@mastra/core"
+---
+
+# Tools
+
+A file-based agent discovers tools from `.ts` and `.js` files under its `tools/` directory. Each file default-exports a [`createTool()`](/reference/tools/create-tool) result, and the filename becomes the tool key.
+
+## Add a tool
+
+Place one tool per file under `tools/`. This file is exposed as `get_weather`.
+
+```typescript title="src/mastra/agents/weather/tools/get_weather.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export default createTool({
+  id: 'get_weather',
+  description: 'Get the current weather for a city',
+  inputSchema: z.object({ city: z.string() }),
+  execute: async ({ context }) => ({ city: context.city, tempC: 21 }),
+})
+```
+
+Test files named `*.test.ts`, `*.spec.ts`, `*.test.js`, and `*.spec.js` are ignored during discovery. Symlinked files are also skipped.
+
+:::note
+Visit the [`createTool()` reference](/reference/tools/create-tool) for the full API.
+:::
+
+## Precedence with config
+
+Discovered tools merge with any `tools` in [`config.ts`](/docs/filesystem/config). On a key collision, `config.tools` wins and a warning is logged. If `config.tools` is a function, discovered tools are ignored with a warning because they can't be statically merged.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Skills](/docs/filesystem/skills)
+- [Filesystem overview](/docs/filesystem/overview)
+- [`createTool()` reference](/reference/tools/create-tool)

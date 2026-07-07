@@ -1,0 +1,32 @@
+---
+title: "Memory | Filesystem"
+description: Give a file-based agent persistent memory with a memory.ts module.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# Memory
+
+A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` that default-exports a [`Memory`](/reference/memory/memory-class) instance.
+
+## Add memory
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { Memory } from '@mastra/memory'
+
+export default new Memory()
+```
+
+The exported instance becomes the agent's `memory`. If no `memory.ts` and no `config.memory` are present, the agent has no memory, which is the default.
+
+## Precedence with config
+
+You can also set `memory` in [`config.ts`](/docs/filesystem/config). `config.memory` wins over `memory.ts`, and a warning is logged when both are present.
+
+## Related
+
+- [config.ts](/docs/filesystem/config)
+- [Filesystem overview](/docs/filesystem/overview)
+- [Memory overview](/docs/memory/overview)
+- [`Memory` reference](/reference/memory/memory-class)
