@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.50.1-alpha.1
+
+### Patch Changes
+
+- Fixed slow agent streaming with remote storage: output processors run an internal workflow once per streamed chunk, and each run performed a storage read that could never hit (the run id is freshly generated and these transient workflows never persist a snapshot). On high-latency databases this throttled token delivery to roughly one storage round-trip per token. The guaranteed-miss read is now skipped for freshly-created transient runs. (#19015) ([#19028](https://github.com/mastra-ai/mastra/pull/19028))
+
+- Fix a custom `stopWhen` being ignored when `maxSteps` is also set. Previously, setting `maxSteps` replaced the user's `stopWhen` with `stepCountIs(maxSteps)`, so the agent could not stop early and ran to the `maxSteps` cap. The two are now composed, so `stopWhen` still fires while `maxSteps` acts as an upper safety cap. Closes #19007. ([#19009](https://github.com/mastra-ai/mastra/pull/19009))
+
+- Fixed durable agent tool error recovery to always continue the agentic loop when tool errors occur, matching the regular agent's behavior. This allows the model to self-correct after tool failures instead of stopping the loop prematurely. ([#18881](https://github.com/mastra-ai/mastra/pull/18881))
+
+## 1.50.1-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000))
+
 ## 1.50.0
 
 ### Minor Changes

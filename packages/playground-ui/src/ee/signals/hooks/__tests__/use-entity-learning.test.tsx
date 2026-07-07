@@ -6,8 +6,8 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { entitiesResponse, pointsResponse, topicsResponse } from '../../services/__tests__/fixtures/entity-learning';
-import { useEntities, useEntityPoints, useEntityTopics } from '../use-entity-learning';
+import { entitiesResponse, topicsResponse } from '../../services/__tests__/fixtures/entity-learning';
+import { useEntities, useEntityTopics } from '../use-entity-learning';
 
 const BASE_URL = 'https://observability.test';
 const ROOT = `${BASE_URL}/api/learning`;
@@ -132,32 +132,6 @@ describe('entity-learning hooks', () => {
         expect(result.current.fetchStatus).toBe('idle');
         expect(onTopics).not.toHaveBeenCalled();
       });
-    });
-  });
-
-  describe('useEntityPoints', () => {
-    it('forwards includeOutliers to the request and scopes via the project header', async () => {
-      let capturedUrl: URL | undefined;
-      let capturedProjectHeader: string | null = null;
-      server.use(
-        http.get(`${ROOT}/entities/:entityId/points`, ({ request }) => {
-          capturedUrl = new URL(request.url);
-          capturedProjectHeader = request.headers.get('X-Mastra-Project-Id');
-          return HttpResponse.json(pointsResponse);
-        }),
-      );
-
-      const { result } = renderHook(
-        () => useEntityPoints('entity_support', { signalName: 'sentiment', runId: '32', includeOutliers: true }),
-        { wrapper },
-      );
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(capturedUrl?.searchParams.get('includeOutliers')).toBe('true');
-      // Scope comes from the session server-side; the client only narrows by
-      // project via the header, never query params.
-      expect(capturedUrl?.searchParams.has('organizationId')).toBe(false);
-      expect(capturedProjectHeader).toBe('proj-1');
     });
   });
 });

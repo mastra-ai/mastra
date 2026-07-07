@@ -29,7 +29,7 @@ import { getToken, getCurrentOrgId } from '../auth/credentials.js';
 import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
-import { loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
+import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
 import { createProject } from '../studio/platform-api.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
 
@@ -749,12 +749,23 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
-  const envVars = await readEnvVars(targetDir, { autoAccept, envFile });
+  // If the user didn't pass --env-file and no ambient .env* file exists,
+  // skip the local env-var upload entirely and let the platform use the
+  // env vars stored on the target environment. The server-side deploy
+  // handler merges request envVars over environment.envVars, so an empty
+  // (absent) envVars payload cleanly falls back to what's already stored.
+  let envVars: Record<string, string> = {};
+  const hasAmbientEnvFile = envFile ? true : (await getDeployEnvFiles(targetDir)).length > 0;
+  if (hasAmbientEnvFile) {
+    envVars = await readEnvVars(targetDir, { autoAccept, envFile });
+  }
   const envCount = Object.keys(envVars).length;
   if (envCount > 0) {
     p.log.step(`Found ${envCount} env var(s)`);
-  } else {
+  } else if (hasAmbientEnvFile) {
     p.log.step('No env vars found in selected env file');
+  } else {
+    p.log.step('No local env file — using env vars stored on the environment');
   }
 
   // Pre-upload validation
