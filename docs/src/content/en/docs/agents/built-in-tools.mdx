@@ -117,16 +117,10 @@ The `suspendPayload` carries the `path` to the plan file. Read the file, present
 const stream = await agent.stream('Refactor the auth module')
 
 for await (const chunk of stream.fullStream) {
-  if (
-    chunk.type === 'tool-call-suspended' &&
-    chunk.payload.toolName === 'submit_plan'
-  ) {
+  if (chunk.type === 'tool-call-suspended' && chunk.payload.toolName === 'submit_plan') {
     const { path } = chunk.payload.suspendPayload
     // Read and display the plan file, then resume:
-    const resumed = await agent.resumeStream(
-      { action: 'approved' },
-      { runId: stream.runId },
-    )
+    const resumed = await agent.resumeStream({ action: 'approved' }, { runId: stream.runId })
     for await (const c of resumed.textStream) process.stdout.write(c)
   }
 }
@@ -175,12 +169,7 @@ Import the tools directly if you need to customize the toolset or skip the signa
 ```typescript title="src/mastra/agents/index.ts"
 import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
-import {
-  taskWriteTool,
-  taskUpdateTool,
-  taskCompleteTool,
-  taskCheckTool,
-} from '@mastra/core/tools'
+import { taskWriteTool, taskUpdateTool, taskCompleteTool, taskCheckTool } from '@mastra/core/tools'
 
 const agent = new Agent({
   id: 'coder',

@@ -75,7 +75,8 @@ The model calls this tool with the following parameters:
           {
             name: 'label',
             type: 'string',
-            description: 'Short display text for this option (1-5 words). This value is returned to the model when selected.',
+            description:
+              'Short display text for this option (1-5 words). This value is returned to the model when selected.',
           },
           {
             name: 'description',
@@ -90,7 +91,8 @@ The model calls this tool with the following parameters:
   {
     name: 'selectionMode',
     type: "'single_select' | 'multi_select'",
-    description: "Controls how many options the user can select. Defaults to 'single_select' when options are provided. Requires options.",
+    description:
+      "Controls how many options the user can select. Defaults to 'single_select' when options are provided. Requires options.",
     isOptional: true,
   },
 ]}
@@ -167,10 +169,7 @@ interface AskUserSuspendPayload {
 All types and the tool are exported from `@mastra/core/tools`:
 
 ```typescript
-import {
-  askUserTool,
-  formatQuestionAnswer,
-} from '@mastra/core/tools'
+import { askUserTool, formatQuestionAnswer } from '@mastra/core/tools'
 
 import type {
   AskUserAnswer,

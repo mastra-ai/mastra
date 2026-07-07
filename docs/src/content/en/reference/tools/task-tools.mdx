@@ -33,12 +33,7 @@ const agent = new Agent({
 Or import the tools directly:
 
 ```typescript title="src/mastra/agents/index.ts"
-import {
-  taskWriteTool,
-  taskUpdateTool,
-  taskCompleteTool,
-  taskCheckTool,
-} from '@mastra/core/tools'
+import { taskWriteTool, taskUpdateTool, taskCompleteTool, taskCheckTool } from '@mastra/core/tools'
 
 const agent = new Agent({
   id: 'coder',
@@ -70,7 +65,8 @@ Create or replace the entire task list. Each call replaces the previous list.
           {
             name: 'id',
             type: 'string',
-            description: "Stable task identifier (e.g. 'task_investigate_tests'). Keep this unchanged across updates. Auto-generated when omitted.",
+            description:
+              "Stable task identifier (e.g. 'task_investigate_tests'). Keep this unchanged across updates. Auto-generated when omitted.",
             isOptional: true,
           },
           {
@@ -202,7 +198,11 @@ Returns a `TaskCheckResult` with:
           { name: 'pending', type: 'number', description: 'Pending tasks.' },
           { name: 'incomplete', type: 'number', description: 'Tasks not yet completed (in-progress + pending).' },
           { name: 'hasTasks', type: 'boolean', description: 'True when at least one task exists.' },
-          { name: 'allCompleted', type: 'boolean', description: 'True when at least one task exists and every task is completed.' },
+          {
+            name: 'allCompleted',
+            type: 'boolean',
+            description: 'True when at least one task exists and every task is completed.',
+          },
         ],
       },
     ],

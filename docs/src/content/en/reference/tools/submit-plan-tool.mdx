@@ -38,19 +38,13 @@ import fs from 'node:fs'
 const stream = await agent.stream('Refactor the auth module')
 
 for await (const chunk of stream.fullStream) {
-  if (
-    chunk.type === 'tool-call-suspended' &&
-    chunk.payload.toolName === 'submit_plan'
-  ) {
+  if (chunk.type === 'tool-call-suspended' && chunk.payload.toolName === 'submit_plan') {
     const { path } = chunk.payload.suspendPayload
     const plan = fs.readFileSync(path, 'utf-8')
     console.log(plan)
 
     // Approve:
-    const resumed = await agent.resumeStream(
-      { action: 'approved' },
-      { runId: stream.runId },
-    )
+    const resumed = await agent.resumeStream({ action: 'approved' }, { runId: stream.runId })
     for await (const c of resumed.textStream) process.stdout.write(c)
   }
 }
@@ -115,13 +109,14 @@ Pass an object to `agent.resumeStream()`:
   {
     name: 'action',
     type: "'approved' | 'rejected'",
-    description: "Whether the user approved or rejected the plan.",
+    description: 'Whether the user approved or rejected the plan.',
     isOptional: false,
   },
   {
     name: 'feedback',
     type: 'string',
-    description: 'Revision instructions when the plan is rejected. Surfaced to the model so it can revise and resubmit.',
+    description:
+      'Revision instructions when the plan is rejected. Surfaced to the model so it can revise and resubmit.',
     isOptional: true,
   },
   {
@@ -184,8 +179,5 @@ All types and the tool are exported from `@mastra/core/tools`:
 ```typescript
 import { submitPlanTool } from '@mastra/core/tools'
 
-import type {
-  SubmitPlanResumeData,
-  SubmitPlanSuspendPayload,
-} from '@mastra/core/tools'
+import type { SubmitPlanResumeData, SubmitPlanSuspendPayload } from '@mastra/core/tools'
 ```
