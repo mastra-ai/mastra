@@ -1894,6 +1894,26 @@ export class Workflow<
             requestContextPath: m.requestContextPath,
             schema: m.schema,
           };
+        } else if (m.initData) {
+          // Store only a reference to the init-data workflow, never the live instance.
+          // A Workflow extends MastraBase, whose `logger`/`component` are enumerable own
+          // fields, so JSON.stringify-ing it below deep-walks the logger and the entire
+          // (possibly self-referential) step graph — ballooning mapConfig and OOMing at
+          // .commit()/module load (#19018). The runtime map iterates the original
+          // mappingConfig, not this serialized copy, and only checks `m.initData` for
+          // truthiness, so a reference is behavior-preserving.
+          a[key] = {
+            initData: m.initData?.id ?? true,
+            path: m.path,
+            schema: m.schema,
+          };
+        } else if (m.step) {
+          // Same reasoning for step references (a step may itself be a workflow, #11124).
+          a[key] = {
+            step: Array.isArray(m.step) ? m.step.map((s: any) => s?.id) : m.step?.id,
+            path: m.path,
+            schema: m.schema,
+          };
         } else {
           a[key] = m;
         }
