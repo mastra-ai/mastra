@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
-import { preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
+import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from './deploy-preflight.js';
 import type { PreflightIssue } from './deploy-preflight.js';
 
 vi.mock('@clack/prompts', () => ({
@@ -225,6 +225,34 @@ describe('preflightBuildOutput', () => {
       expect(issue?.message).toContain('cannot verify TURSO_DATABASE_URL is set on the platform');
     });
 
+    it('suppresses paths guarded by platform-provided vars (e.g. MASTRA_STORAGE_URL) without an env entry', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({
+        localPaths: [{ ...guardedDetection, guardedBy: 'MASTRA_STORAGE_URL' }],
+      });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true });
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('suppresses guarded paths when the var is present only in platform-stored env vars', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const merged = mergePreflightEnvVars({ TURSO_DATABASE_URL: 'libsql://stored.turso.io' }, {});
+      const issues = await preflightBuildOutput(tmpDir, merged, { hasEnvFile: true });
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('suppresses MISSING_ENV_VAR for vars present only in platform-stored env vars', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ userEnvRefs: ['OPENAI_API_KEY'] });
+
+      const merged = mergePreflightEnvVars({ OPENAI_API_KEY: 'sk-stored' }, {});
+      const issues = await preflightBuildOutput(tmpDir, merged, { hasEnvFile: true });
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
     it('still errors on unguarded local paths', async () => {
       writeBundle(`export {};`);
       writeMetadata({
@@ -305,6 +333,31 @@ describe('preflightBuildOutput', () => {
     const issues = await preflightBuildOutput(tmpDir, {});
     const missing = issues.find(i => i.code === 'MISSING_ENV_VAR');
     expect(missing?.message).toContain('SECRET_KEY');
+  });
+});
+
+describe('mergePreflightEnvVars', () => {
+  it('keeps vars present only in the stored environment', () => {
+    expect(mergePreflightEnvVars({ TURSO_DATABASE_URL: 'libsql://stored.turso.io' }, {})).toEqual({
+      TURSO_DATABASE_URL: 'libsql://stored.turso.io',
+    });
+  });
+
+  it('lets local env file values win over stored values (mirrors platform merge)', () => {
+    expect(mergePreflightEnvVars({ API_KEY: 'stored' }, { API_KEY: 'local' })).toEqual({ API_KEY: 'local' });
+  });
+
+  it('lets a blank local value override a stored value (platform request-wins semantics)', () => {
+    expect(
+      mergePreflightEnvVars({ TURSO_DATABASE_URL: 'libsql://stored.turso.io' }, { TURSO_DATABASE_URL: '' }),
+    ).toEqual({
+      TURSO_DATABASE_URL: '',
+    });
+  });
+
+  it('tolerates absent stored env (older platform responses)', () => {
+    expect(mergePreflightEnvVars(undefined, { A: '1' })).toEqual({ A: '1' });
+    expect(mergePreflightEnvVars(null, { A: '1' })).toEqual({ A: '1' });
   });
 });
 

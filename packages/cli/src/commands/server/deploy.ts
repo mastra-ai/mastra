@@ -14,9 +14,15 @@ import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_STUDIO_URL, MASTRA_PLATFORM_API_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
+import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { getProjectConfigToSave, loadProjectConfig, saveProjectConfig } from '../studio/project-config.js';
-import { fetchServerProjects, createServerProject, uploadServerDeploy, pollServerDeploy } from './platform-api.js';
+import {
+  fetchServerProjects,
+  createServerProject,
+  uploadServerDeploy,
+  pollServerDeploy,
+  getServerProjectEnv,
+} from './platform-api.js';
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                           */
@@ -483,8 +489,18 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
   }
 
   // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
+  // Preflight sees the same env picture the platform applies at deploy time:
+  // uploaded env vars merged over the project's stored vars (upload wins), so
+  // vars stored only on the platform don't false-alarm.
   if (!skipPreflight) {
-    const issues = await preflightBuildOutput(targetDir, envVars);
+    let storedEnvVars: Record<string, string> | undefined;
+    try {
+      storedEnvVars = await getServerProjectEnv(token, orgId, projectId);
+    } catch {
+      // Stored env unavailable (older platform, network hiccup) — preflight
+      // proceeds with the local env picture only.
+    }
+    const issues = await preflightBuildOutput(targetDir, mergePreflightEnvVars(storedEnvVars, envVars));
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');

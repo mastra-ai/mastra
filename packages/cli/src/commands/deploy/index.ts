@@ -26,7 +26,7 @@ import { checkBuildStaleness } from '../../utils/source-hash.js';
 import { fetchOrgs } from '../auth/api.js';
 import { MASTRA_PLATFORM_API_URL, MASTRA_STUDIO_URL } from '../auth/client.js';
 import { getToken, getCurrentOrgId } from '../auth/credentials.js';
-import { preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
+import { mergePreflightEnvVars, preflightBuildOutput, printPreflightIssues } from '../deploy-preflight.js';
 import { fetchEnvironments, fetchProjects, createEnvironment } from '../env/platform-api.js';
 import type { Environment } from '../env/platform-api.js';
 import { getDeployEnvFiles, loadDeployEnvFromDotenv, readEnvVars, getMastraVersion } from '../studio/deploy.js';
@@ -795,9 +795,12 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
     }
   }
 
-  // Pre-upload validation
+  // Pre-upload validation. Preflight sees the same env picture the platform
+  // applies at deploy time: request env vars merged over the environment's
+  // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
-    const issues = await preflightBuildOutput(targetDir, envVars, { hasEnvFile: hasAmbientEnvFile });
+    const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
+    const issues = await preflightBuildOutput(targetDir, preflightEnv, { hasEnvFile: hasAmbientEnvFile });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');

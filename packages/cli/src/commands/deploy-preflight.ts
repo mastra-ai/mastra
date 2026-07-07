@@ -165,6 +165,20 @@ export async function preflightBuildOutput(
   return issues;
 }
 
+/**
+ * Mirror the platform's deploy-time env merge: local/request env vars are
+ * applied over the vars already stored on the target environment or server
+ * project (request wins). Preflight should see this merged picture so vars
+ * stored only on the platform don't produce false MISSING_ENV_VAR /
+ * LOCAL_STORAGE_PATH alarms.
+ */
+export function mergePreflightEnvVars(
+  stored: Record<string, string> | null | undefined,
+  local: Record<string, string>,
+): Record<string, string> {
+  return { ...stored, ...local };
+}
+
 export type PreflightOutcome = 'ok' | 'blocked' | 'cancelled';
 
 /**
@@ -277,14 +291,18 @@ function checkMissingEnvVars(source: string, envVars: Record<string, string>): P
   return checkEnvVarNames([...referenced], envVars);
 }
 
+/** Env vars the platform/runtime sets automatically at deploy time. */
+function isPlatformProvidedEnvVar(name: string): boolean {
+  return ENV_VAR_ALLOWLIST_EXACT.has(name) || ENV_VAR_ALLOWLIST_PREFIXES.some(prefix => name.startsWith(prefix));
+}
+
 function checkEnvVarNames(referenced: Iterable<string>, envVars: Record<string, string>): PreflightIssue[] {
   const provided = new Set(Object.keys(envVars));
   const missing: string[] = [];
 
   for (const name of new Set(referenced)) {
     if (provided.has(name)) continue;
-    if (ENV_VAR_ALLOWLIST_EXACT.has(name)) continue;
-    if (ENV_VAR_ALLOWLIST_PREFIXES.some(prefix => name.startsWith(prefix))) continue;
+    if (isPlatformProvidedEnvVar(name)) continue;
     missing.push(name);
   }
 
@@ -362,17 +380,29 @@ async function checkLocalStoragePaths(
       continue;
     }
 
+    // Guards on vars the platform/runtime sets automatically (e.g.
+    // MASTRA_STORAGE_URL on Mastra Cloud) are trusted the same way the
+    // missing-env-var check trusts them — the guard is satisfied at runtime
+    // even though the var never appears in a local env file.
+    if (isPlatformProvidedEnvVar(d.guardedBy)) continue;
+
     // The literal is a dead fallback when the guarding env var is set in the
     // deploy environment. An empty value doesn't count: `process.env.X || 'file:...'`
     // still takes the fallback at runtime when X is blank.
     if (envVars[d.guardedBy]) continue;
 
+    // TODO(managed-env-names): managed databases attached via the platform
+    // inject vars (e.g. TURSO_DATABASE_URL) directly onto the runtime service,
+    // invisible to the CLI — this error is a false positive for them today
+    // (--skip-preflight is the workaround). Once the platform exposes
+    // `managedEnvVarNames` on the environment/project response, merge those
+    // names into the provided set so the error never fires for injected guards.
     if (hasEnvFile) {
       issues.push({
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',
         message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
-        fix: `Set ${d.guardedBy} in your env file, or remove the local fallback.`,
+        fix: `Set ${d.guardedBy} in your env file, or remove the local fallback. If the platform injects it (e.g. a managed database), re-run with --skip-preflight.`,
       });
     } else {
       issues.push({
