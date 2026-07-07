@@ -452,6 +452,8 @@ export function validateToolInput<T = unknown>(
     return { data: input as T };
   }
 
+  schema = toStandardSchema(schema);
+
   // Validation pipeline:
   //
   // 1. normalizeNullishInput: Convert top-level null/undefined to {} or [] based on schema type.
