@@ -753,24 +753,43 @@ const STARTUP_MESSAGE_WINDOW_SIZE = 200;
  * Build a partial assistant `MastraDBMessage` carrying only the accumulated
  * text/thinking render parts, so the interleaving history replay can flush a
  * standalone `AssistantMessageComponent` before each tool/OM boundary.
+ *
+ * Terminal metadata (`stopReason`/`errorMessage`) is stripped from all but the
+ * final slice so an aborted/errored message shows its terminal line once at
+ * the end instead of after every accumulated text slice.
  */
 function buildAssistantSlice(
   message: MastraDBMessage,
   parts: Array<Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }>>,
+  options?: { includeTerminalMetadata?: boolean },
 ): MastraDBMessage {
   const sliceParts = parts.map(part =>
     part.kind === 'thinking'
       ? { type: 'reasoning' as const, reasoning: part.text }
       : { type: 'text' as const, text: part.text },
   );
+  const baseContent = typeof message.content === 'string' ? { format: 2 } : message.content;
+  let metadata = (baseContent as { metadata?: Record<string, unknown> }).metadata;
+  if (!options?.includeTerminalMetadata && metadata) {
+    const { stopReason: _stopReason, errorMessage: _errorMessage, ...rest } = metadata;
+    metadata = rest;
+  }
   return {
     ...message,
     content: {
-      ...(typeof message.content === 'string' ? { format: 2 } : message.content),
+      ...baseContent,
       format: 2,
       parts: sliceParts as MastraDBMessage['content']['parts'],
+      ...(metadata !== undefined ? { metadata } : {}),
     },
   } as MastraDBMessage;
+}
+
+/** Whether a message carries terminal metadata that renders a trailing abort/error line. */
+function hasTerminalMetadata(message: MastraDBMessage): boolean {
+  if (typeof message.content === 'string') return false;
+  const stopReason = (message.content.metadata as { stopReason?: string } | undefined)?.stopReason;
+  return stopReason === 'aborted' || stopReason === 'error';
 }
 
 function getLatestMessageTimestamp(messages: MastraDBMessage[]): number | undefined {
@@ -815,9 +834,11 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       // Accumulate text/thinking until we hit a tool call, then render both
       let accumulatedParts: Array<Extract<AssistantRenderPart, { kind: 'text' | 'thinking' }>> = [];
 
-      const flushAccumulated = (): void => {
-        if (accumulatedParts.length === 0) return;
-        const textMessage = buildAssistantSlice(message, accumulatedParts);
+      const flushAccumulated = (isFinal = false): void => {
+        // The final flush still renders when there is no trailing text but the
+        // message carries terminal metadata, so the abort/error line shows once.
+        if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
+        const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
@@ -1084,7 +1105,7 @@ export async function renderExistingMessages(state: TUIState): Promise<void> {
       }
 
       // Render any remaining text after the last tool call
-      flushAccumulated();
+      flushAccumulated(true);
     }
   }
 

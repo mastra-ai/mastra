@@ -282,6 +282,45 @@ describe('renderExistingMessages startup history loading', () => {
     expect(state.messageComponentsById.get('user-2')).toBe(children[1]);
   });
 
+  it('renders the interrupted line once at the end for an aborted assistant message with tool calls', async () => {
+    const assistant = dbMessage(
+      'assistant',
+      [
+        { type: 'text', text: 'before tool' },
+        { type: 'tool_call', id: 'tool-1', name: 'view', args: { path: 'a.ts' } },
+        { type: 'tool_result', id: 'tool-1', name: 'view', result: 'ok' },
+        { type: 'text', text: 'after tool' },
+      ],
+      'assistant-1',
+    );
+    (assistant.content as { metadata?: Record<string, unknown> }).metadata = { stopReason: 'aborted' };
+    const messages = [createUserMessage('hi', 'user-1'), assistant];
+    const state = createState();
+    const listActiveMessages = vi.fn().mockResolvedValue(messages);
+    state.session = {
+      ...(state.session as any),
+      thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+      state: createSessionState(),
+    } as unknown as TUIState['session'];
+    state.controller = {
+      session: {
+        thread: { getId: vi.fn(() => TEST_THREAD_ID), listActiveMessages },
+        displayState: { get: () => ({ isRunning: false }), restoreTasks: vi.fn() },
+      },
+      setState: vi.fn().mockResolvedValue(undefined),
+    } as unknown as TUIState['controller'];
+
+    await renderExistingMessages(state);
+
+    const rendered = visibleChildren(state).map(child =>
+      (child as { render(width: number): string[] }).render(120).join('\n'),
+    );
+    const interruptedSlices = rendered.filter(text => text.includes('Interrupted'));
+    expect(interruptedSlices).toHaveLength(1);
+    expect(rendered[rendered.length - 1]).toContain('after tool');
+    expect(rendered[rendered.length - 1]).toContain('Interrupted');
+  });
+
   it('tracks the latest rendered message timestamp for startup idle state', async () => {
     const latest = new Date('2026-05-15T13:30:00.000Z');
     const messages = [
