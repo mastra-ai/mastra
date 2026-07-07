@@ -68,6 +68,56 @@ export interface VoiceToolCall {
   args?: unknown;
 }
 
+/**
+ * Token usage for one turn, captured from the model's `finish` chunk. Field names mirror LiveKit's
+ * `CompletionUsage` so the plugin can forward it into `metrics_collected` without remapping. See D10.
+ */
+export interface VoiceTurnUsage {
+  /** Tokens in the prompt (LiveKit `promptTokens`). */
+  promptTokens: number;
+  /** Tokens in the completion (LiveKit `completionTokens`). */
+  completionTokens: number;
+  /** Cached prompt tokens (LiveKit `promptCachedTokens`). */
+  promptCachedTokens: number;
+  /** Total tokens for the turn. */
+  totalTokens: number;
+}
+
+/**
+ * Maps a Mastra `finish` chunk's usage (`payload.output.usage`, AI-SDK `LanguageModelUsage`) to the
+ * LiveKit-shaped {@link VoiceTurnUsage}, or `undefined` when the chunk carries no token counts.
+ * Handles both the flat V2 usage shape (`inputTokens`/`outputTokens`) and the nested V3 shape
+ * (`inputTokens.total`/`outputTokens.total`).
+ */
+export function mapTurnUsage(usage: unknown): VoiceTurnUsage | undefined {
+  if (!usage || typeof usage !== 'object') return undefined;
+  const u = usage as Record<string, unknown>;
+  // Prefer the flat V2 shape (`inputTokens: number`); fall back to the nested V3 shape
+  // (`inputTokens: { total, cacheRead }`).
+  const totalOf = (v: unknown): number | undefined => {
+    if (typeof v === 'number') return v;
+    if (v && typeof v === 'object' && typeof (v as { total?: unknown }).total === 'number') {
+      return (v as { total: number }).total;
+    }
+    return undefined;
+  };
+  const cacheReadOf = (v: unknown): number | undefined =>
+    v && typeof v === 'object' && typeof (v as { cacheRead?: unknown }).cacheRead === 'number'
+      ? (v as { cacheRead: number }).cacheRead
+      : undefined;
+
+  const promptTokens = totalOf(u.inputTokens) ?? 0;
+  const completionTokens = totalOf(u.outputTokens) ?? 0;
+  const promptCachedTokens =
+    (typeof u.cachedInputTokens === 'number' ? u.cachedInputTokens : cacheReadOf(u.inputTokens)) ?? 0;
+  const totalTokens = typeof u.totalTokens === 'number' ? u.totalTokens : promptTokens + completionTokens;
+  // Nothing was reported at all → treat as no usage rather than emitting an all-zero chunk.
+  if (promptTokens === 0 && completionTokens === 0 && totalTokens === 0 && promptCachedTokens === 0) {
+    return undefined;
+  }
+  return { promptTokens, completionTokens, promptCachedTokens, totalTokens };
+}
+
 export interface MastraVoiceAgentMemory {
   thread: string;
   resource?: string;
@@ -96,6 +146,13 @@ export interface VoiceTurnContext {
   requestContext?: RequestContext;
   /** Voice-call span context, so each turn's generation nests under the call trace. */
   tracingContext?: TracingContext;
+  /**
+   * Internal, per-turn side channel for token usage (D10). A generator invokes this once, when the
+   * `finish` chunk carries usage, so the caller (e.g. `MastraLLMStream`) can attribute usage to
+   * exactly this turn — kept on the context (not on generator options) so overlapping turns from
+   * preemptive generation can't misattribute usage. Fire-and-forget; the generator does not await it.
+   */
+  onUsage?: (usage: VoiceTurnUsage) => void;
 }
 
 /**
@@ -108,6 +165,8 @@ export interface VoiceTurnResult {
   toolCalls: VoiceToolCall[];
   /** True when barge-in cut the turn short before it finished streaming. */
   interrupted: boolean;
+  /** Token usage for the turn when the model reported it in its `finish` chunk (D10). */
+  usage?: VoiceTurnUsage;
 }
 
 /** {@link VoiceTurnContext} plus the reply it produced. Passed to {@link VoiceTurnCompleteHook}. */
@@ -143,6 +202,8 @@ export interface AgentReplyGeneratorOptions {
   streamOptions?: MastraStreamOptions;
   /** Speak a short phrase while a tool call runs. See {@link MastraVoiceAgentOptions.toolFeedback}. */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
+  /** Notified as each tool-call chunk arrives, mid-stream. See {@link MastraVoiceAgentOptions.onToolCall}. */
+  onToolCall?: (toolCall: VoiceToolCall) => void;
   /** Fired off the audio path after the reply streams. See {@link MastraVoiceAgentOptions.onTurnComplete}. */
   onTurnComplete?: VoiceTurnCompleteHook;
 }
@@ -153,7 +214,7 @@ export interface AgentReplyGeneratorOptions {
  * which aborts the in-flight `agent.stream()`.
  */
 export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): VoiceReplyGenerator {
-  const { agent, streamOptions, toolFeedback, onTurnComplete } = options;
+  const { agent, streamOptions, toolFeedback, onToolCall, onTurnComplete } = options;
   return ctx => {
     if (ctx.messages.length === 0) return null;
 
@@ -169,12 +230,16 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
     // Accumulated as the turn streams so the post-turn hook can see what was actually produced.
     let replyText = '';
     const toolCalls: VoiceToolCall[] = [];
+    let usage: VoiceTurnUsage | undefined;
 
     // Fire-and-forget after the reply has streamed: off the audio path (the caller already heard
     // the text), and not awaited, so it never delays the next turn. Errors are logged, not thrown.
     const emitTurnComplete = (interrupted: boolean) => {
       if (!onTurnComplete) return;
-      const completeCtx: VoiceTurnCompleteContext = { ...ctx, result: { text: replyText, toolCalls, interrupted } };
+      const completeCtx: VoiceTurnCompleteContext = {
+        ...ctx,
+        result: { text: replyText, toolCalls, interrupted, usage },
+      };
       Promise.resolve()
         .then(() => onTurnComplete(completeCtx))
         .catch(error => {
@@ -200,9 +265,19 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
                 args: chunk.payload.args,
               };
               toolCalls.push(toolCall);
+              onToolCall?.(toolCall);
               if (toolFeedback) {
                 const filler = toolFeedback(toolCall);
                 if (filler) controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
+              }
+            } else if (chunk.type === 'finish') {
+              // Usage is dropped from the spoken stream but surfaced via the per-turn side channel
+              // (D10) and on the turn result, so the plugin and onTurnComplete consumers can read it.
+              const output = (chunk.payload as { output?: { usage?: unknown } }).output;
+              const turnUsage = mapTurnUsage(output?.usage);
+              if (turnUsage) {
+                usage = turnUsage;
+                ctx.onUsage?.(turnUsage);
               }
             } else if (chunk.type === 'error') {
               const error = chunk.payload.error;
@@ -256,6 +331,13 @@ export interface MastraVoiceAgentOptions {
    * takes its own equivalent via `createWorkflowReplyGenerator`.
    */
   toolFeedback?: (toolCall: VoiceToolCall) => string | undefined | void;
+  /**
+   * Called as each tool call starts mid-reply (before the tool result is known), the building block
+   * for tool-driven side effects — analytics, agent-initiated hang-up — without waiting for the turn
+   * to finish. Runs synchronously on the stream; keep it cheap and non-throwing. Applies to the agent
+   * generator built here; the workflow generator surfaces tool calls via `onTurnComplete` instead.
+   */
+  onToolCall?: (toolCall: VoiceToolCall) => void;
   /**
    * Called once per turn after the reply has finished streaming to text-to-speech. Runs off the
    * audio path and fire-and-forget — the turn does not await it — so post-turn memory
@@ -365,6 +447,7 @@ export class MastraVoiceAgent extends voice.Agent {
         agent: options.agent,
         streamOptions: options.streamOptions,
         toolFeedback: options.toolFeedback,
+        onToolCall: options.onToolCall,
         onTurnComplete: options.onTurnComplete,
       });
     } else {

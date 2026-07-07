@@ -3,7 +3,7 @@ import { llm } from '@livekit/agents';
 import type { voice } from '@livekit/agents';
 import type { Agent as MastraAgent } from '@mastra/core/agent';
 import { describe, expect, it, vi } from 'vitest';
-import { DEFAULT_DISCLOSURE_REMINDER, DisclosureReminder, MastraVoiceAgent, prependText } from './bridge';
+import { DEFAULT_DISCLOSURE_REMINDER, DisclosureReminder, MastraVoiceAgent, mapTurnUsage, prependText } from './bridge';
 
 interface FakeChunk {
   type: string;
@@ -39,7 +39,7 @@ async function readAll(stream: ReadableStream<llm.ChatChunk | string>): Promise<
 
 function userTurnContext(text = 'Hello'): llm.ChatContext {
   const ctx = llm.ChatContext.empty();
-  ctx.addMessage({ role: 'user', content: text });
+  ctx.addMessage({ role: 'user', content: text, id: 'u1' });
   return ctx;
 }
 
@@ -89,15 +89,15 @@ describe('MastraVoiceAgent.llmNode', () => {
       requestContext: { tenant: 'acme' },
     });
     const ctx = llm.ChatContext.empty();
-    ctx.addMessage({ role: 'user', content: 'old question' });
-    ctx.addMessage({ role: 'assistant', content: 'old answer' });
-    ctx.addMessage({ role: 'user', content: 'new question' });
+    ctx.addMessage({ role: 'user', content: 'old question', id: 'u1' });
+    ctx.addMessage({ role: 'assistant', content: 'old answer', id: 'a1' });
+    ctx.addMessage({ role: 'user', content: 'new question', id: 'u2' });
     await readAll((await voiceAgent.llmNode(ctx, toolCtx, modelSettings))!);
 
     expect(stream).toHaveBeenCalledTimes(1);
     const [messages, options] = stream.mock.calls[0]! as [unknown, Record<string, unknown>];
     // Memory mode sends only the new turn; history comes from the thread.
-    expect(messages).toEqual([{ role: 'user', content: 'new question' }]);
+    expect(messages).toEqual([{ role: 'user', content: 'new question', id: 'u2' }]);
     expect(options.memory).toEqual({ thread: 'thread-1', resource: 'user-1' });
     expect(options.abortSignal).toBeInstanceOf(AbortSignal);
     expect((options.requestContext as { get: (k: string) => unknown }).get('tenant')).toBe('acme');
@@ -107,16 +107,16 @@ describe('MastraVoiceAgent.llmNode', () => {
     const { agent, stream } = fakeMastraAgent([{ type: 'text-delta', payload: { id: '1', text: 'ok' } }]);
     const voiceAgent = new MastraVoiceAgent({ agent, memory: false });
     const ctx = llm.ChatContext.empty();
-    ctx.addMessage({ role: 'user', content: 'old question' });
-    ctx.addMessage({ role: 'assistant', content: 'old answer' });
-    ctx.addMessage({ role: 'user', content: 'new question' });
+    ctx.addMessage({ role: 'user', content: 'old question', id: 'u1' });
+    ctx.addMessage({ role: 'assistant', content: 'old answer', id: 'a1' });
+    ctx.addMessage({ role: 'user', content: 'new question', id: 'u2' });
     await readAll((await voiceAgent.llmNode(ctx, toolCtx, modelSettings))!);
 
     const [messages] = stream.mock.calls[0]! as [unknown];
     expect(messages).toEqual([
-      { role: 'user', content: 'old question' },
-      { role: 'assistant', content: 'old answer' },
-      { role: 'user', content: 'new question' },
+      { role: 'user', content: 'old question', id: 'u1' },
+      { role: 'assistant', content: 'old answer', id: 'a1' },
+      { role: 'user', content: 'new question', id: 'u2' },
     ]);
   });
 
@@ -176,7 +176,7 @@ describe('MastraVoiceAgent onTurnComplete hook', () => {
       toolCalls: [{ toolCallId: 'c1', toolName: 'lookup', args: { q: 'x' } }],
       interrupted: false,
     });
-    expect(ctx.messages).toEqual([{ role: 'user', content: 'hi' }]);
+    expect(ctx.messages).toEqual([{ role: 'user', content: 'hi', id: 'u1' }]);
     expect(ctx.memory).toEqual({ thread: 't1', resource: 'r1' });
   });
 
@@ -246,6 +246,61 @@ describe('MastraVoiceAgent onTurnComplete hook', () => {
   });
 });
 
+describe('MastraVoiceAgent onToolCall + usage side channels (D4/D10)', () => {
+  it('fires onToolCall mid-stream for each tool call, in order', async () => {
+    const { agent } = fakeMastraAgent([
+      { type: 'text-delta', payload: { id: '1', text: 'one moment ' } },
+      { type: 'tool-call', payload: { toolCallId: 'c1', toolName: 'lookup', args: { q: 'x' } } },
+      { type: 'tool-call', payload: { toolCallId: 'c2', toolName: 'book', args: { id: 7 } } },
+      { type: 'text-delta', payload: { id: '1', text: 'done' } },
+    ]);
+    const onToolCall = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ agent, onToolCall });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    await readAll(result!);
+
+    expect(onToolCall.mock.calls.map(c => c[0])).toEqual([
+      { toolCallId: 'c1', toolName: 'lookup', args: { q: 'x' } },
+      { toolCallId: 'c2', toolName: 'book', args: { id: 7 } },
+    ]);
+  });
+
+  it('captures finish-chunk usage onto the turn result', async () => {
+    const { agent } = fakeMastraAgent([
+      { type: 'text-delta', payload: { id: '1', text: 'hello' } },
+      {
+        type: 'finish',
+        payload: { output: { usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, cachedInputTokens: 5 } } },
+      },
+    ]);
+    const onTurnComplete = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ agent, onTurnComplete });
+    const result = await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings);
+    // Usage never reaches the spoken stream — only text deltas do.
+    expect(await readAll(result!)).toEqual(['hello']);
+
+    await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
+    expect(onTurnComplete.mock.calls[0]![0].result.usage).toEqual({
+      promptTokens: 10,
+      completionTokens: 20,
+      promptCachedTokens: 5,
+      totalTokens: 30,
+    });
+  });
+
+  it('leaves usage undefined when the finish chunk carries no token counts', async () => {
+    const { agent } = fakeMastraAgent([
+      { type: 'text-delta', payload: { id: '1', text: 'hi' } },
+      { type: 'finish', payload: {} },
+    ]);
+    const onTurnComplete = vi.fn();
+    const voiceAgent = new MastraVoiceAgent({ agent, onTurnComplete });
+    await readAll((await voiceAgent.llmNode(userTurnContext(), toolCtx, modelSettings))!);
+    await vi.waitFor(() => expect(onTurnComplete).toHaveBeenCalledTimes(1));
+    expect(onTurnComplete.mock.calls[0]![0].result.usage).toBeUndefined();
+  });
+});
+
 describe('MastraVoiceAgent reply generator seam', () => {
   it('delegates to a custom generate function with the turn context', async () => {
     const generate = vi.fn(() => {
@@ -260,7 +315,7 @@ describe('MastraVoiceAgent reply generator seam', () => {
     const result = await voiceAgent.llmNode(userTurnContext('hello'), toolCtx, modelSettings);
     expect(await readAll(result!)).toEqual(['from generator']);
     const ctx = generate.mock.calls[0]![0] as { messages: unknown; memory: unknown };
-    expect(ctx.messages).toEqual([{ role: 'user', content: 'hello' }]);
+    expect(ctx.messages).toEqual([{ role: 'user', content: 'hello', id: 'u1' }]);
     expect(ctx.memory).toEqual({ thread: 't1', resource: 'r1' });
   });
 
@@ -288,6 +343,43 @@ describe('DisclosureReminder', () => {
     expect(reminder.due(1000)).toBe('AI reminder'); // due; clock resets to 1000
     expect(reminder.due(1500)).toBeUndefined(); // only 500ms since the reset
     expect(reminder.due(2000)).toBe('AI reminder'); // due again
+  });
+});
+
+describe('mapTurnUsage (D10)', () => {
+  it('maps the flat V2 usage shape to LiveKit field names', () => {
+    expect(mapTurnUsage({ inputTokens: 12, outputTokens: 34, totalTokens: 46, cachedInputTokens: 3 })).toEqual({
+      promptTokens: 12,
+      completionTokens: 34,
+      promptCachedTokens: 3,
+      totalTokens: 46,
+    });
+  });
+
+  it('derives totalTokens when the model omits it', () => {
+    expect(mapTurnUsage({ inputTokens: 5, outputTokens: 7 })).toEqual({
+      promptTokens: 5,
+      completionTokens: 7,
+      promptCachedTokens: 0,
+      totalTokens: 12,
+    });
+  });
+
+  it('reads the nested V3 usage shape', () => {
+    expect(
+      mapTurnUsage({ inputTokens: { total: 100, cacheRead: 40 }, outputTokens: { total: 60 }, totalTokens: 160 }),
+    ).toEqual({
+      promptTokens: 100,
+      completionTokens: 60,
+      promptCachedTokens: 40,
+      totalTokens: 160,
+    });
+  });
+
+  it('returns undefined for missing or all-zero usage', () => {
+    expect(mapTurnUsage(undefined)).toBeUndefined();
+    expect(mapTurnUsage({})).toBeUndefined();
+    expect(mapTurnUsage({ inputTokens: 0, outputTokens: 0, totalTokens: 0 })).toBeUndefined();
   });
 });
 
