@@ -37,5 +37,10 @@ export const queryKeys = {
     resourceId: string | undefined,
     threadId: string | undefined,
   ) =>
-    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'threads', threadId ?? null, 'messages'] as const,
+    [
+      ...queryKeys.agentControllerSession(agentControllerId, resourceId),
+      'threads',
+      threadId ?? null,
+      'messages',
+    ] as const,
 } as const;

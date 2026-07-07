@@ -378,7 +378,13 @@ export function useAgentControllerSession({
     } catch (err) {
       // Unbind the transcript (the server is still on the previous thread) so
       // route sync can settle on /new without redirect loops.
-      dispatch({ type: 'reset', modeId: prev.modeId, modelId: prev.modelId, usage: prev.usage, omProgress: prev.omProgress });
+      dispatch({
+        type: 'reset',
+        modeId: prev.modeId,
+        modelId: prev.modelId,
+        usage: prev.usage,
+        omProgress: prev.omProgress,
+      });
       dispatch({ type: 'localNotice', level: 'error', text: `Failed to switch thread: ${errorText(err)}` });
       throw err;
     }
