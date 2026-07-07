@@ -47,7 +47,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--pm-on-fail=ignore', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -61,7 +61,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -164,7 +164,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--pm-on-fail=ignore', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -210,7 +210,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--pm-on-fail=ignore', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });
@@ -227,7 +227,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });

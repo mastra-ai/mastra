@@ -113,8 +113,8 @@ function getInstallCommand(
 
   if (manager?.startsWith('pnpm@')) {
     return hasFile(pluginRoot, 'pnpm-lock.yaml')
-      ? installCommand('pnpm', ['install', '--frozen-lockfile', '--pm-on-fail=ignore'])
-      : installCommand('pnpm', ['install', '--pm-on-fail=ignore']);
+      ? installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore'])
+      : installCommand('pnpm', ['install', '--ignore-workspace', '--pm-on-fail=ignore']);
   }
 
   if (manager?.startsWith('npm@')) {
@@ -138,11 +138,11 @@ function getInstallCommand(
   }
 
   if (hasFile(pluginRoot, 'pnpm-lock.yaml')) {
-    return installCommand('pnpm', ['install', '--frozen-lockfile', '--pm-on-fail=ignore']);
+    return installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore']);
   }
 
   if (hasFile(commandRoot, 'pnpm-lock.yaml')) {
-    return installCommand('pnpm', ['install', '--pm-on-fail=ignore']);
+    return installCommand('pnpm', ['install', '--ignore-workspace', '--pm-on-fail=ignore']);
   }
 
   if (hasNpmLockfile(pluginRoot)) {
