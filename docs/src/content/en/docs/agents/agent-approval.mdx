@@ -141,11 +141,11 @@ const weatherTool = createTool({
     if (!location) {
       return await context?.agent?.suspend({
         question: 'Which city would you like the weather for?',
-      });
+      })
     }
-    return await fetchWeather(location);
+    return await fetchWeather(location)
   },
-});
+})
 ```
 
 :::note
