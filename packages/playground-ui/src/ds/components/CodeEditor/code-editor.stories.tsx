@@ -134,6 +134,29 @@ export const FocusedEmbedded: Story = {
   },
 };
 
+export const FocusedEmbeddedInBlock: Story = {
+  args: {
+    value: `Use the agent instructions below.
+
+- Keep answers concise
+- Ask before taking destructive actions
+- Prefer tool-backed evidence over assumptions`,
+    variant: 'embedded',
+    language: 'markdown',
+    lineNumbers: false,
+    showCopyButton: false,
+    className: 'min-h-24',
+  },
+  render: args => (
+    <div className="w-150 rounded-md border border-border1 bg-surface3 p-3 transition-colors focus-within:border-neutral5/50">
+      <CodeEditor {...args} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    canvasElement.querySelector<HTMLElement>('[role="textbox"]')?.focus();
+  },
+};
+
 export const WithoutCopyButton: Story = {
   args: {
     data: { message: 'Hello, World!' },

@@ -1,7 +1,7 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
+import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
 import { tags as t } from '@lezer/highlight';
@@ -226,7 +226,10 @@ export const useCodemirrorTheme = (): Extension => {
 };
 
 const codeEditorVariants = cva(
-  cn('p-1 font-mono relative overflow-hidden', 'transition-colors duration-normal ease-out-custom'),
+  cn(
+    'p-1 font-mono relative overflow-hidden outline-hidden focus:outline-hidden focus-within:outline-hidden',
+    'transition-colors duration-normal ease-out-custom',
+  ),
   {
     variants: {
       variant: {
@@ -240,9 +243,33 @@ const codeEditorVariants = cva(
   },
 );
 
-const editorFocusAttributes = EditorView.editorAttributes.of({
-  style: 'outline: none',
-});
+const editorFocusAttributes = Prec.highest(
+  EditorView.editorAttributes.of({
+    style: 'outline: none',
+  }),
+);
+
+const editorFocusTheme = Prec.highest(
+  EditorView.theme({
+    '&': {
+      outline: 'none',
+    },
+    '&.cm-focused': {
+      outline: 'none',
+    },
+    '.cm-scroller': {
+      outline: 'none',
+    },
+    '.cm-content': {
+      outline: 'none',
+    },
+    '.cm-content:focus': {
+      outline: 'none',
+    },
+  }),
+);
+
+const editorFocusExtensions: Extension[] = [editorFocusAttributes, editorFocusTheme];
 
 export type CodeEditorProps = {
   data?: Record<string, unknown> | Array<Record<string, unknown>>;
@@ -290,7 +317,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
 
     const extensions = useMemo(() => {
-      const exts: Extension[] = [editorFocusAttributes];
+      const exts: Extension[] = [...editorFocusExtensions];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
