@@ -96,13 +96,6 @@ const topicExamplesResponse = {
   nextOffset: null,
 };
 
-const pointsResponse = {
-  runId: '32',
-  points: [
-    { exampleId: 'ex-1', runId: '32', signalName: 'sentiment', topicId: '89', isOutlier: false, x: 0.1, y: 0.2 },
-  ],
-};
-
 function useEntityLearningHandlers() {
   server.use(
     http.get(`${ENTITY_LEARNING_ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
@@ -110,7 +103,6 @@ function useEntityLearningHandlers() {
     http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics/:topicId/examples`, () =>
       HttpResponse.json(topicExamplesResponse),
     ),
-    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/points`, () => HttpResponse.json(pointsResponse)),
   );
 }
 

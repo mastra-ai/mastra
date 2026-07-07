@@ -4,20 +4,16 @@ import type { ReactNode } from 'react';
 import { Button } from '../../../ds/components/Button';
 import { DataList } from '../../../ds/components/DataList/data-list';
 import { InputGroup, InputGroupAddon, InputGroupInput } from '../../../ds/components/InputGroup';
-import { ScatterPlotChart } from '../../../ds/components/ScatterPlotChart';
 import { Skeleton } from '../../../ds/components/Skeleton';
-import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
 import { cn } from '../../../lib/utils';
 import { TopicTraceDetailsPanel, TopicsLayout } from '../../topics';
-import { useEntities, useEntityPoints, useEntityTopicExamples, useEntityTopics } from '../hooks';
-import type { EntityLearningPoint, EntityLearningTopic, EntityLearningTopicExample } from '../services';
+import { useEntities, useEntityTopicExamples, useEntityTopics } from '../hooks';
+import type { EntityLearningTopic, EntityLearningTopicExample } from '../services';
 import { getSignalCatalogEntry } from '../signals-data';
 import type { SelectedEntity } from '../types';
 
 export const SignalTraceDetailsPanel = TopicTraceDetailsPanel;
 const SignalsLayout = TopicsLayout;
-
-type SignalTab = 'trace-list' | 'chart';
 
 function clusterColor(topicId: string) {
   let hash = 0;
@@ -131,10 +127,6 @@ function SignalDetailsSkeleton() {
         <Skeleton className="h-7 w-48" />
         <Skeleton className="h-4 w-64" />
       </header>
-      <div className="flex gap-6 border-b border-border1/60">
-        <Skeleton className="mb-2 h-5 w-20" />
-        <Skeleton className="mb-2 h-5 w-16" />
-      </div>
       <div className="flex min-h-0 flex-1 gap-6 overflow-hidden">
         <SignalClusterSidebarSkeleton />
         <div className="min-w-0 flex-1 space-y-4 py-4">
@@ -228,114 +220,37 @@ export function SignalTraceListTab({
   );
 }
 
-interface SignalChartTabProps {
-  topics: EntityLearningTopic[];
-  points: EntityLearningPoint[];
-  selectedTopicIds: string[];
-  onTopicToggle: (topicId: string) => void;
-}
-
-export function SignalChartTab({ topics, points, selectedTopicIds, onTopicToggle }: SignalChartTabProps) {
-  const chartData = useMemo(
-    () =>
-      points
-        // Only show points belonging to a selected cluster.
-        .filter(
-          (point): point is EntityLearningPoint & { topicId: string } =>
-            point.topicId !== undefined && selectedTopicIds.includes(point.topicId),
-        )
-        .map(point => ({ ...point, color: clusterColor(point.topicId) })),
-    [points, selectedTopicIds],
-  );
-
-  return (
-    <div className="flex h-full min-w-0 gap-6 overflow-y-auto">
-      <SignalClusterSidebar
-        topics={topics}
-        selectedTopicIds={selectedTopicIds}
-        onTopicSelect={onTopicToggle}
-        multiple
-        ariaLabel="Chart cluster filters"
-      />
-      <div className="min-h-0 min-w-0 flex-1 py-4">
-        <ScatterPlotChart
-          data={chartData}
-          xKey="x"
-          yKey="y"
-          nameKey="topicId"
-          colorKey="color"
-          height="100%"
-          className="h-full"
-          xLabel="X"
-          yLabel="Y"
-        />
-      </div>
-    </div>
-  );
-}
-
-interface SignalClusterTabsProps {
+interface SignalClusterTraceListProps {
   topics: EntityLearningTopic[];
   examples: EntityLearningTopicExample[];
   examplesLoading: boolean;
-  points: EntityLearningPoint[];
   selectedTopicId: string;
   selectedTraceId: string | null;
-  selectedChartTopicIds: string[];
-  activeTab: SignalTab;
-  onActiveTabChange: (tab: SignalTab) => void;
   onTopicSelect: (topicId: string) => void;
-  onChartTopicToggle: (topicId: string) => void;
   onTraceSelect: (traceId: string) => void;
 }
 
-export function SignalClusterTabs({
+export function SignalClusterTraceList({
   topics,
   examples,
   examplesLoading,
-  points,
   selectedTopicId,
   selectedTraceId,
-  selectedChartTopicIds,
-  activeTab,
-  onActiveTabChange,
   onTopicSelect,
-  onChartTopicToggle,
   onTraceSelect,
-}: SignalClusterTabsProps) {
+}: SignalClusterTraceListProps) {
   return (
-    <Tabs<SignalTab>
-      defaultTab="trace-list"
-      value={activeTab}
-      onValueChange={onActiveTabChange}
-      className="flex h-full min-h-0 flex-col overflow-hidden"
-    >
-      <TabList variant="line">
-        <Tab value="trace-list">Trace list</Tab>
-        <Tab value="chart">Chart</Tab>
-      </TabList>
-      <TabContent value="trace-list" className="min-h-0 flex-1 overflow-y-auto py-0">
-        <div className="flex h-full min-w-0 gap-6 overflow-y-auto">
-          <SignalClusterSidebar topics={topics} selectedTopicIds={[selectedTopicId]} onTopicSelect={onTopicSelect} />
-          <div className="min-w-0 flex-1 overflow-y-auto h-full py-4">
-            <SignalTraceListTab
-              examples={examples}
-              loading={examplesLoading}
-              selectedTraceId={selectedTraceId}
-              onTraceSelect={onTraceSelect}
-            />
-          </div>
-        </div>
-      </TabContent>
-      <TabContent value="chart" className="min-h-0 flex-1 overflow-hidden py-0">
-        <SignalChartTab
-          topics={topics}
-          points={points}
-          selectedTopicIds={selectedChartTopicIds}
-          onTopicToggle={onChartTopicToggle}
+    <div className="flex h-full min-w-0 gap-6 overflow-y-auto">
+      <SignalClusterSidebar topics={topics} selectedTopicIds={[selectedTopicId]} onTopicSelect={onTopicSelect} />
+      <div className="min-w-0 flex-1 overflow-y-auto h-full py-4">
+        <SignalTraceListTab
+          examples={examples}
+          loading={examplesLoading}
+          selectedTraceId={selectedTraceId}
+          onTraceSelect={onTraceSelect}
         />
-      </TabContent>
-    </Tabs>
+      </div>
+    </div>
   );
 }
 
@@ -360,8 +275,8 @@ export function SignalDetailsPage({
   const resolvedEntity = entities.find(item => item.entityId === entity?.entityId);
 
   // No runId: the API resolves the latest run for this signal (the entity-wide
-  // `latestRunId` belongs to a single signal). Examples/points below reuse the
-  // run resolved by the topics response so all three queries hit the same run.
+  // `latestRunId` belongs to a single signal). Examples below reuse the run
+  // resolved by the topics response.
   const {
     data: topicsData,
     isLoading: topicsLoading,
@@ -371,30 +286,18 @@ export function SignalDetailsPage({
   const runId = topicsData?.run?.runId;
 
   const topicSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}:${initialTopicId ?? ''}`;
-  const chartSelectionScope = `${signalId ?? ''}:${entity?.entityId ?? ''}:${runId ?? ''}`;
   const topicIds = useMemo(() => topics.map(topic => topic.topicId), [topics]);
   const topicIdSet = useMemo(() => new Set(topicIds), [topicIds]);
   const [selectedTopic, setSelectedTopic] = useState<{ scope: string; topicId: string | null }>(() => ({
     scope: topicSelectionScope,
     topicId: initialTopicId ?? null,
   }));
-  const [selectedChartTopics, setSelectedChartTopics] = useState<{ scope: string; topicIds: string[] | null }>(() => ({
-    scope: chartSelectionScope,
-    topicIds: null,
-  }));
-  const [activeTab, setActiveTab] = useState<SignalTab>('trace-list');
 
   const requestedTopicId =
     selectedTopic.scope === topicSelectionScope ? selectedTopic.topicId : (initialTopicId ?? null);
   const resolvedTopicId = requestedTopicId && topicIdSet.has(requestedTopicId) ? requestedTopicId : topics[0]?.topicId;
   const selectedTopicData = topics.find(topic => topic.topicId === resolvedTopicId);
   const examplesEnabled = Boolean(resolvedEntity?.entityId && signalId && runId && selectedTopicData);
-  const pointsEnabled = Boolean(resolvedEntity?.entityId && signalId && runId);
-  const chartTopicIds =
-    selectedChartTopics.scope === chartSelectionScope && selectedChartTopics.topicIds
-      ? selectedChartTopics.topicIds.filter(topicId => topicIdSet.has(topicId))
-      : topicIds;
-
   const {
     data: examplesData,
     isLoading: examplesLoading,
@@ -410,12 +313,6 @@ export function SignalDetailsPage({
   // so the trace list never flashes the empty-state copy between datasets.
   const examplesPending = examplesLoading || (examplesFetching && examplesData === undefined);
 
-  const { data: pointsData, isError: pointsError } = useEntityPoints(
-    resolvedEntity?.entityId,
-    pointsEnabled && runId && signalId ? { signalName: signalId, runId, includeOutliers: true } : undefined,
-  );
-  const points: EntityLearningPoint[] = pointsData?.points ?? [];
-
   const handleTraceSelect = (traceId: string) => {
     if (!signalId) return;
     onTraceSelect(signalId, traceId);
@@ -423,16 +320,6 @@ export function SignalDetailsPage({
 
   const handleTopicSelect = (topicId: string) => {
     setSelectedTopic({ scope: topicSelectionScope, topicId });
-  };
-
-  const handleChartTopicToggle = (topicId: string) => {
-    setSelectedChartTopics(current => {
-      const base = current.scope === chartSelectionScope && current.topicIds ? current.topicIds : topicIds;
-      return {
-        scope: chartSelectionScope,
-        topicIds: base.includes(topicId) ? base.filter(id => id !== topicId) : [...base, topicId],
-      };
-    });
   };
 
   if (entitiesLoading || topicsLoading) {
@@ -443,7 +330,7 @@ export function SignalDetailsPage({
     );
   }
 
-  if (entitiesError || topicsError || (examplesEnabled && examplesError) || (pointsEnabled && pointsError)) {
+  if (entitiesError || topicsError || (examplesEnabled && examplesError)) {
     return (
       <SignalsLayout sidebar={null}>
         <p className="text-ui-md text-accent2">Failed to load this signal from the observability endpoint.</p>
@@ -458,25 +345,20 @@ export function SignalDetailsPage({
   const signalName = getSignalCatalogEntry(signalId ?? '').name;
 
   return (
-    <SignalsLayout sidebar={null} tracePanel={activeTab === 'trace-list' ? tracePanel : undefined}>
+    <SignalsLayout sidebar={null} tracePanel={tracePanel}>
       <section className="flex h-full min-w-0 flex-col gap-4">
         <header className="space-y-1">
           <h1 className="text-icon-xl font-semibold text-neutral6">{signalName}</h1>
           <p className="text-ui-sm text-neutral3">Explore trace patterns by cluster.</p>
         </header>
         <div className="min-h-0 flex-1 overflow-hidden">
-          <SignalClusterTabs
+          <SignalClusterTraceList
             topics={topics}
             examples={examples}
             examplesLoading={examplesPending}
-            points={points}
             selectedTopicId={selectedTopicData.topicId}
             selectedTraceId={selectedTraceId}
-            selectedChartTopicIds={chartTopicIds}
-            activeTab={activeTab}
-            onActiveTabChange={setActiveTab}
             onTopicSelect={handleTopicSelect}
-            onChartTopicToggle={handleChartTopicToggle}
             onTraceSelect={handleTraceSelect}
           />
         </div>
