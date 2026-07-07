@@ -452,7 +452,8 @@ export function validateToolInput<T = unknown>(
     return { data: input as T };
   }
 
-  schema = toStandardSchema(schema);
+    // Temporary fix: should be validated higher up the chain that it's a complete standard schema
+    schema = toStandardSchema(schema);
 
   // Validation pipeline:
   //
