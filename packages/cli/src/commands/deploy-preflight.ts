@@ -126,9 +126,23 @@ export async function preflightBuildOutput(
      * every caller except the unified deploy always reads an env file.
      */
     hasEnvFile?: boolean;
+    /**
+     * Env var names the platform injects at deploy time (e.g. TURSO_DATABASE_URL
+     * from an attached managed database) — names only, values are platform-side
+     * secrets. Three states:
+     * - `string[]` — platform env context fetched and the field was present:
+     *   the env picture is complete, so guarded local paths whose var is
+     *   neither provided nor managed are trustworthy hard errors.
+     * - `null` — platform env context fetched but the field was absent (older
+     *   platform, or an endpoint that doesn't expose names): the picture is
+     *   incomplete, so guarded misses soften to warnings.
+     * - `undefined` — no platform context at all (lint, studio deploy):
+     *   severity falls back to `hasEnvFile`.
+     */
+    managedEnvVarNames?: string[] | null;
   } = {},
 ): Promise<PreflightIssue[]> {
-  const { hasEnvFile = true } = options;
+  const { hasEnvFile = true, managedEnvVarNames } = options;
   const outputDir = join(targetDir, '.mastra', 'output');
   const entryPath = join(outputDir, 'index.mjs');
 
@@ -149,18 +163,18 @@ export async function preflightBuildOutput(
   if (metadata) {
     // User modules' env refs were captured structurally at build time, so
     // library-only refs inside the bundle never produce warnings.
-    issues.push(...checkEnvVarNames(metadata.userEnvRefs, envVars));
+    issues.push(...checkEnvVarNames(metadata.userEnvRefs, envVars, managedEnvVarNames));
   } else {
     const bundleSources = await readBundleSources(outputDir);
     const combinedSource = bundleSources.join('\n');
-    issues.push(...checkMissingEnvVars(combinedSource, envVars));
+    issues.push(...checkMissingEnvVars(combinedSource, envVars, managedEnvVarNames));
   }
 
   // LOCAL_STORAGE_PATH — read from bundler-generated metadata.  The Rollup
   // plugin `mastra-local-storage-detector` runs during bundling and only
   // reports paths from user modules (not node_modules) that survived
   // tree-shaking, so library examples are structurally excluded.
-  issues.push(...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile)));
+  issues.push(...(await checkLocalStoragePaths(outputDir, metadata, envVars, hasEnvFile, managedEnvVarNames)));
 
   return issues;
 }
@@ -279,7 +293,11 @@ const PROCESS_ENV_BRACKET_REGEX = /\bprocess\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/
  * Fallback for builds without `preflight-metadata.json`: regex-scan the whole
  * bundle (user + library code) for `process.env.X` references.
  */
-function checkMissingEnvVars(source: string, envVars: Record<string, string>): PreflightIssue[] {
+function checkMissingEnvVars(
+  source: string,
+  envVars: Record<string, string>,
+  managedEnvVarNames?: string[] | null,
+): PreflightIssue[] {
   const referenced = new Set<string>();
   for (const match of source.matchAll(PROCESS_ENV_REGEX)) {
     referenced.add(match[1]!);
@@ -288,7 +306,7 @@ function checkMissingEnvVars(source: string, envVars: Record<string, string>): P
     referenced.add(match[1]!);
   }
 
-  return checkEnvVarNames([...referenced], envVars);
+  return checkEnvVarNames([...referenced], envVars, managedEnvVarNames);
 }
 
 /** Env vars the platform/runtime sets automatically at deploy time. */
@@ -296,12 +314,18 @@ function isPlatformProvidedEnvVar(name: string): boolean {
   return ENV_VAR_ALLOWLIST_EXACT.has(name) || ENV_VAR_ALLOWLIST_PREFIXES.some(prefix => name.startsWith(prefix));
 }
 
-function checkEnvVarNames(referenced: Iterable<string>, envVars: Record<string, string>): PreflightIssue[] {
+function checkEnvVarNames(
+  referenced: Iterable<string>,
+  envVars: Record<string, string>,
+  managedEnvVarNames?: string[] | null,
+): PreflightIssue[] {
   const provided = new Set(Object.keys(envVars));
+  const managed = new Set(managedEnvVarNames ?? []);
   const missing: string[] = [];
 
   for (const name of new Set(referenced)) {
     if (provided.has(name)) continue;
+    if (managed.has(name)) continue;
     if (isPlatformProvidedEnvVar(name)) continue;
     missing.push(name);
   }
@@ -352,6 +376,7 @@ async function checkLocalStoragePaths(
   metadata: PreflightMetadata | null,
   envVars: Record<string, string>,
   hasEnvFile: boolean,
+  managedEnvVarNames?: string[] | null,
 ): Promise<PreflightIssue[]> {
   let detections: LocalStorageDetection[];
   if (metadata) {
@@ -391,13 +416,36 @@ async function checkLocalStoragePaths(
     // still takes the fallback at runtime when X is blank.
     if (envVars[d.guardedBy]) continue;
 
-    // TODO(managed-env-names): managed databases attached via the platform
-    // inject vars (e.g. TURSO_DATABASE_URL) directly onto the runtime service,
-    // invisible to the CLI — this error is a false positive for them today
-    // (--skip-preflight is the workaround). Once the platform exposes
-    // `managedEnvVarNames` on the environment/project response, merge those
-    // names into the provided set so the error never fires for injected guards.
-    if (hasEnvFile) {
+    // Managed platform resources (e.g. an attached Turso database) inject
+    // their vars at deploy time; the platform exposes the names so preflight
+    // knows the guard is satisfied even though the value is invisible here.
+    if (managedEnvVarNames?.includes(d.guardedBy)) continue;
+
+    if (managedEnvVarNames !== undefined) {
+      if (managedEnvVarNames === null) {
+        // Platform context was fetched but didn't expose managed names (older
+        // platform, or the server-project env endpoint which doesn't carry
+        // them yet) — the env picture is incomplete, so don't hard-block.
+        // TODO(managed-env-names): once every platform env endpoint exposes
+        // managedEnvVarNames, drop this branch and always hard-error.
+        issues.push({
+          code: 'LOCAL_STORAGE_PATH',
+          severity: 'warning',
+          message: `${truncate(d.value, 80)} will be used at runtime unless ${d.guardedBy} is set — cannot verify whether the platform injects it (${d.hint})`,
+          fix: `Set ${d.guardedBy} in your env file or the environment's stored vars. If a managed database injects it, you can ignore this.`,
+        });
+      } else {
+        // Full env picture: local env file + stored vars + managed names.
+        // The guard var is genuinely absent, so the local fallback WILL be
+        // used at runtime — trustworthy hard error.
+        issues.push({
+          code: 'LOCAL_STORAGE_PATH',
+          severity: 'error',
+          message: `${truncate(d.value, 80)} will be used at runtime because ${d.guardedBy} is not set (${d.hint})`,
+          fix: `Set ${d.guardedBy} in your env file or the environment's stored vars, or attach a managed database that provides it.`,
+        });
+      }
+    } else if (hasEnvFile) {
       issues.push({
         code: 'LOCAL_STORAGE_PATH',
         severity: 'error',

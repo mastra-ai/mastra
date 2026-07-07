@@ -253,6 +253,52 @@ describe('preflightBuildOutput', () => {
       expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
     });
 
+    it('suppresses guarded paths when the var is a platform-managed injection (managedEnvVarNames)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        {},
+        { hasEnvFile: true, managedEnvVarNames: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] },
+      );
+      expect(issues.find(i => i.code === 'LOCAL_STORAGE_PATH')).toBeUndefined();
+    });
+
+    it('suppresses MISSING_ENV_VAR for platform-managed vars (managedEnvVarNames)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ userEnvRefs: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] });
+
+      const issues = await preflightBuildOutput(
+        tmpDir,
+        {},
+        { hasEnvFile: true, managedEnvVarNames: ['TURSO_DATABASE_URL', 'TURSO_AUTH_TOKEN'] },
+      );
+      expect(issues.find(i => i.code === 'MISSING_ENV_VAR')).toBeUndefined();
+    });
+
+    it('hard-errors on guarded misses when managedEnvVarNames is present (complete env picture)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      // Field present but the guard var is not managed, provided, or stored —
+      // the picture is complete even without a local env file.
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: false, managedEnvVarNames: [] });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('error');
+      expect(issue?.message).toContain('TURSO_DATABASE_URL is not set');
+    });
+
+    it('warns (not errors) on guarded misses when platform context lacks managedEnvVarNames (older platform)', async () => {
+      writeBundle(`export {};`);
+      writeMetadata({ localPaths: [guardedDetection] });
+
+      const issues = await preflightBuildOutput(tmpDir, {}, { hasEnvFile: true, managedEnvVarNames: null });
+      const issue = issues.find(i => i.code === 'LOCAL_STORAGE_PATH');
+      expect(issue?.severity).toBe('warning');
+      expect(issue?.message).toContain('cannot verify whether the platform injects it');
+    });
+
     it('still errors on unguarded local paths', async () => {
       writeBundle(`export {};`);
       writeMetadata({

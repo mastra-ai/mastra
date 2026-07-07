@@ -800,7 +800,13 @@ async function runUnifiedDeploy(dir: string | undefined, opts: DeployOptions) {
   // stored vars (request wins), so platform-stored vars don't false-alarm.
   if (!skipPreflight) {
     const preflightEnv = mergePreflightEnvVars(environment.envVars, envVars);
-    const issues = await preflightBuildOutput(targetDir, preflightEnv, { hasEnvFile: hasAmbientEnvFile });
+    const issues = await preflightBuildOutput(targetDir, preflightEnv, {
+      hasEnvFile: hasAmbientEnvFile,
+      // Managed resources (e.g. attached databases) inject vars at deploy
+      // time; the platform exposes their names on the environment. Absent
+      // field = older platform = incomplete env picture (soften to warnings).
+      managedEnvVarNames: environment.managedEnvVarNames ?? null,
+    });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');

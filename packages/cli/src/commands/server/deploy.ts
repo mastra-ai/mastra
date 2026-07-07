@@ -500,7 +500,13 @@ async function runServerDeploy(dir: string | undefined, opts: ServerDeployOption
       // Stored env unavailable (older platform, network hiccup) — preflight
       // proceeds with the local env picture only.
     }
-    const issues = await preflightBuildOutput(targetDir, mergePreflightEnvVars(storedEnvVars, envVars));
+    // `managedEnvVarNames: null` — the server-project env endpoint doesn't
+    // expose managed-database var names yet, so the env picture is incomplete
+    // and guarded local paths soften to warnings instead of hard errors.
+    // TODO(managed-env-names): pass real names once the endpoint exposes them.
+    const issues = await preflightBuildOutput(targetDir, mergePreflightEnvVars(storedEnvVars, envVars), {
+      managedEnvVarNames: null,
+    });
     const outcome = await printPreflightIssues(issues, { autoAccept });
     if (outcome === 'blocked') {
       p.cancel('Deploy blocked by preflight errors.');
