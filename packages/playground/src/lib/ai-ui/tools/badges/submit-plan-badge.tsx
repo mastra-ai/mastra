@@ -271,7 +271,6 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
                     type="button"
                     variant="primary"
                     size="sm"
-                    tooltip={isExpanded ? 'Collapse plan' : 'Expand plan'}
                     aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
                     onClick={toggleExpanded}
                   >
