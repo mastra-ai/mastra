@@ -7,13 +7,13 @@ packages:
 
 # Filesystem overview
 
-Mastra can build parts of your project from files and folders instead of a single configuration object. The bundler discovers a known layout under `src/mastra/` and wires it into your [`Mastra`](/reference/core/mastra-class) instance.
-
 :::experimental
 
 This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
+
+Mastra can build a fully functioning project from files and folders, without a single central configuration object. The bundler discovers a known layout under `src/mastra/` and assembles it into your [`Mastra`](/reference/core/mastra-class) instance.
 
 Each primitive gets a clear home. Agents live in `agents/<name>/` directories, workflows in `workflows/`, and project-wide config in single files like `storage.ts`. A file's location determines what it does, and its path determines its name.
 
