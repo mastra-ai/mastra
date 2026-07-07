@@ -1,0 +1,231 @@
+{
+  "meta": {
+    "name": "test-738cd3d4",
+    "testFile": "packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts",
+    "testName": "DurableAgent Background Tasks E2E > emits background-task-started chunk on the stream after task dispatches",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-07-03T12:27:21.715Z",
+    "updatedAt": "2026-07-03T12:48:14.491Z"
+  },
+  "recordings": [
+    {
+      "hash": "b541de521075a3ee",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- greet (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Research \"machine learning\" please"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "research",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  }
+                },
+                "required": ["topic"],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "function",
+              "name": "greet",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1783082890431
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a15600c40b4a534c-LOS",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Fri, 03 Jul 2026 12:48:11 GMT",
+          "openai-organization": "personal-lzeove",
+          "openai-processing-ms": "107",
+          "openai-project": "proj_dFrBXhnlZG0ULdXzuBt0bnzX",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "b1355042-bfcb-4e66-b7c4-d983fc21877f"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_05d6a03cb04e5c0d006a47af8b160c819f97634a0fa8d1e2b4\",\"object\":\"response\",\"created_at\":1783082891,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_05d6a03cb04e5c0d006a47af8b160c819f97634a0fa8d1e2b4\",\"object\":\"response\",\"created_at\":1783082891,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_en3BtvGlwodKVXGu43UQ64az\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":2}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"obfuscation\":\"Y7Wo8kIAFalQfC\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"topic\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"obfuscation\":\"7U5fFVZnS65\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"obfuscation\":\"pgWZYCCsJ67Jq\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"machine\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"obfuscation\":\"f7aLBhuhs\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" learning\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"obfuscation\":\"MSkKRtd\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"obfuscation\":\"2D0Oi42boDCY4N\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.function_call_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"topic\\\":\\\"machine learning\\\"}\",\"item_id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"machine learning\\\"}\",\"call_id\":\"call_en3BtvGlwodKVXGu43UQ64az\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_05d6a03cb04e5c0d006a47af8b160c819f97634a0fa8d1e2b4\",\"object\":\"response\",\"created_at\":1783082891,\"status\":\"completed\",\"background\":false,\"completed_at\":1783082891,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"machine learning\\\"}\",\"call_id\":\"call_en3BtvGlwodKVXGu43UQ64az\",\"name\":\"research\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":356,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":372},\"user\":null,\"metadata\":{}},\"sequence_number\":11}\n\n"
+        ],
+        "chunkTimings": [1, 614, 0, 0, 1, 0, 0, 0, 0, 87],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "bd0e31dd84cb9f18",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- greet (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Research \"machine learning\" please"
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_05d6a03cb04e5c0d006a47af8bdfa4819fbba30246ab57af11"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_en3BtvGlwodKVXGu43UQ64az",
+              "output": "Background task started. Task ID: 00000000-0000-4000-8000-00000000003f. The tool \"research\" is running in the background. You will be notified when it completes."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "research",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  }
+                },
+                "required": ["topic"],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "function",
+              "name": "greet",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1783082891821
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a15600cd2917d424-LOS",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Fri, 03 Jul 2026 12:48:12 GMT",
+          "openai-organization": "personal-lzeove",
+          "openai-processing-ms": "127",
+          "openai-project": "proj_dFrBXhnlZG0ULdXzuBt0bnzX",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "02da9729-7b62-4953-ba4b-e9387e106d59"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_05d6a03cb04e5c0d006a47af8c8408819f99007d20f9c0a7c7\",\"object\":\"response\",\"created_at\":1783082892,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties",
+          "\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_05d6a03cb04e5c0d006a47af8c8408819f99007d20f9c0a7c7\",\"object\":\"response\",\"created_at\":1783082892,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalPr",
+          "operties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"I've\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"gzg7NEtxv9o5\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" started\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"Dq7DWL6C\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" researching\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"baiV\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \\\"\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"J4TrwkzDA3tj0E\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"machine\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"myANKhT3d\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" learning\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"yGwoVck\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\\"\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"GJ4XWm0d0YpwGF\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I'll\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"SEqJeH5IsRo\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" notify\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"amIeUwlcQ\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"52tRXH4IE0QP\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" when\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"UDMWkvX1ki9\",\"output_index\":0,\"sequence_number\":14}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" it's\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"oz2UtOAsozm\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" completed\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"sN6ddn\",\"output_index\":0,\"sequence_number\":16}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"obfuscation\":\"FI22UM175Mm0tlD\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":18,\"text\":\"I've started researching \\\"machine learning.\\\" I'll notify you when it's completed!\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching \\\"machine learning.\\\" I'll notify you when it's completed!\"},\"sequence_number\":19}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching \\\"machine learning.\\\" I'll notify you when it's completed!\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_05d6a03cb04e5c0d006a47af8c8408819f99007d20f9c0a7c7\",\"object\":\"response\",\"created_at\":1783082892,\"status\":\"completed\",\"background\":false,\"completed_at\":1783082893,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_05d6a03cb04e5c0d006a47af8cf114819f8f182acc62f15949\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching \\\"machine learning.\\\" I'll notify you when it's completed!\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. T",
+          "his takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":426,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":16,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":442},\"user\":null,\"metadata\":{}},\"sequence_number\":21}\n\n"
+        ],
+        "chunkTimings": [3, 0, 0, 1, 375, 0, 0, 0, 1, 0, 0, 0, 1, 29, 72, 1, 0, 19, 4, 1, 87, 4],
+        "isStreaming": true
+      }
+    }
+  ]
+}

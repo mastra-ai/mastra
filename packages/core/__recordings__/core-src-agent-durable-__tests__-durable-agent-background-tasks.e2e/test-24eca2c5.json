@@ -1,0 +1,265 @@
+{
+  "meta": {
+    "name": "test-24eca2c5",
+    "testFile": "packages/core/src/agent/durable/__tests__/durable-agent-background-tasks.e2e.test.ts",
+    "testName": "DurableAgent Background Tasks E2E > dispatches a background-eligible tool and returns a placeholder",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-07-03T12:27:06.081Z",
+    "updatedAt": "2026-07-03T12:47:59.289Z"
+  },
+  "recordings": [
+    {
+      "hash": "e64f89bfcbad16b7",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- greet (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Please research the topic \"quantum computing\""
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "research",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  }
+                },
+                "required": ["topic"],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "function",
+              "name": "greet",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1783082873611
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a156005b6b03534c-LOS",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Fri, 03 Jul 2026 12:47:54 GMT",
+          "openai-organization": "personal-lzeove",
+          "openai-processing-ms": "145",
+          "openai-project": "proj_dFrBXhnlZG0ULdXzuBt0bnzX",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "ad976308-2501-43af-afa5-fefb93c7c71f"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0dd124eb4c96d604006a47af7aa22481a3bcd34074e57f26dd\",\"object\":\"response\",\"created_at\":1783082874,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_ca",
+          "lls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true",
+          "}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0dd124eb4c96d604006a47af7aa22481a3bcd34074e57f26dd\",\"object\":\"response\",\"created_at\":1783082874,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalPr",
+          "operties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"gree",
+          "t\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_CXNIPeWKZDFAqHOu7SUP64lw\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"Y3S0gW72Ith1dC\",\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"topic\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"Wte2q2gQIeD\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"TFIms4HmL6mQs\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"quant\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"Fi6IdeNcbAZ\",\"output_index\":0,\"sequence_number\":6}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"um\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"RslCuqvZKLgaIa\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\" computing\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"gOAt0Y\",\"output_index\":0,\"sequence_number\":8}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\"}\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"obfuscation\":\"mGJvzmSALsJFTZ\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.function_cal",
+          "l_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\"}\",\"item_id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\"}\",\"call_id\":\"call_CXNIPeWKZDFAqHOu7SUP64lw\",\"name\":\"research\"},\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0dd124eb4c96d604006a47af7aa22481a3bcd34074e57f26dd\",\"object\":\"response\",\"created_at\":1783082874,\"status\":\"completed\",\"background\":false,\"completed_at\":1783082875,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"topic\\\":\\\"quantum computing\\\"}\",\"call_id\":\"call_CXNIPeWKZDFAqHOu7SUP64lw\",\"name\":\"research\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research somethin",
+          "g.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":359,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":17,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":376},\"user\":null,\"metadata\":{}},\"sequence_number\":12}\n\n"
+        ],
+        "chunkTimings": [1, 1, 0, 0, 1, 0, 798, 9, 15, 1, 0, 31, 10, 0, 42, 0, 0, 101, 3],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "77199be69734b050",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are a helpful assistant with access to tools. When asked to research something, use the research tool. When asked to greet someone, use the greet tool.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- research (default: background)\n- greet (default: foreground)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"enabled\": true/false, \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- If you don't include \"_background\", the tool's default configuration is used.\n- When a tool runs in the background, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Please research the topic \"quantum computing\""
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_0dd124eb4c96d604006a47af7b976481a3aa922ae5edac7e14"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_CXNIPeWKZDFAqHOu7SUP64lw",
+              "output": "Background task started. Task ID: 00000000-0000-4000-8000-000000000041. The tool \"research\" is running in the background. You will be notified when it completes."
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "research",
+              "description": "Research a topic. This takes a while, use it when the user asks to research something.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "topic": {
+                    "type": "string",
+                    "description": "The topic to research"
+                  }
+                },
+                "required": ["topic"],
+                "additionalProperties": false
+              }
+            },
+            {
+              "type": "function",
+              "name": "greet",
+              "description": "Greet a person by name. Use this when the user asks to greet someone.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "description": "The name to greet"
+                  }
+                },
+                "required": ["name"],
+                "additionalProperties": false
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1783082875579
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a15600674e285352-LOS",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Fri, 03 Jul 2026 12:47:57 GMT",
+          "openai-organization": "personal-lzeove",
+          "openai-processing-ms": "117",
+          "openai-project": "proj_dFrBXhnlZG0ULdXzuBt0bnzX",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "c8b01c67-5795-49a4-a451-52f187ddb950"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0dd124eb4c96d604006a47af7ce62481a3bf111b9c75854e4a\",\"object\":\"response\",\"created_at\":1783082876,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_c",
+          "alls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":tru",
+          "e}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0dd124eb4c96d604006a47af7ce62481a3bf111b9c75854e4a\",\"object\":\"response\",\"created_at\":1783082876,\"status\":\"in_progress\",\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\"",
+          ",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"p",
+          "arameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"I've\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"bvxCsYn2pyxr\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" started\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"PozEpjLl\",\"output_index\":0,\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" researching\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"YfUC\",\"output_index\":0,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"DMnrGW5X3pro\",\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" topic\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"IX25sCudvT\",\"output_index\":0,\"sequence_number\":8}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"ydUxUmJJ52PA0\",\"output_index\":0,\"sequence_number\":9}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" \\\"\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"o95WqFgnGSctN8\",\"output_index\":0,\"sequence_number\":10}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"quant\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"yIqQ2KZsi3I\",\"output_index\":0,\"sequence_number\":11}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"um\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"NU4BiP3jhVfm3X\",\"output_index\":0,\"sequence_number\":12}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" computing\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"jL6wyX\",\"output_index\":0,\"sequence_number\":13}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\\\"\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"YV2SMpLOXX1lLY\",\"output_index\":0,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I'll\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"LAtZvSps4aQ\",\"output_index\":0,\"sequence_number\":15}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" let\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"YzQvkOflRmZk\",\"output_index\":0,\"sequence_number\":16}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"BCzhh2bKTOSz\",\"output_index\":0,\"sequence_number\":17}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" know\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"t4Kmn6eLfhV\",\"output_index\":0,\"sequence_number\":18}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" once\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"45tJPdWtqS3\",\"output_index\":0,\"sequence_number\":19}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" I\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"P4KOvc9tNYMbHR\",\"output_index\":0,\"sequence_number\":20}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"VW0ZYyqV8pI\",\"output_index\":0,\"sequence_number\":21}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"8f99A03e1t3c\",\"output_index\":0,\"sequence_number\":22}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" results\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"7XNEmpkh\",\"output_index\":0,\"sequence_number\":23}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"!\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"o2OJFTiq2SZOqLf\",\"output_index\":0,\"sequence_number\":24}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" If\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"6Robmph9GzOqe\",\"output_index\":0,\"sequence_number\":25}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" you\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"UMXJwsRtouEh\",\"output_index\":0,\"sequence_number\":26}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" have\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"IPsnk54jngl\",\"output_index\":0,\"sequence_number\":27}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" any\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"VBjJtJf6Pqqo\",\"output_index\":0,\"sequence_number\":28}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" specific\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"EnJ2Q4v\",\"output_index\":0,\"sequence_number\":29}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" questions\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"edyUAo\",\"output_index\":0,\"sequence_number\":30}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" in\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"CfnA1CeFJQCyi\",\"output_index\":0,\"sequence_number\":31}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"xRXVb0LES47F\",\"output_index\":0,\"sequence_number\":32}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" meantime\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"eOaJ6W6\",\"output_index\":0,\"sequence_number\":33}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\",\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"Flo5X9P4tHjoCZd\",\"output_index\":0,\"sequence_number\":34}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" feel\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"V5BgPl1BlCs\",\"output_index\":0,\"sequence_number\":35}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" free\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"C5u6OkjNa3M\",\"output_index\":0,\"sequence_number\":36}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" to\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"iJRul4gPbmSiJ\",\"output_index\":0,\"sequence_number\":37}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" ask\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"9f6pw65GgRIW\",\"output_index\":0,\"sequence_number\":38}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"obfuscation\":\"ujT5McRyK4KwZLN\",\"output_index\":0,\"sequence_number\":39}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":40,\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" I'll let you know once I have the results! If you have any specific questions in the meantime, feel free to ask.\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" I'll let you know once I have the results! If you have any specific questions in the meantime, feel free to ask.\"},\"sequence_number\":41}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" I'll let you know once I have the results! If you have any specific questions in the meantime, feel free to ask.\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":42}\n\n",
+          "event: response.completed\nd",
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0dd124eb4c96d604006a47af7ce62481a3bf111b9c75854e4a\",\"object\":\"response\",\"created_at\":1783082876,\"status\":\"completed\",\"background\":false,\"completed_at\":1783082878,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-4o-mini-2024-07-18\",\"moderation\":null,\"output\":[{\"id\":\"msg_0dd124eb4c96d604006a47af7dada081a3bd440507971c00f1\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"I've started researching the topic of \\\"quantum computing.\\\" I'll let you know once I have the results! If you have any specific questions in the meantime, feel free to ask.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":null,\"effort\":null,\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Research a topic. This takes a while, use it when the user asks to research something.\",\"name\":\"research\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"topic\":{\"type\":\"string\",\"description\":\"The topic to research\"}},\"required\":[\"topic\"],\"additionalProperties\":false},\"strict\":true},{\"type\":\"function\",\"description\":\"Greet a person by name. Use this when the user asks to greet someone.\",\"name\":\"greet\",\"parameters\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name to greet\"}},\"required\":[\"name\"],\"additionalProperties\":false},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":429,\"input_tokens_details\":{\"cached_tokens\":0},\"output_tokens\":38,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":467},\"user\":null,\"metadata\":{}},\"sequence_number\":43}\n\n"
+        ],
+        "chunkTimings": [
+          0, 35, 64, 37, 31, 518, 16, 11, 5, 16, 16, 5, 11, 5, 38, 5, 16, 11, 27, 21, 21, 21, 38, 10, 38, 21, 21, 16,
+          11, 5, 11, 10, 6, 10, 17, 16, 10, 5, 22, 21, 10, 44, 63, 102
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

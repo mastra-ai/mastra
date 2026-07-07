@@ -75,11 +75,18 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   const { mastra, runId, agentId, input, logger } = options;
 
   // 1. Deserialize MessageList
-  const messageList = new MessageList({
-    threadId: input.state.threadId,
-    resourceId: input.state.resourceId,
-  });
-  messageList.deserialize(input.messageListState);
+  // Reuse the existing MessageList from the registry if available so that
+  // external consumers (e.g. the stream adapter) that hold a reference to it
+  // see the updated state.  Creating a new instance each iteration would
+  // orphan those references (their newResponseMessages Set would point at
+  // stale objects).
+  const existingEntry = globalRunRegistry.get(runId);
+  const messageList = existingEntry?.messageList
+    ? existingEntry.messageList.deserialize(input.messageListState)
+    : new MessageList({
+        threadId: input.state.threadId,
+        resourceId: input.state.resourceId,
+      }).deserialize(input.messageListState);
 
   // 2. Check global registry first (for local/test execution)
   // This is necessary because workflow steps don't have direct access to DurableAgent's registry
