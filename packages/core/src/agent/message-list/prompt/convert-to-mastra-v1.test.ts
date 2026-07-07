@@ -2117,3 +2117,49 @@ describe('convertToV1Messages - Content Duplication Bug (Issue #7271)', () => {
     });
   });
 });
+
+describe('convertToV1Messages - v5-shaped file parts (mediaType) do not break persist', () => {
+  it('does not throw and preserves the media type when a user file part uses `mediaType`/`data` (v5 shape)', () => {
+    // AI SDK v5 renamed `mimeType` -> `mediaType`. A v5-shaped file part reaching the
+    // v4 converter previously produced `contentType: undefined`, making
+    // `attachmentsToParts` throw "If the attachment is not an image or text, it must
+    // specify a content type" — surfaced as AGENT_MEMORY_PERSIST_RESPONSE_MESSAGES_FAILED.
+    const base64Pdf = 'JVBERi0xLjQ=';
+    const messages: MastraDBMessage[] = [
+      {
+        id: 'msg-file-v5',
+        role: 'user',
+        createdAt: new Date('2024-01-01'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: {
+          format: 2,
+          content: 'Here is the document.',
+          parts: [
+            { type: 'text', text: 'Here is the document.' },
+            // v5 shape: `mediaType` + `data`, no `mimeType`. Cast at the boundary because
+            // the stored `MastraMessagePart` union only describes the v4 shape.
+            {
+              type: 'file',
+              data: base64Pdf,
+              mediaType: 'application/pdf',
+            } as unknown as MastraDBMessage['content']['parts'][number],
+          ],
+        },
+      },
+    ];
+
+    expect(() => convertToV1Messages(messages)).not.toThrow();
+
+    const v1 = convertToV1Messages(messages);
+    const userMsg = v1.find(m => m.role === 'user');
+    expect(userMsg).toBeDefined();
+    expect(Array.isArray(userMsg!.content)).toBe(true);
+    const filePart = (userMsg!.content as Array<{ type: string; mimeType?: string; data?: string }>).find(
+      p => p.type === 'file',
+    );
+    expect(filePart).toBeDefined();
+    expect(filePart!.mimeType).toBe('application/pdf');
+    expect(filePart!.data).toBe('data:application/pdf;base64,JVBERi0xLjQ=');
+  });
+});
