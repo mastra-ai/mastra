@@ -168,7 +168,12 @@
   },
   "changesets": [
     "automated-provider-registry-20260706-184844",
+    "deploy-optional-env-file",
+    "fair-boxes-tan",
+    "fix-stopwhen-discarded-with-maxsteps",
+    "funky-falcons-sin",
     "green-birds-knock",
-    "jolly-towns-pump"
+    "jolly-towns-pump",
+    "whole-meals-camp"
   ]
 }
