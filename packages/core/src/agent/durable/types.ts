@@ -321,6 +321,10 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
+  /** Deferred step-finish chunk for intermediate steps.
+   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
+   *  chunks, matching the regular agent's chunk ordering. */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**

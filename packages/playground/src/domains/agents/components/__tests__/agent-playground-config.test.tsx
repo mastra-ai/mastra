@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { useForm } from 'react-hook-form';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -55,6 +55,16 @@ describe('AgentPlaygroundConfig', () => {
       expect(screen.getByRole('tab', { name: 'Variables' })).not.toBeNull();
       expect(screen.getByRole('tab', { name: 'System Prompt' })).not.toBeNull();
       expect(screen.getByRole('tab', { name: 'Tools 2' })).not.toBeNull();
+    });
+
+    it('keeps the system prompt in edit mode without a preview toggle', () => {
+      render(<AgentPlaygroundConfigHarness />);
+
+      fireEvent.click(screen.getByRole('tab', { name: 'System Prompt' }));
+
+      expect(screen.getByText('Instruction blocks editor')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     });
   });
 });

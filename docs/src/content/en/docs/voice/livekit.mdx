@@ -171,13 +171,13 @@ export default createLiveKitWorker({
 })
 ```
 
-The phrase is spoken as part of the reply and appears in the transcript.
+The phrase is spoken as part of the reply and shown in the transcript.
 
 ## Generate replies with a workflow
 
 By default the worker generates each reply with a Mastra agent. To run multi-step logic per turn (for example classify intent, route, call tools in sequence, then compose a reply), generate replies with a Mastra [workflow](/docs/workflows/overview) instead. Set `workflow` in place of `agent`.
 
-LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. There is no suspend or resume, and no conversation state is carried between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
+LiveKit still owns the audio loop and calls into Mastra once per turn, so the workflow runs to completion each turn. Suspend and resume aren't available, and conversation state isn't carried between turns. Pass the transcript in through `workflowInput` so the workflow stays stateless:
 
 ```typescript title="src/mastra/voice-worker.ts"
 import { createLiveKitWorker, chatContextToMessages } from '@mastra/livekit/worker'
@@ -237,7 +237,7 @@ When the Mastra instance has [observability](/docs/observability/overview) confi
 - A child span for each LiveKit pipeline metric: speech-to-text, text-to-speech, end-of-utterance (turn detection), voice activity detection, and the model's time-to-first-token. These carry the latency and audio measurements that text traces can't show.
 - A per-model usage roll-up (token, character, and audio totals for the whole call) written to the span when the session ends.
 
-The worker is a separate process, so point storage at a backend that accepts concurrent writes from both the server and the worker. SQLite-backed [LibSQL](/reference/storage/libsql) works; single-writer stores do not. Traces, memory, and threads can share one store:
+The worker is a separate process, so point storage at a backend that accepts concurrent writes from both the server and the worker. SQLite-backed [LibSQL](/reference/storage/libsql) works; single-writer stores don't. Traces, memory, and threads can share one store:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'

@@ -14,83 +14,79 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *  - task completion triggers re-invocation of the model,
  *  - the final text includes the continuation response.
  */
-describeForAllEngines(
-  'AIMock loop scenario: streamUntilIdle re-invokes on background task completion',
-  engine => {
-    const getMock = useLoopScenarioAimock();
+describeForAllEngines('AIMock loop scenario: streamUntilIdle re-invokes on background task completion', engine => {
+  const getMock = useLoopScenarioAimock();
 
-    it('re-invokes the model after a background task completes', async () => {
-      const memory = new MockMemory();
+  it('re-invokes the model after a background task completes', async () => {
+    const memory = new MockMemory();
 
-      const {
-        output,
-        mastra,
-        agent,
-        llm: mockInstance,
-      } = await runLoopScenario({
-        engine,
-        llm: getMock(),
-        prompt: 'Do background research',
-        memory,
+    const {
+      output,
+      mastra,
+      agent,
+      llm: mockInstance,
+    } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Do background research',
+      memory,
+      threadId: 'thread-idle-1',
+      resourceId: 'user-1',
+      backgroundTasks: { enabled: true },
+      streamUntilIdle: true,
+      manualStreamConsumption: true,
+      fixtures: llm => {
+        // Initial turn response.
+        llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Dispatching research in background.' });
+        // Continuation after background task completes — model re-invoked.
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research is done, here are the findings.' });
+      },
+    });
+
+    const bgManager = mastra.backgroundTaskManager as any;
+    expect(bgManager).toBeDefined();
+
+    // Publish lifecycle events to simulate a background task completing.
+    const publishEvent = (type: string, taskId: string) =>
+      bgManager.publishLifecycleEvent(type, {
+        id: taskId,
+        toolName: 'research',
+        toolCallId: `call-${taskId}`,
+        runId: 'run-1',
+        agentId: agent.id,
         threadId: 'thread-idle-1',
         resourceId: 'user-1',
-        backgroundTasks: { enabled: true },
-        streamUntilIdle: true,
-        manualStreamConsumption: true,
-        fixtures: llm => {
-          // Initial turn response.
-          llm.on({ endpoint: 'chat', sequenceIndex: 0 }, { content: 'Dispatching research in background.' });
-          // Continuation after background task completes — model re-invoked.
-          llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research is done, here are the findings.' });
-        },
+        status: type.split('.')[1],
+        result: {},
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 1000,
+        createdAt: new Date(),
+        args: { topic: 'AI' },
       });
 
-      const bgManager = mastra.backgroundTaskManager as any;
-      expect(bgManager).toBeDefined();
+    // Mark a task as running so streamUntilIdle stays open.
+    await publishEvent('task.running', 'task-1');
+    await new Promise(r => setTimeout(r, 50));
+    // Complete it — triggers re-invocation.
+    await publishEvent('task.completed', 'task-1');
 
-      // Publish lifecycle events to simulate a background task completing.
-      const publishEvent = (type: string, taskId: string) =>
-        bgManager.publishLifecycleEvent(type, {
-          id: taskId,
-          toolName: 'research',
-          toolCallId: `call-${taskId}`,
-          runId: 'run-1',
-          agentId: agent.id,
-          threadId: 'thread-idle-1',
-          resourceId: 'user-1',
-          status: type.split('.')[1],
-          result: {},
-          retryCount: 0,
-          maxRetries: 0,
-          timeoutMs: 1000,
-          createdAt: new Date(),
-          args: { topic: 'AI' },
-        });
-
-      // Mark a task as running so streamUntilIdle stays open.
-      await publishEvent('task.running', 'task-1');
-      await new Promise(r => setTimeout(r, 50));
-      // Complete it — triggers re-invocation.
-      await publishEvent('task.completed', 'task-1');
-
-      // Now drain the stream to let the re-invocation complete.
-      const textChunks: string[] = [];
-      for await (const chunk of output.fullStream as AsyncIterable<any>) {
-        if (chunk.type === 'text-delta') {
-          textChunks.push(chunk.delta || chunk.text || chunk.payload?.text || '');
-        }
+    // Now drain the stream to let the re-invocation complete.
+    const textChunks: string[] = [];
+    for await (const chunk of output.fullStream as AsyncIterable<any>) {
+      if (chunk.type === 'text-delta') {
+        textChunks.push(chunk.delta || chunk.text || chunk.payload?.text || '');
       }
+    }
 
-      // Get requests AFTER the stream is consumed (they're populated as the stream runs)
-      const requests = mockInstance.getRequests();
+    // Get requests AFTER the stream is consumed (they're populated as the stream runs)
+    const requests = mockInstance.getRequests();
 
-      // The model was invoked at least twice: initial turn + continuation.
-      expect(requests.length).toBeGreaterThanOrEqual(2);
+    // The model was invoked at least twice: initial turn + continuation.
+    expect(requests.length).toBeGreaterThanOrEqual(2);
 
-      // The continuation response made it into the output.
-      const fullText = textChunks.join('');
-      expect(fullText).toContain('Research is done');
-    });
-  },
-  { skip: ['durable'] },
-);
+    // The continuation response made it into the output.
+    const fullText = textChunks.join('');
+    expect(fullText).toContain('Research is done');
+  });
+});

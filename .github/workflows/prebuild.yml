@@ -21,7 +21,7 @@ jobs:
       has_code: ${{ steps.filter.outputs.has_code }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
@@ -95,7 +95,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           fetch-depth: 0
 
@@ -243,7 +243,7 @@ jobs:
 
       - name: Upload affected-tests artifact
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: affected-tests-outputs
           path: /tmp/affected-outputs/
@@ -349,7 +349,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:7
+        image: redis:8
         ports:
           - 6379:6379
 
@@ -359,7 +359,7 @@ jobs:
       TURBO_CACHE: remote:r
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
