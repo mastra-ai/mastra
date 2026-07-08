@@ -67,12 +67,18 @@ function rewriteSpecs(specFor) {
 
 function pin() {
   const changes = rewriteSpecs((name, relPath) => monorepoVersion(name, relPath));
-  console.log(changes.length ? `monorepo-deps: pinned exact monorepo versions\n${changes.join('\n')}` : 'monorepo-deps: already pinned');
+  console.log(
+    changes.length
+      ? `monorepo-deps: pinned exact monorepo versions\n${changes.join('\n')}`
+      : 'monorepo-deps: already pinned',
+  );
 }
 
 function link() {
   const changes = rewriteSpecs((_name, relPath) => `link:${relPath}`);
-  console.log(changes.length ? `monorepo-deps: restored link: specs\n${changes.join('\n')}` : 'monorepo-deps: already linked');
+  console.log(
+    changes.length ? `monorepo-deps: restored link: specs\n${changes.join('\n')}` : 'monorepo-deps: already linked',
+  );
 }
 
 async function run(command) {

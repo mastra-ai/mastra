@@ -45,8 +45,8 @@ if (!fs.existsSync(outputPkgPath)) {
 } else {
   const pkg = JSON.parse(fs.readFileSync(outputPkgPath, 'utf8'));
   const deps = { ...(pkg.dependencies ?? {}), ...(pkg.devDependencies ?? {}) };
-  const bad = Object.entries(deps).filter(([, spec]) =>
-    /^link:/.test(spec) || /^workspace:/.test(spec) || spec === 'latest' || /^@internal\//.test(spec),
+  const bad = Object.entries(deps).filter(
+    ([, spec]) => /^link:/.test(spec) || /^workspace:/.test(spec) || spec === 'latest' || /^@internal\//.test(spec),
   );
   if (bad.length > 0) {
     for (const [name, spec] of bad) {
@@ -58,10 +58,7 @@ if (!fs.existsSync(outputPkgPath)) {
 }
 
 // 3. SPA
-const spaCandidates = [
-  path.join(outputDir, 'ui', 'index.html'),
-  path.join(outputDir, 'public', 'ui', 'index.html'),
-];
+const spaCandidates = [path.join(outputDir, 'ui', 'index.html'), path.join(outputDir, 'public', 'ui', 'index.html')];
 const spaPath = spaCandidates.find(p => fs.existsSync(p));
 if (!spaPath) {
   fail('SPA index.html not found in .mastra/output/{ui,public/ui}/ — run `pnpm web:build` (includes vite build)');

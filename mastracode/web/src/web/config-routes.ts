@@ -3,7 +3,10 @@ import type { ApiRoute } from '@mastra/core/server';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
-import { removeCustomProviderFromSettings, upsertCustomProviderInSettings } from '@mastra/code-sdk/onboarding/custom-providers';
+import {
+  removeCustomProviderFromSettings,
+  upsertCustomProviderInSettings,
+} from '@mastra/code-sdk/onboarding/custom-providers';
 import { applyOmRoleOverride, persistOmObserveAttachments } from '@mastra/code-sdk/onboarding/om-settings';
 import { getAvailableModePacks } from '@mastra/code-sdk/onboarding/packs';
 import type { ModePack, ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';

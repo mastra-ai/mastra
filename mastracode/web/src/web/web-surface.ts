@@ -13,7 +13,11 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 
 import { buildConfigRoutes } from './config-routes.js';
 import { buildFsRoutes } from './fs-routes.js';
-import { assertReplicaStableStateSecret, getGithubFeatureDiagnostics, isGithubFeatureEnabled } from './github/config.js';
+import {
+  assertReplicaStableStateSecret,
+  getGithubFeatureDiagnostics,
+  isGithubFeatureEnabled,
+} from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';

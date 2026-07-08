@@ -148,7 +148,8 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
  * Never shows secret values — only env var names, booleans, and public URLs.
  */
 function StatusCallout({ status, connected, empty }: { status: GithubStatus; connected: boolean; empty: boolean }) {
-  const calloutClass = 'mb-4 rounded-lg border border-border1 bg-surface2 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
+  const calloutClass =
+    'mb-4 rounded-lg border border-border1 bg-surface2 px-3 py-2 text-ui-sm leading-relaxed text-icon3';
 
   // Auth required: the session expired or was never established.
   if (status.authRequired) {
@@ -203,9 +204,8 @@ function StatusCallout({ status, connected, empty }: { status: GithubStatus; con
     return (
       <div className={calloutClass}>
         No repositories found. Your GitHub App installation may not have access to any repos. Check the installation's
-        repository access at{' '}
-        <code className="text-icon4">https://github.com/settings/installations</code> and grant access to at least one
-        repo.
+        repository access at <code className="text-icon4">https://github.com/settings/installations</code> and grant
+        access to at least one repo.
       </div>
     );
   }

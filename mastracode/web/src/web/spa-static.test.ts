@@ -19,8 +19,13 @@ function mockContext(method: string, path: string, accept = '*/*'): any {
   let bodyData: Uint8Array | null = null;
   return {
     req: { method, path, header: (name: string) => headers[name] ?? null },
-    header(name: string, value: string) { resHeaders[name] = value; },
-    body(data: Uint8Array) { bodyData = data; return new Response(data, { headers: resHeaders }); },
+    header(name: string, value: string) {
+      resHeaders[name] = value;
+    },
+    body(data: Uint8Array) {
+      bodyData = data;
+      return new Response(data, { headers: resHeaders });
+    },
     _resHeaders: resHeaders,
     _body: () => bodyData,
   };
@@ -41,7 +46,9 @@ describe('createSpaStaticMiddleware – path traversal', () => {
     const middleware = createSpaStaticMiddleware('/app/ui');
     const c = mockContext('GET', '/..%2fui.key');
     let calledNext = false;
-    await middleware(c, async () => { calledNext = true; });
+    await middleware(c, async () => {
+      calledNext = true;
+    });
 
     // readFile must not be called with a path outside uiDist.
     const readPath = vi.mocked(readFile).mock.calls[0]?.[0] as string | undefined;
@@ -88,7 +95,9 @@ describe('createSpaStaticMiddleware – path traversal', () => {
     for (const prefix of ['/api/foo', '/web/bar', '/auth/callback']) {
       const c = mockContext('GET', prefix);
       let calledNext = false;
-      await middleware(c, async () => { calledNext = true; });
+      await middleware(c, async () => {
+        calledNext = true;
+      });
       expect(calledNext).toBe(true);
     }
   });
@@ -97,7 +106,9 @@ describe('createSpaStaticMiddleware – path traversal', () => {
     const middleware = createSpaStaticMiddleware('/app/ui');
     const c = mockContext('POST', '/assets/app.js');
     let calledNext = false;
-    await middleware(c, async () => { calledNext = true; });
+    await middleware(c, async () => {
+      calledNext = true;
+    });
     expect(calledNext).toBe(true);
     expect(readFile).not.toHaveBeenCalled();
   });

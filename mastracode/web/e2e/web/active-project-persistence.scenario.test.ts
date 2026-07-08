@@ -25,14 +25,16 @@ describe('active project persistence', () => {
   });
 
   it('persists and restores the active project id', async () => {
-    const { saveActiveProjectId, loadActiveProjectId } = await import('../../src/web/ui/domains/workspaces/services/projects.js');
+    const { saveActiveProjectId, loadActiveProjectId } =
+      await import('../../src/web/ui/domains/workspaces/services/projects.js');
     expect(loadActiveProjectId()).toBeNull();
     saveActiveProjectId('proj-1');
     expect(loadActiveProjectId()).toBe('proj-1');
   });
 
   it('clears the active id when null is saved', async () => {
-    const { saveActiveProjectId, loadActiveProjectId } = await import('../../src/web/ui/domains/workspaces/services/projects.js');
+    const { saveActiveProjectId, loadActiveProjectId } =
+      await import('../../src/web/ui/domains/workspaces/services/projects.js');
     saveActiveProjectId('proj-1');
     saveActiveProjectId(null);
     expect(loadActiveProjectId()).toBeNull();
