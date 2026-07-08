@@ -111,6 +111,9 @@ pnpm worker:workflow
 #  …or…
 # 2c. Plugin worker — customer-owned session, MastraLLM reaches the server over HTTP
 pnpm worker:plugin
+#  …or…
+# 2d. Regulated worker — Northwind Financial demo: consent sweep, agent-initiated hang-up, compliance sign-off
+pnpm worker:regulated
 
 # 3. Studio with voice mode (from the monorepo, served on :5173)
 pnpm --dir ../.. dev:playground
