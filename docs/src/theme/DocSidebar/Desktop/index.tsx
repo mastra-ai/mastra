@@ -10,6 +10,7 @@ import { ThemeSwitcher } from '@site/src/components/theme-switcher'
 
 import styles from './styles.module.css'
 import VersionControl from '@site/src/components/version-control'
+import { InverseCorner } from './InverseCorner'
 
 function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
   const {
@@ -26,6 +27,18 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
         isHidden && styles.sidebarHidden,
       )}
     >
+      <InverseCorner
+        size="12px"
+        fill="var(--ifm-background-color)"
+        borderColor="var(--border)"
+        borderWidth={2}
+        style={{
+          bottom: 'auto',
+          top: 'var(--ifm-navbar-height)',
+          right: -2,
+          transform: 'translateX(100%)',
+        }}
+      />
       <div className="my-4 mr-[7px] mb-2">
         <VersionControl />
       </div>

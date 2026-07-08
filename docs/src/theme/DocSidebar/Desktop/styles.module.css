@@ -5,6 +5,7 @@
     height: 100%;
     padding-top: var(--ifm-navbar-height);
     width: var(--doc-sidebar-width);
+    position: relative;
   }
 
   .sidebarWithHideableNavbar {
