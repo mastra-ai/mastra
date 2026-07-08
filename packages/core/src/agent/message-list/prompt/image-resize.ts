@@ -2,11 +2,19 @@
  * Image dimension detection and resizing utilities.
  *
  * Detects oversized images (exceeding provider limits like Anthropic's 8000px)
- * and resizes them to fit within bounds using sharp (native libvips bindings).
- * Dimension detection uses pure-JS header parsing to avoid full decode overhead.
+ * and resizes them to fit within bounds. Uses:
+ * - Pure JS header parsing for dimension detection (PNG, JPEG, WebP, GIF)
+ * - `jpeg-js` (already in core) for JPEG decode/encode
+ * - `pngjs` for PNG decode/encode
+ * - Simple bilinear downsampling for the resize step
+ *
+ * This is intentionally dependency-light (pure JS, no native bindings). It is
+ * slower than a native resizer like sharp for very large images, but avoids a
+ * heavy native dependency. If resize latency becomes a problem we can revisit.
  */
 
-import type sharp from 'sharp';
+import { decode as decodeJpeg, encode as encodeJpeg } from 'jpeg-js';
+import { PNG } from 'pngjs';
 
 /** Maximum image dimension (px) accepted by most LLM providers (Anthropic = 8000). */
 export const MAX_IMAGE_DIMENSION = 8000;
@@ -70,24 +78,18 @@ export function isOversized(dimensions: ImageDimensions, maxDimension = MAX_IMAG
 }
 
 // ---------------------------------------------------------------------------
-// Resize logic (sharp)
+// Resize logic
 // ---------------------------------------------------------------------------
-
-let _sharp: typeof sharp | undefined;
-
-async function getSharp(): Promise<typeof sharp> {
-  if (!_sharp) {
-    _sharp = (await import('sharp')).default;
-  }
-  return _sharp;
-}
 
 /**
  * Resizes an image if any dimension exceeds `maxDimension`.
  * Returns the (possibly resized) image data and metadata.
  *
- * Uses sharp for high-performance native resizing with lanczos3 interpolation.
- * Supports PNG, JPEG, WebP, and GIF. For truly unsupported formats, returns null.
+ * Supports PNG and JPEG. For unsupported formats (WebP, GIF, ...), returns null
+ * to signal the caller should handle it (e.g. drop the image).
+ *
+ * Async so callers don't need to change if the resize backend later moves to an
+ * async/native implementation.
  */
 export async function resizeImageIfNeeded(
   data: Uint8Array,
@@ -103,40 +105,22 @@ export async function resizeImageIfNeeded(
 
   const { width: targetWidth, height: targetHeight } = computeTargetDimensions(dimensions, maxDimension);
 
+  const normalizedType = mediaType.toLowerCase();
+
   try {
-    const sharpFn = await getSharp();
-    const pipeline = sharpFn(Buffer.from(data)).resize(targetWidth, targetHeight, {
-      fit: 'fill',
-      kernel: 'lanczos3',
-    });
-
-    const normalizedType = mediaType.toLowerCase();
-    let outputBuffer: Buffer;
-    let outputMediaType = mediaType;
-
     if (normalizedType.includes('png')) {
-      outputBuffer = await pipeline.png().toBuffer();
-    } else if (normalizedType.includes('jpeg') || normalizedType.includes('jpg')) {
-      outputBuffer = await pipeline.jpeg({ quality: 85 }).toBuffer();
-    } else if (normalizedType.includes('webp')) {
-      outputBuffer = await pipeline.webp({ quality: 85 }).toBuffer();
-    } else if (normalizedType.includes('gif')) {
-      outputBuffer = await pipeline.gif().toBuffer();
-    } else {
-      outputBuffer = await pipeline.png().toBuffer();
-      outputMediaType = 'image/png';
+      return resizePng(data, dimensions, targetWidth, targetHeight, mediaType);
     }
 
-    return {
-      data: new Uint8Array(outputBuffer),
-      mediaType: outputMediaType,
-      resized: true,
-      originalDimensions: dimensions,
-      newDimensions: { width: targetWidth, height: targetHeight },
-    };
+    if (normalizedType.includes('jpeg') || normalizedType.includes('jpg')) {
+      return resizeJpeg(data, dimensions, targetWidth, targetHeight, mediaType);
+    }
   } catch {
     return null;
   }
+
+  // Unsupported format for resize
+  return null;
 }
 
 /**
@@ -149,6 +133,121 @@ export function computeTargetDimensions(dimensions: ImageDimensions, maxDimensio
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
   };
+}
+
+// ---------------------------------------------------------------------------
+// Format-specific resize implementations
+// ---------------------------------------------------------------------------
+
+function resizePng(
+  data: Uint8Array,
+  originalDimensions: ImageDimensions,
+  targetWidth: number,
+  targetHeight: number,
+  mediaType: string,
+): ResizeResult {
+  const png = PNG.sync.read(Buffer.from(data));
+  const resizedPixels = bilinearResize(png.data, png.width, png.height, targetWidth, targetHeight);
+
+  const outPng = new PNG({ width: targetWidth, height: targetHeight });
+  outPng.data = resizedPixels;
+  const encoded = PNG.sync.write(outPng);
+
+  return {
+    data: new Uint8Array(encoded),
+    mediaType,
+    resized: true,
+    originalDimensions,
+    newDimensions: { width: targetWidth, height: targetHeight },
+  };
+}
+
+function resizeJpeg(
+  data: Uint8Array,
+  originalDimensions: ImageDimensions,
+  targetWidth: number,
+  targetHeight: number,
+  mediaType: string,
+): ResizeResult {
+  const decoded = decodeJpeg(data, {
+    useTArray: true,
+    formatAsRGBA: true,
+    // Raise limits so large screenshots (which are exactly the oversized images
+    // we need to resize) aren't rejected by jpeg-js's conservative defaults.
+    maxResolutionInMP: 500,
+    maxMemoryUsageInMB: 2048,
+  });
+  const resizedPixels = bilinearResize(
+    Buffer.from(decoded.data),
+    decoded.width,
+    decoded.height,
+    targetWidth,
+    targetHeight,
+  );
+
+  const encoded = encodeJpeg({ data: resizedPixels, width: targetWidth, height: targetHeight }, 85);
+
+  return {
+    data: new Uint8Array(encoded.data),
+    mediaType,
+    resized: true,
+    originalDimensions,
+    newDimensions: { width: targetWidth, height: targetHeight },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Bilinear interpolation downsampler
+// ---------------------------------------------------------------------------
+
+/**
+ * Resizes RGBA pixel data using bilinear interpolation.
+ * Input and output are both flat RGBA buffers (4 bytes per pixel).
+ */
+export function bilinearResize(
+  srcPixels: Buffer,
+  srcWidth: number,
+  srcHeight: number,
+  dstWidth: number,
+  dstHeight: number,
+): Buffer {
+  const dst = Buffer.alloc(dstWidth * dstHeight * 4);
+
+  const xRatio = srcWidth / dstWidth;
+  const yRatio = srcHeight / dstHeight;
+
+  for (let dstY = 0; dstY < dstHeight; dstY++) {
+    const srcYf = dstY * yRatio;
+    const srcY0 = Math.floor(srcYf);
+    const srcY1 = Math.min(srcY0 + 1, srcHeight - 1);
+    const yFrac = srcYf - srcY0;
+
+    for (let dstX = 0; dstX < dstWidth; dstX++) {
+      const srcXf = dstX * xRatio;
+      const srcX0 = Math.floor(srcXf);
+      const srcX1 = Math.min(srcX0 + 1, srcWidth - 1);
+      const xFrac = srcXf - srcX0;
+
+      const idx00 = (srcY0 * srcWidth + srcX0) * 4;
+      const idx10 = (srcY0 * srcWidth + srcX1) * 4;
+      const idx01 = (srcY1 * srcWidth + srcX0) * 4;
+      const idx11 = (srcY1 * srcWidth + srcX1) * 4;
+      const dstIdx = (dstY * dstWidth + dstX) * 4;
+
+      for (let c = 0; c < 4; c++) {
+        const v00 = srcPixels[idx00 + c]!;
+        const v10 = srcPixels[idx10 + c]!;
+        const v01 = srcPixels[idx01 + c]!;
+        const v11 = srcPixels[idx11 + c]!;
+
+        const top = v00 + (v10 - v00) * xFrac;
+        const bottom = v01 + (v11 - v01) * xFrac;
+        dst[dstIdx + c] = Math.round(top + (bottom - top) * yFrac);
+      }
+    }
+  }
+
+  return dst;
 }
 
 // ---------------------------------------------------------------------------
@@ -191,6 +290,7 @@ function isGif(data: Uint8Array): boolean {
 // ---------------------------------------------------------------------------
 
 function getJpegDimensions(data: Uint8Array): ImageDimensions | null {
+  // Scan for SOF markers (0xFF 0xC0 through 0xFF 0xCF, excluding 0xC4 and 0xCC)
   let offset = 2; // skip SOI marker
   while (offset < data.length - 9) {
     if (data[offset] !== 0xff) {
@@ -207,6 +307,7 @@ function getJpegDimensions(data: Uint8Array): ImageDimensions | null {
       return { width, height };
     }
 
+    // Skip to next marker using segment length
     const segLength = readUint16BE(data, offset + 2);
     offset += 2 + segLength;
   }

@@ -1,4 +1,5 @@
-import sharp from 'sharp';
+import { encode as encodeJpeg } from 'jpeg-js';
+import { PNG } from 'pngjs';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -10,44 +11,55 @@ import {
 } from './image-resize';
 
 // ---------------------------------------------------------------------------
-// Test helpers: create minimal valid image buffers using sharp
+// Test helpers: create minimal valid image buffers using pure-JS encoders
 // ---------------------------------------------------------------------------
 
-async function createPngBuffer(width: number, height: number): Promise<Uint8Array> {
-  const channels = 4;
-  const pixels = Buffer.alloc(width * height * channels);
+function createPngBuffer(width: number, height: number): Uint8Array {
+  const png = new PNG({ width, height });
   for (let i = 0; i < width * height; i++) {
-    pixels[i * channels] = 255; // R
-    pixels[i * channels + 1] = 0; // G
-    pixels[i * channels + 2] = 0; // B
-    pixels[i * channels + 3] = 255; // A
+    png.data[i * 4] = 255; // R
+    png.data[i * 4 + 1] = 0; // G
+    png.data[i * 4 + 2] = 0; // B
+    png.data[i * 4 + 3] = 255; // A
   }
-  const buf = await sharp(pixels, { raw: { width, height, channels } }).png().toBuffer();
-  return new Uint8Array(buf);
+  return new Uint8Array(PNG.sync.write(png));
 }
 
-async function createJpegBuffer(width: number, height: number): Promise<Uint8Array> {
-  const channels = 3;
+function createJpegBuffer(width: number, height: number): Uint8Array {
+  const channels = 4;
   const pixels = Buffer.alloc(width * height * channels);
   for (let i = 0; i < width * height; i++) {
     pixels[i * channels] = 0; // R
     pixels[i * channels + 1] = 0; // G
     pixels[i * channels + 2] = 255; // B
+    pixels[i * channels + 3] = 255; // A
   }
-  const buf = await sharp(pixels, { raw: { width, height, channels } }).jpeg({ quality: 80 }).toBuffer();
-  return new Uint8Array(buf);
+  const encoded = encodeJpeg({ data: pixels, width, height }, 80);
+  return new Uint8Array(encoded.data);
 }
 
-async function createWebpBuffer(width: number, height: number): Promise<Uint8Array> {
-  const channels = 3;
-  const pixels = Buffer.alloc(width * height * channels);
-  for (let i = 0; i < width * height; i++) {
-    pixels[i * channels] = 128;
-    pixels[i * channels + 1] = 64;
-    pixels[i * channels + 2] = 32;
-  }
-  const buf = await sharp(pixels, { raw: { width, height, channels } }).webp({ quality: 80 }).toBuffer();
-  return new Uint8Array(buf);
+/**
+ * Builds a minimal valid WebP (VP8X extended) header encoding the given
+ * dimensions. Only the header bytes needed by `getImageDimensions` are set —
+ * there is no real image body, which is sufficient for dimension-parsing tests.
+ */
+function createWebpHeader(width: number, height: number): Uint8Array {
+  const buf = new Uint8Array(30);
+  // RIFF
+  buf.set([0x52, 0x49, 0x46, 0x46], 0); // "RIFF"
+  buf.set([0x57, 0x45, 0x42, 0x50], 8); // "WEBP"
+  buf.set([0x56, 0x50, 0x38, 0x58], 12); // "VP8X"
+  // width - 1 as 24-bit little-endian at offset 24
+  const w = width - 1;
+  buf[24] = w & 0xff;
+  buf[25] = (w >> 8) & 0xff;
+  buf[26] = (w >> 16) & 0xff;
+  // height - 1 as 24-bit little-endian at offset 27
+  const h = height - 1;
+  buf[27] = h & 0xff;
+  buf[28] = (h >> 8) & 0xff;
+  buf[29] = (h >> 16) & 0xff;
+  return buf;
 }
 
 // ---------------------------------------------------------------------------
@@ -56,19 +68,19 @@ async function createWebpBuffer(width: number, height: number): Promise<Uint8Arr
 
 describe('getImageDimensions', () => {
   it('reads PNG dimensions from header', async () => {
-    const buf = await createPngBuffer(100, 200);
+    const buf = createPngBuffer(100, 200);
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 100, height: 200 });
   });
 
   it('reads JPEG dimensions', async () => {
-    const buf = await createJpegBuffer(300, 150);
+    const buf = createJpegBuffer(300, 150);
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 300, height: 150 });
   });
 
-  it('reads WebP dimensions from header', async () => {
-    const buf = await createWebpBuffer(400, 250);
+  it('reads WebP dimensions from header', () => {
+    const buf = createWebpHeader(400, 250);
     const dims = getImageDimensions(buf);
     expect(dims).not.toBeNull();
     expect(dims!.width).toBe(400);
@@ -164,7 +176,7 @@ describe('computeTargetDimensions', () => {
 
 describe('resizeImageIfNeeded', () => {
   it('returns unchanged for images within limit', async () => {
-    const buf = await createPngBuffer(100, 100);
+    const buf = createPngBuffer(100, 100);
     const result = await resizeImageIfNeeded(buf, 'image/png');
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(false);
@@ -172,7 +184,7 @@ describe('resizeImageIfNeeded', () => {
   });
 
   it('resizes oversized PNG images', async () => {
-    const buf = await createPngBuffer(200, 100);
+    const buf = createPngBuffer(200, 100);
     const result = await resizeImageIfNeeded(buf, 'image/png', 150);
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(true);
@@ -185,7 +197,7 @@ describe('resizeImageIfNeeded', () => {
   });
 
   it('resizes oversized JPEG images', async () => {
-    const buf = await createJpegBuffer(200, 100);
+    const buf = createJpegBuffer(200, 100);
     const result = await resizeImageIfNeeded(buf, 'image/jpeg', 150);
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(true);
@@ -216,7 +228,7 @@ describe('resizeImageIfNeeded', () => {
   });
 
   it('handles the 8000px limit correctly', async () => {
-    const buf = await createPngBuffer(50, 100);
+    const buf = createPngBuffer(50, 100);
     const result1 = await resizeImageIfNeeded(buf, 'image/png', 100);
     expect(result1!.resized).toBe(false);
 
@@ -233,7 +245,7 @@ describe('resizeImageIfNeeded', () => {
 
 describe('large image scenarios (8000px+ resize)', () => {
   it('resizes an 8500x5000 PNG screenshot to fit within 8000px', async () => {
-    const buf = await createPngBuffer(8500, 5000);
+    const buf = createPngBuffer(8500, 5000);
 
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 8500, height: 5000 });
@@ -251,10 +263,10 @@ describe('large image scenarios (8000px+ resize)', () => {
     expect(outputDims!.height).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
     expect(outputDims!.width).toBeGreaterThan(0);
     expect(outputDims!.height).toBeGreaterThan(0);
-  }, 30_000);
+  }, 60_000);
 
   it('resizes a 12000x8000 JPEG screenshot to fit within 8000px', async () => {
-    const buf = await createJpegBuffer(12000, 8000);
+    const buf = createJpegBuffer(12000, 8000);
 
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 12000, height: 8000 });
@@ -270,10 +282,10 @@ describe('large image scenarios (8000px+ resize)', () => {
     const outputDims = getImageDimensions(result!.data);
     expect(outputDims!.width).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
     expect(outputDims!.height).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
-  }, 30_000);
+  }, 60_000);
 
   it('preserves aspect ratio when resizing a wide 10000x2000 PNG', async () => {
-    const buf = await createPngBuffer(10000, 2000);
+    const buf = createPngBuffer(10000, 2000);
 
     const result = await resizeImageIfNeeded(buf, 'image/png');
     expect(result).not.toBeNull();
@@ -283,10 +295,10 @@ describe('large image scenarios (8000px+ resize)', () => {
 
     const outputDims = getImageDimensions(result!.data);
     expect(outputDims).toEqual({ width: 8000, height: 1600 });
-  }, 30_000);
+  }, 60_000);
 
   it('preserves aspect ratio when resizing a tall 3000x10000 PNG', async () => {
-    const buf = await createPngBuffer(3000, 10000);
+    const buf = createPngBuffer(3000, 10000);
 
     const result = await resizeImageIfNeeded(buf, 'image/png');
     expect(result).not.toBeNull();
@@ -296,10 +308,10 @@ describe('large image scenarios (8000px+ resize)', () => {
 
     const outputDims = getImageDimensions(result!.data);
     expect(outputDims).toEqual({ width: 2400, height: 8000 });
-  }, 30_000);
+  }, 60_000);
 
   it('does not resize an exactly 8000x8000 PNG', async () => {
-    const buf = await createPngBuffer(8000, 8000);
+    const buf = createPngBuffer(8000, 8000);
 
     const dims = getImageDimensions(buf);
     expect(dims).toEqual({ width: 8000, height: 8000 });
@@ -309,24 +321,21 @@ describe('large image scenarios (8000px+ resize)', () => {
     expect(result).not.toBeNull();
     expect(result!.resized).toBe(false);
     expect(result!.data).toBe(buf);
-  }, 30_000);
+  }, 60_000);
 
-  it('resizes an oversized WebP image to fit within 8000px', async () => {
-    const buf = await createWebpBuffer(9000, 6000);
+  it('returns null for an oversized WebP image (unsupported by pure-JS resize)', () => {
+    const buf = createWebpHeader(9000, 6000);
 
     const dims = getImageDimensions(buf);
     expect(dims).not.toBeNull();
     expect(isOversized(dims!)).toBe(true);
 
-    const result = await resizeImageIfNeeded(buf, 'image/webp');
-    expect(result).not.toBeNull();
-    expect(result!.resized).toBe(true);
-    expect(result!.newDimensions!.width).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
-    expect(result!.newDimensions!.height).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
-  }, 30_000);
+    // WebP resize is not supported by the pure-JS backend; the caller drops it.
+    return expect(resizeImageIfNeeded(buf, 'image/webp')).resolves.toBeNull();
+  });
 
   it('produces valid output that can be re-parsed after resize', async () => {
-    const buf = await createPngBuffer(8500, 5000);
+    const buf = createPngBuffer(8500, 5000);
 
     const result = await resizeImageIfNeeded(buf, 'image/png');
     expect(result).not.toBeNull();
@@ -335,10 +344,10 @@ describe('large image scenarios (8000px+ resize)', () => {
     const secondResult = await resizeImageIfNeeded(result!.data, 'image/png');
     expect(secondResult).not.toBeNull();
     expect(secondResult!.resized).toBe(false);
-  }, 30_000);
+  }, 60_000);
 
   it('handles base64 round-trip for oversized images', async () => {
-    const buf = await createPngBuffer(8500, 5000);
+    const buf = createPngBuffer(8500, 5000);
     const base64 = Buffer.from(buf).toString('base64');
     const decoded = new Uint8Array(Buffer.from(base64, 'base64'));
 
@@ -353,5 +362,5 @@ describe('large image scenarios (8000px+ resize)', () => {
     const dims = getImageDimensions(reDecoded);
     expect(dims!.width).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
     expect(dims!.height).toBeLessThanOrEqual(MAX_IMAGE_DIMENSION);
-  }, 30_000);
+  }, 60_000);
 });
