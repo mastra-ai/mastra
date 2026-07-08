@@ -36,17 +36,18 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 ## <severity symbol only> Maintainer's Triage Note
 
 **Current Phase:** Triaged
+**Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Continue to Approve|Await final approval|Other>
 
 **Triage:**
 - Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
-- Next Steps: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
+- Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
 
 **Review:**
 - Status: <not started|in progress|complete>
 - Findings: <brief implementation/root-cause/check-risk summary, or `Not reviewed yet.`>
-- Confidence: <Pending Review|1/5|2/5|3/5|4/5|5/5> — <set during Review; keep `Pending Review` until then>
+- Confidence: <Pending Review|1/5|2/5|3/5|4/5|5/5> — <use only these exact values; no text labels>
 - Follow-up: <author/maintainer follow-up needed, or `None yet.`>
 
 **Approve:**
@@ -55,7 +56,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-Heading uses only the severity symbol: `🔴`, `🟠`, `🟡`, or `🟢`. The `Severity` field includes the symbol plus label/reason. Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Confidence belongs only to Review and uses 1/5-5/5, where 5/5 means direct evidence and 1/5 means tentative.
+Heading uses only the severity symbol: `🔴`, `🟠`, `🟡`, or `🟢`. The `Severity` field includes the symbol plus label/reason. Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Confidence belongs only to Review and must be exactly `Pending Review`, `1/5`, `2/5`, `3/5`, `4/5`, or `5/5`; never use labels like `medium-high`.
 
 ## Issue/PR Comment
 
@@ -177,7 +178,7 @@ Next Steps:
 Output:
 
 - Maintainer's Triage Note: include linked issue state, changed area, non-Vercel blockers, CI approval recommendation when relevant, and why this PR is the Review target.
-- If CI workflows have not been approved, do not list failing checks; set `Next Steps` to `Approve CI checks before Review`.
+- If CI workflows have not been approved, do not list failing checks; set top-level `Next Step` to `Approve CI checks before Review`.
 - If this is a PR with linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
 - Interactive ask: `Should this PR be the Review target?`
 
@@ -287,7 +288,7 @@ C) Update the note, then draft a separate author-facing comment
 D) Continue Review before updating anything
 ```
 
-When updating, edit the same note comment: `Current Phase: Reviewed`, concise `Review` findings, numeric Review confidence, `Approve` still pending. After the note update, do not stop with a completion summary; ask whether to continue to Approve.
+When updating, edit the same note comment: `Current Phase: Reviewed`, top-level `Next Step: Continue to Approve`, concise `Review` findings, exact Review confidence value (`1/5`-`5/5`), `Approve` still pending. After the note update, do not stop with a completion summary; ask whether to continue to Approve.
 
 ```text
 Maintainer's Triage Note updated with Review findings.
@@ -327,4 +328,4 @@ C) Pick a different final approver
 D) Do not update anything — stop here
 ```
 
-If approved, update the same note: `Current Phase: Awaiting Approval`, `Approve` status `waiting for final approval`, recommended approver and reason. Then stop.
+If approved, update the same note: `Current Phase: Awaiting Approval`, top-level `Next Step: Await final approval`, `Approve` status `waiting for final approval`, recommended approver and reason. Then stop.
