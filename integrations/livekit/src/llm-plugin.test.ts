@@ -98,11 +98,37 @@ describe('MastraLLM — options + contract (B1)', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { gen } = capturingGenerator();
     const mastraLLM = new MastraLLM({ generate: gen });
-    const toolCtx = { lookup: {}, book: {} } as unknown as llm.ToolContext;
+    const toolCtx = {
+      lookup: llm.tool({ description: 'look something up', execute: async () => 'ok' }),
+      book: llm.tool({ description: 'book an appointment', execute: async () => 'ok' }),
+    } as unknown as llm.ToolContext;
     mastraLLM.chat({ chatCtx: chatCtxWith('a'), toolCtx }).close();
     mastraLLM.chat({ chatCtx: chatCtxWith('b'), toolCtx }).close();
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]![0]).toContain('lookup, book');
+    warn.mockRestore();
+  });
+
+  it('warns with tool names from a ToolContext class instance (LiveKit ≥1.5)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { gen } = capturingGenerator();
+    const mastraLLM = new MastraLLM({ generate: gen });
+    const toolCtx = new llm.ToolContext({
+      lookup: llm.tool({ description: 'look something up', execute: async () => 'ok' }),
+      book: llm.tool({ description: 'book an appointment', execute: async () => 'ok' }),
+    });
+    mastraLLM.chat({ chatCtx: chatCtxWith('a'), toolCtx }).close();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain('lookup, book');
+    warn.mockRestore();
+  });
+
+  it('does not warn for an empty ToolContext instance (AgentSession always passes one)', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { gen } = capturingGenerator();
+    const mastraLLM = new MastraLLM({ generate: gen });
+    mastraLLM.chat({ chatCtx: chatCtxWith('a'), toolCtx: llm.ToolContext.empty() }).close();
+    expect(warn).not.toHaveBeenCalled();
     warn.mockRestore();
   });
 

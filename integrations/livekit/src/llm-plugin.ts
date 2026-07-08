@@ -68,6 +68,22 @@ function mapUsageToLiveKit(usage: VoiceTurnUsage): llm.CompletionUsage {
 }
 
 /**
+ * Tool names carried by a `toolCtx`, across @livekit/agents versions: 1.5+ always passes a
+ * `ToolContext` class instance (tools behind getters, `Object.keys` sees only private fields),
+ * while 1.4 and the object shorthand pass a plain name→tool map.
+ */
+function livekitToolNames(toolCtx: object): string[] {
+  const instance = toolCtx as { flatten?: unknown };
+  if (typeof instance.flatten === 'function') {
+    return (instance.flatten as () => object[])().map(tool => {
+      const { id, name } = tool as { id?: string; name?: string };
+      return id ?? name ?? 'unknown';
+    });
+  }
+  return Object.keys(toolCtx);
+}
+
+/**
  * A standard LiveKit LLM plugin (`llm.LLM`) backed by a Mastra agent. Drop it into the `llm` slot of a
  * customer-owned `voice.AgentSession` and the Mastra app (agent loop, tools, memory, observability)
  * runs wherever it's deployed — most importantly on a **remote** Mastra server reached over HTTP.
@@ -181,12 +197,15 @@ export class MastraLLM extends llm.LLM {
     extraKwargs?: Record<string, unknown>;
   }): llm.LLMStream {
     // D14: tools run server-side; warn once if the customer wired LiveKit-side tools.
-    if (!this.#warnedToolCtx && toolCtx && Object.keys(toolCtx).length > 0) {
-      this.#warnedToolCtx = true;
-      console.warn(
-        `@mastra/livekit: MastraLLM ignores LiveKit-side tools (${Object.keys(toolCtx).join(', ')}). ` +
-          `Tools are defined and executed server-side on the Mastra agent — move them there.`,
-      );
+    if (!this.#warnedToolCtx && toolCtx) {
+      const ignored = livekitToolNames(toolCtx);
+      if (ignored.length > 0) {
+        this.#warnedToolCtx = true;
+        console.warn(
+          `@mastra/livekit: MastraLLM ignores LiveKit-side tools (${ignored.join(', ')}). ` +
+            `Tools are defined and executed server-side on the Mastra agent — move them there.`,
+        );
+      }
     }
     return new MastraLLMStream(this, {
       chatCtx,
