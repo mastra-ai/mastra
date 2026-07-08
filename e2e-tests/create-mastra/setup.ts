@@ -6,12 +6,18 @@ import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { startRegistry } from '../_local-registry-setup';
+import { setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
+import { getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
+  const publishedRegistryTeardown = await setupPublishedRegistryFromEnv(project);
+  if (publishedRegistryTeardown) {
+    return publishedRegistryTeardown;
+  }
+
   const tag = 'create-mastra-e2e-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
@@ -28,22 +34,7 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(
-    [
-      '--filter="create-mastra^..."',
-      '--filter="create-mastra"',
-      '--filter="...^mastra"',
-      '--filter="@mastra/libsql"',
-      '--filter="@mastra/duckdb"',
-      '--filter="@mastra/memory"',
-      '--filter="@mastra/loggers"',
-      '--filter="@mastra/evals"',
-      '--filter="@mastra/observability"',
-    ],
-    tag,
-    rootDir,
-    registry,
-  );
+  await publishPackages(await getSuitePublishFilters(rootDir, 'create-mastra'), tag, rootDir, registry);
 
   return () => {
     try {
