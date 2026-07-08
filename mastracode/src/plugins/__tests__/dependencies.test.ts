@@ -39,7 +39,7 @@ describe('installPluginDependencies', () => {
     expect(execaMock).not.toHaveBeenCalled();
   });
 
-  it('uses pnpm when packageManager declares pnpm', async () => {
+  it('uses pnpm with version mismatch checks disabled when packageManager declares pnpm', async () => {
     const pluginRoot = makePluginRoot();
     writePackageJson(pluginRoot, { packageManager: 'pnpm@10.0.0' });
 
@@ -47,7 +47,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -61,7 +61,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -164,7 +164,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -210,7 +210,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });
@@ -227,7 +227,7 @@ describe('installPluginDependencies', () => {
 
     expect(execaMock).toHaveBeenCalledWith(
       'pnpm',
-      ['install', '--frozen-lockfile', '--ignore-scripts'],
+      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });

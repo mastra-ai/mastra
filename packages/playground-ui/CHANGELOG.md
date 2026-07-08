@@ -1,5 +1,28 @@
 # @mastra/playground-ui
 
+## 40.0.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0)]:
+  - @mastra/core@1.50.2-alpha.0
+  - @mastra/client-js@1.31.2-alpha.0
+  - @mastra/react@1.2.5-alpha.0
+
+## 40.0.1
+
+### Patch Changes
+
+- Added an embedded CodeEditor variant for borderless editor surfaces and aligned CodeEditor focus styling to use the container border instead of CodeMirror's internal outline. ([#19025](https://github.com/mastra-ai/mastra/pull/19025))
+
+- Fixed signal details pages so their sidebars can scroll within the Studio route, removed the scatter plot tab, and cleaned up unused signal points APIs. ([#19005](https://github.com/mastra-ai/mastra/pull/19005))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`27492f2`](https://github.com/mastra-ai/mastra/commit/27492f24ee4960afefb1268a4d38201cd0779566), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1
+  - @mastra/memory@1.22.2
+  - @mastra/client-js@1.31.1
+  - @mastra/react@1.2.4
+
 ## 40.0.1-alpha.2
 
 ### Patch Changes
