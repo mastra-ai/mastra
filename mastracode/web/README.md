@@ -2,7 +2,7 @@
 
 The Mastra Code web surface: API routes (config/fs/GitHub), tenant server, a deployable Mastra entry (`src/mastra/index.ts`), and the SPA UI. Built on [`@mastra/code-sdk`](../sdk).
 
-This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). `@mastra/*` packages are consumed from the npm registry (snapshot releases for unpublished work).
+This is a **standalone pnpm project** (own lockfile, not a monorepo workspace member). For development, the monorepo-provided packages (`@mastra/*`, `mastra`) are consumed via `link:` specs pointing at the monorepo directories, so you always develop against local source. For builds, `scripts/monorepo-deps.mjs` temporarily pins those deps to the exact versions found in the monorepo (see below).
 
 ## Setup
 
@@ -33,10 +33,12 @@ pnpm web:build
 
 1. `prebuild` — builds the linked monorepo packages via turbo.
 2. Vite builds the SPA to `src/mastra/public/ui/`.
-3. `mastra build --dir src/mastra` bundles the API server to `.mastra/output/` and copies `public/` (including the SPA) into it automatically.
+3. `scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra` — pins the `link:` deps to the **exact versions found in the monorepo** (read from each linked package's `package.json`), runs the build, then always restores the `link:` specs (also on failure/Ctrl-C). The build bundles the API server to `.mastra/output/` and copies `public/` (including the SPA) into it automatically.
 4. The server serves the SPA same-origin at `/` (see `src/web/spa-static.ts`).
 
-The deploy output's `package.json` lists `@mastra/code-sdk` (and the other `@mastra/*` packages) at the installed registry versions, so a production deploy `npm install`s them straight from npm. To pick up unpublished work, release (snapshot) via changesets first and bump the versions here.
+The deploy output's `package.json` therefore pins the exact monorepo versions of `@mastra/*`, so a production deploy `npm install`s them straight from npm — those versions must be published (CI releases alphas). **Known limitation:** until `@mastra/code-sdk` has a proper npm release (changeset queued), the build's final output-deps install step fails on `@mastra/code-sdk@0.0.0`; the bundle, SPA, and output `package.json` are still produced correctly before that step.
+
+To switch the manifest manually: `pnpm deps:pin` / `pnpm deps:link` (the `link:` state is what's committed).
 
 Run the output with `pnpm web:start` (or `node .mastra/output/index.mjs` after installing output deps).
 

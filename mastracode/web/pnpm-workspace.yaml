@@ -26,16 +26,3 @@ allowBuilds:
   msw: false
   onnxruntime-node: false
   protobufjs: true
-minimumReleaseAgeExclude:
-  - '@mastra/agent-browser@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/code-sdk@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/core@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/duckdb@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/github-signals@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/libsql@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/mcp@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/memory@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/observability@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/pg@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/stagehand@0.0.0-mastracode-cloud-20260706153555'
-  - '@mastra/tavily@0.0.0-mastracode-cloud-20260706153555'
