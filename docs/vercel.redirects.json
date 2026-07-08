@@ -1,11 +1,6 @@
 {
   "redirects": [
     {
-      "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/filesystem/overview",
-      "permanent": true
-    },
-    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -933,6 +928,11 @@
     {
       "source": "/docs/memory/storage",
       "destination": "/docs/storage/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/filesystem/overview",
       "permanent": true
     }
   ]
