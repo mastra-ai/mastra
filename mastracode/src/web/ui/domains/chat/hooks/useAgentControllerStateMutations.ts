@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { createAgentControllerClient } from '../services/agentControllerClient';
+import { createAgentControllerClient, requireAgentControllerSession } from '../services/agentControllerClient';
 
 interface AgentControllerMutationArgs {
   agentControllerId: string;
@@ -20,14 +20,18 @@ export function useSetAgentControllerStateMutation({
   const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
   return useMutation({
-    mutationFn: (updates: Record<string, unknown>) => session!.setState(updates),
+    mutationFn: (updates: Record<string, unknown>) => requireAgentControllerSession(session).setState(updates),
     onSuccess: async (_data, updates) => {
-      if ('settings' in updates) {
-        queryClient.setQueryData(queryKeys.agentControllerSettings(agentControllerId, resourceId), updates.settings);
-      }
-      await queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId),
-      });
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId),
+        }),
+        'settings' in updates
+          ? queryClient.invalidateQueries({
+              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId),
+            })
+          : Promise.resolve(),
+      ]);
     },
   });
 }
@@ -37,7 +41,7 @@ export function useSwitchAgentControllerModeMutation(args: AgentControllerMutati
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationFn: (modeId: string) => session!.switchMode(modeId),
+    mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
@@ -50,7 +54,7 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
-    mutationFn: (modelId: string) => session!.switchModel(modelId),
+    mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),

@@ -2,7 +2,7 @@ import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { createAgentControllerClient } from '../services/agentControllerClient';
+import { createAgentControllerClient, requireAgentControllerSession } from '../services/agentControllerClient';
 
 interface AgentControllerPermissionMutationArgs {
   agentControllerId: string;
@@ -22,7 +22,7 @@ export function useSetPermissionForCategoryMutation({
 
   return useMutation({
     mutationFn: ({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }) =>
-      session!.setPermissionForCategory(category, policy),
+      requireAgentControllerSession(session).setPermissionForCategory(category, policy),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId),
@@ -41,7 +41,7 @@ export function useSetPermissionForToolMutation({
 
   return useMutation({
     mutationFn: ({ toolName, policy }: { toolName: string; policy: PermissionPolicy }) =>
-      session!.setPermissionForTool(toolName, policy),
+      requireAgentControllerSession(session).setPermissionForTool(toolName, policy),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId),

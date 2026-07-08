@@ -1,4 +1,4 @@
-import { useEffect, useEffectEvent } from 'react';
+import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
@@ -67,8 +67,12 @@ function ThreadPageContent() {
   });
   const navigate = useNavigate();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+  const latestRouteThreadId = useRef<string | null>(null);
 
   const switchToRouteThread = useEffectEvent((threadId: string) => {
+    latestRouteThreadId.current = threadId;
+    const isLatestRequest = () => latestRouteThreadId.current === threadId;
+
     if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
       const message = `Failed to switch thread: thread ${threadId} was not found`;
       resetCurrentThread();
@@ -81,8 +85,12 @@ function ThreadPageContent() {
     resetCurrentThread(threadId);
     void switchThreadMutation
       .mutateAsync(threadId)
-      .then(state => syncState(state))
+      .then(state => {
+        if (!isLatestRequest()) return;
+        syncState(state);
+      })
       .catch(err => {
+        if (!isLatestRequest()) return;
         const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
         resetCurrentThread();
         pushNotice(message, 'error');
@@ -91,6 +99,7 @@ function ThreadPageContent() {
   });
 
   useEffect(() => {
+    latestRouteThreadId.current = routeThreadId ?? null;
     if (!routeThreadId) return;
     if (status !== 'ready' || !transcript.threadId || transcript.threadId === routeThreadId || !threadsQuery.isSuccess)
       return;

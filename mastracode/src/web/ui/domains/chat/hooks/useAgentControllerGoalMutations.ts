@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { createAgentControllerClient } from '../services/agentControllerClient';
+import { createAgentControllerClient, requireAgentControllerSession } from '../services/agentControllerClient';
 
 interface AgentControllerGoalMutationArgs {
   agentControllerId: string;
@@ -28,23 +28,35 @@ function useSessionInvalidation({ agentControllerId, resourceId }: AgentControll
 export function useSetAgentControllerGoalMutation(args: AgentControllerGoalMutationArgs) {
   const { session } = createAgentControllerClient(args);
   const invalidateSession = useSessionInvalidation(args);
-  return useMutation({ mutationFn: (objective: string) => session!.setGoal(objective), onSuccess: invalidateSession });
+  return useMutation({
+    mutationFn: (objective: string) => requireAgentControllerSession(session).setGoal(objective),
+    onSuccess: invalidateSession,
+  });
 }
 
 export function usePauseAgentControllerGoalMutation(args: AgentControllerGoalMutationArgs) {
   const { session } = createAgentControllerClient(args);
   const invalidateSession = useSessionInvalidation(args);
-  return useMutation({ mutationFn: () => session!.updateGoal({ status: 'paused' }), onSuccess: invalidateSession });
+  return useMutation({
+    mutationFn: () => requireAgentControllerSession(session).updateGoal({ status: 'paused' }),
+    onSuccess: invalidateSession,
+  });
 }
 
 export function useResumeAgentControllerGoalMutation(args: AgentControllerGoalMutationArgs) {
   const { session } = createAgentControllerClient(args);
   const invalidateSession = useSessionInvalidation(args);
-  return useMutation({ mutationFn: () => session!.updateGoal({ status: 'active' }), onSuccess: invalidateSession });
+  return useMutation({
+    mutationFn: () => requireAgentControllerSession(session).updateGoal({ status: 'active' }),
+    onSuccess: invalidateSession,
+  });
 }
 
 export function useClearAgentControllerGoalMutation(args: AgentControllerGoalMutationArgs) {
   const { session } = createAgentControllerClient(args);
   const invalidateSession = useSessionInvalidation(args);
-  return useMutation({ mutationFn: () => session!.clearGoal(), onSuccess: invalidateSession });
+  return useMutation({
+    mutationFn: () => requireAgentControllerSession(session).clearGoal(),
+    onSuccess: invalidateSession,
+  });
 }

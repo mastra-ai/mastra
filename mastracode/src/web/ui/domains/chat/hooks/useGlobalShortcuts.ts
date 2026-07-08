@@ -49,7 +49,7 @@ export function useGlobalShortcuts() {
         overlays.close('sidebar');
         return;
       }
-      if (busy) void abortMutation.mutateAsync();
+      if (busy) abortMutation.mutate();
     },
   });
 }

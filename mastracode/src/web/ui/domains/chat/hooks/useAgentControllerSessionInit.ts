@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { createAgentControllerClient } from '../services/agentControllerClient';
+import { createAgentControllerClient, requireAgentControllerSession } from '../services/agentControllerClient';
 
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
@@ -23,10 +23,11 @@ export function useAgentControllerSessionInit({
   return useQuery({
     queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'],
     queryFn: async () => {
-      const created = await session!.create({ tags: projectPath ? { projectPath } : undefined });
+      const activeSession = requireAgentControllerSession(session);
+      const created = await activeSession.create({ tags: projectPath ? { projectPath } : undefined });
       if (projectPath) {
         try {
-          await session!.setState({ projectPath });
+          await activeSession.setState({ projectPath });
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }
@@ -37,6 +38,6 @@ export function useAgentControllerSessionInit({
     staleTime: Infinity,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
-    retry: 3,
+    retry: false,
   });
 }

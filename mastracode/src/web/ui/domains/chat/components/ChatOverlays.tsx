@@ -55,8 +55,7 @@ export function ChatOverlays() {
           onThemeChange={setTheme}
           onDensityChange={changeDensity}
           onModelChange={modelId => {
-            void switchModelMutation.mutateAsync(modelId);
-            toast('Model updated', 'success');
+            void switchModelMutation.mutateAsync(modelId).then(() => toast('Model updated', 'success'));
           }}
           onBehaviorChange={updates => {
             void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));

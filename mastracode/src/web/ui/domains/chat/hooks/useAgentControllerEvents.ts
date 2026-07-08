@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { AgentControllerSession } from '../services/agentControllerClient';
 
@@ -20,10 +20,16 @@ export function useAgentControllerEvents({
   onEvent,
   onConnectedChange,
 }: UseAgentControllerEventsArgs) {
+  const [connectionState, setConnectionStateSnapshot] = useState<SseConnectionState>('never');
   const connectedSnapshotRef = useRef<SseConnectionState>('never');
+  const onEventRef = useRef(onEvent);
+  const onConnectedChangeRef = useRef(onConnectedChange);
 
-  const subscribe = (onStoreChange: () => void) => {
-    if (!enabled || !session || !epoch) return () => {};
+  onEventRef.current = onEvent;
+  onConnectedChangeRef.current = onConnectedChange;
+
+  useEffect(() => {
+    if (!enabled || !session || !epoch) return;
 
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
@@ -31,8 +37,8 @@ export function useAgentControllerEvents({
     const setConnectionState = (state: SseConnectionState) => {
       if (connectedSnapshotRef.current === state) return;
       connectedSnapshotRef.current = state;
-      onConnectedChange(state === 'connected');
-      onStoreChange();
+      onConnectedChangeRef.current(state === 'connected');
+      setConnectionStateSnapshot(state);
     };
 
     const disconnect = () => {
@@ -41,7 +47,7 @@ export function useAgentControllerEvents({
 
     void session
       .subscribe({
-        onEvent,
+        onEvent: event => onEventRef.current(event),
         onError: () => {
           if (!disposed) disconnect();
         },
@@ -64,11 +70,7 @@ export function useAgentControllerEvents({
       disposed = true;
       unsubscribe?.();
     };
-  };
+  }, [enabled, session, epoch]);
 
-  return useSyncExternalStore(
-    subscribe,
-    () => connectedSnapshotRef.current,
-    () => 'never',
-  );
+  return connectionState;
 }

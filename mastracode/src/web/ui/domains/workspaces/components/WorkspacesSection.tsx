@@ -126,8 +126,9 @@ function WorkspaceRow({
     <button
       type="button"
       aria-current={active ? 'true' : undefined}
-      disabled={disabled || active}
-      onClick={onSelect}
+      aria-disabled={active || undefined}
+      disabled={disabled}
+      onClick={active ? undefined : onSelect}
       className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
     >
       <GitBranch size={13} />

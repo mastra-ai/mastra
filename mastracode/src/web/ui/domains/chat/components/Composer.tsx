@@ -2,7 +2,7 @@ import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useEffectEvent, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -72,6 +72,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
 
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const appliedCommandNameRef = useRef<string | null>(null);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -81,16 +82,26 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
     setActiveSuggestion(0);
   };
 
-  const applyCommand = useEffectEvent((name: string) => {
+  const applyCommandDraft = (name: string) => {
     updateDraft(`/${name} `);
     inputRef.current?.focus();
+  };
+
+  const applyCommand = (name: string) => {
+    applyCommandDraft(name);
     onCommandApplied();
-  });
+  };
 
   useEffect(() => {
-    if (!commandNameToApply) return;
-    applyCommand(commandNameToApply);
-  }, [commandNameToApply]);
+    if (!commandNameToApply) {
+      appliedCommandNameRef.current = null;
+      return;
+    }
+    if (appliedCommandNameRef.current === commandNameToApply) return;
+    appliedCommandNameRef.current = commandNameToApply;
+    applyCommandDraft(commandNameToApply);
+    onCommandApplied();
+  }, [commandNameToApply, applyCommandDraft, onCommandApplied]);
 
   useTextareaAutoResize(inputRef, draft);
 

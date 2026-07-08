@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { createAgentControllerClient } from '../services/agentControllerClient';
+import { createAgentControllerClient, requireAgentControllerSession } from '../services/agentControllerClient';
 
 interface AgentControllerThreadMutationArgs {
   agentControllerId: string;
@@ -38,7 +38,7 @@ export function useCreateAgentControllerThreadMutation(args: AgentControllerThre
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
-    mutationFn: (title?: string) => session!.createThread(title),
+    mutationFn: (title?: string) => requireAgentControllerSession(session).createThread(title),
     onSuccess: invalidateThreads,
   });
 }
@@ -48,7 +48,7 @@ export function useDeleteAgentControllerThreadMutation(args: AgentControllerThre
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
-    mutationFn: (threadId: string) => session!.deleteThread(threadId),
+    mutationFn: (threadId: string) => requireAgentControllerSession(session).deleteThread(threadId),
     onSuccess: invalidateThreads,
   });
 }
@@ -58,7 +58,8 @@ export function useRenameAgentControllerThreadMutation(args: AgentControllerThre
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
-    mutationFn: ({ threadId, title }: { threadId: string; title: string }) => session!.renameThread(threadId, title),
+    mutationFn: ({ threadId, title }: { threadId: string; title: string }) =>
+      requireAgentControllerSession(session).renameThread(threadId, title),
     onSuccess: invalidateThreads,
   });
 }
@@ -68,7 +69,8 @@ export function useCloneAgentControllerThreadMutation(args: AgentControllerThrea
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
-    mutationFn: (options?: { sourceThreadId?: string; title?: string }) => session!.cloneThread(options),
+    mutationFn: (options?: { sourceThreadId?: string; title?: string }) =>
+      requireAgentControllerSession(session).cloneThread(options),
     onSuccess: invalidateThreads,
   });
 }
@@ -79,8 +81,8 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
 
   return useMutation({
     mutationFn: async (threadId: string) => {
-      await session!.switchThread(threadId);
-      return session!.state();
+      await requireAgentControllerSession(session).switchThread(threadId);
+      return requireAgentControllerSession(session).state();
     },
     onSuccess: invalidateSession,
   });
