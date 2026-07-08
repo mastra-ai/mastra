@@ -1,5 +1,38 @@
 # @mastra/core
 
+## 1.50.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+
+## 1.50.2-alpha.0
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0))
+
+## 1.50.1
+
+### Patch Changes
+
+- Update provider registry and model documentation with latest models and providers ([`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000))
+
+- Fixed slow agent streaming with remote storage: output processors run an internal workflow once per streamed chunk, and each run performed a storage read that could never hit (the run id is freshly generated and these transient workflows never persist a snapshot). On high-latency databases this throttled token delivery to roughly one storage round-trip per token. The guaranteed-miss read is now skipped for freshly-created transient runs. (#19015) ([#19028](https://github.com/mastra-ai/mastra/pull/19028))
+
+- Fix a custom `stopWhen` being ignored when `maxSteps` is also set. Previously, setting `maxSteps` replaced the user's `stopWhen` with `stepCountIs(maxSteps)`, so the agent could not stop early and ran to the `maxSteps` cap. The two are now composed, so `stopWhen` still fires while `maxSteps` acts as an upper safety cap. Closes #19007. ([#19009](https://github.com/mastra-ai/mastra/pull/19009))
+
+- Fixed durable agent tool error recovery to always continue the agentic loop when tool errors occur, matching the regular agent's behavior. This allows the model to self-correct after tool failures instead of stopping the loop prematurely. ([#18881](https://github.com/mastra-ai/mastra/pull/18881))
+
+- Fixed the internal notification dispatcher starting the workflow scheduler in every app. Since 1.39.0 every Mastra instance registered the notification dispatch cron at boot, which kept the scheduler polling storage every 10 seconds — generating constant network traffic to remote databases (like Turso) and preventing serverless containers from ever scaling to zero. The dispatch schedule now activates lazily on the first deferred or summarized notification, so apps that never defer notifications no longer run a scheduler at all. Stale dispatcher schedule rows left behind by earlier versions are cleaned up automatically the next time a scheduler runs. Fixes #18864. ([#18907](https://github.com/mastra-ai/mastra/pull/18907))
+
+## 1.50.1-alpha.2
+
+### Patch Changes
+
+- Fixed the internal notification dispatcher starting the workflow scheduler in every app. Since 1.39.0 every Mastra instance registered the notification dispatch cron at boot, which kept the scheduler polling storage every 10 seconds — generating constant network traffic to remote databases (like Turso) and preventing serverless containers from ever scaling to zero. The dispatch schedule now activates lazily on the first deferred or summarized notification, so apps that never defer notifications no longer run a scheduler at all. Stale dispatcher schedule rows left behind by earlier versions are cleaned up automatically the next time a scheduler runs. Fixes #18864. ([#18907](https://github.com/mastra-ai/mastra/pull/18907))
+
 ## 1.50.1-alpha.1
 
 ### Patch Changes

@@ -802,12 +802,15 @@ export type ProviderModelsMap = {
   ];
   readonly vultr: readonly [
     'MiniMaxAI/MiniMax-M2.7',
+    'Qwen/Qwen3.5-397B-A17B',
+    'Qwen/Qwen3.6-27B',
+    'XiaomiMiMo/MiMo-V2.5-Pro',
+    'deepseek-ai/DeepSeek-V4-Flash',
     'moonshotai/Kimi-K2.6',
     'nvidia/DeepSeek-V3.2-NVFP4',
-    'nvidia/Llama-3.1-Nemotron-Safety-Guard-8B-v3',
     'nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16',
     'nvidia/Nemotron-Cascade-2-30B-A3B',
-    'zai-org/GLM-5.1-FP8',
+    'zai-org/GLM-5.2-FP8',
   ];
   readonly '302ai': readonly [
     'MiniMax-M1',
@@ -1035,6 +1038,7 @@ export type ProviderModelsMap = {
     'deepseek-v4-pro',
     'gemini-3.1-flash-lite-preview',
     'gemini-3.1-pro-preview',
+    'glm-5.2',
     'gpt-5-mini',
     'gpt-5.1-codex',
     'gpt-5.1-codex-max',
@@ -1886,8 +1890,6 @@ export type ProviderModelsMap = {
   ];
   readonly llmgateway: readonly [
     'auto',
-    'claude-3-7-sonnet',
-    'claude-3-7-sonnet-20250219',
     'claude-3-opus',
     'claude-fable-5',
     'claude-haiku-4-5',
@@ -2951,6 +2953,7 @@ export type ProviderModelsMap = {
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.5',
     'minimax/minimax-m2.7',
+    'minimax/minimax-m3',
     'mistralai/codestral-2508',
     'mistralai/devstral-2512',
     'mistralai/devstral-medium',
@@ -3256,9 +3259,9 @@ export type ProviderModelsMap = {
   ];
   readonly openrouter: readonly [
     'ai21/jamba-large-1.7',
-    'aion-labs/aion-1.0',
-    'aion-labs/aion-1.0-mini',
     'aion-labs/aion-2.0',
+    'aion-labs/aion-3.0',
+    'aion-labs/aion-3.0-mini',
     'aion-labs/aion-rp-llama-3.1-8b',
     'allenai/olmo-3-32b-think',
     'amazon/nova-2-lite-v1',
@@ -3837,7 +3840,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.1',
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model'];
-  readonly xpersona: readonly ['xpersona-frieren-coder', 'xpersona-gpt-5.5'];
+  readonly xpersona: readonly ['claude-fable-5', 'xpersona-frieren-coder', 'xpersona-gpt-5.5'];
   readonly baseten: readonly [
     'deepseek-ai/DeepSeek-V4-Pro',
     'moonshotai/Kimi-K2.5',

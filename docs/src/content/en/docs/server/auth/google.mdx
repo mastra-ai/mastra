@@ -279,7 +279,7 @@ Visit [Mastra Client SDK](/docs/server/mastra-client) for more configuration opt
 - **Workspace users are rejected**: Verify `GOOGLE_ALLOWED_DOMAINS` matches the Google ID token `hd` claim.
 - **Consumer Gmail accounts are rejected**: This is expected when `allowedDomains` is configured because Gmail accounts don't have a Workspace `hd` claim.
 - **RBAC returns default permissions**: No roles were resolved for the user. Verify the user email or custom `getUserKey`, Google group membership, and `roleMapping`. If the Directory API lookup fails, the provider throws an error instead of returning `_default`.
-- **Cookies are not sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
+- **Cookies aren't sent cross-origin**: Set `credentials: "include"` in `MastraClient` and configure `server.cors` with your frontend origin and `credentials: true`.
 - **Session lost on restart**: Set `GOOGLE_COOKIE_PASSWORD` to a stable value of at least 32 characters. Without it, an auto-generated key is used in development and changes on each restart.
 
 ## Related

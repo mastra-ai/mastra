@@ -75,7 +75,7 @@ export const releaseChecklist = createSkill({
 })
 ```
 
-The `references` field bundles supporting documents that the agent can read with the `skill_read` tool, just like `references/` files in a filesystem skill.
+The `references` field bundles supporting documents that the agent can read with the `skill_read` tool, like `references/` files in a filesystem skill.
 
 :::note
 Visit [`createSkill()` reference](/reference/agents/createSkill) for the full API.
@@ -139,6 +139,8 @@ export const agent = new Agent({
 
 The resolver function receives `{ requestContext }` and returns a `SkillInput[]` array or a `Promise<SkillInput[]>`.
 
+See [Request Context](/docs/server/request-context) for more on using request context with agents and workflows.
+
 ## Merging with workspace skills
 
 When an agent has both `skills` and a workspace with skills configured, they merge. Agent-level skills take precedence on name conflicts:
@@ -159,7 +161,7 @@ const customReview = createSkill({
   instructions: '...',
 })
 
-export const agent = new Agent({
+export const reviewer = new Agent({
   id: 'reviewer',
   model: '__GATEWAY_OPENAI_MODEL__',
   workspace,

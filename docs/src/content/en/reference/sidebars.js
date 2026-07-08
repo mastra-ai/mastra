@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
       label: 'ACP',
@@ -164,6 +165,19 @@ const sidebars = {
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Code SDK',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-agent-controller',
+          label: 'mountAgentControllerOnMastra()',
+          customProps: { tags: ['beta'] },
+        },
       ],
     },
     {
