@@ -76,7 +76,7 @@ Use your public Mastra server URL as the base URL:
 https://your-app.example.com/api/agents/whatsapp-agent/channels/whatsapp/webhook
 ```
 
-Use this URL anywhere the WhatsApp adapter docs ask for the callback URL or webhook URL. The adapter handles webhook verification and incoming events through the generated Mastra webhook route.
+Use this URL for incoming WhatsApp event delivery. The generated Mastra route handles POST events from WhatsApp; follow the Chat SDK WhatsApp adapter docs for the Meta callback and webhook verification flow.
 
 ## Related
 
