@@ -1,7 +1,7 @@
 import { Mastra, type Config } from '@mastra/core/mastra';
 import { VercelDeployer } from '@mastra/deployer-vercel';
 import { MastraEditor } from '@mastra/editor';
-import { editorShowcaseAgent, recipeAgent, studioPreviewAgent } from './agents/studio-preview-agent';
+import { editorShowcaseAgent, studioPreviewAgent } from './agents/studio-preview-agent';
 import { previewScorers } from './scorers/preview-scorers';
 import { seedStudioPreview } from './seed/seed';
 import { storage } from './store';
@@ -10,7 +10,6 @@ import { previewStatusTool } from './tools/preview-status';
 export const mastra = new Mastra({
   agents: {
     studioPreviewAgent,
-    recipeAgent,
     editorShowcaseAgent,
   },
   tools: {

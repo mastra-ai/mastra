@@ -26,12 +26,12 @@ const getSubmitPlanStatus = (result: SubmitPlanResult | undefined): SubmitPlanSt
 
 export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPlanBadgeProps) => {
   const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
-  const [comment, setComment] = useState('');
-  const [isCommentOpen, setIsCommentOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const { path, title, plan } = suspendPayload;
   const resolvedTitle = title ?? 'Submitted plan';
-  const trimmedComment = comment.trim();
+  const trimmedFeedback = feedback.trim();
   const isResolved = !!result || toolCallApprovals?.[toolCallId]?.status === 'approved';
   const status = getSubmitPlanStatus(result);
   const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Resolved';
@@ -42,7 +42,7 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
 
   const sharedResumeData = useMemo(
     () => ({
-      ...(path !== undefined ? { path } : {}),
+      path,
       ...(title !== undefined ? { title } : {}),
       ...(plan !== undefined ? { plan } : {}),
     }),
@@ -51,7 +51,7 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
 
   const copyContent = useMemo(
     () =>
-      [resolvedTitle, path ? `File: ${path}` : undefined, plan]
+      [resolvedTitle, `File: ${path}`, plan]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join('\n\n'),
     [path, plan, resolvedTitle],
@@ -68,13 +68,18 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
 
   const handleApprove = useCallback(() => {
     if (isResolved || isRunning) return;
-    approveToolcall(toolCallId, buildResumeData('approved', trimmedComment));
-  }, [approveToolcall, buildResumeData, isResolved, isRunning, toolCallId, trimmedComment]);
+    approveToolcall(toolCallId, buildResumeData('approved'));
+  }, [approveToolcall, buildResumeData, isResolved, isRunning, toolCallId]);
 
   const handleReject = useCallback(() => {
     if (isResolved || isRunning) return;
-    approveToolcall(toolCallId, buildResumeData('rejected', trimmedComment));
-  }, [approveToolcall, buildResumeData, isResolved, isRunning, toolCallId, trimmedComment]);
+    approveToolcall(toolCallId, buildResumeData('rejected'));
+  }, [approveToolcall, buildResumeData, isResolved, isRunning, toolCallId]);
+
+  const handleRequestChanges = useCallback(() => {
+    if (isResolved || isRunning || !trimmedFeedback) return;
+    approveToolcall(toolCallId, buildResumeData('rejected', trimmedFeedback));
+  }, [approveToolcall, buildResumeData, isResolved, isRunning, toolCallId, trimmedFeedback]);
 
   const leftActions = !isResolved ? (
     <Button
@@ -92,15 +97,15 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
 
   const rightActions = !isResolved ? (
     <>
-      <Popover open={isCommentOpen} onOpenChange={setIsCommentOpen}>
+      <Popover open={isFeedbackOpen} onOpenChange={setIsFeedbackOpen}>
         <PopoverTrigger asChild>
           <Button
             type="button"
             variant="primary"
             size="icon-sm"
-            tooltip={trimmedComment ? 'Edit comment' : 'Add comment'}
-            aria-label={trimmedComment ? 'Edit comment' : 'Add comment'}
-            aria-pressed={isCommentOpen}
+            tooltip="Request changes"
+            aria-label="Open request changes"
+            aria-pressed={isFeedbackOpen}
             disabled={isRunning}
           >
             <MessageSquareText />
@@ -108,9 +113,9 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
         </PopoverTrigger>
         <PopoverContent side="top" align="end" sideOffset={8} className="w-72 p-3">
           <Textarea
-            placeholder="Add an optional comment..."
-            value={comment}
-            onChange={event => setComment(event.target.value)}
+            placeholder="Describe requested changes..."
+            value={feedback}
+            onChange={event => setFeedback(event.target.value)}
             disabled={isRunning}
             rows={3}
             variant="outline"
@@ -122,10 +127,10 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
               type="button"
               variant="primary"
               size="sm"
-              onClick={() => setIsCommentOpen(false)}
-              disabled={isRunning}
+              onClick={handleRequestChanges}
+              disabled={isRunning || !trimmedFeedback}
             >
-              Done
+              Request changes
             </Button>
           </div>
         </PopoverContent>

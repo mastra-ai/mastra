@@ -22,7 +22,7 @@ export interface AskUserResult {
 }
 
 export interface SubmitPlanSuspendPayload {
-  path?: string;
+  path: string;
   title?: string;
   plan?: string;
 }

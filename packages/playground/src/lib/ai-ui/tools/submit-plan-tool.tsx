@@ -26,14 +26,8 @@ function isSubmitPlanSuspendPayload(payload: unknown): payload is SubmitPlanSusp
 
   const { path, title, plan } = payload;
   const hasPath = typeof path === 'string' && path.length > 0;
-  const hasPlan = typeof plan === 'string' && plan.length > 0;
 
-  return (
-    (hasPath || hasPlan) &&
-    isOptionalNonEmptyString(path) &&
-    isOptionalNonEmptyString(title) &&
-    isOptionalNonEmptyString(plan)
-  );
+  return hasPath && isOptionalNonEmptyString(title) && isOptionalNonEmptyString(plan);
 }
 
 function asSubmitPlanResult(output: unknown): SubmitPlanResult | undefined {

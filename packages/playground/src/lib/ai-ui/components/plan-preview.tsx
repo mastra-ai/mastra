@@ -36,18 +36,28 @@ const getFileName = (path: string) => {
   return segments[segments.length - 1] ?? path;
 };
 
-const renderTitle = (title: string) =>
-  title.split(/(`[^`]+`)/g).map((part, index) => {
+const TITLE_CODE_SPAN_PATTERN = /(`[^`]+`)/g;
+
+const renderTitle = (title: string) => {
+  let offset = 0;
+
+  return title.split(TITLE_CODE_SPAN_PATTERN).flatMap(part => {
+    const key = `${offset}:${part}`;
+    offset += part.length;
+
+    if (!part) return [];
+
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
       return (
-        <code key={`${part}-${index}`} className="rounded-md bg-surface3 px-1.5 py-0.5 font-mono text-[0.9em]">
+        <code key={key} className="rounded-md bg-surface3 px-1.5 py-0.5 font-mono text-[0.9em]">
           {part.slice(1, -1)}
         </code>
       );
     }
 
-    return <Fragment key={`${part}-${index}`}>{part}</Fragment>;
+    return <Fragment key={key}>{part}</Fragment>;
   });
+};
 
 export const PlanPreview = ({
   title,

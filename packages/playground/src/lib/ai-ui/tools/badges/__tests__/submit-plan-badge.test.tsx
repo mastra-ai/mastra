@@ -112,12 +112,35 @@ describe('SubmitPlanBadge', () => {
       });
     });
 
-    it('adds an optional comment to approval', () => {
+    it('requests changes with feedback', () => {
       const { approveToolcall } = renderBadge({ toolCallId: 'call-1', suspendPayload, result: undefined });
 
-      fireEvent.click(within(badge()).getByRole('button', { name: /add comment/i }));
+      fireEvent.click(within(badge()).getByRole('button', { name: /open request changes/i }));
 
-      fireEvent.change(screen.getByPlaceholderText('Add an optional comment...'), {
+      expect(screen.getByRole<HTMLButtonElement>('button', { name: /^request changes$/i }).disabled).toBe(true);
+
+      fireEvent.change(screen.getByPlaceholderText('Describe requested changes...'), {
+        target: { value: '  Add rollback steps.  ' },
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /^request changes$/i }));
+
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
+      expect(approveToolcall).toHaveBeenCalledWith('call-1', {
+        action: 'rejected',
+        feedback: 'Add rollback steps.',
+        path: '/workspace/plan.md',
+        title: 'Review the migration',
+        plan: '## Migration\n\n- Backfill users\n- Flip reads',
+      });
+    });
+
+    it('does not attach requested-changes feedback when approving', () => {
+      const { approveToolcall } = renderBadge({ toolCallId: 'call-1', suspendPayload, result: undefined });
+
+      fireEvent.click(within(badge()).getByRole('button', { name: /open request changes/i }));
+
+      fireEvent.change(screen.getByPlaceholderText('Describe requested changes...'), {
         target: { value: '  Keep the rollout narrow.  ' },
       });
 
@@ -126,28 +149,6 @@ describe('SubmitPlanBadge', () => {
       expect(approveToolcall).toHaveBeenCalledTimes(1);
       expect(approveToolcall).toHaveBeenCalledWith('call-1', {
         action: 'approved',
-        feedback: 'Keep the rollout narrow.',
-        path: '/workspace/plan.md',
-        title: 'Review the migration',
-        plan: '## Migration\n\n- Backfill users\n- Flip reads',
-      });
-    });
-
-    it('adds an optional comment to rejection', () => {
-      const { approveToolcall } = renderBadge({ toolCallId: 'call-1', suspendPayload, result: undefined });
-
-      fireEvent.click(within(badge()).getByRole('button', { name: /add comment/i }));
-
-      fireEvent.change(screen.getByPlaceholderText('Add an optional comment...'), {
-        target: { value: '  Add rollback steps.  ' },
-      });
-
-      fireEvent.click(within(badge()).getByRole('button', { name: /reject/i }));
-
-      expect(approveToolcall).toHaveBeenCalledTimes(1);
-      expect(approveToolcall).toHaveBeenCalledWith('call-1', {
-        action: 'rejected',
-        feedback: 'Add rollback steps.',
         path: '/workspace/plan.md',
         title: 'Review the migration',
         plan: '## Migration\n\n- Backfill users\n- Flip reads',
@@ -166,33 +167,6 @@ describe('SubmitPlanBadge', () => {
       fireEvent.click(screen.getByTestId('submit-plan-content'));
 
       expect(within(badge()).getByRole('button', { name: /collapse plan/i })).toBeTruthy();
-    });
-  });
-
-  describe('when an inline plan has no path', () => {
-    const suspendPayload: SubmitPlanSuspendPayload = {
-      title: 'Inline recipe plan',
-      plan: '## Menu\n\n- Duck\n- Potatoes',
-    };
-
-    it('renders the markdown body without a filename row', () => {
-      renderBadge({ toolCallId: 'call-inline', suspendPayload, result: undefined });
-
-      expect(screen.getByText('Inline recipe plan')).toBeTruthy();
-      expect(screen.getByRole('heading', { name: 'Menu' })).toBeTruthy();
-      expect(screen.queryByText('Plan file')).toBeNull();
-    });
-
-    it('approves without inventing a path', () => {
-      const { approveToolcall } = renderBadge({ toolCallId: 'call-inline', suspendPayload, result: undefined });
-
-      fireEvent.click(within(badge()).getByRole('button', { name: /approve/i }));
-
-      expect(approveToolcall).toHaveBeenCalledWith('call-inline', {
-        action: 'approved',
-        title: 'Inline recipe plan',
-        plan: '## Menu\n\n- Duck\n- Potatoes',
-      });
     });
   });
 

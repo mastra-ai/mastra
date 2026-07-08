@@ -132,7 +132,7 @@ describe('SubmitPlanTool', () => {
   });
 
   describe('when the suspend payload is malformed', () => {
-    it('renders an inline plan body when path is missing but plan is present', () => {
+    it('renders nothing when path is missing but plan is present', () => {
       const metadata: MessageMetadata = {
         suspendedTools: {
           'call-5': {
@@ -146,9 +146,7 @@ describe('SubmitPlanTool', () => {
 
       renderTool({ toolName: 'submit_plan', toolCallId: 'call-5', output: undefined, metadata });
 
-      expect(screen.getByTestId('submit-plan-badge')).toBeTruthy();
-      expect(screen.getByText('Missing path')).toBeTruthy();
-      expect(screen.getByText('Body')).toBeTruthy();
+      expect(screen.queryByTestId('submit-plan-badge')).toBeNull();
     });
 
     it('renders nothing when both path and plan are missing', () => {
