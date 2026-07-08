@@ -146,13 +146,6 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     isOptional: true,
   },
   {
-    name: 'onToolCall',
-    type: '(toolCall: VoiceToolCall) => void',
-    description:
-      'Called as each tool call starts mid-reply, before its result is known. The building block for tool-driven side effects such as analytics or agent-initiated hang-up. Runs synchronously on the stream; keep it cheap. Applies to the agent reply path.',
-    isOptional: true,
-  },
-  {
     name: 'onTurnComplete',
     type: '(ctx: VoiceTurnCompleteContext) => void | Promise<void>',
     description:
@@ -407,7 +400,7 @@ Provide exactly one reply source: `remote`, `agent`, or `generate`.
     name: 'onToolCall',
     type: '(toolCall: VoiceToolCall) => void',
     description:
-      'Called as each tool call starts, mid-stream. Pair with runEndCall() to rebuild agent-initiated hang-up.',
+      'Called as each tool call starts, mid-stream. Pair with runEndCall() to implement your own agent-initiated hang-up flow.',
     isOptional: true,
   },
   {
