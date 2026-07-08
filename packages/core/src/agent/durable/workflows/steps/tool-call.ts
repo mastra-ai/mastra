@@ -959,6 +959,14 @@ export function createDurableToolCallStep() {
                       },
                     },
                   });
+
+                  // Flush to storage so the metadata update (especially suspendedAt)
+                  // is persisted. Unlike the regular agent which has a single long-lived
+                  // messageList, the durable agent's workflow state is serialized before
+                  // this async callback fires, so we must flush directly.
+                  if (saveQueueManager && state?.threadId) {
+                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                  }
                 },
 
                 onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,
