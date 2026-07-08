@@ -9,7 +9,7 @@ import { TabSwitcher } from './tab-switcher'
 
 function NavbarContentDesktop() {
   return (
-    <div className="@container mx-auto flex h-(--ifm-navbar-height) w-full items-center justify-between border-b-[0.5px] border-(--border-subtle) px-4">
+    <div className="@container mx-auto flex h-(--ifm-navbar-height) w-full items-center justify-between px-4">
       <div className="flex items-center gap-2">
         <Link href="/docs" aria-label="mastra.ai, Back to docs homepage">
           <Logo />
