@@ -71,7 +71,7 @@ type ScorerTypeShortcuts = {
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
   instructions: string;
-  jsonPromptInjection?: boolean;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */

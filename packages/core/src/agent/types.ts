@@ -498,6 +498,12 @@ export interface GoalConfig {
    */
   maxSteps?: number;
   /**
+   * Use JSON prompt injection instead of native provider structured output for
+   * the default goal judge. Useful for providers that reject native response
+   * formats; `'inline'` injects schema instructions into the user prompt.
+   */
+  jsonPromptInjection?: boolean | 'system' | 'inline';
+  /**
    * Custom goal scorer (a {@link MastraScorer} or a registered scorer id). When
    * omitted, a default rubric scorer judges the objective with the judge model.
    */

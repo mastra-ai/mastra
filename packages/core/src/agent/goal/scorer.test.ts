@@ -61,6 +61,11 @@ describe('createGoalScorer tool support', () => {
     const instructions = scorer.config.judge?.instructions ?? '';
     expect(instructions).toBe(customPrompt);
   });
+
+  it('forwards jsonPromptInjection to the judge config', () => {
+    const scorer = createGoalScorer({ judgeModel, jsonPromptInjection: 'inline' });
+    expect(scorer.config.judge?.jsonPromptInjection).toBe('inline');
+  });
 });
 
 describe('createGoalScorer JSON fallback', () => {

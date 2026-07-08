@@ -104,6 +104,7 @@ export function createGoalScorer({
   defaultMemoryOptions,
   onStream,
   maxSteps,
+  jsonPromptInjection,
   mastra,
   requestContext,
 }: {
@@ -114,6 +115,7 @@ export function createGoalScorer({
   defaultMemoryOptions?: AgentMemoryOption;
   onStream?: ScorerJudgeConfig['onStream'];
   maxSteps?: number;
+  jsonPromptInjection?: ScorerJudgeConfig['jsonPromptInjection'];
   mastra?: Mastra;
   requestContext?: RequestContext<any>;
 }) {
@@ -132,6 +134,7 @@ export function createGoalScorer({
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
       ...(onStream ? { onStream } : {}),
       ...(maxSteps ? { maxSteps } : {}),
+      ...(jsonPromptInjection ? { jsonPromptInjection } : {}),
       ...(requestContext ? { requestContext } : {}),
     },
   });

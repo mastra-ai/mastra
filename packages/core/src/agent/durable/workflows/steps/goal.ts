@@ -320,6 +320,7 @@ export function createDurableGoalStep() {
             requestContext,
             onStream: observeJudgeStream,
             ...(effective.maxSteps ? { maxSteps: effective.maxSteps } : {}),
+            ...(effective.jsonPromptInjection ? { jsonPromptInjection: effective.jsonPromptInjection } : {}),
           });
         }
 
