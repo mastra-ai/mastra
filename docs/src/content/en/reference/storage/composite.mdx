@@ -5,6 +5,7 @@ packages:
   - "@mastra/clickhouse"
   - "@mastra/core"
   - "@mastra/libsql"
+  - "@mastra/mongodb"
   - "@mastra/pg"
 ---
 
@@ -23,7 +24,7 @@ npm install @mastra/core@latest
 You'll also need to install the storage providers you want to compose:
 
 ```bash npm2yarn
-npm install @mastra/pg@latest @mastra/libsql@latest
+npm install @mastra/pg@latest @mastra/libsql@latest @mastra/mongodb@latest
 ```
 
 ## Storage domains
@@ -91,6 +92,38 @@ export const mastra = new Mastra({
     default: pgStore,
     domains: {
       memory: new MemoryLibSQL({ url: 'file:./local.db' }),
+    },
+  }),
+})
+```
+
+### Mixed backends
+
+Use domain classes from each storage package to route different domains to different backends. The following example stores memory and workflow state in MongoDB, then routes observability to ClickHouse:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { ObservabilityStorageClickhouse } from '@mastra/clickhouse'
+import { MemoryStorageMongoDB, WorkflowsStorageMongoDB } from '@mastra/mongodb'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite',
+    domains: {
+      memory: new MemoryStorageMongoDB({
+        uri: process.env.MONGODB_URI,
+        dbName: 'mastra_memory',
+      }),
+      workflows: new WorkflowsStorageMongoDB({
+        uri: process.env.MONGODB_URI,
+        dbName: 'mastra_workflows',
+      }),
+      observability: new ObservabilityStorageClickhouse({
+        url: process.env.CLICKHOUSE_URL,
+        username: process.env.CLICKHOUSE_USERNAME,
+        password: process.env.CLICKHOUSE_PASSWORD,
+      }),
     },
   }),
 })

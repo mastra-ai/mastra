@@ -5,8 +5,12 @@ packages:
   - "@mastra/core"
   - "@mastra/libsql"
   - "@mastra/memory"
+  - "@mastra/mongodb"
   - "@mastra/pg"
 ---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
 
 # Storage overview
 
@@ -112,17 +116,36 @@ Storage can be configured at the Mastra instance level or at the agent level.
 
 Instance-level storage is shared by agents, workflows, observability, evals, schedules, and other runtime features registered on the same Mastra instance.
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { PostgresStore } from '@mastra/pg'
+<Tabs>
+  <TabItem value="postgresql" label="PostgreSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { PostgresStore } from '@mastra/pg'
 
-export const mastra = new Mastra({
-  storage: new PostgresStore({
-    id: 'mastra-storage',
-    connectionString: process.env.DATABASE_URL,
-  }),
-})
-```
+    export const mastra = new Mastra({
+      storage: new PostgresStore({
+        id: 'mastra-storage',
+        connectionString: process.env.DATABASE_URL,
+      }),
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="mongodb" label="MongoDB">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { MongoDBStore } from '@mastra/mongodb'
+
+    export const mastra = new Mastra({
+      storage: new MongoDBStore({
+        id: 'mastra-storage',
+        uri: process.env.MONGODB_URI,
+        dbName: process.env.MONGODB_DB_NAME,
+      }),
+    })
+    ```
+  </TabItem>
+</Tabs>
 
 Use instance-level storage when most runtime domains can share the same database.
 
