@@ -20,6 +20,10 @@ function safeValidate<T>(
     if (result instanceof Promise) {
       throw new Error('Your schema is async, which is not supported. Please use a sync schema.');
     }
+    // Prioritise issues over value: Valibot returns both on failure (typed: false).
+    if ('issues' in result && Array.isArray(result.issues) && result.issues.length > 0) {
+      return { issues: result.issues as readonly StandardSchemaIssue[] };
+    }
     return result as { value: T } | { issues: readonly StandardSchemaIssue[] };
   } catch (err) {
     // Catch Zod internal errors like "Cannot read properties of undefined (reading 'run')"

@@ -936,6 +936,7 @@
     "tsup": "^8.5.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
+    "valibot": "^1.4.1",
     "vitest": "catalog:",
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
