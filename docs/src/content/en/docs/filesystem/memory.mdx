@@ -29,7 +29,7 @@ import { Memory } from '@mastra/memory'
 export default new Memory()
 ```
 
-The exported instance becomes the agent's `memory`. If your app configures a storage provider on the main Mastra instance, memory data is stored there. See [memory storage](/docs/memory/storage) for storage setup.
+The exported instance becomes the agent's `memory`. If your app configures a storage provider on the main Mastra instance, memory data is stored there. See [storage](/docs/storage/overview) for more information.
 
 Use the same `resource` and `thread` values when calling the agent to continue a conversation:
 
@@ -62,7 +62,7 @@ export default new Memory({
 
 Visit the [`Memory` reference](/reference/memory/memory-class) for constructor options. Use these pages for related memory features:
 
-- [Memory storage](/docs/memory/storage): configure persistence for memory data.
+- [Storage](/docs/storage/overview): configure persistence for memory data.
 - [Semantic recall](/docs/memory/semantic-recall): retrieve relevant past messages by semantic meaning.
 - [Memory processors](/docs/memory/memory-processors): filter, trim, or transform messages before memory adds them to model context.
 
@@ -75,6 +75,6 @@ Visit the [`Memory` reference](/reference/memory/memory-class) for constructor o
 - [config.ts](/docs/filesystem/config)
 - [Filesystem overview](/docs/filesystem/overview)
 - [Memory overview](/docs/memory/overview)
-- [Memory storage](/docs/memory/storage)
+- [Storage](/docs/storage/overview)
 - [Semantic recall](/docs/memory/semantic-recall)
 - [`Memory` reference](/reference/memory/memory-class)
