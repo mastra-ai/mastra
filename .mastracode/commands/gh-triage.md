@@ -10,7 +10,7 @@ Manage one open GitHub issue or active PR through three explicit phases:
 
 1. **Triage** — classify, route, and always end by posting/updating either a Maintainer's Triage Note or an issue/PR comment.
 2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`.
-3. **Approve** — mark the note as waiting for final approval with a recommended approver, then stop.
+3. **Approve** — mark the note as waiting for final approval with a final approver, then stop.
 
 Start with **Triage** only. In `--headless` mode, choose the next step, post the required Triage output, and exit.
 
@@ -52,7 +52,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 
 **Approve:**
 - Status: <not started|waiting for final approval|approved|not approved>
-- Final approver: <person/team, or `Not identified yet.`>
+- Final approver: <@person or @org/team, or `Not identified yet.`>
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
@@ -315,13 +315,13 @@ D) Stop here
 
 Only enter after Review is complete enough for final maintainer routing. Do not merge, close, label, assign, or change PR/issue state.
 
-### 1. Recommend one final approver
+### 1. Identify one final approver
 
 - [ ] Use reviewed files/area from the working file.
 - [ ] Check CODEOWNERS first: `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`.
-- [ ] Do not recommend docs maintainers unless the PR explicitly changes docs or introduces/changes a feature that needs docs follow-up.
-- [ ] If CODEOWNERS is clear, recommend one matching person/team.
-- [ ] Otherwise use recent history for affected paths and recommend one person with recent context.
+- [ ] Do not list docs maintainers unless the PR explicitly changes docs or introduces/changes a feature that needs docs follow-up.
+- [ ] If CODEOWNERS is clear, use one matching `@user` or `@org/team` mention.
+- [ ] Otherwise use recent history for affected paths and choose one person with recent context; only use `@` for a confirmed GitHub handle.
 - [ ] If unclear, say `No clear final approver identified` with a short reason.
 
 ```bash
@@ -333,12 +333,12 @@ git log --since="6 months ago" --format='%an <%ae>' -- <path> | sort | uniq -c |
 
 ```text
 Review is ready for final approval routing.
-Recommended final approver: <person/team or no clear approver> — <short reason>.
+Final approver: <@person/@org/team or no clear approver> — <short reason>.
 
-A) Update the Maintainer's Triage Note as waiting for final approval, with this approver recommendation
+A) Update the Maintainer's Triage Note as waiting for final approval with this approver
 B) Show me the proposed note update first
 C) Pick a different final approver
 D) Do not update anything — stop here
 ```
 
-If approved, update the same note: `Current Phase: Awaiting Approval`, top-level `Next Step: Await final approval`, `Approve` status `waiting for final approval`, recommended approver and reason. Then stop.
+If approved, update the same note: `Current Phase: Awaiting Approval`, top-level `Next Step: Await final approval`, `Approve` status `waiting for final approval`, final approver and reason. Then stop.
