@@ -33,4 +33,6 @@ const result = await memory.summarizeThread({
 
 `summarizeConversation({ model, messages, instructions, extract })` takes the same options with messages you already have in hand instead of a `threadId`.
 
+`summarizeThread` loads the thread's messages page-by-page starting from the newest, and accepts `lastMessages` (only summarize the last N messages) and `maxInputTokens` (stop loading older messages past this estimated token count, default 1,000,000) to bound how much history is read from storage.
+
 **Why:** session-based agents (for example voice calls) often need a summary or structured extraction of the finished conversation — sentiment, requested services, follow-ups — stored in the application's own database. Observational Memory's observer and extractors are built for exactly this distillation, but attaching OM to an agent just to summarize at session end forces the whole observe/activate lifecycle onto a use case that doesn't need it. These APIs expose the summarization/extraction logic directly.
