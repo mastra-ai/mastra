@@ -27,6 +27,8 @@ const IGNORED_CONSOLE_PATTERNS = [
   /Content Security Policy/i,
   // Storage Access API calls can be denied in CI without breaking docs pages.
   /requestStorageAccess: Permission denied\./i,
+  // Browser feature probes can be blocked by Permissions Policy in CI.
+  /Permissions policy violation: compute-pressure is not allowed in this document\./i,
   // Browser's generic "Failed to load resource" message — we track these properly
   // via page.on('response') with URL-based filtering above, so no need to fail
   // on the bare console message (which contains no URL context)
