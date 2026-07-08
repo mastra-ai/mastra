@@ -738,6 +738,7 @@ export type ProviderModelsMap = {
     'grok-4.20-0309-reasoning',
     'grok-4.20-multi-agent-0309',
     'grok-4.3',
+    'grok-4.5',
     'grok-build-0.1',
     'grok-imagine-image',
     'grok-imagine-image-quality',
@@ -2042,7 +2043,6 @@ export type ProviderModelsMap = {
     'qwen3-coder-next',
     'qwen3-coder-plus',
     'qwen3-max',
-    'qwen3-max-2026-01-23',
     'qwen3-next-80b-a3b-instruct',
     'qwen3-next-80b-a3b-thinking',
     'qwen3-vl-235b-a22b-instruct',
@@ -3600,6 +3600,7 @@ export type ProviderModelsMap = {
     '~moonshotai/kimi-latest',
     '~openai/gpt-latest',
     '~openai/gpt-mini-latest',
+    '~x-ai/grok-latest',
   ];
   readonly jiekou: readonly [
     'baidu/ernie-4.5-300b-a47b-paddle',

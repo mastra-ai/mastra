@@ -178,7 +178,8 @@
     "~google/gemini-pro-latest",
     "~moonshotai/kimi-latest",
     "~openai/gpt-latest",
-    "~openai/gpt-mini-latest"
+    "~openai/gpt-mini-latest",
+    "~x-ai/grok-latest"
   ],
   "temperature": [
     "ai21/jamba-large-1.7",
@@ -473,6 +474,7 @@
     "~anthropic/claude-opus-latest",
     "~google/gemini-flash-latest",
     "~google/gemini-pro-latest",
-    "~moonshotai/kimi-latest"
+    "~moonshotai/kimi-latest",
+    "~x-ai/grok-latest"
   ]
 }
