@@ -86,49 +86,6 @@ describe('createVirtualDependencies', () => {
     });
   });
 
-  it('should resolve workspace cache facades from the workspace map when metadata root paths are missing', () => {
-    const depsToOptimize = new Map<string, DependencyMetadata>([
-      [
-        '@mastra/core/evals/scoreTraces',
-        {
-          exports: ['scoreTraces'],
-          rootPath: null,
-          isWorkspace: true,
-        },
-      ],
-    ]);
-
-    const workspaceMap = new Map<string, WorkspacePackageInfo>([
-      [
-        '@mastra/core',
-        {
-          location: '/workspace/packages/core',
-          dependencies: {},
-          version: '1.0.0',
-        },
-      ],
-    ]);
-
-    const result = createVirtualDependencies(depsToOptimize, {
-      workspaceRoot: '/workspace',
-      workspaceMap,
-      projectRoot: '/workspace/apps/mastra',
-      outputDir: '/workspace/apps/mastra/.mastra/.build',
-      bundlerOptions: { isDev: true },
-    });
-
-    expect(result.fileNameToDependencyMap.has('apps/mastra/.mastra/.build/@mastra__core__evals__scoreTraces')).toBe(
-      false,
-    );
-    expect(
-      result.fileNameToDependencyMap.get('packages/core/node_modules/.cache/@mastra__core__evals__scoreTraces'),
-    ).toBe('@mastra/core/evals/scoreTraces');
-    expect(result.optimizedDependencyEntries.get('@mastra/core/evals/scoreTraces')).toEqual({
-      name: 'packages/core/node_modules/.cache/@mastra__core__evals__scoreTraces',
-      virtual: "export { scoreTraces } from '@mastra/core/evals/scoreTraces';",
-    });
-  });
-
   it('should handle default export only', () => {
     const depsToOptimize = new Map<string, DependencyMetadata>([
       [
@@ -670,11 +627,7 @@ describe('bundleExternals', () => {
 
     expect(result.output).toBeDefined();
     expect(result.fileNameToDependencyMap).toBeInstanceOf(Map);
-    expect(result.fileNameToDependencyMap.size).toBe(2);
-    expect(result.fileNameToDependencyMap.has(join('app', '.mastra', '.build', '@workspace__utils'))).toBe(false);
-    expect(
-      result.fileNameToDependencyMap.has(join('packages', 'utils', 'node_modules', '.cache', '@workspace__utils')),
-    ).toBe(true);
+    expect(result.fileNameToDependencyMap.size).toBe(3);
 
     // Check that both workspace and external packages are handled
     const dependencyValues = Array.from(result.fileNameToDependencyMap.values());

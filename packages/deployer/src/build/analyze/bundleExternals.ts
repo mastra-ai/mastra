@@ -26,7 +26,6 @@ import type { DependencyMetadata } from '../types';
 import {
   getCompiledDepCachePath,
   getNodeResolveOptions,
-  getPackageName,
   isDependencyPartOfPackage,
   rollupSafeName,
   slash,
@@ -53,13 +52,11 @@ export function createVirtualDependencies(
     workspaceRoot,
     outputDir,
     bundlerOptions,
-    workspaceMap = new Map(),
   }: {
     workspaceRoot: string | null;
     projectRoot: string;
     outputDir: string;
     bundlerOptions?: { isDev?: boolean; externalsPreset?: boolean };
-    workspaceMap?: Map<string, WorkspacePackageInfo>;
   },
 ): {
   optimizedDependencyEntries: Map<string, VirtualDependency>;
@@ -110,14 +107,7 @@ export function createVirtualDependencies(
   // We rewrite the path to the original folder inside node_modules/.cache
   if (isDev || externalsPreset) {
     for (const [dep, { isWorkspace, rootPath }] of depsToOptimize.entries()) {
-      if (!isWorkspace || !workspaceRoot) {
-        continue;
-      }
-
-      const packageName = getPackageName(dep);
-      const workspaceRootPath = packageName ? workspaceMap.get(packageName)?.location : null;
-      const depRootPath = rootPath ?? workspaceRootPath;
-      if (!depRootPath) {
+      if (!isWorkspace || !rootPath || !workspaceRoot) {
         continue;
       }
 
@@ -127,9 +117,8 @@ export function createVirtualDependencies(
       }
 
       const fileName = basename(currentDepPath.name);
-      const entryName = prepareEntryFileName(getCompiledDepCachePath(depRootPath, fileName), rootDir);
+      const entryName = prepareEntryFileName(getCompiledDepCachePath(rootPath, fileName), rootDir);
 
-      fileNameToDependencyMap.delete(currentDepPath.name);
       fileNameToDependencyMap.set(entryName, dep);
       optimizedDependencyEntries.set(dep, {
         ...currentDepPath,
@@ -528,7 +517,6 @@ export async function bundleExternals(
 
   const { optimizedDependencyEntries, fileNameToDependencyMap } = createVirtualDependencies(depsToOptimize, {
     workspaceRoot,
-    workspaceMap,
     outputDir,
     projectRoot,
     bundlerOptions: {
