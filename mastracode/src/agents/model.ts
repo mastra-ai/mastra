@@ -1,7 +1,8 @@
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { GatewayLanguageModel, MastraModelGatewayInterface } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import { loadSettings } from '../onboarding/settings.js';
+import { AMAZON_BEDROCK_GATEWAY_ID, createAmazonBedrockGateway } from '../providers/amazon-bedrock-gateway.js';
 import type { ThinkingLevel } from '../providers/openai-codex.js';
 import {
   MASTRA_GATEWAY_PREFIX,
@@ -25,11 +26,11 @@ export type { MastraCodeCustomProvider, MastraCodeGatewayOptions } from './mastr
 type ResolvedModel = GatewayLanguageModel;
 type ModelRequestHeaders = Record<string, string>;
 
-function getHarnessHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
-  const harnessContext = requestContext?.get('harness') as HarnessRequestContext<any> | undefined;
+function getAgentControllerHeaders(requestContext?: RequestContext): ModelRequestHeaders | undefined {
+  const agentControllerContext = requestContext?.get('controller') as AgentControllerRequestContext<any> | undefined;
   const headers = {
-    ...(harnessContext?.threadId ? { 'x-thread-id': harnessContext.threadId } : {}),
-    ...(harnessContext?.resourceId ? { 'x-resource-id': harnessContext.resourceId } : {}),
+    ...(agentControllerContext?.threadId ? { 'x-thread-id': agentControllerContext.threadId } : {}),
+    ...(agentControllerContext?.resourceId ? { 'x-resource-id': agentControllerContext.resourceId } : {}),
   };
 
   return Object.keys(headers).length > 0 ? headers : undefined;
@@ -46,6 +47,15 @@ export function createMastraCodeModelCatalogProvider(gateway: MastraModelGateway
 }
 
 /**
+ * Placeholder for future model ID normalization.
+ * Currently returns the input unchanged, but exists as a seam
+ * for aliasing, casing fixes, or validation in the future.
+ */
+export function resolveModelId(modelId: string): string {
+  return modelId;
+}
+
+/**
  * Resolve a model ID to the correct provider instance.
  * Shared by the main agent, observer, and reflector.
  *
@@ -59,15 +69,41 @@ export function resolveModel(
   options?: { thinkingLevel?: ThinkingLevel; remapForCodexOAuth?: boolean; requestContext?: RequestContext },
 ): GatewayLanguageModel {
   reloadAuthStorage();
-  const headers = getHarnessHeaders(options?.requestContext);
+  const headers = getAgentControllerHeaders(options?.requestContext);
   const settings = loadSettings();
-  const isMastraGatewayModel = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
-  const normalizedModelId = stripMastraGatewayPrefix(modelId);
+  // Bedrock was previously cataloged under the MastraCode gateway namespace
+  // (`mastracode/amazon-bedrock/<model>`). Normalize any legacy saved ids to the
+  // standalone `amazon-bedrock/<model>` form so they resolve through the
+  // dedicated Bedrock gateway.
+  const bedrockLegacyPrefix = `${MASTRACODE_GATEWAY_ID}/amazon-bedrock/`;
+  const normalizedInput = modelId.startsWith(bedrockLegacyPrefix)
+    ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
+    : modelId;
+  const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
+  const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
   const bareModelId = modelParts.join('/');
   if (!providerId || !bareModelId) {
     throw new Error(`Invalid model id: ${modelId}`);
   }
+
+  if (providerId === AMAZON_BEDROCK_GATEWAY_ID) {
+    const bedrockGateway = createAmazonBedrockGateway();
+    const routerId = `${AMAZON_BEDROCK_GATEWAY_ID}/${bareModelId}`;
+    const auth = bedrockGateway.resolveAuth({
+      gatewayId: AMAZON_BEDROCK_GATEWAY_ID,
+      providerId: AMAZON_BEDROCK_GATEWAY_ID,
+      modelId: bareModelId,
+      routerId,
+    });
+    return bedrockGateway.resolveLanguageModel({
+      providerId: AMAZON_BEDROCK_GATEWAY_ID,
+      modelId: bareModelId,
+      apiKey: auth?.apiKey ?? '',
+      headers,
+    });
+  }
+
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
   const mgApiKey = MastraCodeGateway.getMemoryGatewayApiKey();
@@ -97,18 +133,18 @@ export function resolveModel(
 }
 
 /**
- * Dynamic model function that reads the current model from harness state.
+ * Dynamic model function that reads the current model from controller state.
  * This allows runtime model switching via the /models picker.
  */
 export function getDynamicModel({ requestContext }: { requestContext: RequestContext }): ResolvedModel {
-  const harnessContext = requestContext.get('harness') as HarnessRequestContext<any> | undefined;
+  const agentControllerContext = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
 
-  const modelId = harnessContext?.state?.currentModelId;
+  const modelId = agentControllerContext?.session?.modelId;
   if (!modelId) {
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = harnessContext?.state?.thinkingLevel as ThinkingLevel | undefined;
+  const thinkingLevel = agentControllerContext?.state?.thinkingLevel as ThinkingLevel | undefined;
 
   return resolveModel(modelId, { thinkingLevel, remapForCodexOAuth: true, requestContext });
 }

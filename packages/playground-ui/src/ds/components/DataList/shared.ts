@@ -25,14 +25,21 @@ export const dataListRowStaticStyles = ['mx-1 grid grid-cols-subgrid gap-8 px-5'
 
 import { cva } from 'class-variance-authority';
 
+export type DataListSticky = 'start';
+
+export const dataListStickyStartStyles = [
+  'data-list-sticky-start sticky left-0 z-10 isolate self-stretch overflow-visible',
+  'after:absolute after:-right-4 after:top-1/2 after:-translate-y-1/2 after:h-4 after:w-px after:bg-border2 after:content-[""] after:pointer-events-none',
+] as const;
+
 /** Tone for a single row. `error` lays a subtle, theme-aware destructive tint
  *  over whatever background the row already has. */
 export type DataListRowVariant = 'default' | 'error';
 
 /**
  * Per-row tone. Kept as a `.ts` cva (safe to export — no react-refresh concern).
- * The error tint uses `!` so it wins over the striped variant's root-level zebra
- * (a higher-specificity descendant rule) and over the base row hover.
+ * The error tint uses `!` so it wins over borderless table root-level styling
+ * (higher-specificity descendant rules) and over the base row hover.
  */
 export const dataListRowVariants = cva('', {
   variants: {

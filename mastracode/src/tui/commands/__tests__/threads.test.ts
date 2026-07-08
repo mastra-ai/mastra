@@ -1,4 +1,4 @@
-import type { HarnessMessage, HarnessThread } from '@mastra/core/harness';
+import type { AgentControllerMessage, AgentControllerThread } from '@mastra/core/agent-controller';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { askModalQuestion } from '../../modal-question.js';
 import { handleThreadsCommand, showThreadLockPrompt } from '../threads.js';
@@ -33,7 +33,7 @@ vi.mock('../../components/thread-selector.js', () => ({
   },
 }));
 
-function createThread(id: string, updatedAtIso: string): HarnessThread {
+function createThread(id: string, updatedAtIso: string): AgentControllerThread {
   const updatedAt = new Date(updatedAtIso);
   return {
     id,
@@ -46,7 +46,7 @@ function createThread(id: string, updatedAtIso: string): HarnessThread {
   };
 }
 
-function createMessage(id: string, text: string): HarnessMessage {
+function createMessage(id: string, text: string): AgentControllerMessage {
   return {
     id,
     role: 'user',
@@ -55,7 +55,7 @@ function createMessage(id: string, text: string): HarnessMessage {
   };
 }
 
-function createContext(threads: HarnessThread[]) {
+function createContext(threads: AgentControllerThread[]) {
   const showOverlay = vi.fn();
   const trackInteractivePrompt = vi.fn();
   const state = {
@@ -71,12 +71,16 @@ function createContext(threads: HarnessThread[]) {
     chatContainer: { clear: vi.fn(), addChild: vi.fn(), invalidate: vi.fn() },
     allToolComponents: [] as any[],
     pendingTools: new Map(),
-    harness: {
-      listThreads: vi.fn(async () => threads),
-      getCurrentThreadId: vi.fn(() => null),
-      getResourceId: vi.fn(() => 'resource-1'),
-      getCurrentModeId: vi.fn(() => 'build'),
-      getFirstUserMessagesForThreads: vi.fn(async () => new Map()),
+    session: {
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+      thread: {
+        getId: vi.fn(() => null),
+        list: vi.fn(async () => threads),
+        firstUserMessages: vi.fn(async () => new Map()),
+      },
+      mode: { get: vi.fn(() => 'build') },
+    },
+    controller: {
       setResourceId: vi.fn(),
       switchThread: vi.fn(),
       cloneThread: vi.fn(),
@@ -145,7 +149,7 @@ describe('handleThreadsCommand thread listing', () => {
     await commandPromise;
   });
 
-  it('returns only cached previews and never requests uncached ones from the harness', async () => {
+  it('returns only cached previews and never requests uncached ones from the controller', async () => {
     const threads = [createThread('thread-1', '2026-03-17T15:10:00.000Z')];
     const { ctx, state, showOverlay } = createContext(threads);
     state.threadPreviewCache.set('thread-1', {
@@ -153,7 +157,7 @@ describe('handleThreadsCommand thread listing', () => {
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),
     });
     state.attemptedThreadPreviewIds.add('thread-1');
-    state.harness.getFirstUserMessagesForThreads = vi.fn(
+    state.session.thread.firstUserMessages = vi.fn(
       async () => new Map([['thread-1', createMessage('message-1', 'slow')]]),
     );
 
@@ -166,7 +170,7 @@ describe('handleThreadsCommand thread listing', () => {
     await expect(selector.options.getMessagePreviews(['thread-1', 'thread-2'])).resolves.toEqual(
       new Map([['thread-1', 'Cached preview']]),
     );
-    expect(state.harness.getFirstUserMessagesForThreads).not.toHaveBeenCalled();
+    expect(state.session.thread.firstUserMessages).not.toHaveBeenCalled();
     expect(state.threadPreviewCache.get('thread-1')).toEqual({
       preview: 'Cached preview',
       updatedAt: new Date('2026-03-17T15:10:00.000Z').getTime(),

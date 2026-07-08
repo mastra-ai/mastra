@@ -12,11 +12,13 @@ jobs:
   sync-templates:
     name: Sync Template Repositories
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
+    permissions:
+      contents: read
 
     steps:
       - name: Initial checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           # Use default GITHUB_TOKEN for initial checkout
           # This is needed to access the .github/actions/app-auth action
@@ -30,9 +32,11 @@ jobs:
           client-id: ${{ vars.DANE_CLIENT_ID }}
           private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
           owner: mastra-ai
+          permission-contents: write
+          permission-administration: write
 
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

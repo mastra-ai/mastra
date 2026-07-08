@@ -10,6 +10,8 @@ import { RoutePermissionGuard } from './domains/auth/components/route-permission
 import { RoutePermissionsGate } from './domains/auth/components/route-permissions-gate';
 import { DatasetCrumb } from './domains/datasets/dataset-crumb';
 import { WorkflowLayout } from './domains/workflows/workflow-layout';
+import SignalsOverviewPage, { SignalDetailsPage, SignalTraceIdPage } from './ee/signals';
+import { SignalCrumb, SignalDetailsCrumb, SignalsRootCrumb } from './ee/signals/signal-crumb';
 import { PostHogProvider } from './lib/analytics';
 import { Link } from './lib/link';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
@@ -28,7 +30,6 @@ import AgentBuilderSkillsView from './pages/agent-builder/skills/view';
 import Agents from './pages/agents';
 import Agent from './pages/agents/agent';
 import AgentSession from './pages/agents/agent/session';
-import AgentChannelsPage from './pages/agents/agent-channels';
 import AgentEvaluate from './pages/agents/agent-evaluate';
 import AgentPlayground from './pages/agents/agent-playground';
 import AgentReview from './pages/agents/agent-review';
@@ -105,7 +106,7 @@ import { TraceCrumb } from '@/domains/traces/trace-crumb';
 import { WorkflowCrumb, WorkflowRunCrumb } from '@/domains/workflows/workflow-crumbs';
 import { LinkComponentProvider } from '@/lib/framework';
 import type { LinkComponentProviderProps } from '@/lib/framework';
-import { navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
+import { findNavItem, navCrumb, navHandle, navHandleWithChildren } from '@/lib/nav';
 import type { CrumbDef, RouteHeaderHandle } from '@/lib/route-header';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
@@ -130,6 +131,9 @@ declare global {
     MASTRA_REQUEST_CONTEXT_PRESETS?: string;
     MASTRA_EXPERIMENTAL_UI?: string;
     MASTRA_AGENT_SIGNALS?: string;
+    MASTRA_SIGNALS_UI?: string;
+    MASTRA_ORGANIZATION_ID?: string;
+    MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT?: string;
   }
 }
 
@@ -376,6 +380,43 @@ export const routes: RouteObject[] = [
         handle: navHandleWithChildren('/scorers', [{ id: 'scorer', Component: ScorerCrumb, heading: 'Scorer' }]),
       },
       { path: '/metrics', element: <Metrics />, handle: navHandle('/metrics') },
+      {
+        path: '/signals',
+        handle: {
+          ...navHandle('/signals'),
+          crumbs: [
+            {
+              id: 'nav:/signals',
+              Component: SignalsRootCrumb,
+              heading: 'Signals',
+              icon: findNavItem('/signals')?.Icon,
+            },
+          ],
+        },
+        children: [
+          { index: true, element: <SignalsOverviewPage /> },
+          {
+            path: ':signalId',
+            element: <SignalDetailsPage />,
+            handle: {
+              crumbs: [{ id: 'signal', Component: SignalCrumb, heading: 'Signal' }],
+            } satisfies RouteHeaderHandle,
+          },
+          {
+            path: ':signalId/traces/:traceId',
+            element: <SignalTraceIdPage />,
+            handle: {
+              crumbs: [
+                {
+                  id: 'signal',
+                  Component: SignalDetailsCrumb,
+                  heading: 'Signal',
+                },
+              ],
+            } satisfies RouteHeaderHandle,
+          },
+        ],
+      },
       { path: '/observability', element: <Traces />, handle: navHandle('/observability') },
       {
         path: '/traces/:traceId',
@@ -442,6 +483,7 @@ export const routes: RouteObject[] = [
           },
           { path: 'chat', element: <Agent /> },
           { path: 'chat/:threadId', element: <Agent /> },
+          { path: 'settings', element: <Agent view="settings" /> },
           ...(isExperimentalFeatures
             ? [
                 { path: 'editor', element: <AgentPlayground /> },
@@ -450,7 +492,12 @@ export const routes: RouteObject[] = [
               ]
             : []),
           { path: 'traces', element: <AgentTraces /> },
-          { path: 'channels', element: <AgentChannelsPage /> },
+          {
+            // Channels is configuration, not a tool tab: it now lives in the
+            // agent settings view. Keep old links working.
+            path: 'channels',
+            loader: ({ params }: LoaderFunctionArgs) => redirect(`/agents/${params.agentId}/settings?tab=channels`),
+          },
         ],
       },
 

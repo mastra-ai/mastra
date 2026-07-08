@@ -5,7 +5,7 @@
 
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { HarnessRequestContext } from '@mastra/core/harness';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem } from '@mastra/core/workspace';
 import { z } from 'zod';
@@ -40,7 +40,9 @@ export const requestSandboxAccessTool = createTool({
   resumeSchema: z.union([z.string(), z.array(z.string())]),
   execute: async ({ path: requestedPath, reason }: RequestSandboxAccessInput, context: any) => {
     try {
-      const harnessCtx = context?.requestContext?.get('harness') as HarnessRequestContext<MastraCodeState> | undefined;
+      const agentControllerCtx = context?.requestContext?.get('controller') as
+        | AgentControllerRequestContext<MastraCodeState>
+        | undefined;
 
       // Resolve to absolute path (expand ~ first since Node path APIs don't handle it)
       const expanded = expandTilde(requestedPath);
@@ -76,25 +78,27 @@ export const requestSandboxAccessTool = createTool({
       const answerText = Array.isArray(resumeData) ? resumeData.join(', ') : String(resumeData);
       const approved = answerText.toLowerCase().startsWith('y') || answerText.toLowerCase() === 'approve';
       if (approved) {
-        // Persist to harness state first (and await it) so the value is
+        // Persist to controller state first (and await it) so the value is
         // committed before the next tool call re-derives the workspace's
         // allowed paths from state. The workspace factory rebuilds the
         // filesystem allowlist from `sandboxAllowedPaths` on every call
         // (getDynamicWorkspace), so an unawaited setState would let that
         // rebuild clobber the in-turn widen below before the grant lands.
-        const currentAllowed = (harnessCtx?.getState?.()?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const controllerState = agentControllerCtx?.getState();
+        const currentAllowed = (controllerState?.sandboxAllowedPaths as string[] | undefined) ?? [];
+        const nextAllowed = currentAllowed.includes(absolutePath) ? currentAllowed : [...currentAllowed, absolutePath];
         if (!currentAllowed.includes(absolutePath)) {
-          await harnessCtx?.setState?.({
-            sandboxAllowedPaths: [...currentAllowed, absolutePath],
+          await agentControllerCtx?.setState({
+            sandboxAllowedPaths: nextAllowed,
           });
         }
 
         // Also update the live workspace filesystem immediately so tools in
         // the same turn (e.g. `view`) can access the path without waiting for
         // a fresh workspace build. The resolved workspace is carried on the
-        // harness request context — the tool-execution context does not expose
+        // controller request context — the tool-execution context does not expose
         // it — so read the filesystem from there.
-        const fs = harnessCtx?.workspace?.filesystem ?? context?.workspace?.filesystem;
+        const fs = agentControllerCtx?.workspace?.filesystem ?? context?.workspace?.filesystem;
         if (fs instanceof LocalFilesystem) {
           fs.setAllowedPaths((prev: readonly string[]) => [...prev, absolutePath]);
         }

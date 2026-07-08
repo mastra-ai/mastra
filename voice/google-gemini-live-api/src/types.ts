@@ -49,6 +49,13 @@ export interface GeminiToolConfig {
 export interface GeminiSessionConfig {
   /** Enable session resumption after network interruptions */
   enableResumption?: boolean;
+  /**
+   * Opt in to seeding initial conversation history via send_client_content frames.
+   * Required by the Gemini Live v1alpha endpoint when calling sendContext() on
+   * gemini-3.1-flash-live-preview and later 3.x models.
+   * Defaults to true so that sendContext() works out of the box.
+   */
+  initialHistoryInClientContent?: boolean;
   /** Maximum session duration (e.g., '24h', '2h') */
   maxDuration?: string;
   /** Enable automatic context compression */
@@ -107,6 +114,14 @@ export interface GeminiLiveVoiceConfig {
 }
 
 /**
+ * A single conversation turn for context seeding via {@link GeminiLiveVoice.sendContext}.
+ */
+export interface IncrementalTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+/**
  * Runtime options that can be passed to methods
  */
 export interface GeminiLiveVoiceOptions {
@@ -149,7 +164,9 @@ export interface GeminiLiveEventMap {
   /** Session state changes */
   session: {
     state: 'connecting' | 'connected' | 'disconnected' | 'disconnecting' | 'error' | 'updated';
-    config?: Record<string, unknown>; // Configuration data when state is 'updated' or 'connected'
+    config?: Record<string, unknown>;
+    code?: number;
+    reason?: string;
   };
   /** Tool calls from the model */
   toolCall: { name: string; args: Record<string, any>; id: string };
@@ -239,6 +256,11 @@ export interface GeminiLiveServerMessage {
   // Setup completion message
   setup?: {
     sessionHandle?: string;
+  };
+  // Session resumption update from server (camelCase per wire format)
+  sessionResumptionUpdate?: {
+    newHandle?: string;
+    resumable?: boolean;
   };
 
   // Setup complete message (alternative format)

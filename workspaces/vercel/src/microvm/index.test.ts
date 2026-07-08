@@ -1,6 +1,6 @@
 import { Workspace, createWorkspaceTools } from '@mastra/core/workspace';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { VercelMicroVMSandbox } from './index';
+import { VercelSandbox } from './index';
 
 const createMock = vi.fn();
 
@@ -30,7 +30,7 @@ function makeFinished(exitCode: number, stdout: string, stderr = '') {
   };
 }
 
-describe('VercelMicroVMSandbox', () => {
+describe('VercelSandbox', () => {
   beforeEach(() => {
     createMock.mockReset();
     delete process.env.VERCEL_OIDC_TOKEN;
@@ -45,11 +45,11 @@ describe('VercelMicroVMSandbox', () => {
 
   describe('constructor', () => {
     it('creates an instance with defaults', () => {
-      const sandbox = new VercelMicroVMSandbox();
-      expect(sandbox.name).toBe('VercelMicroVMSandbox');
-      expect(sandbox.provider).toBe('vercel-microvm');
+      const sandbox = new VercelSandbox();
+      expect(sandbox.name).toBe('VercelSandbox');
+      expect(sandbox.provider).toBe('vercel-sandbox');
       expect(sandbox.status).toBe('pending');
-      expect(sandbox.id).toMatch(/^vercel-microvm-/);
+      expect(sandbox.id).toMatch(/^vercel-sandbox-/);
       expect(sandbox.processes).toBeDefined();
     });
   });
@@ -59,7 +59,7 @@ describe('VercelMicroVMSandbox', () => {
       const fake = makeFakeSandbox();
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox({
+      const sandbox = new VercelSandbox({
         runtime: 'node22',
         timeout: 600_000,
         resources: { vcpus: 4 },
@@ -85,7 +85,7 @@ describe('VercelMicroVMSandbox', () => {
     it('passes explicit credentials when all three are provided', async () => {
       createMock.mockResolvedValue(makeFakeSandbox());
 
-      const sandbox = new VercelMicroVMSandbox({
+      const sandbox = new VercelSandbox({
         token: 't',
         teamId: 'team',
         projectId: 'proj',
@@ -104,7 +104,7 @@ describe('VercelMicroVMSandbox', () => {
       process.env.VERCEL_PROJECT_ID = 'envproj';
       createMock.mockResolvedValue(makeFakeSandbox());
 
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       await sandbox._start();
 
       const params = createMock.mock.calls[0]![0] as Record<string, unknown>;
@@ -114,7 +114,7 @@ describe('VercelMicroVMSandbox', () => {
     });
 
     it('throws when credentials are incomplete', async () => {
-      const sandbox = new VercelMicroVMSandbox({ token: 'only-token' });
+      const sandbox = new VercelSandbox({ token: 'only-token' });
       const error = await sandbox._start().catch(e => e);
       expect(error).toBeInstanceOf(Error);
       expect(error.message).toContain('Incomplete credentials');
@@ -123,7 +123,7 @@ describe('VercelMicroVMSandbox', () => {
 
     it('does not recreate the sandbox if already running', async () => {
       createMock.mockResolvedValue(makeFakeSandbox());
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       await sandbox._start();
       await sandbox._start();
       expect(createMock).toHaveBeenCalledTimes(1);
@@ -137,7 +137,7 @@ describe('VercelMicroVMSandbox', () => {
       });
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       const result = await sandbox.executeCommand('echo', ['hello']);
 
       expect(result.success).toBe(true);
@@ -156,7 +156,7 @@ describe('VercelMicroVMSandbox', () => {
       });
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       const result = await sandbox.executeCommand('false');
 
       expect(result.success).toBe(false);
@@ -172,7 +172,7 @@ describe('VercelMicroVMSandbox', () => {
 
       const onStdout = vi.fn();
       const onStderr = vi.fn();
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       await sandbox.executeCommand('cmd', [], { onStdout, onStderr });
 
       expect(onStdout).toHaveBeenCalledWith('out');
@@ -186,7 +186,7 @@ describe('VercelMicroVMSandbox', () => {
       });
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       const result = await sandbox.executeCommand('sleep', ['100'], { timeout: 20 });
 
       expect(result.timedOut).toBe(true);
@@ -200,7 +200,7 @@ describe('VercelMicroVMSandbox', () => {
       });
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox({ env: { BASE: '1' } });
+      const sandbox = new VercelSandbox({ env: { BASE: '1' } });
       await sandbox.executeCommand('node', ['app.js'], { cwd: '/app', env: { EXTRA: '2' } });
 
       const runArgs = (fake.runCommand as ReturnType<typeof vi.fn>).mock.calls[0]![0];
@@ -214,11 +214,11 @@ describe('VercelMicroVMSandbox', () => {
       const fake = makeFakeSandbox();
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox({ runtime: 'node24', timeout: 120_000, ports: [8080] });
+      const sandbox = new VercelSandbox({ runtime: 'node24', timeout: 120_000, ports: [8080] });
       await sandbox._start();
 
       const info = sandbox.getInfo();
-      expect(info.provider).toBe('vercel-microvm');
+      expect(info.provider).toBe('vercel-sandbox');
       expect(info.metadata?.runtime).toBe('node24');
       expect(info.metadata?.timeout).toBe(120_000);
       expect(info.metadata?.domains).toEqual({ 8080: 'https://port-8080.vercel.run' });
@@ -227,7 +227,7 @@ describe('VercelMicroVMSandbox', () => {
 
   describe('getInstructions()', () => {
     it('returns default instructions describing the MicroVM', () => {
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       const text = sandbox.getInstructions!();
       expect(text).toContain('Vercel Sandbox');
       expect(text).toContain('Firecracker MicroVM');
@@ -235,12 +235,12 @@ describe('VercelMicroVMSandbox', () => {
     });
 
     it('honors a string override', () => {
-      const sandbox = new VercelMicroVMSandbox({ instructions: 'custom only' });
+      const sandbox = new VercelSandbox({ instructions: 'custom only' });
       expect(sandbox.getInstructions!()).toBe('custom only');
     });
 
     it('honors a function override receiving defaults', () => {
-      const sandbox = new VercelMicroVMSandbox({
+      const sandbox = new VercelSandbox({
         instructions: ({ defaultInstructions }) => `${defaultInstructions}\nEXTRA`,
       });
       const text = sandbox.getInstructions!();
@@ -251,7 +251,7 @@ describe('VercelMicroVMSandbox', () => {
 
   describe('WorkspaceSandbox conformance', () => {
     it('exposes sandbox tools when wired into a Workspace', async () => {
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       const workspace = new Workspace({ sandbox });
       const tools = await createWorkspaceTools(workspace);
 
@@ -266,7 +266,7 @@ describe('VercelMicroVMSandbox', () => {
       const fake = makeFakeSandbox();
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       await sandbox._start();
       await sandbox._stop();
 
@@ -278,7 +278,7 @@ describe('VercelMicroVMSandbox', () => {
       const fake = makeFakeSandbox();
       createMock.mockResolvedValue(fake);
 
-      const sandbox = new VercelMicroVMSandbox();
+      const sandbox = new VercelSandbox();
       await sandbox._start();
       await sandbox._destroy();
 

@@ -21,10 +21,26 @@ export const globalRunRegistry = new TTLCache<string, RunRegistryEntry>({
   ttl: 10 * 60 * 1000,
   updateAgeOnGet: true,
   dispose: entry => {
-    entry.cleanup?.();
+    entry?.cleanup?.();
   },
   noDisposeOnSet: true,
 });
+
+/**
+ * End a run's root spans (MODEL_GENERATION then AGENT_RUN) with an error so the trace
+ * still exports — stores persist only span-end events. After a resume the fresh resume
+ * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
+ * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
+ */
+export function endRunSpansWithError(runId: string, error: Error): void {
+  try {
+    const entry = globalRunRegistry.get(runId);
+    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({ error, endSpan: true });
+    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({ error, endSpan: true });
+  } catch {
+    // Span bookkeeping must never break error reporting.
+  }
+}
 
 /**
  * Registry for per-run non-serializable state.

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-cloud",
-  "version": "1.1.5",
+  "version": "1.2.2",
   "description": "Mastra Cloud authentication with PKCE OAuth",
   "type": "module",
   "main": "dist/index.js",
@@ -29,12 +29,12 @@
     "@mastra/auth": "workspace:*"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.32.0-0 <2.0.0-0"
+    "hono": "^4.0.0"
   },
   "devDependencies": {
+    "@internal/auth": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@mastra/core": "workspace:*",
     "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

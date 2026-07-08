@@ -1,5 +1,5 @@
 import type { StoredMCPServerConfig } from '@mastra/client-js';
-import { toast } from '@mastra/playground-ui';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 

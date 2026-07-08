@@ -19,7 +19,7 @@ Several built-in systems publish and subscribe to events through the same pub/su
 
 - **Workflow execution**: The scheduler publishes a `workflow.start` event, and a long-lived worker consumes it to run the workflow. Step and lifecycle events flow over pub/sub during execution.
 - **Scheduled workflows**: The scheduler dispatches due runs by publishing to the workflow topic. See [Scheduled workflows](/docs/workflows/scheduled-workflows).
-- **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/streaming/background-task-streaming).
+- **Background tasks**: A task manager dispatches work to a worker group and fans task lifecycle updates out to subscribers, which is how background task streams stay live. See [Background task streaming](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events).
 - **Agent signals**: Sending a signal to an active agent run publishes an event on a thread topic, so a run executing in another process receives the signal.
 - **Resumable streams**: Stream chunks are published per run, so a client that reconnects can replay what it missed.
 
@@ -133,5 +133,5 @@ Visit the [PubSub reference](/reference/pubsub/base) for the full delivery contr
 
 - [PubSub reference](/reference/pubsub/base)
 - [Mastra class](/reference/core/mastra-class)
-- [Background task streaming](/docs/streaming/background-task-streaming)
+- [Background task streaming](/docs/long-running-agents/background-tasks#subscribe-to-all-task-events)
 - [Scheduled workflows](/docs/workflows/scheduled-workflows)

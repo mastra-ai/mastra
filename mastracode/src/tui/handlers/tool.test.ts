@@ -17,6 +17,7 @@ function stripAnsi(text: string): string {
 
 function createToolHandlerContext(): EventHandlerContext {
   const chatContainer = new Container();
+  const session = { displayState: { get: vi.fn(() => ({ toolInputBuffers: new Map() })) } };
   const state = {
     chatContainer,
     ui: { requestRender: vi.fn() },
@@ -32,9 +33,8 @@ function createToolHandlerContext(): EventHandlerContext {
     toolOutputExpanded: false,
     hideThinkingBlock: false,
     taskToolInsertIndex: -1,
-    harness: {
-      getDisplayState: vi.fn(() => ({ toolInputBuffers: new Map() })),
-    },
+    session,
+    controller: { session },
   } as unknown as TUIState;
 
   return {
@@ -121,7 +121,7 @@ describe('task tool rendering', () => {
       ['call-1', { toolName: 'view', text: '{"path":"src/example.ts","offset":80,"limit":90}' }],
       ['call-2', { toolName: 'view', text: '{"path":"src/example.ts","offset":1,"limit":25}' }],
     ]);
-    vi.mocked(ctx.state.harness.getDisplayState).mockReturnValue({ toolInputBuffers: buffers } as any);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'view');
     handleToolInputDelta(ctx, 'call-1', '');
@@ -136,18 +136,18 @@ describe('task tool rendering', () => {
 
   it('streams submit_plan args into a plan box instead of rendering a generic tool', () => {
     const ctx = createToolHandlerContext();
-    const buffers = new Map([
-      ['call-1', { toolName: 'submit_plan', text: '{"title":"Ship it","plan":"Build the feature"}' }],
-    ]);
-    vi.mocked(ctx.state.harness.getDisplayState).mockReturnValue({ toolInputBuffers: buffers } as any);
+    const buffers = new Map([['call-1', { toolName: 'submit_plan', text: '{"path":".mastracode/plans/ship-it.md"}' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'submit_plan');
-    handleToolInputDelta(ctx, 'call-1', '{"title":"Ship it","plan":"Build the feature"}');
+    handleToolInputDelta(ctx, 'call-1', '{"path":".mastracode/plans/ship-it.md"}');
 
     expect(ctx.state.pendingTools.has('call-1')).toBe(false);
     expect(ctx.state.allToolComponents).toHaveLength(0);
     expect(ctx.state.pendingSubmitPlanComponents.has('call-1')).toBe(true);
     expect(visibleChildren(ctx)).toHaveLength(2);
-    expect(ctx.state.chatContainer.render(80).join('\n')).toContain('Build the feature');
+    const output = stripAnsi(ctx.state.chatContainer.render(80).join('\n'));
+    expect(output).toContain('.mastracode/plans/ship-it.md');
+    expect(output).toContain('Submitting plan…');
   });
 });

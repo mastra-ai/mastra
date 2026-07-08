@@ -11,7 +11,7 @@ packages:
 
 :::experimental
 
-This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -70,6 +70,7 @@ const { tool, instructions } = createCodeMode({
 })
 
 const agent = new Agent({
+  id: 'shop-assistant',
   name: 'shop-assistant',
   instructions: ['You are a helpful shopping assistant.', instructions],
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -128,6 +129,7 @@ const inventory = createCodeMode({
 })
 
 const agent = new Agent({
+  id: 'ops-assistant',
   name: 'ops-assistant',
   instructions: ['You are an ops assistant.', sales.instructions, inventory.instructions],
   model: '__GATEWAY_OPENAI_MODEL__',

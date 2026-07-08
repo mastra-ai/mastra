@@ -11,7 +11,7 @@ import './dialog.css';
 const Dialog = DialogPrimitive.Root;
 
 type DialogTriggerProps = DialogPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -29,7 +29,7 @@ DialogTrigger.displayName = 'DialogTrigger';
 const DialogPortal = DialogPrimitive.Portal;
 
 type DialogCloseProps = DialogPrimitive.Close.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -57,35 +57,39 @@ DialogOverlay.displayName = 'DialogOverlay';
 
 type DialogContentProps = Omit<DialogPrimitive.Popup.Props, 'className'> & {
   className?: string;
+  showOverlay?: boolean;
+  overlayClassName?: string;
 };
 
-const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Popup
-      ref={ref}
-      data-slot="dialog-content"
-      className={cn(
-        'dialog-content-anim',
-        'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
-        'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
-        'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
-        'focus-visible:outline-hidden',
-        className,
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close
-        render={
-          <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
-            <X />
-          </Button>
-        }
-      />
-    </DialogPrimitive.Popup>
-  </DialogPortal>
-));
+const DialogContent = React.forwardRef<HTMLDivElement, DialogContentProps>(
+  ({ className, children, showOverlay = true, overlayClassName, ...props }, ref) => (
+    <DialogPortal>
+      {showOverlay && <DialogOverlay className={overlayClassName} />}
+      <DialogPrimitive.Popup
+        ref={ref}
+        data-slot="dialog-content"
+        className={cn(
+          'dialog-content-anim',
+          'fixed left-[50%] top-[50%] z-50 grid translate-x-[-50%] translate-y-[-50%]',
+          'w-full max-w-[calc(100%-2rem)] sm:max-w-lg',
+          'rounded-xl border border-border1/40 bg-surface2/96 backdrop-blur-md shadow-dialog',
+          'focus-visible:outline-hidden',
+          className,
+        )}
+        {...props}
+      >
+        {children}
+        <DialogPrimitive.Close
+          render={
+            <Button variant="ghost" size="sm" className="absolute top-3 right-3" aria-label="Close">
+              <X />
+            </Button>
+          }
+        />
+      </DialogPrimitive.Popup>
+    </DialogPortal>
+  ),
+);
 DialogContent.displayName = 'DialogContent';
 
 const DialogHeader = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (

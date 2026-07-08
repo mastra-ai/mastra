@@ -617,6 +617,55 @@ describe('DaytonaSandbox', () => {
     });
   });
 
+  describe('Default cwd from mounts', () => {
+    it('no mounts and no cwd — command has no cd prefix', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).not.toContain('cd ');
+      expect(cmd).toContain('(echo hello)');
+    });
+
+    it('mount exists and no cwd — command cds to mount path', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      sandbox.mounts.entries.set('/data/gcs-mount', { state: 'mounted' });
+
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /data/gcs-mount');
+      expect(cmd).toContain('(echo hello)');
+    });
+
+    it('mount exists but explicit cwd overrides', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      sandbox.mounts.entries.set('/data/gcs-mount', { state: 'mounted' });
+
+      await sandbox.executeCommand('echo', ['hello'], { cwd: '/tmp' });
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /tmp');
+      expect(cmd).not.toContain('gcs-mount');
+    });
+
+    it('multiple mounts — defaults to first mount path', async () => {
+      const sandbox = new DaytonaSandbox();
+      await sandbox._start();
+      sandbox.mounts.entries.set('/data/first-mount', { state: 'mounted' });
+      sandbox.mounts.entries.set('/data/second-mount', { state: 'mounted' });
+
+      await sandbox.executeCommand('echo', ['hello']);
+
+      const cmd: string = mockSandbox.process.executeSessionCommand.mock.calls[0]![1].command;
+      expect(cmd).toContain('cd /data/first-mount');
+      expect(cmd).not.toContain('second-mount');
+    });
+  });
+
   describe('Mount Configuration', () => {
     it('S3 prefix mount uses bucket:/prefix syntax in mount command', async () => {
       mockSandbox.process.executeCommand.mockImplementation(async (command: string) => {

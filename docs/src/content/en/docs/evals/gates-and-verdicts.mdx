@@ -1,0 +1,149 @@
+---
+title: "Gates and verdicts | Evals"
+description: "Define hard requirements and quality thresholds for eval runs, with a computed pass/fail verdict."
+packages:
+  - "@mastra/core"
+---
+
+# Gates and verdicts
+
+Gates and verdicts add severity semantics to `runEvals`. Gates are scorers that must score 1.0 — hard requirements that block a run. Thresholds are minimum acceptable scores on tracked metrics. The verdict summarizes the outcome as `passed`, `scored`, or `failed`.
+
+## When to use gates and verdicts
+
+- Enforce hard requirements in CI (e.g., "agent must call the right tool")
+- Track quality metrics with minimum thresholds (e.g., "faithfulness above 0.7")
+- Get a single verdict signal (`passed`, `scored`, or `failed`) from an eval run without writing custom assertion logic
+- Separate "must pass" gates from "nice to have" tracked metrics
+
+## Quickstart
+
+```typescript title="src/evals/weather-eval.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { weatherAgent } from '../agents'
+import { faithfulnessScorer } from '../scorers'
+
+const result = await runEvals({
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  target: weatherAgent,
+
+  // Gates: must all score 1.0 or the run fails
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+
+  // Scorers: tracked with optional thresholds
+  scorers: [
+    { scorer: faithfulnessScorer, threshold: 0.7 },
+    checks.includes('Brooklyn'), // no threshold = tracked only
+  ],
+})
+
+console.log(result.verdict) // 'passed' | 'scored' | 'failed'
+```
+
+## How verdicts work
+
+The verdict is computed from gates and thresholds after all data items are processed:
+
+- `failed`: At least one gate averaged below 1.0 across data items
+- `scored`: All gates passed, but at least one threshold scorer missed its threshold
+- `passed`: All gates scored 1.0 and all thresholds were met
+
+When no gates or threshold-bearing scorers are provided, the verdict field is omitted and `runEvals` behaves exactly as before.
+
+## Gates
+
+Gates are scorers passed via the `gates` field. They run before regular scorers on each data item. A gate must average a score of 1.0 across all data items to pass.
+
+```typescript title="src/evals/tool-gate.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+
+const result = await runEvals({
+  data: [{ input: 'What is the weather?' }],
+  target: weatherAgent,
+  gates: [checks.calledTool('get_weather')],
+  scorers: [qualityScorer],
+})
+
+// result.gateResults: [{ id: 'check-called-tool', passed: true, score: 1 }]
+```
+
+Any scorer works as a gate. Quick Checks are a natural fit because they return binary 1/0 scores.
+
+:::note
+Visit [runEvals() reference](/reference/evals/run-evals) for the full parameter and return type documentation.
+:::
+
+## Thresholds
+
+Wrap a scorer in `{ scorer, threshold }` to set pass/fail bounds. The threshold is compared against the scorer's average score across all data items.
+
+A `threshold` can be:
+
+- **A number** — implies minimum (score at or above passes): `{ scorer, threshold: 0.7 }`
+- **An object with `min` and/or `max`** — for range-based checks: `{ scorer, threshold: { max: 0.3 } }`
+
+Use `max` for scorers where a high score is bad (e.g., hallucination, toxicity). Use `{ min, max }` when the score should fall within a specific band.
+
+```typescript title="src/evals/threshold-example.ts"
+import { runEvals } from '@mastra/core/evals'
+
+const result = await runEvals({
+  data: [{ input: 'Explain quantum computing' }],
+  target: myAgent,
+  scorers: [
+    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold — high score = bad
+    { scorer: verbosityScorer, threshold: { min: 0.3, max: 0.8 } }, // range threshold
+    toneScorer, // bare scorer, no threshold — tracked only
+  ],
+})
+
+// result.thresholdResults:
+// [
+//   { id: 'faithfulness', passed: true, averageScore: 0.85, threshold: 0.7 },
+//   { id: 'hallucination', passed: true, averageScore: 0.1, threshold: { max: 0.3 } },
+//   { id: 'verbosity', passed: false, averageScore: 0.9, threshold: { min: 0.3, max: 0.8 } },
+// ]
+```
+
+A bare scorer (no threshold) still shows up in `result.scores` but doesn't affect the verdict.
+
+## Using verdicts in CI
+
+The verdict gives a single signal for CI pipelines:
+
+```typescript title="src/evals/ci-check.ts"
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+
+const result = await runEvals({
+  data: testDataset,
+  target: myAgent,
+  gates: [checks.calledTool('search'), checks.noToolErrors()],
+  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }],
+})
+
+if (result.verdict === 'failed') {
+  console.error(
+    'Gate failures:',
+    result.gateResults?.filter(g => !g.passed),
+  )
+  process.exit(1)
+}
+
+if (result.verdict === 'scored') {
+  console.warn(
+    'Threshold misses:',
+    result.thresholdResults?.filter(t => !t.passed),
+  )
+}
+```
+
+## Related
+
+- [Quick Checks](/docs/evals/quick-checks): Zero-LLM micro-scorers that work well as gates
+- [runEvals() reference](/reference/evals/run-evals): Full API documentation
+- [Built-in scorers](/docs/evals/built-in-scorers): LLM-based and code-based scorers
+- [Running evals in CI](/docs/evals/running-in-ci): CI integration patterns

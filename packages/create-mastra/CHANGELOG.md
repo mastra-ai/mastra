@@ -1,5 +1,127 @@
 # create-mastra
 
+## 1.18.3-alpha.0
+
+## 1.18.2
+
+## 1.18.2-alpha.2
+
+## 1.18.2-alpha.1
+
+## 1.18.2-alpha.0
+
+## 1.18.1
+
+## 1.18.1-alpha.5
+
+## 1.18.1-alpha.4
+
+## 1.18.1-alpha.3
+
+## 1.18.1-alpha.2
+
+## 1.18.1-alpha.1
+
+## 1.18.1-alpha.0
+
+## 1.18.0
+
+## 1.18.0-alpha.5
+
+## 1.18.0-alpha.4
+
+## 1.18.0-alpha.3
+
+## 1.17.1-alpha.2
+
+## 1.17.1-alpha.1
+
+## 1.17.1-alpha.0
+
+## 1.17.0
+
+## 1.17.0-alpha.10
+
+## 1.17.0-alpha.9
+
+## 1.17.0-alpha.8
+
+## 1.17.0-alpha.7
+
+## 1.16.1-alpha.6
+
+## 1.16.1-alpha.5
+
+## 1.16.1-alpha.4
+
+## 1.16.1-alpha.3
+
+## 1.16.1-alpha.2
+
+## 1.16.1-alpha.1
+
+## 1.16.1-alpha.0
+
+## 1.16.0
+
+## 1.16.0-alpha.7
+
+## 1.16.0-alpha.6
+
+## 1.16.0-alpha.5
+
+## 1.16.0-alpha.4
+
+## 1.16.0-alpha.3
+
+## 1.15.2-alpha.2
+
+## 1.15.2-alpha.1
+
+## 1.15.2-alpha.0
+
+## 1.15.1
+
+## 1.15.1-alpha.5
+
+## 1.15.1-alpha.4
+
+## 1.15.1-alpha.3
+
+## 1.15.1-alpha.2
+
+## 1.15.1-alpha.1
+
+## 1.15.1-alpha.0
+
+## 1.15.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.15.0-alpha.0
+
+### Minor Changes
+
+- Random bump ([#18178](https://github.com/mastra-ai/mastra/pull/18178))
+
+## 1.14.1
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
+## 1.14.1-alpha.2
+
+## 1.14.1-alpha.1
+
+## 1.14.1-alpha.0
+
+### Patch Changes
+
+- Security remediation for the 2026-06-17 "easy-day-js" supply-chain incident. Patch bump to publish clean versions and move the `latest` dist-tag forward, superseding the compromised versions that declared the malicious `easy-day-js` dependency. ([#18056](https://github.com/mastra-ai/mastra/pull/18056))
+
 ## 1.14.0
 
 ### Minor Changes

@@ -1,8 +1,9 @@
 import { Agent } from '@mastra/core/agent';
-import { Harness } from '@mastra/core/harness';
+import { AgentController } from '@mastra/core/agent-controller';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
+import { Workspace } from '@mastra/core/workspace';
 import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
@@ -59,7 +60,7 @@ function createTextStream() {
   });
 }
 
-describe('tool approval with LibSQLStore via Harness', () => {
+describe('tool approval with LibSQLStore via AgentController', () => {
   it('should persist and load snapshot for tool approval resume', async () => {
     const mockExecute = vi.fn().mockResolvedValue({ content: 'file contents' });
 
@@ -98,9 +99,10 @@ describe('tool approval with LibSQLStore via Harness', () => {
     });
     const registeredAgent = mastra.getAgent('test-agent');
 
-    const harness = new Harness({
-      id: 'test-harness',
+    const controller = new AgentController({
+      id: 'test-controller',
       storage,
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
       modes: [
         {
           id: 'default',
@@ -115,34 +117,35 @@ describe('tool approval with LibSQLStore via Harness', () => {
       ],
       initialState: { yolo: false },
     });
-    (harness as any).getAgentForMode = () => registeredAgent;
+    (controller as any).getAgentForMode = () => registeredAgent;
 
-    await harness.init();
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
 
     // Collect events
     const events: any[] = [];
-    harness.subscribe(event => {
+    session.subscribe(event => {
       events.push(event);
     });
 
     // Create a thread
-    await harness.createThread();
+    await session.thread.create();
 
     // Send message — should hit tool-call-approval and auto-approve (policy = 'ask')
     // We need to respond to the approval prompt
     const approvalPromise = new Promise<void>(resolve => {
-      harness.subscribe(event => {
+      session.subscribe(event => {
         if (event.type === 'tool_approval_required') {
-          // Must be async — pendingApprovalResolve is set after emit returns
+          // Must be async — the approval gate is armed after emit returns
           queueMicrotask(() => {
-            harness.respondToToolApproval({ decision: 'approve' });
+            session.respondToToolApproval({ decision: 'approve' });
             resolve();
           });
         }
       });
     });
 
-    await Promise.all([harness.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
+    await Promise.all([session.sendMessage({ content: 'Read test.txt' }), approvalPromise]);
 
     // The tool should have been called
     expect(mockExecute).toHaveBeenCalledTimes(1);

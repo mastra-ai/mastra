@@ -18,11 +18,11 @@ on:
 jobs:
   setup:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     outputs:
       packages: ${{ steps.set-packages.outputs.packages }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -38,7 +38,7 @@ jobs:
   test-unit:
     needs: setup
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -48,7 +48,7 @@ jobs:
       matrix:
         package: ${{ fromJson(needs.setup.outputs.packages) }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -67,7 +67,7 @@ jobs:
 
   test-docker:
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -77,7 +77,7 @@ jobs:
       matrix:
         package: [s3, gcs, azure]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
