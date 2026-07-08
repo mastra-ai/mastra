@@ -6,6 +6,8 @@
  * Session-scoped grants let the user approve a category once per session.
  */
 
+import type { PermissionPatternRule } from '@mastra/core/agent-controller';
+
 import { MC_TOOLS } from './tool-names.js';
 
 // ---------------------------------------------------------------------------
@@ -198,4 +200,45 @@ export function resolveApproval(
 
   // 5. Default policy for category
   return DEFAULT_POLICIES[category] ?? 'ask';
+}
+
+// ---------------------------------------------------------------------------
+// Pattern rule parsing
+// ---------------------------------------------------------------------------
+
+const TOOL_ALIASES: Record<string, string> = {
+  Bash: MC_TOOLS.EXECUTE_COMMAND,
+  Edit: MC_TOOLS.STRING_REPLACE_LSP,
+  Write: MC_TOOLS.WRITE_FILE,
+  Read: MC_TOOLS.VIEW,
+  Grep: MC_TOOLS.SEARCH_CONTENT,
+  Glob: MC_TOOLS.FIND_FILES,
+};
+
+/** Parse "Bash(git status*)" into a PermissionPatternRule. Bare names get wildcard pattern. */
+export function parsePatternEntry(entry: string, policy: PermissionPolicy): PermissionPatternRule {
+  const match = entry.match(/^([A-Za-z_-]+)\((.+)\)$/);
+  if (match && match[1] && match[2]) {
+    const alias = match[1];
+    const pattern = match[2];
+    const toolName = TOOL_ALIASES[alias] ?? alias;
+    return { toolName, pattern, policy };
+  }
+  const toolName = TOOL_ALIASES[entry] ?? entry;
+  return { toolName, pattern: '*', policy };
+}
+
+/** Parse the `permissions` block from settings into PermissionPatternRule[]. */
+export function parsePermissionPatterns(
+  config: { allow?: string[]; deny?: string[] } | undefined,
+): PermissionPatternRule[] {
+  if (!config) return [];
+  const rules: PermissionPatternRule[] = [];
+  for (const entry of config.deny ?? []) {
+    rules.push(parsePatternEntry(entry, 'deny'));
+  }
+  for (const entry of config.allow ?? []) {
+    rules.push(parsePatternEntry(entry, 'allow'));
+  }
+  return rules;
 }

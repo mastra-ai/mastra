@@ -122,6 +122,7 @@ export const stateSchema = z.object({
       categories: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
       tools: z.record(z.string(), z.enum(['allow', 'ask', 'deny'])).default({}),
     })
+    .passthrough()
     .default({ categories: {}, tools: {} }),
   // Smart editing mode — use AST-based analysis for code edits
   smartEditing: z.boolean().default(true),

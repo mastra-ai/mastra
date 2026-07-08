@@ -71,7 +71,7 @@ import {
   resolveOmRoleModel,
   saveSettings,
 } from './onboarding/settings.js';
-import { getToolCategory } from './permissions.js';
+import { getToolCategory, parsePermissionPatterns } from './permissions.js';
 import { PluginManager } from './plugins/manager.js';
 import { PlanRejectionAbortProcessor } from './processors/plan-rejection-abort.js';
 import { createAmazonBedrockGateway } from './providers/amazon-bedrock-gateway.js';
@@ -760,6 +760,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     globalInitialState.yolo = globalSettings.preferences.yolo;
   }
   globalInitialState.thinkingLevel = globalSettings.preferences.thinkingLevel;
+  const permPatterns = parsePermissionPatterns(globalSettings.permissions);
+  if (permPatterns.length > 0) {
+    (globalInitialState as any).permissionRules = {
+      categories: {},
+      tools: {},
+      ...(globalInitialState as any).permissionRules,
+      patterns: permPatterns,
+    };
+  }
   if (config?.omScope) {
     globalInitialState.omScope = config.omScope;
   }

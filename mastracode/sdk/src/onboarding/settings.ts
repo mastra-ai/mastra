@@ -246,6 +246,13 @@ export interface GlobalSettings {
   signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
   observability: ObservabilitySettings;
+  // Permission allowlist/denylist patterns for fine-grained tool approval
+  permissions: PermissionSettings;
+}
+
+export interface PermissionSettings {
+  allow?: string[];
+  deny?: string[];
 }
 
 export interface SignalSettings {
@@ -332,6 +339,7 @@ const DEFAULTS: GlobalSettings = {
   voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
   signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   observability: { resources: {}, localTracing: false },
+  permissions: {},
 };
 
 const THINKING_LEVEL_VALUES: ThinkingLevelSetting[] = ['off', 'low', 'medium', 'high', 'xhigh'];
@@ -587,6 +595,19 @@ function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
   return { resources, localTracing };
 }
 
+function parsePermissionSettings(raw: unknown): PermissionSettings {
+  if (!raw || typeof raw !== 'object') return {};
+  const obj = raw as Record<string, unknown>;
+  const result: PermissionSettings = {};
+  if (Array.isArray(obj.allow)) {
+    result.allow = obj.allow.filter((v): v is string => typeof v === 'string');
+  }
+  if (Array.isArray(obj.deny)) {
+    result.deny = obj.deny.filter((v): v is string => typeof v === 'string');
+  }
+  return result;
+}
+
 /**
  * One-time migration: move model-related data from auth.json to settings.json.
  * Reads `_modelRanks`, `_modeModelId_*`, `_subagentModelId*` from auth.json,
@@ -633,6 +654,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
+        permissions: parsePermissionSettings(raw.permissions),
       };
       applyQuietModePreferenceRollout(settings, raw.onboarding);
     } catch {
@@ -756,6 +778,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
+      permissions: parsePermissionSettings(raw.permissions),
     };
 
     // Migrate legacy omModelId → omModelOverride

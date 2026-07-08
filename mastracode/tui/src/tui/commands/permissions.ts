@@ -55,6 +55,25 @@ async function showPermissions(ctx: SlashCommandContext): Promise<void> {
     }
   }
 
+  if (rules.patterns && rules.patterns.length > 0) {
+    lines.push('');
+    lines.push('Pattern Rules (from settings.json):');
+    const allowPatterns = rules.patterns.filter(r => r.policy === 'allow');
+    const denyPatterns = rules.patterns.filter(r => r.policy === 'deny');
+    if (allowPatterns.length > 0) {
+      lines.push('  Allow:');
+      for (const r of allowPatterns) {
+        lines.push(`    ${r.toolName}(${r.pattern})`);
+      }
+    }
+    if (denyPatterns.length > 0) {
+      lines.push('  Deny:');
+      for (const r of denyPatterns) {
+        lines.push(`    ${r.toolName}(${r.pattern})`);
+      }
+    }
+  }
+
   if (grants.categories.length > 0 || grants.tools.length > 0) {
     lines.push('');
     lines.push('Session Grants (reset on restart):');
@@ -70,6 +89,9 @@ async function showPermissions(ctx: SlashCommandContext): Promise<void> {
   lines.push('Commands:');
   lines.push('  /permissions set <category> <allow|ask|deny>');
   lines.push('  /yolo — toggle auto-approve all tools');
+  lines.push('');
+  lines.push('Pattern rules are configured in ~/.mastracode/settings.json:');
+  lines.push('  { "permissions": { "allow": ["Bash(git status*)"], "deny": ["Bash(rm -rf*)"] } }');
 
   ctx.showInfo(lines.join('\n'));
 }

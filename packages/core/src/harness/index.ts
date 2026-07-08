@@ -70,6 +70,7 @@ export type {
   OMBufferedStatus,
   OMProgressState,
   OMStatus,
+  PermissionPatternRule,
   PermissionPolicy,
   PermissionRules,
   ToolCategory,

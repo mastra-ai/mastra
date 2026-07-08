@@ -41,6 +41,26 @@ import type {
   ToolCategory,
 } from './types';
 
+// ---------------------------------------------------------------------------
+// Permission pattern matching helpers
+// ---------------------------------------------------------------------------
+
+/** Extract the primary argument string from a tool call for pattern matching. */
+function extractPrimaryArg(_toolName: string, args: unknown): string | undefined {
+  if (!args || typeof args !== 'object' || Array.isArray(args)) return undefined;
+  const record = args as Record<string, unknown>;
+  if (typeof record['command'] === 'string') return record['command'];
+  if (typeof record['file_path'] === 'string') return record['file_path'];
+  if (typeof record['path'] === 'string') return record['path'];
+  return undefined;
+}
+
+/** Simple glob matching: `*` matches any sequence of characters. */
+function globMatch(input: string, pattern: string): boolean {
+  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`).test(input);
+}
+
 /**
  * Minimal persistence surface the Session uses to read and write per-thread
  * settings (mode id, per-mode model id, …). The AgentController backs this with thread
@@ -2824,11 +2844,11 @@ export class Session<TState = unknown> {
 
   /**
    * Resolve the effective approval policy for a tool: explicit per-tool deny
-   * wins, then session-wide yolo, then an explicit per-tool policy, then a
-   * session-scoped grant, then the tool's category grant/policy, falling back to
-   * "ask". Pure session state plus the injected category resolver.
+   * wins, then session-wide yolo, then an explicit per-tool policy, then
+   * pattern rules (matched against tool args), then a session-scoped grant,
+   * then the tool's category grant/policy, falling back to "ask".
    */
-  resolveToolApproval(toolName: string): PermissionPolicy {
+  resolveToolApproval(toolName: string, args?: unknown): PermissionPolicy {
     const state = this.state.get() as Record<string, unknown>;
     const rules = this.permissions.getRules();
 
@@ -2838,6 +2858,19 @@ export class Session<TState = unknown> {
     if (state.yolo === true) return 'allow';
 
     if (toolPolicy) return toolPolicy;
+
+    if (rules.patterns?.length && args) {
+      const argStr = extractPrimaryArg(toolName, args);
+      if (argStr !== undefined) {
+        const matchingPatterns = rules.patterns.filter(
+          r => (r.toolName === toolName || r.toolName === '*') && globMatch(argStr, r.pattern),
+        );
+        const denyMatch = matchingPatterns.find(r => r.policy === 'deny');
+        if (denyMatch) return 'deny';
+        const allowMatch = matchingPatterns.find(r => r.policy === 'allow');
+        if (allowMatch) return 'allow';
+      }
+    }
 
     if (this.hasToolGrant(toolName)) return 'allow';
 

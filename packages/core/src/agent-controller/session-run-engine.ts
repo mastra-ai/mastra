@@ -313,7 +313,7 @@ export class SessionRunEngine {
           ? approvalTransform.transformed
           : getDisplayTransform(chunk.metadata, 'input-available', chunk.payload.args);
 
-        const policy = this.#session.resolveToolApproval(toolName);
+        const policy = this.#session.resolveToolApproval(toolName, chunk.payload.args);
 
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext });

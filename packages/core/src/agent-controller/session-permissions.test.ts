@@ -72,4 +72,90 @@ describe('session.permissions', () => {
     expect(rules.categories.execute).toBe('deny');
     expect(rules.tools.fetch).toBe('allow');
   });
+
+  describe('pattern-based approval', () => {
+    it('allows a command matching an allow pattern', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [{ toolName: 'execute_command', pattern: 'git status*', policy: 'allow' }],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('execute_command', { command: 'git status' })).toBe('allow');
+      expect(session.resolveToolApproval('execute_command', { command: 'git status --short' })).toBe('allow');
+    });
+
+    it('denies a command matching a deny pattern', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [{ toolName: 'execute_command', pattern: 'rm -rf*', policy: 'deny' }],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('execute_command', { command: 'rm -rf /' })).toBe('deny');
+    });
+
+    it('deny patterns take precedence over allow patterns', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [
+            { toolName: 'execute_command', pattern: 'git*', policy: 'allow' },
+            { toolName: 'execute_command', pattern: 'git push --force*', policy: 'deny' },
+          ],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('execute_command', { command: 'git status' })).toBe('allow');
+      expect(session.resolveToolApproval('execute_command', { command: 'git push --force origin main' })).toBe('deny');
+    });
+
+    it('falls through to ask when no pattern matches', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [{ toolName: 'execute_command', pattern: 'git*', policy: 'allow' }],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('execute_command', { command: 'rm -rf /' })).toBe('ask');
+    });
+
+    it('matches file_path arg for file tools', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [{ toolName: 'write_file', pattern: '*.test.ts', policy: 'allow' }],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('write_file', { file_path: 'foo.test.ts' })).toBe('allow');
+      expect(session.resolveToolApproval('write_file', { file_path: 'foo.ts' })).toBe('ask');
+    });
+
+    it('skips pattern matching when no args provided', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [{ toolName: 'execute_command', pattern: 'git*', policy: 'allow' }],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('execute_command')).toBe('ask');
+    });
+  });
 });

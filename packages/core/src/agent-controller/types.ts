@@ -391,6 +391,13 @@ export type ToolCategory = 'read' | 'edit' | 'execute' | 'mcp' | 'other';
  */
 export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 
+/** A pattern-based permission rule that matches tool arguments using glob-style wildcards. */
+export interface PermissionPatternRule {
+  toolName: string;
+  pattern: string;
+  policy: PermissionPolicy;
+}
+
 /**
  * Permission rules for controlling tool approval behavior.
  * Per-tool overrides take precedence over category policies.
@@ -398,6 +405,7 @@ export type PermissionPolicy = 'allow' | 'ask' | 'deny';
 export interface PermissionRules {
   categories: Partial<Record<ToolCategory, PermissionPolicy>>;
   tools: Partial<Record<string, PermissionPolicy>>;
+  patterns?: PermissionPatternRule[];
 }
 
 // =============================================================================
