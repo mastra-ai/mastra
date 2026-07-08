@@ -2284,6 +2284,108 @@ describe('prompt alias normalization (GitHub #14154)', () => {
   });
 });
 
+describe('Standard Schema path segment format — real ArkType schemas (plain string paths)', () => {
+  // ArkType implements StandardJSONSchemaV1 natively and works directly with validateToolInput.
+  it('validateToolInput: nested ArkType error path renders field names, not [object Object]', async () => {
+    const { type } = await import('arktype');
+    const schema = type({ user: { email: 'string' } });
+
+    const result = validateToolInput(schema as any, { user: { email: 123 } });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('user');
+    expect(result.error!.message).not.toContain('[object Object]');
+  });
+
+  it('validateToolInput: multiple nested ArkType errors all render correctly', async () => {
+    const { type } = await import('arktype');
+    const schema = type({ address: { city: 'string', zip: 'string' } });
+
+    const result = validateToolInput(schema as any, { address: { city: 123, zip: 456 } });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('address');
+    expect(result.error!.message).not.toContain('[object Object]');
+  });
+});
+
+describe('Standard Schema path segment format (PathSegment objects) — real Valibot path segment verification', () => {
+  // Valibot uses { key: PropertyKey } path segment objects. These tests confirm
+  // that the getPathKey fix correctly extracts readable field names from them.
+  it('Valibot produces { key } path segment objects (not plain strings)', async () => {
+    const v = await import('valibot');
+    const schema = v.object({ user: v.object({ email: v.string() }) });
+    const raw = schema['~standard'].validate({ user: { email: 999 } });
+
+    expect('issues' in raw).toBe(true);
+    if ('issues' in raw && raw.issues && raw.issues[0]?.path) {
+      const firstSegment = raw.issues[0].path[0] as any;
+      expect(typeof firstSegment).toBe('object');
+      expect(firstSegment).toHaveProperty('key');
+      expect(firstSegment.key).toBe('user');
+    }
+  });
+
+  it('getPathKey extracts correct field names from Valibot path segments', async () => {
+    const v = await import('valibot');
+    const schema = v.object({ address: v.object({ city: v.string(), zip: v.string() }) });
+    const raw = schema['~standard'].validate({ address: { city: 99, zip: 88 } });
+
+    expect('issues' in raw).toBe(true);
+    if ('issues' in raw && raw.issues) {
+      const paths = raw.issues.map((issue: any) =>
+        issue.path?.map((p: any) => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'),
+      );
+      expect(paths).toContain('address.city');
+      expect(paths).toContain('address.zip');
+      expect(paths.join('')).not.toContain('[object Object]');
+    }
+  });
+});
+
+describe('Standard Schema path segment format (PathSegment objects) — mock schema', () => {
+  // Mock schema simulating the { key: PropertyKey } path segment format to test
+  // the full validateToolInput error message path end-to-end.
+  function makeMockSchemaWithObjectPaths(issues: { message: string; path: { key: string }[] }[]) {
+    const jsonSchemaFn = () => ({ type: 'object' as const, properties: { name: { type: 'string' } } });
+    return {
+      '~standard': {
+        vendor: 'mock',
+        version: 1 as const,
+        validate: (_data: unknown) => ({ issues }),
+        types: undefined,
+        jsonSchema: { input: jsonSchemaFn, output: jsonSchemaFn },
+      },
+    } as any;
+  }
+
+  it('validateToolInput: nested error path renders field names, not [object Object]', () => {
+    const schema = makeMockSchemaWithObjectPaths([
+      { message: 'Invalid type', path: [{ key: 'user' }, { key: 'email' }] },
+    ]);
+
+    const result = validateToolInput(schema, { user: { email: 123 } });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('user.email');
+    expect(result.error!.message).not.toContain('[object Object]');
+  });
+
+  it('validateToolInput: multiple nested paths all render correctly', () => {
+    const schema = makeMockSchemaWithObjectPaths([
+      { message: 'Required', path: [{ key: 'address' }, { key: 'city' }] },
+      { message: 'Too short', path: [{ key: 'address' }, { key: 'zip' }] },
+    ]);
+
+    const result = validateToolInput(schema, { address: {} });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('address.city');
+    expect(result.error!.message).toContain('address.zip');
+    expect(result.error!.message).not.toContain('[object Object]');
+  });
+});
+
 describe('Standard Schema path segment format (PathSegment objects)', () => {
   // The Standard Schema spec allows path segments to be either a plain PropertyKey
   // (e.g. 'fieldName') OR a PathSegment object (e.g. { key: 'fieldName' }).
