@@ -2313,6 +2313,7 @@ describe('Standard Schema path segment format (PathSegment objects) — real Val
   // Valibot uses { key: PropertyKey } path segment objects. These tests confirm
   // that the getPathKey fix correctly extracts readable field names from them.
   it('Valibot produces { key } path segment objects (not plain strings)', async () => {
+    expect.assertions(4);
     const v = await import('valibot');
     const schema = v.object({ user: v.object({ email: v.string() }) });
     const raw = schema['~standard'].validate({ user: { email: 999 } });
@@ -2326,20 +2327,22 @@ describe('Standard Schema path segment format (PathSegment objects) — real Val
     }
   });
 
-  it('getPathKey extracts correct field names from Valibot path segments', async () => {
+  it('Valibot { key } path segments render as readable field names through validateToolInput', async () => {
     const v = await import('valibot');
-    const schema = v.object({ address: v.object({ city: v.string(), zip: v.string() }) });
-    const raw = schema['~standard'].validate({ address: { city: 99, zip: 88 } });
+    const valibotSchema = v.object({ address: v.object({ city: v.string(), zip: v.string() }) });
 
-    expect('issues' in raw).toBe(true);
-    if ('issues' in raw && raw.issues) {
-      const paths = raw.issues.map((issue: any) =>
-        issue.path?.map((p: any) => (typeof p === 'object' && 'key' in p ? String(p.key) : String(p))).join('.'),
-      );
-      expect(paths).toContain('address.city');
-      expect(paths).toContain('address.zip');
-      expect(paths.join('')).not.toContain('[object Object]');
-    }
+    // Wrap with jsonSchema to satisfy StandardSchemaWithJSON (Valibot only implements StandardSchemaV1)
+    const jsonSchemaFn = () => ({ type: 'object' as const, properties: {} });
+    const schema = {
+      '~standard': { ...valibotSchema['~standard'], jsonSchema: { input: jsonSchemaFn, output: jsonSchemaFn } },
+    } as any;
+
+    const result = validateToolInput(schema, { address: { city: 99, zip: 88 } });
+
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('address.city');
+    expect(result.error!.message).toContain('address.zip');
+    expect(result.error!.message).not.toContain('[object Object]');
   });
 });
 
