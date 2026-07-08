@@ -4,7 +4,14 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { createProjectFromRepo } from '../services/github';
 import type { GithubRepo } from '../services/github';
-import { addGithubProject, addProject, ensureResourceId, loadProjects, removeProject } from '../services/projects';
+import {
+  addGithubProject,
+  addProject,
+  ensureResourceId,
+  loadProjects,
+  loadProjectsWithResolvedIds,
+  removeProject,
+} from '../services/projects';
 import type { Project } from '../services/projects';
 
 function invalidateProjects(queryClient: ReturnType<typeof useQueryClient>) {
@@ -12,9 +19,10 @@ function invalidateProjects(queryClient: ReturnType<typeof useQueryClient>) {
 }
 
 export function useProjectsQuery() {
+  const { baseUrl } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.projects(),
-    queryFn: loadProjects,
+    queryFn: () => loadProjectsWithResolvedIds(baseUrl),
     initialData: loadProjects,
   });
 }

@@ -204,7 +204,7 @@ describe('ThreadList', () => {
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });
 
-  it('when "New thread" is clicked, then it opens the /chat draft page without persisting a thread and the sidebar closes', async () => {
+  it('when "New thread" is clicked, then it opens the /new draft page without persisting a thread and the sidebar closes', async () => {
     seedProject();
     const captured = useAgentControllerHandlers([threadOne]);
     renderThreadList();
@@ -213,7 +213,7 @@ describe('ThreadList', () => {
     await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
     await userEvent.click(screen.getByRole('button', { name: 'New thread' }));
 
-    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat'));
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/new'));
     expect(captured.created).toBe(0);
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');
   });

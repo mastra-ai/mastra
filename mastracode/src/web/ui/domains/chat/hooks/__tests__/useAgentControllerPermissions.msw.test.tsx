@@ -1,4 +1,3 @@
-import { MastraClient } from '@mastra/client-js';
 import type { PermissionRules } from '@mastra/client-js';
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -6,18 +5,17 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
-import { useAgentControllerPermissionsQuery, useSetPermissionForCategoryMutation } from '../useAgentControllerQueries';
+import { useSetPermissionForCategoryMutation } from '../useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../useAgentControllerPermissions';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';
 const permissionsUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}/permissions`;
 const categoryUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}/permissions/category`;
 
-function session() {
-  return new MastraClient({ baseUrl: TEST_BASE_URL }).getAgentController(controllerId).session(resourceId);
-}
+const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
-describe('agent-controller query hooks', () => {
+describe('agent-controller permission hooks', () => {
   describe('when permissions are updated', () => {
     it('refreshes the cached permission rules through React Query invalidation', async () => {
       const firstRules: PermissionRules = { categories: { read: 'ask' }, tools: {} };
@@ -38,10 +36,9 @@ describe('agent-controller query hooks', () => {
         }),
       );
 
-      const agentSession = session();
       const { result, client } = renderHookWithProviders(() => {
-        const permissions = useAgentControllerPermissionsQuery(agentSession, true);
-        const setCategory = useSetPermissionForCategoryMutation(agentSession);
+        const permissions = useAgentControllerPermissions(hookArgs);
+        const setCategory = useSetPermissionForCategoryMutation(hookArgs);
         return { permissions, setCategory };
       });
 

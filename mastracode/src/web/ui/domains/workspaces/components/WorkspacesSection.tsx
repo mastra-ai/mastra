@@ -5,27 +5,29 @@ import { GitBranch, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, KeyboardEvent } from 'react';
 
-// Deep import (not the chat barrel) to keep the cross-domain graph acyclic.
-import { useChatSession } from '../../chat/context/ChatSessionProvider';
+import { useApiConfig } from '../../../../../shared/api/config';
+import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
 import type { Worktree } from '../services/projects';
 
-/**
- * Propless workspaces section: reads the active project from context and the
- * agent session from the chat domain, so worktree switches rebind the live
- * session without prop wiring.
- */
 export function WorkspacesSection() {
-  const { activeProject, resourceId } = useActiveProjectContext();
-  const session = useChatSession();
+  const { baseUrl } = useApiConfig();
+  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const [creating, setCreating] = useState(false);
   const [branch, setBranch] = useState('');
   const workspaces = useWorkspacesQuery(activeProject);
   const scope = { agentControllerId: AGENT_CONTROLLER_ID, resourceId };
-  const selectWorkspace = useSelectWorkspaceMutation(activeProject, session, scope);
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, session, scope);
+  const setStateMutation = useSetAgentControllerStateMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
+  const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
+  const selectWorkspace = useSelectWorkspaceMutation(activeProject, workspaceSession, scope);
+  const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, scope);
 
   if (activeProject?.source !== 'github') return null;
 
@@ -98,7 +100,7 @@ export function WorkspacesSection() {
               className="h-8 text-xs"
             />
             {createWorkspace.error && (
-              <Txt as="span" variant="ui-xs" className="px-2 text-error">
+              <Txt as="p" variant="ui-xs" className="m-0 text-red-400">
                 {createWorkspace.error instanceof Error ? createWorkspace.error.message : 'Failed to create workspace'}
               </Txt>
             )}
@@ -124,16 +126,13 @@ function WorkspaceRow({
     <button
       type="button"
       aria-current={active ? 'true' : undefined}
-      aria-label={worktree.branch}
+      aria-disabled={active || undefined}
       disabled={disabled}
-      onClick={onSelect}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-60 ${active ? 'bg-surface4' : 'bg-transparent'}`}
-      title={worktree.worktreePath}
+      onClick={active ? undefined : onSelect}
+      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
     >
-      <GitBranch size={14} className="shrink-0 text-icon3" />
-      <Txt as="span" variant="ui-sm" className="min-w-0 truncate text-icon6">
-        {worktree.branch}
-      </Txt>
+      <GitBranch size={13} />
+      <span className="truncate">{worktree.branch}</span>
     </button>
   );
 }

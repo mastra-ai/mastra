@@ -1,6 +1,4 @@
 import { Marked } from 'marked';
-import { useMemo } from 'react';
-
 import { escapeHtml, highlightCode, normalizeLanguage } from './highlight';
 
 /**
@@ -91,7 +89,7 @@ interface MarkdownProps {
  * escaped before being injected via `dangerouslySetInnerHTML`.
  */
 export function Markdown({ children, className }: MarkdownProps) {
-  const html = useMemo(() => renderMarkdown(children), [children]);
+  const html = renderMarkdown(children);
 
   return (
     <div

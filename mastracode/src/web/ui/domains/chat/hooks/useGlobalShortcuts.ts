@@ -1,18 +1,22 @@
+import { useApiConfig } from '../../../../../shared/api/config';
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatSession } from '../context/ChatSessionProvider';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { useAbortAgentControllerMutation } from './useAgentControllerRunMutations';
 
-/**
- * App-wide keyboard shortcuts. Zero-args: observes overlay state via
- * `useOverlays()`, run state via `useChatSession()`, and the zero-projects
- * rule via `useActiveProjectContext()` (with no projects the projects modal
- * is forced open, so Escape must be a no-op).
- */
 export function useGlobalShortcuts() {
+  const { baseUrl } = useApiConfig();
   const overlays = useOverlays();
-  const { projects } = useActiveProjectContext();
-  const { busy, abort } = useChatSession();
+  const { projects, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { busy } = useChatSession();
+  const abortMutation = useAbortAgentControllerMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
 
   useKeyDown({
     'mod+k': e => {
@@ -45,7 +49,7 @@ export function useGlobalShortcuts() {
         overlays.close('sidebar');
         return;
       }
-      if (busy) void abort();
+      if (busy) abortMutation.mutate();
     },
   });
 }

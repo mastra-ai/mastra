@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 /**
@@ -31,16 +31,13 @@ const OverlaysContext = createContext<OverlaysApi | null>(null);
 export function OverlaysProvider({ children }: { children: ReactNode }) {
   const [openState, setOpenState] = useState<Record<OverlayName, boolean>>(CLOSED);
 
-  const isOpen = useCallback((name: OverlayName) => openState[name], [openState]);
-  const open = useCallback((name: OverlayName) => setOpenState(state => ({ ...state, [name]: true })), []);
-  const close = useCallback((name: OverlayName) => setOpenState(state => ({ ...state, [name]: false })), []);
-  const toggle = useCallback((name: OverlayName) => setOpenState(state => ({ ...state, [name]: !state[name] })), []);
-  const closeAll = useCallback(() => setOpenState(CLOSED), []);
+  const isOpen = (name: OverlayName) => openState[name];
+  const open = (name: OverlayName) => setOpenState(state => ({ ...state, [name]: true }));
+  const close = (name: OverlayName) => setOpenState(state => ({ ...state, [name]: false }));
+  const toggle = (name: OverlayName) => setOpenState(state => ({ ...state, [name]: !state[name] }));
+  const closeAll = () => setOpenState(CLOSED);
 
-  const value = useMemo<OverlaysApi>(
-    () => ({ isOpen, open, close, toggle, closeAll }),
-    [isOpen, open, close, toggle, closeAll],
-  );
+  const value: OverlaysApi = { isOpen, open, close, toggle, closeAll };
 
   return <OverlaysContext.Provider value={value}>{children}</OverlaysContext.Provider>;
 }

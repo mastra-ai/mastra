@@ -1,25 +1,41 @@
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { SettingsPanel, useDensityPreference } from '../../settings';
 import { ProjectsModal, useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSession } from '../context/ChatSessionProvider';
+import { useAgentControllerModels } from '../hooks/useAgentControllerModels';
+import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
+import { useAgentControllerSettings } from '../hooks/useAgentControllerSettings';
+import {
+  useSetAgentControllerStateMutation,
+  useSwitchAgentControllerModelMutation,
+} from '../hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
-/** Chat-page overlays: command palette, settings, shortcuts, and projects. */
 export function ChatOverlays() {
+  const { baseUrl } = useApiConfig();
   const overlays = useOverlays();
   const { projects, activeProject, resourceId, sessionEnabled, selectProject } = useActiveProjectContext();
-  const session = useChatSession();
+  const { transcript } = useChatSession();
   const { runPaletteCommand } = useChatCommands();
   const { theme, setTheme } = useTheme();
   const { density, changeDensity } = useDensityPreference();
   const { toast } = useToast();
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const modelsQuery = useAgentControllerModels(hookArgs);
+  const settingsQuery = useAgentControllerSettings(hookArgs);
+  const permissionsQuery = useAgentControllerPermissions(hookArgs);
+  const switchModelMutation = useSwitchAgentControllerModelMutation(hookArgs);
+  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
+  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
-  // Derived: with zero projects the modal is forced open (closing is a no-op).
   const projectsOpen = overlays.isOpen('projects') || projects.length === 0;
 
   return (
@@ -32,22 +48,23 @@ export function ChatOverlays() {
         <SettingsPanel
           theme={theme}
           density={density}
-          models={session.models}
-          currentModelId={session.transcript.modelId ?? null}
-          settings={session.settings}
+          models={modelsQuery.data ?? []}
+          currentModelId={transcript.modelId ?? null}
+          settings={settingsQuery.data ?? null}
           resourceId={sessionEnabled ? resourceId : undefined}
           onThemeChange={setTheme}
           onDensityChange={changeDensity}
           onModelChange={modelId => {
-            void session.switchModel(modelId);
-            toast('Model updated', 'success');
+            void switchModelMutation.mutateAsync(modelId).then(() => toast('Model updated', 'success'));
           }}
           onBehaviorChange={updates => {
-            void session.setState(updates).then(() => toast('Settings updated', 'success'));
+            void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
           }}
-          permissions={session.permissions}
-          pendingPermissionCategory={session.pendingPermissionCategory}
-          setPermissionForCategory={session.setPermissionForCategory}
+          permissions={permissionsQuery.data ?? null}
+          pendingPermissionCategory={setPermissionForCategoryMutation.variables?.category ?? null}
+          setPermissionForCategory={(category, policy) =>
+            setPermissionForCategoryMutation.mutateAsync({ category, policy })
+          }
           onClose={() => overlays.close('settings')}
         />
       )}

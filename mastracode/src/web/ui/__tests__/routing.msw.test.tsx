@@ -111,49 +111,47 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 }
 
 describe('MastraCode web routing', () => {
-  it('given the auth check is pending, when visiting /chat, then a skeleton renders instead of a blank screen', async () => {
-    renderRoutes('/chat', async () => {
+  it('given the auth check is pending, when visiting /new, then a skeleton renders instead of a blank screen', async () => {
+    renderRoutes('/new', async () => {
       await delay(150);
       return new Response(null, { status: 404 });
     });
 
     expect(await screen.findByRole('status', { name: 'Checking sign-in' })).toBeInTheDocument();
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting /chat, then the chat UI renders without auth affordances', async () => {
-    const { router } = renderRoutes('/chat', AUTH_DISABLED);
+  it('given auth is disabled, when visiting /new, then the chat UI renders without auth affordances', async () => {
+    const { router } = renderRoutes('/new', AUTH_DISABLED);
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
-    // /chat is the draft page: it stays on /chat and never redirects to a
-    // thread page until the user sends a first message.
-    await expectPathname(router, '/chat');
+    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
+    await expectPathname(router, '/new');
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign out/i })).not.toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting /, then the user is redirected to /chat', async () => {
+  it('given auth is disabled, when visiting /, then the user is redirected to /new', async () => {
     const { router } = renderRoutes('/', AUTH_DISABLED);
 
-    await expectPathname(router, '/chat');
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
+    await expectPathname(router, '/new');
+    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
   });
 
-  it('given auth is disabled, when visiting an unknown path, then the user is redirected to /chat', async () => {
+  it('given auth is disabled, when visiting an unknown path, then the user is redirected to /new', async () => {
     const { router } = renderRoutes('/does-not-exist', AUTH_DISABLED);
 
-    await expectPathname(router, '/chat');
+    await expectPathname(router, '/new');
   });
 
-  it('given auth is enabled and the session is unauthenticated, when visiting /chat, then the user lands on /signin with a sign-in action', async () => {
-    const { router } = renderRoutes('/chat', UNAUTHENTICATED);
+  it('given auth is enabled and the session is unauthenticated, when visiting /new, then the user lands on /signin with a sign-in action', async () => {
+    const { router } = renderRoutes('/new', UNAUTHENTICATED);
 
     await expectPathname(router, '/signin');
     expect(await screen.findByRole('button', { name: /sign in/i })).toBeInTheDocument();
-    expect(screen.queryByText('Ready for new conversation')).not.toBeInTheDocument();
+    expect(screen.queryByText('What do you want to work on?')).not.toBeInTheDocument();
   });
 
   it('given an unauthenticated user on /signin with a returnTo, when they click Sign in, then they are sent to the hosted login with that returnTo', async () => {
@@ -165,33 +163,33 @@ describe('MastraCode web routing', () => {
     expect(loginUrl(TEST_BASE_URL, '/chat')).toBe(`${TEST_BASE_URL}/auth/login?returnTo=%2Fchat`);
   });
 
-  it('given an unauthenticated user on /signin with an unsafe returnTo, when they click Sign in, then it falls back to /chat', async () => {
+  it('given an unauthenticated user on /signin with an unsafe returnTo, when they click Sign in, then it falls back to the app root', async () => {
     renderRoutes('/signin?returnTo=https%3A%2F%2Fevil.example', UNAUTHENTICATED);
 
     await userEvent.click(await screen.findByRole('button', { name: /sign in/i }));
 
-    expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/chat');
+    expect(redirectToLogin).toHaveBeenCalledWith(TEST_BASE_URL, '/');
   });
 
-  it('given auth is enabled and the session is authenticated, when visiting /chat, then chat renders with identity and sign-out only', async () => {
-    const { router } = renderRoutes('/chat', AUTHENTICATED);
+  it('given auth is enabled and the session is authenticated, when visiting /new, then chat renders with identity and sign-out only', async () => {
+    const { router } = renderRoutes('/new', AUTHENTICATED);
 
-    await expectPathname(router, '/chat');
+    await expectPathname(router, '/new');
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /sign in/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
   });
 
-  it('given an authenticated session, when visiting /signin, then the user is redirected to /chat', async () => {
+  it('given an authenticated session, when visiting /signin, then the user is redirected to /new', async () => {
     const { router } = renderRoutes('/signin', AUTHENTICATED);
 
-    await expectPathname(router, '/chat');
+    await expectPathname(router, '/new');
   });
 
-  it('given auth is disabled, when visiting /signin, then the user is redirected to /chat', async () => {
+  it('given auth is disabled, when visiting /signin, then the user is redirected to /new', async () => {
     const { router } = renderRoutes('/signin', AUTH_DISABLED);
 
-    await expectPathname(router, '/chat');
+    await expectPathname(router, '/new');
   });
 });

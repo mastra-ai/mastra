@@ -1,62 +1,138 @@
-import type { PlanResume } from '@mastra/client-js';
-import { createContext, useCallback, useContext } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { createContext, useContext, useEffect, useEffectEvent, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { queryKeys } from '../../../../../shared/api/keys';
 // Deep imports (not the workspaces barrel): the barrel re-exports components
 // that consume this chat context, so importing it here would create a cycle.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { useProjectSessionSync } from '../../workspaces/hooks/useProjectSessionSync';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import type { AgentControllerSessionApi } from '../hooks/useAgentControllerSession';
-import { useAgentControllerSession } from '../hooks/useAgentControllerSession';
+import { useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
+import type { ConnectionStatus } from '../hooks/useAgentControllerConnection';
+import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
+import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import type { TranscriptState } from '../services/transcript';
 
-/**
- * Owns the agent-controller session for the active project plus the derived
- * chat-run state (`busy`, `showWorkingIndicator`) and the stable prompt
- * callbacks. Chat-session state lives here — overlay/palette visibility is
- * deliberately elsewhere (`lib/overlays`) so the two never mix again.
- */
-export interface ChatSessionApi extends AgentControllerSessionApi {
-  /** Whether the agent is mid-run or a local send is pending. */
+export interface ChatSessionApi {
+  transcript: TranscriptState;
+  status: ConnectionStatus;
+  modes: ReturnType<typeof useAgentControllerConnection>['modes'];
+  messagesPending: boolean;
   busy: boolean;
-  /**
-   * Show the "working" indicator while busy, unless the last transcript entry
-   * is a streaming assistant message that already has visible text (the
-   * stream itself is then the feedback).
-   */
   showWorkingIndicator: boolean;
-  onApprove: (toolCallId: string, approved: boolean, id: string) => void;
-  onRespond: (toolCallId: string, data: string | string[] | PlanResume, id: string) => void;
+  localUser: (text: string, steer?: boolean) => void;
+  resetHydration: () => void;
+  resetCurrentThread: (threadId?: string) => void;
+  syncState: (state: {
+    modeId?: string;
+    modelId?: string;
+    omProgress?: TranscriptState['omProgress'];
+    tokenUsage?: TranscriptState['usage'];
+  }) => void;
+  reset: (state?: Parameters<ReturnType<typeof useAgentControllerTranscript>['reset']>[0], threadId?: string) => void;
+  resolvePrompt: (id: string) => void;
+  pushNotice: (text: string, level?: 'info' | 'error') => void;
 }
 
 const ChatSessionContext = createContext<ChatSessionApi | null>(null);
 
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
-  const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const projectPath = deriveProjectPath(activeProject);
 
-  const session = useAgentControllerSession({
+  return (
+    <ChatSessionBoundary
+      key={`${resourceId}:${projectPath ?? ''}`}
+      resourceId={resourceId}
+      projectPath={projectPath}
+      sessionEnabled={sessionEnabled}
+    >
+      {children}
+    </ChatSessionBoundary>
+  );
+}
+
+function ChatSessionBoundary({
+  children,
+  resourceId,
+  projectPath,
+  sessionEnabled,
+}: {
+  children: ReactNode;
+  resourceId: string;
+  projectPath?: string;
+  sessionEnabled: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
+  const firstSyncAtRef = useRef(0);
+
+  const {
+    transcript,
+    hydrateMessages,
+    reset,
+    resetDormant,
+    resetHydration,
+    resetCurrentThread,
+    syncState,
+    onEvent,
+    localUser,
+    resolvePrompt,
+    pushNotice,
+  } = useAgentControllerTranscript();
+
+  const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
-    projectPath: deriveProjectPath(activeProject),
+    threadId: transcript.threadId,
     baseUrl,
     enabled: sessionEnabled,
   });
-  const { transcript, status, approveTool, respondSuspension } = session;
 
-  useProjectSessionSync({ session, status, resourceId, activeProject });
+  const onMessagesData = useEffectEvent((data: typeof messagesQuery.data) => {
+    hydrateMessages(data);
+  });
 
-  const onApprove = useCallback(
-    (toolCallId: string, approved: boolean, id: string) => void approveTool(toolCallId, approved, id),
-    [approveTool],
-  );
-  const onRespond = useCallback(
-    (toolCallId: string, data: string | string[] | PlanResume, id: string) =>
-      void respondSuspension(toolCallId, data, id),
-    [respondSuspension],
-  );
+  useEffect(() => {
+    onMessagesData(messagesQuery.data);
+  }, [messagesQuery.data]);
+
+  const connection = useAgentControllerConnection({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+    onEvent,
+  });
+
+  const onConnectionStateSynced = useEffectEvent(() => {
+    if (!connection.state || !connection.stateUpdatedAt) return;
+    const isFirst = firstSyncAtRef.current === 0;
+    firstSyncAtRef.current = connection.stateUpdatedAt;
+    resetHydration();
+    queryClient.removeQueries({
+      queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, connection.state.threadId),
+    });
+    reset(
+      connection.state,
+      isFirst ? (connection.createdThreadId ?? connection.state.threadId) : connection.state.threadId,
+    );
+  });
+
+  useEffect(() => {
+    if (!connection.state || !connection.stateUpdatedAt) return;
+    onConnectionStateSynced();
+  }, [connection.state, connection.stateUpdatedAt]);
+
+  const onSessionDisabled = useEffectEvent(resetDormant);
+
+  useEffect(() => {
+    if (sessionEnabled) return;
+    onSessionDisabled();
+  }, [sessionEnabled]);
 
   const busy = transcript.running || transcript.pending;
   const lastEntry = transcript.entries[transcript.entries.length - 1];
@@ -73,7 +149,21 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
       lastEntryHasText
     );
 
-  const value: ChatSessionApi = { ...session, busy, showWorkingIndicator, onApprove, onRespond };
+  const value: ChatSessionApi = {
+    transcript,
+    status: connection.status,
+    modes: connection.modes,
+    messagesPending: Boolean(transcript.threadId) && messagesQuery.isPending,
+    busy,
+    showWorkingIndicator,
+    localUser,
+    resetHydration,
+    resetCurrentThread,
+    syncState,
+    reset,
+    resolvePrompt,
+    pushNotice,
+  };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
 }

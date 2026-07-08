@@ -70,6 +70,7 @@ export function useKeyDown(bindings: KeyDownBindings, options: UseKeyDownOptions
     }
   });
 
+  // Keyboard shortcuts are global DOM listeners; register and clean them up in an effect.
   useEffect(() => {
     if (!enabled) return;
 

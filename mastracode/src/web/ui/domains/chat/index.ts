@@ -14,7 +14,6 @@ export { ChatSessionProvider, useChatSession } from './context/ChatSessionProvid
 export type { ChatSessionApi } from './context/ChatSessionProvider';
 export { ChatCommandsProvider, useChatCommands } from './context/ChatCommandsProvider';
 export type { ChatCommandsApi } from './context/ChatCommandsProvider';
-export { useAgentControllerSession } from './hooks/useAgentControllerSession';
 export { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 export { useTextareaAutoResize } from './hooks/useTextareaAutoResize';
 export { useTranscriptScroll } from './hooks/useTranscriptScroll';

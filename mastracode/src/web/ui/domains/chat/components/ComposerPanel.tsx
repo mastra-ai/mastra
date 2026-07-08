@@ -1,9 +1,9 @@
-import { useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router';
-
+import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSession } from '../context/ChatSessionProvider';
+import { useSwitchAgentControllerModeMutation } from '../hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 
@@ -13,50 +13,26 @@ type ComposerPanelProps = {
   composerVariant?: 'inline' | 'textarea';
 };
 
-/**
- * The composer region: input + status line, wired to the chat session and
- * palette/composer command hand-off. Must render inside `ChatSessionProvider`
- * with an active project.
- */
 export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
-  const { activeProject } = useActiveProjectContext();
-  const session = useChatSession();
+  const { baseUrl } = useApiConfig();
+  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const { composerCommandName, clearComposerCommand } = useChatCommands();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const { transcript, status, busy, modes } = session;
+  const { transcript, modes, syncState } = useChatSession();
+  const switchModeMutation = useSwitchAgentControllerModeMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
 
-  const { createThread, send: sessionSend } = session;
-  const send = useCallback(
-    async (text: string) => {
-      if (location.pathname === '/new') {
-        const threadId = await createThread();
-        await sessionSend(text);
-        void navigate(`/threads/${threadId}`, { replace: true });
-        return;
-      }
-      await sessionSend(text);
-    },
-    [location.pathname, createThread, navigate, sessionSend],
-  );
-
-  // Parent only renders this component with an active project; TS narrowing.
   if (!activeProject) return null;
 
   return (
     <div className={composerPanelClass}>
       <Composer
         variant={composerVariant}
-        activeProject={activeProject}
-        transcript={transcript}
-        status={status}
-        busy={busy}
-        send={send}
-        steer={session.steer}
-        abort={session.abort}
         commandNameToApply={composerCommandName}
         onCommandApplied={clearComposerCommand}
-        session={session}
       />
 
       <StatusLine
@@ -68,7 +44,9 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
         tokensPerSec={transcript.tokensPerSec}
         modes={modes}
         activeModeId={transcript.modeId}
-        onModeChange={modeId => void session.switchMode(modeId)}
+        onModeChange={modeId => {
+          void switchModeMutation.mutateAsync(modeId).then(() => syncState({ modeId }));
+        }}
       />
     </div>
   );

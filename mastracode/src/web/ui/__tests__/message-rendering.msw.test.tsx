@@ -11,6 +11,8 @@ import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
 import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
+import { NewPage } from '../domains/chat/NewPage';
+import { ThreadPage } from '../domains/chat/ThreadPage';
 import type { Project } from '../domains/workspaces';
 
 /**
@@ -24,8 +26,8 @@ function renderChat() {
       {
         element: <Chat />,
         children: [
-          { path: '/chat', element: null },
-          { path: '/threads/:threadId', element: null },
+          { path: '/chat', element: <NewPage /> },
+          { path: '/threads/:threadId', element: <ThreadPage /> },
         ],
       },
     ],

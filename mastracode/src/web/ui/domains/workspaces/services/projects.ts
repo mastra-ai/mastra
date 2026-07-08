@@ -129,6 +129,27 @@ export function saveProjects(projects: Project[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
+export async function loadProjectsWithResolvedIds(baseUrl: string): Promise<Project[]> {
+  const projects = loadProjects();
+  const resolvedProjects = await Promise.all(
+    projects.map(async project => {
+      if (project.resourceId || !project.path) return project;
+      try {
+        const resolved = await resolveProjectPath(baseUrl, project.path);
+        return { ...project, resourceId: resolved.resourceId, gitBranch: resolved.gitBranch };
+      } catch {
+        return project;
+      }
+    }),
+  );
+
+  if (resolvedProjects.some((project, index) => project !== projects[index])) {
+    saveProjects(resolvedProjects);
+  }
+
+  return resolvedProjects;
+}
+
 /**
  * Add a project for an absolute path. The server resolves its resourceId so it
  * lines up with the TUI; the picker-supplied name is kept if given, otherwise

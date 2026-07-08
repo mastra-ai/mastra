@@ -11,7 +11,7 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
 
@@ -616,91 +616,76 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
 
   // Map each tool-invocation to its position within a run of consecutive tool
   // parts, so consecutive cards compose into one bordered container.
-  const toolGroupPositions = useMemo(() => {
-    const positions = new Map<string, ToolGroupPosition>();
-    for (let i = 0; i < parts.length; i++) {
-      const part = parts[i];
-      if (part.type !== 'tool-invocation') continue;
-      const prevIsTool = i > 0 && parts[i - 1].type === 'tool-invocation';
-      const nextIsTool = i + 1 < parts.length && parts[i + 1].type === 'tool-invocation';
-      const position: ToolGroupPosition = prevIsTool
-        ? nextIsTool
-          ? 'middle'
-          : 'last'
-        : nextIsTool
-          ? 'first'
-          : 'single';
-      positions.set(part.toolInvocation.toolCallId, position);
-    }
-    return positions;
-  }, [parts]);
+  const toolGroupPositions = new Map<string, ToolGroupPosition>();
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (part.type !== 'tool-invocation') continue;
+    const prevIsTool = i > 0 && parts[i - 1].type === 'tool-invocation';
+    const nextIsTool = i + 1 < parts.length && parts[i + 1].type === 'tool-invocation';
+    const position: ToolGroupPosition = prevIsTool ? (nextIsTool ? 'middle' : 'last') : nextIsTool ? 'first' : 'single';
+    toolGroupPositions.set(part.toolInvocation.toolCallId, position);
+  }
 
-  const roles = useMemo<MessageRoleRenderers>(
-    () => ({
-      User: ({ children }) => (
-        <div className="flex w-full flex-col items-end">
-          <div
-            className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
-              entry.steer ? 'bg-warning1/10' : 'bg-surface3'
-            }`}
-          >
-            {children}
-          </div>
+  const roles: MessageRoleRenderers = {
+    User: ({ children }) => (
+      <div className="flex w-full flex-col items-end">
+        <div
+          className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
+            entry.steer ? 'bg-warning1/10' : 'bg-surface3'
+          }`}
+        >
+          {children}
         </div>
-      ),
-      Assistant: ({ children }) => (
-        <div className="max-w-full">
-          {toolCount > 1 && (
-            <div className="flex justify-end">
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setAllExpanded(v => (v === true ? false : true))}
-                aria-pressed={allExpanded === true}
-              >
-                {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
-              </Button>
-            </div>
+      </div>
+    ),
+    Assistant: ({ children }) => (
+      <div className="max-w-full">
+        {toolCount > 1 && (
+          <div className="flex justify-end">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setAllExpanded(v => (v === true ? false : true))}
+              aria-pressed={allExpanded === true}
+            >
+              {allExpanded ? 'Collapse all' : `Expand all (${toolCount})`}
+            </Button>
+          </div>
+        )}
+        <div>{children}</div>
+      </div>
+    ),
+    System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
+    Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
+  };
+
+  const renderers = {
+    Text: (part: TextPart) =>
+      entry.message.role === 'user' ? (
+        <div className="prose">
+          <Markdown>{part.text}</Markdown>
+        </div>
+      ) : (
+        <div className="prose">
+          <Markdown>{part.text}</Markdown>
+          {entry.streaming && part === lastTextPart && (
+            <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
           )}
-          <div>{children}</div>
         </div>
       ),
-      System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
-      Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
-    }),
-    [allExpanded, entry.steer, toolCount],
-  );
-
-  const renderers = useMemo(
-    () => ({
-      Text: (part: TextPart) =>
-        entry.message.role === 'user' ? (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-          </div>
-        ) : (
-          <div className="prose">
-            <Markdown>{part.text}</Markdown>
-            {entry.streaming && part === lastTextPart && (
-              <span className="ml-0.5 inline-block h-[1em] w-0.5 animate-pulse bg-accent1 align-text-bottom" />
-            )}
-          </div>
-        ),
-      Reasoning: (part: ReasoningPart) => (
-        <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
-          <Markdown>{part.reasoning}</Markdown>
-        </div>
-      ),
-      ToolInvocation: (part: ToolInvocationPart) => {
-        const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
-        const tool = toolFromInvocationPart(part, runtime);
-        const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
-        return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
-      },
-      File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
-    }),
-    [allExpanded, entry.message.role, entry.runtimeTools, entry.streaming, lastTextPart, toolGroupPositions],
-  );
+    Reasoning: (part: ReasoningPart) => (
+      <div className="my-1.5 border-l-2 border-border1 pl-2.5 text-ui-sm italic text-icon3 [&_p]:my-0.5">
+        <Markdown>{part.reasoning}</Markdown>
+      </div>
+    ),
+    ToolInvocation: (part: ToolInvocationPart) => {
+      const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
+      const tool = toolFromInvocationPart(part, runtime);
+      const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
+      return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
+    },
+    File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
+  };
 
   const status = statusMetadata(entry);
   if (status) return <StatusMetadataCard status={status} />;
