@@ -7,11 +7,12 @@ import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useActiveProjectContext } from '../../workspaces';
+import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useChatSession } from '../context/ChatSessionProvider';
 import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation, useSetAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
-import { useGetAgentControllerPermissionsMutation, useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import { useAbortAgentControllerMutation, useFollowUpAgentControllerMutation, useSendAgentControllerMessageMutation, useSteerAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
@@ -64,7 +65,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
-  const getPermissionsMutation = useGetAgentControllerPermissionsMutation(hookArgs);
+  const { data: permissionRules, isLoading: permissionsLoading } = useAgentControllerPermissions(hookArgs);
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
   const [draft, setDraft] = useState('');
@@ -193,7 +194,8 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
           await resumeGoalMutation.mutateAsync();
           return;
         case 'permissions': {
-          const rules = await getPermissionsMutation.mutateAsync();
+          if (permissionsLoading) return;
+          const rules = permissionRules ?? { categories: {}, tools: {} };
           const cats =
             Object.entries(rules.categories ?? {})
               .map(([k, v]) => `  ${k}: ${v}`)

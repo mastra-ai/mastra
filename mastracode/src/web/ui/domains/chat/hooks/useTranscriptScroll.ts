@@ -24,6 +24,7 @@ export function useTranscriptScroll(transcript: TranscriptState) {
     el.scrollTo({ top: el.scrollHeight, behavior });
   }, []);
 
+  // Scroll position is DOM state; subscribe to scroll events and mirror bottom proximity for UI controls.
   useEffect(() => {
     const el = threadRef.current;
     if (!el) return;
@@ -36,12 +37,14 @@ export function useTranscriptScroll(transcript: TranscriptState) {
     return () => el.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Thread changes require imperative DOM scrolling after the new transcript has rendered.
   useEffect(() => {
     setShowScrollDown(false);
     const raf = requestAnimationFrame(() => scrollToBottom('auto'));
     return () => cancelAnimationFrame(raf);
   }, [transcript.threadId, scrollToBottom]);
 
+  // Streaming updates should imperatively follow the DOM scroll only while the user is already near the bottom.
   useEffect(() => {
     const el = threadRef.current;
     if (!el) return;

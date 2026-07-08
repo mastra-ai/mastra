@@ -48,16 +48,3 @@ export function useSetPermissionForToolMutation({
       }),
   });
 }
-
-export function useGetAgentControllerPermissionsMutation({
-  agentControllerId,
-  resourceId,
-  baseUrl = '',
-  enabled = true,
-}: AgentControllerPermissionMutationArgs) {
-  const { session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-
-  return useMutation({
-    mutationFn: () => session!.getPermissions(),
-  });
-}

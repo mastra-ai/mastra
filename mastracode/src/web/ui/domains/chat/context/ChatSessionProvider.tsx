@@ -7,13 +7,11 @@ import { useApiConfig } from '../../../../../shared/api/config';
 // Deep imports (not the workspaces barrel): the barrel re-exports components
 // that consume this chat context, so importing it here would create a cycle.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { useProjectSessionSync } from '../../workspaces/hooks/useProjectSessionSync';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
 import type { ConnectionStatus } from '../hooks/useAgentControllerConnection';
 import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
-import { useSetAgentControllerStateMutation } from '../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import type { TranscriptState } from '../services/transcript';
 
@@ -98,20 +96,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     if (sessionEnabled) return;
     resetDormant();
   }, [sessionEnabled, resetDormant]);
-
-  const setStateMutation = useSetAgentControllerStateMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
-
-  useProjectSessionSync({
-    status: connection.status,
-    resourceId,
-    activeProject,
-    setState: updates => setStateMutation.mutateAsync(updates),
-  });
 
   const busy = transcript.running || transcript.pending;
   const lastEntry = transcript.entries[transcript.entries.length - 1];

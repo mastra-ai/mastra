@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { DEFAULT_RESOURCE_ID, loadActiveProjectId, saveActiveProjectId } from '../services/projects';
 import type { Project } from '../services/projects';
@@ -19,14 +19,6 @@ export function useActiveProject() {
   useEffect(() => {
     saveActiveProjectId(activeProjectId);
   }, [activeProjectId]);
-
-  const backfilledRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (activeProject && !activeProject.resourceId && backfilledRef.current !== activeProject.id) {
-      backfilledRef.current = activeProject.id;
-      ensureResourceId.mutate(activeProject);
-    }
-  }, [activeProject, ensureResourceId]);
 
   const selectProject = async (project: Project | null) => {
     if (!project) {

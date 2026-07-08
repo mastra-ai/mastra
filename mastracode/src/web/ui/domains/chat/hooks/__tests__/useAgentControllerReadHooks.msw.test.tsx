@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import { useAgentControllerModels } from '../useAgentControllerModels';
-import { AGENT_CONTROLLER_THREAD_PAGE_SIZE, useAgentControllerThreads } from '../useAgentControllerThreads';
 import { useAgentControllerThreadMessages } from '../useAgentControllerThreadMessages';
+import { AGENT_CONTROLLER_THREAD_PAGE_SIZE, useAgentControllerThreads } from '../useAgentControllerThreads';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';

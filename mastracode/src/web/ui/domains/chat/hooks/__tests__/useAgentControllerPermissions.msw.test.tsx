@@ -5,8 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../../e2e/web-ui/render';
-import { useAgentControllerPermissions } from '../useAgentControllerPermissions';
 import { useSetPermissionForCategoryMutation } from '../useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../useAgentControllerPermissions';
 
 const controllerId = 'code';
 const resourceId = 'resource-test';

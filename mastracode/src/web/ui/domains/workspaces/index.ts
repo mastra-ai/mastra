@@ -7,7 +7,6 @@ export { WorkspacesSection } from './components/WorkspacesSection';
 export { useActiveProject } from './hooks/useActiveProject';
 export { ActiveProjectProvider, useActiveProjectContext } from './context/ActiveProjectProvider';
 export type { ActiveProjectApi } from './context/ActiveProjectProvider';
-export { useProjectSessionSync } from './hooks/useProjectSessionSync';
 export * from './hooks/useEnsureRepoMaterialized';
 export * from './hooks/useGithubGitOps';
 export * from './hooks/useGithubRepos';

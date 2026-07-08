@@ -101,7 +101,7 @@ describe('projects query hooks', () => {
     await waitFor(() => expect(result.current.projects.data.map(project => project.id)).toEqual(['project-legacy']));
   });
 
-  it('backfills a missing resourceId and refreshes the projects query', async () => {
+  it('legacy project gains a resourceId when the list loads', async () => {
     saveProjects([legacyProject]);
     server.use(
       http.get(`${ORIGIN}/web/project/resolve`, () =>
@@ -114,21 +114,46 @@ describe('projects query hooks', () => {
       ),
     );
 
-    const { result, client } = renderHookWithProviders(() => {
-      const projects = useProjectsQuery();
-      const ensureResourceId = useEnsureResourceIdMutation();
-      return { projects, ensureResourceId };
-    });
+    const { result } = renderHookWithProviders(() => useProjectsQuery());
 
-    await waitFor(() => expect(result.current.projects.data[0]?.resourceId).toBeUndefined());
-
-    await act(async () => {
-      await result.current.ensureResourceId.mutateAsync(legacyProject);
-    });
-    await waitForMutationsIdle(client);
-
+    await waitFor(() => expect(result.current.data[0]?.resourceId).toBe('resource-legacy'));
     expect(loadProjects()[0]?.resourceId).toBe('resource-legacy');
-    await waitFor(() => expect(result.current.projects.data[0]?.resourceId).toBe('resource-legacy'));
+  });
+
+  it('unresolvable projects stay in the list without a resourceId', async () => {
+    let resolveHits = 0;
+    saveProjects([localProject, legacyProject]);
+    server.use(
+      http.get(`${ORIGIN}/web/project/resolve`, () => {
+        resolveHits += 1;
+        return HttpResponse.json({ error: 'nope' }, { status: 500 });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectsQuery());
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+    expect(result.current.data.map(project => project.id)).toEqual(['project-local', 'project-legacy']);
+    expect(result.current.data[1]?.resourceId).toBeUndefined();
+    expect(loadProjects()[1]?.resourceId).toBeUndefined();
+    expect(resolveHits).toBe(1);
+  });
+
+  it('resolved projects load without hitting the network', async () => {
+    let resolveHits = 0;
+    saveProjects([localProject]);
+    server.use(
+      http.get(`${ORIGIN}/web/project/resolve`, () => {
+        resolveHits += 1;
+        return HttpResponse.json({ error: 'unexpected' }, { status: 500 });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectsQuery());
+
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
+    expect(result.current.data[0]?.resourceId).toBe('resource-local');
+    expect(resolveHits).toBe(0);
   });
 
   it('leaves the projects cache unchanged when resourceId resolution fails', async () => {

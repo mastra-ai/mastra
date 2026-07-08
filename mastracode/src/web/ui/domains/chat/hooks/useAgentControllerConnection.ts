@@ -36,6 +36,7 @@ export function useAgentControllerConnection({
   const [modes, setModes] = useState<AgentControllerModeInfo[]>([]);
   const { controller, session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
+  // The agent-controller session and SSE stream are external systems; subscribe and tear down in an effect.
   useEffect(() => {
     if (!enabled || !controller || !session) {
       setStatus('connecting');
@@ -105,6 +106,14 @@ export function useAgentControllerConnection({
         ]);
         if (disposed) return;
         setModes(agentControllerModes);
+
+        if (projectPath) {
+          try {
+            await session.setState({ projectPath });
+          } catch {
+            // Continue connecting; session.state() below remains the source of truth.
+          }
+        }
 
         const state = await session.state();
         if (disposed) return;

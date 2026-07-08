@@ -15,8 +15,8 @@ import { useToast } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useChatSession } from '../context/ChatSessionProvider';
-import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
 import { useCloneAgentControllerThreadMutation, useDeleteAgentControllerThreadMutation, useRenameAgentControllerThreadMutation, useSwitchAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
+import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const MAX_THREADS = 5;

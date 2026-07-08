@@ -3,13 +3,14 @@ import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
-import { useChatSession } from './ChatSessionProvider';
 import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
-import { useGetAgentControllerPermissionsMutation, useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import { useAbortAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
 import type { SlashCommand } from '../services/commands';
 import { runNoArgCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { useChatSession } from './ChatSessionProvider';
 
 export interface ChatCommandsApi {
   composerCommandName: string | null;
@@ -30,7 +31,7 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
-  const getPermissionsMutation = useGetAgentControllerPermissionsMutation(hookArgs);
+  const { data: permissionRules, isLoading: permissionsLoading } = useAgentControllerPermissions(hookArgs);
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
   const clearComposerCommand = useCallback(() => setComposerCommandName(null), []);
@@ -42,13 +43,15 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      if (command.name === 'permissions' && permissionsLoading) return;
+
       void runNoArgCommand(command.name, {
         session: {
           clearGoal: () => clearGoalMutation.mutateAsync().then(() => undefined),
           pauseGoal: () => pauseGoalMutation.mutateAsync().then(() => undefined),
           resumeGoal: () => resumeGoalMutation.mutateAsync().then(() => undefined),
           abort: () => abortMutation.mutateAsync().then(() => undefined),
-          getPermissions: () => getPermissionsMutation.mutateAsync(),
+          getPermissions: () => Promise.resolve(permissionRules ?? { categories: {}, tools: {} }),
           setPermissionForCategory: (category, policy) => setPermissionForCategoryMutation.mutateAsync({ category, policy }),
           pushNotice,
         },
@@ -60,7 +63,8 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
       abortMutation,
       activeProject,
       clearGoalMutation,
-      getPermissionsMutation,
+      permissionRules,
+      permissionsLoading,
       pauseGoalMutation,
       pushNotice,
       resumeGoalMutation,
