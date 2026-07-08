@@ -93,7 +93,7 @@ These should be explicitly excluded for now.
 | Storage composition/init/domain resolution | Infrastructure boot/plumbing. Skip unless a primitive fails because required storage is unavailable. |
 | Filesystem DB and Git history internals | Editor/source-control implementation details, not primitive execution. |
 | Editor entities, agent/workspace/skill/prompt-block/scorer-definition CRUD/versioning | Admin/config authoring APIs. Not Pulse scope currently. |
-| Agent Builder picker/model policy UI derivation | Admin/UI configuration. Skip for Pulse. Runtime enforcement denial during an agent run can be a primitive error later. |
+| Agent Builder picker/model policy UI derivation | Admin/UI configuration. Skip for Pulse. Runtime enforcement denial during an agent run can be a primitive error later. Separate from durable agent config changes, which are config provenance candidates; see `12-harness-agent-config-pulse-candidates.md`. |
 | Server route registration, auth provider/session/SSO lifecycle, HTTP request logging config | Server/admin plumbing. Skip unless an agent/workflow request is denied and the primitive run needs that error. |
 | License/feature entitlement validation | Org/product infrastructure. Skip for Pulse. |
 | Bundler/deployer | Build/deploy operations, not user primitive execution. |
@@ -136,7 +136,7 @@ These should be explicitly excluded for now.
 | --- | --- | --- |
 | `a2a` | Apply | Remote A2A agent/subagent execution is user primitive work. Keep run/task/request/stream/suspend/resume pulses. |
 | `tool-loop-agent` | Apply selectively | Runtime `prepareCall`/`prepareStep` processor behavior applies. One-time conversion/id generation is lower priority and can defer. |
-| `agent-builder/ee` | Skip | Admin/UI policy derivation. Runtime denial during a primitive call can be represented later as an auth/policy error Pulse. |
+| `agent-builder/ee` | Skip for picker/policy helpers; config provenance elsewhere | Admin/UI policy derivation itself is still skip. Durable agent changes from Agent Builder/CMS, such as instructions changed or tool added, are `Change` candidates; see `12-harness-agent-config-pulse-candidates.md`. Runtime denial during a primitive call can be represented later as an auth/policy error Pulse. |
 | Telemetry and Logging | Skip/defer | Skip PostHog. Skip generic logger plumbing. Defer logger-to-Pulse bridging until Pulse ingestion design is clearer. |
 | `request-context`, `action`, `voice`, `tts`, `error` | Apply at caller | Context and error utilities should enrich primitive Pulses. Voice/TTS applies where a voice provider actually executes for an agent/tool/workflow. |
 
