@@ -87,6 +87,16 @@ describe('createLiveKitWorker', () => {
     ).toThrow(/mutually exclusive/);
   });
 
+  it('rejects `configuration.endCall` combined with `generate`', () => {
+    expect(() =>
+      createLiveKitWorker({
+        mastra: fakeMastra(),
+        generate: vi.fn(),
+        configuration: { endCall: {} },
+      }),
+    ).toThrow(/`configuration.endCall` has no effect with `generate`/);
+  });
+
   it('does not load a VAD during prewarm when vad is disabled', async () => {
     const definition = createLiveKitWorker({ mastra: fakeMastra(), vad: false });
     const proc = { userData: {} } as JobProcess<Record<string, unknown>>;
@@ -513,6 +523,21 @@ describe('runEndCall', () => {
     await runEndCall(session, ctx, { message: 'bye' }, fakeLogger());
     expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
     expect(ctx.shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('logs and does not throw when ctx.shutdown() throws synchronously', async () => {
+    const { session } = fakeSpeakingSession('listening');
+    const ctx = fakeEndCallCtx();
+    ctx.shutdown.mockImplementationOnce(() => {
+      throw new Error('already shutting down');
+    });
+    const logger = fakeLogger();
+    await expect(runEndCall(session, ctx, {}, logger)).resolves.toBeUndefined();
+    expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledWith(
+      '@mastra/livekit: shutdown while ending the call failed',
+      expect.any(Error),
+    );
   });
 });
 

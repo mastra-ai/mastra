@@ -678,7 +678,11 @@ export async function runEndCall(
     } catch (error) {
       logger.warn('@mastra/livekit: deleteRoom while ending the call failed', error);
     }
-    ctx.shutdown(config.reason ?? DEFAULT_END_CALL_REASON);
+    try {
+      ctx.shutdown(config.reason ?? DEFAULT_END_CALL_REASON);
+    } catch (error) {
+      logger.warn('@mastra/livekit: shutdown while ending the call failed', error);
+    }
   }
 }
 
@@ -759,6 +763,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
     throw new Error(
       '@mastra/livekit: `workflowInput` is required when `workflow` is set. Map the turn into the ' +
         'workflow inputData, e.g. workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }).',
+    );
+  }
+  if (options.generate && options.configuration?.endCall) {
+    throw new Error(
+      '@mastra/livekit: `configuration.endCall` has no effect with `generate` — the worker cannot observe ' +
+        'tool calls from a custom reply generator. Detect the end-call tool inside your generator and call ' +
+        '`runEndCall` directly instead.',
     );
   }
 
