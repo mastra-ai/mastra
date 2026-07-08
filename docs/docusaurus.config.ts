@@ -4,6 +4,7 @@ import prismMastraLight from './src/theme/prism-mastra-light.js'
 import remarkModelTokens from './src/plugins/remark-model-tokens'
 import type { Config } from '@docusaurus/types'
 import type { ThemeConfig } from '@docusaurus/preset-classic'
+import type { AlgoliaPluginOptions } from '@mastra/docusaurus-plugin-algolia'
 
 const NPM2YARN_CONFIG = { sync: true, converters: ['pnpm', 'yarn', 'bun'] }
 const SHARED_REMARK_PLUGINS = [
@@ -37,10 +38,8 @@ const config: Config = {
     },
     experimental_faster: true,
   },
-  // Custom fields for Algolia search, HubSpot, and Analytics
+  // Custom fields for HubSpot and Analytics
   customFields: {
-    algoliaAppId: process.env.ALGOLIA_APP_ID,
-    algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY,
     hsPortalId: process.env.HS_PORTAL_ID,
     hsFormGuid: process.env.HS_FORM_GUID,
     hsFormGuidLearn: process.env.HS_FORM_GUID_LEARN,
@@ -105,6 +104,27 @@ const config: Config = {
         siteTitle: 'Mastra',
         excludeRoutes: ['/404'],
       },
+    ],
+    [
+      '@mastra/docusaurus-plugin-algolia',
+      {
+        indexName: 'docs_v1_crawler',
+        hitsPerPage: 20,
+        algoliaAppId: process.env.ALGOLIA_APP_ID!,
+        algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY!,
+        suggestedLinks: [
+          { label: 'Quickstart', description: 'Get up and running with Mastra', link: '/guides/getting-started/quickstart' },
+          { label: 'Studio', description: 'Test your agents, workflows, and tools', link: '/docs/studio/overview' },
+          { label: 'Agents', description: 'Use LLMs and tools to solve open-ended tasks', link: '/docs/agents/overview' },
+          { label: 'Memory', description: 'Manage agent context across conversations', link: '/docs/memory/overview' },
+          { label: 'Workflows', description: 'Define and manage complex sequences of tasks', link: '/docs/workflows/overview' },
+          { label: 'Streaming', description: 'Streaming for real-time agent interactions', link: '/docs/streaming/overview' },
+          { label: 'MCP', description: 'Connect agents to external tools and resources', link: '/docs/mcp/overview' },
+          { label: 'Evals', description: 'Evaluate agent performance', link: '/docs/evals/overview' },
+          { label: 'Observability', description: 'Monitor and log agent activity', link: '/docs/observability/overview' },
+          { label: 'Deployment', description: 'Deploy your agents, workflows, and tools', link: '/docs/deployment/overview' },
+        ],
+      } satisfies AlgoliaPluginOptions,
     ],
   ],
   presets: [
