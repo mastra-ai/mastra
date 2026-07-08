@@ -32,7 +32,7 @@ Use channels when an agent needs to:
 
 ## Configure an agent
 
-Configure channels directly on your agent using adapters from the [Chat SDK](https://chat-sdk.dev/adapters). The example below uses Slack, but other adapters follow the same shape: import the adapter factory, add it to `channels.adapters`, and use the adapter key in the generated webhook route.
+Configure channels directly on your agent using adapters from the Chat SDK. The example below uses Slack, but other adapters follow the same shape: import the adapter factory, add it to `channels.adapters`, and use the adapter key in the generated webhook route.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
