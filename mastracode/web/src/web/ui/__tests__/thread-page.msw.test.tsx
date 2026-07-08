@@ -220,6 +220,7 @@ describe('MastraCode thread pages', () => {
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
 
     const composer = await screen.findByPlaceholderText(/Ask Mastra Code/);
+    await waitFor(() => expect(composer).not.toBeDisabled());
     await userEvent.type(composer, 'Hello draft{Enter}');
 
     await waitFor(() => expect(captured.created).toBe(1));

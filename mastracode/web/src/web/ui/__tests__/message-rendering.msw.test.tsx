@@ -605,7 +605,7 @@ describe('App mode + theme controls', () => {
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
 
-      expect(buildButton).toHaveAttribute('aria-pressed', 'true');
+      await waitFor(() => expect(buildButton).toHaveAttribute('aria-pressed', 'true'));
       expect(planButton).toHaveAttribute('aria-pressed', 'false');
     });
 
@@ -653,7 +653,7 @@ describe('App mode + theme controls', () => {
 
       const settings = screen.getByRole('button', { name: 'Open settings' });
       const readyStatus = screen.getByRole('status', { name: '' });
-      expect(readyStatus).toHaveTextContent('Ready');
+      await waitFor(() => expect(readyStatus).toHaveTextContent('Ready'));
       expect(readyStatus.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
