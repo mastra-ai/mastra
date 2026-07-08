@@ -3144,8 +3144,8 @@ importers:
         specifier: ^7.16.2
         version: 7.16.2(eslint@10.5.0(jiti@2.7.0))(typescript@6.0.3)
       eslint-plugin-unicorn:
-        specifier: ^66.0.0
-        version: 66.0.0(eslint@10.5.0(jiti@2.7.0))
+        specifier: ^70.0.0
+        version: 70.0.0(eslint@10.5.0(jiti@2.7.0))
       globals:
         specifier: ^16.5.0
         version: 16.5.0
@@ -21972,8 +21972,8 @@ packages:
     peerDependencies:
       eslint: ^8.57.0 || ^9.0.0 || ^10.0.0
 
-  eslint-plugin-unicorn@66.0.0:
-    resolution: {integrity: sha512-+ywdy8T3foyZ2t3nRBujGa3vfOVMobHIi5iLB0L+fogdVO3EiUJ4BAyIacogWytnweLw3hgT70LQL9KoKTY/kA==}
+  eslint-plugin-unicorn@70.0.0:
+    resolution: {integrity: sha512-uAF9xMcVvvhTfvusCgogJ1wh4To3q2KhVMw3i1Apf/ILTbxsCjscvraAZACsEurb7no2fdXblD3whcbVnjw5zg==}
     engines: {node: '>=22'}
     peerDependencies:
       eslint: '>=10.4'
@@ -45691,7 +45691,7 @@ snapshots:
       - supports-color
       - typescript
 
-  eslint-plugin-unicorn@66.0.0(eslint@10.5.0(jiti@2.7.0)):
+  eslint-plugin-unicorn@70.0.0(eslint@10.5.0(jiti@2.7.0)):
     dependencies:
       '@babel/helper-validator-identifier': 7.29.7
       '@eslint-community/eslint-utils': 4.9.1(eslint@10.5.0(jiti@2.7.0))
