@@ -9,7 +9,7 @@ goal: true
 Manage one open GitHub issue or active PR through three explicit phases:
 
 1. **Triage** — classify, route, and always end by posting/updating either a Maintainer's Triage Note or an issue/PR comment.
-2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`; skip this for critical paths that only need CODEOWNER approval.
+2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`.
 3. **Approve** — mark the note as waiting for final approval with a recommended approver, then stop.
 
 Start with **Triage** only. In `--headless` mode, choose the next step, post the required Triage output, and exit.
@@ -21,7 +21,7 @@ Start with **Triage** only. In `--headless` mode, choose the next step, post the
   - Issue review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
 - [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
 - [ ] After successfully posting/updating the Triage output, remove the `status: needs triage` label from the triaged issue or PR if present.
-- [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR for Review or CODEOWNER approval, then remove `status: needs triage` from those linked issues if present.
+- [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR, then remove `status: needs triage` from those linked issues if present.
 - [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything. The only label write allowed is removing `status: needs triage` after a successful Triage post.
 - [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, and the required `status: needs triage` label removal after posting.
 - [ ] Stop on non-open issues, non-open PRs, or draft PRs unless the user explicitly asks for a note.
@@ -36,12 +36,12 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 ## <severity symbol only> Maintainer's Triage Note
 
 **Current Phase:** Triaged
-**Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Await final approval|Continue to Approve|Other>
+**Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Continue to Approve|Await final approval|Other>
 
 **Triage:**
 - Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
-- Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Await final approval|Other>
+- Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
 
 **Review:**
@@ -72,12 +72,12 @@ Thanks for opening this.
 
 Post/update an issue/PR comment only after explicit approval in interactive mode. In `--headless` triage, choose the required output from the classification case and post it without asking.
 
-When a PR triage note routes linked/closing issue(s), also post this short comment on each linked issue:
+When a PR triage note routes linked/closing issue(s) to Review, also post this short comment on each linked issue:
 
 ```markdown
 Thanks for opening this issue.
 
-This has been triaged and routed to PR #<n> for <Review|CODEOWNER approval>. Maintainers will continue the lifecycle tracking on that PR.
+This has been triaged and routed to PR #<n> for Review. Maintainers will continue the lifecycle tracking on that PR.
 ```
 
 ## Phase 1: Triage
@@ -116,7 +116,6 @@ gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,l
 - [ ] If CI workflows are waiting for approval or have not been approved, do not report individual failing/pending checks. Recommend `Approve CI checks before Review` as the next step.
 - [ ] Only report non-Vercel failing checks when CI has already been approved and the check result is real.
 - [ ] Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Do not set confidence during Triage.
-- [ ] For PRs touching critical paths, check CODEOWNERS during Triage. If ownership is clear and the path only needs owner sign-off, skip Review and route directly to approval waiting.
 
 ```bash
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
@@ -130,9 +129,6 @@ gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[]
 RELEVANT_PATH="path/from/repo/root"
 git log --since="90 days ago" --oneline --decorate -- "$RELEVANT_PATH" | head -20
 git log --since="90 days ago" --format='%h %ad %an %s' --date=short -- "$RELEVANT_PATH" | head -20
-
-# Critical-path owner lookup.
-find .github . docs -name CODEOWNERS -maxdepth 2 2>/dev/null
 ```
 
 ### 3. Classify and route
@@ -177,16 +173,14 @@ Checks before selecting:
 Next Steps:
 
 - `Review PR #<n>` when CI has been approved or checks are not required before Review.
-- `Await final approval` when the PR touches a critical CODEOWNERS-owned path and only needs owner sign-off.
 - `Approve CI checks before Review` when CI workflows are waiting for approval.
 
 Output:
 
-- Maintainer's Triage Note: include linked issue state, changed area, non-Vercel blockers, CI approval recommendation when relevant, and why this PR is the Review or approval target.
+- Maintainer's Triage Note: include linked issue state, changed area, non-Vercel blockers, CI approval recommendation when relevant, and why this PR is the Review target.
 - If CI workflows have not been approved, do not list failing checks; set top-level `Next Step` to `Approve CI checks before Review`.
-- If routing a critical path directly to approval, set top-level `Next Step` to `Await final approval`, set `Review` to not started with findings `Skipped — critical path requires CODEOWNER approval`, and set `Approve` to `waiting for final approval` with the matched CODEOWNER.
 - If this is a PR with linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
-- Interactive ask: `Should this PR be the Review target or skip directly to approval waiting?`
+- Interactive ask: `Should this PR be the Review target?`
 
 #### Case C: Multiple candidate PRs
 
@@ -195,16 +189,14 @@ Use when multiple active PRs clearly close/fix the issue or address the same liv
 Next Steps:
 
 - `Select one fixing PR for Review`, unless one PR is clearly the right target.
-- `Await final approval` for a selected critical-path PR with clear CODEOWNER ownership and no need for Review.
 - `Approve CI checks before Review` for any selected PR whose CI workflows are waiting for approval.
 
 Output:
 
-- Maintainer's Triage Note: list candidate PRs with one-line next-step facts, including linked issue state, CI approval state, obvious non-Vercel blockers, and critical-path ownership. Do not compare implementations deeply.
+- Maintainer's Triage Note: list candidate PRs with one-line next-step facts, including linked issue state, CI approval state, and obvious non-Vercel blockers. Do not compare implementations deeply.
 - If CI workflows have not been approved for a candidate, recommend approving CI before Review instead of listing failing checks.
-- If one critical-path PR is selected for direct approval, set top-level `Next Step` to `Await final approval`, skip Review, and set `Approve` to `waiting for final approval` with the matched CODEOWNER.
 - If one PR is selected and it has linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
-- Interactive ask: `Which PR should move to Review or skip directly to approval waiting?`
+- Interactive ask: `Which PR should move to Review?`
 
 #### Case D: Issue investigation
 
@@ -230,17 +222,16 @@ Output:
 
 ```text
 Triage output is ready: <Case A issue/PR comment|Maintainer's Triage Note|Maintainer's Triage Note + linked issue comment(s)>.
-Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Approve CI checks before Review|Select fixing PR|Await final approval>.
+Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Approve CI checks before Review|Select fixing PR>.
 
 A) Post the selected Triage output and stop here
 B) Show/edit the draft before posting
 C) The triage read is wrong — let me explain
 D) Post the selected Triage output, then continue to Review
-E) Post the selected Triage output, then continue to Approve
-F) Do not post — stop here
+E) Do not post — stop here
 ```
 
-Only offer D for Cases B-D that need Review. Only offer E for critical-path routes that skip Review. Never offer D or E for Case A. If output was already posted automatically, replace the posting options with a short summary of what was posted and stop.
+Only offer D for Cases B-D. Never offer D for Case A. If output was already posted automatically, replace the posting options with a short summary of what was posted and stop.
 
 ## Phase 2: Review
 
@@ -310,11 +301,11 @@ D) Stop here
 
 ## Phase 3: Approve
 
-Enter after Review, or directly after Triage for critical-path PRs that skip Review and only need CODEOWNER sign-off. Do not merge, close, label, assign, or change PR/issue state.
+Only enter after Review is complete enough for final maintainer routing. Do not merge, close, label, assign, or change PR/issue state.
 
 ### 1. Recommend one final approver
 
-- [ ] Use reviewed files/area from the working file, or the triaged changed files for critical-path routes that skipped Review.
+- [ ] Use reviewed files/area from the working file.
 - [ ] Check CODEOWNERS first: `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`.
 - [ ] If CODEOWNERS is clear, recommend one matching person/team.
 - [ ] Otherwise use recent history for affected paths and recommend one person with recent context.
@@ -328,7 +319,7 @@ git log --since="6 months ago" --format='%an <%ae>' -- <path> | sort | uniq -c |
 ### 2. Present Approve options
 
 ```text
-Approval routing is ready.
+Review is ready for final approval routing.
 Recommended final approver: <person/team or no clear approver> — <short reason>.
 
 A) Update the Maintainer's Triage Note as waiting for final approval, with this approver recommendation
