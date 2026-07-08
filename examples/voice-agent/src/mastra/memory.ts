@@ -126,18 +126,25 @@ const callSummaryExtractor = new Extractor({
  * on its own cadence, while the per-call summary is the app's record, produced exactly once per
  * call regardless of length.
  */
-export async function summarizeCall(mapping: { thread: string; resource?: string } | false): Promise<void> {
-  if (!mapping) return;
-  await callCenterMemory.summarizeThread({
-    model: 'openai/gpt-4.1-mini',
-    threadId: mapping.thread,
-    resourceId: mapping.resource,
-    instructions: "Summarize this call for the contractor's office: who called, what they wanted, and any follow-up promised.",
-    // Two extractors ride the one summarization pass: the business record above, and the
-    // working-memory update. With `manageWorkingMemory` the main agent never writes working
-    // memory in-loop, and most demo calls end below the Observer's token threshold — this
-    // end-of-call extraction is what guarantees the caller's collected details (name, number,
-    // zip, scenario) are in working memory before their next call.
-    extract: [callSummaryExtractor, new WorkingMemoryExtractor()],
-  });
+export async function summarizeCall(mapping: { thread: string; resource?: string }): Promise<void> {
+  try {
+    await callCenterMemory.summarizeThread({
+      model: 'openai/gpt-4.1-mini',
+      threadId: mapping.thread,
+      // Same fallback the live turn path uses (see onTurnComplete in the worker entrypoints): a
+      // thread-only mapping still needs a resource id, since this memory is resource-scoped.
+      resourceId: mapping.resource ?? mapping.thread,
+      instructions: "Summarize this call for the contractor's office: who called, what they wanted, and any follow-up promised.",
+      // Two extractors ride the one summarization pass: the business record above, and the
+      // working-memory update. With `manageWorkingMemory` the main agent never writes working
+      // memory in-loop, and most demo calls end below the Observer's token threshold — this
+      // end-of-call extraction is what guarantees the caller's collected details (name, number,
+      // zip, scenario) are in working memory before their next call.
+      extract: [callSummaryExtractor, new WorkingMemoryExtractor()],
+    });
+  } catch (error) {
+    // Runs from onCallEnd, awaited within LiveKit's shutdown window — a failure here (a flaky LLM
+    // call, a broken extractor) must not prevent the worker from finishing shutdown.
+    console.error('[memory] summarizeCall failed', error);
+  }
 }
