@@ -20,9 +20,10 @@ Start with **Triage** only. In `--headless` mode, choose the next step, post the
   - PR review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
   - Issue review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
 - [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
-- [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR.
-- [ ] Do not modify code, labels, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything.
-- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, or approved issue/PR comments.
+- [ ] After successfully posting/updating the Triage output, remove the `status: needs triage` label from the triaged issue or PR if present.
+- [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR, then remove `status: needs triage` from those linked issues if present.
+- [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything. The only label write allowed is removing `status: needs triage` after a successful Triage post.
+- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, and the required `status: needs triage` label removal after posting.
 - [ ] Stop on non-open issues, non-open PRs, or draft PRs unless the user explicitly asks for a note.
 - [ ] Do not invent evidence. Say what was not checked.
 - [ ] Keep interactive responses short and end with lettered options.
@@ -73,7 +74,9 @@ Post/update an issue/PR comment only after explicit approval in interactive mode
 When a PR triage note routes linked/closing issue(s) to Review, also post this short comment on each linked issue:
 
 ```markdown
-This issue has been triaged and routed to PR #<n> for Review. Maintainers will continue the lifecycle tracking on that PR.
+Thanks for opening this issue.
+
+This has been triaged and routed to PR #<n> for Review. Maintainers will continue the lifecycle tracking on that PR.
 ```
 
 ## Phase 1: Triage
@@ -210,10 +213,10 @@ Output:
 
 ### 4. Post/update note or comment, then pause
 
-- [ ] Case A: post the issue/PR comment and stop. Do not continue to Review.
-- [ ] Cases B-D: update an existing Maintainer's Triage Note if present; otherwise create one.
-- [ ] PR note route with linked/closing issue(s): after posting/updating the PR note, post the linked-issue triage comment on each linked issue.
-- [ ] `--headless`: make the classification decision, post the selected output(s) without asking, and exit. Do not pause for confirmation or continue to Review.
+- [ ] Case A: post the issue/PR comment, remove `status: needs triage` if present, and stop. Do not continue to Review.
+- [ ] Cases B-D: update an existing Maintainer's Triage Note if present; otherwise create one. After the note is posted/updated, remove `status: needs triage` if present.
+- [ ] PR note route with linked/closing issue(s): after posting/updating the PR note, post the linked-issue triage comment on each linked issue, then remove `status: needs triage` from those linked issues if present.
+- [ ] `--headless`: make the classification decision, post the selected output(s), remove `status: needs triage` where applicable, and exit. Do not pause for confirmation or continue to Review.
 - [ ] Interactive mode: show the selected draft(s), recommend the route, and ask before posting unless already requested.
 
 ```text
