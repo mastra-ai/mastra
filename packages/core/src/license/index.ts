@@ -173,7 +173,7 @@ export class LicenseClient {
       if (data.valid) {
         this.status = 'valid';
         this.logger?.info(
-          `License validated: ${data.planTier} tier${data.expiresAt ? `, expires ${data.expiresAt.slice(0, 10)}` : ''}`,
+          `License validated${data.expiresAt ? `, expires ${data.expiresAt.slice(0, 10)}` : ''}`,
         );
         this.cachedResult = data;
 
