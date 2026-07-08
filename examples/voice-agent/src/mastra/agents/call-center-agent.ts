@@ -6,9 +6,10 @@ import {
   lookupCustomer,
   rescheduleAppointment,
 } from '../tools/call-center-tools';
-import { checkServiceArea, finalizeIntake } from '../tools/intake-tools';
+import { checkServiceArea, endCall, finalizeIntake } from '../tools/intake-tools';
 import { callCenterMemory } from '../memory';
 import { workspaceContextProcessor } from '../processors/workspace-context';
+import { stopOnToolCall } from './stop-conditions';
 
 export const callCenterAgent = new Agent({
   id: 'call-center',
@@ -19,6 +20,7 @@ export const callCenterAgent = new Agent({
 
 You are on a PHONE CALL, so:
 - Keep replies short: one or two sentences, then stop and let the caller respond.
+- Every word you produce is spoken aloud. Never repeat or re-phrase a sentence you already said this turn — after a tool result, continue from where you left off instead of starting your reply again.
 - Never use lists, markdown, emojis, or special characters. Speak in plain sentences.
 - Say times naturally ("two o'clock" not "14:00") and dates naturally ("Thursday, June twelfth").
 - Ask for one piece of information at a time and confirm details back before you act.
@@ -30,17 +32,21 @@ Every call follows one of these paths. Listen for which one it is, and remember 
 
 2. Roof inspection — the caller wants a roof looked at. Collect the property address and zip code, then use checkServiceArea. If the zip is in the service area, take their name and number and book the inspection. If it is outside the service area, apologize that you do not cover that area and offer to take a callback instead.
 
+Zip codes have exactly five digits. If the caller says fewer digits or you did not hear all five, ask them to repeat the full five-digit zip code. Never guess or fill in missing digits.
+
 3. General callback — the caller just wants someone to call them back. Collect their name, number, and the reason, and take a message.
 
 4. Existing customer or scheduling — the caller references an existing account or a booked visit. Use lookupCustomer by phone or name first, then help them check availability or book, reschedule, or cancel a site visit.
 
 If you have spoken with this caller before, earlier calls and what you learned about them are recalled for you automatically — greet them by name and reference what you remember instead of asking again.
 
-Memory and pace, because this is a live call:
-- Always speak your reply to the caller FIRST. Only update your working memory after you have responded — never make the caller wait on a memory update.
-- Keep the working memory current with what you have collected (name, number, trade, address, zip, which path this is) so you never ask twice and so it is there next time they call.
+The caller's collected details (working memory) are shown to you as context and kept up to date for you automatically in the background. Never try to update it yourself and never mention it. Use it and the conversation so far so you never ask for the same detail twice.
 
-At the END of the call, once you have everything, call finalizeIntake exactly once with the scenario ("lead", "inspection", or "callback") and the collected fields. It reconciles and submits the record and returns a reference number to read back — or it tells you what is still missing or that the address is out of area, which you must resolve before saying goodbye. Existing-customer scheduling handled with the booking tools does not need finalizeIntake.
+Ending the call: begin this sequence ONLY once the caller says goodbye or confirms there is nothing else they need — never just because you finished a task; after finishing a task mid-call, ask if there is anything else instead. Then, in this exact order:
+1. Call finalizeIntake exactly once with the scenario ("lead", "inspection", or "callback") and the collected fields — BEFORE you say any goodbye. It reconciles and submits the record — or it tells you what is still missing or that the address is out of area, which you must resolve before going on. Existing-customer scheduling handled with the booking tools does not need finalizeIntake.
+2. Read the returned reference number back slowly, letter by letter and digit by digit.
+3. Say one short goodbye.
+4. Call endCall, always after your goodbye, never before it. The moment you call endCall your turn is over: produce no text after it, do not acknowledge its result, and do not narrate that you are hanging up.
 
 Stay warm and professional. If a request is outside trades work, scheduling, or accounts, offer to take a callback.`,
   // Fast, NON-reasoning model for the voice loop — time-to-first-token is what the caller hears.
@@ -56,6 +62,16 @@ Stay warm and professional. If a request is outside trades work, scheduling, or 
     cancelAppointment,
     checkServiceArea,
     finalizeIntake,
+    endCall,
+  },
+  // Hard stop once a step calls `endCall`: the loop never runs the follow-up step, so the model
+  // structurally CANNOT speak past its goodbye (models tend to re-state their reply after a tool
+  // result, and on a call every word is spoken aloud — instructions alone don't reliably stop it).
+  // Applies on every path — in-process worker, remote MastraLLM plugin, workflow — because it
+  // lives on the agent. Other tools still get their follow-up step (finalizeIntake needs one to
+  // read the reference number back).
+  defaultOptions: {
+    stopWhen: stopOnToolCall('endCall'),
   },
   // Deterministic per-turn tenant context, injected before the model runs (mock "Firebase").
   inputProcessors: [workspaceContextProcessor],

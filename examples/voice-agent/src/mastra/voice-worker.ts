@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { recordContact } from './backend';
 import { mastra } from './index';
-import { flushObservationalMemory } from './memory';
+import { summarizeCall } from './memory';
 
 export default createLiveKitWorker({
   mastra,
@@ -13,7 +13,21 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-  greeting: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+  // Grouped conversation config. This default worker is deliberately PERMISSIVE — no consent
+  // gating, no periodic re-disclosure — so the demo flows friction-free; every compliance
+  // safeguard (`requireConsent`, `greeting.repeatEvery`, `allowInterruptions: false`, consent
+  // sweep) lives in voice-worker-regulated.ts, which exists to demonstrate them all at once.
+  // `greeting.text` is spoken at call start; it also accepts a resolver — `({ metadata }) =>
+  // string` — to open differently per tenant off the dispatch metadata when one agent serves many.
+  configuration: {
+    greeting: {
+      text: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+    },
+    // Let the agent hang up when the call is done. It calls the `endCall` tool (see intake-tools) as
+    // its last action; the worker waits for the goodbye to play out, then disconnects (running the
+    // onCallEnd summary below). No `message` here — the agent speaks its own goodbye.
+    endCall: {},
+  },
   // Scope memory for the call: `thread` is this call, `resource` is the caller so their
   // collected details and working memory persist across calls (returning callers are
   // recognized). In production `resource` would be the verified customer (from caller ID or
@@ -23,10 +37,9 @@ export default createLiveKitWorker({
     return { thread, resource: metadata.resourceId ?? thread };
   },
   // Spoken filler while a tool runs, so the caller isn't left in silence. Returning nothing
-  // keeps a tool silent — which is what we want for `updateWorkingMemory`: the agent is told
-  // to write working memory only AFTER it has replied, so that write trails the spoken text
-  // (the worker streams text to TTS as it arrives, so a trailing tool call doesn't delay what
-  // the caller hears). Announcing it would just add a stray phrase after the answer.
+  // keeps a tool silent. (Working memory no longer surfaces here at all: with
+  // `manageWorkingMemory` in ../memory.ts the agent has no in-loop memory tool — the Observer
+  // writes it off the audio path.)
   toolFeedback: ({ toolName }) => {
     if (toolName === 'lookupCustomer') return 'Let me pull up your account.';
     if (toolName === 'checkAvailability') return 'One moment while I check the diary.';
@@ -52,13 +65,16 @@ export default createLiveKitWorker({
       interrupted: result.interrupted,
     });
   },
-  // End-of-call hook: after the caller hangs up, distill the call into durable observational
-  // memory ONCE, off the audio path (awaited within LiveKit's shutdown window). This is the
-  // non-blocking home for OM — rather than paying for it inline on a turn. `observe()` still
-  // respects the `messageTokens` threshold, so a long enough call flushes here even if the inline
-  // processor's last check was just under it.
+  // End-of-call hook: after the caller hangs up, summarize the call ONCE into the business's own
+  // records — off the audio path, awaited within LiveKit's shutdown window so it finishes before
+  // the worker process exits. `summarizeCall` (memory.ts) runs `memory.summarizeThread()`: a
+  // standalone one-shot summarization + structured extraction over the whole call, deliberately
+  // outside observational memory's lifecycle (OM keeps doing cross-call facts on its own cadence).
+  // Permissive default: the summary ALWAYS runs. For the consent-gated version (no consent → no
+  // stored summary), see voice-worker-regulated.ts.
   onCallEnd: async ({ memory }) => {
-    await flushObservationalMemory(memory);
+    if (!memory) return;
+    await summarizeCall(memory);
   },
 });
 
