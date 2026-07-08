@@ -1,229 +1,302 @@
 ---
 name: gh-triage
-description: Route a GitHub issue or PR to the right understanding command with a scoped handoff file
+description: GitHub OSS maintainer lifecycle triage, review, and approval management
 goal: true
 ---
 
-# GitHub Triage
+# GH Triage
 
-Route one open GitHub issue or active PR. `/gh-triage` owns routing and handoff setup only; `/understand-pr` and `/understand-issue` own the downstream investigation, conclusions, drafts, and posting decisions.
+Manage one open GitHub issue or active PR through three explicit phases:
 
-## Hard rules
+1. **Triage** — classify, route, and always end by posting/updating either a Maintainer's Triage Note or an issue/PR comment.
+2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`.
+3. **Approve** — mark the note as waiting for final approval with a recommended approver, then stop.
 
-- [ ] Read-only except creating/updating exactly one scoped handoff file:
-  - PR handoff: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
-  - Issue handoff: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
-- [ ] Do not post comments, label, assign, close, tag, coordinate externally, implement fixes, or commit without explicit user approval.
-- [ ] Non-open issues, non-open PRs, and draft PRs stop with no handoff file.
-- [ ] Keep `/gh-triage` short: resolve the input, find open closing/fixing PRs, choose a branch, seed the handoff file, and print the next command.
-- [ ] Do not perform downstream investigation or draft comments in `/gh-triage`. Put needed downstream outputs in the handoff file's instructions.
-- [ ] For PR handoffs, check whether maintainer notes already exist. Record only a pointer or one-line summary as prior context.
+Start with **Triage** only. In `--headless` mode, make the routing decision, post the required Triage output, and exit.
 
-## Handoff file
+## Rules
 
-Create the file only after the input is confirmed open/active and the route target is known.
+- [ ] Triage creates no local files. Review may create/update exactly one scoped working file:
+  - PR review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
+  - Issue review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
+- [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
+- [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR.
+- [ ] Do not modify code, labels, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything.
+- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, or approved issue/PR comments.
+- [ ] Stop on non-open issues, non-open PRs, or draft PRs unless the user explicitly asks for a note.
+- [ ] Do not invent evidence. Say what was not checked.
+- [ ] Keep interactive responses short and end with lettered options.
 
-Use this skeleton plus only the selected route's action block. Keep `Context` factual and concise. Put the old triage lifecycle work under `Handoff instructions` as action items for the downstream command.
+## Maintainer's Triage Note
 
-```markdown
-# GitHub Triage Handoff
-
-## Route
-
-- Source: <issue|PR> #<number> — <title>
-- Selected route: <Branch B: understand-pr|Branch C: understand-pr after PR selection|Branch D: understand-issue>
-- Reason: <why this route was selected>
-- Next command: `<exact /understand-* command>`
-
-## Context
-
-- Issue: <issue # + short summary, or `None linked.`>
-- PR: <PR # + short summary, or `None selected.`>
-- Current state: <open/active state, draft status if PR, obvious route blockers>
-- Linked candidates: <closing/fixing PRs, multiple candidates, or `None.`>
-- Existing maintainer notes: <link/pointer/one-line summary, or `None found.`>
-- Triage notes: <minimal routing facts only; no downstream conclusions>
-
-## Handoff instructions
-
-<Insert only the selected PR or issue action block below.>
-
-## Workspace
-
-<Downstream command writes findings here.>
-```
-
-### PR handoff action block
-
-Use only for `.pr-review/GH_TRIAGE_PR_<pr-number>.md` files.
+Use one GitHub comment for the lifecycle. Update the same comment across phases.
 
 ```markdown
-Run the normal `/understand-pr` review lifecycle, then update this file and present the user with the relevant next actions.
+## 🟡 Maintainer's Triage Note
 
-Action items:
+**Current Phase:** Triage
 
-- Determine severity/scope/assessment for maintainer context, using:
-  - `🔴 critical` — security issue, data loss/corruption, production outage, or core path broken for many users.
-  - `🟠 high` — major feature broken, serious regression, or high-impact workflow blocked.
-  - `🟡 medium` — real issue with limited surface area, workaround, or meaningful docs/behavior confusion.
-  - `🟢 low` — minor bug, typo, small docs gap, support/question, duplicate, invalid, unsupported, spam, unrelated, or low-risk test/coverage work.
-- Evaluate issue summary, PR relevance, evidence checked, changed areas, checks/local verification, and unresolved risks.
-- For merge confidence, weigh code correctness, integration with existing patterns, unresolved review comments, local verification, approved/required remote checks that actually ran, and release/user impact.
-- Treat unapproved remote CI checks and Vercel/auth deployment failures as neutral for merge confidence; do not count them as missing verification or failures. Prefer narrow local checks/lint/typecheck/tests for confidence evidence.
-- In `Why not higher`, name the specific gap/risk, its merge impact, and whether it is blocking. Avoid generic limits like "needs maintainer review" or "tests not run" unless tied to specific missing evidence and impact.
-- Identify maintainer fix-up candidates from the old triage path, such as conflicts, relevant check/lint/CI failures, or inline suggestions.
-- Prepare maintainer notes using this structure:
+**Triage:**
+- Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
+- Maintainer read: <brief user-visible problem/goal and why this route was chosen>
+- Routing: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Wait for author/checks|Select fixing PR|Other>
+- Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
+- Confidence: <high|medium|low> — <why enough for triage or what is uncertain>
 
-  ## <severity>: Maintainer notes
+**Review:**
+- Status: <not started|in progress|complete>
+- Findings: <brief implementation/root-cause/check-risk summary, or `Not reviewed yet.`>
+- Follow-up: <author/maintainer follow-up needed, or `None yet.`>
 
-  **Merge confidence:** <x/5> — <ready to merge|mergeable with non-blocking follow-up|needs review changes|blocked>
-
-  **Why:**
-  - <1-3 bullets with concrete evidence supporting the assessment>
-
-  **Why not higher:**
-  - <explicit missing evidence or unresolved risk; mark blocking vs non-blocking>
-
-  **Required before merge:**
-  - <required change/check/review, or `None.`>
-
-  **Non-blocking follow-ups:**
-  - <follow-up, or `None.`>
-
-  **Author comments:**
-  - <author-facing action needed, or `None.`>
-
-  **Prior maintainer notes:**
-  - <reuse/supersede/update decision, or `None found.`>
-
-- At any stop/final prompt, include the applicable posting/fix-up options below, even if notes are only provisional or not ready.
-- Ask the user whether to post the maintainer notes after review.
-- If maintainer fix-up candidates exist, ask whether to fix conflicts, relevant lint/check/CI failures, or inline suggestions before/with maintainer notes.
-- Do not post comments or modify code without explicit user approval.
+**Approve:**
+- Status: <not started|waiting for final approval|approved|not approved>
+- Final approver: <person/team, or `Not identified yet.`>
+- Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-### Issue handoff action block
+Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Use recent relevant-area history as evidence when it shows recurrence, regression risk, ownership, or core-path impact.
 
-Use only for `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md` files.
+## Issue/PR Comment
+
+Use this only when the best next action is to ask the author for information, explain duplicate/non-actionable routing, or leave an author-facing Review outcome. It is separate from the Maintainer's Triage Note.
 
 ```markdown
-Run the normal `/understand-issue` investigation lifecycle, then update this file and present the user with the relevant next actions.
+Thanks for opening this.
 
-Action items:
+<Concise maintainer-facing response: what was found, what is needed, or why this is not actionable.>
 
-- Determine severity/scope/assessment for maintainer context, using the same severity rubric above.
-- Evaluate issue summary, likely affected area, evidence checked, debugging theory, and likely reproduction path.
-- Identify likely root cause or current best diagnosis.
-- Record unknowns and recommended next action.
-- Prepare an issue-comment draft if a maintainer response is useful.
-- Ask the user whether to post the issue comment after investigation.
-- Do not post comments or modify code without explicit user approval.
+<If asking for info, list exactly what is needed. If duplicate, link the duplicate/closed issue or PR. If spam/invalid, keep it brief and neutral.>
 ```
 
-## Step 1: Resolve and check input
+Post/update an issue/PR comment only after explicit approval in interactive mode. In `--headless` triage, choose the required output from the classification case and post it without asking.
 
-- [ ] Ensure `$ARGUMENTS` contains one issue/PR number or URL. If missing, ask for it and stop.
-- [ ] Resolve whether the input is an issue or PR.
-  - `/issues/<n>` → issue input.
-  - `/pull/<n>` → PR input.
-  - `issue <n>` / `pr <n>` use the explicit prefix.
-  - Bare number / `#<n>`: call the issue API first; if the response has `pull_request`, treat it as a PR.
+When a PR triage note routes linked/closing issue(s) to Review, also post this short comment on each linked issue:
+
+```markdown
+This issue has been triaged and routed to PR #<n> for Review. Maintainers will continue the lifecycle tracking on that PR.
+```
+
+## Phase 1: Triage
+
+### 1. Resolve input
+
+- [ ] Require one issue/PR number or URL. Missing input: ask and stop; in headless mode, fail clearly.
+- [ ] Parse flags: `--headless` runs non-interactively: classify, post the selected Triage output(s), and exit.
+- [ ] Resolve type:
+  - `/issues/<n>` or `issue <n>` → issue.
+  - `/pull/<n>` or `pr <n>` → PR.
+  - Bare number / `#<n>`: call issue API; if it has `pull_request`, treat as PR.
 
 ```bash
-INPUT="$ARGUMENTS"
 OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 OWNER=${OWNER_REPO%/*}
 REPO=${OWNER_REPO#*/}
-
 gh api "repos/$OWNER/$REPO/issues/<number>" --jq '{number, state, isPr: has("pull_request")}'
 ```
 
-- [ ] Fetch only enough metadata to confirm state and route.
+### 2. Gather routing context
+
+Fetch enough to classify and write the note. Do not do implementation review.
 
 ```bash
-# ISSUE input
-gh issue view "$ISSUE" --comments --json number,title,state,author,assignees,createdAt,updatedAt,body,comments,url
-
-# PR input
-gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,createdAt,updatedAt,body,comments,url,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
+gh issue view "$ISSUE" --comments --json number,title,state,author,assignees,labels,createdAt,updatedAt,body,comments,url
+gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,labels,createdAt,updatedAt,body,comments,url,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
 ```
 
-- [ ] Stop immediately if issue `state != OPEN`, PR `state != OPEN`, or PR `isDraft == true`. Tell the user this command only triages open issues or active PRs.
-
-## Step 2: Find routing context
-
-Gather only enough context to choose Branch A/B/C/D and seed a useful handoff.
-
-- [ ] For issue input, find open PRs that explicitly close/fix the issue. These drive routing.
-- [ ] Treat mention-only/cross-referenced PRs as context, not as routing targets unless they clearly close/fix the issue.
-- [ ] For PR input, fetch linked/closing issues and changed file names.
-- [ ] For PR routes, inspect comments enough to identify whether an existing maintainer-notes comment is present.
-- [ ] Record obvious route blockers only when they affect handoff selection, such as closed/non-open state, draft PR, conflicts, or clearly failing relevant checks excluding Vercel/auth deployment failures. Do not diagnose or fix blockers here.
+- [ ] Stop if issue/PR is not open or PR is draft.
+- [ ] For issues, find PRs that explicitly close/fix the issue.
+- [ ] Treat mention-only/cross-referenced PRs as context unless they clearly close/fix.
+- [ ] For PRs, fetch linked/closing issues and their current states; a PR linked only to already-closed/resolved issues is often duplicate or stale.
+- [ ] Record changed files, visible check/conflict status, and existing Maintainer's Triage Note if present.
+- [ ] Check recent git history for the relevant area to inform routing, severity, confidence, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage.
 
 ```bash
-# Closing/fixing refs for an issue
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
-gh api graphql -f query='query($id:ID!){ node(id:$id){ ... on Issue { closedByPullRequestsReferences(first:20){ nodes{ number title state url } } } } }' -f id="$ISSUE_NODE_ID"
-
-# Timeline cross-references, context only
+gh api graphql -f query='query($id:ID!){ node(id:$id){ ... on Issue { closedByPullRequestsReferences(first:20){ nodes{ number title state url isDraft } } } } }' -f id="$ISSUE_NODE_ID"
 gh api "repos/$OWNER/$REPO/issues/$ISSUE/timeline" --paginate --jq '.[] | select(.event=="cross-referenced") | {source:.source.issue | {number,title,state,pull_request,url}}'
 
-# PR route context
-gh pr view "$PR" --json number,title,state,isDraft,url,author,body,comments,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
+# PR linked issue states
+gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[]? | {number,title,state,url}'
+
+# Relevant-area history. For PRs, use changed files; for issues, infer the narrowest likely paths from labels/title/body/comments.
+RELEVANT_PATH="path/from/repo/root"
+git log --since="90 days ago" --oneline --decorate -- "$RELEVANT_PATH" | head -20
+git log --since="90 days ago" --format='%h %ad %an %s' --date=short -- "$RELEVANT_PATH" | head -20
 ```
 
-## Step 3: Choose one branch
+### 3. Classify and route
 
-- Branch A — irrelevant/non-actionable input.
-- Branch B — exactly one open/active fixing PR, or input is an active PR.
-- Branch C — multiple open/active fixing PRs.
-- Branch D — issue input with no open fixing PR.
+Choose one case. Triage must finish with exactly one primary output route: Case A posts an issue/PR comment and stops; Cases B-D post/update the Maintainer's Triage Note because the item is triaged and ready for Review.
 
-Follow only the selected branch.
+#### Case A: Irrelevant, duplicate, resolved, unclear, or non-actionable
 
-### Branch A: Irrelevant input
+Use when no Review should start yet:
 
-Use for spam, unrelated, invalid, unsupported, or clearly non-actionable items.
+- spam, unrelated, invalid, unsupported, or clearly out of scope
+- unclear or missing reproduction/details
+- duplicate of an existing issue/PR
+- input PR only links closed/resolved issues, suggesting the PR is duplicate, stale, or no longer needed
+- issue already resolved by a closed/merged PR or prior maintainer answer
 
-- [ ] Do not create a handoff file.
-- [ ] Tell the user briefly why no `/understand-*` handoff is needed.
+Routing:
 
-### Branch B: One linked/input PR
+- `Close as <reason>` for spam/invalid/duplicate/resolved.
+- `Ask author for info` when the item could become actionable with specific details.
+- `Wait for author/checks` only when the blocker is external and Review is premature.
 
-Use when exactly one open PR clearly closes/fixes the issue, or when the input itself is an active PR.
+Output:
 
-- [ ] Create/update `.pr-review/GH_TRIAGE_PR_<pr-number>.md` using the skeleton plus the PR handoff action block only.
-- [ ] Put issue/PR/link/check/comment facts in `Context`.
-- [ ] Do not include the issue handoff action block.
-- [ ] End by telling the user the exact next command:
+- Issue/PR comment only: explain why Review is not starting, cite the duplicate/closed issue or PR when present, or ask for the exact missing details. Keep spam/invalid comments brief and neutral.
+- Do not create/update a Maintainer's Triage Note for Case A unless the user explicitly overrides the route.
+- Interactive ask: `Does this look non-actionable, or is there context that makes it worth Review?`
+
+#### Case B: One PR to review
+
+Use when the input is an active PR, or exactly one active PR clearly closes/fixes the issue, and linked issue state does not make the PR obviously duplicate/stale.
+
+Checks before selecting:
+
+- linked/closing issue is open, or the PR independently fixes a still-valid problem
+- no stronger active PR handles the same issue
+- draft/non-open state has already been ruled out
+
+Routing:
+
+- `Review PR #<n>`.
+
+Output:
+
+- Maintainer's Triage Note: include linked issue state, changed area, visible blockers, and why this PR is the Review target.
+- If this is a PR with linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
+- Interactive ask: `Should this PR be the Review target?`
+
+#### Case C: Multiple candidate PRs
+
+Use when multiple active PRs clearly close/fix the issue or address the same live problem.
+
+Routing:
+
+- `Select one fixing PR for Review`, unless one PR is clearly the right target.
+
+Output:
+
+- Maintainer's Triage Note: list candidate PRs with one-line routing facts, including linked issue state and obvious blockers. Do not compare implementations deeply.
+- If one PR is selected and it has linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
+- Interactive ask: `Which PR should move to Review?`
+
+#### Case D: Issue investigation
+
+Use for an open issue with no active PR that clearly closes/fixes it, and enough information for investigation.
+
+Routing:
+
+- `Investigate issue #<n>`.
+
+Output:
+
+- Maintainer's Triage Note: include likely area, known evidence, missing-but-nonblocking context, and why issue investigation comes before PR Review.
+- Do not post an author-facing comment during Triage unless the route falls back to Case A because information is required before Review.
+- Interactive ask: `Should this issue move to Review as an investigation?`
+
+### 4. Post/update note or comment, then pause
+
+- [ ] Case A: post the issue/PR comment and stop. Do not continue to Review.
+- [ ] Cases B-D: update an existing Maintainer's Triage Note if present; otherwise create one.
+- [ ] PR note route with linked/closing issue(s): after posting/updating the PR note, post the linked-issue triage comment on each linked issue.
+- [ ] `--headless`: make the classification decision, post the selected output(s) without asking, and exit. Do not pause for confirmation or continue to Review.
+- [ ] Interactive mode: show the selected draft(s), recommend the route, and ask before posting unless already requested.
 
 ```text
-/understand-pr <pr-number> --working-file .pr-review/GH_TRIAGE_PR_<pr-number>.md
+Triage output is ready: <Case A issue/PR comment|Maintainer's Triage Note|Maintainer's Triage Note + linked issue comment(s)>.
+Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Select fixing PR>.
+
+A) Post the selected Triage output and stop here
+B) Show/edit the draft before posting
+C) The triage read is wrong — let me explain
+D) Post the selected Triage output, then continue to Review
+E) Do not post — stop here
 ```
 
-### Branch C: Multiple linked PRs
+Only offer D for Cases B-D. Never offer D for Case A. If output was already posted automatically, replace the posting options with a short summary of what was posted and stop.
 
-Use when multiple open PRs clearly close/fix the issue.
+## Phase 2: Review
 
-- [ ] Record candidate PRs and routing facts concisely.
-- [ ] If one active fixing PR is unambiguous, select it and create/update `.pr-review/GH_TRIAGE_PR_<pr-number>.md`.
-- [ ] If selection is ambiguous, ask the user which PR should receive the handoff. Do not compare implementations deeply.
-- [ ] Once selected, use the Branch B PR handoff shape and end with:
+Only enter after explicit user selection.
+
+### 1. Create one working file
+
+Create/update exactly one file using the selected route:
+
+- PR Review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
+- Issue Review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
+
+For PR Review, build the file from the PR diff and routing context:
+
+```bash
+gh pr diff "$PR" --patch
+gh pr view "$PR" --comments --json number,title,url,author,body,comments,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
+```
+
+For Issue Review, build the file from the issue body, comments, timeline, labels, candidate PRs, and routing question.
+
+The file should contain only Review context: input URL/number, selected route, Maintainer's Triage Note comment URL/id if available, relevant facts, and questions for the skill. Do not embed the Maintainer's Triage Note template or issue/PR comment template in the working file.
+
+### 2. Activate the matching skill
 
 ```text
-/understand-pr <pr-number> --working-file .pr-review/GH_TRIAGE_PR_<pr-number>.md
+Activate skill: understand-pr
+Arguments: <PR number or URL> --working-file .pr-review/GH_TRIAGE_PR_<pr-number>.md
 ```
-
-### Branch D: No linked PR
-
-Use for issue input when no PR clearly closes/fixes the issue.
-
-- [ ] Create/update `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md` using the skeleton plus the issue handoff action block only.
-- [ ] Put issue/link/comment facts in `Context`.
-- [ ] Do not include the PR handoff action block.
-- [ ] In `Context`, write `None selected.` for the PR field.
-- [ ] End by telling the user the exact next command:
 
 ```text
-/understand-issue <issue-number> --working-file .issue-review/GH_TRIAGE_ISSUE_<issue-number>.md
+Activate skill: understand-issue
+Arguments: <issue number or URL> --working-file .issue-review/GH_TRIAGE_ISSUE_<issue-number>.md
 ```
+
+For multiple PRs, ask which PR first. No-action routes do not enter Review unless the user corrects the route.
+
+### 3. Ask whether to update the note
+
+After Review finishes or stops:
+
+```text
+Review is complete enough to update the Maintainer's Triage Note.
+
+A) Update the Maintainer's Triage Note with Review findings
+B) Show me the proposed note update first
+C) Do not update the note — keep the working file only
+D) Continue Review before updating anything
+```
+
+If approved, update the same note: `Current Phase: Review`, concise `Review` findings, `Approve` still pending.
+
+## Phase 3: Approve
+
+Only enter after Review is complete enough for final maintainer routing. Do not merge, close, label, assign, or change PR/issue state.
+
+### 1. Recommend one final approver
+
+- [ ] Use reviewed files/area from the working file.
+- [ ] Check CODEOWNERS first: `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`.
+- [ ] If CODEOWNERS is clear, recommend one matching person/team.
+- [ ] Otherwise use recent history for affected paths and recommend one person with recent context.
+- [ ] If unclear, say `No clear final approver identified` with a short reason.
+
+```bash
+find .github . docs -name CODEOWNERS -maxdepth 2 2>/dev/null
+git log --since="6 months ago" --format='%an <%ae>' -- <path> | sort | uniq -c | sort -rn | head -10
+```
+
+### 2. Present Approve options
+
+```text
+Review is ready for final approval routing.
+Recommended final approver: <person/team or no clear approver> — <short reason>.
+
+A) Update the Maintainer's Triage Note as waiting for final approval, with this approver recommendation
+B) Show me the proposed note update first
+C) Pick a different final approver
+D) Do not update anything — stop here
+```
+
+If approved, update the same note: `Current Phase: Approve`, `Approve` status `waiting for final approval`, recommended approver and reason. Then stop.
