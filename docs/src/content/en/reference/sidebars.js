@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
       label: 'ACP',
