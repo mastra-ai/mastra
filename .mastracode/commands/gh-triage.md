@@ -12,7 +12,7 @@ Manage one open GitHub issue or active PR through three explicit phases:
 2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`.
 3. **Approve** — mark the note as waiting for final approval with a recommended approver, then stop.
 
-Start with **Triage** only. In `--headless` mode, make the routing decision, post the required Triage output, and exit.
+Start with **Triage** only. In `--headless` mode, choose the next step, post the required Triage output, and exit.
 
 ## Rules
 
@@ -34,12 +34,12 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 ```markdown
 ## 🟡 Maintainer's Triage Note
 
-**Current Phase:** Triage
+**Current Phase:** Triaged
 
 **Triage:**
 - Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
-- Routing: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Wait for author/checks|Select fixing PR|Other>
+- Next Steps: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
 - Confidence: <high|medium|low> — <why enough for triage or what is uncertain>
 
@@ -58,7 +58,7 @@ Severity: critical = security/data loss/outage/core path broken; high = serious 
 
 ## Issue/PR Comment
 
-Use this only when the best next action is to ask the author for information, explain duplicate/non-actionable routing, or leave an author-facing Review outcome. It is separate from the Maintainer's Triage Note.
+Use this only when the best next action is to ask the author for information, explain duplicate/non-actionable handling, or leave an author-facing Review outcome. It is separate from the Maintainer's Triage Note.
 
 ```markdown
 Thanks for opening this.
@@ -94,7 +94,7 @@ REPO=${OWNER_REPO#*/}
 gh api "repos/$OWNER/$REPO/issues/<number>" --jq '{number, state, isPr: has("pull_request")}'
 ```
 
-### 2. Gather routing context
+### 2. Gather triage context
 
 Fetch enough to classify and write the note. Do not do implementation review.
 
@@ -107,8 +107,11 @@ gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,l
 - [ ] For issues, find PRs that explicitly close/fix the issue.
 - [ ] Treat mention-only/cross-referenced PRs as context unless they clearly close/fix.
 - [ ] For PRs, fetch linked/closing issues and their current states; a PR linked only to already-closed/resolved issues is often duplicate or stale.
-- [ ] Record changed files, visible check/conflict status, and existing Maintainer's Triage Note if present.
-- [ ] Check recent git history for the relevant area to inform routing, severity, confidence, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage.
+- [ ] Record changed files, merge/conflict status, CI approval state, and existing Maintainer's Triage Note if present.
+- [ ] Ignore Vercel checks during Triage; do not cite them as blockers or failures.
+- [ ] If CI workflows are waiting for approval or have not been approved, do not report individual failing/pending checks. Recommend `Approve CI checks before Review` as the next step.
+- [ ] Only report non-Vercel failing checks when CI has already been approved and the check result is real.
+- [ ] Check recent git history for the relevant area to inform next steps, severity, confidence, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage.
 
 ```bash
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
@@ -138,10 +141,11 @@ Use when no Review should start yet:
 - input PR only links closed/resolved issues, suggesting the PR is duplicate, stale, or no longer needed
 - issue already resolved by a closed/merged PR or prior maintainer answer
 
-Routing:
+Next Steps:
 
 - `Close as <reason>` for spam/invalid/duplicate/resolved.
 - `Ask author for info` when the item could become actionable with specific details.
+- `Approve CI checks before Review` when CI workflows have not been approved.
 - `Wait for author/checks` only when the blocker is external and Review is premature.
 
 Output:
@@ -160,13 +164,15 @@ Checks before selecting:
 - no stronger active PR handles the same issue
 - draft/non-open state has already been ruled out
 
-Routing:
+Next Steps:
 
-- `Review PR #<n>`.
+- `Review PR #<n>` when CI has been approved or checks are not required before Review.
+- `Approve CI checks before Review` when CI workflows are waiting for approval.
 
 Output:
 
-- Maintainer's Triage Note: include linked issue state, changed area, visible blockers, and why this PR is the Review target.
+- Maintainer's Triage Note: include linked issue state, changed area, non-Vercel blockers, CI approval recommendation when relevant, and why this PR is the Review target.
+- If CI workflows have not been approved, do not list failing checks; set `Next Steps` to `Approve CI checks before Review`.
 - If this is a PR with linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
 - Interactive ask: `Should this PR be the Review target?`
 
@@ -174,13 +180,15 @@ Output:
 
 Use when multiple active PRs clearly close/fix the issue or address the same live problem.
 
-Routing:
+Next Steps:
 
 - `Select one fixing PR for Review`, unless one PR is clearly the right target.
+- `Approve CI checks before Review` for any selected PR whose CI workflows are waiting for approval.
 
 Output:
 
-- Maintainer's Triage Note: list candidate PRs with one-line routing facts, including linked issue state and obvious blockers. Do not compare implementations deeply.
+- Maintainer's Triage Note: list candidate PRs with one-line next-step facts, including linked issue state, CI approval state, and obvious non-Vercel blockers. Do not compare implementations deeply.
+- If CI workflows have not been approved for a candidate, recommend approving CI before Review instead of listing failing checks.
 - If one PR is selected and it has linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
 - Interactive ask: `Which PR should move to Review?`
 
@@ -188,7 +196,7 @@ Output:
 
 Use for an open issue with no active PR that clearly closes/fixes it, and enough information for investigation.
 
-Routing:
+Next Steps:
 
 - `Investigate issue #<n>`.
 
@@ -208,7 +216,7 @@ Output:
 
 ```text
 Triage output is ready: <Case A issue/PR comment|Maintainer's Triage Note|Maintainer's Triage Note + linked issue comment(s)>.
-Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Select fixing PR>.
+Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Approve CI checks before Review|Select fixing PR>.
 
 A) Post the selected Triage output and stop here
 B) Show/edit the draft before posting
@@ -268,7 +276,7 @@ C) Do not update the note — keep the working file only
 D) Continue Review before updating anything
 ```
 
-If approved, update the same note: `Current Phase: Review`, concise `Review` findings, `Approve` still pending.
+If approved, update the same note: `Current Phase: Reviewed`, concise `Review` findings, `Approve` still pending.
 
 ## Phase 3: Approve
 
@@ -299,4 +307,4 @@ C) Pick a different final approver
 D) Do not update anything — stop here
 ```
 
-If approved, update the same note: `Current Phase: Approve`, `Approve` status `waiting for final approval`, recommended approver and reason. Then stop.
+If approved, update the same note: `Current Phase: Awaiting Approval`, `Approve` status `waiting for final approval`, recommended approver and reason. Then stop.
