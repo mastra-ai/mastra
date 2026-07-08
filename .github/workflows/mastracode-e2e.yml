@@ -48,4 +48,4 @@ jobs:
         run: pnpm run build:mastracode
 
       - name: Run Mastra Code E2E
-        run: pnpm --filter ./mastracode run e2e:test -- --reporter=dot
+        run: pnpm --filter ./mastracode/tui run e2e:test -- --reporter=dot
