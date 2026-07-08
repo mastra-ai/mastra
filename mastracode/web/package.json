@@ -14,7 +14,7 @@
     "web:dev:github": "pnpm db:up && pnpm web:dev",
     "web:ui:build": "pnpm run prebuild && vite --config src/web/vite.config.ts build",
     "web:build": "pnpm run web:ui:build && node scripts/monorepo-deps.mjs run -- mastra build --dir src/mastra",
-    "web:deploy": "pnpm run web:build && mastra deploy --skip-build",
+    "web:deploy": "pnpm run web:build && node scripts/validate-output.mjs && mastra deploy --skip-build",
     "deps:pin": "node scripts/monorepo-deps.mjs pin",
     "deps:link": "node scripts/monorepo-deps.mjs link",
     "web:start": "varlock run -- mastra start",
