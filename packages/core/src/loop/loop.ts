@@ -71,6 +71,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     backgroundTaskManager: _internal?.backgroundTaskManager,
     agentBackgroundConfig: _internal?.agentBackgroundConfig,
     backgroundTaskManagerConfig: _internal?.backgroundTaskManagerConfig,
+    toolPayloadTransform: _internal?.toolPayloadTransform,
     skipBgTaskWait: _internal?.skipBgTaskWait,
     drainPendingSignals: _internal?.drainPendingSignals,
     initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
