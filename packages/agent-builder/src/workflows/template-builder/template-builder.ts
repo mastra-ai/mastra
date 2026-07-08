@@ -1479,26 +1479,28 @@ Previous iterations may have fixed some issues, so start by re-running validateC
         let previousErrors = validationResults.remainingErrors;
         let lastValidationResult: any = null;
 
-        for await (const chunk of result.fullStream) {
-          if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
-            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
-            console.info({
-              type: chunk.type,
-              msgId: chunkData.messageId,
-              iteration: currentIteration,
-            });
-          } else {
-            console.info(JSON.stringify(chunk, null, 2));
-          }
-          if (chunk.type === 'tool-result') {
-            // Track validation results
-            const chunkData = 'payload' in chunk ? chunk.payload : chunk;
-            if (chunkData.toolName === 'validateCode') {
-              const toolResult = chunkData.result;
-              lastValidationResult = toolResult; // Store the full result
-              if (toolResult?.summary) {
-                iterationErrors = toolResult.summary.totalErrors || 0;
-                console.info(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
+        if ('fullStream' in result && result.fullStream) {
+          for await (const chunk of result.fullStream) {
+            if (chunk.type === 'step-finish' || chunk.type === 'step-start') {
+              const chunkData = 'payload' in chunk ? chunk.payload : chunk;
+              console.info({
+                type: chunk.type,
+                msgId: chunkData.messageId,
+                iteration: currentIteration,
+              });
+            } else {
+              console.info(JSON.stringify(chunk, null, 2));
+            }
+            if (chunk.type === 'tool-result') {
+              // Track validation results
+              const chunkData = 'payload' in chunk ? chunk.payload : chunk;
+              if (chunkData.toolName === 'validateCode') {
+                const toolResult = chunkData.result;
+                lastValidationResult = toolResult; // Store the full result
+                if (toolResult?.summary) {
+                  iterationErrors = toolResult.summary.totalErrors || 0;
+                  console.info(`Iteration ${currentIteration}: Found ${iterationErrors} errors`);
+                }
               }
             }
           }
