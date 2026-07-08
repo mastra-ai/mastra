@@ -559,10 +559,6 @@ html {
   margin-bottom: 0;
 }
 
-[data-theme='dark'] .navbar {
-  border-bottom-color: var(--border);
-}
-
 .navbar__link {
   font-weight: 500;
 }

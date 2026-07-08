@@ -43,10 +43,11 @@ const ARC_PATH = `M 1 0 A 1 1 0 0 0 0 1`
 
 /**
  * Renders an "inverse border-radius" — a concave quarter-circle at the
- * top-right that makes a div appear to extend outward with a smooth curve.
+ * top-right that makes a surface appear to extend outward with a smooth curve.
  *
- * Place this inside a `position: relative` parent. The SVG is absolutely
- * positioned above the parent's top-right edge, extending outward.
+ * The SVG is positioned (absolute by default) at its top-right edge. Pass a
+ * `style` to override the positioning — the consumer pins it at the
+ * navbar/sidebar junction (see DocSidebar/Desktop).
  */
 export function InverseCorner({
   size,
