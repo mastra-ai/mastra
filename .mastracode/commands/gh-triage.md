@@ -235,9 +235,9 @@ Only offer D for Cases B-D. Never offer D for Case A. If output was already post
 
 ## Phase 2: Review
 
-Only enter after explicit user selection. Do not stop after writing the working file; continue into the matching skill, finish its interactive Review flow, then ask the note update question below.
+Only enter after explicit user selection. Do not stop after writing the working file; continue into the matching skill, finish its interactive Review flow, then update the existing Maintainer's Triage Note.
 
-### 1. Create one working file
+### 1. Prepare Review working file
 
 Create/update exactly one file using the selected route:
 
@@ -255,6 +255,8 @@ For Issue Review, build the file from the issue body, comments, timeline, labels
 
 The file should contain only Review context: input URL/number, selected route, Maintainer's Triage Note comment URL/id if available, relevant facts, and questions for the skill. Do not embed the Maintainer's Triage Note template or issue/PR comment template in the working file.
 
+The working file is internal Review context only. It is never the final Phase 2 output.
+
 ### 2. Activate the matching skill and continue through Review
 
 After writing the working file, immediately activate the matching skill with `--working-file`. Do not end with a prep summary.
@@ -269,6 +271,8 @@ Activate skill: understand-issue
 Arguments: <issue number or URL> --working-file .issue-review/GH_TRIAGE_ISSUE_<issue-number>.md
 ```
 
+After the skill finishes, return to this command and update/ask about the existing note.
+
 For multiple PRs, ask which PR first. No-action routes do not enter Review unless the user corrects the route.
 
 ### 3. Update the existing note
@@ -276,11 +280,11 @@ For multiple PRs, ask which PR first. No-action routes do not enter Review unles
 Before ending Phase 2, update the existing Maintainer's Triage Note with Review findings. Do not add a separate comment or PR review as lifecycle output unless the user asks for an author-facing message.
 
 ```text
-Review is complete enough to update the existing Maintainer's Triage Note.
+Review output is ready: update the existing Maintainer's Triage Note.
 
 A) Update the existing Maintainer's Triage Note with Review findings
 B) Show me the proposed note update first
-C) Draft a separate author-facing comment after updating the note
+C) Update the note, then draft a separate author-facing comment
 D) Continue Review before updating anything
 ```
 
