@@ -271,6 +271,10 @@ See `scope-expansion-after-02.md` for notes on message arrays, context deltas, a
 
 See `fit_exploration_procedure.md` for the repeatable process used to run numbered Pulse fit explorations.
 
+See `fit_exploration_01/`, `fit_exploration_02/`, and `fit_exploration_03/` for historical shape-fit passes.
+
+See `code_audit/README.md` for source and candidate emission audits, including the Harness and agent config provenance addendum.
+
 ## Lean Child Pulses
 
 Pulse should avoid context duplication by design.
