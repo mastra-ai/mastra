@@ -42,7 +42,6 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
 - Next Steps: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
-- Confidence: Pending Review
 
 **Review:**
 - Status: <not started|in progress|complete>
@@ -56,7 +55,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-Heading uses only the severity symbol: `🔴`, `🟠`, `🟡`, or `🟢`. The `Severity` field includes the symbol plus label/reason. Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Triage confidence stays `Pending Review`; Review confidence uses 1/5-5/5, where 5/5 means direct evidence and 1/5 means tentative.
+Heading uses only the severity symbol: `🔴`, `🟠`, `🟡`, or `🟢`. The `Severity` field includes the symbol plus label/reason. Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Confidence belongs only to Review and uses 1/5-5/5, where 5/5 means direct evidence and 1/5 means tentative.
 
 ## Issue/PR Comment
 
@@ -115,7 +114,7 @@ gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,l
 - [ ] Ignore Vercel checks during Triage; do not cite them as blockers or failures.
 - [ ] If CI workflows are waiting for approval or have not been approved, do not report individual failing/pending checks. Recommend `Approve CI checks before Review` as the next step.
 - [ ] Only report non-Vercel failing checks when CI has already been approved and the check result is real.
-- [ ] Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Leave confidence as `Pending Review`.
+- [ ] Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Do not set confidence during Triage.
 
 ```bash
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
@@ -288,7 +287,16 @@ C) Update the note, then draft a separate author-facing comment
 D) Continue Review before updating anything
 ```
 
-When updating, edit the same note comment: `Current Phase: Reviewed`, concise `Review` findings, numeric Review confidence, `Approve` still pending.
+When updating, edit the same note comment: `Current Phase: Reviewed`, concise `Review` findings, numeric Review confidence, `Approve` still pending. After the note update, do not stop with a completion summary; ask whether to continue to Approve.
+
+```text
+Maintainer's Triage Note updated with Review findings.
+
+A) Continue to Approve
+B) Show me the updated note
+C) Draft a separate author-facing comment
+D) Stop here
+```
 
 ## Phase 3: Approve
 
