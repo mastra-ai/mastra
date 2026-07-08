@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   enrichSubmitPlanMessages,
   enrichSubmitPlanStreamChunk,
@@ -57,6 +57,26 @@ describe('submit plan enrichment', () => {
       title: 'Cook Anything',
       plan: '## Summary\n\nMake dinner.',
     });
+  });
+
+  it('uses the submit-plan project root environment override', async () => {
+    await fs.writeFile(
+      path.join(projectRoot, '.mastracode', 'plans', 'env-plan.md'),
+      '# Env Plan\n\nFrom env.',
+      'utf-8',
+    );
+
+    vi.stubEnv('MASTRA_SUBMIT_PLAN_PROJECT_ROOT', projectRoot);
+
+    try {
+      await expect(enrichSubmitPlanSuspendPayload({ path: '.mastracode/plans/env-plan.md' })).resolves.toEqual({
+        path: '.mastracode/plans/env-plan.md',
+        title: 'Env Plan',
+        plan: 'From env.',
+      });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('enriches submit_plan suspended stream chunks', async () => {

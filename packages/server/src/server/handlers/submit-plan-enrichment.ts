@@ -13,7 +13,9 @@ interface SubmitPlanFile {
 }
 
 const getProjectRoot = (projectRoot?: string) =>
-  path.resolve(projectRoot ?? process.env.MASTRA_PROJECT_ROOT ?? process.cwd());
+  path.resolve(
+    projectRoot ?? process.env.MASTRA_SUBMIT_PLAN_PROJECT_ROOT ?? process.env.MASTRA_PROJECT_ROOT ?? process.cwd(),
+  );
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

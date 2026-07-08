@@ -175,12 +175,26 @@ describe('SubmitPlanBadge', () => {
       path: '/workspace/.mastra/plans/review.md',
     };
 
-    it('renders the path-only review card', () => {
+    it('renders an unavailable plan file state', () => {
       renderBadge({ toolCallId: 'call-2', suspendPayload, result: undefined });
 
-      expect(screen.getByText('Submitted plan')).toBeTruthy();
-      expect(screen.getByText('Plan file')).toBeTruthy();
-      expect(screen.getByText('/workspace/.mastra/plans/review.md')).toBeTruthy();
+      expect(screen.getByText('Plan file unavailable')).toBeTruthy();
+      expect(screen.getByText(/Could not read the plan file/)).toBeTruthy();
+      expect(within(badge()).queryByRole('button', { name: /approve plan/i })).toBeNull();
+      expect(within(badge()).getByRole('button', { name: /reject plan/i })).toBeTruthy();
+      expect(within(badge()).getByRole('button', { name: /open request changes/i })).toBeTruthy();
+    });
+
+    it('rejects without fake plan content', () => {
+      const { approveToolcall } = renderBadge({ toolCallId: 'call-2', suspendPayload, result: undefined });
+
+      fireEvent.click(within(badge()).getByRole('button', { name: /reject plan/i }));
+
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
+      expect(approveToolcall).toHaveBeenCalledWith('call-2', {
+        action: 'rejected',
+        path: '/workspace/.mastra/plans/review.md',
+      });
     });
   });
 

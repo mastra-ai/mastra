@@ -5,6 +5,7 @@ import { Memory } from '@mastra/memory';
 import { MODEL_TOKENS } from '../../../../../docs/src/plugins/remark-model-tokens/models';
 import { previewScorers } from '../scorers/preview-scorers';
 import { storage } from '../store';
+import { writePlanFileTool } from '../tools/plan-file';
 import { previewStatusTool } from '../tools/preview-status';
 
 function resolvePreviewModel() {
@@ -32,6 +33,7 @@ Use the preview status tool when a reviewer asks about preview health, routing, 
   model,
   tools: {
     previewStatusTool,
+    write_plan_file: writePlanFileTool,
     submit_plan: submitPlanTool,
   },
   // Memory is enabled (history only, no semantic recall) so the chat thread

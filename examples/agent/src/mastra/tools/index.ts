@@ -1,6 +1,8 @@
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
+export { writePlanFileTool } from './plan-file-tool.js';
+
 export const cookingTool = createTool({
   id: 'cooking-tool',
   description: 'Used to cook given an ingredient',

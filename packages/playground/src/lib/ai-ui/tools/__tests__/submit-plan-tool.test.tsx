@@ -112,7 +112,7 @@ describe('SubmitPlanTool', () => {
   });
 
   describe('when only a path is present', () => {
-    it('renders a path-only review card', () => {
+    it('renders an unavailable plan file card', () => {
       const metadata: MessageMetadata = {
         suspendedTools: {
           'call-4': {
@@ -125,9 +125,9 @@ describe('SubmitPlanTool', () => {
 
       renderTool({ toolName: 'submit_plan', toolCallId: 'call-4', output: undefined, metadata });
 
-      expect(screen.getByText('Submitted plan')).toBeTruthy();
-      expect(screen.getByText('Plan file')).toBeTruthy();
-      expect(screen.getByText('/workspace/.mastra/plans/plan.md')).toBeTruthy();
+      expect(screen.getByText('Plan file unavailable')).toBeTruthy();
+      expect(screen.getByText(/Could not read the plan file/)).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /approve plan/i })).toBeNull();
     });
   });
 

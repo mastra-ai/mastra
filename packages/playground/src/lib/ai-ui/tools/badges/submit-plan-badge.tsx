@@ -30,7 +30,9 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const { path, title, plan } = suspendPayload;
-  const resolvedTitle = title ?? 'Submitted plan';
+  const hasPlan = typeof plan === 'string' && plan.length > 0;
+  const missingPlanMessage = `Could not read the plan file at \`${path}\`. Make sure the agent writes the markdown file before submitting it.`;
+  const resolvedTitle = hasPlan ? (title ?? 'Submitted plan') : 'Plan file unavailable';
   const trimmedFeedback = feedback.trim();
   const isResolved = !!result || toolCallApprovals?.[toolCallId]?.status === 'approved';
   const status = getSubmitPlanStatus(result);
@@ -51,10 +53,10 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
 
   const copyContent = useMemo(
     () =>
-      [resolvedTitle, `File: ${path}`, plan]
+      [resolvedTitle, `File: ${path}`, hasPlan ? plan : missingPlanMessage]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join('\n\n'),
-    [path, plan, resolvedTitle],
+    [hasPlan, missingPlanMessage, path, plan, resolvedTitle],
   );
 
   const buildResumeData = useCallback(
@@ -136,17 +138,19 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
         </PopoverContent>
       </Popover>
 
-      <Button
-        type="button"
-        variant="primary"
-        size="icon-sm"
-        tooltip="Approve plan"
-        aria-label="Approve plan"
-        onClick={handleApprove}
-        disabled={isRunning}
-      >
-        <CheckIcon />
-      </Button>
+      {hasPlan && (
+        <Button
+          type="button"
+          variant="primary"
+          size="icon-sm"
+          tooltip="Approve plan"
+          aria-label="Approve plan"
+          onClick={handleApprove}
+          disabled={isRunning}
+        >
+          <CheckIcon />
+        </Button>
+      )}
     </>
   ) : undefined;
 
@@ -157,7 +161,7 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
       className="mb-4"
       title={resolvedTitle}
       path={path}
-      plan={plan}
+      plan={hasPlan ? plan : missingPlanMessage}
       status={statusBadge}
       copyContent={copyContent}
       leftActions={leftActions}
