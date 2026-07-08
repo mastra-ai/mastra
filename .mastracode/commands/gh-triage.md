@@ -60,7 +60,7 @@ Severity: critical = security/data loss/outage/core path broken; high = serious 
 
 ## Issue/PR Comment
 
-Use this only when the best next action is to ask the author for information, explain duplicate/non-actionable handling, or leave an author-facing Review outcome. It is separate from the Maintainer's Triage Note.
+Use this to ask the author for information or explain duplicate/non-actionable handling. Do not use a new comment for normal Review output; Review findings go in the existing Maintainer's Triage Note unless the user asks for an author-facing comment.
 
 ```markdown
 Thanks for opening this.
@@ -235,7 +235,7 @@ Only offer D for Cases B-D. Never offer D for Case A. If output was already post
 
 ## Phase 2: Review
 
-Only enter after explicit user selection.
+Only enter after explicit user selection. Do not stop after writing the working file; continue into the matching skill, finish its interactive Review flow, then ask the note update question below.
 
 ### 1. Create one working file
 
@@ -255,7 +255,9 @@ For Issue Review, build the file from the issue body, comments, timeline, labels
 
 The file should contain only Review context: input URL/number, selected route, Maintainer's Triage Note comment URL/id if available, relevant facts, and questions for the skill. Do not embed the Maintainer's Triage Note template or issue/PR comment template in the working file.
 
-### 2. Activate the matching skill
+### 2. Activate the matching skill and continue through Review
+
+After writing the working file, immediately activate the matching skill with `--working-file`. Do not end with a prep summary.
 
 ```text
 Activate skill: understand-pr
@@ -269,20 +271,20 @@ Arguments: <issue number or URL> --working-file .issue-review/GH_TRIAGE_ISSUE_<i
 
 For multiple PRs, ask which PR first. No-action routes do not enter Review unless the user corrects the route.
 
-### 3. Ask whether to update the note
+### 3. Update the existing note
 
-After Review finishes or stops:
+Before ending Phase 2, update the existing Maintainer's Triage Note with Review findings. Do not add a separate comment or PR review as lifecycle output unless the user asks for an author-facing message.
 
 ```text
-Review is complete enough to update the Maintainer's Triage Note.
+Review is complete enough to update the existing Maintainer's Triage Note.
 
-A) Update the Maintainer's Triage Note with Review findings
+A) Update the existing Maintainer's Triage Note with Review findings
 B) Show me the proposed note update first
-C) Do not update the note — keep the working file only
+C) Draft a separate author-facing comment after updating the note
 D) Continue Review before updating anything
 ```
 
-If approved, update the same note: `Current Phase: Reviewed`, concise `Review` findings, numeric Review confidence, `Approve` still pending.
+When updating, edit the same note comment: `Current Phase: Reviewed`, concise `Review` findings, numeric Review confidence, `Approve` still pending.
 
 ## Phase 3: Approve
 
