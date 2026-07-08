@@ -108,7 +108,7 @@ const config: Config = {
     [
       '@mastra/docusaurus-plugin-algolia',
       {
-        indexName: 'docs_v1_crawler',
+        indexName: 'docs_main',
         hitsPerPage: 20,
         algoliaAppId: process.env.ALGOLIA_APP_ID!,
         algoliaSearchApiKey: process.env.ALGOLIA_SEARCH_API_KEY!,
