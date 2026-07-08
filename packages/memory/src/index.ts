@@ -2158,6 +2158,7 @@ Notes:
       resourceId: opts.resourceId,
       lastMessages,
       maxInputTokens: maxInputTokens ?? SUMMARIZE_THREAD_DEFAULTS.maxInputTokens,
+      abortSignal: summarizeOptions.abortSignal,
     });
     return summarizeConversation({
       ...summarizeOptions,
@@ -2178,11 +2179,13 @@ Notes:
     resourceId,
     lastMessages,
     maxInputTokens,
+    abortSignal,
   }: {
     threadId: string;
     resourceId?: string;
     lastMessages?: number;
     maxInputTokens: number;
+    abortSignal?: AbortSignal;
   }): Promise<MastraDBMessage[]> {
     if (lastMessages !== undefined && lastMessages <= 0) return [];
 
@@ -2192,6 +2195,8 @@ Notes:
     let page = 0;
 
     while (true) {
+      abortSignal?.throwIfAborted();
+
       // Each page is the next-older slice of the thread, returned in chronological order
       // (recall queries newest-first and reverses each page when no orderBy is given).
       const { messages: batch, hasMore } = await this.recall({
@@ -2205,6 +2210,8 @@ Notes:
       let reachedLimit = false;
       const kept: MastraDBMessage[] = [];
       for (let i = batch.length - 1; i >= 0; i--) {
+        abortSignal?.throwIfAborted();
+
         const message = batch[i]!;
         if (lastMessages !== undefined && collected.length + kept.length >= lastMessages) {
           reachedLimit = true;

@@ -294,6 +294,27 @@ describe('Memory.summarizeThread()', () => {
     expect(promptText()).not.toContain('marker-old');
   });
 
+  it('stops paging through storage when the abort signal fires during loading', async () => {
+    const texts = Array.from({ length: 120 }, (_, index) => `marker-${index + 1}`);
+    const { memory, threadId, resourceId } = await createThreadWithMessages(texts);
+    const { model, doStream } = createMockSummarizerModel(OBSERVATION_OUTPUT);
+
+    const controller = new AbortController();
+    const originalRecall = memory.recall.bind(memory);
+    const recallSpy = vi.spyOn(memory, 'recall').mockImplementation(async args => {
+      const result = await originalRecall(args);
+      controller.abort();
+      return result;
+    });
+
+    await expect(
+      memory.summarizeThread({ model: model as any, threadId, resourceId, abortSignal: controller.signal }),
+    ).rejects.toThrow();
+
+    expect(recallSpy).toHaveBeenCalledTimes(1);
+    expect(doStream).not.toHaveBeenCalled();
+  });
+
   it('paginates across storage pages and preserves chronological order', async () => {
     const texts = Array.from({ length: 120 }, (_, index) => `marker-${String(index + 1).padStart(3, '0')}`);
     const { memory, threadId, resourceId } = await createThreadWithMessages(texts);
