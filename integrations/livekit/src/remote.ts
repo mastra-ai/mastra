@@ -186,7 +186,9 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
   return ctx => {
     if (ctx.messages.length === 0) return null;
 
-    const abortController = new AbortController();
+    // Reassigned per retry attempt (see the loop below) so a watchdog abort on one attempt can't
+    // poison the next; `cancel()` always aborts whichever attempt is currently in flight.
+    let currentAbortController: AbortController | undefined;
     let cancelled = false;
     // Accumulated as the turn streams so the post-turn hook sees what was actually produced.
     let replyText = '';
@@ -224,6 +226,10 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
         let retryable = true;
         try {
           for (let attempt = 0; ; attempt++) {
+            // A fresh controller per attempt: reusing one across retries meant a watchdog abort on an
+            // earlier attempt left every subsequent attempt's fetch already-aborted before it started.
+            const abortController = new AbortController();
+            currentAbortController = abortController;
             let timedOut = false;
             let watchdog: ReturnType<typeof setTimeout> | undefined;
             const clearWatchdog = () => {
@@ -356,7 +362,7 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
       },
       cancel: () => {
         cancelled = true;
-        abortController.abort();
+        currentAbortController?.abort();
       },
     });
   };

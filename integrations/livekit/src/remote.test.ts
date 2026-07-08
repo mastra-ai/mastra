@@ -49,7 +49,12 @@ function startFakeServer(handler: Handler): Promise<FakeServer> {
       res.on('close', () => {
         if (!res.writableEnded) state.aborted = true;
       });
-      void Promise.resolve(handler({ req, res, recorded })).catch(() => {});
+      void Promise.resolve(handler({ req, res, recorded })).catch(error => {
+        // Surface handler bugs instead of leaving the request hanging with no clue why: destroying
+        // the response makes the client's fetch reject immediately, and the log pinpoints the cause.
+        console.error('[remote.test] fake server handler threw', error);
+        if (!res.writableEnded) res.destroy(error instanceof Error ? error : new Error(String(error)));
+      });
     });
   });
   return new Promise(resolve => {
@@ -459,6 +464,26 @@ describe('createRemoteAgentReplyGenerator — first-token timeout (D9)', () => {
     const gen = createRemoteAgentReplyGenerator({ baseUrl: server.url, agentId: 'test', retries: 0, timeoutMs: 500 });
     const stream = (await gen(makeCtx())) as ReadableStream<string>;
     expect(await readAll(stream)).toEqual(['quick']);
+  });
+
+  it('recovers on a retry after the watchdog aborts the first attempt (fresh AbortController per attempt)', async () => {
+    let requestCount = 0;
+    const server = await startFakeServer(({ res }) => {
+      requestCount++;
+      if (requestCount === 1) {
+        // Accept and hang forever so the watchdog fires and aborts this attempt.
+        openSSE(res);
+        return;
+      }
+      // The retry must not inherit an already-aborted signal from the first attempt.
+      openSSE(res);
+      writeChunk(res, { type: 'text-delta', payload: { text: 'recovered' } });
+      endSSE(res);
+    });
+    const gen = createRemoteAgentReplyGenerator({ baseUrl: server.url, agentId: 'test', retries: 1, timeoutMs: 50 });
+    const stream = (await gen(makeCtx())) as ReadableStream<string>;
+    expect(await readAll(stream)).toEqual(['recovered']);
+    expect(server.state.requests).toHaveLength(2);
   });
 });
 
