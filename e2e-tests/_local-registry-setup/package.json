@@ -4,5 +4,13 @@
   "private": true,
   "main": "index.js",
   "type": "module",
-  "dependencies": {}
+  "dependencies": {
+    "get-port": "^7.1.0",
+    "tinyglobby": "^0.2.16",
+    "verdaccio": "^6.2.5",
+    "verdaccio-auth-memory": "^10.3.1"
+  },
+  "scripts": {
+    "publish-ci-registry": "node publish-ci-registry.js"
+  }
 }
