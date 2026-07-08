@@ -42,11 +42,12 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
 - Next Steps: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
-- Confidence: <1/5|2/5|3/5|4/5|5/5> — <why enough for triage or what is uncertain>
+- Confidence: Pending Review
 
 **Review:**
 - Status: <not started|in progress|complete>
 - Findings: <brief implementation/root-cause/check-risk summary, or `Not reviewed yet.`>
+- Confidence: <Pending Review|1/5|2/5|3/5|4/5|5/5> — <set during Review; keep `Pending Review` until then>
 - Follow-up: <author/maintainer follow-up needed, or `None yet.`>
 
 **Approve:**
@@ -55,7 +56,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Confidence uses 1/5-5/5, where 5/5 means the route is strongly supported by direct evidence and 1/5 means the route is tentative and needs more information. Use recent relevant-area history as evidence when it shows recurrence, regression risk, ownership, or core-path impact.
+Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Triage confidence stays `Pending Review`; Review confidence uses 1/5-5/5, where 5/5 means the finding is strongly supported by direct evidence and 1/5 means it is tentative and needs more information. Use recent relevant-area history as evidence when it shows recurrence, regression risk, ownership, or core-path impact.
 
 ## Issue/PR Comment
 
@@ -114,7 +115,7 @@ gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,l
 - [ ] Ignore Vercel checks during Triage; do not cite them as blockers or failures.
 - [ ] If CI workflows are waiting for approval or have not been approved, do not report individual failing/pending checks. Recommend `Approve CI checks before Review` as the next step.
 - [ ] Only report non-Vercel failing checks when CI has already been approved and the check result is real.
-- [ ] Check recent git history for the relevant area to inform next steps, severity, confidence, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage.
+- [ ] Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Leave confidence as `Pending Review`.
 
 ```bash
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
@@ -281,7 +282,7 @@ C) Do not update the note — keep the working file only
 D) Continue Review before updating anything
 ```
 
-If approved, update the same note: `Current Phase: Reviewed`, concise `Review` findings, `Approve` still pending.
+If approved, update the same note: `Current Phase: Reviewed`, concise `Review` findings, numeric Review confidence, `Approve` still pending.
 
 ## Phase 3: Approve
 
