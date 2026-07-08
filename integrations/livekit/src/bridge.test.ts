@@ -337,12 +337,19 @@ describe('MastraVoiceAgent reply generator seam', () => {
 });
 
 describe('DisclosureReminder', () => {
-  it('returns the reminder once the interval elapses, then resets the clock', () => {
+  it('returns the reminder once the interval elapses, then resets the clock once markDelivered is called', () => {
     const reminder = new DisclosureReminder(1000, 'AI reminder', 0);
     expect(reminder.due(500)).toBeUndefined(); // 500ms < 1000ms
-    expect(reminder.due(1000)).toBe('AI reminder'); // due; clock resets to 1000
+    expect(reminder.due(1000)).toBe('AI reminder'); // due
+    reminder.markDelivered(1000); // clock resets to 1000 once delivery is confirmed
     expect(reminder.due(1500)).toBeUndefined(); // only 500ms since the reset
     expect(reminder.due(2000)).toBe('AI reminder'); // due again
+  });
+
+  it('stays due if markDelivered is never called, instead of silently skipping an interval', () => {
+    const reminder = new DisclosureReminder(1000, 'AI reminder', 0);
+    expect(reminder.due(1000)).toBe('AI reminder'); // due, but never delivered
+    expect(reminder.due(1500)).toBe('AI reminder'); // still due — the clock never reset
   });
 });
 

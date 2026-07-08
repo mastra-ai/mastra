@@ -25,11 +25,16 @@ export class DisclosureReminder {
   ) {
     this.lastAt = now;
   }
-  /** Call once per turn: the reminder text if it's due (resetting the clock), else `undefined`. */
+  /** Call once per turn: the reminder text if it's due, else `undefined`. Does not reset the clock —
+   * call {@link DisclosureReminder.markDelivered} once the reminder is actually threaded into the
+   * outgoing reply, so a reminder that never makes it out isn't silently skipped for a full interval. */
   due(now: number = Date.now()): string | undefined {
     if (now - this.lastAt < this.everyMs) return undefined;
-    this.lastAt = now;
     return this.text;
+  }
+  /** Resets the clock. Call only once the reminder text from {@link due} was actually emitted. */
+  markDelivered(now: number = Date.now()): void {
+    this.lastAt = now;
   }
 }
 
@@ -475,9 +480,12 @@ export class MastraVoiceAgent extends voice.Agent {
 
     // Periodic AI re-disclosure: when the interval has elapsed, prefix this turn's spoken reply with
     // the reminder. Done at the turn boundary (never mid-turn), riding the same stream so barge-in
-    // cancellation still propagates to the underlying generation.
+    // cancellation still propagates to the underlying generation. The clock only resets once the
+    // reminder is actually threaded into the outgoing reply below, not just because it was due.
     const reminder = this.reminder?.due();
-    return reminder ? prependText(reply, reminder) : reply;
+    if (!reminder) return reply;
+    this.reminder?.markDelivered();
+    return prependText(reply, reminder);
   }
 }
 
