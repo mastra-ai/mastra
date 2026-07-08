@@ -14,7 +14,7 @@
     "@mastra/agent-builder": "*",
     "dotenv": "^17.4.2",
     "vite": "^8.0.16",
-    "zod": "^3.25.76"
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@mastra/core": "*",
