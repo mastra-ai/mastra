@@ -31,23 +31,26 @@ function createTestMessage(
 }
 
 /** Mock model: doStream serves the summarizer output, doGenerate serves the structured-extraction follow-up. */
-function createMockSummarizerModel(streamText: string, generateObjectJson?: string) {
-  const doStream = vi.fn(async () => ({
-    stream: convertArrayToReadableStream([
-      { type: 'stream-start', warnings: [] },
-      { type: 'response-metadata', id: 'sum-1', modelId: 'mock-summarizer', timestamp: new Date() },
-      { type: 'text-start', id: 'text-1' },
-      { type: 'text-delta', id: 'text-1', delta: streamText },
-      { type: 'text-end', id: 'text-1' },
-      {
-        type: 'finish',
-        finishReason: 'stop' as const,
-        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-      },
-    ]),
-    rawCall: { rawPrompt: null, rawSettings: {} },
-    warnings: [],
-  }));
+function createMockSummarizerModel(streamText: string, generateObjectJson?: string, onDoStream?: (args: any) => void) {
+  const doStream = vi.fn(async (args: any) => {
+    onDoStream?.(args);
+    return {
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'sum-1', modelId: 'mock-summarizer', timestamp: new Date() },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: streamText },
+        { type: 'text-end', id: 'text-1' },
+        {
+          type: 'finish',
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
+        },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    };
+  });
   const doGenerate = vi.fn(async () => ({
     rawCall: { rawPrompt: null, rawSettings: {} },
     finishReason: 'stop' as const,
@@ -83,27 +86,10 @@ describe('summarizeConversation()', () => {
 
   it('appends custom instructions to the summarizer system prompt', async () => {
     let systemText = '';
-    const doStream = vi.fn(async ({ prompt }: any) => {
+    const { model } = createMockSummarizerModel(OBSERVATION_OUTPUT, undefined, ({ prompt }: any) => {
       const systemMessage = prompt.find((message: any) => message.role === 'system');
       systemText = typeof systemMessage?.content === 'string' ? systemMessage.content : '';
-      return {
-        stream: convertArrayToReadableStream([
-          { type: 'stream-start', warnings: [] },
-          { type: 'response-metadata', id: 'sum-1', modelId: 'mock-summarizer', timestamp: new Date() },
-          { type: 'text-start', id: 'text-1' },
-          { type: 'text-delta', id: 'text-1', delta: OBSERVATION_OUTPUT },
-          { type: 'text-end', id: 'text-1' },
-          {
-            type: 'finish',
-            finishReason: 'stop' as const,
-            usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150 },
-          },
-        ]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-        warnings: [],
-      };
     });
-    const model = new MockLanguageModelV2({ doStream } as any);
 
     await summarizeConversation({
       model: model as any,
@@ -175,6 +161,44 @@ describe('summarizeConversation()', () => {
 });
 
 describe('Memory.summarizeThread()', () => {
+  /** Seed a memory instance with one thread whose messages carry the given texts, in order. */
+  async function createThreadWithMessages(texts: string[]) {
+    const memory = new Memory({ storage: new InMemoryStore() });
+    const threadId = 'call-thread';
+    const resourceId = 'caller-42';
+
+    await memory.saveThread({
+      thread: {
+        id: threadId,
+        resourceId,
+        title: 'Call',
+        metadata: {},
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    });
+    const base = Date.now();
+    await memory.saveMessages({
+      messages: texts.map((text, index) =>
+        createTestMessage(text, index % 2 === 0 ? 'user' : 'assistant', {
+          threadId,
+          resourceId,
+          createdAt: new Date(base + index * 1000),
+        }),
+      ),
+    });
+    return { memory, threadId, resourceId };
+  }
+
+  /** Capture every summarizer prompt as one searchable string. */
+  function createPromptCapturingModel() {
+    const prompts: string[] = [];
+    const { model } = createMockSummarizerModel(OBSERVATION_OUTPUT, undefined, (args: any) =>
+      prompts.push(JSON.stringify(args.prompt)),
+    );
+    return { model, promptText: () => prompts.join('\n') };
+  }
+
   it('loads the thread messages from storage and summarizes them', async () => {
     const memory = new Memory({ storage: new InMemoryStore() });
     const threadId = 'call-thread';
@@ -207,5 +231,50 @@ describe('Memory.summarizeThread()', () => {
 
     expect(doStream).toHaveBeenCalled();
     expect(result.summary).toContain('roof inspection');
+  });
+
+  it('only summarizes the last N messages when lastMessages is set', async () => {
+    const { memory, threadId, resourceId } = await createThreadWithMessages([
+      'marker-one',
+      'marker-two',
+      'marker-three',
+      'marker-four',
+      'marker-five',
+    ]);
+    const { model, promptText } = createPromptCapturingModel();
+
+    await memory.summarizeThread({ model: model as any, threadId, resourceId, lastMessages: 2 });
+
+    expect(promptText()).toContain('marker-four');
+    expect(promptText()).toContain('marker-five');
+    expect(promptText()).not.toContain('marker-one');
+    expect(promptText()).not.toContain('marker-two');
+    expect(promptText()).not.toContain('marker-three');
+  });
+
+  it('stops loading older messages once maxInputTokens is crossed, always keeping the newest', async () => {
+    const { memory, threadId, resourceId } = await createThreadWithMessages([
+      `marker-old ${'lorem '.repeat(200)}`,
+      `marker-new ${'ipsum '.repeat(200)}`,
+    ]);
+    const { model, promptText } = createPromptCapturingModel();
+
+    await memory.summarizeThread({ model: model as any, threadId, resourceId, maxInputTokens: 10 });
+
+    expect(promptText()).toContain('marker-new');
+    expect(promptText()).not.toContain('marker-old');
+  });
+
+  it('paginates across storage pages and preserves chronological order', async () => {
+    const texts = Array.from({ length: 120 }, (_, index) => `marker-${String(index + 1).padStart(3, '0')}`);
+    const { memory, threadId, resourceId } = await createThreadWithMessages(texts);
+    const { model, promptText } = createPromptCapturingModel();
+
+    await memory.summarizeThread({ model: model as any, threadId, resourceId });
+
+    const text = promptText();
+    expect(text).toContain('marker-001');
+    expect(text).toContain('marker-120');
+    expect(text.indexOf('marker-001')).toBeLessThan(text.indexOf('marker-120'));
   });
 });
