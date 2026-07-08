@@ -12,7 +12,7 @@
 # src/web/.env.example.
 services:
   app-db:
-    image: postgres:16
+    image: postgres:18
     container_name: mastracode-web-db
     ports:
       - '54329:5432'
