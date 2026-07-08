@@ -33,7 +33,7 @@ Start with **Triage** only. In `--headless` mode, choose the next step, post the
 Use one GitHub comment for the lifecycle. Update the same comment across phases.
 
 ```markdown
-## 🟡 Maintainer's Triage Note
+## <severity> Maintainer's Triage Note
 
 **Current Phase:** Triaged
 
