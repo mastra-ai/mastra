@@ -45,11 +45,13 @@ export const queryKeys = {
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     threadId: string | undefined,
+    syncEpoch?: number,
   ) =>
     [
       ...queryKeys.agentControllerSession(agentControllerId, resourceId),
       'threads',
       threadId ?? null,
       'messages',
+      syncEpoch ?? 0,
     ] as const,
 } as const;

@@ -6,7 +6,7 @@
  * props again. Driven end-to-end: real fetch/SSE transport, MSW at the
  * network boundary.
  */
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -17,6 +17,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatSessionProvider, useChatSession } from '../ChatSessionProvider';
+import { useThreadMessages } from '../ChatThreadMessages';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
@@ -125,6 +126,11 @@ function Probe() {
   );
 }
 
+function MessagesProbe() {
+  const { messagesPending } = useThreadMessages();
+  return <span data-testid="messages-pending">{messagesPending ? 'yes' : 'no'}</span>;
+}
+
 function renderProbe() {
   return renderWithProviders(
     <ActiveProjectProvider>
@@ -136,6 +142,69 @@ function renderProbe() {
 }
 
 describe('ChatSessionProvider', () => {
+  it('given the first state request is still pending, then it shows the connection loading state without mounting children', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(http.get(SESSION, () => new Promise<Response>(() => {})));
+
+    renderProbe();
+
+    expect(screen.getByText('Connecting to agent…')).toBeInTheDocument();
+    expect(screen.queryByTestId('status')).not.toBeInTheDocument();
+  });
+
+  it('given the initial session create fails, then it shows the connection error state without mounting children', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(http.post(`${API}/sessions`, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
+
+    renderProbe();
+
+    await waitFor(() =>
+      expect(screen.getByRole('alert')).toHaveTextContent('Disconnected. Check the server and reload to reconnect.'),
+    );
+    expect(screen.queryByTestId('status')).not.toBeInTheDocument();
+  });
+
+  it('given a dormant project without a resource id, then children still render with a connecting session', async () => {
+    const dormantProject: Project = { ...project, id: 'project-dormant', resourceId: undefined };
+    seedProject([dormantProject], dormantProject);
+    server.use(http.get(`${TEST_BASE_URL}/web/project/resolve`, () => HttpResponse.json({ error: 'missing' }, { status: 404 })));
+
+    renderProbe();
+
+    expect(screen.getByTestId('status')).toHaveTextContent('connecting');
+    expect(screen.getByTestId('thread-id')).toHaveTextContent('(none)');
+  });
+
+  it('given thread messages are still loading, then the loader exposes pending until the transcript hydrates', async () => {
+    let resolveMessages: (messages: AgentControllerMessage[]) => void = () => {};
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        new Promise<Response>(resolve => {
+          resolveMessages = messages => resolve(HttpResponse.json({ messages }));
+        }),
+      ),
+    );
+
+    renderWithProviders(
+      <ActiveProjectProvider>
+        <ChatSessionProvider>
+          <Probe />
+          <MessagesProbe />
+        </ChatSessionProvider>
+      </ActiveProjectProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByTestId('messages-pending')).toHaveTextContent('yes'));
+    resolveMessages([{ id: 'hydrated-message', role: 'user', content: [{ type: 'text', text: 'hydrated' }] }]);
+
+    await waitFor(() => expect(screen.getByTestId('messages-pending')).toHaveTextContent('no'));
+    await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('1'));
+  });
+
   it('given a seeded project, when the session connects, then it binds the session to the workspace path before ready', async () => {
     const requests: string[] = [];
     seedProject();

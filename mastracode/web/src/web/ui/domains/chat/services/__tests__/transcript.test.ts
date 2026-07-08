@@ -1,7 +1,7 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../transcript';
+import { deriveRunIndicators, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
@@ -17,6 +17,86 @@ function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
     typeof entry === 'object' && entry !== null && 'kind' in entry && entry.kind === 'message' && 'message' in entry
   );
 }
+
+describe('deriveRunIndicators', () => {
+  it('marks an idle transcript as not busy', () => {
+    expect(deriveRunIndicators(initialTranscript)).toEqual({ busy: false, showWorkingIndicator: false });
+  });
+
+  it('shows the working indicator while a run has no assistant text yet', () => {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'agent_start' } });
+
+    expect(deriveRunIndicators(state)).toEqual({ busy: true, showWorkingIndicator: true });
+  });
+
+  it('hides the working indicator while streaming assistant text', () => {
+    const running = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'agent_start' } });
+    const state = transcriptReducer(running, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        message: { id: 'assistant-1', role: 'assistant', content: [{ type: 'text', text: 'Streaming text' }] },
+      },
+    });
+
+    expect(deriveRunIndicators(state)).toEqual({ busy: true, showWorkingIndicator: false });
+  });
+});
+
+describe('transcript reducer history hydration', () => {
+  const messages: AgentControllerMessage[] = [{ id: 'user-1', role: 'user', content: [{ type: 'text', text: 'Hi' }] }];
+
+  function threadState(threadId = 'thread-1') {
+    return transcriptReducer(initialTranscript, { type: 'reset', threadId });
+  }
+
+  it('hydrates an empty idle transcript at most once per thread', () => {
+    const hydrated = transcriptReducer(threadState(), { type: 'hydrateMessages', messages });
+
+    expect(hydrated.entries).toHaveLength(1);
+    expect(hydrated.hydratedThreadId).toBe('thread-1');
+    // Re-dispatching with fresh data is a no-op — same state reference, so a
+    // render-phase dispatch cannot loop.
+    expect(transcriptReducer(hydrated, { type: 'hydrateMessages', messages: [] })).toBe(hydrated);
+  });
+
+  it('ignores hydration without a thread or into a busy/non-empty transcript', () => {
+    expect(transcriptReducer(initialTranscript, { type: 'hydrateMessages', messages })).toBe(initialTranscript);
+
+    const running = transcriptReducer(threadState(), { type: 'event', event: { type: 'agent_start' } });
+    expect(transcriptReducer(running, { type: 'hydrateMessages', messages })).toBe(running);
+
+    const withEntry = transcriptReducer(threadState(), { type: 'localNotice', level: 'info', text: 'hello' });
+    expect(transcriptReducer(withEntry, { type: 'hydrateMessages', messages })).toBe(withEntry);
+  });
+
+  it('re-arms hydration via resetHydration and reset', () => {
+    const hydrated = transcriptReducer(threadState(), { type: 'hydrateMessages', messages });
+
+    const rearmed = transcriptReducer(hydrated, { type: 'resetHydration' });
+    expect(rearmed.hydratedThreadId).toBeUndefined();
+
+    const resetState = transcriptReducer(hydrated, { type: 'reset', threadId: 'thread-2' });
+    expect(resetState.hydratedThreadId).toBeUndefined();
+    expect(resetState.entries).toEqual([]);
+  });
+
+  it('resets to a new thread while preserving mode and model', () => {
+    const configured = transcriptReducer(initialTranscript, {
+      type: 'reset',
+      threadId: 'thread-1',
+      modeId: 'build',
+      modelId: 'anthropic/claude-4.5-sonnet',
+    });
+
+    const switched = transcriptReducer(configured, { type: 'resetThread', threadId: 'thread-2' });
+
+    expect(switched.threadId).toBe('thread-2');
+    expect(switched.modeId).toBe('build');
+    expect(switched.modelId).toBe('anthropic/claude-4.5-sonnet');
+    expect(switched.entries).toEqual([]);
+  });
+});
 
 describe('transcript reducer message entries', () => {
   it('hydrates controller messages as ordered MastraDBMessage entries', () => {

@@ -197,14 +197,11 @@ describe('MastraCode sidebar auth actions', () => {
 });
 
 describe('MastraCode empty thread state', () => {
-  it('given a project with no messages, when the app renders, then the Mastra Code wordmark hero appears', async () => {
+  it('given a project with no messages, when the app renders, then the empty-thread project summary appears', async () => {
     renderSeededApp();
 
-    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
-    const wordmark = screen.getByLabelText('Mastra Code');
-    expect(wordmark).toBeInTheDocument();
-    // The hero sits inside the transcript scroller, which centers empty content vertically.
-    expect(wordmark.closest('.place-items-center')).not.toBeNull();
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    expect(screen.queryByText('Loading messages')).not.toBeInTheDocument();
   });
 });
 

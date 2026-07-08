@@ -107,15 +107,17 @@ describe('ChatMessageList', () => {
     useAgentControllerHandlers();
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
-    expect(screen.getByText('Project')).toBeInTheDocument();
-    expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
-    expect(screen.getByText('Resource ID')).toBeInTheDocument();
-    expect(screen.getByText(RESOURCE_ID)).toBeInTheDocument();
-    expect(screen.getByText('Branch')).toBeInTheDocument();
-    expect(screen.getByText('main')).toBeInTheDocument();
-    expect(screen.getByText('Workspace')).toBeInTheDocument();
-    expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText('Ready for new conversation')).toBeInTheDocument();
+      expect(screen.getByText('Project')).toBeInTheDocument();
+      expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
+      expect(screen.getByText('Resource ID')).toBeInTheDocument();
+      expect(screen.getByText(RESOURCE_ID)).toBeInTheDocument();
+      expect(screen.getByText('Branch')).toBeInTheDocument();
+      expect(screen.getByText('main')).toBeInTheDocument();
+      expect(screen.getByText('Workspace')).toBeInTheDocument();
+      expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
+    });
   });
 
   it('given streamed assistant text, then it renders the transcript entry', async () => {

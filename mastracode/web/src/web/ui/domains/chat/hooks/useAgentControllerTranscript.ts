@@ -1,8 +1,8 @@
 import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMProgress } from '@mastra/client-js';
-import { useReducer, useRef } from 'react';
+import { useReducer } from 'react';
 
 import { initialTranscript, transcriptReducer } from '../services/transcript';
-import type { TranscriptState, UsageSnapshot } from '../services/transcript';
+import type { UsageSnapshot } from '../services/transcript';
 
 interface SessionStateSnapshot {
   modeId?: string;
@@ -12,24 +12,32 @@ interface SessionStateSnapshot {
   tokenUsage?: UsageSnapshot;
 }
 
-export function useAgentControllerTranscript() {
-  const [transcript, dispatch] = useReducer(transcriptReducer, initialTranscript);
-  const transcriptRef = useRef<TranscriptState>(transcript);
-  const hydratedThreadRef = useRef<string | undefined>(undefined);
-  transcriptRef.current = transcript;
+export interface TranscriptInit {
+  state: SessionStateSnapshot;
+  threadId?: string;
+}
+
+export function useAgentControllerTranscript(init?: TranscriptInit) {
+  const [transcript, dispatch] = useReducer(transcriptReducer, init, initArg =>
+    initArg
+      ? transcriptReducer(initialTranscript, {
+          type: 'reset',
+          modeId: initArg.state.modeId,
+          modelId: initArg.state.modelId,
+          threadId: initArg.threadId ?? initArg.state.threadId,
+          omProgress: initArg.state.omProgress,
+          usage: initArg.state.tokenUsage,
+        })
+      : initialTranscript,
+  );
 
   const hydrateMessages = (messages?: AgentControllerMessage[]) => {
-    const current = transcriptRef.current;
-    const threadId = current.threadId;
-    if (!threadId || !messages) return;
-    if (hydratedThreadRef.current === threadId) return;
-    if (current.running || current.pending || current.entries.length > 0) return;
-    hydratedThreadRef.current = threadId;
-    dispatch({ type: 'hydrateMessages', messages, threadId });
+    if (!messages) return;
+    dispatch({ type: 'hydrateMessages', messages });
   };
 
   const resetHydration = () => {
-    hydratedThreadRef.current = undefined;
+    dispatch({ type: 'resetHydration' });
   };
 
   const reset = (state?: SessionStateSnapshot, threadId?: string) => {
@@ -44,8 +52,7 @@ export function useAgentControllerTranscript() {
   };
 
   const resetCurrentThread = (threadId?: string) => {
-    const prev = transcriptRef.current;
-    dispatch({ type: 'reset', threadId, modeId: prev.modeId, modelId: prev.modelId });
+    dispatch({ type: 'resetThread', threadId });
   };
 
   const syncState = (state: SessionStateSnapshot) => {
@@ -74,14 +81,8 @@ export function useAgentControllerTranscript() {
     dispatch({ type: 'localNotice', text, level });
   };
 
-  const resetDormant = () => {
-    hydratedThreadRef.current = undefined;
-    dispatch({ type: 'reset' });
-  };
-
   return {
     transcript,
-    transcriptRef,
     hydrateMessages,
     resetHydration,
     reset,
@@ -91,6 +92,5 @@ export function useAgentControllerTranscript() {
     localUser,
     resolvePrompt,
     pushNotice,
-    resetDormant,
   };
 }

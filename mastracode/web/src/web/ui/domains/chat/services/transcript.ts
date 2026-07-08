@@ -174,6 +174,12 @@ export interface TranscriptState {
   /** Current tokens/sec throughput (0 when idle). */
   tokensPerSec: number;
   /**
+   * @internal Thread whose persisted history has been folded into `entries`.
+   * Guards `hydrateMessages` so hydration applies at most once per thread and
+   * stays idempotent when dispatched during render.
+   */
+  hydratedThreadId?: string;
+  /**
    * @internal Timestamp (ms) of the first streamed content delta of the current
    * step — i.e. when decoding actually began. Used to measure tokens/sec over
    * decode time only, excluding TTFT and tool-execution gaps between steps.
@@ -192,6 +198,23 @@ export const initialTranscript: TranscriptState = {
   tokensPerSec: 0,
   _decodeStartedAt: 0,
 };
+
+export function deriveRunIndicators(transcript: TranscriptState): {
+  busy: boolean;
+  showWorkingIndicator: boolean;
+} {
+  const busy = transcript.running || transcript.pending;
+  const lastEntry = transcript.entries[transcript.entries.length - 1];
+  const lastEntryHasText =
+    lastEntry?.kind === 'message' &&
+    lastEntry.message.role === 'assistant' &&
+    lastEntry.message.content.parts.some(part => part.type === 'text' && part.text.trim().length > 0);
+  const showWorkingIndicator =
+    busy &&
+    !(lastEntry?.kind === 'message' && lastEntry.message.role === 'assistant' && lastEntry.streaming && lastEntryHasText);
+
+  return { busy, showWorkingIndicator };
+}
 
 let noticeSeq = 0;
 
@@ -220,13 +243,21 @@ type Action =
   | {
       /**
        * Fold persisted messages into the timeline while keeping all live state
-       * (mode/model/usage/goal/OM). Used by the query-driven history hydration,
-       * which can resolve after live stream events have already arrived —
-       * entries the history doesn't know about (matched by id) are preserved.
+       * (mode/model/usage/goal/OM). Applies at most once per thread and only
+       * into an empty, idle transcript — otherwise it is a no-op, which makes
+       * it safe to dispatch during render.
        */
       type: 'hydrateMessages';
       messages: AgentControllerMessage[];
-      threadId: string;
+    }
+  | {
+      /** Re-arm history hydration for the current thread. */
+      type: 'resetHydration';
+    }
+  | {
+      /** Reset to a new thread, preserving the session's mode/model selection. */
+      type: 'resetThread';
+      threadId?: string;
     }
   | {
       /**
@@ -256,11 +287,15 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'hydrate':
       return hydrate(action.messages, action.modeId, action.modelId, action.threadId, action.omProgress, action.usage);
     case 'hydrateMessages': {
-      const hydrated = hydrateEntries(action.messages);
-      const known = new Set(hydrated.map(entry => entry.id));
-      const liveExtras = state.entries.filter(entry => !known.has(entry.id));
-      return { ...state, threadId: action.threadId, entries: [...hydrated, ...liveExtras] };
+      const threadId = state.threadId;
+      if (!threadId || state.hydratedThreadId === threadId) return state;
+      if (state.running || state.pending || state.entries.length > 0) return state;
+      return { ...state, hydratedThreadId: threadId, entries: hydrateEntries(action.messages) };
     }
+    case 'resetHydration':
+      return state.hydratedThreadId === undefined ? state : { ...state, hydratedThreadId: undefined };
+    case 'resetThread':
+      return { ...initialTranscript, threadId: action.threadId, modeId: state.modeId, modelId: state.modelId };
     case 'syncState':
       return {
         ...state,

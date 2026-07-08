@@ -197,8 +197,9 @@ describe('ThreadList', () => {
     useAgentControllerHandlers([threadOne, threadTwo]);
     renderThreadList();
 
+    await screen.findByText('Second thread');
     await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
-    await userEvent.click(await screen.findByText('Second thread'));
+    await userEvent.click(screen.getByText('Second thread'));
 
     await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-two'));
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('no');

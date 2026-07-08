@@ -12,6 +12,7 @@ import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatSessionApi } from '../context/ChatSessionProvider';
 import { useChatSession } from '../context/ChatSessionProvider';
+import { useThreadMessages } from '../context/ChatThreadMessages';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -36,7 +37,8 @@ const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm l
 export function ChatMessageList() {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const { transcript, status, showWorkingIndicator, messagesPending, resolvePrompt } = useChatSession();
+  const { transcript, status, showWorkingIndicator, resolvePrompt } = useChatSession();
+  const { messagesPending } = useThreadMessages();
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
@@ -75,7 +77,7 @@ export function ChatMessageList() {
         activeProject={activeProject}
         transcript={transcript}
         showWorkingIndicator={showWorkingIndicator}
-        messagesPending={messagesPending || status === 'connecting'}
+        messagesPending={messagesPending}
         threadRef={threadRef}
         onApprove={onApprove}
         onRespond={onRespond}
