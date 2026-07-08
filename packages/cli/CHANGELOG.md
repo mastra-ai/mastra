@@ -1,5 +1,15 @@
 # mastra
 
+## 1.18.3-alpha.1
+
+### Patch Changes
+
+- Fixed .env file changes not triggering dev server reload by resolving env file paths to absolute paths before passing them to Rollup's file watcher ([#19051](https://github.com/mastra-ai/mastra/pull/19051))
+
+- Updated dependencies:
+  - @mastra/core@1.50.2-alpha.1
+  - @mastra/deployer@1.50.2-alpha.1
+
 ## 1.18.3-alpha.0
 
 ### Patch Changes

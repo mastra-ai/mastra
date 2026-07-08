@@ -1,5 +1,22 @@
 # mastracode
 
+## 0.30.1-alpha.1
+
+### Patch Changes
+
+- Fixed TUI height corruption caused by unsanitized ANSI escape codes in tool output. pi-tui's extractAnsiCode() only handles CSI sequences ending with m/G/K/H/J; other terminators (cursor movement, mode switches) caused the scanner to swallow subsequent visible text, making visibleWidth() undercount and collapsing the TUI to a few rows. Added sanitizeAnsiForRendering() to strip non-SGR CSI sequences at all content entry points. Also improved terminal cleanup on exit to prevent Kitty keyboard protocol from leaking (5;99~ codes). ([#18735](https://github.com/mastra-ai/mastra/pull/18735))
+
+- Publish the Mastra Code agent core as `@mastra/code-sdk` (previously the internal `@internal/mastracode` package), so third parties can build their own UIs and surfaces on top of the Mastra Code coding agent. The `mastracode` CLI now consumes it as a regular runtime dependency instead of bundling it into its published output. ([#18986](https://github.com/mastra-ai/mastra/pull/18986))
+
+- Improved Mastra Code web interface state handling without changing behavior. ([#19107](https://github.com/mastra-ai/mastra/pull/19107))
+
+- Updated dependencies [[`0cf3826`](https://github.com/mastra-ai/mastra/commit/0cf38268cee1913d1292d7d917c76744ea2aee6c), [`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9), [`e405085`](https://github.com/mastra-ai/mastra/commit/e405085fa8ee5ea07670b8d2b62b2376c0e0e414)]:
+  - @mastra/code-sdk@0.1.0-alpha.0
+  - @mastra/schema-compat@1.3.4-alpha.0
+  - @mastra/core@1.50.2-alpha.1
+  - @mastra/mcp@1.13.1
+  - @mastra/memory@1.22.3-alpha.0
+
 ## 0.30.1-alpha.0
 
 ### Patch Changes
