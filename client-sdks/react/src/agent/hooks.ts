@@ -6,7 +6,7 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, JSONValue, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
@@ -61,6 +61,25 @@ const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallI
     if (invocation.toolCallId !== toolCallId) return false;
     return invocation.state === 'result' || (invocation as { result?: unknown }).result != null;
   });
+
+const isJsonValue = (value: unknown): value is JSONValue => {
+  if (value === null) return true;
+
+  const valueType = typeof value;
+  if (valueType === 'string' || valueType === 'boolean') return true;
+  if (valueType === 'number') return Number.isFinite(value);
+
+  if (Array.isArray(value)) {
+    return value.every(isJsonValue);
+  }
+
+  if (typeof value !== 'object') return false;
+
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) return false;
+
+  return Object.values(value).every(isJsonValue);
+};
 
 /**
  * Normalize persisted initial messages back into the stream-friendly shape the
@@ -942,11 +961,25 @@ export const useChat = ({
       return;
     }
 
-    const response = await agent.approveToolCall({
-      runId: currentRunId,
-      toolCallId,
-      requestContext: _requestContext.current,
-    });
+    let response: Awaited<ReturnType<typeof agent.approveToolCall>>;
+
+    if (resumeData !== undefined) {
+      if (!isJsonValue(resumeData)) {
+        throw new Error('resumeData must be JSON-serializable');
+      }
+
+      response = await agent.resumeStream(resumeData, {
+        runId: currentRunId,
+        toolCallId,
+        requestContext: _requestContext.current,
+      });
+    } else {
+      response = await agent.approveToolCall({
+        runId: currentRunId,
+        toolCallId,
+        requestContext: _requestContext.current,
+      });
+    }
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {

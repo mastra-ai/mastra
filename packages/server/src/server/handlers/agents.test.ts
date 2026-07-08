@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
@@ -814,6 +817,62 @@ describe('Agent Routes Authorization', () => {
       // The resource should be overridden to user-a (from context)
       expect(capturedMemoryOption.resource).toBe('user-a');
     });
+
+    it('should enrich submit_plan suspension payloads from local plan files', async () => {
+      const projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-submit-plan-route-'));
+
+      try {
+        await fs.mkdir(path.join(projectRoot, '.mastracode', 'plans'), { recursive: true });
+        await fs.writeFile(
+          path.join(projectRoot, '.mastracode', 'plans', 'route-plan.md'),
+          '# Route Plan\n\nRead this body.',
+          'utf-8',
+        );
+        vi.stubEnv('MASTRA_PROJECT_ROOT', projectRoot);
+
+        vi.spyOn(mockAgent, 'stream').mockResolvedValue({
+          fullStream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({
+                type: 'tool-call-suspended',
+                runId: 'run-1',
+                from: 'AGENT',
+                payload: {
+                  toolName: 'submit_plan',
+                  toolCallId: 'call-1',
+                  args: { path: '.mastracode/plans/route-plan.md' },
+                  suspendPayload: { path: '.mastracode/plans/route-plan.md' },
+                },
+              });
+              controller.close();
+            },
+          }),
+        } as any);
+
+        const stream = (await STREAM_GENERATE_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+        } as any)) as ReadableStream;
+
+        const { value } = await stream.getReader().read();
+
+        expect(value).toMatchObject({
+          payload: {
+            suspendPayload: {
+              path: '.mastracode/plans/route-plan.md',
+              title: 'Route Plan',
+              plan: 'Read this body.',
+            },
+          },
+        });
+      } finally {
+        vi.unstubAllEnvs();
+        await fs.rm(projectRoot, { recursive: true, force: true });
+      }
+    });
   });
 
   describe('requestContext passthrough', () => {
@@ -1138,7 +1197,7 @@ describe('Agent Routes Authorization', () => {
       expect(capturedOptions.runId).toBe('test-run-id');
     });
 
-    it('should return fullStream from agent.resumeStream()', async () => {
+    it('should return a readable stream from agent.resumeStream()', async () => {
       const requestContext = createContextWithReservedKeys({});
       const expectedStream = new ReadableStream();
 
@@ -1155,7 +1214,7 @@ describe('Agent Routes Authorization', () => {
         resumeData: { step: 'next' },
       } as any);
 
-      expect(result).toBe(expectedStream);
+      expect(result).toBeInstanceOf(ReadableStream);
     });
   });
 
