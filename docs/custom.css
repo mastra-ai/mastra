@@ -502,7 +502,7 @@ html {
   height: auto;
   padding-inline: 0;
   padding-block: 0;
-  border-bottom: 2px solid var(--border);
+  border-bottom: 1px solid var(--border);
   box-shadow: 0 0 37.7px 0 #eaeaea;
   background-color: var(--ifm-navbar-background-color);
 }
@@ -553,7 +553,7 @@ html {
 }
 
 [data-theme='dark'] .navbar {
-  border-bottom-color: var(--mastra-border);
+  border-bottom-color: var(--border);
 }
 
 .navbar__link {
@@ -1257,9 +1257,7 @@ article p {
 
   /* ==================== SIDEBAR ==================== */
   .theme-doc-sidebar-container {
-    border-right: 2px solid var(--border);
-    /* Allow the inverse corner to overflow past the sidebar's right edge */
-    clip-path: none;
+    border-right: 1px solid var(--border);
   }
 
   [data-theme='dark'] .theme-doc-sidebar-container {
@@ -1619,7 +1617,11 @@ article p {
 
   .theme-doc-sidebar-container.theme-doc-sidebar-container {
     padding-inline-start: 0rem;
-    border-right: 2px solid var(--border);
+    border-right: 1px solid var(--border);
+    /* Docusaurus's sidebar container module sets clip-path: inset(0), which
+       clips the inverse corner that intentionally overflows the right edge.
+       Override it here with matching-or-higher specificity. */
+    clip-path: none;
   }
 
   [class*='sidebar']:has(> .menu) {

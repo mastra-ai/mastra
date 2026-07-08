@@ -25,19 +25,21 @@ export interface InverseCornerProps {
 /**
  * Fill path for a concave top-right corner in a 1×1 viewBox.
  *
- * Arc goes from (1,i) to (i,1), then closes through the (0,0) corner.
- * Straight edges overshoot by `o` to bleed over the parent's border.
+ * The arc runs corner-to-corner, from the box's top-right (1,0) to its
+ * bottom-left (0,1), then closes back through the (0,0) corner. The straight
+ * edges overshoot by `O` so the fill bleeds over the parent's borders and
+ * leaves no gap.
  */
-const O = 0.05
-const I = 0.03
-const FILL_PATH = `M ${1 + O} ${I} A 1 1 0 0 0 ${I} ${1 + O} L ${-O} ${1 + O} L ${-O} ${-O} L ${1 + O} ${-O} Z`
+const O = 0.1
+const FILL_PATH = `M 1 0 A 1 1 0 0 0 0 1 L ${-O} 1 L ${-O} ${-O} L 1 ${-O} Z`
 
 /**
- * Arc-only path for stroke rendering. Endpoints are inset by `I` so the arc
- * doesn't start flush at the edge, creating a smoother transition into the
- * parent's straight border.
+ * Arc-only path for stroke rendering. The arc spans the full quarter circle,
+ * from the top edge (1,0) to the left edge (0,1), so its endpoints land
+ * exactly on the parent's navbar-bottom and sidebar-right borders. Position
+ * the SVG so this stroke overlaps those borders (see the consumer).
  */
-const ARC_PATH = `M 1 ${I} A 1 1 0 0 0 ${I} 1`
+const ARC_PATH = `M 1 0 A 1 1 0 0 0 0 1`
 
 /**
  * Renders an "inverse border-radius" — a concave quarter-circle at the
@@ -64,6 +66,7 @@ export function InverseCorner({
         position: 'absolute',
         display: 'block',
         pointerEvents: 'none',
+        overflow: 'visible',
         bottom: '100%',
         right: 0,
         width: size,

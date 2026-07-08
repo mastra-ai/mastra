@@ -28,15 +28,17 @@ function DocSidebarDesktop({ path, sidebar, onCollapse, isHidden }: Props) {
       )}
     >
       <InverseCorner
-        size="12px"
-        fill="var(--ifm-background-color)"
+        size="24px"
+        fill="var(--ifm-navbar-background-color)"
         borderColor="var(--border)"
-        borderWidth={2}
+        borderWidth={1}
         style={{
+          position: 'fixed',
           bottom: 'auto',
+          right: 'auto',
           top: 'var(--ifm-navbar-height)',
-          right: -2,
-          transform: 'translateX(100%)',
+          left: 'var(--doc-sidebar-width)',
+          transform: 'translate(-0.5px, -0.5px)',
         }}
       />
       <div className="my-4 mr-[7px] mb-2">
