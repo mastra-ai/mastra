@@ -42,6 +42,14 @@ To switch the manifest manually: `pnpm deps:pin` / `pnpm deps:link` (the `link:`
 
 Run the output with `pnpm web:start` (or `node .mastra/output/index.mjs` after installing output deps).
 
+To deploy to Mastra Cloud:
+
+```bash
+pnpm web:deploy
+```
+
+This runs `web:build` (pinned versions, as above) and then `mastra deploy --skip-build`, which uploads the existing `.mastra/output`. Deploy targets `--env production` by default and auto-selects `.env.production` if present — otherwise it will offer to upload vars from the local `.env`, so double-check what you confirm in the prompt. Requires `mastra auth login` first; pass extra flags via `pnpm web:deploy -- --env staging` etc.
+
 ## Tests
 
 ```bash
