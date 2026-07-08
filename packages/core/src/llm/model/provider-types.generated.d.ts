@@ -3260,6 +3260,8 @@ export type ProviderModelsMap = {
   readonly openrouter: readonly [
     'ai21/jamba-large-1.7',
     'aion-labs/aion-2.0',
+    'aion-labs/aion-3.0',
+    'aion-labs/aion-3.0-mini',
     'aion-labs/aion-rp-llama-3.1-8b',
     'allenai/olmo-3-32b-think',
     'amazon/nova-2-lite-v1',

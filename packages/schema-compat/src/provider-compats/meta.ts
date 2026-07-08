@@ -4,7 +4,14 @@ import type { ZodType as ZodTypeV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 import type { Targets } from 'zod-to-json-schema';
 import { jsonSchema } from '../json-schema';
-import { isAllOfSchema, isArraySchema, isObjectSchema, isStringSchema, isUnionSchema } from '../json-schema/utils';
+import {
+  isAllOfSchema,
+  isArraySchema,
+  isNumberSchema,
+  isObjectSchema,
+  isStringSchema,
+  isUnionSchema,
+} from '../json-schema/utils';
 import { SchemaCompatLayer } from '../schema-compatibility';
 import type { PublicSchema } from '../schema.types';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../standard-schema/standard-schema';
@@ -93,6 +100,8 @@ export class MetaSchemaCompatLayer extends SchemaCompatLayer {
       this.defaultObjectHandler(schema);
     } else if (isArraySchema(schema)) {
       this.defaultArrayHandler(schema);
+    } else if (isNumberSchema(schema)) {
+      this.defaultNumberHandler(schema);
     } else if (isStringSchema(schema)) {
       this.defaultStringHandler(schema);
     }

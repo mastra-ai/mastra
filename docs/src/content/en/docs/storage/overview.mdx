@@ -1,0 +1,236 @@
+---
+title: "Storage overview"
+description: Configure storage for Mastra to persist runtime state across agents, workflows, observability, evals, schedules, and memory.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+  - "@mastra/mongodb"
+  - "@mastra/pg"
+---
+
+import Tabs from "@theme/Tabs";
+import TabItem from "@theme/TabItem";
+
+# Storage overview
+
+Storage is the persistence layer for the Mastra runtime. It keeps memory, workflow state, observability data, eval results, schedules, and long-running agent state available after a process restarts.
+
+Storage powers:
+
+- [Memory](/docs/memory/overview): Message history, threads, resources, and working memory.
+- [Workflows](/docs/workflows/overview): Durable snapshots for suspended and resumed workflow runs.
+- [Observability](/docs/observability/overview): Traces, spans, metrics, logs, and feedback.
+- [Evals](/docs/evals/overview): Scores, datasets, experiments, and evaluation results.
+- [Long-running agents](/docs/long-running-agents/durable-agents): Background tasks, schedules, goals, and thread state.
+
+## When to configure storage
+
+Configure a persistent storage adapter when state must survive restarts, be shared across processes, or be visible in Studio across sessions. The default in-memory store is useful for tests and short local experiments, but it loses data when the process exits.
+
+Use storage when your application needs any of these behaviors:
+
+- Agents remember past messages or user facts.
+- Workflows suspend and resume after a restart.
+- Traces, metrics, logs, scores, or feedback stay available for analysis.
+- Schedules and background tasks continue across deployments.
+- Multiple runtime processes read and write the same state.
+
+## How storage works
+
+Mastra storage is organized into **domains**. A domain owns one type of runtime data, and a storage adapter implements one or more domains.
+
+| Domain | What it stores |
+| - | - |
+| `memory` | Threads, messages, resources, working memory, and other agent memory state. |
+| `workflows` | Workflow snapshots used to suspend and resume runs. |
+| `observability` | Traces, spans, metrics, logs, and feedback. |
+| `scores` | Eval score records. |
+| `datasets` | Dataset records and dataset items used by evals and experiments. |
+| `experiments` | Experiment runs and per-item experiment results. |
+| `backgroundTasks` | Background task records and execution state. |
+| `schedules` | Schedule definitions and trigger history. |
+| `threadState` | Durable task, goal, and thread state. |
+
+Adapter support varies by domain. For the full domain list and built-in schemas, see the [storage overview reference](/reference/storage/overview).
+
+## Choose a backend by data shape
+
+Different domains write and query different kinds of data. Pick a backend based on the domain's access pattern:
+
+- `memory`: Reads and writes rows during every remembered agent call. Use a transactional database such as libSQL, PostgreSQL, or MongoDB.
+- `observability`: Writes high-volume telemetry and often queries aggregations. Use a dedicated observability store or an online analytical processing (OLAP) backend such as ClickHouse or DuckDB.
+- `workflows`: Stores durable snapshots that must be available when a run resumes. Use a reliable persistent database.
+- `scores`, `datasets`, and `experiments`: Store lower-frequency evaluation data that's often read later for analysis.
+- `schedules`: Stores schedule definitions and fire history. Use an adapter that implements the schedules domain.
+
+When domains have different operational needs, use [composite storage](#composite-storage) to route each domain to the right backend.
+
+## Get started locally
+
+For local development, use libSQL with a file-backed database. It doesn't require a separate database server and persists state between restarts.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  storage: new LibSQLStore({
+    id: 'mastra-storage',
+    url: 'file:./mastra.db',
+  }),
+})
+```
+
+:::tip[Sharing the database with Studio]
+
+When running `mastra dev` alongside your application, use an absolute path so both processes access the same database:
+
+```typescript
+url: 'file:/absolute/path/to/your/project/mastra.db'
+```
+
+Relative paths like `file:./mastra.db` resolve based on each process's working directory, which may differ.
+
+:::
+
+Mastra initializes the required storage structures on first use.
+
+## Configure for production
+
+For production, use a persistent managed database. PostgreSQL is a good default for most teams because it works well for transactional runtime state and is widely available as a managed service.
+
+Production guidance:
+
+- Use a managed database with backups, monitoring, and connection pooling.
+- Keep local file databases such as `file:./mastra.db` out of multi-process production deployments.
+- Route high-volume domains, especially `observability`, to a dedicated backend with [composite storage](#composite-storage).
+- Configure [retention](/reference/storage/retention) policies on the storage adapter or composite store, then call `storage.prune()` from a scheduler or maintenance job.
+- Choose providers based on the domains your application uses. For example, schedules require an adapter that implements the `schedules` domain.
+
+## Configuration scope
+
+Storage can be configured at the Mastra instance level or at the agent level.
+
+### Instance-level storage
+
+Instance-level storage is shared by agents, workflows, observability, evals, schedules, and other runtime features registered on the same Mastra instance.
+
+<Tabs>
+  <TabItem value="postgresql" label="PostgreSQL">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { PostgresStore } from '@mastra/pg'
+
+    export const mastra = new Mastra({
+      storage: new PostgresStore({
+        id: 'mastra-storage',
+        connectionString: process.env.DATABASE_URL,
+      }),
+    })
+    ```
+  </TabItem>
+
+  <TabItem value="mongodb" label="MongoDB">
+    ```typescript title="src/mastra/index.ts"
+    import { Mastra } from '@mastra/core'
+    import { MongoDBStore } from '@mastra/mongodb'
+
+    export const mastra = new Mastra({
+      storage: new MongoDBStore({
+        id: 'mastra-storage',
+        uri: process.env.MONGODB_URI,
+        dbName: process.env.MONGODB_DB_NAME,
+      }),
+    })
+    ```
+  </TabItem>
+</Tabs>
+
+Use instance-level storage when most runtime domains can share the same database.
+
+### Agent-level storage
+
+Agent-level storage is configured on a `Memory` instance. It overrides instance-level storage for that agent's memory data only.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { PostgresStore } from '@mastra/pg'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer customer support questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new PostgresStore({
+      id: 'support-agent-storage',
+      connectionString: process.env.SUPPORT_AGENT_DATABASE_URL,
+    }),
+  }),
+})
+```
+
+Use agent-level storage when an agent needs an isolated memory boundary or a different memory backend.
+
+## Composite storage
+
+[`MastraCompositeStore`](/reference/storage/composite) routes domains to different backends. Use it when one database isn't the right fit for every domain.
+
+The following example uses libSQL as the default store and routes workflow state to PostgreSQL:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraCompositeStore } from '@mastra/core/storage'
+import { LibSQLStore } from '@mastra/libsql'
+import { WorkflowsPG } from '@mastra/pg'
+
+export const mastra = new Mastra({
+  storage: new MastraCompositeStore({
+    id: 'composite-storage',
+    default: new LibSQLStore({
+      id: 'default-storage',
+      url: 'file:./mastra.db',
+    }),
+    domains: {
+      workflows: new WorkflowsPG({
+        connectionString: process.env.DATABASE_URL,
+      }),
+    },
+  }),
+})
+```
+
+You can also route `observability` to a dedicated analytics backend. See [observability storage](/docs/observability/storage) for an observability-specific example.
+
+## Supported providers
+
+Each provider page includes installation instructions, configuration parameters, and usage examples:
+
+- [libSQL](/reference/storage/libsql)
+- [PostgreSQL](/reference/storage/postgresql)
+- [MongoDB](/reference/storage/mongodb)
+- [Upstash](/reference/storage/upstash)
+- [Redis](/reference/storage/redis)
+- [Cloudflare D1](/reference/storage/cloudflare-d1)
+- [Cloudflare KV & Durable Objects](/reference/storage/cloudflare)
+- [Convex](/reference/storage/convex)
+- [DynamoDB](/reference/storage/dynamodb)
+- [LanceDB](/reference/storage/lance)
+- [Microsoft SQL Server](/reference/storage/mssql)
+- [Google Cloud Spanner](/reference/storage/spanner)
+
+:::tip
+
+libSQL is the fastest path for local development because it doesn't require running a separate database server.
+
+:::
+
+## Next steps
+
+- [Composite storage](/reference/storage/composite)
+- [Storage retention](/reference/storage/retention)
+- [Storage schemas](/reference/storage/overview)
+- [Memory](/docs/memory/overview)
+- [Observability storage](/docs/observability/storage)
