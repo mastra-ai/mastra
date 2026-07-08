@@ -1,19 +1,17 @@
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
+import { useChatSession } from './ChatSessionProvider';
+import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
+import { useGetAgentControllerPermissionsMutation, useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
+import { useAbortAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
 import type { SlashCommand } from '../services/commands';
 import { runNoArgCommand } from '../services/commands';
-import { useChatSession } from './ChatSessionProvider';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
-/**
- * Shares palette-command state between the command palette (writer) and the
- * composer (reader), which no longer have a common prop-passing parent.
- * Arg-commands park their name in `composerCommandName` so the composer can
- * prefill "/name "; no-arg commands run immediately via `runNoArgCommand`.
- */
 export interface ChatCommandsApi {
-  /** Command the composer should prefill (set by the palette), if any. */
   composerCommandName: string | null;
   clearComposerCommand: () => void;
   runPaletteCommand: (command: SlashCommand) => void;
@@ -22,9 +20,18 @@ export interface ChatCommandsApi {
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
-  const session = useChatSession();
-  const { activeProject } = useActiveProjectContext();
+  const { baseUrl } = useApiConfig();
+  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { transcript, pushNotice } = useChatSession();
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
+
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
+  const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
+  const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
+  const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const getPermissionsMutation = useGetAgentControllerPermissionsMutation(hookArgs);
+  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
   const clearComposerCommand = useCallback(() => setComposerCommandName(null), []);
 
@@ -32,15 +39,34 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
     (command: SlashCommand) => {
       if (command.args) {
         setComposerCommandName(command.name);
-      } else {
-        void runNoArgCommand(command.name, {
-          session,
-          transcript: session.transcript,
-          activeProject: activeProject ?? null,
-        });
+        return;
       }
+
+      void runNoArgCommand(command.name, {
+        session: {
+          clearGoal: () => clearGoalMutation.mutateAsync().then(() => undefined),
+          pauseGoal: () => pauseGoalMutation.mutateAsync().then(() => undefined),
+          resumeGoal: () => resumeGoalMutation.mutateAsync().then(() => undefined),
+          abort: () => abortMutation.mutateAsync().then(() => undefined),
+          getPermissions: () => getPermissionsMutation.mutateAsync(),
+          setPermissionForCategory: (category, policy) => setPermissionForCategoryMutation.mutateAsync({ category, policy }),
+          pushNotice,
+        },
+        transcript,
+        activeProject: activeProject ?? null,
+      });
     },
-    [session, activeProject],
+    [
+      abortMutation,
+      activeProject,
+      clearGoalMutation,
+      getPermissionsMutation,
+      pauseGoalMutation,
+      pushNotice,
+      resumeGoalMutation,
+      setPermissionForCategoryMutation,
+      transcript,
+    ],
   );
 
   const value = useMemo<ChatCommandsApi>(

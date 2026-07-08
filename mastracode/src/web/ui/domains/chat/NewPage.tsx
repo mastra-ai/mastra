@@ -51,7 +51,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
             {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-            <Transcript entries={noticeEntries} onApprove={session.onApprove} onRespond={session.onRespond} />
+            <Transcript entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
           </div>
         )}
       </div>

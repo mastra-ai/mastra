@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import type { useAgentControllerSession } from './useAgentControllerSession';
+import type { TranscriptState } from '../services/transcript';
 
-type Transcript = ReturnType<typeof useAgentControllerSession>['transcript'];
-
-function getStreamingLength(transcript: Transcript) {
+function getStreamingLength(transcript: TranscriptState) {
   const lastTranscriptEntry = transcript.entries[transcript.entries.length - 1];
   return lastTranscriptEntry?.kind === 'message' && lastTranscriptEntry.message.role === 'assistant'
     ? lastTranscriptEntry.message.content.parts.reduce((n, part) => {
@@ -15,7 +13,7 @@ function getStreamingLength(transcript: Transcript) {
     : 0;
 }
 
-export function useTranscriptScroll(transcript: Transcript) {
+export function useTranscriptScroll(transcript: TranscriptState) {
   const threadRef = useRef<HTMLDivElement>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const streamingLen = getStreamingLength(transcript);

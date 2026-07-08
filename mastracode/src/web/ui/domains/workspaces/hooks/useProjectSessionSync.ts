@@ -1,19 +1,17 @@
 import { useEffect, useRef } from 'react';
 
-import type { useAgentControllerSession } from '../../chat/hooks/useAgentControllerSession';
+import type { ConnectionStatus } from '../../chat/hooks/useAgentControllerConnection';
 import type { Project } from '../services/projects';
 import { deriveProjectPath } from './useWorkspaces';
 
-type Session = ReturnType<typeof useAgentControllerSession>;
-
 export function useProjectSessionSync({
-  session,
+  setState,
   status,
   resourceId,
   activeProject,
 }: {
-  session: Session;
-  status: Session['status'];
+  setState: (updates: Record<string, unknown>) => Promise<unknown>;
+  status: ConnectionStatus;
   resourceId: string;
   activeProject: Project | null;
 }) {
@@ -22,16 +20,16 @@ export function useProjectSessionSync({
     if (resourceId !== prevResourceId.current) {
       prevResourceId.current = resourceId;
       if (status === 'ready') {
-        void session.setState({ projectPath: deriveProjectPath(activeProject) });
+        void setState({ projectPath: deriveProjectPath(activeProject) });
       }
     }
-  }, [resourceId, status, activeProject, session]);
+  }, [resourceId, status, activeProject, setState]);
 
   const initialSet = useRef(false);
   useEffect(() => {
     if (status === 'ready' && !initialSet.current && activeProject) {
       initialSet.current = true;
-      void session.setState({ projectPath: deriveProjectPath(activeProject) });
+      void setState({ projectPath: deriveProjectPath(activeProject) });
     }
-  }, [status, activeProject, session]);
+  }, [status, activeProject, setState]);
 }

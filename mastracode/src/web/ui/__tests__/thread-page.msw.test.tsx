@@ -108,6 +108,7 @@ function useAgentControllerHandlers({
   const captured: CapturedRequests = { sessionsCreated: 0, switched: [], created: 0, deleted: [], sent: [] };
   // The bound thread follows successful switches so `GET /sessions/:id` stays authoritative.
   let bound = boundThreadId;
+  let stateShouldFail = false;
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
@@ -119,6 +120,7 @@ function useAgentControllerHandlers({
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, async () => {
       if (stateDelayMs > 0) await delay(stateDelayMs);
+      if (stateShouldFail) return HttpResponse.error();
       return HttpResponse.json(sessionState(bound));
     }),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(bound))),
@@ -133,7 +135,8 @@ function useAgentControllerHandlers({
       const { threadId } = (await request.json()) as { threadId: string };
       captured.switched.push(threadId);
       if (failSwitchFor.includes(threadId)) {
-        return HttpResponse.json({ error: 'Thread not found' }, { status: 500 });
+        stateShouldFail = true;
+        return HttpResponse.json({ ok: false });
       }
       bound = threadId;
       return HttpResponse.json({ ok: true });
@@ -201,7 +204,7 @@ describe('MastraCode thread pages', () => {
     const { router } = renderRoutes('/new');
 
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
-    expect(screen.getAllByPlaceholderText(/Message the agent/)).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText(/Ask Mastra Code/)).toHaveLength(1);
     const draftRegion = screen.getByRole('region', { name: 'What do you want to work on?' });
     expect(within(draftRegion).getByRole('textbox')).toHaveAttribute('rows', '4');
     expect(within(draftRegion).getByText('MastraCode Test')).toBeInTheDocument();
@@ -216,7 +219,7 @@ describe('MastraCode thread pages', () => {
 
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
 
-    const composer = await screen.findByPlaceholderText(/Message the agent/);
+    const composer = await screen.findByPlaceholderText(/Ask Mastra Code/);
     await userEvent.type(composer, 'Hello draft{Enter}');
 
     await waitFor(() => expect(captured.created).toBe(1));
@@ -235,7 +238,7 @@ describe('MastraCode thread pages', () => {
 
     await expectPathname(router, '/new');
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
-    expect(screen.getAllByPlaceholderText(/Message the agent/)).toHaveLength(1);
+    expect(screen.getAllByPlaceholderText(/Ask Mastra Code/)).toHaveLength(1);
     expect(captured.created).toBe(0);
   });
 
@@ -271,12 +274,16 @@ describe('MastraCode thread pages', () => {
     await expectPathname(router, '/new');
   });
 
-  it('given switching to an unknown thread fails, when deep-linking to it, then an error notice renders and the URL falls back to /new', async () => {
+  it('given an unknown thread deep link, then the URL falls back to /new with an error notice in route state', async () => {
     const captured = useAgentControllerHandlers({ failSwitchFor: ['nope'] });
     const { router } = renderRoutes('/threads/nope');
 
-    await waitFor(() => expect(captured.switched).toContain('nope'));
-    expect(await screen.findByText(/Failed to switch thread/)).toBeInTheDocument();
     await expectPathname(router, '/new');
+    await waitFor(() =>
+      expect((router.state.location.state as { routeErrorNotice?: string } | null)?.routeErrorNotice).toMatch(
+        /Failed to switch thread/,
+      ),
+    );
+    expect(captured.switched).not.toContain('nope');
   });
 });

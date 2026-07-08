@@ -207,7 +207,7 @@ describe('Sidebar', () => {
       await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-two'));
     });
 
-    it('opens the /chat draft page without persisting a thread when the new-thread control is clicked', async () => {
+    it('opens the /new draft page without persisting a thread when the new-thread control is clicked', async () => {
       seedProject();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
@@ -216,7 +216,7 @@ describe('Sidebar', () => {
       await screen.findByText('First thread');
       await userEvent.click(screen.getByRole('button', { name: 'New thread' }));
 
-      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat'));
+      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/new'));
       expect(captured.created).toBe(0);
     });
   });

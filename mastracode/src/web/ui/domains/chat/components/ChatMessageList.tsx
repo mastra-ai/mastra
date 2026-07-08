@@ -1,3 +1,4 @@
+import type { PlanResume } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -5,12 +6,16 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
 import type { RefObject } from 'react';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows, Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatSessionApi } from '../context/ChatSessionProvider';
 import { useChatSession } from '../context/ChatSessionProvider';
+import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation, useSetAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
+import { useApproveAgentControllerToolMutation, useRespondAgentControllerSuspensionMutation } from '../hooks/useAgentControllerRunMutations';
 import { useTranscriptScroll } from '../hooks/useTranscriptScroll';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { GoalPanel } from './GoalPanel';
 import { Transcript } from './Transcript';
 
@@ -20,28 +25,39 @@ const transcriptScrollClass =
   'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]';
 const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm leading-relaxed text-icon3';
 
-/**
- * Persisted thread transcript page. `/new` is handled by NewPage, so this
- * component only renders existing thread history, loading, and run state.
- */
 export function ChatMessageList() {
-  const { activeProject } = useActiveProjectContext();
-  const session = useChatSession();
-  const { transcript, status, showWorkingIndicator, messagesPending, onApprove, onRespond } = session;
+  const { baseUrl } = useApiConfig();
+  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { transcript, status, showWorkingIndicator, messagesPending, resolvePrompt } = useChatSession();
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
+  const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
+  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
+  const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
+  const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
+  const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
 
-  // Parent only renders this component with an active project; TS narrowing.
   if (!activeProject) return null;
+
+  const onApprove = (toolCallId: string, approved: boolean, id: string) => {
+    resolvePrompt(id);
+    void approveMutation.mutateAsync({ toolCallId, approved });
+  };
+  const onRespond = (toolCallId: string, resumeData: string | string[] | PlanResume, id: string) => {
+    resolvePrompt(id);
+    void respondMutation.mutateAsync({ toolCallId, resumeData });
+  };
 
   return (
     <div className="flex min-h-0 flex-col overflow-y-auto">
       {transcript.goal && (
         <GoalPanel
           goal={transcript.goal}
-          onSetGoal={goal => void session.setGoal(goal)}
-          onPauseGoal={() => void session.pauseGoal()}
-          onResumeGoal={() => void session.resumeGoal()}
-          onClearGoal={() => void session.clearGoal()}
+          onSetGoal={goal => void setGoalMutation.mutateAsync(goal)}
+          onPauseGoal={() => void pauseGoalMutation.mutateAsync()}
+          onResumeGoal={() => void resumeGoalMutation.mutateAsync()}
+          onClearGoal={() => void clearGoalMutation.mutateAsync()}
         />
       )}
 
@@ -63,16 +79,12 @@ export function ChatMessageList() {
 }
 
 function ConnectionNotice({ status }: { status: ChatSessionApi['status'] }) {
-  if (status !== 'reconnecting' && status !== 'error') {
-    return null;
-  }
+  if (status !== 'reconnecting' && status !== 'error') return null;
 
   return (
     <div role="status" aria-live="polite" className="px-3 pt-2">
       <Notice variant={status === 'reconnecting' ? 'warning' : 'destructive'}>
-        {status === 'reconnecting'
-          ? 'Connection lost — reconnecting…'
-          : 'Disconnected. Check the server and reload to reconnect.'}
+        {status === 'reconnecting' ? 'Connection lost — reconnecting…' : 'Disconnected. Check the server and reload to reconnect.'}
       </Notice>
     </div>
   );
@@ -84,19 +96,11 @@ type TranscriptPanelProps = {
   showWorkingIndicator: boolean;
   messagesPending: boolean;
   threadRef: RefObject<HTMLDivElement | null>;
-  onApprove: ChatSessionApi['onApprove'];
-  onRespond: ChatSessionApi['onRespond'];
+  onApprove: (toolCallId: string, approved: boolean, id: string) => void;
+  onRespond: (toolCallId: string, data: string | string[] | PlanResume, id: string) => void;
 };
 
-function TranscriptPanel({
-  activeProject,
-  transcript,
-  showWorkingIndicator,
-  messagesPending,
-  threadRef,
-  onApprove,
-  onRespond,
-}: TranscriptPanelProps) {
+function TranscriptPanel({ activeProject, transcript, showWorkingIndicator, messagesPending, threadRef, onApprove, onRespond }: TranscriptPanelProps) {
   if (transcript.entries.length === 0 && messagesPending) {
     return (
       <div className={transcriptScrollClass} ref={threadRef}>
@@ -105,8 +109,10 @@ function TranscriptPanel({
     );
   }
 
+  const panelClassName = transcript.entries.length === 0 ? `${transcriptScrollClass} place-items-center` : transcriptScrollClass;
+
   return (
-    <div className={transcriptScrollClass} ref={threadRef}>
+    <div className={panelClassName} ref={threadRef}>
       {transcript.entries.length === 0 && <EmptyThreadState activeProject={activeProject} />}
       <Transcript entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />
       {showWorkingIndicator && <WorkingIndicator />}
@@ -151,13 +157,7 @@ function WorkingIndicator() {
 
 function ScrollToLatestButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button
-      variant="default"
-      size="icon-sm"
-      className="absolute bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full shadow-md"
-      onClick={onClick}
-      aria-label="Jump to latest message"
-    >
+    <Button variant="default" size="icon-sm" className="absolute bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full shadow-md" onClick={onClick} aria-label="Jump to latest message">
       <ArrowDown size={18} />
     </Button>
   );

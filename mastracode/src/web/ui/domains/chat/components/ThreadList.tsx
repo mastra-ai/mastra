@@ -7,28 +7,36 @@ import { MoreHorizontal, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
+import { useApiConfig } from '../../../../../shared/api/config';
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
-// Deep import (not the workspaces barrel) to keep the cross-domain graph acyclic.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
+import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useChatSession } from '../context/ChatSessionProvider';
+import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
+import { useCloneAgentControllerThreadMutation, useDeleteAgentControllerThreadMutation, useRenameAgentControllerThreadMutation, useSwitchAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const MAX_THREADS = 5;
 
-/**
- * Propless thread list: owns the chat-thread section of the sidebar. Reads
- * threads from the chat session, gates itself on the active project, closes
- * the sidebar drawer on navigation, and toasts on thread CRUD.
- */
 export function ThreadList() {
-  const session = useChatSession();
-  const { activeProject } = useActiveProjectContext();
+  const { baseUrl } = useApiConfig();
+  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const projectPath = deriveProjectPath(activeProject);
+  const { resetCurrentThread, resetHydration, syncState, pushNotice } = useChatSession();
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
+
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, projectPath, baseUrl, enabled: sessionEnabled };
+  const threadsQuery = useAgentControllerThreads(hookArgs);
+  const switchThreadMutation = useSwitchAgentControllerThreadMutation(hookArgs);
+  const deleteThreadMutation = useDeleteAgentControllerThreadMutation(hookArgs);
+  const renameThreadMutation = useRenameAgentControllerThreadMutation(hookArgs);
+  const cloneThreadMutation = useCloneAgentControllerThreadMutation(hookArgs);
 
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -41,22 +49,26 @@ export function ThreadList() {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuFor(null);
     };
     document.addEventListener('mousedown', onDown);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-    };
+    return () => document.removeEventListener('mousedown', onDown);
   }, [menuFor]);
 
   useKeyDown({ escape: () => setMenuFor(null) }, { target: 'document', enabled: !!menuFor });
 
   if (!activeProject) return null;
 
-  const threads = session.threads;
-  // The URL is the source of truth: nothing is highlighted on the /new draft
-  // page even if the session is still bound to a thread server-side.
+  const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
 
   const openThread = (threadId: string) => {
-    void session.switchThread(threadId);
+    resetHydration();
+    resetCurrentThread(threadId);
+    void switchThreadMutation
+      .mutateAsync(threadId)
+      .then(state => syncState(state))
+      .catch(err => {
+        resetCurrentThread();
+        pushNotice(`Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`, 'error');
+      });
     void navigate(`/threads/${threadId}`);
     overlays.close('sidebar');
   };
@@ -67,15 +79,20 @@ export function ThreadList() {
   };
 
   const cloneThread = async (threadId: string) => {
-    const newThreadId = await session.cloneThread(threadId);
+    const thread = await cloneThreadMutation.mutateAsync({ sourceThreadId: threadId });
+    resetHydration();
+    resetCurrentThread(thread.id);
     toast('Thread cloned', 'success');
-    void navigate(`/threads/${newThreadId}`);
+    void navigate(`/threads/${thread.id}`);
   };
 
   const deleteThread = async (threadId: string) => {
-    await session.deleteThread(threadId);
+    await deleteThreadMutation.mutateAsync(threadId);
     toast('Thread deleted');
-    if (threadId === routeThreadId) void navigate('/new');
+    if (threadId === routeThreadId) {
+      resetCurrentThread();
+      void navigate('/new');
+    }
   };
 
   const startRename = (thread: AgentControllerThreadInfo) => {
@@ -87,7 +104,7 @@ export function ThreadList() {
   const commitRename = (threadId: string) => {
     const title = renameDraft.trim();
     if (title) {
-      void session.renameThread(threadId, title);
+      void renameThreadMutation.mutateAsync({ threadId, title });
       toast('Thread renamed', 'success');
     }
     setRenamingId(null);
@@ -105,51 +122,16 @@ export function ThreadList() {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
       <ThreadListHeader threadCount={threads.length} onCreateThread={startDraft} />
-
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
-        {sortedThreads.length === 0 && (
-          <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
-            No threads yet
-          </Txt>
-        )}
+        {sortedThreads.length === 0 && <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">No threads yet</Txt>}
         {sortedThreads.map(thread =>
           renamingId === thread.id ? (
-            <RenameThreadRow
-              key={thread.id}
-              draft={renameDraft}
-              onDraftChange={setRenameDraft}
-              onCommit={() => commitRename(thread.id)}
-              onCancel={() => {
-                setRenamingId(null);
-                setRenameDraft('');
-              }}
-            />
+            <RenameThreadRow key={thread.id} draft={renameDraft} onDraftChange={setRenameDraft} onCommit={() => commitRename(thread.id)} onCancel={() => { setRenamingId(null); setRenameDraft(''); }} />
           ) : (
-            <ThreadRow
-              key={thread.id}
-              thread={thread}
-              active={thread.id === activeThreadId}
-              menuOpen={menuFor === thread.id}
-              menuRef={menuFor === thread.id ? menuRef : undefined}
-              onSwitch={() => openThread(thread.id)}
-              onToggleMenu={() => setMenuFor(prev => (prev === thread.id ? null : thread.id))}
-              onRename={() => startRename(thread)}
-              onClone={() => {
-                setMenuFor(null);
-                void cloneThread(thread.id);
-              }}
-              onDelete={() => {
-                setMenuFor(null);
-                void deleteThread(thread.id);
-              }}
-            />
+            <ThreadRow key={thread.id} thread={thread} active={thread.id === activeThreadId} menuOpen={menuFor === thread.id} menuRef={menuFor === thread.id ? menuRef : undefined} onSwitch={() => openThread(thread.id)} onToggleMenu={() => setMenuFor(prev => (prev === thread.id ? null : thread.id))} onRename={() => startRename(thread)} onClone={() => { setMenuFor(null); void cloneThread(thread.id); }} onDelete={() => { setMenuFor(null); void deleteThread(thread.id); }} />
           ),
         )}
-        {threads.length > MAX_THREADS && (
-          <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">
-            +{threads.length - MAX_THREADS} more
-          </Txt>
-        )}
+        {threads.length > MAX_THREADS && <Txt as="div" variant="ui-xs" className="px-2 py-1.5 text-icon3">+{threads.length - MAX_THREADS} more</Txt>}
       </div>
     </div>
   );
@@ -158,133 +140,33 @@ export function ThreadList() {
 function ThreadListHeader({ threadCount, onCreateThread }: { threadCount: number; onCreateThread: () => void }) {
   return (
     <div className="flex items-center justify-between px-1">
-      <Txt as="span" variant="ui-xs" className="flex items-center gap-1.5 text-icon3 uppercase tracking-wide">
-        Threads
-        {threadCount > 0 && (
-          <Badge variant="default" size="xs">
-            {threadCount}
-          </Badge>
-        )}
-      </Txt>
-      <Button variant="ghost" size="icon-sm" aria-label="New thread" onClick={onCreateThread}>
-        <Plus size={15} />
-      </Button>
+      <Txt as="span" variant="ui-xs" className="flex items-center gap-1.5 text-icon3 uppercase tracking-wide">Threads{threadCount > 0 && <Badge variant="default" size="xs">{threadCount}</Badge>}</Txt>
+      <Button variant="ghost" size="icon-sm" aria-label="New thread" onClick={onCreateThread}><Plus size={15} /></Button>
     </div>
   );
 }
 
-function RenameThreadRow({
-  draft,
-  onDraftChange,
-  onCommit,
-  onCancel,
-}: {
-  draft: string;
-  onDraftChange: (draft: string) => void;
-  onCommit: () => void;
-  onCancel: () => void;
-}) {
+function RenameThreadRow({ draft, onDraftChange, onCommit, onCancel }: { draft: string; onDraftChange: (draft: string) => void; onCommit: () => void; onCancel: () => void }) {
   return (
     <div role="listitem" className="px-1 py-0.5">
-      <Input
-        aria-label="Thread title"
-        autoFocus
-        value={draft}
-        placeholder="Thread title"
-        onChange={e => onDraftChange(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') onCommit();
-          if (e.key === 'Escape') onCancel();
-        }}
-        onBlur={onCommit}
-      />
+      <Input aria-label="Thread title" autoFocus value={draft} placeholder="Thread title" onChange={e => onDraftChange(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') onCommit(); if (e.key === 'Escape') onCancel(); }} onBlur={onCommit} />
     </div>
   );
 }
 
-function ThreadRow({
-  thread,
-  active,
-  menuOpen,
-  menuRef,
-  onSwitch,
-  onToggleMenu,
-  onRename,
-  onClone,
-  onDelete,
-}: {
-  thread: AgentControllerThreadInfo;
-  active: boolean;
-  menuOpen: boolean;
-  menuRef?: React.RefObject<HTMLDivElement | null>;
-  onSwitch: () => void;
-  onToggleMenu: () => void;
-  onRename: () => void;
-  onClone: () => void;
-  onDelete: () => void;
-}) {
+function ThreadRow({ thread, active, menuOpen, menuRef, onSwitch, onToggleMenu, onRename, onClone, onDelete }: { thread: AgentControllerThreadInfo; active: boolean; menuOpen: boolean; menuRef?: React.RefObject<HTMLDivElement | null>; onSwitch: () => void; onToggleMenu: () => void; onRename: () => void; onClone: () => void; onDelete: () => void }) {
   return (
-    <div
-      role="listitem"
-      className={`group flex items-center rounded-md transition-colors hover:bg-surface4 ${active ? 'bg-surface4' : ''}`}
-    >
-      <button
-        type="button"
-        className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left"
-        onClick={onSwitch}
-      >
-        <Txt as="span" variant="ui-sm" className={`truncate ${thread.title ? 'text-icon6' : 'text-icon3 italic'}`}>
-          {thread.title || 'Untitled'}
-        </Txt>
-        {thread.updatedAt && (
-          <Txt as="span" variant="ui-xs" className="shrink-0 text-icon3">
-            {relativeTime(thread.updatedAt)}
-          </Txt>
-        )}
+    <div role="listitem" className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
+      <button type="button" className="flex w-full flex-col gap-0.5 rounded-md px-2 py-2 text-left" onClick={onSwitch}>
+        <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
+        <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
-      <div className="relative pr-1" ref={menuRef}>
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="Thread actions"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={e => {
-            e.stopPropagation();
-            onToggleMenu();
-          }}
-        >
-          <MoreHorizontal size={15} />
-        </Button>
-        {menuOpen && <ThreadActionsMenu onRename={onRename} onClone={onClone} onDelete={onDelete} />}
-      </div>
+      <Button type="button" variant="ghost" size="icon-sm" aria-label="Thread actions" className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[open=true]:opacity-100" data-open={menuOpen} onClick={e => { e.stopPropagation(); onToggleMenu(); }}><MoreHorizontal size={15} /></Button>
+      {menuOpen && <div ref={menuRef} role="menu" className="absolute right-1 top-8 z-20 flex min-w-28 flex-col rounded-md border border-border1 bg-surface3 p-1 shadow-lg"><MenuButton onClick={onRename}>Rename</MenuButton><MenuButton onClick={onClone}>Clone</MenuButton><MenuButton onClick={onDelete}>Delete</MenuButton></div>}
     </div>
   );
 }
 
-function ThreadActionsMenu({
-  onRename,
-  onClone,
-  onDelete,
-}: {
-  onRename: () => void;
-  onClone: () => void;
-  onDelete: () => void;
-}) {
-  return (
-    <div
-      role="menu"
-      className="absolute right-0 top-full z-10 mt-1 flex min-w-32 flex-col rounded-md border border-border1 bg-surface4 p-1 shadow-lg"
-    >
-      <Button variant="ghost" size="sm" role="menuitem" className="justify-start" onClick={onRename}>
-        Rename
-      </Button>
-      <Button variant="ghost" size="sm" role="menuitem" className="justify-start" onClick={onClone}>
-        Clone
-      </Button>
-      <Button variant="ghost" size="sm" role="menuitem" className="justify-start text-accent2" onClick={onDelete}>
-        Delete
-      </Button>
-    </div>
-  );
+function MenuButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+  return <button type="button" role="menuitem" className="rounded px-2 py-1.5 text-left text-ui-sm text-icon5 hover:bg-surface4" onClick={onClick}>{children}</button>;
 }
