@@ -10,6 +10,10 @@ When triaging a PR, do the following:
 2. For each changed file, check whether it matches any `path` entry below. A `**` suffix means every file under that directory.
 3. If one or more changed files match, add every listed `owner` from the matching entries as a reviewer on the PR. In your triage comment, list each matched path and its `reason` so the reviewer has context.
 4. If zero changed files match, this file has no effect on the PR. Continue with normal triage.
+5. **Auto-close for external contributors**: If the PR author is **not** a member of the `mastra-ai` GitHub organization and any changed file matches one of the following paths, auto-close the PR with a polite comment explaining that these paths require internal ownership and suggesting the contributor open an issue instead:
+   - `packages/core/src/loop/loop.ts`
+   - `packages/deployer/**`
+6. The auto-close rule in step 5 does **not** apply to `mastra-ai` org members. For org members, follow the normal reviewer-assignment flow in steps 2–4.
 
 ## Paths
 
