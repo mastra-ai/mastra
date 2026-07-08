@@ -10,4 +10,8 @@ export { serializeSessionMetadata } from './metadata';
 export type { LiveKitSessionMetadata } from './metadata';
 export { pipeAgentReplyToWriter } from './workflow-generator';
 export type { AgentReplyStreamLike } from './workflow-generator';
+export { createConsentTool } from './consent';
+export type { ConsentGrant, ConsentToolOptions } from './consent';
+export { createEndCallTool } from './end-call';
+export type { EndCallRequest, EndCallToolOptions } from './end-call';
 export { DEFAULT_LIVEKIT_AGENT_NAME } from './constants';

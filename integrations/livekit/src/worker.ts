@@ -59,6 +59,12 @@ export interface VoiceCallEndArgs {
   metadata: LiveKitSessionMetadata;
   /** Request context for the call, if any. */
   requestContext?: RequestContext;
+  /**
+   * The worker's `configuration` (greeting, consent requirements, …). Read it here to honor policy
+   * at end-of-call — e.g. only flush a call summary to observational memory when
+   * `configuration.requireConsent.summaryStorage` isn't required, or the caller granted it.
+   */
+  configuration?: LiveKitWorkerConfiguration;
   /** The LiveKit room name. */
   roomName: string;
   /** The LiveKit job context, for advanced teardown needs. */
@@ -100,9 +106,17 @@ export interface CreateLiveKitWorkerOptions {
   resultText?: (result: unknown) => string | undefined | void;
   /** Lowest-level escape hatch: supply any reply generator directly (a custom workflow, remote bridge, …). */
   generate?: VoiceReplyGenerator;
-  /** Speech-to-text: a LiveKit plugin instance or an inference model string like 'deepgram/nova-3'. */
+  /**
+   * Speech-to-text: a LiveKit plugin instance or an inference model string like 'deepgram/nova-3'.
+   * For per-call / per-tenant selection, set the `configuration.stt` resolver — it takes
+   * precedence, with this option as the fallback.
+   */
   stt?: voice.AgentSessionOptions['stt'];
-  /** Text-to-speech: a LiveKit plugin instance or an inference model string like 'cartesia/sonic-3'. */
+  /**
+   * Text-to-speech: a LiveKit plugin instance or an inference model string like 'cartesia/sonic-3'.
+   * For per-call / per-tenant selection, set the `configuration.tts` resolver — it takes
+   * precedence, with this option as the fallback.
+   */
   tts?: voice.AgentSessionOptions['tts'];
   /**
    * Voice activity detection. `'silero'` (default) loads the Silero VAD from
@@ -159,12 +173,25 @@ export interface CreateLiveKitWorkerOptions {
    * grace window; a thrown error is logged, not propagated. See {@link VoiceCallEndArgs}.
    */
   onCallEnd?: VoiceCallEndHook;
-  /** Static greeting spoken when the session starts. */
+  /**
+   * Grouped conversation & compliance configuration. Related policy knobs live here — rather than
+   * as many top-level worker options — so this call stays flat as more are added. Today it carries
+   * the greeting / AI-disclosure; it's the intended home for further compliance controls (recording
+   * notice, periodic re-disclosure, data retention, human handoff, …). See
+   * {@link LiveKitWorkerConfiguration}.
+   */
+  configuration?: LiveKitWorkerConfiguration;
+  /**
+   * Static greeting spoken when the session starts.
+   *
+   * @deprecated Prefer `configuration.greeting.text`. Still honored for backwards compatibility;
+   * when `configuration.greeting` is also set, its fields take precedence.
+   */
   greeting?: string;
   /**
-   * Save the spoken greeting to the memory thread as an assistant message, so the saved
-   * thread is a faithful call transcript. Defaults to `true`; only applies when a
-   * greeting is set and memory is enabled.
+   * Save the spoken greeting to the memory thread as an assistant message.
+   *
+   * @deprecated Prefer `configuration.greeting.persist`. Still honored for backwards compatibility.
    */
   persistGreeting?: boolean;
   /**
@@ -321,6 +348,383 @@ async function resolveInstructions(
 }
 
 /**
+ * Per-call context handed to the `configuration` resolvers (greeting text, STT, TTS) so they can
+ * key per-call / per-tenant behavior off the call. Built post-connect, so the dispatch metadata,
+ * request context, and room name are all available.
+ */
+export interface VoiceCallContext {
+  /**
+   * Dispatch metadata for the call — the per-tenant routing signal (dialed number, tenant/agent id,
+   * thread/resource, and any `requestContext` entries) parsed from the LiveKit job metadata.
+   */
+  metadata: LiveKitSessionMetadata;
+  /** The request context built from the dispatch metadata, if any. */
+  requestContext?: RequestContext;
+  /** The LiveKit room name. */
+  roomName: string;
+  /** The LiveKit job context, for anything the metadata doesn't carry. */
+  ctx: JobContext;
+}
+
+/** Context handed to a greeting resolver. Alias of {@link VoiceCallContext}. */
+export type GreetingContext = VoiceCallContext;
+
+/**
+ * A per-call resolver for a session component (STT / TTS): invoked once per call (post-connect)
+ * with the call {@link VoiceCallContext}. Return `undefined` to fall back to the static top-level
+ * option for that component.
+ */
+export type SessionComponentResolver<T> = (
+  context: VoiceCallContext,
+) => T | undefined | void | Promise<T | undefined | void>;
+
+/**
+ * The spoken greeting: a fixed string, or a resolver invoked once per call (post-connect) with the
+ * call {@link GreetingContext}. Use the resolver form for a per-tenant greeting derived from the
+ * dispatch metadata / request context — one multi-tenant agent, a different opening per tenant.
+ * Return `undefined` (or empty) for no greeting on that call.
+ */
+export type GreetingText =
+  | string
+  | ((context: GreetingContext) => string | undefined | void | Promise<string | undefined | void>);
+
+/**
+ * The opening greeting spoken when the session starts — and the vehicle for a required AI
+ * disclosure. Under the EU AI Act (Art. 50) a person interacting with an AI system must be told so
+ * at the first interaction; set `allowInterruptions: false` so that disclosure can't be talked over.
+ */
+export interface GreetingConfiguration {
+  /**
+   * What is spoken when the session starts. A fixed string, or a resolver invoked once per call
+   * (post-connect) with the call {@link GreetingContext} — return a per-tenant greeting built from
+   * the dispatch metadata / request context (e.g. `` `Thanks for calling ${tenant}, you're speaking
+   * with an AI assistant` ``). Omit, or return `undefined`, for no greeting.
+   */
+  text?: GreetingText;
+  /**
+   * Whether the caller can interrupt (barge over) the greeting. Defaults to LiveKit's behavior
+   * (interruptible). Set `false` to make the greeting play through — e.g. when it carries a
+   * disclosure the caller is legally required to hear ("you're speaking with an AI assistant"),
+   * so they can't talk over it and miss it.
+   */
+  allowInterruptions?: boolean;
+  /**
+   * Wait for the greeting to finish playing before continuing (greeting persistence and
+   * `onSessionStart`). Defaults to `false`. Pair with `allowInterruptions: false` when a
+   * disclosure must fully play out before any post-greeting work runs.
+   */
+  awaitPlayout?: boolean;
+  /**
+   * Save the spoken greeting to the memory thread as an assistant message, so the saved thread is
+   * a faithful call transcript. Defaults to `true`; only applies when memory is enabled.
+   */
+  persist?: boolean;
+  /**
+   * Periodically re-disclose the AI status on long calls (e.g. California SB 243). Once this many
+   * milliseconds have elapsed since the last disclosure, the next turn's reply is prefixed with a
+   * short reminder — spoken at the turn boundary, never mid-turn. Omit (or `0`) to disable. Example:
+   * `repeatEvery: 3 * 60_000` re-discloses roughly every three minutes.
+   */
+  repeatEvery?: number;
+  /** The short reminder spoken on each re-disclosure. Defaults to a generic AI-assistant reminder. */
+  repeatText?: string;
+}
+
+/**
+ * One consent item's requirement. `true` is shorthand for a required consent with defaults; the
+ * object form carries the metadata a production consent record needs (whether it's required, and a
+ * human-readable purpose for the spoken/logged prompt and the audit trail).
+ */
+export type ConsentRequirement =
+  | boolean
+  | {
+      /** Whether the caller's consent is required for this item. Defaults to `true` when present. */
+      required?: boolean;
+      /**
+       * Human-readable description of what is being consented to — for the spoken/logged consent
+       * prompt and the stored consent record. E.g. "storing a summary of this call".
+       */
+      purpose?: string;
+    };
+
+/**
+ * Consent requirements for the call, as a **named, extensible set** — each item independently
+ * required and independently granted at runtime, rather than one global "consented" flag. New
+ * consent items are added as named keys so the model grows without reshaping existing ones or
+ * conflating unrelated permissions (a production consent model, not one-size-fits-all). The
+ * requirements are declared here; capturing the caller's grant at runtime and enforcing it is the
+ * companion piece (a consent tool / recording gate) — see the package TODO.
+ */
+export interface ConsentConfiguration {
+  /**
+   * Consent to store a summary of the call (observational-memory distillation, CRM notes, etc.).
+   * When required, persist a call summary only if the caller has granted this consent.
+   */
+  summaryStorage?: ConsentRequirement;
+  // Further consent items (recording, dataSharing, marketing, …) are added as named keys here.
+}
+
+/**
+ * Agent-initiated hang-up: let the agent end the call itself (say goodbye → hang up). Enable it here
+ * and add a matching tool to the agent with `createEndCallTool` (both default to the tool name
+ * `'endCall'`). The tool only signals intent — from inside `agent.stream()` it can't reach the room;
+ * the worker owns the hang-up. On each turn the worker watches for the tool, waits for the agent's
+ * closing words to finish playing (so the goodbye is never cut off), then disconnects — running
+ * `onCallEnd` on the way out, exactly as a caller-initiated hang-up does. Works on the agent and
+ * workflow reply paths.
+ */
+export interface EndCallConfiguration {
+  /**
+   * Name of the tool the agent calls to end the call — must match the `id` you gave
+   * `createEndCallTool`. Defaults to `'endCall'`.
+   */
+  tool?: string;
+  /**
+   * Optional closing line spoken (non-interruptibly) right before hanging up, after the agent's own
+   * final words finish. Use it for a guaranteed sign-off or a compliance closing. Omit to just hang
+   * up once the agent's closing words finish playing.
+   */
+  message?: string;
+  /** Reason recorded on the shutdown (shows up in LiveKit logs). Defaults to `'agent ended call'`. */
+  reason?: string;
+  /**
+   * Safety cap in milliseconds on how long to wait for the agent's closing words to finish playing
+   * before hanging up, in case the speaking state never clears. Defaults to `30000`.
+   */
+  maxWaitMs?: number;
+}
+
+/**
+ * Grouped conversation & compliance configuration for {@link CreateLiveKitWorkerOptions.configuration}.
+ * A single home for related policy knobs so they don't each become a top-level worker option. Today
+ * it carries the greeting / AI-disclosure, consent requirements, agent-initiated hang-up, and
+ * per-call STT/TTS selection; it's the intended landing spot for further compliance controls
+ * (recording notice, data retention, …).
+ */
+export interface LiveKitWorkerConfiguration {
+  /** The opening greeting / AI-disclosure, plus optional periodic re-disclosure. See {@link GreetingConfiguration}. */
+  greeting?: GreetingConfiguration;
+  /** Consent requirements for the call. See {@link ConsentConfiguration}. */
+  requireConsent?: ConsentConfiguration;
+  /** Let the agent end the call itself (say goodbye → hang up). See {@link EndCallConfiguration}. */
+  endCall?: EndCallConfiguration;
+  /**
+   * Per-call speech-to-text: a resolver invoked once per call (post-connect) with the call
+   * {@link VoiceCallContext}, returning anything the top-level `stt` option accepts (a plugin
+   * instance or an inference model string like `'deepgram/nova-3'`). Use it to pick the
+   * transcriber per tenant or language off the dispatch metadata / request context. Return
+   * `undefined` to fall back to the top-level `stt`. Runs during call setup, so keep it fast —
+   * when it constructs plugin instances, cache them across calls (e.g. a `Map` keyed by tenant).
+   */
+  stt?: SessionComponentResolver<voice.AgentSessionOptions['stt']>;
+  /**
+   * Per-call text-to-speech: a resolver invoked once per call (post-connect) with the call
+   * {@link VoiceCallContext}, returning anything the top-level `tts` option accepts (a plugin
+   * instance or an inference model string like `'cartesia/sonic-3'`). Use it to give each tenant
+   * its own voice / language. Return `undefined` to fall back to the top-level `tts`. Runs during
+   * call setup, so keep it fast — when it constructs plugin instances, cache them across calls.
+   */
+  tts?: SessionComponentResolver<voice.AgentSessionOptions['tts']>;
+}
+
+/**
+ * Resolves the effective greeting from the canonical `configuration.greeting` and the deprecated
+ * top-level `greeting` / `persistGreeting` options. The legacy options are the base so existing
+ * worker configs keep working unchanged; `configuration.greeting` overrides field-by-field. Exported
+ * for unit testing.
+ */
+export function resolveGreetingConfig(
+  options: Pick<CreateLiveKitWorkerOptions, 'greeting' | 'persistGreeting' | 'configuration'>,
+): GreetingConfiguration {
+  return {
+    text: options.greeting,
+    persist: options.persistGreeting,
+    ...options.configuration?.greeting,
+  };
+}
+
+/**
+ * Resolves the greeting text for a call: returns a fixed string as-is, or invokes the resolver form
+ * with the call context to produce a per-tenant greeting. Empty / whitespace-nothing results
+ * normalize to `undefined` (no greeting). Exported for unit testing.
+ */
+export async function resolveGreetingText(
+  text: GreetingText | undefined,
+  context: GreetingContext,
+): Promise<string | undefined> {
+  const resolved = typeof text === 'function' ? await text(context) : text;
+  return resolved || undefined;
+}
+
+/**
+ * Resolves a per-call session component (STT / TTS): invokes the `configuration` resolver with the
+ * call context, falling back to the static top-level option when there is no resolver or it
+ * resolves to `undefined`. Exported for unit testing.
+ */
+export async function resolveSessionComponent<T>(
+  resolver: SessionComponentResolver<T> | undefined,
+  fallback: T | undefined,
+  context: VoiceCallContext,
+): Promise<T | undefined> {
+  const resolved = resolver ? await resolver(context) : undefined;
+  return resolved ?? fallback;
+}
+
+/** A {@link GreetingConfiguration} whose `text` resolver has been resolved to a plain string. */
+type ResolvedGreetingConfiguration = Omit<GreetingConfiguration, 'text'> & { text?: string };
+
+/**
+ * Speaks the session's opening greeting, honoring the interruption / playout options. Takes the
+ * already-resolved greeting (see {@link resolveGreetingText}) and returns the LiveKit `SpeechHandle`,
+ * or `undefined` when there is no greeting text. Extracted and exported so the greeting behavior is
+ * unit-testable without a live room.
+ */
+export async function speakGreeting(
+  session: Pick<voice.AgentSession, 'say'>,
+  greeting: ResolvedGreetingConfiguration,
+): Promise<ReturnType<voice.AgentSession['say']> | undefined> {
+  if (!greeting.text) return undefined;
+  // Only pass a say-options object when we actually override a default, so an unset
+  // `allowInterruptions` keeps LiveKit's own default rather than forcing a value.
+  const handle = session.say(
+    greeting.text,
+    greeting.allowInterruptions === undefined ? undefined : { allowInterruptions: greeting.allowInterruptions },
+  );
+  if (greeting.awaitPlayout) {
+    // waitForPlayout rejects if the greeting is interrupted; that's a normal outcome for an
+    // interruptible greeting, not a session-level failure, so swallow it.
+    await handle.waitForPlayout().catch(() => {});
+  }
+  return handle;
+}
+
+/** Default tool name the worker watches for to end the call. Matches `createEndCallTool`'s default. */
+export const DEFAULT_END_CALL_TOOL = 'endCall';
+/** Default shutdown reason recorded when the agent ends the call. */
+export const DEFAULT_END_CALL_REASON = 'agent ended call';
+/** Default safety cap on waiting for the agent's closing words to finish before hanging up. */
+export const DEFAULT_END_CALL_MAX_WAIT_MS = 30_000;
+
+/** Agent states where the agent is still busy producing / playing a reply (not done speaking). */
+const AGENT_BUSY_STATES = new Set<voice.AgentState>(['thinking', 'speaking']);
+
+/** The minimal logger surface these helpers use (the Mastra logger satisfies it). */
+type WarnLogger = { warn: (message: string, ...args: unknown[]) => void };
+
+/**
+ * Resolves once the agent is no longer producing or playing a reply — i.e. its state has left
+ * `thinking`/`speaking` for `listening`/`idle`. Returns immediately when it's already idle. A
+ * `maxWaitMs` safety cap guarantees it resolves even if the speaking state never clears. Used before
+ * an agent-initiated hang-up so the closing words play out fully instead of being cut off by the
+ * session close. Exported for unit testing.
+ */
+export function waitForAgentDoneSpeaking(
+  session: Pick<voice.AgentSession, 'agentState' | 'on' | 'off'>,
+  maxWaitMs: number = DEFAULT_END_CALL_MAX_WAIT_MS,
+): Promise<void> {
+  if (!AGENT_BUSY_STATES.has(session.agentState)) return Promise.resolve();
+  return new Promise<void>(resolve => {
+    // Check-then-subscribe with no await in between, so a state change can't slip past unobserved.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onChange = (ev: voice.AgentStateChangedEvent) => {
+      if (AGENT_BUSY_STATES.has(ev.newState)) return;
+      cleanup();
+      resolve();
+    };
+    const cleanup = () => {
+      session.off(voice.AgentSessionEventTypes.AgentStateChanged, onChange);
+      if (timer) clearTimeout(timer);
+    };
+    session.on(voice.AgentSessionEventTypes.AgentStateChanged, onChange);
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, maxWaitMs);
+    // Don't let the safety timer keep the worker process alive on its own.
+    (timer as { unref?: () => void }).unref?.();
+  });
+}
+
+/**
+ * Ends the call after the agent asked to (via its end-call tool): wait for the agent's closing words
+ * to finish, speak an optional final `message`, then disconnect. The teardown's session close
+ * force-interrupts any playing speech, so the waits here MUST complete before we disconnect — that's
+ * the whole point of the sequence. `ctx.deleteRoom()` hangs up the caller (SIP-safe); `ctx.shutdown()`
+ * ends the job and runs the registered shutdown callbacks (`onCallEnd`), so end-of-call work happens
+ * exactly as it does on a caller hang-up. Both run in a `finally` so a hiccup while waiting still ends
+ * the call. Exported for unit testing.
+ */
+export async function runEndCall(
+  session: Pick<voice.AgentSession, 'agentState' | 'on' | 'off' | 'say'>,
+  ctx: Pick<JobContext, 'deleteRoom' | 'shutdown'>,
+  config: EndCallConfiguration,
+  logger: WarnLogger,
+): Promise<void> {
+  try {
+    await waitForAgentDoneSpeaking(session, config.maxWaitMs ?? DEFAULT_END_CALL_MAX_WAIT_MS);
+    if (config.message) {
+      // waitForPlayout rejects if interrupted; the closing line is non-interruptible, but swallow
+      // anyway so a hiccup can't leave the call hanging.
+      await session
+        .say(config.message, { allowInterruptions: false })
+        .waitForPlayout()
+        .catch(() => {});
+    }
+  } catch (error) {
+    logger.warn('@mastra/livekit: waiting for the agent to finish before ending the call failed', error);
+  } finally {
+    try {
+      await ctx.deleteRoom();
+    } catch (error) {
+      logger.warn('@mastra/livekit: deleteRoom while ending the call failed', error);
+    }
+    try {
+      ctx.shutdown(config.reason ?? DEFAULT_END_CALL_REASON);
+    } catch (error) {
+      logger.warn('@mastra/livekit: shutdown while ending the call failed', error);
+    }
+  }
+}
+
+/**
+ * Builds the per-turn hook that detects the agent's end-call tool and kicks off the hang-up once, or
+ * `undefined` when end-call isn't configured. The detector fires the teardown fire-and-forget (the
+ * turn never waits on it) and de-dupes so a repeated tool call can't start two hang-ups.
+ */
+function buildEndCallDetector(
+  config: EndCallConfiguration | undefined,
+  getSession: () => Pick<voice.AgentSession, 'agentState' | 'on' | 'off' | 'say'> | undefined,
+  ctx: Pick<JobContext, 'deleteRoom' | 'shutdown'>,
+  logger: WarnLogger,
+): VoiceTurnCompleteHook | undefined {
+  if (!config) return undefined;
+  const toolName = config.tool ?? DEFAULT_END_CALL_TOOL;
+  let triggered = false;
+  return turnCtx => {
+    if (triggered) return;
+    if (!turnCtx.result.toolCalls.some(call => call.toolName === toolName)) return;
+    const session = getSession();
+    if (!session) return;
+    triggered = true;
+    void runEndCall(session, ctx, config, logger);
+  };
+}
+
+/** Runs the worker's own turn-complete detector alongside the user's `onTurnComplete`, if any. */
+function composeTurnComplete(
+  user: VoiceTurnCompleteHook | undefined,
+  detector: VoiceTurnCompleteHook | undefined,
+): VoiceTurnCompleteHook | undefined {
+  if (!detector) return user;
+  return ctx => {
+    // The detector is fire-and-forget (it kicks off the hang-up itself); don't couple the user's
+    // hook to it.
+    void detector(ctx);
+    return user?.(ctx);
+  };
+}
+
+/**
  * Builds a LiveKit agent worker definition that answers voice sessions with Mastra agents.
  *
  * Use as the default export of your worker entry file, then run it with the LiveKit
@@ -359,6 +763,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
     throw new Error(
       '@mastra/livekit: `workflowInput` is required when `workflow` is set. Map the turn into the ' +
         'workflow inputData, e.g. workflowInput: ({ chatCtx }) => ({ history: chatContextToMessages(chatCtx) }).',
+    );
+  }
+  if (options.generate && options.configuration?.endCall) {
+    throw new Error(
+      '@mastra/livekit: `configuration.endCall` has no effect with `generate` — the worker cannot observe ' +
+        'tool calls from a custom reply generator. Detect the end-call tool inside your generator and call ' +
+        '`runEndCall` directly instead.',
     );
   }
 
@@ -492,12 +903,35 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         const onCallEnd = options.onCallEnd;
         ctx.addShutdownCallback(async () => {
           try {
-            await onCallEnd({ memory, memoryInstance, metadata, requestContext, roomName, ctx });
+            await onCallEnd({
+              memory,
+              memoryInstance,
+              metadata,
+              requestContext,
+              configuration: options.configuration,
+              roomName,
+              ctx,
+            });
           } catch (error) {
             logger.warn('@mastra/livekit: onCallEnd hook threw', error);
           }
         });
       }
+
+      // Resolve the greeting: `configuration.greeting` is canonical, but the deprecated top-level
+      // `greeting` / `persistGreeting` options are still honored (additive), configuration winning.
+      const greetingConfig = resolveGreetingConfig(options);
+      // Periodic AI re-disclosure (disabled unless a positive interval is set). Handled at the turn
+      // boundary inside the voice agent, so it works on the agent and workflow/custom paths alike.
+      const greetingReminder =
+        greetingConfig.repeatEvery && greetingConfig.repeatEvery > 0
+          ? { everyMs: greetingConfig.repeatEvery, text: greetingConfig.repeatText }
+          : undefined;
+
+      // Agent-initiated hang-up: watch each turn for the end-call tool, then (once) wait for the
+      // agent's closing words to play out and disconnect. Detected at the turn boundary alongside the
+      // user's onTurnComplete; the closure reads `session` (assigned just below, before any turn).
+      const endCallDetector = buildEndCallDetector(options.configuration?.endCall, () => session, ctx, logger);
 
       const agent = createMastraVoiceAgent({
         ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
@@ -505,13 +939,24 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,
-        onTurnComplete: options.onTurnComplete,
+        onTurnComplete: composeTurnComplete(options.onTurnComplete, endCallDetector),
+        greetingReminder,
         streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
 
+      // Per-call STT/TTS: the `configuration.stt` / `configuration.tts` resolvers pick this
+      // call's transcriber and voice (per-tenant voices/languages keyed off the dispatch
+      // metadata), falling back to the static top-level options. The same context feeds the
+      // greeting resolver below.
+      const callContext: VoiceCallContext = { metadata, requestContext, roomName, ctx };
+      const [stt, tts] = await Promise.all([
+        resolveSessionComponent(options.configuration?.stt, options.stt, callContext),
+        resolveSessionComponent(options.configuration?.tts, options.tts, callContext),
+      ]);
+
       const session = new voice.AgentSession({
-        stt: options.stt,
-        tts: options.tts,
+        stt,
+        tts,
         vad,
         turnHandling: buildTurnHandling(options, turnDetection),
         ...options.sessionOptions,
@@ -528,18 +973,23 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           outputOptions: options.outputOptions,
         });
 
-        if (options.greeting) {
-          session.say(options.greeting);
-          if (options.persistGreeting !== false && memory && memoryInstance) {
-            try {
-              await persistSpokenGreeting({
-                memory: memoryInstance,
-                threadId: memory.thread,
-                resourceId: memory.resource ?? memory.thread,
-                greeting: options.greeting,
-              });
-            } catch (error) {
-              logger.warn('@mastra/livekit: failed to persist the greeting', error);
+        if (greetingConfig.text) {
+          // Resolve the greeting once (a fixed string, or a per-tenant resolver run post-connect),
+          // then use that same resolved text for both speaking and persistence.
+          const greetingText = await resolveGreetingText(greetingConfig.text, callContext);
+          if (greetingText) {
+            await speakGreeting(session, { ...greetingConfig, text: greetingText });
+            if (greetingConfig.persist !== false && memory && memoryInstance) {
+              try {
+                await persistSpokenGreeting({
+                  memory: memoryInstance,
+                  threadId: memory.thread,
+                  resourceId: memory.resource ?? memory.thread,
+                  greeting: greetingText,
+                });
+              } catch (error) {
+                logger.warn('@mastra/livekit: failed to persist the greeting', error);
+              }
             }
           }
         }

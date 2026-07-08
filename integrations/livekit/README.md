@@ -14,7 +14,8 @@ caller speaks ─▶ VAD ─▶ STT ─▶ turn detection ─▶ [ Mastra agent 
 - **Two reply paths** — answer turns with a Mastra **agent** (the default, richest path) or a Mastra **workflow** (run-to-completion per turn, e.g. deterministic intent routing). A low-level `generate` escape hatch accepts any custom reply generator.
 - **Full speech stack, pluggable** — STT/TTS as LiveKit inference model strings (`'deepgram/nova-3'`, `'cartesia/sonic-3'`) or your own plugin instances; Silero VAD and LiveKit multilingual/English turn detection; barge-in cancels in-flight generation automatically.
 - **Memory, scoped to the call** — `thread` = call, `resource` = caller, so a returning caller is recognized across calls. Up-front thread creation and greeting persistence keep the saved thread a faithful transcript. Works on the agent path and the workflow path (via `memoryInstance`).
-- **Lifecycle hooks** — `toolFeedback` (speak filler while a tool runs), `onTurnComplete` (post-turn, fire-and-forget, off the audio path), and `onCallEnd` (end-of-call, awaited within LiveKit's shutdown window — the place to flush observational memory).
+- **Lifecycle hooks** — `toolFeedback` (speak filler while a tool runs), `onTurnComplete` (post-turn, fire-and-forget, off the audio path), and `onCallEnd` (end-of-call, awaited within LiveKit's shutdown window — the place to summarize the finished call with `memory.summarizeThread()`).
+- **Compliance controls, grouped under `configuration`** — AI-disclosure greeting that can't be barged over (with a per-tenant resolver), periodic re-disclosure on long calls (`repeatEvery`), an extensible named consent model (`requireConsent` declared on the worker, captured at runtime with `createConsentTool`), and agent-initiated hang-up (`endCall` + `createEndCallTool`) that waits for the goodbye to play out before disconnecting.
 - **Observability** — one `voice call` trace per session with LiveKit pipeline metrics and every Mastra run nested under it.
 - **Connection + dispatch helpers** — `liveKitConnectionRoute` mints tokens and dispatches the worker so a frontend can join.
 
@@ -35,7 +36,7 @@ Peer dependencies (`@mastra/core` and `@livekit/agents` are required; the two pl
 
 The package has two entry points, one per process:
 
-- `@mastra/livekit` — server-side helpers (`liveKitConnectionRoute`, `dispatchVoiceSession`, `pipeAgentReplyToWriter`). Safe to import from Mastra server code; never loads the `@livekit/agents` runtime.
+- `@mastra/livekit` — server-side helpers (`liveKitConnectionRoute`, `dispatchVoiceSession`, `pipeAgentReplyToWriter`) and the agent tool factories (`createConsentTool`, `createEndCallTool` — they go on agents defined in server/shared code). Safe to import from Mastra server code; never loads the `@livekit/agents` runtime.
 - `@mastra/livekit/worker` — the worker runtime (`createLiveKitWorker`, `runLiveKitWorker`). Import it only from the worker entry file.
 
 ## Quick start
@@ -54,7 +55,9 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-  greeting: 'Thanks for calling. How can I help?',
+  configuration: {
+    greeting: { text: 'Thanks for calling. How can I help?' },
+  },
 });
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
@@ -135,35 +138,144 @@ For full control, pass a `generate` function — any `VoiceReplyGenerator` that 
 
 ## `createLiveKitWorker` options
 
-| Option                                              | Type                                      | Notes                                                                                                                                                                               |
-| --------------------------------------------------- | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mastra`                                            | `Mastra`                                  | **Required.** The instance whose agents/workflows answer sessions.                                                                                                                  |
-| **Reply generation** (pick one)                     |                                           |                                                                                                                                                                                     |
-| `agent`                                             | `string \| Agent \| (args) => …`          | The agent that answers. Defaults to `metadata.agentId`.                                                                                                                             |
-| `workflow`                                          | `string \| Workflow \| (args) => string`  | Answer with a workflow instead. Requires `workflowInput`.                                                                                                                           |
-| `workflowInput`                                     | `(ctx & { metadata }) => inputData`       | Maps a turn into the workflow's `inputData`.                                                                                                                                        |
-| `replyStep`                                         | `string`                                  | Only stream text from this workflow step id.                                                                                                                                        |
-| `resultText`                                        | `(result) => string`                      | Fallback reply text when the workflow streams nothing.                                                                                                                              |
-| `generate`                                          | `VoiceReplyGenerator`                     | Lowest-level escape hatch.                                                                                                                                                          |
-| **Speech stack**                                    |                                           |                                                                                                                                                                                     |
-| `stt`                                               | plugin or `'provider/model'`              | Speech-to-text.                                                                                                                                                                     |
-| `tts`                                               | plugin or `'provider/model'`              | Text-to-speech.                                                                                                                                                                     |
-| `vad`                                               | `VAD \| 'silero' \| false`                | Voice activity detection. Defaults to `'silero'`.                                                                                                                                   |
-| `turnDetection`                                     | `'multilingual' \| 'english' \| …`        | End-of-turn detection.                                                                                                                                                              |
-| `turnHandling`                                      | `AgentSessionOptions['turnHandling']`     | Endpointing delays, interruption sensitivity, preemptive generation.                                                                                                                |
-| `sessionOptions` / `inputOptions` / `outputOptions` | partial LiveKit options                   | Merged over what the helper builds.                                                                                                                                                 |
-| **Memory**                                          |                                           |                                                                                                                                                                                     |
-| `memory`                                            | `false \| (args) => { thread, resource }` | Memory mapping. Defaults to `{ thread: metadata.threadId ?? room, resource: metadata.resourceId ?? thread }` when the agent has memory.                                             |
-| `memoryInstance`                                    | `Memory \| (args) => Memory`              | The `Memory` used to bootstrap the thread + persist the greeting on the **workflow/custom** path (no agent to source it from). Mastra storage is injected if the `Memory` has none. |
-| `greeting`                                          | `string`                                  | Spoken when the session starts.                                                                                                                                                     |
-| `persistGreeting`                                   | `boolean`                                 | Save the greeting to the thread. Defaults to `true`.                                                                                                                                |
-| **Lifecycle hooks**                                 |                                           |                                                                                                                                                                                     |
-| `toolFeedback`                                      | `(toolCall) => string \| void`            | Speak filler while a tool runs (agent + workflow).                                                                                                                                  |
-| `onTurnComplete`                                    | `VoiceTurnCompleteHook`                   | After each turn streams, **fire-and-forget**, off the audio path.                                                                                                                   |
-| `onCallEnd`                                         | `VoiceCallEndHook`                        | When the call ends, **awaited** within LiveKit's shutdown window.                                                                                                                   |
-| `onSessionStart`                                    | `(args) => …`                             | After the session starts — attach listeners, trigger replies, etc.                                                                                                                  |
-| **Other**                                           |                                           |                                                                                                                                                                                     |
-| `observability`                                     | `boolean`                                 | Voice-pipeline tracing. Defaults to `true`.                                                                                                                                         |
+| Option                                              | Type                                       | Notes                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| --------------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mastra`                                            | `Mastra`                                   | **Required.** The instance whose agents/workflows answer sessions.                                                                                                                                                                                                                                                                                                                                                           |
+| **Reply generation** (pick one)                     |                                            |                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `agent`                                             | `string \| Agent \| (args) => …`           | The agent that answers. Defaults to `metadata.agentId`.                                                                                                                                                                                                                                                                                                                                                                      |
+| `workflow`                                          | `string \| Workflow \| (args) => string`   | Answer with a workflow instead. Requires `workflowInput`.                                                                                                                                                                                                                                                                                                                                                                    |
+| `workflowInput`                                     | `(ctx & { metadata }) => inputData`        | Maps a turn into the workflow's `inputData`.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `replyStep`                                         | `string`                                   | Only stream text from this workflow step id.                                                                                                                                                                                                                                                                                                                                                                                 |
+| `resultText`                                        | `(result) => string`                       | Fallback reply text when the workflow streams nothing.                                                                                                                                                                                                                                                                                                                                                                       |
+| `generate`                                          | `VoiceReplyGenerator`                      | Lowest-level escape hatch.                                                                                                                                                                                                                                                                                                                                                                                                   |
+| **Speech stack**                                    |                                            |                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `stt`                                               | plugin or `'provider/model'`               | Speech-to-text.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `tts`                                               | plugin or `'provider/model'`               | Text-to-speech.                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `vad`                                               | `VAD \| 'silero' \| false`                 | Voice activity detection. Defaults to `'silero'`.                                                                                                                                                                                                                                                                                                                                                                            |
+| `turnDetection`                                     | `'multilingual' \| 'english' \| …`         | End-of-turn detection.                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `turnHandling`                                      | `AgentSessionOptions['turnHandling']`      | Endpointing delays, interruption sensitivity, preemptive generation.                                                                                                                                                                                                                                                                                                                                                         |
+| `sessionOptions` / `inputOptions` / `outputOptions` | partial LiveKit options                    | Merged over what the helper builds.                                                                                                                                                                                                                                                                                                                                                                                          |
+| **Memory**                                          |                                            |                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `memory`                                            | `false \| (args) => { thread, resource }`  | Memory mapping. Defaults to `{ thread: metadata.threadId ?? room, resource: metadata.resourceId ?? thread }` when the agent has memory.                                                                                                                                                                                                                                                                                      |
+| `memoryInstance`                                    | `Memory \| (args) => Memory`               | The `Memory` used to bootstrap the thread + persist the greeting on the **workflow/custom** path (no agent to source it from). Mastra storage is injected if the `Memory` has none.                                                                                                                                                                                                                                          |
+| `configuration`                                     | `{ greeting?, requireConsent?, endCall? }` | Grouped conversation & compliance config (see [Configuration](#configuration)). `greeting` (`text` — a string or a per-tenant resolver — plus `allowInterruptions`, `awaitPlayout`, `persist`, `repeatEvery`/`repeatText` for periodic AI re-disclosure), `requireConsent` (extensible consent set, e.g. `summaryStorage`, surfaced on `onCallEnd`), and `endCall` (agent-initiated hang-up; pair with `createEndCallTool`). |
+| **Lifecycle hooks**                                 |                                            |                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `toolFeedback`                                      | `(toolCall) => string \| void`             | Speak filler while a tool runs (agent + workflow).                                                                                                                                                                                                                                                                                                                                                                           |
+| `onTurnComplete`                                    | `VoiceTurnCompleteHook`                    | After each turn streams, **fire-and-forget**, off the audio path.                                                                                                                                                                                                                                                                                                                                                            |
+| `onCallEnd`                                         | `VoiceCallEndHook`                         | When the call ends, **awaited** within LiveKit's shutdown window.                                                                                                                                                                                                                                                                                                                                                            |
+| `onSessionStart`                                    | `(args) => …`                              | After the session starts — attach listeners, trigger replies, etc.                                                                                                                                                                                                                                                                                                                                                           |
+| **Other**                                           |                                            |                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `observability`                                     | `boolean`                                  | Voice-pipeline tracing. Defaults to `true`.                                                                                                                                                                                                                                                                                                                                                                                  |
+
+## Configuration
+
+`configuration` groups related conversation & compliance knobs in one place, so they don't each
+become a top-level worker option — and it's where further compliance controls land as they ship.
+
+```typescript
+createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  configuration: {
+    greeting: {
+      // Spoken via TTS at call start (no model round-trip). Doubles as a required AI disclosure.
+      text: 'You are speaking with an AI assistant. This call may be recorded. How can I help?',
+      allowInterruptions: false, // caller can't barge over the disclosure (EU AI Act Art. 50)
+      awaitPlayout: true, // hold post-greeting work until the disclosure finishes
+      persist: true, // save it to the memory thread (default true)
+      // Periodic re-disclosure on long calls: once this interval elapses, the NEXT turn's reply is
+      // prefixed with a short "you're speaking with an AI" reminder (spoken at the turn boundary,
+      // never mid-turn). Omit to disable.
+      repeatEvery: 3 * 60_000, // ~every 3 minutes (California SB 243 and similar)
+      repeatText: 'Quick reminder — you are speaking with an AI assistant.', // optional; has a default
+    },
+    // Consent requirements — a named, extensible set. Each item is independently required and
+    // independently granted, so new items are added without one global "consented" flag.
+    requireConsent: {
+      summaryStorage: true, // or { required: true, purpose: 'storing a summary of this call' }
+    },
+    // Let the agent end the call itself. Pair with a `createEndCallTool` tool on the agent; the
+    // worker waits for the agent's closing words to play out, then hangs up (running onCallEnd).
+    endCall: {
+      message: 'Thanks for calling. Goodbye!', // optional non-interruptible sign-off before hangup
+    },
+  },
+});
+```
+
+**Greeting / AI disclosure.** `text` is spoken at call start; `allowInterruptions: false` makes a
+required disclosure play through; `awaitPlayout: true` waits for it before anything else runs;
+`repeatEvery` re-discloses periodically on long calls. Under the EU AI Act (Art. 50) a person must be
+told they're interacting with an AI at the first interaction.
+
+**Per-tenant greeting.** `greeting.text` also takes a resolver — a function called once per call
+(post-connect) with the call context (`metadata`, `requestContext`, `roomName`, `ctx`). Return a
+greeting keyed off the dispatch metadata so one multi-tenant agent opens differently per tenant (the
+disclosure options still apply to whatever it returns; return `undefined` for no greeting):
+
+```typescript
+configuration: {
+  greeting: {
+    text: ({ metadata }) => {
+      const tenant = TENANTS[metadata.requestContext?.tenantId as string];
+      return `Thanks for calling ${tenant?.name ?? 'us'}. You're speaking with an AI assistant.`;
+    },
+    allowInterruptions: false, // the disclosure still can't be barged over
+  },
+},
+```
+
+**Consent.** `requireConsent` _declares_ which consents the call needs (starting with `summaryStorage`
+— consent to store a summary of the call). Capture the caller's decision at runtime with
+**`createConsentTool`** (exported from `@mastra/livekit`) — add it to your agent, and it reads the
+caller identity from the tool context and hands each decision to your store:
+
+```typescript
+import { createConsentTool } from '@mastra/livekit';
+
+// in your agent's tools:
+recordConsent: createConsentTool({
+  items: ['summaryStorage'],
+  onGrant: async ({ item, granted, resourceId }) => {
+    if (resourceId) await db.saveConsent(resourceId, item, granted); // your system of record
+  },
+}),
+```
+
+Then _enforce_ it: the requirements are surfaced on the `onCallEnd` hook (`args.configuration`), so
+you only run the consent-gated action — e.g. the `memory.summarizeThread()` call that stores the
+summary — when it isn't required or the caller granted it. Whether to gate at all is your policy
+call: a permissive deployment skips `requireConsent` entirely and always summarizes, while a
+regulated one declares → captures → enforces (the runnable example ships both flavors). Further
+controls (recording notice, data retention, human handoff) are planned to land here too.
+
+**Agent-initiated hang-up.** `endCall` lets the agent end the call itself — say goodbye, then hang up.
+Enable it under `configuration`, and add a matching tool to the agent with **`createEndCallTool`**
+(both default to the tool name `'endCall'`). The tool only _signals_ intent — from inside
+`agent.stream()` it can't reach the room — so the worker owns the hang-up: on each turn it watches for
+the tool, waits for the agent's closing words to finish playing (so the goodbye is never cut off),
+then disconnects, running `onCallEnd` on the way out exactly as a caller hang-up does. It works on the
+agent and workflow reply paths.
+
+```typescript
+import { createEndCallTool } from '@mastra/livekit';
+
+// in your agent's tools:
+endCall: createEndCallTool({
+  // optional bookkeeping — the tool reads the caller identity from its context
+  onEndCall: ({ reason, resourceId }) => log.info('agent ended call', { reason, resourceId }),
+}),
+```
+
+Instruct the agent to say its goodbye and then call `endCall` as its final action. `endCall.message`
+adds a guaranteed non-interruptible sign-off spoken right before hanging up; `endCall.reason` sets the
+shutdown reason in LiveKit logs; `endCall.maxWaitMs` caps how long to wait for the closing words
+(default 30s). This is the AI-oversight companion to a future first-class human `handoff`.
+
+**Backwards compatibility.** The previous top-level `greeting` (string) and `persistGreeting` options
+still work — they're deprecated aliases for `configuration.greeting.text` and
+`configuration.greeting.persist`. If both are set, `configuration.greeting` wins field-by-field, so
+existing worker configs keep running unchanged while you migrate.
 
 ## Lifecycle hooks
 
@@ -184,9 +296,20 @@ createLiveKitWorker({
   },
 
   // 3. End-of-call: runs when the caller hangs up, AWAITED within LiveKit's shutdown grace window
-  //    (so it finishes before the process exits). The place for end-of-call memory maintenance.
-  onCallEnd: async ({ memory, memoryInstance }) => {
-    // e.g. flush observational memory once for the whole call instead of paying for it per turn.
+  //    (so it finishes before the process exits). The place for end-of-call work — e.g. summarize
+  //    the finished call into your own records. `memory.summarizeThread()` (@mastra/memory) runs a
+  //    one-shot summarization + structured extraction over the whole call, outside observational
+  //    memory's lifecycle — nothing is written back to memory; you decide where the result goes
+  //    (return value and/or each Extractor's `onExtracted` hook).
+  onCallEnd: async ({ memory }) => {
+    if (!memory) return;
+    await myMemory.summarizeThread({
+      // your app's `Memory` (from @mastra/memory)
+      model: 'openai/gpt-4.1-mini',
+      threadId: memory.thread,
+      resourceId: memory.resource,
+      instructions: 'Summarize this call for the business owner.',
+    });
   },
 });
 ```
@@ -293,7 +416,8 @@ Single-process HTTP hosts run the **Mastra server** as-is (`node .mastra/output/
 
 A complete, runnable reference lives in the Mastra monorepo at **[`examples/voice-agent`](https://github.com/mastra-ai/mastra/tree/main/examples/voice-agent)** — a trades-contractor front-desk voice agent that exercises nearly every feature here:
 
-- **Both entrypoints** — an agent worker (`pnpm worker`) and a workflow worker (`pnpm worker:workflow`, deterministic intent routing → memory-backed reply).
+- **Three workers, one agent name** (run one at a time): the default **agent** worker (`pnpm worker`) and **workflow** worker (`pnpm worker:workflow`, deterministic intent routing → memory-backed reply) are deliberately **permissive** — no consent friction, the end-of-call summary always runs. The **regulated** worker (`pnpm worker:regulated`, a "Northwind Financial" line) demonstrates every compliance control at once: non-interruptible AI disclosure, 45-second re-disclosure, a four-item runtime consent sweep with an audit ledger, agent-initiated hang-up with a compliance sign-off, and a consent-gated summary (no consent → no stored summary).
+- **End-of-call summarization** — every finished call is distilled into a structured record (summary, sentiment, requested services) via `memory.summarizeThread()` + an `Extractor` whose `onExtracted` hook writes to the app's own store, from the `onCallEnd` hook.
 - **Three memory layers** — working memory, semantic recall, and observational memory, all scoped to the caller.
 - **Tools + deterministic reconciliation**, a tenant-context input processor, the `toolFeedback` / `onTurnComplete` / `onCallEnd` hooks, and full observability.
 
@@ -310,7 +434,7 @@ pnpm worker:download-files      # one-time model download
 
 # in two terminals:
 pnpm dev                        # Mastra server + Studio at http://localhost:4111
-pnpm worker                     # the voice worker (or `pnpm worker:workflow`)
+pnpm worker                     # the voice worker (or `pnpm worker:workflow` / `pnpm worker:regulated`)
 ```
 
 See the example's own [`README.md`](https://github.com/mastra-ai/mastra/tree/main/examples/voice-agent) for the scenario walkthrough and the memory/latency design notes.

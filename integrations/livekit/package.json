@@ -1,6 +1,6 @@
 {
   "name": "@mastra/livekit",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "LiveKit voice integration for Mastra agents — realtime voice with semantic turn detection and barge-in",
   "type": "module",
   "main": "./dist/index.js",
@@ -28,6 +28,16 @@
       "require": {
         "types": "./dist/worker-entry.d.ts",
         "default": "./dist/worker-entry.cjs"
+      }
+    },
+    "./plugin": {
+      "import": {
+        "types": "./dist/plugin-entry.d.ts",
+        "default": "./dist/plugin-entry.js"
+      },
+      "require": {
+        "types": "./dist/plugin-entry.d.ts",
+        "default": "./dist/plugin-entry.cjs"
       }
     },
     "./package.json": "./package.json"
