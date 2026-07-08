@@ -58,7 +58,7 @@ Integration providers connect external tool platforms to the editor. Once regist
 
 [Composio](https://composio.dev) gives access to hundreds of integration tools organized into toolkits (GitHub, Slack, Gmail, and others).
 
-1. Get an API key from your Composio dashboard.
+1. Get a **project** API key (the `x-api-key` type) from your [Composio dashboard](https://dashboard.composio.dev).
 
 1. Register the provider in your Editor configuration:
 
@@ -81,7 +81,7 @@ Integration providers connect external tool platforms to the editor. Once regist
    })
    ```
 
-   Composio tool slugs use a format like `GITHUB_CREATE_ISSUE`. Tool calls are scoped to the `resourceId` passed through request context for per-user authentication.
+   Composio tool slugs use a format like `GITHUB_CREATE_ISSUE`. By default, tool calls use the connection pinned by the agent's author. To route calls to each end user's own account instead, see [connection scope](/docs/agent-builder/integrations#connection-scope) in the Agent Builder docs.
 
 ### Arcade
 

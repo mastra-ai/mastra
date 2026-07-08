@@ -245,6 +245,12 @@ export interface ResolveToolsOpts {
    * invoker, not just the author. Falsy = fall back to request context.
    */
   authorId?: string;
+  /**
+   * Identity bucketing for this connection. Providers may use it to decide
+   * whether to pin a specific account or let the backend auto-resolve within
+   * the user bucket. Absent = treat as `'per-author'` (back-compat).
+   */
+  scope?: ToolProviderConnectionScope;
   /** Per-request context (auth, tenant, currentUser, ...). */
   requestContext?: Record<string, unknown>;
 }
