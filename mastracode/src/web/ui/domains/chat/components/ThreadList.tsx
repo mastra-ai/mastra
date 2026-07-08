@@ -5,6 +5,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useKeyDown } from '../../../lib/hooks';
@@ -26,6 +27,8 @@ export function ThreadList() {
   const { activeProject } = useActiveProjectContext();
   const overlays = useOverlays();
   const { toast } = useToast();
+  const navigate = useNavigate();
+  const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
   const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -48,27 +51,31 @@ export function ThreadList() {
   if (!activeProject) return null;
 
   const threads = session.threads;
-  const activeThreadId = session.transcript.threadId;
+  // The URL is the source of truth: nothing is highlighted on the /new draft
+  // page even if the session is still bound to a thread server-side.
+  const activeThreadId = routeThreadId;
 
-  const switchThread = (threadId: string) => {
+  const openThread = (threadId: string) => {
     void session.switchThread(threadId);
+    void navigate(`/threads/${threadId}`);
     overlays.close('sidebar');
   };
 
-  const createThread = () => {
-    void session.createThread();
-    toast('New thread created', 'success');
+  const startDraft = () => {
     overlays.close('sidebar');
+    void navigate('/new');
   };
 
-  const cloneThread = (threadId: string) => {
-    void session.cloneThread(threadId);
+  const cloneThread = async (threadId: string) => {
+    const newThreadId = await session.cloneThread(threadId);
     toast('Thread cloned', 'success');
+    void navigate(`/threads/${newThreadId}`);
   };
 
-  const deleteThread = (threadId: string) => {
-    void session.deleteThread(threadId);
+  const deleteThread = async (threadId: string) => {
+    await session.deleteThread(threadId);
     toast('Thread deleted');
+    if (threadId === routeThreadId) void navigate('/new');
   };
 
   const startRename = (thread: AgentControllerThreadInfo) => {
@@ -97,7 +104,7 @@ export function ThreadList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <ThreadListHeader threadCount={threads.length} onCreateThread={createThread} />
+      <ThreadListHeader threadCount={threads.length} onCreateThread={startDraft} />
 
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
@@ -124,16 +131,16 @@ export function ThreadList() {
               active={thread.id === activeThreadId}
               menuOpen={menuFor === thread.id}
               menuRef={menuFor === thread.id ? menuRef : undefined}
-              onSwitch={() => switchThread(thread.id)}
+              onSwitch={() => openThread(thread.id)}
               onToggleMenu={() => setMenuFor(prev => (prev === thread.id ? null : thread.id))}
               onRename={() => startRename(thread)}
               onClone={() => {
                 setMenuFor(null);
-                cloneThread(thread.id);
+                void cloneThread(thread.id);
               }}
               onDelete={() => {
                 setMenuFor(null);
-                deleteThread(thread.id);
+                void deleteThread(thread.id);
               }}
             />
           ),

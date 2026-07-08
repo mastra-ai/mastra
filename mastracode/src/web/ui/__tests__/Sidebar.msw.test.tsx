@@ -11,6 +11,7 @@ import type { AgentControllerSessionState, AgentControllerThreadInfo } from '@ma
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
@@ -156,17 +157,25 @@ function useAgentControllerHandlers(): CapturedRequests {
   return captured;
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}</span>;
+}
+
 function renderSidebar() {
   return renderWithProviders(
-    <ToastProvider>
-      <ActiveProjectProvider>
-        <ChatSessionProvider>
-          <OverlaysProvider>
-            <Sidebar />
-          </OverlaysProvider>
-        </ChatSessionProvider>
-      </ActiveProjectProvider>
-    </ToastProvider>,
+    <MemoryRouter initialEntries={['/chat']}>
+      <ToastProvider>
+        <ActiveProjectProvider>
+          <ChatSessionProvider>
+            <OverlaysProvider>
+              <Sidebar />
+              <LocationProbe />
+            </OverlaysProvider>
+          </ChatSessionProvider>
+        </ActiveProjectProvider>
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -187,18 +196,18 @@ describe('Sidebar', () => {
       expect(await screen.findByText('Second thread')).toBeInTheDocument();
     });
 
-    it('switches threads when a thread is clicked', async () => {
+    it('navigates to the thread page when a thread is clicked', async () => {
       seedProject();
       useAuthHandler();
-      const captured = useAgentControllerHandlers();
+      useAgentControllerHandlers();
       renderSidebar();
 
       await userEvent.click(await screen.findByText('Second thread'));
 
-      await waitFor(() => expect(captured.switched).toContain('thread-two'));
+      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-two'));
     });
 
-    it('creates a thread and toasts when the new-thread control is clicked', async () => {
+    it('opens the /chat draft page without persisting a thread when the new-thread control is clicked', async () => {
       seedProject();
       useAuthHandler();
       const captured = useAgentControllerHandlers();
@@ -207,8 +216,8 @@ describe('Sidebar', () => {
       await screen.findByText('First thread');
       await userEvent.click(screen.getByRole('button', { name: 'New thread' }));
 
-      await waitFor(() => expect(captured.created).toBe(1));
-      expect(await screen.findByText('New thread created')).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/chat'));
+      expect(captured.created).toBe(0);
     });
   });
 

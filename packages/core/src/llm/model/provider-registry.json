@@ -321,6 +321,8 @@
         "alibaba/wan-v2.6-r2v",
         "alibaba/wan-v2.6-r2v-flash",
         "alibaba/wan-v2.6-t2v",
+        "alibaba/wan-v2.7-r2v",
+        "alibaba/wan-v2.7-t2v",
         "amazon/nova-2-lite",
         "amazon/nova-lite",
         "amazon/nova-micro",
@@ -918,12 +920,15 @@
       "name": "Vultr",
       "models": [
         "MiniMaxAI/MiniMax-M2.7",
+        "Qwen/Qwen3.5-397B-A17B",
+        "Qwen/Qwen3.6-27B",
+        "XiaomiMiMo/MiMo-V2.5-Pro",
+        "deepseek-ai/DeepSeek-V4-Flash",
         "moonshotai/Kimi-K2.6",
         "nvidia/DeepSeek-V3.2-NVFP4",
-        "nvidia/Llama-3.1-Nemotron-Safety-Guard-8B-v3",
         "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
         "nvidia/Nemotron-Cascade-2-30B-A3B",
-        "zai-org/GLM-5.1-FP8"
+        "zai-org/GLM-5.2-FP8"
       ],
       "docUrl": "https://api.vultrinference.com/",
       "gateway": "models.dev"
@@ -1215,6 +1220,7 @@
         "deepseek-v4-pro",
         "gemini-3.1-flash-lite-preview",
         "gemini-3.1-pro-preview",
+        "glm-5.2",
         "gpt-5-mini",
         "gpt-5.1-codex",
         "gpt-5.1-codex-max",
@@ -1546,9 +1552,10 @@
       "apiKeyEnvVar": "SUBCONSCIOUS_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Subconscious",
-      "models": ["subconscious/tim-qwen3.6-27b"],
+      "models": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"],
       "docUrl": "https://docs.subconscious.dev",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "npm": "@ai-sdk/anthropic"
     },
     "lmstudio": {
       "url": "http://127.0.0.1:1234/v1",
@@ -2501,8 +2508,6 @@
       "name": "LLM Gateway",
       "models": [
         "auto",
-        "claude-3-7-sonnet",
-        "claude-3-7-sonnet-20250219",
         "claude-3-opus",
         "claude-fable-5",
         "claude-haiku-4-5",
@@ -3216,6 +3221,7 @@
         "gpt-5.5",
         "gpt-5.5-pro",
         "grok-build-0.1",
+        "hy3-free",
         "kimi-k2.5",
         "kimi-k2.6",
         "kimi-k2.7-code",
@@ -4057,6 +4063,7 @@
         "minimax/minimax-m2.1",
         "minimax/minimax-m2.5",
         "minimax/minimax-m2.7",
+        "minimax/minimax-m3",
         "mistralai/codestral-2508",
         "mistralai/devstral-2512",
         "mistralai/devstral-medium",
@@ -4415,9 +4422,9 @@
       "name": "OpenRouter",
       "models": [
         "ai21/jamba-large-1.7",
-        "aion-labs/aion-1.0",
-        "aion-labs/aion-1.0-mini",
         "aion-labs/aion-2.0",
+        "aion-labs/aion-3.0",
+        "aion-labs/aion-3.0-mini",
         "aion-labs/aion-rp-llama-3.1-8b",
         "allenai/olmo-3-32b-think",
         "amazon/nova-2-lite-v1",
@@ -4560,6 +4567,7 @@
         "moonshotai/kimi-k2.7-code",
         "morph/morph-v3-fast",
         "morph/morph-v3-large",
+        "nex-agi/nex-n2-mini",
         "nex-agi/nex-n2-pro",
         "nousresearch/hermes-3-llama-3.1-405b",
         "nousresearch/hermes-3-llama-3.1-405b:free",
@@ -5118,7 +5126,7 @@
       "apiKeyEnvVar": "XPERSONA_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Xpersona",
-      "models": ["xpersona-frieren-coder", "xpersona-gpt-5.5"],
+      "models": ["claude-fable-5", "xpersona-frieren-coder", "xpersona-gpt-5.5"],
       "docUrl": "https://www.xpersona.co/docs",
       "gateway": "models.dev"
     },
@@ -6449,6 +6457,8 @@
       "alibaba/wan-v2.6-r2v",
       "alibaba/wan-v2.6-r2v-flash",
       "alibaba/wan-v2.6-t2v",
+      "alibaba/wan-v2.7-r2v",
+      "alibaba/wan-v2.7-t2v",
       "amazon/nova-2-lite",
       "amazon/nova-lite",
       "amazon/nova-micro",
@@ -6957,12 +6967,15 @@
     ],
     "vultr": [
       "MiniMaxAI/MiniMax-M2.7",
+      "Qwen/Qwen3.5-397B-A17B",
+      "Qwen/Qwen3.6-27B",
+      "XiaomiMiMo/MiMo-V2.5-Pro",
+      "deepseek-ai/DeepSeek-V4-Flash",
       "moonshotai/Kimi-K2.6",
       "nvidia/DeepSeek-V3.2-NVFP4",
-      "nvidia/Llama-3.1-Nemotron-Safety-Guard-8B-v3",
       "nvidia/Nemotron-3-Nano-Omni-30B-A3B-Reasoning-BF16",
       "nvidia/Nemotron-Cascade-2-30B-A3B",
-      "zai-org/GLM-5.1-FP8"
+      "zai-org/GLM-5.2-FP8"
     ],
     "302ai": [
       "MiniMax-M1",
@@ -7190,6 +7203,7 @@
       "deepseek-v4-pro",
       "gemini-3.1-flash-lite-preview",
       "gemini-3.1-pro-preview",
+      "glm-5.2",
       "gpt-5-mini",
       "gpt-5.1-codex",
       "gpt-5.1-codex-max",
@@ -7403,7 +7417,7 @@
       "stable-diffusion-3.5-large",
       "wan2-2-t2v-a14b"
     ],
-    "subconscious": ["subconscious/tim-qwen3.6-27b"],
+    "subconscious": ["subconscious/glm-5.2", "subconscious/tim-qwen3.6-27b"],
     "lmstudio": ["openai/gpt-oss-20b", "qwen/qwen3-30b-a3b-2507", "qwen/qwen3-coder-30b"],
     "poolside": ["poolside/laguna-m.1", "poolside/laguna-xs.2"],
     "zenmux": [
@@ -8041,8 +8055,6 @@
     ],
     "llmgateway": [
       "auto",
-      "claude-3-7-sonnet",
-      "claude-3-7-sonnet-20250219",
       "claude-3-opus",
       "claude-fable-5",
       "claude-haiku-4-5",
@@ -8584,6 +8596,7 @@
       "gpt-5.5",
       "gpt-5.5-pro",
       "grok-build-0.1",
+      "hy3-free",
       "kimi-k2.5",
       "kimi-k2.6",
       "kimi-k2.7-code",
@@ -9105,6 +9118,7 @@
       "minimax/minimax-m2.1",
       "minimax/minimax-m2.5",
       "minimax/minimax-m2.7",
+      "minimax/minimax-m3",
       "mistralai/codestral-2508",
       "mistralai/devstral-2512",
       "mistralai/devstral-medium",
@@ -9410,9 +9424,9 @@
     ],
     "openrouter": [
       "ai21/jamba-large-1.7",
-      "aion-labs/aion-1.0",
-      "aion-labs/aion-1.0-mini",
       "aion-labs/aion-2.0",
+      "aion-labs/aion-3.0",
+      "aion-labs/aion-3.0-mini",
       "aion-labs/aion-rp-llama-3.1-8b",
       "allenai/olmo-3-32b-think",
       "amazon/nova-2-lite-v1",
@@ -9555,6 +9569,7 @@
       "moonshotai/kimi-k2.7-code",
       "morph/morph-v3-fast",
       "morph/morph-v3-large",
+      "nex-agi/nex-n2-mini",
       "nex-agi/nex-n2-pro",
       "nousresearch/hermes-3-llama-3.1-405b",
       "nousresearch/hermes-3-llama-3.1-405b:free",
@@ -9990,7 +10005,7 @@
       "z-ai/glm-5.1"
     ],
     "abliteration-ai": ["abliterated-model"],
-    "xpersona": ["xpersona-frieren-coder", "xpersona-gpt-5.5"],
+    "xpersona": ["claude-fable-5", "xpersona-frieren-coder", "xpersona-gpt-5.5"],
     "baseten": [
       "deepseek-ai/DeepSeek-V4-Pro",
       "moonshotai/Kimi-K2.5",

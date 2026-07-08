@@ -96,13 +96,6 @@ const topicExamplesResponse = {
   nextOffset: null,
 };
 
-const pointsResponse = {
-  runId: '32',
-  points: [
-    { exampleId: 'ex-1', runId: '32', signalName: 'sentiment', topicId: '89', isOutlier: false, x: 0.1, y: 0.2 },
-  ],
-};
-
 function useEntityLearningHandlers() {
   server.use(
     http.get(`${ENTITY_LEARNING_ROOT}/entities`, () => HttpResponse.json(entitiesResponse)),
@@ -110,7 +103,6 @@ function useEntityLearningHandlers() {
     http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/topics/:topicId/examples`, () =>
       HttpResponse.json(topicExamplesResponse),
     ),
-    http.get(`${ENTITY_LEARNING_ROOT}/entities/:entityId/points`, () => HttpResponse.json(pointsResponse)),
   );
 }
 
@@ -208,6 +200,19 @@ describe('Signals page wrappers', () => {
 
       expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
     });
+
+    it('renders inside a route-level scroll boundary', async () => {
+      useEntityLearningHandlers();
+
+      renderSignalsPage('/signals/sentiment?entityId=entity_support');
+
+      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
+      const scrollBoundary = screen.getByTestId('signal-details-scroll-boundary');
+
+      expect(scrollBoundary.className).toContain('h-full');
+      expect(scrollBoundary.className).toContain('min-h-0');
+      expect(scrollBoundary.className).toContain('overflow-y-auto');
+    });
   });
 
   describe('when a trace route is active', () => {
@@ -225,6 +230,20 @@ describe('Signals page wrappers', () => {
       await waitFor(() =>
         expect(screen.getByTestId('location').textContent).toBe('/signals/sentiment?entityId=entity_support'),
       );
+    }, 15000);
+
+    it('renders inside a route-level scroll boundary', async () => {
+      useEntityLearningHandlers();
+      useTraceDetailHandlers();
+
+      renderSignalsPage('/signals/sentiment/traces/trace-1?entityId=entity_support');
+
+      expect(await screen.findByRole('heading', { name: 'Sentiment' })).not.toBeNull();
+      const scrollBoundary = screen.getByTestId('signal-details-scroll-boundary');
+
+      expect(scrollBoundary.className).toContain('h-full');
+      expect(scrollBoundary.className).toContain('min-h-0');
+      expect(scrollBoundary.className).toContain('overflow-y-auto');
     }, 15000);
   });
 

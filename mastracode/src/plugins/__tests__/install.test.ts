@@ -177,10 +177,15 @@ describe('installGithubPlugin', () => {
       ['repo', 'clone', 'acme/mastracode-plugin', checkoutDir],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
-    expect(execaMock).toHaveBeenNthCalledWith(4, 'git', ['checkout', 'main'], {
-      cwd: checkoutDir,
-      env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
-    });
+    expect(execaMock).toHaveBeenNthCalledWith(
+      4,
+      'git',
+      ['checkout', 'main'],
+      expect.objectContaining({
+        cwd: checkoutDir,
+        env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
+      }),
+    );
     expect(
       loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins['acme.github'],
     ).toMatchObject({
@@ -188,6 +193,71 @@ describe('installGithubPlugin', () => {
       path: 'sources/github/acme-mastracode-plugin',
       ref: 'main',
     });
+  });
+
+  it('installs checkout dependencies before loading and writing the registry record', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const checkoutDir = path.join(homeDir, '.mastracode/plugins/sources/github/acme-dep-plugin');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.dep');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+        fs.writeFileSync(path.join(destination, 'pnpm-lock.yaml'), 'lockfileVersion: 9');
+      }
+      return { stdout: '' };
+    });
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/dep-plugin', 'global', { projectRoot, homeDir }),
+    ).resolves.toBe('acme.dep');
+
+    expect(execaMock).toHaveBeenNthCalledWith(
+      3,
+      'gh',
+      ['repo', 'clone', 'acme/dep-plugin', checkoutDir, '--', '--depth', '1'],
+      expect.anything(),
+    );
+    expect(execaMock).toHaveBeenNthCalledWith(
+      4,
+      'pnpm',
+      ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore', '--ignore-scripts'],
+      expect.objectContaining({ cwd: checkoutDir }),
+    );
+    expect(
+      loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins['acme.dep'],
+    ).toMatchObject({
+      source: 'github',
+      path: 'sources/github/acme-dep-plugin',
+    });
+  });
+
+  it('does not write a registry record when dependency installation fails', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-install-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const installError = new Error('dependency install failed');
+    execaMock.mockImplementation(async (cmd: string, args: string[]) => {
+      if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
+        const destination = args[3];
+        if (!destination) throw new Error('missing checkout dir');
+        writePlugin(destination, 'acme.dep-fail');
+        fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
+      }
+      if (cmd === 'pnpm') {
+        throw installError;
+      }
+      return { stdout: '' };
+    });
+
+    await expect(
+      installGithubPlugin('https://github.com/acme/dep-fail', 'global', { projectRoot, homeDir }),
+    ).rejects.toThrow(installError);
+
+    expect(loadPluginRegistry(path.join(homeDir, '.mastracode/plugins/plugins.json')).plugins).toEqual({});
   });
 
   it('throws an actionable error when gh is unavailable', async () => {
@@ -220,7 +290,9 @@ describe('installGithubPlugin', () => {
       if (cmd === 'gh' && args[0] === 'repo' && args[1] === 'clone') {
         const checkoutDir = args[3];
         if (!checkoutDir) throw new Error('missing checkout dir');
-        writePlugin(path.join(checkoutDir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria'), 'alexandria');
+        const nestedPluginDir = path.join(checkoutDir, '.mastracode', 'plugins', 'sources', 'local', 'alexandria');
+        writePlugin(nestedPluginDir, 'alexandria');
+        fs.writeFileSync(path.join(nestedPluginDir, 'package.json'), JSON.stringify({ name: 'alexandria' }));
         fs.writeFileSync(
           path.join(checkoutDir, '.mastracode-plugin.json'),
           JSON.stringify({
@@ -240,15 +312,20 @@ describe('installGithubPlugin', () => {
       installGithubPlugin('https://github.com/acme/alexandria', 'project', { projectRoot, homeDir }),
     ).resolves.toBe('alexandria');
 
+    const checkoutDir = path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria');
+    const nestedPluginDir = path.join(checkoutDir, '.mastracode/plugins/sources/local/alexandria');
     expect(execaMock).toHaveBeenCalledWith(
       'gh',
-      [
-        'repo',
-        'clone',
-        'acme/alexandria',
-        path.join(projectRoot, '.mastracode/plugins/sources/github/acme-alexandria'),
-      ],
+      ['repo', 'clone', 'acme/alexandria', checkoutDir, '--', '--depth', '1'],
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
+    );
+    expect(execaMock).toHaveBeenCalledWith(
+      'npm',
+      ['install', '--ignore-scripts'],
+      expect.objectContaining({ cwd: nestedPluginDir }),
+    );
+    expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
+      fs.realpathSync(mastracodePackageRoot),
     );
     expect(
       loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins.alexandria,

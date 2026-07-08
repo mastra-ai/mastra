@@ -60,6 +60,7 @@ export type ScenarioName =
   | 'plugins-local-tool'
   | 'plugins-local-hot-reload'
   | 'plugins-github-install-gh-cli'
+  | 'plugins-github-install-missing-package-manager'
   | 'plugins-github-poll-update'
   | 'plugins-blocked-config'
   | 'plugins-scaffold-install-tool'

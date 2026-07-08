@@ -442,7 +442,7 @@ await agentController.init()
 
 Create a new, fully-wired `Session` and bring it online. The session starts in the default mode with the seeded model, connects to the AgentController's shared machinery (agent, storage/lock, config catalog), and has a current thread (the most recent thread for the resource, or a freshly created one). Call `init()` once before creating sessions so shared storage is ready.
 
-The AgentController owns no session of its own — every consumer creates its own session and drives all work through it. In a server or multiplayer setting, each request, thread, or user gets its own session, isolated from every other: independent event bus, mode, model, state, and current thread.
+The AgentController owns no session of its own — every consumer creates its own session and drives all work through it. A `resourceId` maps to exactly one session per AgentController (get-or-create): calling `createSession` with the same `resourceId` returns the existing session, so reconnects resume rather than fork the conversation. Different `resourceId`s produce independent sessions with isolated event bus, mode, model, state, and current thread. Use `session.thread.create()` and `session.thread.switch()` to manage multiple conversations within one session.
 
 `id` and `ownerId` are required — they mirror `SessionRecord.id` and `SessionRecord.ownerId` and are stable for the life of the session. `resourceId` is optional and defaults to `config.resourceId` then `config.id`.
 

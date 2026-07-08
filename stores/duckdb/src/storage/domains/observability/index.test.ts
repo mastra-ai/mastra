@@ -430,6 +430,48 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(traces.spans.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('listTracesLight returns seeded traces via the facade', async () => {
+      await storage.batchCreateSpans({
+        records: [
+          {
+            traceId: 'trace-light-1',
+            spanId: 'root-light',
+            parentSpanId: null,
+            name: 'workflow-run',
+            spanType: SpanType.WORKFLOW_RUN,
+            isEvent: false,
+            entityType: EntityType.WORKFLOW_RUN,
+            entityId: 'wf-light',
+            entityName: 'myWorkflow',
+            userId: null,
+            organizationId: null,
+            resourceId: null,
+            runId: null,
+            sessionId: null,
+            threadId: null,
+            requestId: null,
+            environment: 'production',
+            source: null,
+            serviceName: 'svc',
+            scope: null,
+            attributes: null,
+            metadata: null,
+            tags: ['v1'],
+            links: null,
+            input: null,
+            output: null,
+            error: null,
+            startedAt: new Date('2026-01-03T00:00:00Z'),
+            endedAt: new Date('2026-01-03T00:00:01Z'),
+          },
+        ],
+      });
+
+      // On base the facade falls through to the base-class throw; after the fix it resolves.
+      const result = await storage.listTracesLight({});
+      expect(result.spans.map(s => s.traceId)).toContain('trace-light-1');
+    });
+
     it('listTraces applies scalar prefilter and tag post-filter correctly', async () => {
       await storage.batchCreateSpans({
         records: [

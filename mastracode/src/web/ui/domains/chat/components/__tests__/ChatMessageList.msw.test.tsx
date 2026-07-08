@@ -8,6 +8,7 @@
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -80,12 +81,23 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
 }
 
 function renderMessageList() {
+  // Mounted on the thread's own page: /chat is the draft composer and hides
+  // the bound thread's transcript.
   return renderWithProviders(
-    <ActiveProjectProvider>
-      <ChatSessionProvider>
-        <ChatMessageList />
-      </ChatSessionProvider>
-    </ActiveProjectProvider>,
+    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+      <Routes>
+        <Route
+          path="/threads/:threadId"
+          element={
+            <ActiveProjectProvider>
+              <ChatSessionProvider>
+                <ChatMessageList />
+              </ChatSessionProvider>
+            </ActiveProjectProvider>
+          }
+        />
+      </Routes>
+    </MemoryRouter>,
   );
 }
 

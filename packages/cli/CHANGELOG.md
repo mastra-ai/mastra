@@ -1,5 +1,57 @@
 # mastra
 
+## 1.18.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0)]:
+  - @mastra/core@1.50.2-alpha.0
+  - @mastra/deployer@1.50.2-alpha.0
+
+## 1.18.2
+
+### Patch Changes
+
+- `mastra deploy` no longer requires a local `.env` or `.env.<name>` file when the target environment already has env vars stored on Mastra Cloud. Previously the command errored with "No env file found for deploy" even when Cloud held the canonical env vars for that environment. ([#19016](https://github.com/mastra-ai/mastra/pull/19016))
+
+  If an explicit `--env-file` is passed, or a `.env*` file exists in the project, behavior is unchanged: those vars are read and layered on top of the environment's stored env vars for that deploy (Cloud is the base, local values win). If neither is present, the deploy proceeds with an empty local payload and Cloud's stored env vars are used as-is. `mastra studio deploy` and `mastra server deploy` are unchanged.
+
+- Warn before overwriting existing environment variables during `mastra deploy`. When an env file provides variables whose values differ from those already stored on the target environment, the CLI now lists the affected keys and asks for confirmation before uploading (skipped with `--yes` or in headless mode). ([#19060](https://github.com/mastra-ai/mastra/pull/19060))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1
+  - @mastra/deployer@1.50.1
+
+## 1.18.2-alpha.2
+
+### Patch Changes
+
+- Warn before overwriting existing environment variables during `mastra deploy`. When an env file provides variables whose values differ from those already stored on the target environment, the CLI now lists the affected keys and asks for confirmation before uploading (skipped with `--yes` or in headless mode). ([#19060](https://github.com/mastra-ai/mastra/pull/19060))
+
+- Updated dependencies [[`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1-alpha.2
+  - @mastra/deployer@1.50.1-alpha.2
+
+## 1.18.2-alpha.1
+
+### Patch Changes
+
+- `mastra deploy` no longer requires a local `.env` or `.env.<name>` file when the target environment already has env vars stored on Mastra Cloud. Previously the command errored with "No env file found for deploy" even when Cloud held the canonical env vars for that environment. ([#19016](https://github.com/mastra-ai/mastra/pull/19016))
+
+  If an explicit `--env-file` is passed, or a `.env*` file exists in the project, behavior is unchanged: those vars are read and layered on top of the environment's stored env vars for that deploy (Cloud is the base, local values win). If neither is present, the deploy proceeds with an empty local payload and Cloud's stored env vars are used as-is. `mastra studio deploy` and `mastra server deploy` are unchanged.
+
+- Updated dependencies [[`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95)]:
+  - @mastra/core@1.50.1-alpha.1
+  - @mastra/deployer@1.50.1-alpha.1
+
+## 1.18.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000)]:
+  - @mastra/core@1.50.1-alpha.0
+  - @mastra/deployer@1.50.1-alpha.0
+
 ## 1.18.1
 
 ### Patch Changes
