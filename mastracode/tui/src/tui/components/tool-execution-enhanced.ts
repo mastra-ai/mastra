@@ -11,6 +11,7 @@ import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
+import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { BOX_INDENT, getTermWidth, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -258,7 +259,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     ) {
       return;
     }
-    this.streamingOutput += output;
+    this.streamingOutput += sanitizeAnsiForRendering(output);
     this.rebuild();
   }
 
