@@ -30,8 +30,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "hasToolResult": true,
-        "toolCallId": "call_plan_rc_e2e_initial_write"
+        "turnIndex": 1
       },
       "response": {
         "toolCalls": [
@@ -53,8 +52,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "hasToolResult": true,
-        "toolCallId": "call_plan_rc_e2e_revised_write"
+        "turnIndex": 3
       },
       "response": {
         "toolCalls": [
