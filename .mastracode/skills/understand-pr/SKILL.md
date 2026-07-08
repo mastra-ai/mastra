@@ -15,7 +15,7 @@ Do not produce walls of text. Every response should be short, dense, and end wit
 **Shell note:** `gh` output often contains ANSI color codes that break `jq`. Use `gh`'s built-in `--jq` flag instead of piping to `jq`, or prefix commands with `NO_COLOR=1`.
 
 1. Parse the PR number and optional `--working-file <path>` from `$ARGUMENTS`.
-2. If `--working-file` is present, verify the file exists and read it first. Use the same file as the only artifact, use it as context and make all instructions in the file a priority during the review lifecycle. Update it before ending and make sure all instructions it has are fulfilled. If the file does not exist but `--working-file` argument was passed, tell the user and end.
+2. If `--working-file` is present, verify the file exists and read it first. Treat it as caller-provided context, follow its handoff instructions, and update that same file with findings before returning to the caller. Do not treat the working file as the final user-facing output. If the file does not exist but `--working-file` argument was passed, tell the user and end.
 3. Verify the checked-out branch matches the PR head branch.
 4. Run `gh pr view --json title,body,commits,files,labels,number,headRefName,author` to get PR metadata.
 5. Run `gh pr diff` to get the full diff.
@@ -208,7 +208,9 @@ Wait for the user's response. Then share your opinion — be direct and honest. 
 
 ## Phase 7: Review Comment (Optional)
 
-After the opinion exchange, offer to draft a review comment:
+If `--working-file` is present, do not offer a PR comment by default. Update the working file with Review findings and return to the caller so it can handle the lifecycle output.
+
+Otherwise, after the opinion exchange, offer to draft a review comment:
 
 ```text
 Want me to draft a review comment? Options:

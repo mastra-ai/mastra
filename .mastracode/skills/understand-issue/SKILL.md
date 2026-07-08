@@ -19,7 +19,7 @@ Do not produce walls of text. Responses should be short, dense, and information-
 Figure out what we're investigating.
 
 1. Parse the issue input and optional `--working-file <path>` from `$ARGUMENTS`.
-2. If `--working-file` is present, verify the file exists, read it first, use its context, follow its handoff instructions, update that same file, and create no separate artifact. If the file does not exist, tell the user and end.
+2. If `--working-file` is present, verify the file exists and read it first. Treat it as caller-provided context, follow its handoff instructions, and update that same file with findings before returning to the caller. Do not treat the working file as the final user-facing output. If the file does not exist, tell the user and end.
 3. Never post comments without explicit approval.
 
 The user may provide:
@@ -207,7 +207,7 @@ Only move to the write-up after the user confirms they genuinely understand the 
 
 ## Phase 7: Understanding File
 
-If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions. Otherwise, write `.issue-review/UNDERSTANDING.md`.
+If a working file was provided, update that same file with the full investigation and any requested outputs from its handoff instructions, then return to the caller so it can handle the lifecycle output. Otherwise, write `.issue-review/UNDERSTANDING.md`.
 
 Capture:
 
@@ -222,7 +222,9 @@ Present the key findings to the user interactively before finalizing the file.
 
 ## Phase 8: Share to GitHub (Optional)
 
-Offer to post the analysis to the GitHub issue:
+If `--working-file` is present, skip this phase by default and return to the caller.
+
+Otherwise, offer to post the analysis to the GitHub issue:
 
 ```text
 A) Post a summary of this analysis as an issue comment
