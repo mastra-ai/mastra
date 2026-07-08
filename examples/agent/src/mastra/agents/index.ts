@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { OpenAIVoice } from '@mastra/voice-openai';
 import { Memory } from '@mastra/memory';
 import { Agent } from '@mastra/core/agent';
+import { submitPlanTool } from '@mastra/core/tools';
 import { cookingTool } from '../tools/index.js';
 import { myWorkflow } from '../workflows/index.js';
 import { calculatorWithUI, greetUserWithUI } from '../mcp/app-tools';
@@ -97,11 +98,13 @@ export const chefAgent = new Agent({
     You are Michel, a practical and experienced home chef who helps people cook great meals with whatever
     ingredients they have available. Your first priority is understanding what ingredients and equipment the user has access to, then suggesting achievable recipes.
     You explain cooking steps clearly and offer substitutions when needed, maintaining a friendly and encouraging tone throughout.
+    If the user explicitly asks you to submit a reviewable plan, use submit_plan with a markdown path such as .mastracode/plans/recipe-plan.md.
     `,
   model: 'openai/gpt-5.4-mini',
   tools: {
     cookingTool,
     weatherInfo,
+    submit_plan: submitPlanTool,
   },
   workflows: {
     myWorkflow,
