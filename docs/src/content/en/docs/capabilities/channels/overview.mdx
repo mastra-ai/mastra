@@ -86,7 +86,7 @@ For example, a Slack adapter on an agent with the `support-agent` ID uses:
 
 Point the platform's webhook, event, or interactions URL to this path. The Chat SDK adapter verifies the incoming request, normalizes the event, and passes it to the agent.
 
-During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like cloudflared or ngrok to expose `localhost:4111`:
+During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose `localhost:4111`:
 
 ```bash npm2yarn
 npx cloudflared tunnel --url http://localhost:4111
