@@ -1,7 +1,9 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { useEffect } from 'react';
+import { useRef, useSyncExternalStore } from 'react';
 
 import type { AgentControllerSession } from './useAgentControllerClient';
+
+export type SseConnectionState = 'never' | 'connected' | 'dropped';
 
 interface UseAgentControllerEventsArgs {
   session: AgentControllerSession | null;
@@ -18,17 +20,30 @@ export function useAgentControllerEvents({
   onEvent,
   onConnectedChange,
 }: UseAgentControllerEventsArgs) {
-  useEffect(() => {
-    if (!enabled || !session || !epoch) return;
+  const connectedSnapshotRef = useRef<SseConnectionState>('never');
+
+  const subscribe = (onStoreChange: () => void) => {
+    if (!enabled || !session || !epoch) return () => {};
 
     let disposed = false;
     let unsubscribe: (() => void) | undefined;
+
+    const setConnectionState = (state: SseConnectionState) => {
+      if (connectedSnapshotRef.current === state) return;
+      connectedSnapshotRef.current = state;
+      onConnectedChange(state === 'connected');
+      onStoreChange();
+    };
+
+    const disconnect = () => {
+      if (connectedSnapshotRef.current === 'connected') setConnectionState('dropped');
+    };
 
     void session
       .subscribe({
         onEvent,
         onError: () => {
-          if (!disposed) onConnectedChange(false);
+          if (!disposed) disconnect();
         },
       })
       .then(
@@ -38,10 +53,10 @@ export function useAgentControllerEvents({
             return;
           }
           unsubscribe = sub.unsubscribe;
-          onConnectedChange(true);
+          setConnectionState('connected');
         },
         () => {
-          if (!disposed) onConnectedChange(false);
+          if (!disposed) disconnect();
         },
       );
 
@@ -49,5 +64,11 @@ export function useAgentControllerEvents({
       disposed = true;
       unsubscribe?.();
     };
-  }, [session, enabled, epoch, onEvent, onConnectedChange]);
+  };
+
+  return useSyncExternalStore(
+    subscribe,
+    () => connectedSnapshotRef.current,
+    () => 'never',
+  );
 }

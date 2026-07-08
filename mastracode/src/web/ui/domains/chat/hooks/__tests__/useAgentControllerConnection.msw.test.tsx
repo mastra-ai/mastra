@@ -81,6 +81,49 @@ describe('useAgentControllerConnection', () => {
     expect(onStream).toHaveBeenCalledTimes(1);
   });
 
+  it('given the event callback changes after connection, then the active stream is not resubscribed', async () => {
+    const onStream = vi.fn();
+    const onEvent = vi.fn();
+
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/modes`, () => HttpResponse.json({ modes: [] })),
+      http.get(sessionUrl, () =>
+        HttpResponse.json({
+          controllerId,
+          resourceId,
+          modeId: 'build',
+          modelId: 'openai/gpt-4o-mini',
+          threadId: 'state-thread',
+          settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+        }),
+      ),
+      http.get(`${sessionUrl}/stream`, () => {
+        onStream();
+        return new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+          headers: { 'content-type': 'text/event-stream' },
+        });
+      }),
+    );
+
+    const { rerender, result } = renderHookWithProviders(() =>
+      useAgentControllerConnection({
+        ...hookArgs,
+        onEvent: event => onEvent(event),
+      }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    rerender();
+    rerender();
+
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(onStream).toHaveBeenCalledTimes(1);
+  });
+
   it('given reconnect polling is disconnected, then it backs off and stops at the retry cap', () => {
     expect(reconnectRefetchInterval(true, 0)).toBe(false);
     expect(reconnectRefetchInterval(false, 0)).toBe(1000);

@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { useCallback, useState } from 'react';
+import { useState } from 'react';
 import { useAgentControllerClient } from './useAgentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerModes } from './useAgentControllerModes';
@@ -40,13 +40,13 @@ export function useAgentControllerConnection({
     enabled: enabled && initQuery.isSuccess,
     sseConnected,
   });
-  const handleConnectedChange = useCallback((connected: boolean) => {
+  const handleConnectedChange = (connected: boolean) => {
     setSseConnectionState(current => {
       if (connected) return 'connected';
       if (current === 'connected') return 'dropped';
       return current;
     });
-  }, []);
+  };
 
   useAgentControllerEvents({
     session,
