@@ -62,7 +62,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -368,7 +368,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
