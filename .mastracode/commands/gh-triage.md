@@ -22,8 +22,8 @@ Start with **Triage** only. In `--headless` mode, choose the next step, post the
 - [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
 - [ ] After successfully posting/updating the Triage output, remove the `status: needs triage` label from the triaged issue or PR if present.
 - [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR, then remove `status: needs triage` from those linked issues if present.
-- [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything. The only label write allowed is removing `status: needs triage` after a successful Triage post.
-- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, and the required `status: needs triage` label removal after posting.
+- [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything, except the critical-path actions required by `.mastracode/resources/CRITICAL_PATHS.md`. The only label write allowed is removing `status: needs triage` after a successful Triage post.
+- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, critical-path reviewer/close actions required by `.mastracode/resources/CRITICAL_PATHS.md`, and the required `status: needs triage` label removal after posting.
 - [ ] Stop on non-open issues, non-open PRs, or draft PRs unless the user explicitly asks for a note.
 - [ ] Do not invent evidence. Say what was not checked.
 - [ ] Keep interactive responses short and end with lettered options.
@@ -36,12 +36,12 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 ## <severity symbol only> Maintainer's Triage Note
 
 **Current Phase:** Triaged
-**Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Continue to Approve|Await final approval|Other>
+**Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Critical-path owner review|Continue to Approve|Await final approval|Other>
 
 **Triage:**
 - Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
-- Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
+- Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Critical-path owner review|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
 
 **Review:**
@@ -72,12 +72,12 @@ Thanks for opening this.
 
 Post/update an issue/PR comment only after explicit approval in interactive mode. In `--headless` triage, choose the required output from the classification case and post it without asking.
 
-When a PR triage note routes linked/closing issue(s) to Review, also post this short comment on each linked issue:
+When a PR triage note routes linked/closing issue(s), also post this short comment on each linked issue:
 
 ```markdown
 Thanks for opening this issue.
 
-This has been triaged and routed to PR #<n> for Review. Maintainers will continue the lifecycle tracking on that PR.
+This has been triaged and routed to PR #<n> for maintainer follow-up. Maintainers will continue the lifecycle tracking on that PR.
 ```
 
 ## Phase 1: Triage
@@ -116,6 +116,7 @@ gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,l
 - [ ] If CI workflows are waiting for approval or have not been approved, do not report individual failing/pending checks. Recommend `Approve CI checks before Review` as the next step.
 - [ ] Only report non-Vercel failing checks when CI has already been approved and the check result is real.
 - [ ] Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Do not set confidence during Triage.
+- [ ] For PRs, read `.mastracode/resources/CRITICAL_PATHS.md` and compare changed files against it.
 
 ```bash
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
@@ -133,7 +134,7 @@ git log --since="90 days ago" --format='%h %ad %an %s' --date=short -- "$RELEVAN
 
 ### 3. Classify and route
 
-Choose one case. Triage must finish with exactly one primary output route: Case A posts an issue/PR comment and stops; Cases B-D post/update the Maintainer's Triage Note because the item is triaged and ready for Review.
+Choose one case. Triage must finish with exactly one primary output route: Case A posts an issue/PR comment and stops; Case B follows the critical-path resource output; Cases C-E post/update the Maintainer's Triage Note. Critical-path matches stop after Triage unless the user explicitly asks to continue.
 
 #### Case A: Irrelevant, duplicate, resolved, unclear, suspicious, or non-actionable
 
@@ -160,7 +161,17 @@ Output:
 - Do not create/update a Maintainer's Triage Note for Case A unless the user explicitly overrides the route.
 - Interactive ask: `Does this look non-actionable, or is there context that makes it worth Review?`
 
-#### Case B: One PR to review
+#### Case B: Critical path
+
+Use when an active PR's changed files match `.mastracode/resources/CRITICAL_PATHS.md`.
+
+Output:
+
+- Follow the resource: auto-close/comment for listed external-contributor paths; otherwise request/add the listed owner(s) and post/update a concise Maintainer's Triage Note that calls out the matched path, owner(s), and reason.
+- Skip the Review step by default; do not activate `understand-pr` or create a review working file for this route unless the user explicitly asks.
+- Interactive ask: `This touches a critical path. Post the critical-path triage output and stop here?`
+
+#### Case C: One PR to review
 
 Use when the input is an active PR, or exactly one active PR clearly closes/fixes the issue, and linked issue state does not make the PR obviously duplicate/stale.
 
@@ -182,7 +193,7 @@ Output:
 - If this is a PR with linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
 - Interactive ask: `Should this PR be the Review target?`
 
-#### Case C: Multiple candidate PRs
+#### Case D: Multiple candidate PRs
 
 Use when multiple active PRs clearly close/fix the issue or address the same live problem.
 
@@ -198,7 +209,7 @@ Output:
 - If one PR is selected and it has linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
 - Interactive ask: `Which PR should move to Review?`
 
-#### Case D: Issue investigation
+#### Case E: Issue investigation
 
 Use for an open issue with no active PR that clearly closes/fixes it, and enough information for investigation.
 
@@ -215,14 +226,15 @@ Output:
 ### 4. Post/update note or comment, then pause
 
 - [ ] Case A: post the issue/PR comment, remove `status: needs triage` if present, and stop. Do not continue to Review.
-- [ ] Cases B-D: update an existing Maintainer's Triage Note if present; otherwise create one. After the note is posted/updated, remove `status: needs triage` if present.
+- [ ] Case B: follow `.mastracode/resources/CRITICAL_PATHS.md`, post/update the required GitHub-visible output, remove `status: needs triage` if present, and stop. Do not enter Review unless the user explicitly asks.
+- [ ] Cases C-E: update an existing Maintainer's Triage Note if present; otherwise create one. After the note is posted/updated, remove `status: needs triage` if present.
 - [ ] PR note route with linked/closing issue(s): after posting/updating the PR note, post the linked-issue triage comment on each linked issue, then remove `status: needs triage` from those linked issues if present.
 - [ ] `--headless`: make the classification decision, post the selected output(s), remove `status: needs triage` where applicable, and exit. Do not pause for confirmation or continue to Review.
 - [ ] Interactive mode: show the selected draft(s), recommend the route, and ask before posting unless already requested.
 
 ```text
-Triage output is ready: <Case A issue/PR comment|Maintainer's Triage Note|Maintainer's Triage Note + linked issue comment(s)>.
-Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Approve CI checks before Review|Select fixing PR>.
+Triage output is ready: <Case A issue/PR comment|critical-path output|Maintainer's Triage Note|Maintainer's Triage Note + linked issue comment(s)>.
+Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Approve CI checks before Review|Select fixing PR|Critical-path owner review>.
 
 A) Post the selected Triage output and stop here
 B) Show/edit the draft before posting
@@ -231,7 +243,7 @@ D) Post the selected Triage output, then continue to Review
 E) Do not post — stop here
 ```
 
-Only offer D for Cases B-D. Never offer D for Case A. If output was already posted automatically, replace the posting options with a short summary of what was posted and stop.
+Only offer D for Cases C-E. Never offer D for Cases A-B. If output was already posted automatically, replace the posting options with a short summary of what was posted and stop.
 
 ## Phase 2: Review
 
