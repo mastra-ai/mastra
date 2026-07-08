@@ -149,6 +149,35 @@ describe('summarizeConversation()', () => {
     });
   });
 
+  it('surfaces failed extractor output in extractionFailures', async () => {
+    const onExtracted = vi.fn(async () => undefined);
+    // `summary` must be a string — a numeric value fails the extractor's schema.
+    const { model } = createMockSummarizerModel(
+      OBSERVATION_OUTPUT,
+      JSON.stringify({ 'call-summary': { summary: 123, sentiment: 'positive' } }),
+    );
+
+    const result = await summarizeConversation({
+      model: model as any,
+      messages: [createTestMessage('Hello', 'user', { threadId: 'call-1' })],
+      extract: [
+        new Extractor({
+          name: 'Call summary',
+          instructions: 'Return a concise summary of the call.',
+          schema: z.object({ summary: z.string(), sentiment: z.enum(['positive', 'neutral', 'negative']) }),
+          metadataKeyPath: false,
+          onExtracted,
+        }),
+      ],
+    });
+
+    expect(result.extracted).toEqual({});
+    expect(result.extractionFailures).toHaveLength(1);
+    expect(result.extractionFailures?.[0]?.slug).toBe('call-summary');
+    expect(result.extractionFailures?.[0]?.error).toBeTruthy();
+    expect(onExtracted).not.toHaveBeenCalled();
+  });
+
   it('returns an empty result without calling the model when there are no messages', async () => {
     const { model, doStream, doGenerate } = createMockSummarizerModel(OBSERVATION_OUTPUT);
 
