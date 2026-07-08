@@ -131,7 +131,7 @@ git log --since="90 days ago" --format='%h %ad %an %s' --date=short -- "$RELEVAN
 
 Choose one case. Triage must finish with exactly one primary output route: Case A posts an issue/PR comment and stops; Cases B-D post/update the Maintainer's Triage Note because the item is triaged and ready for Review.
 
-#### Case A: Irrelevant, duplicate, resolved, unclear, or non-actionable
+#### Case A: Irrelevant, duplicate, resolved, unclear, suspicious, or non-actionable
 
 Use when no Review should start yet:
 
@@ -140,17 +140,19 @@ Use when no Review should start yet:
 - duplicate of an existing issue/PR
 - input PR only links closed/resolved issues, suggesting the PR is duplicate, stale, or no longer needed
 - issue already resolved by a closed/merged PR or prior maintainer answer
+- PR code or attached snippets look suspicious, malicious, credential-seeking, exfiltration-prone, or otherwise security-risky enough that normal Review should not start
 
 Next Steps:
 
-- `Close as <reason>` for spam/invalid/duplicate/resolved.
+- `Close as <reason>` for spam/invalid/duplicate/resolved/suspicious.
 - `Ask author for info` when the item could become actionable with specific details.
+- `Escalate suspicious security risk` when code appears malicious or unsafe and should not enter normal Review.
 - `Approve CI checks before Review` when CI workflows have not been approved.
 - `Wait for author/checks` only when the blocker is external and Review is premature.
 
 Output:
 
-- Issue/PR comment only: explain why Review is not starting, cite the duplicate/closed issue or PR when present, or ask for the exact missing details. Keep spam/invalid comments brief and neutral.
+- Issue/PR comment only: explain why Review is not starting, cite the duplicate/closed issue or PR when present, ask for the exact missing details, or state that the submitted code cannot proceed through normal Review because it appears suspicious or security-risky. Keep spam/invalid/suspicious comments brief and neutral.
 - Do not create/update a Maintainer's Triage Note for Case A unless the user explicitly overrides the route.
 - Interactive ask: `Does this look non-actionable, or is there context that makes it worth Review?`
 
