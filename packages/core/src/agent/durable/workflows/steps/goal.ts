@@ -183,6 +183,7 @@ export function createDurableGoalStep() {
         maxRuns: goal.maxRuns,
         prompt: goal.prompt,
         maxSteps: goal.maxSteps,
+        jsonPromptInjection: goal.jsonPromptInjection,
       });
 
       // Defensive budget guard.

@@ -75,6 +75,7 @@ export interface EffectiveGoalSettings {
   maxRuns: number;
   prompt: string;
   maxSteps: number | undefined;
+  jsonPromptInjection: boolean | 'system' | 'inline' | undefined;
 }
 
 /** The agent-level goal config the loop step resolves defaults from. */
@@ -83,6 +84,7 @@ export interface AgentGoalConfigDefaults {
   maxRuns?: number;
   prompt?: string;
   maxSteps?: number;
+  jsonPromptInjection?: boolean | 'system' | 'inline';
 }
 
 /**
@@ -99,6 +101,7 @@ export function resolveEffectiveGoalSettings(
     maxRuns: record?.maxRuns ?? agentDefaults?.maxRuns ?? DEFAULT_GOAL_MAX_RUNS,
     prompt: record?.prompt ?? agentDefaults?.prompt ?? DEFAULT_GOAL_JUDGE_PROMPT,
     maxSteps: agentDefaults?.maxSteps,
+    jsonPromptInjection: agentDefaults?.jsonPromptInjection,
   };
 }
 
