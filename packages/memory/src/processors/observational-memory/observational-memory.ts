@@ -2664,7 +2664,8 @@ ${formattedMessages}
       omDebug(
         `[OM:status] step=${stepNumber} msgs=${pendingTokens}/${threshold} obs=${currentObservationTokens}/${effectiveObservationTokensThreshold} gen=${record.generationCount}`,
       );
-      await writer.custom(statusPart).catch(() => {});
+      // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; the status snapshot is ephemeral (polling UIs only) and has no durable intent.
+      await writer.custom({ ...statusPart, transient: true }).catch(() => {});
     }
   }
 
