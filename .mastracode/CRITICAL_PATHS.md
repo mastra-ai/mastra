@@ -130,13 +130,9 @@ When triaging a PR, do the following:
   owners: ["@wardpeet", "@TheIsrael1", "@LekoArts"]
   reason: Core bundling entry point; incorrect output breaks deployments.
 
-- path: packages/deployer/src/build/deployer.ts
+- path: packages/deployer/src/build/**
   owners: ["@wardpeet", "@TheIsrael1", "@LekoArts"]
-  reason: Build-time deployer generation and project bundling orchestration.
-
-- path: packages/deployer/src/build/babel/**
-  owners: ["@wardpeet", "@TheIsrael1", "@LekoArts"]
-  reason: AST transforms used during deployment builds; incorrect rewrites produce broken runtime code.
+  reason: Entire deployer build pipeline is brittle; unit tests cannot catch build output bugs, only e2e tests work. Community PRs here almost always break production builds (see #18930).
 
 - path: packages/core/src/storage/index.ts
   owners: ["@NikAiyer", "@abhiaiyer91"]
@@ -214,9 +210,29 @@ When triaging a PR, do the following:
   owners: ["@TheIsrael1", "@wardpeet", "@mfrachet"]
   reason: Generated route types couple the public client SDK to server API contracts.
 
-- path: packages/schema-compat/src/**
+- path: packages/schema-compat/src/index.ts
   owners: ["@wardpeet", "@DanielSLew", "@TylerBarnes"]
-  reason: Schema compatibility layer preserves behavior across AI SDK and provider versions.
+  reason: Schema compat public entry point; changes affect all providers.
+
+- path: packages/schema-compat/src/types.ts
+  owners: ["@wardpeet", "@DanielSLew", "@TylerBarnes"]
+  reason: Shared schema compat types used by every provider compat layer.
+
+- path: packages/schema-compat/src/schema-compatibility*.ts
+  owners: ["@wardpeet", "@DanielSLew", "@TylerBarnes"]
+  reason: Core schema transformation logic shared across all providers.
+
+- path: packages/schema-compat/src/json-schema/**
+  owners: ["@wardpeet", "@DanielSLew", "@TylerBarnes"]
+  reason: JSON Schema utilities used by all provider compat layers.
+
+- path: packages/schema-compat/src/zod-to-json.ts
+  owners: ["@wardpeet", "@DanielSLew", "@TylerBarnes"]
+  reason: Zod-to-JSON-Schema conversion shared across providers.
+
+- path: packages/schema-compat/src/json-to-zod.ts
+  owners: ["@wardpeet", "@DanielSLew", "@TylerBarnes"]
+  reason: JSON-Schema-to-Zod conversion shared across providers.
 
 - path: packages/_vendored/ai_v*/**
   owners: ["@wardpeet", "@TheIsrael1", "@abhiaiyer91"]
