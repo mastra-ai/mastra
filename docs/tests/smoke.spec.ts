@@ -32,6 +32,10 @@ const IGNORED_CONSOLE_PATTERNS = [
   // Common benign warnings
   /Download the React DevTools/i,
   /ResizeObserver loop/i,
+  // Browser storage-partitioning: third-party scripts calling the
+  // Storage Access API get denied in the CI sandbox. Benign and unrelated
+  // to page code — the request is made by embedded/analytics scripts.
+  /requestStorageAccess: Permission denied/i,
 ]
 
 /**
