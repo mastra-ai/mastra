@@ -46,6 +46,7 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { summarizeConversation } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
   SummarizeConversationResult,
@@ -2135,7 +2136,6 @@ Notes:
       'messages' | 'memory' | 'mastra' | 'threadId' | 'resourceId'
     >,
   ): Promise<SummarizeConversationResult> {
-    const { summarizeConversation } = await import('./processors/observational-memory/summarize');
     const { messages } = await this.recall({ threadId: opts.threadId, resourceId: opts.resourceId, perPage: false });
     return summarizeConversation({
       ...opts,
