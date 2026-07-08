@@ -1,11 +1,13 @@
 import { Button } from '@site/src/components/ui/button'
-import { useChatbotSidebar } from '@site/src/theme/DocRoot/Layout/ChatbotSidebar/context'
+import { useDocsChat } from '@mastra/docusaurus-plugin-kapa/client'
+import type { Ref } from 'react'
 
 export function AskAI() {
-  const { toggle } = useChatbotSidebar()
+  const { toggle, triggerRef } = useDocsChat()
 
   return (
     <Button
+      ref={triggerRef as Ref<HTMLButtonElement>}
       onClick={toggle}
       size="sm"
       variant="outline"

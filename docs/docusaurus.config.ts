@@ -48,8 +48,6 @@ const config: Config = {
     gaId: process.env.GA_ID,
     posthogApiKey: process.env.POSTHOG_API_KEY,
     posthogHost: process.env.POSTHOG_HOST,
-    kapaIntegrationId: process.env.KAPA_INTEGRATION_ID,
-    kapaGroupId: process.env.KAPA_GROUP_ID,
   },
   plugins: [
     [require.resolve('./src/plugins/tailwind/tailwind-plugin'), {}],
@@ -149,6 +147,15 @@ const config: Config = {
           },
         ],
       } satisfies AlgoliaPluginOptions,
+    ],
+  ],
+  themes: [
+    [
+      '@mastra/docusaurus-plugin-kapa',
+      {
+        integrationId: process.env.KAPA_INTEGRATION_ID,
+        groupId: process.env.KAPA_GROUP_ID,
+      },
     ],
   ],
   presets: [

@@ -37,7 +37,6 @@
     "test:navigation": "pnpm exec playwright test tests/navigation.spec.ts"
   },
   "dependencies": {
-    "@copilotkit/react-ui": "1.8.10",
     "@docusaurus/core": "^3.10.1",
     "@docusaurus/faster": "^3.10.1",
     "@docusaurus/plugin-content-docs": "^3.10.1",
@@ -47,8 +46,8 @@
     "@docusaurus/theme-common": "^3.10.1",
     "@headlessui/react": "^2.2.9",
     "@hookform/resolvers": "^5.2.2",
-    "@kapaai/react-sdk": "^0.9.2",
     "@mastra/docusaurus-plugin-algolia": "^1.1.2",
+    "@mastra/docusaurus-plugin-kapa": "^1.1.2",
     "@mdx-js/react": "^3.1.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",
@@ -90,6 +89,8 @@
     "@types/hast": "^3.0.4",
     "@types/mdast": "^4.0.4",
     "@types/node": "22.19.13",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.0",
     "baseline-browser-mapping": "^2.10.8",
     "jsdom": "^26.1.0",
     "postcss": "^8.5.8",
