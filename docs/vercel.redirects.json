@@ -367,7 +367,7 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -552,7 +552,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -577,7 +577,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -923,6 +923,16 @@
     {
       "source": "/docs/getting-started/model-providers",
       "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     }
   ]

@@ -382,7 +382,7 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -567,7 +567,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -592,7 +592,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -941,6 +941,16 @@
       "permanent": true
     },
     {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
@@ -1152,7 +1162,7 @@
     },
     {
       "source": "/docs/server-db/storage/llms.txt",
-      "destination": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1297,7 +1307,7 @@
     },
     {
       "source": "/docs/memory/storage/overview/llms.txt",
-      "destination": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1322,7 +1332,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources/llms.txt",
-      "destination": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1598,6 +1608,16 @@
     {
       "source": "/docs/getting-started/model-providers/llms.txt",
       "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure/llms.txt",
+      "destination": "/reference/project-structure/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     }
   ]

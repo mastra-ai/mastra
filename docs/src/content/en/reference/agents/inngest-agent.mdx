@@ -266,7 +266,7 @@ const { output, cleanup } = await durableAgent.observe(runId, {
 await output.text
 ```
 
-The result from `observe()` does not include `threadId` or `resourceId`.
+The result from `observe()` doesn't include `threadId` or `resourceId`.
 
 Returns: `Promise<Omit<InngestAgentStreamResult, 'threadId' | 'resourceId'>>`
 

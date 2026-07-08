@@ -31,11 +31,6 @@ const sidebars = {
       items: [
         {
           type: 'doc',
-          id: 'getting-started/project-structure',
-          label: 'Project Structure',
-        },
-        {
-          type: 'doc',
           id: 'getting-started/manual-install',
           label: 'Manual Install',
         },
@@ -43,6 +38,11 @@ const sidebars = {
           type: 'doc',
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
+        },
+        {
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
         },
       ],
     },
@@ -220,11 +220,6 @@ const sidebars = {
               type: 'doc',
               id: 'memory/overview',
               label: 'Overview',
-            },
-            {
-              type: 'doc',
-              id: 'memory/storage',
-              label: 'Storage',
             },
             {
               type: 'doc',

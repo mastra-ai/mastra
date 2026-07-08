@@ -305,7 +305,7 @@ slack.setBaseUrl('https://abc123.trycloudflare.com')
 
 #### `initialize()`
 
-Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Does not auto-provision new apps; use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
+Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Doesn't auto-provision new apps; use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
 
 ```typescript
 await slack.initialize()
