@@ -144,6 +144,45 @@ export default createLiveKitWorker({
 
 See the [LiveKit turn detection docs](https://docs.livekit.io/agents/logic/turns/) for all options.
 
+## Per-call voices and transcription
+
+The top-level `stt` and `tts` options apply to every call. To pick them per call — one voice or language per tenant — set the `configuration.stt` and `configuration.tts` resolvers instead. Each resolver runs once per call with the dispatch metadata, request context, room name, and job context, and returns anything the matching top-level option accepts: a plugin instance or an inference model string. Return `undefined` to fall back to the top-level option.
+
+The following example gives each tenant its own text-to-speech voice, keyed off the `tenant` entry in the dispatch metadata:
+
+```typescript title="src/mastra/voice-worker.ts"
+import * as cartesia from '@livekit/agents-plugin-cartesia'
+
+// One voice id per tenant, resolved from the dispatch metadata on each call.
+const tenantVoices: Record<string, string> = {
+  meridian: 'your-cartesia-voice-id-1',
+  coastal: 'your-cartesia-voice-id-2',
+}
+// The resolver runs during call setup, so cache plugin instances across calls.
+const ttsByVoice = new Map<string, cartesia.TTS>()
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  configuration: {
+    tts: ({ metadata }) => {
+      const voice = tenantVoices[metadata.requestContext?.tenant as string]
+      if (!voice) return undefined // fall back to the top-level `tts`
+      let tts = ttsByVoice.get(voice)
+      if (!tts) {
+        tts = new cartesia.TTS({ voice })
+        ttsByVoice.set(voice, tts)
+      }
+      return tts
+    },
+  },
+})
+```
+
+`configuration.stt` works the same way for per-call transcription, for example a different transcription model or language per tenant. The greeting has a matching per-call form: `configuration.greeting.text` accepts a resolver with the same call context, so one worker can open with each tenant's own phrasing.
+
 ## Memory and threads
 
 When the resolved Mastra agent has memory configured, each call becomes one memory thread:

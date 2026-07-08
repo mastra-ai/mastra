@@ -23,7 +23,9 @@ export type {
   GreetingText,
   LiveKitWorkerConfiguration,
   ResolveMastraAgentArgs,
+  SessionComponentResolver,
   SessionStartArgs,
+  VoiceCallContext,
   VoiceCallEndArgs,
   VoiceCallEndHook,
 } from './worker';

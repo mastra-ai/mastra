@@ -106,9 +106,17 @@ export interface CreateLiveKitWorkerOptions {
   resultText?: (result: unknown) => string | undefined | void;
   /** Lowest-level escape hatch: supply any reply generator directly (a custom workflow, remote bridge, …). */
   generate?: VoiceReplyGenerator;
-  /** Speech-to-text: a LiveKit plugin instance or an inference model string like 'deepgram/nova-3'. */
+  /**
+   * Speech-to-text: a LiveKit plugin instance or an inference model string like 'deepgram/nova-3'.
+   * For per-call / per-tenant selection, set the `configuration.stt` resolver — it takes
+   * precedence, with this option as the fallback.
+   */
   stt?: voice.AgentSessionOptions['stt'];
-  /** Text-to-speech: a LiveKit plugin instance or an inference model string like 'cartesia/sonic-3'. */
+  /**
+   * Text-to-speech: a LiveKit plugin instance or an inference model string like 'cartesia/sonic-3'.
+   * For per-call / per-tenant selection, set the `configuration.tts` resolver — it takes
+   * precedence, with this option as the fallback.
+   */
   tts?: voice.AgentSessionOptions['tts'];
   /**
    * Voice activity detection. `'silero'` (default) loads the Silero VAD from
@@ -340,11 +348,11 @@ async function resolveInstructions(
 }
 
 /**
- * Context handed to a greeting resolver so it can produce a per-call / per-tenant greeting. Built
- * post-connect, so the dispatch metadata, request context, and room name are all available to key
- * the greeting off of.
+ * Per-call context handed to the `configuration` resolvers (greeting text, STT, TTS) so they can
+ * key per-call / per-tenant behavior off the call. Built post-connect, so the dispatch metadata,
+ * request context, and room name are all available.
  */
-export interface GreetingContext {
+export interface VoiceCallContext {
   /**
    * Dispatch metadata for the call — the per-tenant routing signal (dialed number, tenant/agent id,
    * thread/resource, and any `requestContext` entries) parsed from the LiveKit job metadata.
@@ -357,6 +365,18 @@ export interface GreetingContext {
   /** The LiveKit job context, for anything the metadata doesn't carry. */
   ctx: JobContext;
 }
+
+/** Context handed to a greeting resolver. Alias of {@link VoiceCallContext}. */
+export type GreetingContext = VoiceCallContext;
+
+/**
+ * A per-call resolver for a session component (STT / TTS): invoked once per call (post-connect)
+ * with the call {@link VoiceCallContext}. Return `undefined` to fall back to the static top-level
+ * option for that component.
+ */
+export type SessionComponentResolver<T> = (
+  context: VoiceCallContext,
+) => T | undefined | void | Promise<T | undefined | void>;
 
 /**
  * The spoken greeting: a fixed string, or a resolver invoked once per call (post-connect) with the
@@ -477,8 +497,9 @@ export interface EndCallConfiguration {
 /**
  * Grouped conversation & compliance configuration for {@link CreateLiveKitWorkerOptions.configuration}.
  * A single home for related policy knobs so they don't each become a top-level worker option. Today
- * it carries the greeting / AI-disclosure, consent requirements, and agent-initiated hang-up; it's
- * the intended landing spot for further compliance controls (recording notice, data retention, …).
+ * it carries the greeting / AI-disclosure, consent requirements, agent-initiated hang-up, and
+ * per-call STT/TTS selection; it's the intended landing spot for further compliance controls
+ * (recording notice, data retention, …).
  */
 export interface LiveKitWorkerConfiguration {
   /** The opening greeting / AI-disclosure, plus optional periodic re-disclosure. See {@link GreetingConfiguration}. */
@@ -487,6 +508,23 @@ export interface LiveKitWorkerConfiguration {
   requireConsent?: ConsentConfiguration;
   /** Let the agent end the call itself (say goodbye → hang up). See {@link EndCallConfiguration}. */
   endCall?: EndCallConfiguration;
+  /**
+   * Per-call speech-to-text: a resolver invoked once per call (post-connect) with the call
+   * {@link VoiceCallContext}, returning anything the top-level `stt` option accepts (a plugin
+   * instance or an inference model string like `'deepgram/nova-3'`). Use it to pick the
+   * transcriber per tenant or language off the dispatch metadata / request context. Return
+   * `undefined` to fall back to the top-level `stt`. Runs during call setup, so keep it fast —
+   * when it constructs plugin instances, cache them across calls (e.g. a `Map` keyed by tenant).
+   */
+  stt?: SessionComponentResolver<voice.AgentSessionOptions['stt']>;
+  /**
+   * Per-call text-to-speech: a resolver invoked once per call (post-connect) with the call
+   * {@link VoiceCallContext}, returning anything the top-level `tts` option accepts (a plugin
+   * instance or an inference model string like `'cartesia/sonic-3'`). Use it to give each tenant
+   * its own voice / language. Return `undefined` to fall back to the top-level `tts`. Runs during
+   * call setup, so keep it fast — when it constructs plugin instances, cache them across calls.
+   */
+  tts?: SessionComponentResolver<voice.AgentSessionOptions['tts']>;
 }
 
 /**
@@ -516,6 +554,20 @@ export async function resolveGreetingText(
 ): Promise<string | undefined> {
   const resolved = typeof text === 'function' ? await text(context) : text;
   return resolved || undefined;
+}
+
+/**
+ * Resolves a per-call session component (STT / TTS): invokes the `configuration` resolver with the
+ * call context, falling back to the static top-level option when there is no resolver or it
+ * resolves to `undefined`. Exported for unit testing.
+ */
+export async function resolveSessionComponent<T>(
+  resolver: SessionComponentResolver<T> | undefined,
+  fallback: T | undefined,
+  context: VoiceCallContext,
+): Promise<T | undefined> {
+  const resolved = resolver ? await resolver(context) : undefined;
+  return resolved ?? fallback;
 }
 
 /** A {@link GreetingConfiguration} whose `text` resolver has been resolved to a plain string. */
@@ -881,9 +933,19 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
 
+      // Per-call STT/TTS: the `configuration.stt` / `configuration.tts` resolvers pick this
+      // call's transcriber and voice (per-tenant voices/languages keyed off the dispatch
+      // metadata), falling back to the static top-level options. The same context feeds the
+      // greeting resolver below.
+      const callContext: VoiceCallContext = { metadata, requestContext, roomName, ctx };
+      const [stt, tts] = await Promise.all([
+        resolveSessionComponent(options.configuration?.stt, options.stt, callContext),
+        resolveSessionComponent(options.configuration?.tts, options.tts, callContext),
+      ]);
+
       const session = new voice.AgentSession({
-        stt: options.stt,
-        tts: options.tts,
+        stt,
+        tts,
         vad,
         turnHandling: buildTurnHandling(options, turnDetection),
         ...options.sessionOptions,
@@ -903,12 +965,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         if (greetingConfig.text) {
           // Resolve the greeting once (a fixed string, or a per-tenant resolver run post-connect),
           // then use that same resolved text for both speaking and persistence.
-          const greetingText = await resolveGreetingText(greetingConfig.text, {
-            metadata,
-            requestContext,
-            roomName,
-            ctx,
-          });
+          const greetingText = await resolveGreetingText(greetingConfig.text, callContext);
           if (greetingText) {
             await speakGreeting(session, { ...greetingConfig, text: greetingText });
             if (greetingConfig.persist !== false && memory && memoryInstance) {

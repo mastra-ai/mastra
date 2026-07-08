@@ -92,13 +92,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   {
     name: 'stt',
     type: 'STT | string',
-    description: "Speech-to-text: a LiveKit plugin instance or an inference model string such as 'deepgram/nova-3'.",
+    description:
+      "Speech-to-text: a LiveKit plugin instance or an inference model string such as 'deepgram/nova-3'. For per-call selection, set the configuration.stt resolver — it takes precedence, with this option as the fallback.",
     isOptional: true,
   },
   {
     name: 'tts',
     type: 'TTS | string',
-    description: "Text-to-speech: a LiveKit plugin instance or an inference model string such as 'cartesia/sonic-3'.",
+    description:
+      "Text-to-speech: a LiveKit plugin instance or an inference model string such as 'cartesia/sonic-3'. For per-call selection, set the configuration.tts resolver — it takes precedence, with this option as the fallback.",
     isOptional: true,
   },
   {
@@ -158,16 +160,65 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     isOptional: true,
   },
   {
+    name: 'configuration',
+    type: 'LiveKitWorkerConfiguration',
+    description:
+      'Grouped conversation and compliance configuration: the opening greeting and AI disclosure, consent requirements, agent-initiated hang-up, and per-call STT/TTS selection.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'LiveKitWorkerConfiguration',
+        parameters: [
+          {
+            name: 'greeting',
+            type: 'GreetingConfiguration',
+            description:
+              'The opening greeting and AI disclosure: text (a fixed string or a per-call resolver for per-tenant greetings), allowInterruptions, awaitPlayout, persist, and periodic re-disclosure via repeatEvery and repeatText.',
+            isOptional: true,
+          },
+          {
+            name: 'requireConsent',
+            type: 'ConsentConfiguration',
+            description:
+              'Named consent requirements for the call (starting with summaryStorage). Capture grants at runtime with createConsentTool; the requirements surface on onCallEnd for enforcement.',
+            isOptional: true,
+          },
+          {
+            name: 'endCall',
+            type: 'EndCallConfiguration',
+            description:
+              "Agent-initiated hang-up: the worker watches each turn for the end-call tool (pair with createEndCallTool), waits for the agent's closing words to play out, then disconnects — running onCallEnd on the way out.",
+            isOptional: true,
+          },
+          {
+            name: 'stt',
+            type: '(context: VoiceCallContext) => STT | string | undefined',
+            description:
+              'Per-call speech-to-text: a resolver invoked once per call (post-connect) with { metadata, requestContext, roomName, ctx }, returning anything the top-level stt option accepts. Return undefined to fall back to the top-level stt. Cache plugin instances across calls — the resolver runs during call setup.',
+            isOptional: true,
+          },
+          {
+            name: 'tts',
+            type: '(context: VoiceCallContext) => TTS | string | undefined',
+            description:
+              'Per-call text-to-speech: a resolver invoked once per call (post-connect) with { metadata, requestContext, roomName, ctx }, returning anything the top-level tts option accepts — one voice or language per tenant. Return undefined to fall back to the top-level tts. Cache plugin instances across calls.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
     name: 'greeting',
     type: 'string',
-    description: 'Static greeting spoken when the session starts.',
+    description: 'Static greeting spoken when the session starts. Deprecated: prefer configuration.greeting.text.',
     isOptional: true,
   },
   {
     name: 'persistGreeting',
     type: 'boolean',
     description:
-      'Save the spoken greeting to the memory thread as an assistant message, making the saved thread a faithful call transcript. Only applies when a greeting is set and memory is enabled.',
+      'Save the spoken greeting to the memory thread as an assistant message, making the saved thread a faithful call transcript. Only applies when a greeting is set and memory is enabled. Deprecated: prefer configuration.greeting.persist.',
     isOptional: true,
     defaultValue: 'true',
   },

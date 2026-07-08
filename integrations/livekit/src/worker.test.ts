@@ -8,11 +8,12 @@ import {
   resolveGreetingConfig,
   resolveGreetingText,
   resolveMemoryInstance,
+  resolveSessionComponent,
   runEndCall,
   speakGreeting,
   waitForAgentDoneSpeaking,
 } from './worker';
-import type { GreetingContext, ResolveMastraAgentArgs } from './worker';
+import type { GreetingContext, ResolveMastraAgentArgs, VoiceCallContext } from './worker';
 import { workerSetupComplete } from './worker-setup';
 
 function fakeMastra(overrides: Partial<Record<'getAgentById' | 'getAgent' | 'getLogger', unknown>> = {}): Mastra {
@@ -135,6 +136,32 @@ describe('createLiveKitWorker', () => {
     await shutdownCallbacks[0]!();
     expect(onCallEnd).toHaveBeenCalledTimes(1);
     expect(onCallEnd.mock.calls[0]![0]).toMatchObject({ roomName: 'room-9', memory: false, memoryInstance: null });
+  });
+
+  it('resolves per-call STT/TTS from the configuration resolvers with the call context', async () => {
+    const agent = { id: 'support', name: 'support', hasOwnMemory: () => false };
+    const mastra = fakeMastra({ getAgentById: vi.fn(() => agent) });
+    const stt = vi.fn(() => 'deepgram/nova-3' as const);
+    const tts = vi.fn(async () => 'cartesia/sonic-3' as const);
+    const definition = createLiveKitWorker({
+      mastra,
+      vad: false,
+      observability: false,
+      configuration: { stt, tts },
+    });
+    const ctx = fakeJobContext(JSON.stringify({ agentId: 'support', requestContext: { tenant: 'meridian' } }));
+    // Session start fails without a real LiveKit room; STT/TTS resolution happens before that.
+    await definition.entry(ctx).catch(() => {});
+
+    expect(stt).toHaveBeenCalledTimes(1);
+    expect(tts).toHaveBeenCalledTimes(1);
+    const context = stt.mock.calls[0]![0] as VoiceCallContext;
+    expect(context.roomName).toBe('room-1');
+    expect(context.ctx).toBe(ctx);
+    expect(context.metadata.requestContext).toEqual({ tenant: 'meridian' });
+    expect(context.requestContext).toBeDefined();
+    // Both resolvers receive the same per-call context.
+    expect(tts.mock.calls[0]![0]).toBe(context);
   });
 });
 
@@ -262,6 +289,32 @@ describe('resolveGreetingText', () => {
 
   it('treats undefined text as no greeting', async () => {
     expect(await resolveGreetingText(undefined, context)).toBeUndefined();
+  });
+});
+
+describe('resolveSessionComponent', () => {
+  const context: VoiceCallContext = {
+    metadata: { requestContext: { tenant: 'meridian' } },
+    roomName: 'room-1',
+    ctx: fakeJobContext(),
+  };
+
+  it('invokes the resolver with the call context and uses its result', async () => {
+    const resolver = vi.fn((c: VoiceCallContext) => `stt-for-${c.metadata.requestContext?.tenant}`);
+    expect(await resolveSessionComponent(resolver, 'static-stt', context)).toBe('stt-for-meridian');
+    expect(resolver).toHaveBeenCalledWith(context);
+  });
+
+  it('awaits an async resolver', async () => {
+    expect(await resolveSessionComponent(async () => 'async-tts', undefined, context)).toBe('async-tts');
+  });
+
+  it('falls back to the static option when the resolver returns undefined', async () => {
+    expect(await resolveSessionComponent<string>(() => undefined, 'static', context)).toBe('static');
+  });
+
+  it('uses the static option when there is no resolver', async () => {
+    expect(await resolveSessionComponent(undefined, 'static', context)).toBe('static');
   });
 });
 
