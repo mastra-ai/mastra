@@ -52,6 +52,14 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     description: 'Override default message handlers for DMs, mentions, and subscribed threads.',
   },
   {
+    name: 'respondToBots',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Whether messages authored by other bots wake the agent. By default the built-in handlers ignore bot-authored messages, preventing reply loops when multiple bots share a channel or thread. Messages the adapter can't classify pass through. The guard lives in the default handler, so custom `handlers` that call `defaultHandler` inherit it.",
+  },
+  {
     name: 'inlineMedia',
     type: 'string[] | ((mimeType: string) => boolean)',
     isOptional: true,

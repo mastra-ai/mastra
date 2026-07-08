@@ -132,6 +132,28 @@ In group conversations, Mastra automatically prefixes each message with the send
 [Bob (@U456DEF)]: I have a question too.
 ```
 
+## Multiple agents on one platform
+
+Channel threads are scoped per agent. When two agents (for example, a support bot and a triage bot) are both active in the same Slack or Discord thread, each agent gets its own Mastra thread with independent conversation history and subscription state. One agent subscribing to a platform thread doesn't affect the other.
+
+Threads created before per-agent scoping have no owning agent recorded. The first agent to touch such a thread claims it and keeps its history; other agents get fresh threads.
+
+By default, agents ignore messages authored by other bots. This prevents two subscribed bots from replying to each other in a loop. Set `respondToBots: true` to opt in:
+
+```typescript
+export const agent = new Agent({
+  id: 'agent',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    respondToBots: true,
+  },
+})
+```
+
+The guard applies to the built-in handlers, so custom `handlers` that call `defaultHandler` inherit it. Handlers that do their own routing bypass it.
+
 ## Multimodal content
 
 Models like Gemini can natively process images, video, and audio. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:

@@ -262,4 +262,84 @@ describe('MastraStateAdapter', () => {
       expect(entry2?.message.text).toBe('b');
     });
   });
+
+  describe('per-agent subscription scoping', () => {
+    const externalThreadId = 'slack:C1:171234.5678';
+
+    async function seedThread(id: string, agentId?: string) {
+      await memoryStore.saveThread({
+        thread: {
+          id,
+          title: 'Test thread',
+          resourceId: 'slack:user1',
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          metadata: {
+            channel_platform: 'slack',
+            channel_externalThreadId: externalThreadId,
+            channel_externalChannelId: 'slack:C1',
+            ...(agentId ? { channel_agentId: agentId } : {}),
+          },
+        },
+      });
+    }
+
+    it('isolates subscriptions between agents on the same external thread', async () => {
+      await seedThread('thread-agent-a', 'agent-a');
+      await seedThread('thread-agent-b', 'agent-b');
+
+      const adapterA = new MastraStateAdapter(memoryStore, 'agent-a');
+      const adapterB = new MastraStateAdapter(memoryStore, 'agent-b');
+      await adapterA.connect();
+      await adapterB.connect();
+
+      await adapterA.subscribe(externalThreadId);
+
+      expect(await adapterA.isSubscribed(externalThreadId)).toBe(true);
+      expect(await adapterB.isSubscribed(externalThreadId)).toBe(false);
+
+      // Flag landed on agent A's thread only
+      const threadA = await memoryStore.getThreadById({ threadId: 'thread-agent-a' });
+      const threadB = await memoryStore.getThreadById({ threadId: 'thread-agent-b' });
+      expect((threadA?.metadata as Record<string, unknown>)?.channel_subscribed).toBe('true');
+      expect((threadB?.metadata as Record<string, unknown>)?.channel_subscribed).toBeUndefined();
+    });
+
+    it('falls back to an unclaimed legacy thread (no channel_agentId)', async () => {
+      await seedThread('legacy-thread');
+
+      const scoped = new MastraStateAdapter(memoryStore, 'agent-a');
+      await scoped.connect();
+
+      await scoped.subscribe(externalThreadId);
+      expect(await scoped.isSubscribed(externalThreadId)).toBe(true);
+
+      const thread = await memoryStore.getThreadById({ threadId: 'legacy-thread' });
+      expect((thread?.metadata as Record<string, unknown>)?.channel_subscribed).toBe('true');
+    });
+
+    it('does not use a thread claimed by another agent', async () => {
+      await seedThread('claimed-thread', 'agent-a');
+
+      const adapterB = new MastraStateAdapter(memoryStore, 'agent-b');
+      await adapterB.connect();
+
+      // No thread for agent B and no unclaimed legacy thread — subscribe is a no-op
+      await adapterB.subscribe(externalThreadId);
+      expect(await adapterB.isSubscribed(externalThreadId)).toBe(false);
+
+      const thread = await memoryStore.getThreadById({ threadId: 'claimed-thread' });
+      expect((thread?.metadata as Record<string, unknown>)?.channel_subscribed).toBeUndefined();
+    });
+
+    it('unscoped adapter (no agentId) keeps pre-scoping behavior', async () => {
+      await seedThread('any-thread', 'agent-a');
+
+      const unscoped = new MastraStateAdapter(memoryStore);
+      await unscoped.connect();
+
+      await unscoped.subscribe(externalThreadId);
+      expect(await unscoped.isSubscribed(externalThreadId)).toBe(true);
+    });
+  });
 });

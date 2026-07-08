@@ -373,6 +373,23 @@ export interface ChannelConfig {
   handlers?: ChannelHandlers;
 
   /**
+   * Whether messages authored by other bots wake the agent.
+   *
+   * Defaults to `false`: the default handlers ignore messages whose author is
+   * a bot (`isBot === true`), preventing bot-to-bot reply loops when multiple
+   * bots share a channel or thread. Messages with `isBot: false` or
+   * `isBot: 'unknown'` always pass through.
+   *
+   * Set to `true` to let bot-authored messages trigger the agent. The guard
+   * lives in the default handler, so custom {@link handlers} that call
+   * `defaultHandler` inherit it, while handlers that do their own routing
+   * bypass it.
+   *
+   * @default false
+   */
+  respondToBots?: boolean;
+
+  /**
    * Which media types to send inline to the model (as file parts).
    * Everything else is described as text metadata so the agent knows about the
    * file without crashing models that reject unsupported types.
