@@ -39,6 +39,11 @@ const sidebars = {
           id: 'getting-started/build-with-ai',
           label: 'Build with AI',
         },
+        {
+          type: 'doc',
+          id: 'storage/overview',
+          label: 'Storage',
+        },
       ],
     },
     {
@@ -319,11 +324,6 @@ const sidebars = {
               ],
             },
           ],
-        },
-        {
-          type: 'doc',
-          id: 'storage/overview',
-          label: 'Storage',
         },
       ],
     },
