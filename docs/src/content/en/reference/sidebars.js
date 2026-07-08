@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
       label: 'ACP',
@@ -665,6 +666,7 @@ const sidebars = {
       label: 'Tools and MCP',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'tools/ask-user-tool', label: 'askUserTool' },
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
         {
           type: 'doc',
@@ -679,6 +681,8 @@ const sidebars = {
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
+        { type: 'doc', id: 'tools/submit-plan-tool', label: 'submitPlanTool' },
+        { type: 'doc', id: 'tools/task-tools', label: 'Task tools' },
         { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
