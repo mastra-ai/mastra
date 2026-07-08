@@ -40,7 +40,7 @@ export default function SearchBar() {
   const pluginData = usePluginData('docusaurus-plugin-algolia') as AlgoliaPluginData | undefined
   const [isOpen, setIsOpen] = useState(false)
 
-  useHotkeys('meta+k', () => setIsOpen((open: boolean) => !open))
+  useHotkeys('mod+k', () => setIsOpen((open: boolean) => !open))
 
   const searchOptions = {
     indexName: pluginData?.indexName,

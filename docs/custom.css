@@ -1994,7 +1994,7 @@ a.learn-sidebar-item.is-active {
   display: none;
 }
 
-@media (min-width: 62.25rem) {
+@media (width >= 62.25rem) {
   .mastra-search-button {
     width: auto;
   }
