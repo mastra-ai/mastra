@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import { callCenterMemory } from '../memory';
 import { endCall, lookupAccountStatus, recordConsent } from '../tools/compliance-tools';
+import { stopOnToolCall } from './stop-conditions';
 
 /**
  * "Super Regulated Business" demo agent — Northwind Financial, a stand-in for a heavily-regulated
@@ -57,8 +58,7 @@ Stay calm, professional, and concise throughout.`,
   // structurally cannot speak past its close-out line, which matters even more here because the
   // worker plays the official compliance sign-off after it.
   defaultOptions: {
-    stopWhen: ({ steps }: { steps: Array<{ toolCalls?: Array<{ toolName: string }> }> }) =>
-      (steps.at(-1)?.toolCalls ?? []).some(call => call.toolName === 'endCall'),
+    stopWhen: stopOnToolCall('endCall'),
   },
   // Reuse the caller-scoped memory (working memory + observational memory) so the consent-gated
   // end-of-call OM flush can be demonstrated. The regulated worker prefixes the memory `resource`

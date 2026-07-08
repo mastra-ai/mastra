@@ -9,6 +9,7 @@ import {
 import { checkServiceArea, endCall, finalizeIntake } from '../tools/intake-tools';
 import { callCenterMemory } from '../memory';
 import { workspaceContextProcessor } from '../processors/workspace-context';
+import { stopOnToolCall } from './stop-conditions';
 
 export const callCenterAgent = new Agent({
   id: 'call-center',
@@ -70,8 +71,7 @@ Stay warm and professional. If a request is outside trades work, scheduling, or 
   // lives on the agent. Other tools still get their follow-up step (finalizeIntake needs one to
   // read the reference number back).
   defaultOptions: {
-    stopWhen: ({ steps }: { steps: Array<{ toolCalls?: Array<{ toolName: string }> }> }) =>
-      (steps.at(-1)?.toolCalls ?? []).some(call => call.toolName === 'endCall'),
+    stopWhen: stopOnToolCall('endCall'),
   },
   // Deterministic per-turn tenant context, injected before the model runs (mock "Firebase").
   inputProcessors: [workspaceContextProcessor],
