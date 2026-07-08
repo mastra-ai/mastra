@@ -240,28 +240,6 @@ type DataChunk = Extract<ChunkType, DataChunkType>;
 const isDataChunk = (chunk: ChunkType): chunk is DataChunk =>
   typeof chunk.type === 'string' && chunk.type.startsWith('data-');
 
-type JSONValue = string | number | boolean | null | JSONValue[] | { [key: string]: JSONValue };
-
-const isJSONValue = (value: unknown): value is JSONValue => {
-  if (value === null) return true;
-
-  const type = typeof value;
-  if (type === 'number') return Number.isFinite(value);
-  if (type === 'string' || type === 'boolean') return true;
-  if (type !== 'object') return false;
-
-  if (Array.isArray(value)) {
-    return value.every(isJSONValue);
-  }
-
-  if (!isObject(value)) return false;
-
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-
-  return Object.values(value).every(isJSONValue);
-};
-
 /**
  * Convert AI-SDK v5 UIMessages returned by the server (generate mode) into
  * `MastraDBMessage[]`, stamping the supplied metadata onto each message's
@@ -964,23 +942,11 @@ export const useChat = ({
       return;
     }
 
-    const response =
-      resumeData === undefined
-        ? await agent.approveToolCall({
-            runId: currentRunId,
-            toolCallId,
-            requestContext: _requestContext.current,
-          })
-        : await (async () => {
-            if (!isJSONValue(resumeData)) {
-              throw new Error('approveToolCall resumeData must be JSON-serializable');
-            }
-            return agent.resumeStream(resumeData, {
-              runId: currentRunId,
-              toolCallId,
-              requestContext: _requestContext.current,
-            });
-          })();
+    const response = await agent.approveToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
