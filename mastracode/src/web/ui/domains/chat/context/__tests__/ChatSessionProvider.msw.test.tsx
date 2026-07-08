@@ -117,6 +117,7 @@ function Probe() {
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="thread-id">{transcript.threadId ?? '(none)'}</span>
+      <span data-testid="entries-count">{transcript.entries.length}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
       <span data-testid="working">{showWorkingIndicator ? 'yes' : 'no'}</span>
       <button onClick={() => void selectProject(nextProject)}>switch project</button>
@@ -169,9 +170,7 @@ describe('ChatSessionProvider', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
     await userEvent.click(screen.getByRole('button', { name: 'switch project' }));
 
-    await waitFor(() =>
-      expect(requests).toContain('setState:next:{"state":{"projectPath":"/tmp/mastracode-next"}}'),
-    );
+    await waitFor(() => expect(requests).toContain('setState:next:{"state":{"projectPath":"/tmp/mastracode-next"}}'));
   });
 
   it('given an idle transcript, then busy and the working indicator are off', async () => {
@@ -182,6 +181,61 @@ describe('ChatSessionProvider', () => {
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
     expect(screen.getByTestId('busy')).toHaveTextContent('no');
     expect(screen.getByTestId('working')).toHaveTextContent('no');
+  });
+
+  it('given a reconnect re-sync returns a new state, then the thread messages cache is dropped and the transcript rehydrates', async () => {
+    const requests: string[] = [];
+    seedProject();
+
+    server.use(
+      http.post(`${API}/sessions`, () =>
+        HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: 'thread-before-drop' }),
+      ),
+      http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+      http.get(SESSION, () => {
+        requests.push('state');
+        const threadId =
+          requests.filter(request => request === 'state').length === 1 ? 'thread-before-drop' : 'thread-after-drop';
+        return HttpResponse.json({ ...sessionState(), threadId });
+      }),
+      http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+      http.get(`${SESSION}/threads/thread-before-drop/messages`, () => {
+        requests.push('messages:before');
+        return HttpResponse.json({
+          messages: [{ id: 'before-message', role: 'user', content: [{ type: 'text', text: 'before' }] }],
+        });
+      }),
+      http.get(`${SESSION}/threads/thread-after-drop/messages`, () => {
+        requests.push('messages:after');
+        return HttpResponse.json({
+          messages: [{ id: 'after-message', role: 'user', content: [{ type: 'text', text: 'after' }] }],
+        });
+      }),
+      http.get(`${SESSION}/stream`, () => {
+        requests.push('stream');
+        if (requests.filter(request => request === 'stream').length === 1) {
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(controller) {
+                setTimeout(() => controller.error(new Error('stream dropped')), 0);
+              },
+            }),
+            { headers: { 'content-type': 'text/event-stream' } },
+          );
+        }
+        return sse();
+      }),
+    );
+
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('thread-id')).toHaveTextContent('thread-before-drop'));
+    await waitFor(() => expect(requests).toContain('messages:before'));
+    await waitFor(() => expect(screen.getByTestId('thread-id')).toHaveTextContent('thread-after-drop'), {
+      timeout: 2500,
+    });
+    await waitFor(() => expect(requests).toContain('messages:after'));
+    await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('1'));
   });
 
   it('given a run started without streamed assistant text, then busy is on and the working indicator shows', async () => {

@@ -1,13 +1,13 @@
-import type { AgentControllerEvent, AgentControllerModeInfo } from '@mastra/client-js';
-import { useEffect, useState } from 'react';
-
-import { queryKeys } from '../../../../../shared/api/keys';
+import type { AgentControllerEvent } from '@mastra/client-js';
+import { useCallback, useState } from 'react';
 import { useAgentControllerClient } from './useAgentControllerClient';
-import type { AgentControllerSession } from './useAgentControllerClient';
+import { useAgentControllerEvents } from './useAgentControllerEvents';
+import { useAgentControllerModes } from './useAgentControllerModes';
+import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
+import { useAgentControllerSessionSync } from './useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
-
-type SessionState = Awaited<ReturnType<AgentControllerSession['state']>>;
+type SseConnectionState = 'never' | 'connected' | 'dropped';
 
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
@@ -16,9 +16,6 @@ interface UseAgentControllerConnectionArgs {
   baseUrl?: string;
   enabled?: boolean;
   onEvent: (event: AgentControllerEvent) => void;
-  onInitialState: (state: SessionState, threadId?: string) => void;
-  onReconnectState: (state: SessionState) => void;
-  onReconnectMessagesInvalidated: (queryKey: ReturnType<typeof queryKeys.agentControllerThreadMessages>) => void;
 }
 
 export function useAgentControllerConnection({
@@ -28,108 +25,73 @@ export function useAgentControllerConnection({
   baseUrl = '',
   enabled = true,
   onEvent,
-  onInitialState,
-  onReconnectState,
-  onReconnectMessagesInvalidated,
 }: UseAgentControllerConnectionArgs) {
-  const [status, setStatus] = useState<ConnectionStatus>('connecting');
-  const [modes, setModes] = useState<AgentControllerModeInfo[]>([]);
-  const { controller, session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
+  const sseConnected = sseConnectionState === 'connected';
+  const hasEverConnected = sseConnectionState !== 'never';
+  const { session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const modesQuery = useAgentControllerModes({ agentControllerId, resourceId, baseUrl, enabled });
+  const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
+  const syncQuery = useAgentControllerSessionSync({
+    agentControllerId,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: enabled && initQuery.isSuccess,
+    sseConnected,
+  });
+  const handleConnectedChange = useCallback((connected: boolean) => {
+    setSseConnectionState(current => {
+      if (connected) return 'connected';
+      if (current === 'connected') return 'dropped';
+      return current;
+    });
+  }, []);
 
-  // The agent-controller session and SSE stream are external systems; subscribe and tear down in an effect.
-  useEffect(() => {
-    if (!enabled || !controller || !session) {
-      setStatus('connecting');
-      setModes([]);
-      return;
-    }
+  useAgentControllerEvents({
+    session,
+    enabled,
+    epoch: syncQuery.dataUpdatedAt,
+    onEvent,
+    onConnectedChange: handleConnectedChange,
+  });
 
-    let unsubscribe: (() => void) | undefined;
-    let disposed = false;
-    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    const MAX_RETRIES = 10;
-    const MAX_DELAY_MS = 30_000;
-    let attempt = 0;
+  const status = deriveConnectionStatus({
+    initIsError: initQuery.isError,
+    syncIsError: syncQuery.isError,
+    hasSyncData: Boolean(syncQuery.data),
+    sseConnected,
+    hasEverConnected,
+    syncFailureCount: syncQuery.failureCount,
+  });
 
-    function scheduleReconnect(activeSession: AgentControllerSession): void {
-      if (disposed) return;
-      attempt += 1;
-      if (attempt > MAX_RETRIES) {
-        setStatus('error');
-        return;
-      }
-      const delay = Math.min(1000 * Math.pow(2, attempt - 1), MAX_DELAY_MS);
-      reconnectTimer = setTimeout(() => void subscribe(activeSession, true), delay);
-    }
+  return {
+    status,
+    modes: modesQuery.data ?? [],
+    state: syncQuery.data,
+    stateUpdatedAt: syncQuery.dataUpdatedAt,
+    createdThreadId: initQuery.data?.threadId ?? undefined,
+  };
+}
 
-    async function subscribe(activeSession: AgentControllerSession, isReconnect: boolean): Promise<void> {
-      if (disposed) return;
-
-      if (isReconnect) {
-        setStatus('reconnecting');
-        try {
-          const state = await activeSession.state();
-          if (disposed) return;
-          onReconnectState(state);
-          onReconnectMessagesInvalidated(
-            queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, state.threadId),
-          );
-        } catch {
-          // Keep trying to subscribe even if state re-sync fails.
-        }
-      }
-
-      try {
-        const sub = await activeSession.subscribe({
-          onEvent,
-          onError: () => {
-            unsubscribe?.();
-            unsubscribe = undefined;
-            scheduleReconnect(activeSession);
-          },
-        });
-        unsubscribe = sub.unsubscribe;
-        if (!disposed) {
-          attempt = 0;
-          setStatus('ready');
-        }
-      } catch {
-        scheduleReconnect(activeSession);
-      }
-    }
-
-    (async () => {
-      try {
-        const [created, agentControllerModes] = await Promise.all([
-          session.create({ tags: projectPath ? { projectPath } : undefined }),
-          controller.listModes(),
-        ]);
-        if (disposed) return;
-        setModes(agentControllerModes);
-
-        if (projectPath) {
-          try {
-            await session.setState({ projectPath });
-          } catch {
-            // Continue connecting; session.state() below remains the source of truth.
-          }
-        }
-
-        const state = await session.state();
-        if (disposed) return;
-        onInitialState(state, created.threadId ?? state.threadId);
-        await subscribe(session, false);
-      } catch {
-        if (!disposed) setStatus('error');
-      }
-    })();
-
-    return () => {
-      disposed = true;
-      clearTimeout(reconnectTimer);
-      unsubscribe?.();
-    };
-  }, [agentControllerId, resourceId, projectPath, enabled, controller, session, onEvent, onInitialState, onReconnectState, onReconnectMessagesInvalidated]);
-
-  return { status, modes };
+export function deriveConnectionStatus({
+  initIsError,
+  syncIsError,
+  hasSyncData,
+  sseConnected,
+  hasEverConnected,
+  syncFailureCount,
+}: {
+  initIsError: boolean;
+  syncIsError: boolean;
+  hasSyncData: boolean;
+  sseConnected: boolean;
+  hasEverConnected: boolean;
+  syncFailureCount: number;
+}): ConnectionStatus {
+  if (initIsError || (syncIsError && !hasSyncData)) return 'error';
+  if (!hasSyncData) return 'connecting';
+  if (!sseConnected && syncFailureCount >= 10) return 'error';
+  if (!sseConnected) return hasEverConnected ? 'reconnecting' : 'connecting';
+  return 'ready';
 }

@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
-import type { QueryKey } from '@tanstack/react-query';
-import { createContext, useCallback, useContext, useEffect } from 'react';
+import { createContext, useContext, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { queryKeys } from '../../../../../shared/api/keys';
 // Deep imports (not the workspaces barrel): the barrel re-exports components
 // that consume this chat context, so importing it here would create a cycle.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
@@ -25,7 +25,12 @@ export interface ChatSessionApi {
   localUser: (text: string, steer?: boolean) => void;
   resetHydration: () => void;
   resetCurrentThread: (threadId?: string) => void;
-  syncState: (state: { modeId?: string; modelId?: string; omProgress?: TranscriptState['omProgress']; tokenUsage?: TranscriptState['usage'] }) => void;
+  syncState: (state: {
+    modeId?: string;
+    modelId?: string;
+    omProgress?: TranscriptState['omProgress'];
+    tokenUsage?: TranscriptState['usage'];
+  }) => void;
   reset: (state?: Parameters<ReturnType<typeof useAgentControllerTranscript>['reset']>[0], threadId?: string) => void;
   resolvePrompt: (id: string) => void;
   pushNotice: (text: string, level?: 'info' | 'error') => void;
@@ -34,10 +39,35 @@ export interface ChatSessionApi {
 const ChatSessionContext = createContext<ChatSessionApi | null>(null);
 
 export function ChatSessionProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient();
-  const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const projectPath = deriveProjectPath(activeProject);
+
+  return (
+    <ChatSessionBoundary
+      key={`${resourceId}:${projectPath ?? ''}`}
+      resourceId={resourceId}
+      projectPath={projectPath}
+      sessionEnabled={sessionEnabled}
+    >
+      {children}
+    </ChatSessionBoundary>
+  );
+}
+
+function ChatSessionBoundary({
+  children,
+  resourceId,
+  projectPath,
+  sessionEnabled,
+}: {
+  children: ReactNode;
+  resourceId: string;
+  projectPath?: string;
+  sessionEnabled: boolean;
+}) {
+  const queryClient = useQueryClient();
+  const { baseUrl } = useApiConfig();
+  const firstSyncAtRef = useRef(0);
 
   const {
     transcript,
@@ -65,21 +95,6 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     hydrateMessages(messagesQuery.data);
   }, [hydrateMessages, messagesQuery.data]);
 
-  const handleReconnectState = useCallback(
-    (state: Parameters<typeof reset>[0]) => {
-      reset(state);
-      resetHydration();
-    },
-    [reset, resetHydration],
-  );
-
-  const handleReconnectMessagesInvalidated = useCallback(
-    (queryKey: QueryKey) => {
-      queryClient.removeQueries({ queryKey });
-    },
-    [queryClient],
-  );
-
   const connection = useAgentControllerConnection({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -87,10 +102,29 @@ export function ChatSessionProvider({ children }: { children: ReactNode }) {
     baseUrl,
     enabled: sessionEnabled,
     onEvent,
-    onInitialState: reset,
-    onReconnectState: handleReconnectState,
-    onReconnectMessagesInvalidated: handleReconnectMessagesInvalidated,
   });
+
+  useEffect(() => {
+    if (!connection.state || !connection.stateUpdatedAt) return;
+    const isFirst = firstSyncAtRef.current === 0;
+    firstSyncAtRef.current = connection.stateUpdatedAt;
+    resetHydration();
+    queryClient.removeQueries({
+      queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, connection.state.threadId),
+    });
+    reset(
+      connection.state,
+      isFirst ? (connection.createdThreadId ?? connection.state.threadId) : connection.state.threadId,
+    );
+  }, [
+    connection.createdThreadId,
+    connection.state,
+    connection.stateUpdatedAt,
+    queryClient,
+    reset,
+    resetHydration,
+    resourceId,
+  ]);
 
   useEffect(() => {
     if (sessionEnabled) return;
