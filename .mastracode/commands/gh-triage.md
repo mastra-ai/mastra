@@ -33,7 +33,7 @@ Start with **Triage** only. In `--headless` mode, choose the next step, post the
 Use one GitHub comment for the lifecycle. Update the same comment across phases.
 
 ```markdown
-## <severity> Maintainer's Triage Note
+## <severity symbol only> Maintainer's Triage Note
 
 **Current Phase:** Triaged
 
@@ -56,7 +56,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Triage confidence stays `Pending Review`; Review confidence uses 1/5-5/5, where 5/5 means the finding is strongly supported by direct evidence and 1/5 means it is tentative and needs more information. Use recent relevant-area history as evidence when it shows recurrence, regression risk, ownership, or core-path impact.
+Heading uses only the severity symbol: `🔴`, `🟠`, `🟡`, or `🟢`. The `Severity` field includes the symbol plus label/reason. Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Triage confidence stays `Pending Review`; Review confidence uses 1/5-5/5, where 5/5 means direct evidence and 1/5 means tentative.
 
 ## Issue/PR Comment
 
