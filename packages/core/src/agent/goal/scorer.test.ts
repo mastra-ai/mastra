@@ -1,8 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
 import { createTool } from '../../tools';
-import { Agent } from '../agent';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING } from './objective';
 import { createGoalScorer } from './scorer';
 
@@ -68,44 +67,33 @@ describe('createGoalScorer tool support', () => {
   });
 });
 
-describe('createGoalScorer JSON fallback', () => {
-  async function runWithFallbackText(decision: 'done' | 'continue' | 'waiting', reason: string) {
-    const model = createMockModel({ mockText: { decision, reason }, version: 'v2' });
-    const streamSpy = vi
-      .spyOn(Agent.prototype, 'stream')
-      .mockResolvedValueOnce({ object: Promise.resolve(undefined) } as any)
-      .mockResolvedValueOnce({
-        object: Promise.resolve(undefined),
-        text: Promise.resolve(JSON.stringify({ decision, reason })),
-      } as any);
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+describe('createGoalScorer JSON prompt injection', () => {
+  async function runWithInjectedJson(decision: 'done' | 'continue' | 'waiting', reason: string) {
+    const streamCalls: any[] = [];
+    const model = createMockModel({
+      mockText: { decision, reason },
+      version: 'v2',
+      spyStream: props => streamCalls.push(props),
+    });
+    const scorer = createGoalScorer({ judgeModel: model as any, jsonPromptInjection: true });
 
-    try {
-      const scorer = createGoalScorer({ judgeModel: model as any });
+    const result = await scorer.run({
+      input: { originalTask: 'do the thing', currentText: 'I did the thing' },
+      output: 'I did the thing',
+    } as any);
 
-      const result = await scorer.run({
-        input: { originalTask: 'do the thing', currentText: 'I did the thing' },
-        output: 'I did the thing',
-      } as any);
-
-      expect(streamSpy).toHaveBeenCalledTimes(2);
-      expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
-      expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
-      return result;
-    } finally {
-      streamSpy.mockRestore();
-      warnSpy.mockRestore();
-    }
+    expect(JSON.stringify(streamCalls[0]?.prompt)).toContain('JSON schema');
+    return result;
   }
 
-  it('falls back to JSON prompt injection text when native structured output is unavailable', async () => {
-    const result = await runWithFallbackText('done', 'all requirements met');
+  it('parses JSON prompt injection text through the structured output pipeline', async () => {
+    const result = await runWithInjectedJson('done', 'all requirements met');
     expect(result.score).toBe(1);
     expect(result.reason).toBe('all requirements met');
   });
 
   it('preserves the waiting score when JSON prompt injection text returns waiting', async () => {
-    const result = await runWithFallbackText('waiting', 'waiting for approval');
+    const result = await runWithInjectedJson('waiting', 'waiting for approval');
     expect(result.score).toBe(GOAL_SCORE_WAITING);
     expect(result.reason).toBe('waiting for approval');
   });
