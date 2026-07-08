@@ -1,0 +1,145 @@
+---
+title: "Slack | Channels"
+description: "Configure a Mastra agent to receive Slack messages and mentions through a channel adapter."
+packages:
+  - "@mastra/core"
+---
+
+# Slack
+
+Slack channels let a Mastra agent receive direct messages, channel mentions, and thread replies from Slack. Use the Slack adapter when you create and configure the Slack app yourself.
+
+## Install the adapter
+
+Install the Slack adapter from the Chat SDK:
+
+```bash npm2yarn
+npm install @chat-adapter/slack
+```
+
+## Agent configuration
+
+Add `createSlackAdapter()` to the agent's `channels.adapters` object:
+
+```typescript title="src/mastra/agents/slack-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const slackAgent = new Agent({
+  id: 'slack-agent',
+  name: 'Slack Agent',
+  instructions: 'Answer questions, help with tasks, and have natural conversations in Slack.',
+  model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+```
+
+The `channels` property tells Mastra to generate a webhook endpoint for the Slack adapter. The adapter handles Slack event verification, request signature validation, and message formatting.
+
+Register the agent on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { slackAgent } from './agents/slack-agent'
+
+export const mastra = new Mastra({
+  agents: { slackAgent },
+})
+```
+
+## Slack app settings
+
+Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps). Select **Create New App** > **From scratch**, then choose the workspace where the agent should run.
+
+In **OAuth & Permissions**, add these **Bot Token Scopes**:
+
+- `app_mentions:read`
+- `channels:history`
+- `channels:read`
+- `chat:write`
+- `users:read`
+
+Install the app to the workspace from **OAuth & Permissions**, then copy the **Bot User OAuth Token**. In **Basic Information** > **App Credentials**, copy the **Signing Secret**.
+
+Keep **Socket Mode** turned off under **Settings** > **Socket Mode**. The Slack adapter receives events through HTTP webhooks.
+
+## Environment variables
+
+The adapter reads Slack credentials from these environment variables by default:
+
+```bash title=".env"
+SLACK_SIGNING_SECRET=your-signing-secret
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+```
+
+For additional adapter options, see the [Chat SDK Slack adapter docs](https://chat-sdk.dev/adapters/official/slack).
+
+## Webhook URL
+
+Mastra generates the Slack webhook route from the agent ID and adapter key:
+
+```text
+/api/agents/slack-agent/channels/slack/webhook
+```
+
+Use your public Mastra server URL as the base URL:
+
+```text
+https://your-app.example.com/api/agents/slack-agent/channels/slack/webhook
+```
+
+For local development, expose the Mastra dev server with a tunnel:
+
+```bash npm2yarn
+npx cloudflared tunnel --url http://localhost:4111
+```
+
+Use the generated tunnel URL as the base URL while developing:
+
+```text
+https://<your-tunnel-url>/api/agents/slack-agent/channels/slack/webhook
+```
+
+In the Slack app settings, open **Event Subscriptions**, turn **Enable Events** on, and set **Request URL** to the webhook URL. Slack sends a verification request to the route.
+
+## Event subscriptions
+
+Under **Subscribe to bot events**, add these events:
+
+- `app_mention`: Delivers messages that mention the bot in channels.
+- `message.channels`: Delivers channel messages for conversations where the bot is present.
+
+Select **Save Changes** after updating events. Slack requires the app to be reinstalled after event subscription changes. Open **OAuth & Permissions** and select **Reinstall to Workspace**.
+
+## Slack behavior
+
+Invite the bot to a channel before using channel mentions:
+
+```text
+/invite @your-bot-name
+```
+
+Mention the bot in the channel:
+
+```text
+@your-bot-name What can you help me with?
+```
+
+The agent responds in the thread. Response content depends on the model, instructions, memory, and tools configured on the agent.
+
+## Production deployment
+
+When you deploy the Mastra server, update the Slack app's **Request URL** to the production webhook URL. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
+
+Channels on serverless platforms may need `waitUntil` and shared pub/sub configuration so background responses and thread leases work across short-lived instances. See [serverless deployment](/docs/capabilities/channels/overview#serverless-deployment) in the channels overview.
+
+## Related
+
+- [Channels overview](/docs/capabilities/channels/overview)
+- [More](/docs/capabilities/channels/other-adapters)
+- [Channels reference](/reference/agents/channels)
+- [Deployment overview](/docs/deployment/overview)

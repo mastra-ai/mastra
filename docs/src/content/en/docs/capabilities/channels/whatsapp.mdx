@@ -1,0 +1,84 @@
+---
+title: "WhatsApp | Channels"
+description: "Configure a Mastra agent to receive WhatsApp Business Cloud messages through a channel adapter."
+packages:
+  - "@mastra/core"
+---
+
+# WhatsApp
+
+WhatsApp channels let a Mastra agent receive customer messages through WhatsApp Business Cloud. Mastra handles the agent wiring and webhook route; the Chat SDK WhatsApp adapter docs cover Meta app setup, credentials, and webhook configuration.
+
+## Install the adapter
+
+Install the WhatsApp adapter from the Chat SDK:
+
+```bash npm2yarn
+npm install @chat-adapter/whatsapp
+```
+
+## Agent configuration
+
+Add `createWhatsAppAdapter()` to the agent's `channels.adapters` object:
+
+```typescript title="src/mastra/agents/whatsapp-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createWhatsAppAdapter } from '@chat-adapter/whatsapp'
+
+export const whatsappAgent = new Agent({
+  id: 'whatsapp-agent',
+  name: 'WhatsApp Agent',
+  instructions: 'Answer customer questions and help with tasks in WhatsApp.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      whatsapp: createWhatsAppAdapter(),
+    },
+  },
+})
+```
+
+Register the agent on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { whatsappAgent } from './agents/whatsapp-agent'
+
+export const mastra = new Mastra({
+  agents: { whatsappAgent },
+})
+```
+
+## Adapter setup
+
+Follow the [Chat SDK WhatsApp adapter docs](https://chat-sdk.dev/adapters/official/whatsapp) for WhatsApp-specific setup, including Meta app configuration, access tokens, phone number IDs, webhook verification, and message limits.
+
+The adapter reads WhatsApp credentials from environment variables such as:
+
+```bash title=".env"
+WHATSAPP_ACCESS_TOKEN=your-meta-access-token
+WHATSAPP_APP_SECRET=your-meta-app-secret
+WHATSAPP_PHONE_NUMBER_ID=your-whatsapp-phone-number-id
+WHATSAPP_VERIFY_TOKEN=your-webhook-verify-token
+```
+
+## Webhook URL
+
+Mastra generates the WhatsApp webhook route from the agent ID and adapter key:
+
+```text
+/api/agents/whatsapp-agent/channels/whatsapp/webhook
+```
+
+Use your public Mastra server URL as the base URL:
+
+```text
+https://your-app.example.com/api/agents/whatsapp-agent/channels/whatsapp/webhook
+```
+
+Use this URL anywhere the WhatsApp adapter docs ask for the callback URL or webhook URL. The adapter handles webhook verification and incoming events through the generated Mastra webhook route.
+
+## Related
+
+- [Channels overview](/docs/capabilities/channels/overview)
+- [More](/docs/capabilities/channels/other-adapters)
