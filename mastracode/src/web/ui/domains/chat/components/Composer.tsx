@@ -2,7 +2,7 @@ import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -10,10 +10,20 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useChatSession } from '../context/ChatSessionProvider';
-import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation, useSetAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
+import {
+  useClearAgentControllerGoalMutation,
+  usePauseAgentControllerGoalMutation,
+  useResumeAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
+} from '../hooks/useAgentControllerGoalMutations';
 import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
 import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
-import { useAbortAgentControllerMutation, useFollowUpAgentControllerMutation, useSendAgentControllerMessageMutation, useSteerAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
+import {
+  useAbortAgentControllerMutation,
+  useFollowUpAgentControllerMutation,
+  useSendAgentControllerMessageMutation,
+  useSteerAgentControllerMutation,
+} from '../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
 import { useTextareaAutoResize } from '../hooks/useTextareaAutoResize';
@@ -44,15 +54,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const projectPath = deriveProjectPath(activeProject);
   const location = useLocation();
   const navigate = useNavigate();
-  const {
-    transcript,
-    status,
-    busy,
-    localUser,
-    resetCurrentThread,
-    resetHydration,
-    pushNotice,
-  } = useChatSession();
+  const { transcript, status, busy, localUser, resetCurrentThread, resetHydration, pushNotice } = useChatSession();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
@@ -70,7 +72,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
 
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const suggestions = useMemo(() => matchCommands(draft), [draft]);
+  const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
@@ -79,16 +81,16 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
     setActiveSuggestion(0);
   };
 
-  const applyCommand = (name: string) => {
+  const applyCommand = useEffectEvent((name: string) => {
     updateDraft(`/${name} `);
     inputRef.current?.focus();
-  };
+    onCommandApplied();
+  });
 
   useEffect(() => {
     if (!commandNameToApply) return;
     applyCommand(commandNameToApply);
-    onCommandApplied();
-  }, [commandNameToApply, onCommandApplied]);
+  }, [commandNameToApply]);
 
   useTextareaAutoResize(inputRef, draft);
 
@@ -217,11 +219,16 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
         case 'cost': {
           const u = transcript.usage;
           if (!u?.totalTokens) pushNotice('No token usage recorded yet.');
-          else pushNotice(`Tokens — prompt: ${u.promptTokens ?? 0}, completion: ${u.completionTokens ?? 0}, total: ${u.totalTokens}`);
+          else
+            pushNotice(
+              `Tokens — prompt: ${u.promptTokens ?? 0}, completion: ${u.completionTokens ?? 0}, total: ${u.totalTokens}`,
+            );
           return;
         }
         case 'think':
-          pushNotice('Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.');
+          pushNotice(
+            'Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.',
+          );
           return;
         case 'om':
           pushNotice(`Observational memory phase: ${transcript.omPhase ?? 'idle'}`);
@@ -299,7 +306,13 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
       )}
       <div className="absolute bottom-2 right-2 flex items-center gap-1">
         {busy && (
-          <Button type="button" variant="outline" size="icon-sm" onClick={() => void abortMutation.mutateAsync()} aria-label="Abort">
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => void abortMutation.mutateAsync()}
+            aria-label="Abort"
+          >
             <Square size={14} />
           </Button>
         )}

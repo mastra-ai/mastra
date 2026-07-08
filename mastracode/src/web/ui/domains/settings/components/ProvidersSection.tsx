@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, Search } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ProviderInfo } from '../../../../../shared/api/types';
 import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../../../../../shared/hooks/use-providers';
@@ -53,24 +53,20 @@ export function ProvidersSection() {
     if (editing) keyInputRef.current?.focus();
   }, [editing]);
 
-  const configured = useMemo(
-    () => providers.filter(p => p.source !== 'none').sort((a, b) => a.provider.localeCompare(b.provider)),
-    [providers],
-  );
+  const configured = providers.filter(p => p.source !== 'none').sort((a, b) => a.provider.localeCompare(b.provider));
 
   // When searching, surface ALL matches (any source) so configured + new
   // providers are reachable; configured ones float to the top.
-  const results = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return [];
-    return providers
-      .filter(p => p.provider.toLowerCase().includes(q))
-      .sort((a, b) => {
-        if ((a.source !== 'none') !== (b.source !== 'none')) return a.source !== 'none' ? -1 : 1;
-        return a.provider.localeCompare(b.provider);
-      })
-      .slice(0, 50);
-  }, [providers, search]);
+  const q = search.trim().toLowerCase();
+  const results = q
+    ? providers
+        .filter(p => p.provider.toLowerCase().includes(q))
+        .sort((a, b) => {
+          if ((a.source !== 'none') !== (b.source !== 'none')) return a.source !== 'none' ? -1 : 1;
+          return a.provider.localeCompare(b.provider);
+        })
+        .slice(0, 50)
+    : [];
 
   const saveKey = async (provider: string, envVar?: string) => {
     const key = keyDraft.trim();

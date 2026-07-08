@@ -13,7 +13,7 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
 type NotificationMode = AgentControllerSessionSettings['notifications'];
@@ -205,21 +205,19 @@ function ModelPicker({
   const current = models.find(m => m.id === currentModelId);
   const currentLabel = current ? `${current.provider} / ${current.modelName}` : (currentModelId ?? 'Select a model');
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const matched = q
-      ? models.filter(
-          m =>
-            m.provider.toLowerCase().includes(q) ||
-            m.modelName.toLowerCase().includes(q) ||
-            m.id.toLowerCase().includes(q),
-        )
-      : models;
-    return [...matched].sort((a, b) => {
-      if (a.hasApiKey !== b.hasApiKey) return a.hasApiKey ? -1 : 1;
-      return a.id.localeCompare(b.id);
-    });
-  }, [models, query]);
+  const q = query.trim().toLowerCase();
+  const matched = q
+    ? models.filter(
+        m =>
+          m.provider.toLowerCase().includes(q) ||
+          m.modelName.toLowerCase().includes(q) ||
+          m.id.toLowerCase().includes(q),
+      )
+    : models;
+  const filtered = [...matched].sort((a, b) => {
+    if (a.hasApiKey !== b.hasApiKey) return a.hasApiKey ? -1 : 1;
+    return a.id.localeCompare(b.id);
+  });
 
   // Open/close is an event, not a synchronization: reset search state in the
   // handlers that trigger it instead of reacting via effects.

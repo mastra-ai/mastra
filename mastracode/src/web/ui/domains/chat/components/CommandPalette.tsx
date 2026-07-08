@@ -2,7 +2,7 @@ import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { SLASH_COMMANDS } from '../index';
 import type { SlashCommand } from '../index';
@@ -23,11 +23,10 @@ export function CommandPalette({ onRun, onClose }: CommandPaletteProps) {
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const matches = useMemo<SlashCommand[]>(() => {
-    const q = query.trim().toLowerCase();
-    if (!q) return SLASH_COMMANDS;
-    return SLASH_COMMANDS.filter(c => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q));
-  }, [query]);
+  const q = query.trim().toLowerCase();
+  const matches: SlashCommand[] = q
+    ? SLASH_COMMANDS.filter(c => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
+    : SLASH_COMMANDS;
 
   // Keep the active index in range as the match list shrinks/grows.
   useEffect(() => {

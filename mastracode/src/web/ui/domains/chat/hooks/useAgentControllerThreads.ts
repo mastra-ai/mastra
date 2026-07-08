@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useAgentControllerClient } from './useAgentControllerClient';
+import { createAgentControllerClient } from '../services/agentControllerClient';
 
 export const AGENT_CONTROLLER_THREAD_PAGE_SIZE = 20;
 
@@ -20,7 +20,7 @@ export function useAgentControllerThreads({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerThreadsArgs) {
-  const { session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
   return useQuery({
     queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),

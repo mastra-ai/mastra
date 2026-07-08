@@ -1,6 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useState } from 'react';
-import { useAgentControllerClient } from './useAgentControllerClient';
+import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerModes } from './useAgentControllerModes';
 import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
@@ -29,7 +29,7 @@ export function useAgentControllerConnection({
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
-  const { session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
   const modesQuery = useAgentControllerModes({ agentControllerId, resourceId, baseUrl, enabled });
   const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
   const syncQuery = useAgentControllerSessionSync({

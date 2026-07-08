@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useAgentControllerClient } from './useAgentControllerClient';
+import { createAgentControllerClient } from '../services/agentControllerClient';
 
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
@@ -18,7 +18,7 @@ export function useAgentControllerSessionInit({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionInitArgs) {
-  const { session } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
   return useQuery({
     queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'],

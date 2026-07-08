@@ -1,7 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useRef, useSyncExternalStore } from 'react';
 
-import type { AgentControllerSession } from './useAgentControllerClient';
+import type { AgentControllerSession } from '../services/agentControllerClient';
 
 export type SseConnectionState = 'never' | 'connected' | 'dropped';
 

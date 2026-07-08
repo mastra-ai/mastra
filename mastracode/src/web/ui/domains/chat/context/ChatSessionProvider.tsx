@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { createContext, useContext, useEffect, useRef } from 'react';
+import { createContext, useContext, useEffect, useEffectEvent, useRef } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
@@ -91,9 +91,13 @@ function ChatSessionBoundary({
     enabled: sessionEnabled,
   });
 
+  const onMessagesData = useEffectEvent((data: typeof messagesQuery.data) => {
+    hydrateMessages(data);
+  });
+
   useEffect(() => {
-    hydrateMessages(messagesQuery.data);
-  }, [hydrateMessages, messagesQuery.data]);
+    onMessagesData(messagesQuery.data);
+  }, [messagesQuery.data]);
 
   const connection = useAgentControllerConnection({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -104,7 +108,7 @@ function ChatSessionBoundary({
     onEvent,
   });
 
-  useEffect(() => {
+  const onConnectionStateSynced = useEffectEvent(() => {
     if (!connection.state || !connection.stateUpdatedAt) return;
     const isFirst = firstSyncAtRef.current === 0;
     firstSyncAtRef.current = connection.stateUpdatedAt;
@@ -116,20 +120,19 @@ function ChatSessionBoundary({
       connection.state,
       isFirst ? (connection.createdThreadId ?? connection.state.threadId) : connection.state.threadId,
     );
-  }, [
-    connection.createdThreadId,
-    connection.state,
-    connection.stateUpdatedAt,
-    queryClient,
-    reset,
-    resetHydration,
-    resourceId,
-  ]);
+  });
+
+  useEffect(() => {
+    if (!connection.state || !connection.stateUpdatedAt) return;
+    onConnectionStateSynced();
+  }, [connection.state, connection.stateUpdatedAt]);
+
+  const onSessionDisabled = useEffectEvent(resetDormant);
 
   useEffect(() => {
     if (sessionEnabled) return;
-    resetDormant();
-  }, [sessionEnabled, resetDormant]);
+    onSessionDisabled();
+  }, [sessionEnabled]);
 
   const busy = transcript.running || transcript.pending;
   const lastEntry = transcript.entries[transcript.entries.length - 1];

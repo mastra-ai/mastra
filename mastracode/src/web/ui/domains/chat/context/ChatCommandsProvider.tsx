@@ -1,9 +1,13 @@
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
-import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
+import {
+  useClearAgentControllerGoalMutation,
+  usePauseAgentControllerGoalMutation,
+  useResumeAgentControllerGoalMutation,
+} from '../hooks/useAgentControllerGoalMutations';
 import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
 import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import { useAbortAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
@@ -34,49 +38,33 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const { data: permissionRules, isLoading: permissionsLoading } = useAgentControllerPermissions(hookArgs);
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
-  const clearComposerCommand = useCallback(() => setComposerCommandName(null), []);
+  const clearComposerCommand = () => setComposerCommandName(null);
 
-  const runPaletteCommand = useCallback(
-    (command: SlashCommand) => {
-      if (command.args) {
-        setComposerCommandName(command.name);
-        return;
-      }
+  const runPaletteCommand = (command: SlashCommand) => {
+    if (command.args) {
+      setComposerCommandName(command.name);
+      return;
+    }
 
-      if (command.name === 'permissions' && permissionsLoading) return;
+    if (command.name === 'permissions' && permissionsLoading) return;
 
-      void runNoArgCommand(command.name, {
-        session: {
-          clearGoal: () => clearGoalMutation.mutateAsync().then(() => undefined),
-          pauseGoal: () => pauseGoalMutation.mutateAsync().then(() => undefined),
-          resumeGoal: () => resumeGoalMutation.mutateAsync().then(() => undefined),
-          abort: () => abortMutation.mutateAsync().then(() => undefined),
-          getPermissions: () => Promise.resolve(permissionRules ?? { categories: {}, tools: {} }),
-          setPermissionForCategory: (category, policy) => setPermissionForCategoryMutation.mutateAsync({ category, policy }),
-          pushNotice,
-        },
-        transcript,
-        activeProject: activeProject ?? null,
-      });
-    },
-    [
-      abortMutation,
-      activeProject,
-      clearGoalMutation,
-      permissionRules,
-      permissionsLoading,
-      pauseGoalMutation,
-      pushNotice,
-      resumeGoalMutation,
-      setPermissionForCategoryMutation,
+    void runNoArgCommand(command.name, {
+      session: {
+        clearGoal: () => clearGoalMutation.mutateAsync().then(() => undefined),
+        pauseGoal: () => pauseGoalMutation.mutateAsync().then(() => undefined),
+        resumeGoal: () => resumeGoalMutation.mutateAsync().then(() => undefined),
+        abort: () => abortMutation.mutateAsync().then(() => undefined),
+        getPermissions: () => Promise.resolve(permissionRules ?? { categories: {}, tools: {} }),
+        setPermissionForCategory: (category, policy) =>
+          setPermissionForCategoryMutation.mutateAsync({ category, policy }),
+        pushNotice,
+      },
       transcript,
-    ],
-  );
+      activeProject: activeProject ?? null,
+    });
+  };
 
-  const value = useMemo<ChatCommandsApi>(
-    () => ({ composerCommandName, clearComposerCommand, runPaletteCommand }),
-    [composerCommandName, clearComposerCommand, runPaletteCommand],
-  );
+  const value: ChatCommandsApi = { composerCommandName, clearComposerCommand, runPaletteCommand };
 
   return <ChatCommandsContext.Provider value={value}>{children}</ChatCommandsContext.Provider>;
 }

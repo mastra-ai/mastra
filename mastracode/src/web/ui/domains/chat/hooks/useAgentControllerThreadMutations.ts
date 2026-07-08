@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useAgentControllerClient } from './useAgentControllerClient';
+import { createAgentControllerClient } from '../services/agentControllerClient';
 
 interface AgentControllerThreadMutationArgs {
   agentControllerId: string;
@@ -11,7 +11,11 @@ interface AgentControllerThreadMutationArgs {
   enabled?: boolean;
 }
 
-function useThreadMutationInvalidation({ agentControllerId, resourceId, projectPath }: AgentControllerThreadMutationArgs) {
+function useThreadMutationInvalidation({
+  agentControllerId,
+  resourceId,
+  projectPath,
+}: AgentControllerThreadMutationArgs) {
   const queryClient = useQueryClient();
   return async () => {
     await Promise.all([
@@ -30,7 +34,7 @@ function useThreadMutationInvalidation({ agentControllerId, resourceId, projectP
 }
 
 export function useCreateAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = useAgentControllerClient(args);
+  const { session } = createAgentControllerClient(args);
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
@@ -40,7 +44,7 @@ export function useCreateAgentControllerThreadMutation(args: AgentControllerThre
 }
 
 export function useDeleteAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = useAgentControllerClient(args);
+  const { session } = createAgentControllerClient(args);
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
@@ -50,7 +54,7 @@ export function useDeleteAgentControllerThreadMutation(args: AgentControllerThre
 }
 
 export function useRenameAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = useAgentControllerClient(args);
+  const { session } = createAgentControllerClient(args);
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
@@ -60,7 +64,7 @@ export function useRenameAgentControllerThreadMutation(args: AgentControllerThre
 }
 
 export function useCloneAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = useAgentControllerClient(args);
+  const { session } = createAgentControllerClient(args);
   const invalidateThreads = useThreadMutationInvalidation(args);
 
   return useMutation({
@@ -70,7 +74,7 @@ export function useCloneAgentControllerThreadMutation(args: AgentControllerThrea
 }
 
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
-  const { session } = useAgentControllerClient(args);
+  const { session } = createAgentControllerClient(args);
   const invalidateSession = useThreadMutationInvalidation(args);
 
   return useMutation({

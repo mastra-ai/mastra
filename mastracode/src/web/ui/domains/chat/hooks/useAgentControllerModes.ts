@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useAgentControllerClient } from './useAgentControllerClient';
+import { createAgentControllerClient } from '../services/agentControllerClient';
 
 interface UseAgentControllerModesArgs {
   agentControllerId: string;
@@ -16,7 +16,7 @@ export function useAgentControllerModes({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerModesArgs) {
-  const { controller } = useAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { controller } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
   return useQuery({
     queryKey: queryKeys.agentControllerModes(agentControllerId),

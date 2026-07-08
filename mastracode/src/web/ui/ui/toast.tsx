@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useContext, useRef, useState } from 'react';
 
 export type ToastLevel = 'info' | 'success' | 'error';
 
@@ -26,11 +26,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const seq = useRef(0);
 
-  const toast = useCallback((text: string, level: ToastLevel = 'info') => {
+  const toast = (text: string, level: ToastLevel = 'info') => {
     const id = ++seq.current;
     setToasts(t => [...t, { id, text, level }]);
     setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), DISMISS_MS);
-  }, []);
+  };
 
   return (
     <ToastContext.Provider value={{ toast }}>

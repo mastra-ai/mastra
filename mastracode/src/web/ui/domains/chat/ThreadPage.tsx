@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../shared/api/config';
@@ -28,7 +28,9 @@ export function ThreadPage() {
       header={<ChatHeader />}
       sidebarOpen={overlays.isOpen('sidebar')}
       onSidebarClose={() => overlays.close('sidebar')}
-      content={activeProject ? <ThreadPageContent /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
+      content={
+        activeProject ? <ThreadPageContent /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
+      }
       footer={activeProject ? <ThreadComposer /> : null}
     />
   );
@@ -66,11 +68,9 @@ function ThreadPageContent() {
   const navigate = useNavigate();
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
 
-  useEffect(() => {
-    if (!routeThreadId) return;
-    if (status !== 'ready' || !transcript.threadId || transcript.threadId === routeThreadId || !threadsQuery.isSuccess) return;
-    if (!threadsQuery.data.some(thread => thread.id === routeThreadId)) {
-      const message = `Failed to switch thread: thread ${routeThreadId} was not found`;
+  const switchToRouteThread = useEffectEvent((threadId: string) => {
+    if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
+      const message = `Failed to switch thread: thread ${threadId} was not found`;
       resetCurrentThread();
       pushNotice(message, 'error');
       void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
@@ -78,9 +78,9 @@ function ThreadPageContent() {
     }
 
     resetHydration();
-    resetCurrentThread(routeThreadId);
+    resetCurrentThread(threadId);
     void switchThreadMutation
-      .mutateAsync(routeThreadId)
+      .mutateAsync(threadId)
       .then(state => syncState(state))
       .catch(err => {
         const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
@@ -88,19 +88,14 @@ function ThreadPageContent() {
         pushNotice(message, 'error');
         void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       });
-  }, [
-    routeThreadId,
-    status,
-    transcript.threadId,
-    threadsQuery.isSuccess,
-    threadsQuery.data,
-    switchThreadMutation,
-    resetHydration,
-    resetCurrentThread,
-    syncState,
-    navigate,
-    pushNotice,
-  ]);
+  });
+
+  useEffect(() => {
+    if (!routeThreadId) return;
+    if (status !== 'ready' || !transcript.threadId || transcript.threadId === routeThreadId || !threadsQuery.isSuccess)
+      return;
+    switchToRouteThread(routeThreadId);
+  }, [routeThreadId, status, transcript.threadId, threadsQuery.isSuccess]);
 
   return <ChatMessageList />;
 }
