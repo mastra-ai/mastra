@@ -1,0 +1,108 @@
+---
+title: "Reference: createBuilderAgent() | Editor"
+description: "API reference for createBuilderAgent, the factory that creates the agent powering the Agent Builder's chat-based editor."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# createBuilderAgent()
+
+**Added in:** `@mastra/editor@0.12.1`
+
+`createBuilderAgent()` creates the agent that powers the Agent Builder's chat-based editor. Register the returned agent on `Mastra.agents` to enable the Builder. Without it, the chat-based editor is unavailable.
+
+It is exported from `@mastra/editor/ee`.
+
+## Usage example
+
+Register the builder agent on `Mastra.agents`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { MastraEditor } from '@mastra/editor'
+import { createBuilderAgent } from '@mastra/editor/ee'
+
+export const mastra = new Mastra({
+  agents: { builderAgent: createBuilderAgent() },
+  editor: new MastraEditor({
+    builder: {
+      enabled: true,
+    },
+  }),
+})
+```
+
+By default the agent uses the `__GATEWAY_OPENAI_MODEL__` model, which requires `OPENAI_API_KEY`. Pass a `model` override to use a different provider:
+
+```typescript
+import { createBuilderAgent } from '@mastra/editor/ee'
+
+const builderAgent = createBuilderAgent({
+  model: '__GATEWAY_ANTHROPIC_MODEL_SONNET__',
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'args',
+    type: "Partial<AgentConfig<'builder-agent'>>",
+    isOptional: true,
+    description:
+      'Partial agent configuration merged over the builder defaults. Accepts the same fields as the Agent constructor — see the Agent reference. The most common override is `model`. The `id`, `name`, and `description` are fixed by the factory and cannot be overridden; array-valued `errorProcessors` are appended to the built-in defaults, while dynamic overrides are passed through unchanged.',
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'agent',
+    type: "Agent<'builder-agent'>",
+    description: 'The configured builder agent. Register it on `Mastra.agents` to enable the Agent Builder.',
+  },
+]}
+/>
+
+## Defaults
+
+`createBuilderAgent()` applies the following defaults unless overridden through `args`:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string',
+    defaultValue: '__GATEWAY_OPENAI_MODEL__',
+    description: 'Model used by the builder agent. Override with `createBuilderAgent({ model })`.',
+  },
+  {
+    name: 'memory',
+    type: 'Memory',
+    description: 'A `@mastra/memory` instance wired into the builder agent.',
+  },
+  {
+    name: 'workspace',
+    type: 'Workspace',
+    description: "A local-filesystem `Workspace` that exposes the builder agent's bundled skills.",
+  },
+  {
+    name: 'errorProcessors',
+    type: 'Processor[]',
+    description:
+      'Built-in processors that recover from provider-side stream and history errors during long, tool-heavy builds. An array you pass is appended to these; a dynamic override is passed through unchanged.',
+  },
+]}
+/>
+
+## Related
+
+- [Agent](/reference/agents/agent) — the full `AgentConfig` surface accepted by `args`.
+- [BuilderAgentDefaults](/reference/editor/agent-builder/builder-agent-defaults) — admin-pinned defaults (memory, model, workspace) applied to the agents you build, typed with `SerializedMemoryConfig`.
+- [Agent Builder overview](/docs/agent-builder/overview) — setup and prerequisites.
+- [MastraEditor](/reference/editor/mastra-editor) — the editor instance the builder agent works with.
