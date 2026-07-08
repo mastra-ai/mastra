@@ -162,6 +162,9 @@ export class GoalManager {
    */
   async updateJudgeDefaults(state: TUIState, judgeModelId: string, maxTurns: number): Promise<GoalState | null> {
     if (!this.record) return null;
+    // Preserve the current goal status so updating judge settings does not
+    // accidentally pause or resume the goal.
+    const currentStatus = this.record.status;
     const threadId = state.session.thread.getId();
     const agent = this.getAgent(state);
     if (agent && threadId) {
@@ -169,13 +172,17 @@ export class GoalManager {
         threadId,
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
+        status: currentStatus,
       });
-      if (updated) this.record = { ...updated, id: this.record.id };
+      if (updated) {
+        this.record = { ...updated, id: this.record.id };
+      }
     } else {
       this.record = {
         ...this.record,
         ...(judgeModelId ? { judgeModelId } : {}),
         maxRuns: maxTurns,
+        status: currentStatus,
         updatedAt: Date.now(),
       };
     }

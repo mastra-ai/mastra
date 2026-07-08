@@ -121,9 +121,35 @@ describe('GoalManager adapter', () => {
     const goal = await manager.updateJudgeDefaults(state, 'anthropic/claude-sonnet-4-5', 25);
 
     expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(
-      expect.objectContaining({ threadId: 'parent-thread', judgeModelId: 'anthropic/claude-sonnet-4-5', maxRuns: 25 }),
+      expect.objectContaining({
+        threadId: 'parent-thread',
+        judgeModelId: 'anthropic/claude-sonnet-4-5',
+        maxRuns: 25,
+        status: 'active',
+      }),
     );
     expect(goal).toMatchObject({ judgeModelId: 'anthropic/claude-sonnet-4-5', maxTurns: 25, turnsUsed: 3 });
+  });
+
+  it('preserves paused status when judge defaults are updated on a paused goal', async () => {
+    const agent = createAgent();
+    agent.updateObjectiveOptions.mockResolvedValue(
+      makeRecord({ judgeModelId: 'anthropic/claude-sonnet-4-5', maxRuns: 25, runsUsed: 3, status: 'paused' }),
+    );
+    const state = createState(agent);
+    const manager = new GoalManager();
+    await manager.setGoal(state, 'finish the task', '__GATEWAY_OPENAI_MODEL__', 50);
+
+    // Simulate the goal being paused by a rate limit
+    manager.applyEvaluation({ runsUsed: 3, status: 'paused' });
+    expect(manager.getGoal()).toMatchObject({ status: 'paused' });
+
+    // Changing judge settings should NOT resume the paused goal
+    const goal = await manager.updateJudgeDefaults(state, 'anthropic/claude-sonnet-4-5', 25);
+
+    expect(agent.updateObjectiveOptions).toHaveBeenCalledWith(expect.objectContaining({ status: 'paused' }));
+    expect(goal).toMatchObject({ status: 'paused', turnsUsed: 3 });
+    expect(manager.isActive()).toBe(false);
   });
 
   it('applies in-loop evaluations (runsUsed + status) from the goal chunk', async () => {
