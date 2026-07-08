@@ -101,7 +101,7 @@ export function resolveEffectiveGoalSettings(
     maxRuns: record?.maxRuns ?? agentDefaults?.maxRuns ?? DEFAULT_GOAL_MAX_RUNS,
     prompt: record?.prompt ?? agentDefaults?.prompt ?? DEFAULT_GOAL_JUDGE_PROMPT,
     maxSteps: agentDefaults?.maxSteps,
-    jsonPromptInjection: agentDefaults?.jsonPromptInjection,
+    jsonPromptInjection: record?.jsonPromptInjection ?? agentDefaults?.jsonPromptInjection,
   };
 }
 

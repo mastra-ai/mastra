@@ -904,6 +904,7 @@ export class Agent<
       judgeModelId?: string;
       maxRuns?: number;
       prompt?: string;
+      jsonPromptInjection?: boolean | 'system' | 'inline';
       id?: string;
     },
   ): Promise<GoalObjectiveRecord | undefined> {
@@ -921,6 +922,7 @@ export class Agent<
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+      ...(options.jsonPromptInjection !== undefined ? { jsonPromptInjection: options.jsonPromptInjection } : {}),
     };
     await writeObjective(store, options.threadId, record);
     return record;
@@ -953,6 +955,7 @@ export class Agent<
     judgeModelId?: string;
     maxRuns?: number;
     prompt?: string;
+    jsonPromptInjection?: boolean | 'system' | 'inline';
     status?: GoalObjectiveRecord['status'];
   }): Promise<GoalObjectiveRecord | undefined> {
     const store = await resolveGoalStore(this.#mastra as MastraUnion | undefined);
@@ -965,6 +968,7 @@ export class Agent<
       ...(options.judgeModelId !== undefined ? { judgeModelId: options.judgeModelId } : {}),
       ...(options.maxRuns !== undefined && options.maxRuns > 0 ? { maxRuns: options.maxRuns } : {}),
       ...(options.prompt !== undefined ? { prompt: options.prompt } : {}),
+      ...(options.jsonPromptInjection !== undefined ? { jsonPromptInjection: options.jsonPromptInjection } : {}),
       ...(options.status !== undefined ? { status: options.status } : {}),
     };
     await writeObjective(store, options.threadId, updated);

@@ -124,16 +124,30 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       },
     });
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
-    const object = await result.object;
-    if (object === undefined) {
-      throw new MastraError({
-        id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'structuredOutput object is undefined',
-      });
+    try {
+      const object = await result.object;
+      if (object === undefined) {
+        throw new MastraError({
+          id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'structuredOutput object is undefined',
+        });
+      }
+      return result;
+    } catch {
+      return tryGenerateWithJsonFallback(agent, prompt, {
+        ...streamOptions,
+        structuredOutput: {
+          ...streamOptions.structuredOutput,
+          jsonPromptInjection:
+            streamOptions.structuredOutput.jsonPromptInjection === 'inline' ||
+            streamOptions.structuredOutput.jsonPromptInjection === 'system'
+              ? streamOptions.structuredOutput.jsonPromptInjection
+              : true,
+        },
+      } as AgentExecutionOptions<OUTPUT>);
     }
-    return result;
   }
 }
 

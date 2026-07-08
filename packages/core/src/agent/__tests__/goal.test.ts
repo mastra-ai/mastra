@@ -34,10 +34,14 @@ function singleStepModel(text = 'Working on it.') {
   });
 }
 
-function goalJudgeModel(decisions: Array<{ decision: 'done' | 'continue' | 'waiting'; reason: string }>) {
+function goalJudgeModel(
+  decisions: Array<{ decision: 'done' | 'continue' | 'waiting'; reason: string }>,
+  spyStream?: (props: any) => void,
+) {
   let call = 0;
   return new MockLanguageModelV2({
-    doStream: async () => {
+    doStream: async props => {
+      spyStream?.(props);
       const decision = decisions[Math.min(call, decisions.length - 1)];
       call++;
       const text = JSON.stringify(decision);
@@ -76,11 +80,25 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: undefined,
       maxRuns: DEFAULT_GOAL_MAX_RUNS,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+      maxSteps: undefined,
+      jsonPromptInjection: undefined,
     });
 
     expect(
-      resolveEffectiveGoalSettings(undefined, { judgeModelId: 'agent-judge', maxRuns: 10, prompt: 'agent-prompt' }),
-    ).toEqual({ judgeModelId: 'agent-judge', maxRuns: 10, prompt: 'agent-prompt' });
+      resolveEffectiveGoalSettings(undefined, {
+        judgeModelId: 'agent-judge',
+        maxRuns: 10,
+        prompt: 'agent-prompt',
+        maxSteps: 20,
+        jsonPromptInjection: 'inline',
+      }),
+    ).toEqual({
+      judgeModelId: 'agent-judge',
+      maxRuns: 10,
+      prompt: 'agent-prompt',
+      maxSteps: 20,
+      jsonPromptInjection: 'inline',
+    });
   });
 
   it('lets the ThreadState record override agent config', () => {
@@ -91,6 +109,7 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: 'record-judge',
       maxRuns: 3,
       prompt: 'record-prompt',
+      jsonPromptInjection: true,
       startedAt: 0,
       updatedAt: 0,
     };
@@ -98,6 +117,8 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: 'record-judge',
       maxRuns: 3,
       prompt: 'record-prompt',
+      maxSteps: undefined,
+      jsonPromptInjection: true,
     });
   });
 
@@ -107,6 +128,8 @@ describe('resolveEffectiveGoalSettings', () => {
       judgeModelId: 'agent-judge',
       maxRuns: 7,
       prompt: DEFAULT_GOAL_JUDGE_PROMPT,
+      maxSteps: undefined,
+      jsonPromptInjection: undefined,
     });
   });
 });
@@ -123,6 +146,7 @@ describe('Agent objective methods', () => {
       resourceId: RESOURCE,
       judgeModelId: 'judge-1',
       maxRuns: 5,
+      jsonPromptInjection: 'inline',
     });
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record).toMatchObject({
@@ -132,6 +156,7 @@ describe('Agent objective methods', () => {
       runsUsed: 0,
       judgeModelId: 'judge-1',
       maxRuns: 5,
+      jsonPromptInjection: 'inline',
     });
     // Unprovided optional fields are left unset so they fall back to agent config.
     expect(record?.prompt).toBeUndefined();
@@ -146,8 +171,18 @@ describe('Agent objective methods', () => {
     expect(await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'j' })).toBeUndefined();
 
     await agent.setObjective('Goal', { threadId: THREAD, resourceId: RESOURCE });
-    const updated = await agent.updateObjectiveOptions({ threadId: THREAD, judgeModelId: 'new-judge', maxRuns: 12 });
-    expect(updated).toMatchObject({ judgeModelId: 'new-judge', maxRuns: 12, objective: 'Goal' });
+    const updated = await agent.updateObjectiveOptions({
+      threadId: THREAD,
+      judgeModelId: 'new-judge',
+      maxRuns: 12,
+      jsonPromptInjection: true,
+    });
+    expect(updated).toMatchObject({
+      judgeModelId: 'new-judge',
+      maxRuns: 12,
+      jsonPromptInjection: true,
+      objective: 'Goal',
+    });
   });
 
   it('no-ops without storage', async () => {
@@ -261,6 +296,34 @@ describe('in-loop goal scoring', () => {
     const record = await agent.getObjective({ threadId: THREAD });
     expect(record?.status).toBe('done');
     expect(record?.runsUsed).toBe(2);
+  });
+
+  it('passes goal jsonPromptInjection through to the built-in scorer model call', async () => {
+    const judgeCalls: any[] = [];
+    const agent = makeAgent({
+      judge: goalJudgeModel([{ decision: 'done', reason: 'goal satisfied' }], props => judgeCalls.push(props)) as any,
+      maxRuns: 5,
+      jsonPromptInjection: 'inline',
+    });
+    expect(agent.__getGoalConfig()?.jsonPromptInjection).toBe('inline');
+    await agent.setObjective('Reach the goal', {
+      threadId: THREAD,
+      resourceId: RESOURCE,
+      jsonPromptInjection: 'inline',
+    });
+    expect((await agent.getObjective({ threadId: THREAD }))?.jsonPromptInjection).toBe('inline');
+
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const _chunk of stream.fullStream) {
+      // Drain stream so the goal step runs.
+    }
+
+    expect(judgeCalls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(judgeCalls[0]?.prompt)).toContain('JSON schema');
+    expect(judgeCalls.every(call => call.responseFormat === undefined)).toBe(true);
   });
 
   it('direct agent goal loop pauses actionably when built-in scorer returns waiting', async () => {

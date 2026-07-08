@@ -41,6 +41,8 @@ export interface GoalObjectiveRecord {
   judgeModelId?: string;
   /** Extra judge guidance. Falls back to agent `goal.prompt` (default = built-in goal judge prompt). */
   prompt?: string;
+  /** Use prompt injection instead of native provider structured output for the default goal judge. */
+  jsonPromptInjection?: boolean | 'system' | 'inline';
   /**
    * Why the objective is parked (`status === 'paused'`). Set for judge failure
    * or budget exhaustion. Unset for `active`/`done`.

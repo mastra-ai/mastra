@@ -1,3 +1,4 @@
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
 import { createMockModel } from '../../test-utils/llm-mock';
@@ -83,6 +84,7 @@ describe('createGoalScorer JSON prompt injection', () => {
     } as any);
 
     expect(JSON.stringify(streamCalls[0]?.prompt)).toContain('JSON schema');
+    expect(streamCalls.every(call => call.responseFormat === undefined)).toBe(true);
     return result;
   }
 
@@ -96,6 +98,46 @@ describe('createGoalScorer JSON prompt injection', () => {
     const result = await runWithInjectedJson('waiting', 'waiting for approval');
     expect(result.score).toBe(GOAL_SCORE_WAITING);
     expect(result.reason).toBe('waiting for approval');
+  });
+
+  it('falls back to generate when prompt-injection streaming produces no object', async () => {
+    const generateCalls: any[] = [];
+    const streamCalls: any[] = [];
+    const model = new MockLanguageModelV2({
+      doStream: async props => {
+        streamCalls.push(props);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 0, totalTokens: 10 } },
+          ]),
+        };
+      },
+      doGenerate: async props => {
+        generateCalls.push(props);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: '{"decision":"done","reason":"generated fallback"}' }],
+          warnings: [],
+        };
+      },
+    });
+    const scorer = createGoalScorer({ judgeModel: model as any, jsonPromptInjection: true });
+
+    const result = await scorer.run({
+      input: { originalTask: 'do the thing', currentText: 'I did the thing' },
+      output: 'I did the thing',
+    } as any);
+
+    expect(streamCalls.length).toBeGreaterThan(0);
+    expect(generateCalls.length).toBeGreaterThan(0);
+    expect(result.score).toBe(1);
+    expect(result.reason).toBe('generated fallback');
   });
 });
 

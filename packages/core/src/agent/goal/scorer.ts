@@ -121,6 +121,7 @@ export function createGoalScorer({
 }) {
   const hasTools = !!tools && Object.keys(tools).length > 0;
   const instructions = prompt ?? DEFAULT_GOAL_JUDGE_PROMPT;
+  const effectiveJsonPromptInjection = jsonPromptInjection ?? true;
   const scorer = createScorer({
     id: GOAL_SCORER_ID,
     name: 'Goal (LLM)',
@@ -134,7 +135,7 @@ export function createGoalScorer({
       ...(defaultMemoryOptions ? { defaultMemoryOptions } : {}),
       ...(onStream ? { onStream } : {}),
       ...(maxSteps ? { maxSteps } : {}),
-      ...(jsonPromptInjection ? { jsonPromptInjection } : {}),
+      jsonPromptInjection: effectiveJsonPromptInjection,
       ...(requestContext ? { requestContext } : {}),
     },
   });
