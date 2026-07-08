@@ -7,6 +7,7 @@ import path from 'node:path';
 import { Container, Markdown, Spacer, Text } from '@earendil-works/pi-tui';
 import type { MarkdownTheme } from '@earendil-works/pi-tui';
 import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { CHAT_INDENT, getMarkdownTheme, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -84,9 +85,9 @@ export class AssistantMessageComponent extends Container {
       const content = message.content[i]!;
 
       if (content.type === 'text' && (content as any).text.trim()) {
-        // Assistant text messages - trim the text
+        // Assistant text messages - trim and sanitize escape codes
         this.contentContainer.addChild(
-          new Markdown((content as any).text.trim(), CHAT_INDENT, 0, this.markdownTheme, {
+          new Markdown(sanitizeAnsiForRendering((content as any).text.trim()), CHAT_INDENT, 0, this.markdownTheme, {
             color: (text: string) => theme.fg('text', text),
           }),
         );
@@ -105,10 +106,16 @@ export class AssistantMessageComponent extends Container {
         } else {
           // Thinking traces in thinkingText color, italic
           this.contentContainer.addChild(
-            new Markdown((content as any).thinking.trim(), CHAT_INDENT, 0, this.markdownTheme, {
-              color: (text: string) => theme.fg('thinkingText', text),
-              italic: true,
-            }),
+            new Markdown(
+              sanitizeAnsiForRendering((content as any).thinking.trim()),
+              CHAT_INDENT,
+              0,
+              this.markdownTheme,
+              {
+                color: (text: string) => theme.fg('thinkingText', text),
+                italic: true,
+              },
+            ),
           );
           this.contentContainer.addChild(new Spacer(1));
         }

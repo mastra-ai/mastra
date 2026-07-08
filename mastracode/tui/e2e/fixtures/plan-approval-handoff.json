@@ -29,8 +29,7 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
-        "hasToolResult": true,
-        "toolCallId": "call_plan_approval_e2e_write"
+        "turnIndex": 1
       },
       "response": {
         "toolCalls": [
