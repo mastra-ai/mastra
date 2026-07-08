@@ -42,7 +42,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
 - Next Steps: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
-- Confidence: <high|medium|low> — <why enough for triage or what is uncertain>
+- Confidence: <1/5|2/5|3/5|4/5|5/5> — <why enough for triage or what is uncertain>
 
 **Review:**
 - Status: <not started|in progress|complete>
@@ -55,7 +55,7 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Use recent relevant-area history as evidence when it shows recurrence, regression risk, ownership, or core-path impact.
+Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Confidence uses 1/5-5/5, where 5/5 means the route is strongly supported by direct evidence and 1/5 means the route is tentative and needs more information. Use recent relevant-area history as evidence when it shows recurrence, regression risk, ownership, or core-path impact.
 
 ## Issue/PR Comment
 
