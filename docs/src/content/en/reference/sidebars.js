@@ -373,6 +373,7 @@ const sidebars = {
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
+        { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },

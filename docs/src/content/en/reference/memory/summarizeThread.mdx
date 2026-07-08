@@ -13,7 +13,7 @@ Messages load page-by-page starting from the newest, bounded by `lastMessages` a
 
 Nothing is written back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go — for example your own database.
 
-Use this when a session ends and you want a summary or structured extraction of the whole conversation, such as a voice call at hang-up. To summarize messages you already have in hand (without loading them from a thread), use the standalone `summarizeConversation()` function instead — it takes the same options with `messages` in place of `threadId`.
+Use this when a session ends and you want a summary or structured extraction of the whole conversation, such as a voice call at hang-up. To summarize messages you already have in hand (without loading them from a thread), use the standalone [`summarizeConversation()`](/reference/memory/summarizeConversation) function instead — it takes the same options with `messages` in place of `threadId`.
 
 ## Usage example
 
@@ -157,6 +157,7 @@ export async function onCallEnd(threadId: string, resourceId: string) {
 
 ### Related
 
+- [summarizeConversation()](/reference/memory/summarizeConversation)
 - [Memory Class Reference](/reference/memory/memory-class)
 - [Observational Memory](/reference/memory/observational-memory)
 - [.recall()](/reference/memory/recall)
