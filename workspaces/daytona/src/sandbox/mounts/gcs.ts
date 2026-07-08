@@ -173,6 +173,14 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
   }
 
   const hasCredentials = !!config.serviceAccountKey;
+  // Infer directories from object prefixes. GCS has no real directories — a
+  // "folder" only exists implicitly as a shared prefix of object names. Without
+  // --implicit-dirs, an object written to the bucket via the GCS API without a
+  // placeholder "directory" object (e.g. an SDK/gsutil upload of foo/bar.txt
+  // with no foo/ marker) is unreachable in the mount: it isn't listed, and it
+  // can't be read by full path. Common when the mount reads bucket contents
+  // produced by another process. See gcsfuse docs "implicit directories".
+  const implicitDirsFlag = '--implicit-dirs';
   // Run gcsfuse as the sandbox user (not root) so the FUSE connection is registered
   // in the container's user namespace — allowing fusermount -u to unmount it later.
   let mountCmd: string;
@@ -185,10 +193,10 @@ export async function mountGCS(mountPath: string, config: DaytonaGCSMountConfig,
     await writeFile(keyPath, config.serviceAccountKey!);
     await run(`chmod 600 ${shellQuote(keyPath)}`, 30_000);
 
-    mountCmd = `gcsfuse --key-file=${shellQuote(keyPath)} ${onlyDirFlag}-o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
+    mountCmd = `gcsfuse --key-file=${shellQuote(keyPath)} ${implicitDirsFlag} ${onlyDirFlag}-o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   } else {
     logger.debug(`${LOG_PREFIX} No credentials provided, mounting GCS as public bucket (read-only)`);
-    mountCmd = `gcsfuse --anonymous-access ${onlyDirFlag}-o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
+    mountCmd = `gcsfuse --anonymous-access ${implicitDirsFlag} ${onlyDirFlag}-o allow_other ${uidGidFlags} ${shellQuote(config.bucket)} ${quotedMountPath}`;
   }
 
   logger.debug(`${LOG_PREFIX} Mounting GCS:`, mountCmd);

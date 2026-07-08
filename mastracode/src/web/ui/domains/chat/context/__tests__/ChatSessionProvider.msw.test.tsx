@@ -135,7 +135,12 @@ describe('ChatSessionProvider', () => {
       { type: 'agent_start' },
       {
         type: 'message_update',
-        message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
+        message: {
+          id: 'assistant-stream',
+          role: 'assistant',
+          createdAt: new Date(),
+          content: { format: 2, parts: [{ type: 'text', text: 'Streaming now' }] },
+        },
       },
     ]);
     renderProbe();

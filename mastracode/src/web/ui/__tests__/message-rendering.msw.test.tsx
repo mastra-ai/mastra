@@ -5,6 +5,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-cont
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
@@ -12,6 +13,29 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/rende
 import { loginUrl, logoutUrl } from '../domains/auth';
 import Chat from '../domains/chat/Chat';
 import type { Project } from '../domains/workspaces';
+
+/**
+ * Renders <Chat /> inside a memory router mirroring the app's pathless chat
+ * layout (Chat itself uses router hooks for /threads/:threadId navigation).
+ * Auth guards are intentionally bypassed — these specs stub /auth/me directly.
+ */
+function renderChat() {
+  const router = createMemoryRouter(
+    [
+      {
+        element: <Chat />,
+        children: [
+          { path: '/chat', element: null },
+          { path: '/threads/:threadId', element: null },
+        ],
+      },
+    ],
+    // The transcript only renders on the thread's own page now — /chat is the
+    // draft composer and hides the bound thread's history.
+    { initialEntries: ['/threads/thread-test'] },
+  );
+  return renderWithProviders(<RouterProvider router={router} />);
+}
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
@@ -119,7 +143,7 @@ function renderSeededApp(authResponse: Response = new Response(null, { status: 4
   seedProject();
   useAgentControllerHandlers();
   useAuthMe(authResponse);
-  return renderWithProviders(<Chat />);
+  return renderChat();
 }
 
 /** Locate a migrated tool card by its accessible group label ("Tool: <name>"). */
@@ -209,7 +233,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<Chat />);
+    renderChat();
 
     expect(await screen.findByText('Hello')).toBeInTheDocument();
     expect(screen.getByText('from hydrate')).toBeInTheDocument();
@@ -247,7 +271,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<Chat />);
+    renderChat();
 
     const first = await findToolCard('view');
     const last = await findToolCard('search');
@@ -273,7 +297,7 @@ describe('MastraCode message rendering', () => {
     useAgentControllerHandlers();
     server.use(http.get(`${SESSION}/stream`, () => stream.response));
 
-    renderWithProviders(<Chat />);
+    renderChat();
 
     expect(await screen.findByText('Ready')).toBeInTheDocument();
     await stream.emit();
@@ -298,7 +322,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<Chat />);
+    renderChat();
 
     const card = await findToolCard('execute_command');
     expect(within(card).getByText('Done')).toBeInTheDocument();
@@ -313,7 +337,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<Chat />);
+    renderChat();
 
     expect(await screen.findByText('Thread title updated: Better title')).toBeInTheDocument();
     expect(screen.queryByText(/om_thread_title_updated/)).not.toBeInTheDocument();
@@ -339,7 +363,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const card = await findToolCard('view');
       await userEvent.click(within(card).getByText('view'));
@@ -357,7 +381,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const card = await screen.findByRole('group', { name: 'Tool approval for edit' });
       expect(within(card).getByRole('button', { name: 'Approve edit' })).toBeInTheDocument();
@@ -380,7 +404,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const card = await screen.findByRole('group', { name: 'Plan approval' });
       expect(within(card).getByText('Plan: Ship the migration')).toBeInTheDocument();
@@ -404,7 +428,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const card = await screen.findByRole('group', { name: 'Access request' });
       expect(within(card).getByRole('button', { name: 'Allow access to /etc/hosts' })).toBeInTheDocument();
@@ -427,7 +451,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const card = await screen.findByRole('group', { name: 'Question from the agent' });
       expect(within(card).getByText('Which database?')).toBeInTheDocument();
@@ -451,7 +475,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       expect(await screen.findByText('Run the migration')).toBeInTheDocument();
     });
@@ -469,7 +493,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
@@ -483,7 +507,7 @@ describe('MastraCode message rendering', () => {
         events: [{ type: 'info', message: "I'm in **plan mode** — run `/mode build`" }],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const bold = await screen.findByText('plan mode');
       expect(bold.tagName).toBe('STRONG');
@@ -505,7 +529,7 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const code = await screen.findByText(/const/);
       expect(code.closest('pre')).toHaveClass('font-mono');
@@ -540,7 +564,7 @@ describe('MastraCode message rendering', () => {
       ],
     });
 
-    renderWithProviders(<Chat />);
+    renderChat();
 
     const card = await findToolCard('string_replace');
     await userEvent.click(within(card).getByRole('button'));
@@ -575,7 +599,7 @@ describe('App mode + theme controls', () => {
     it('renders the mode switcher below the composer, not in the header', async () => {
       seedMultiMode();
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
@@ -594,7 +618,7 @@ describe('App mode + theme controls', () => {
     it('marks the active mode as selected', async () => {
       seedMultiMode();
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
@@ -606,7 +630,7 @@ describe('App mode + theme controls', () => {
     it('does not render a theme toggle in the header', async () => {
       seedMultiMode();
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       await screen.findByRole('button', { name: 'Build' });
 
@@ -616,7 +640,7 @@ describe('App mode + theme controls', () => {
     it('does not render a project switcher in the header', async () => {
       seedMultiMode();
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       await screen.findByRole('button', { name: 'Build' });
 
@@ -637,7 +661,7 @@ describe('App mode + theme controls', () => {
     it('renders the ready status above settings in the sidebar', async () => {
       seedMultiMode();
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       await screen.findByRole('button', { name: 'Build' });
 
@@ -654,7 +678,7 @@ describe('App mode + theme controls', () => {
     it('does not duplicate the project name in the status line', async () => {
       seedMultiMode();
 
-      renderWithProviders(<Chat />);
+      renderChat();
 
       await screen.findByRole('button', { name: 'Build' });
 

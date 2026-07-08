@@ -6,7 +6,7 @@
  * React Query hook (shared cache key with the rest of the UI), redirecting
  * unauthenticated sessions to `/signin` when web auth is enabled. `SignInGate`
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
- * `/chat`.
+ * `/` so the app can render the draft composer.
  */
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
@@ -14,6 +14,8 @@ import type { RouteObject } from 'react-router';
 
 import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
+import { NewPage } from './domains/chat/NewPage';
+import { ThreadPage } from './domains/chat/ThreadPage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -53,8 +55,12 @@ function SignInGate() {
   const auth = useWebAuth();
   if (auth.isPending) return <AuthPendingSkeleton />;
   const state = auth.data;
-  if (!state?.authEnabled || state.authenticated) return <Navigate to="/chat" replace />;
+  if (!state?.authEnabled || state.authenticated) return <Navigate to="/" replace />;
   return <SignInPage />;
+}
+
+function RedirectToDraftThread() {
+  return <Navigate to="/new" replace />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -66,10 +72,19 @@ export function createAppRoutes(): RouteObject[] {
       path: '/',
       element: <RequireAuth />,
       children: [
-        { index: true, element: <Navigate to="/chat" replace /> },
-        { path: 'chat', element: <Chat /> },
+        { index: true, element: <RedirectToDraftThread /> },
+        {
+          // Pathless layout: <Chat /> (providers, session, SSE stream) stays
+          // mounted while navigating between thread URLs, so thread navigation
+          // never tears down or reconnects the session.
+          element: <Chat />,
+          children: [
+            { path: 'new', element: <NewPage /> },
+            { path: 'threads/:threadId', element: <ThreadPage /> },
+          ],
+        },
         // Legacy deep links (the app used to serve everything at any path).
-        { path: '*', element: <Navigate to="/chat" replace /> },
+        { path: '*', element: <RedirectToDraftThread /> },
       ],
     },
     { path: '/signin', element: <SignInGate /> },
