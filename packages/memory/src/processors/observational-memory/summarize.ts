@@ -16,6 +16,14 @@ import type { ObservationalMemoryModel, ResolvedObservationConfig } from './type
 /** A concrete model config — token-based model routing is not supported for one-shot summarization. */
 export type SummarizeModel = Exclude<ObservationalMemoryModel, ModelByInputTokens>;
 
+/** Defaults for how `Memory.summarizeThread()` loads a thread's messages from storage. */
+export const SUMMARIZE_THREAD_DEFAULTS = {
+  /** Stop loading older messages once the collected messages exceed this estimated token count. */
+  maxInputTokens: 1_000_000,
+  /** Number of messages fetched per storage page while paginating backwards from the newest message. */
+  pageSize: 100,
+} as const;
+
 export interface SummarizeConversationOptions {
   /** Model that runs the summarization (e.g. a router string like `'openai/gpt-4.1-mini'`). */
   model: SummarizeModel;
