@@ -1,5 +1,5 @@
 import { LibSQLVector } from '@mastra/libsql';
-import { Extractor, Memory } from '@mastra/memory';
+import { Extractor, Memory, WorkingMemoryExtractor } from '@mastra/memory';
 import { z } from 'zod';
 import { saveCallSummary } from './backend';
 import { voiceAgentDbUrl } from './db';
@@ -50,13 +50,28 @@ export const callCenterMemory = new Memory({
     observationalMemory: {
       scope: 'resource',
       model: 'openai/gpt-4.1-mini',
+      // NOTE: `observation.manageWorkingMemory: true` would be the more complete form of the
+      // read-only setup below (the Observer would also extract fields whenever it fires
+      // mid-call), but with resource-scoped working memory its extractor crashes in the
+      // multi-thread observer ("no resourceId was provided") — core bug, filed separately.
+      // Until that lands, working memory is written once per call by `summarizeCall` below.
       observation: { messageTokens: 3000 },
     },
     workingMemory: {
       enabled: true,
       scope: 'resource',
-      // Fields are `.nullish()` (accept null and undefined), not `.optional()`: the model updates
-      // the whole working-memory object each turn and emits `null` for fields it doesn't know yet.
+      // `agentManaged: false` moves working-memory writes OFF the caller's clock: the main agent
+      // gets working memory as read-only context — no `updateWorkingMemory` tool, no "update
+      // immediately" system instruction. On a live call the in-loop tool was the top UX offender,
+      // in two ways: models re-state their reply after the tool result (the caller hears the
+      // answer twice), and they sometimes write memory BEFORE replying (seconds of dead air).
+      // Removing the tool removes both failure modes deterministically — no prompt discipline
+      // required — and cuts the extra model step from every memory-writing turn. In-call "never
+      // ask twice" is covered by `lastMessages` (the whole call is in context); cross-call fields
+      // land at the end-of-call summary (`summarizeCall` below runs a WorkingMemoryExtractor).
+      agentManaged: false,
+      // Fields are `.nullish()` (accept null and undefined), not `.optional()`: the extractor
+      // returns the whole working-memory object and emits `null` for fields it doesn't know yet.
       // A bare `.optional()` boolean rejects that null and drops the write.
       schema: z.object({
         callerName: z.string().nullish().describe("The caller's full name"),
@@ -118,6 +133,11 @@ export async function summarizeCall(mapping: { thread: string; resource?: string
     threadId: mapping.thread,
     resourceId: mapping.resource,
     instructions: "Summarize this call for the contractor's office: who called, what they wanted, and any follow-up promised.",
-    extract: [callSummaryExtractor],
+    // Two extractors ride the one summarization pass: the business record above, and the
+    // working-memory update. With `manageWorkingMemory` the main agent never writes working
+    // memory in-loop, and most demo calls end below the Observer's token threshold — this
+    // end-of-call extraction is what guarantees the caller's collected details (name, number,
+    // zip, scenario) are in working memory before their next call.
+    extract: [callSummaryExtractor, new WorkingMemoryExtractor()],
   });
 }

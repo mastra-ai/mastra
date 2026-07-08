@@ -37,10 +37,9 @@ export default createLiveKitWorker({
     return { thread, resource: metadata.resourceId ?? thread };
   },
   // Spoken filler while a tool runs, so the caller isn't left in silence. Returning nothing
-  // keeps a tool silent — which is what we want for `updateWorkingMemory`: the agent is told
-  // to write working memory only AFTER it has replied, so that write trails the spoken text
-  // (the worker streams text to TTS as it arrives, so a trailing tool call doesn't delay what
-  // the caller hears). Announcing it would just add a stray phrase after the answer.
+  // keeps a tool silent. (Working memory no longer surfaces here at all: with
+  // `manageWorkingMemory` in ../memory.ts the agent has no in-loop memory tool — the Observer
+  // writes it off the audio path.)
   toolFeedback: ({ toolName }) => {
     if (toolName === 'lookupCustomer') return 'Let me pull up your account.';
     if (toolName === 'checkAvailability') return 'One moment while I check the diary.';

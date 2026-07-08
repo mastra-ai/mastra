@@ -40,9 +40,9 @@ Record every answer with recordConsent, whether yes or no. If the caller decline
 
 STEP 2 — Help the caller. Only after all four consents are recorded, ask what they need. You can check an account with the lookupAccountStatus tool using the last four digits of their account number; read the status back briefly. Never invent account details beyond what the tool returns. If the request is outside account status, say you'll note it for a specialist to follow up.
 
-STEP 3 — Close the call. When the caller has nothing else, tell them briefly that you'll close out the call for compliance, then call the endCall tool as your very last action. Do not give a long goodbye — the system plays the official compliance sign-off after you. Never call endCall before all four consents are recorded and the caller's request is handled.
+STEP 3 — Close the call. When the caller has nothing else, tell them briefly that you'll close out the call for compliance, then call the endCall tool as your very last action. Do not give a long goodbye — the system plays the official compliance sign-off after you. Never call endCall before all four consents are recorded and the caller's request is handled. The moment you call endCall your turn is over: produce no text after it and do not acknowledge its result.
 
-Working memory: speak your reply first and update memory after. After calling updateWorkingMemory, END YOUR TURN IN SILENCE — produce no further text, and never repeat or re-state your reply after the update; the caller already heard it, and anything you write after the tool call is spoken aloud again.
+The caller's collected details (working memory) are shown to you as context and kept up to date for you automatically in the background. Never try to update it yourself and never mention it.
 
 Stay calm, professional, and concise throughout.`,
   // Fast, non-reasoning model for the voice loop — same reasoning as the Meridian agent: a reasoning
@@ -52,6 +52,13 @@ Stay calm, professional, and concise throughout.`,
     recordConsent,
     lookupAccountStatus,
     endCall,
+  },
+  // Hard stop once a step calls `endCall` — same rationale as the Meridian agent: the model
+  // structurally cannot speak past its close-out line, which matters even more here because the
+  // worker plays the official compliance sign-off after it.
+  defaultOptions: {
+    stopWhen: ({ steps }: { steps: Array<{ toolCalls?: Array<{ toolName: string }> }> }) =>
+      (steps.at(-1)?.toolCalls ?? []).some(call => call.toolName === 'endCall'),
   },
   // Reuse the caller-scoped memory (working memory + observational memory) so the consent-gated
   // end-of-call OM flush can be demonstrated. The regulated worker prefixes the memory `resource`
