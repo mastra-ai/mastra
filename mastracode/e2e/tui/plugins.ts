@@ -213,6 +213,7 @@ function writeGithubInstallPluginSource(pluginDir: string): void {
     JSON.stringify(
       {
         type: 'module',
+        packageManager: 'pnpm@11.8.0',
         dependencies: {
           'e2e-plugin-installed-dependency': 'file:./fixtures/dependency',
         },
@@ -529,6 +530,7 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Local plugin path or discovered plugin:/i, terminal, 8_000);
     terminal.write('\r');
@@ -611,6 +613,14 @@ export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
     if (!githubInstallGhPath) throw new Error('GitHub install gh fixture was not prepared');
+    githubInstallCheckoutDir = join(
+      homeDir,
+      '.mastracode',
+      'plugins',
+      'sources',
+      'github',
+      'acme-github-install-plugin',
+    );
     const { PluginManager } = await import('../../src/plugins/manager.js');
     return startMastraCodeApp({
       config: {
@@ -631,7 +641,6 @@ export const pluginsGithubInstallGhCliScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
-    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/GitHub URL:/i, terminal, 8_000);
     await typeTextSlowly(terminal, 'https://github.com/acme/github-install-plugin');
@@ -714,7 +723,6 @@ export const pluginsGithubInstallMissingPackageManagerScenario: McE2eScenario = 
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
-    terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/GitHub URL:/i, terminal, 8_000);
     await typeTextSlowly(terminal, 'https://github.com/acme/github-install-plugin');

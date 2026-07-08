@@ -233,11 +233,73 @@ async function retentionTick() {
 
 You can also cancel a long-running prune with an `AbortSignal` — the loop stops between batches and returns partial results with `done: false`, so the next run resumes cleanly.
 
+## MongoDB TTL indexes (alternative to prune)
+
+MongoDB offers native [TTL (Time-To-Live) indexes](https://www.mongodb.com/docs/manual/core/index-ttl/) that automatically delete expired documents without requiring manual `prune()` calls. This is a database-level feature that runs as a background thread.
+
+:::note[When to use TTL vs prune()]
+
+**Use MongoDB TTL indexes when:**
+
+- You want automated, zero-maintenance deletion
+- Your retention periods are fixed (e.g., "always 30 days")
+- You prefer database-native solutions
+
+**Use `prune()` when:**
+
+- You need fine-grained control over deletion timing
+- You want to cap deletion rate during business hours
+- You need resumable, cancellable cleanup operations
+- You're using composite storage with multiple databases
+
+Both approaches are valid. TTL is simpler; `prune()` gives more control.
+:::
+
+### Setting up TTL indexes on MongoDB
+
+TTL indexes work on date fields. MongoDB checks the index every 60 seconds and deletes documents where the date field + TTL duration \< current time.
+
+```typescript
+import { MongoDBStore } from '@mastra/mongodb'
+
+const storage = new MongoDBStore({
+  id: 'mongodb-storage',
+  uri: process.env.MONGODB_URI!,
+  dbName: process.env.MONGODB_DB_NAME!,
+  indexes: [
+    // Messages expire after 30 days
+    {
+      collection: 'mastra_messages',
+      keys: { createdAt: 1 },
+      options: { expireAfterSeconds: 30 * 24 * 60 * 60 }, // 30 days
+    },
+    // Threads expire after 90 days
+    {
+      collection: 'mastra_threads',
+      keys: { createdAt: 1 },
+      options: { expireAfterSeconds: 90 * 24 * 60 * 60 }, // 90 days
+    },
+    // Spans expire after 7 days
+    {
+      collection: 'mastra_ai_spans',
+      keys: { startedAt: 1 },
+      options: { expireAfterSeconds: 7 * 24 * 60 * 60 }, // 7 days
+    },
+  ],
+})
+```
+
+:::tip
+TTL indexes delete documents shortly after they expire (background thread runs every \~60 seconds), but the exact timing is not guaranteed. For precise, immediate cleanup, use `prune()` instead.
+:::
+
 ## Reclaiming disk
 
 `prune()` deletes rows but doesn't shrink the database file. On SQLite/libSQL the freed pages go on a freelist and are reused by future writes, so the file stops growing — for most users this alone solves the unbounded-growth problem.
 
 Handing that free space back to the OS is a separate concern that Mastra doesn't manage. If you specifically need to shrink the file, run the underlying database's compaction (for example `VACUUM` on self-hosted libSQL) yourself, in a maintenance window — a full `VACUUM` locks the file and needs roughly twice the file size in free disk. On PostgreSQL, autovacuum reclaims dead tuples for reuse automatically; a manual `VACUUM FULL` is only needed if you must return disk to the OS.
+
+For MongoDB, deleted documents are reused by future insertions. To reclaim disk space, run [`db.runCommand({ compact: "collection_name" })`](https://www.mongodb.com/docs/manual/reference/command/compact/) during a maintenance window.
 
 :::note[libSQL and Turso]
 [Turso Cloud](/reference/storage/libsql) manages storage compaction for you, so there's nothing to reclaim manually. This applies only to self-hosted libSQL files.

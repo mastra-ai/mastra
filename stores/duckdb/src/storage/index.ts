@@ -202,6 +202,13 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.listTraces(...args);
   }
 
+  async listTracesLight(
+    ...args: Parameters<ObservabilityStoreImpl['listTracesLight']>
+  ): ReturnType<ObservabilityStoreImpl['listTracesLight']> {
+    const delegate = await this.requireDelegate();
+    return delegate.listTracesLight(...args);
+  }
+
   async listBranches(
     ...args: Parameters<ObservabilityStoreImpl['listBranches']>
   ): ReturnType<ObservabilityStoreImpl['listBranches']> {

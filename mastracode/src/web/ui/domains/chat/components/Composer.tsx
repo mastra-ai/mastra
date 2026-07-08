@@ -11,8 +11,20 @@ import { matchCommands, SLASH_COMMANDS } from '../services/commands';
 
 type Session = ReturnType<typeof useAgentControllerSession>;
 type Transcript = Session['transcript'];
+type ComposerVariant = 'inline' | 'textarea';
+
+const composerVariantClass: Record<ComposerVariant, string> = {
+  inline: 'max-h-52 min-h-10 resize-none',
+  textarea: 'max-h-64 min-h-28 resize-none',
+};
+
+const composerVariantRows: Record<ComposerVariant, number> = {
+  inline: 1,
+  textarea: 4,
+};
 
 type ComposerProps = {
+  variant?: ComposerVariant;
   activeProject: Project | null;
   transcript: Transcript;
   status: Session['status'];
@@ -38,6 +50,7 @@ type ComposerProps = {
 };
 
 export function Composer({
+  variant = 'inline',
   activeProject,
   transcript,
   status,
@@ -239,12 +252,12 @@ export function Composer({
       )}
       <Textarea
         ref={inputRef}
-        className="max-h-52 min-h-10 resize-none"
+        className={composerVariantClass[variant]}
         value={draft}
         onChange={e => updateDraft(e.target.value)}
         onKeyDown={onComposerKeyDown}
         placeholder="Message the agent · / for commands · Shift+Enter for newline"
-        rows={1}
+        rows={composerVariantRows[variant]}
         disabled={status === 'error'}
       />
       {busy ? (
