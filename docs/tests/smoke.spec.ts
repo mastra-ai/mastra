@@ -25,6 +25,8 @@ const IGNORED_CONSOLE_PATTERNS = [
   /service-worker/i,
   // CSP report-only violations from embedded content (e.g. YouTube iframes)
   /Content Security Policy/i,
+  // Storage Access API calls can be denied in CI without breaking docs pages.
+  /requestStorageAccess: Permission denied\./i,
   // Browser's generic "Failed to load resource" message — we track these properly
   // via page.on('response') with URL-based filtering above, so no need to fail
   // on the bare console message (which contains no URL context)
