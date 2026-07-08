@@ -46,6 +46,10 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+} from './processors/observational-memory/summarize';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
@@ -62,6 +66,12 @@ export {
   type ExtractorSource,
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export { summarizeConversation } from './processors/observational-memory/summarize';
+export type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+  SummarizeModel,
+} from './processors/observational-memory/summarize';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -2095,6 +2105,44 @@ Notes:
       throw new Error('Observational memory is not enabled');
     }
     await omEngine.updateRecordConfig(threadId, resourceId, config);
+  }
+
+  /**
+   * Summarize one of this memory's threads in one shot.
+   *
+   * Loads the thread's messages from storage and runs `summarizeConversation()` over them —
+   * Observational Memory's Observer plumbing as a standalone call. Nothing is written back to
+   * memory: the summary and extracted values are returned to you (and to each extractor's
+   * `onExtracted` hook), so you decide where they go. Works whether or not observational
+   * memory is enabled on this instance.
+   *
+   * Use this when a session ends and you want a summary or structured extraction of the whole
+   * conversation — for example a voice call at hang-up.
+   *
+   * @example
+   * ```ts
+   * const result = await memory.summarizeThread({
+   *   model: 'openai/gpt-4.1-mini',
+   *   threadId: call.threadId,
+   *   instructions: 'Summarize this voicemail call for the business owner.',
+   *   extract: [callSummaryExtractor],
+   * });
+   * ```
+   */
+  public async summarizeThread(
+    opts: { threadId: string; resourceId?: string } & Omit<
+      SummarizeConversationOptions,
+      'messages' | 'memory' | 'mastra' | 'threadId' | 'resourceId'
+    >,
+  ): Promise<SummarizeConversationResult> {
+    const { summarizeConversation } = await import('./processors/observational-memory/summarize');
+    const { messages } = await this.recall({ threadId: opts.threadId, resourceId: opts.resourceId, perPage: false });
+    return summarizeConversation({
+      ...opts,
+      messages,
+      memory: this,
+      mastra: this._mastraInstance,
+    });
   }
 
   /**
