@@ -108,7 +108,7 @@ describe('isProcessorWorkflow', () => {
     expect(isProcessorWorkflow({})).toBe(false);
   });
 
-  it('returns false for an array (even with matching keys as indices)', () => {
+  it('returns false for an array', () => {
     expect(isProcessorWorkflow([])).toBe(false);
   });
 
