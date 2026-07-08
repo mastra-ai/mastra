@@ -14,3 +14,14 @@ const storage = new MastraCompositeStore({
   },
 });
 ```
+
+`prune()` also accepts a per-call `retention` option that replaces the configured retention policies for that call only — for example to skip a domain (keep chat history) or prune more aggressively without reconstructing the store:
+
+```ts
+// prune everything except the memory domain, one time
+await storage.prune({
+  retention: {
+    observability: { spans: { maxAge: '14d' } },
+  },
+});
+```

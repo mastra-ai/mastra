@@ -60,10 +60,39 @@ describe('handlePruneCommand', () => {
 
     await handlePruneCommand(ctx, ['bogus']);
 
-    expect(ctx.showError).toHaveBeenCalledWith('Unknown /prune subcommand: bogus\nUsage: /prune [vacuum]');
+    expect(ctx.showError).toHaveBeenCalledWith('Unknown /prune option: bogus\nUsage: /prune [vacuum] [keep-memory]');
     expect(ctx.state.options.storageMaintenance.prune).not.toHaveBeenCalled();
     expect(ctx.stop).not.toHaveBeenCalled();
     expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('keep-memory prunes without the memory domain and combines with vacuum in any order', async () => {
+    const prune = vi.fn().mockResolvedValue([]);
+    const reclaimDisk = vi
+      .fn()
+      .mockResolvedValue([{ file: '/data/mastra.db', bytesBefore: 30 * 1024 ** 3, bytesAfter: 2 * 1024 ** 3 }]);
+    const ctx = createCtx({
+      retention: {
+        memory: { messages: { maxAge: '90d' } },
+        observability: { spans: { maxAge: '14d' } },
+      },
+      prune,
+      reclaimDisk,
+    });
+
+    await handlePruneCommand(ctx, ['keep-memory', 'vacuum']);
+
+    // Prune override excludes memory; vacuum still runs.
+    expect(prune).toHaveBeenCalledWith({
+      maxBatches: 20,
+      retention: { observability: { spans: { maxAge: '14d' } } },
+    });
+    expect(reclaimDisk).toHaveBeenCalledOnce();
+    const output = loggedOutput();
+    expect(output).toContain('memory.messages: kept (keep-memory)');
+    expect(output).toContain('observability.spans: 14d');
+    expect(output).toContain('Reclaimed 28.0 GB.');
+    expect(exitSpy).toHaveBeenCalledWith(0);
   });
 
   it('stops the TUI, quiesces background writers, runs maintenance, and exits 0', async () => {
@@ -128,6 +157,20 @@ describe('handlePruneCommand', () => {
     await handlePruneCommand(ctx, ['vacuum']);
 
     expect(loggedOutput()).toContain('Disk reclamation (VACUUM) is only available for local libsql storage.');
+    expect(exitSpy).toHaveBeenCalledWith(0);
+  });
+
+  it('logs quiesce failures instead of swallowing them, then continues maintenance', async () => {
+    const ctx = createCtx();
+    ctx.controller.getMastra.mockReturnValue({
+      stopWorkers: vi.fn().mockRejectedValue(new Error('worker refused to stop')),
+    });
+
+    await handlePruneCommand(ctx);
+
+    const output = loggedOutput();
+    expect(output).toContain('Warning: failed to quiesce a background writer (stop workers): worker refused to stop');
+    expect(ctx.state.options.storageMaintenance.prune).toHaveBeenCalled();
     expect(exitSpy).toHaveBeenCalledWith(0);
   });
 

@@ -400,9 +400,10 @@ export function setupAutocomplete(state: TUIState): void {
       name: 'prune',
       description: 'Prune old storage data (closes the TUI, shows progress)',
       getArgumentCompletions: (argumentPrefix: string) =>
-        [{ value: 'vacuum', label: 'vacuum', description: 'Prune, then VACUUM to reclaim disk space' }].filter(
-          command => command.value.startsWith(argumentPrefix.toLowerCase()),
-        ),
+        [
+          { value: 'vacuum', label: 'vacuum', description: 'Prune, then VACUUM to reclaim disk space' },
+          { value: 'keep-memory', label: 'keep-memory', description: 'Keep chat history (messages/threads)' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },

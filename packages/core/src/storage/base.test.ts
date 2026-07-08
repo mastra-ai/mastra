@@ -134,6 +134,29 @@ describe('MastraCompositeStore — disabled domains (`false` override)', () => {
     expect(await composite.getStore('skills')).toBe(editor.stores?.skills);
   });
 
+  it('disables threadState via `false` instead of falling back to the in-memory store', async () => {
+    const inner = new InMemoryStore({ id: 'inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      default: inner,
+      domains: { threadState: false },
+    });
+
+    expect(await composite.getStore('threadState')).toBeUndefined();
+  });
+
+  it('wires the in-memory threadState store when the domain is left unset', async () => {
+    const inner = new InMemoryStore({ id: 'inner' });
+
+    const composite = new MastraCompositeStore({
+      id: 'outer',
+      default: inner,
+    });
+
+    expect(await composite.getStore('threadState')).toBeDefined();
+  });
+
   it('does not count `false` overrides as a storage source', () => {
     expect(
       () =>

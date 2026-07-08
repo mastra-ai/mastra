@@ -17,6 +17,11 @@ import { closeSync, existsSync, openSync, readSync, renameSync, rmSync, statSync
 import { dirname } from 'node:path';
 
 import type { MastraCompositeStore, PruneOptions, PruneResult, RetentionConfig } from '@mastra/core/storage';
+// Native `libsql` driver, deliberately alongside `@libsql/client` (used by the
+// stores): maintenance needs deterministic connection close for the
+// exclusivity probe, and the wrapper's close() can leave the file lock held
+// until GC finalizes cached statements. Don't "clean up" either dependency.
+// Upstream report: https://github.com/tursodatabase/libsql-js/issues/228
 import Database from 'libsql';
 
 import type { StorageConfig } from './project.js';
@@ -59,7 +64,7 @@ export interface StorageMaintenance {
   backend: 'libsql' | 'pg';
   /** Retention policies in effect (for display in /prune output). */
   retention: RetentionConfig;
-  /** Delete rows older than the retention policies. Safe to re-run; batched and cancellable. */
+  /** Delete rows older than the retention policies. Safe to re-run; batched and cancellable. `options.retention` replaces the standing policies for this call only. */
   prune: (options?: PruneOptions) => Promise<PruneResult[]>;
   /** Close the long-lived storage connection (checkpoints WAL for local libsql). Nothing can use the store afterwards. */
   closeStorage?: () => Promise<void>;
@@ -153,8 +158,10 @@ export async function reclaimLibSQLDisk(
     // itself hold the WAL lock and poison every retry in this process.
     // Upstream bug (libsql 0.5.x / @libsql/client 0.17.x): Database.close()
     // does not finalize outstanding statements — they are only finalized by
-    // GC, so lock release after close() is nondeterministic. If upstream
-    // fixes that, the header check can become a plain journal_mode query.
+    // GC, so lock release after close() is nondeterministic. Reported as
+    // https://github.com/tursodatabase/libsql-js/issues/228 (fix in flight in
+    // PR #214). Once that lands, the header check can become a plain
+    // journal_mode query.
     const probe = new Database(file);
     try {
       probe.exec('PRAGMA busy_timeout = 2000');
@@ -200,12 +207,39 @@ export async function reclaimLibSQLDisk(
     } finally {
       db.close();
     }
+    // Re-probe right before the swap: `VACUUM INTO` can take tens of seconds
+    // on multi-GB files, and a session started in that window reopens the db
+    // in WAL mode (flipping the header back). Swapping under it would orphan
+    // that session's inode and silently lose its writes.
+    if (journalModeFromHeader(file) !== 'delete') {
+      rmSync(tmp, { force: true });
+      throw new Error(
+        `${file} was opened by another process during compaction — is another Mastra Code session running? ` +
+          `Close other sessions and run /prune vacuum again.`,
+      );
+    }
     // Swap the compacted copy into place. The old WAL/SHM sidecars belong to
-    // the old inode — they must never be paired with the new file.
+    // the old inode — they must never be paired with the new file. If any step
+    // after the first rename fails, restore the original so the db path is
+    // never left empty (a naive restart would otherwise create a fresh db).
     renameSync(file, `${file}.old`);
-    rmSync(`${file}-wal`, { force: true });
-    rmSync(`${file}-shm`, { force: true });
-    renameSync(tmp, file);
+    try {
+      rmSync(`${file}-wal`, { force: true });
+      rmSync(`${file}-shm`, { force: true });
+      renameSync(tmp, file);
+    } catch (err) {
+      try {
+        renameSync(`${file}.old`, file);
+      } catch {
+        throw new Error(
+          `Failed to swap compacted copy into place AND failed to restore the original — ` +
+            `your data is intact at ${file}.old; rename it back to ${file} manually. ` +
+            `Original error: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+      rmSync(tmp, { force: true });
+      throw err;
+    }
     rmSync(`${file}.old`, { force: true });
     results.push({ file, bytesBefore, bytesAfter: fileSizeWithWal(file) });
   }
@@ -298,20 +332,28 @@ const PASS_MAX_BATCHES = 20;
 export async function runStorageMaintenance(opts: {
   maintenance: StorageMaintenance;
   vacuum: boolean;
+  /** Skip the memory domain (messages/threads) so chat history is preserved. */
+  keepMemory?: boolean;
   log: (line: string) => void;
 }): Promise<void> {
-  const { maintenance, vacuum, log } = opts;
+  const { maintenance, vacuum, keepMemory = false, log } = opts;
+
+  // keep-memory: prune with the standing policies minus the memory domain,
+  // for this run only. The configured retention is untouched.
+  const { memory: _memory, ...withoutMemory } = maintenance.retention;
+  const retentionForRun = keepMemory ? { retention: withoutMemory } : {};
 
   log('Pruning rows older than the retention policies:');
   for (const [domain, tables] of Object.entries(maintenance.retention)) {
     for (const [table, policy] of Object.entries(tables ?? {})) {
-      log(`  ${domain}.${table}: ${(policy as { maxAge: string | number }).maxAge}`);
+      const kept = keepMemory && domain === 'memory';
+      log(`  ${domain}.${table}: ${kept ? 'kept (keep-memory)' : (policy as { maxAge: string | number }).maxAge}`);
     }
   }
 
   const totals = new Map<string, number>();
   for (;;) {
-    const results = await maintenance.prune({ maxBatches: PASS_MAX_BATCHES });
+    const results = await maintenance.prune({ maxBatches: PASS_MAX_BATCHES, ...retentionForRun });
     if (results.length === 0) break;
     let remaining = false;
     let deletedThisPass = 0;

@@ -8,8 +8,10 @@
  * output on the released terminal, then exits the process.
  *
  * Usage:
- *   /prune          delete rows older than the retention policies, then exit
- *   /prune vacuum   prune, then checkpoint WAL + VACUUM to return disk to the OS, then exit
+ *   /prune                      delete rows older than the retention policies, then exit
+ *   /prune vacuum               prune, then checkpoint WAL + VACUUM to return disk to the OS, then exit
+ *   /prune keep-memory          prune, but keep chat history (messages/threads)
+ *   /prune vacuum keep-memory   flags combine in any order
  */
 import { runStorageMaintenance } from '../../utils/storage-maintenance.js';
 
@@ -22,11 +24,14 @@ export async function handlePruneCommand(ctx: SlashCommandContext, args: string[
     return;
   }
 
-  const sub = args[0]?.toLowerCase() ?? '';
-  if (sub && sub !== 'vacuum') {
-    ctx.showError(`Unknown /prune subcommand: ${sub}\nUsage: /prune [vacuum]`);
+  const flags = new Set(args.map(a => a.toLowerCase()));
+  const unknown = [...flags].filter(f => f !== 'vacuum' && f !== 'keep-memory');
+  if (unknown.length > 0) {
+    ctx.showError(`Unknown /prune option: ${unknown.join(', ')}\nUsage: /prune [vacuum] [keep-memory]`);
     return;
   }
+  const vacuum = flags.has('vacuum');
+  const keepMemory = flags.has('keep-memory');
 
   // Hand the terminal back so progress prints as plain text and the deletes
   // can't freeze the UI or race the agent's own writes. The TUI's alternate
@@ -39,14 +44,26 @@ export async function handlePruneCommand(ctx: SlashCommandContext, args: string[
   log('Closing the TUI to run storage maintenance…');
   let exitCode = 0;
   try {
-    // Quiesce background writers so maintenance has the db to itself.
-    await Promise.allSettled([
+    // Quiesce background writers so maintenance has the db to itself. Surface
+    // any failures — a writer that didn't stop is exactly the SQLITE_BUSY
+    // contention this handoff exists to prevent.
+    const quiesceSteps = ['MCP disconnect', 'stop workers', 'stop intervals'] as const;
+    const quiesceResults = await Promise.allSettled([
       ctx.mcpManager?.disconnect(),
       ctx.controller.getMastra()?.stopWorkers(),
       ctx.controller.stopIntervals(),
     ]);
+    for (const [i, result] of quiesceResults.entries()) {
+      if (result.status === 'rejected') {
+        log(
+          `Warning: failed to quiesce a background writer (${quiesceSteps[i]}): ${
+            result.reason instanceof Error ? result.reason.message : String(result.reason)
+          }`,
+        );
+      }
+    }
 
-    await runStorageMaintenance({ maintenance, vacuum: sub === 'vacuum', log });
+    await runStorageMaintenance({ maintenance, vacuum, keepMemory, log });
     log('Storage maintenance complete. Run mastracode to start a new session.');
   } catch (err) {
     log(`Storage maintenance failed: ${err instanceof Error ? err.message : String(err)}`);

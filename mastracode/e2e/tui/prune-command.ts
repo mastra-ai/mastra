@@ -15,17 +15,18 @@ export const pruneCommandScenario: McE2eScenario = {
     ).toBeVisible();
     runtime.printScreen('after startup', terminal);
 
-    // Unknown subcommands are rejected without leaving the TUI
+    // Unknown options are rejected without leaving the TUI
     terminal.submit('/prune bogus');
-    await runtime.waitForScreenText(/Unknown \/prune subcommand: bogus/i, terminal);
+    await runtime.waitForScreenText(/Unknown \/prune option: bogus/i, terminal);
     runtime.printScreen('after /prune bogus', terminal);
 
-    // /prune vacuum stops the TUI, then prunes + vacuums with plain-text progress
-    terminal.submit('/prune vacuum');
+    // /prune vacuum keep-memory stops the TUI, then prunes (skipping chat
+    // history) + vacuums with plain-text progress
+    terminal.submit('/prune vacuum keep-memory');
     await runtime.waitForOutputText(/Closing the TUI to run storage maintenance/i, terminal);
     await runtime.waitForOutputText(/Pruning rows older than the retention policies/i, terminal);
     await runtime.waitForOutputText(/observability\.spans: 14d/i, terminal);
-    await runtime.waitForOutputText(/memory\.messages: 90d/i, terminal);
+    await runtime.waitForOutputText(/memory\.messages: kept \(keep-memory\)/i, terminal);
     // Fresh e2e database has no retention-eligible rows
     await runtime.waitForOutputText(/Nothing to prune|rows deleted/i, terminal);
     // Long db paths wrap across terminal lines, so don't match on the path itself
@@ -35,6 +36,6 @@ export const pruneCommandScenario: McE2eScenario = {
       /Storage maintenance complete\. Run mastracode to start a new session\./i,
       terminal,
     );
-    runtime.printScreen('after /prune vacuum', terminal);
+    runtime.printScreen('after /prune vacuum keep-memory', terminal);
   },
 };

@@ -391,8 +391,13 @@ export class MastraCompositeStore extends MastraBase {
         // The thread-state domain always has an in-memory store wired by default
         // so the built-in task tools work out of the box without a configured
         // backend. Configure a durable backend for state that must survive a
-        // process restart.
-        threadState: resolve('threadState') ?? new InMemoryThreadStateStorage(),
+        // process restart. An explicit `false` override still disables the
+        // domain entirely — the in-memory fallback only applies when the
+        // domain is left unset.
+        threadState:
+          domainOverrides.threadState === false
+            ? undefined
+            : (resolve('threadState') ?? new InMemoryThreadStateStorage()),
       } as StorageDomains;
     }
     // Otherwise, subclasses set stores themselves
@@ -463,9 +468,13 @@ export class MastraCompositeStore extends MastraBase {
    * failed domain is retried naturally on the next tick.
    *
    * With no `retention` configured this is a no-op returning `[]`.
+   *
+   * Pass `options.retention` to replace the configured retention policies for
+   * this call only — e.g. to skip a domain (keep chat history) or prune more
+   * aggressively than the standing config without reconstructing the store.
    */
   async prune(options?: PruneOptions): Promise<PruneResult[]> {
-    const retention = this.retention;
+    const retention = options?.retention ?? this.retention;
     if (!retention) return [];
 
     const results: PruneResult[] = [];

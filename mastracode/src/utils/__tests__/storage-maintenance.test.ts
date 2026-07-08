@@ -1,10 +1,16 @@
 import { existsSync, mkdtempSync, rmSync, statSync } from 'node:fs';
+import * as fsModule from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { createClient } from '@libsql/client';
 import Database from 'libsql';
 import { describe, it, expect, vi, afterEach } from 'vitest';
+
+// Passthrough spies on node:fs so the swap-rollback test can fail a targeted
+// renameSync call while everything else uses the real filesystem.
+vi.mock('node:fs', { spy: true });
+const realFs = await vi.importActual<typeof fsModule>('node:fs');
 
 import type { LibSQLStorageConfig, PgStorageConfig } from '../project.js';
 import { getDatabasePath, getVectorDatabasePath } from '../project.js';
@@ -130,6 +136,7 @@ describe('runStorageMaintenance', () => {
     await runStorageMaintenance({ maintenance, vacuum: false, log: line => lines.push(line) });
 
     expect(prune).toHaveBeenCalledTimes(2);
+    // No keep-memory: the standing retention config is used (no override).
     expect(prune).toHaveBeenCalledWith({ maxBatches: 20 });
     const output = lines.join('\n');
     expect(output).toContain('memory.messages: 90d');
@@ -138,6 +145,32 @@ describe('runStorageMaintenance', () => {
     expect(output).toContain('memory.mastra_messages: 120 rows deleted');
     expect(output).toContain('Prune complete: 25120 rows deleted.');
     expect(maintenance.closeStorage).toHaveBeenCalledOnce();
+  });
+
+  it('keep-memory prunes with an override that drops the memory domain and marks it kept', async () => {
+    const prune = vi
+      .fn()
+      .mockResolvedValue([{ domain: 'observability', table: 'mastra_ai_spans', deleted: 3, done: true }]);
+    const maintenance = makeMaintenance({
+      retention: {
+        memory: { messages: { maxAge: '90d' }, threads: { maxAge: '90d' } },
+        observability: { spans: { maxAge: '14d' } },
+      },
+      prune,
+    });
+    const lines: string[] = [];
+
+    await runStorageMaintenance({ maintenance, vacuum: false, keepMemory: true, log: line => lines.push(line) });
+
+    // Override contains everything EXCEPT the memory domain.
+    expect(prune).toHaveBeenCalledWith({
+      maxBatches: 20,
+      retention: { observability: { spans: { maxAge: '14d' } } },
+    });
+    const output = lines.join('\n');
+    expect(output).toContain('memory.messages: kept (keep-memory)');
+    expect(output).toContain('memory.threads: kept (keep-memory)');
+    expect(output).toContain('observability.spans: 14d');
   });
 
   it('reports when nothing is eligible and hints at /prune vacuum for local libsql', async () => {
@@ -301,5 +334,60 @@ describe('reclaimLibSQLDisk', () => {
     const results = await reclaimLibSQLDisk([dbFile]);
     expect(results).toHaveLength(1);
     expect(results[0]!.bytesAfter).toBeLessThan(results[0]!.bytesBefore);
+  });
+
+  it('refuses the swap when a session opens the file during compaction (TOCTOU re-probe)', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-reclaim-toctou-'));
+    const dbFile = path.join(dir, 'test.db');
+    await seedDb(dbFile, { keepRows: true });
+
+    // onFileStart fires between the exclusivity probe and VACUUM INTO — the
+    // window a new session could start in. Simulate one: opening the db in
+    // WAL mode flips the file header back, which the pre-swap re-probe must
+    // catch (swapping under a live session would orphan its inode).
+    const lateSession: InstanceType<typeof Database>[] = [];
+    await expect(
+      reclaimLibSQLDisk([dbFile], file => {
+        const session = new Database(file);
+        session.exec('PRAGMA journal_mode = WAL');
+        lateSession.push(session);
+      }),
+    ).rejects.toThrow(/during compaction/);
+
+    // Original file untouched, no swap artifacts left behind
+    expect(existsSync(dbFile)).toBe(true);
+    expect(existsSync(`${dbFile}.vacuum-tmp`)).toBe(false);
+    expect(existsSync(`${dbFile}.old`)).toBe(false);
+    for (const session of lateSession) session.close();
+  });
+
+  it('restores the original file when the swap fails partway (rollback)', async () => {
+    dir = mkdtempSync(path.join(tmpdir(), 'mc-reclaim-rollback-'));
+    const dbFile = path.join(dir, 'test.db');
+    await seedDb(dbFile, { keepRows: true });
+
+    // Fail the second rename (compacted tmp → db path), after the original
+    // was already moved aside — the worst partial-failure point.
+    const realRenameSync = realFs.renameSync;
+    vi.mocked(fsModule.renameSync).mockImplementation(((from: any, to: any) => {
+      if (String(from).endsWith('.vacuum-tmp')) throw new Error('simulated rename failure');
+      return realRenameSync(from, to);
+    }) as typeof realFs.renameSync);
+    try {
+      await expect(reclaimLibSQLDisk([dbFile])).rejects.toThrow('simulated rename failure');
+    } finally {
+      vi.mocked(fsModule.renameSync).mockRestore();
+    }
+
+    // The original file is back at the db path — never left empty — and no
+    // swap artifacts remain.
+    expect(existsSync(dbFile)).toBe(true);
+    expect(existsSync(`${dbFile}.old`)).toBe(false);
+    expect(existsSync(`${dbFile}.vacuum-tmp`)).toBe(false);
+    const verify = createClient({ url: `file:${dbFile}` });
+    const rows = await verify.execute('SELECT COUNT(*) AS n FROM blobs');
+    expect(Number(rows.rows[0]!.n)).toBe(100);
+    await verify.execute('PRAGMA journal_mode = DELETE');
+    verify.close();
   });
 });
