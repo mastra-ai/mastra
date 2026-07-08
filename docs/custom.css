@@ -502,14 +502,21 @@ html {
   height: auto;
   padding-inline: 0;
   padding-block: 0;
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 0 37.7px 0 #eaeaea;
+  /* Render the bottom hairline via box-shadow instead of border-bottom so it
+     doesn't add 1px to the navbar's occupied height. The navbar height is
+     driven by --ifm-navbar-height (47px), and a real border would push the
+     layout to 48px, desyncing the sidebar's sticky offset and causing a 1px
+     scroll jump. The second layer is the soft drop shadow. */
+  box-shadow:
+    0 1px 0 0 var(--border),
+    0 0 37.7px 0 #eaeaea;
   background-color: var(--ifm-navbar-background-color);
 }
 
 [data-theme='dark'] .theme-layout-navbar {
-  border-bottom-color: var(--border);
-  box-shadow: 0 8px 60px 0 rgba(2, 2, 2, 0.5);
+  box-shadow:
+    0 1px 0 0 var(--border),
+    0 8px 60px 0 rgba(2, 2, 2, 0.5);
 }
 
 .theme-layout-navbar a {
