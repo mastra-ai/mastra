@@ -37,6 +37,7 @@ Always return just the number, no explanation.`,
       response = await this.agent.generateLegacy(prompt);
     }
 
-    return parseFloat(response.text);
+    const match = response.text.match(/-?\d+(?:\.\d+)?/);
+    return match ? parseFloat(match[0]) : 0;
   }
 }
