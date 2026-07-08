@@ -1,5 +1,87 @@
 # mastracode
 
+## 0.30.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0)]:
+  - @mastra/core@1.50.2-alpha.0
+  - @mastra/client-js@1.31.2-alpha.0
+  - @mastra/react@1.2.5-alpha.0
+  - @mastra/playground-ui@40.0.2-alpha.0
+  - @mastra/server@1.50.2-alpha.0
+  - @mastra/hono@1.5.7-alpha.0
+
+## 0.30.0
+
+### Minor Changes
+
+- Added URL-driven thread pages to the MastraCode web UI. Each conversation now lives at its own /threads/:threadId URL, so threads can be deep-linked, refreshed, and navigated with the browser's back/forward buttons. ([#19062](https://github.com/mastra-ai/mastra/pull/19062))
+
+  **What changed for users**
+  - Clicking a thread in the sidebar navigates to its page instead of swapping content in place
+  - /chat is now a draft page: composing there creates the thread on first send and then navigates to /threads/:id
+  - The new-thread button opens the /chat draft page instead of immediately creating an empty thread
+  - Cloning a thread lands on the new thread's URL; deleting the active thread returns to /chat
+  - Thread history now loads through a cached query with a skeleton loading state instead of a blank flash
+  - Fixed a race where switching threads from the sidebar could show an empty transcript instead of the thread's history
+
+### Patch Changes
+
+- Improved MastraCode web chat routing and composer layout. ([#19062](https://github.com/mastra-ai/mastra/pull/19062))
+
+- Fixed GitHub plugins so their dependencies are installed when plugins are installed or updated. ([#19013](https://github.com/mastra-ai/mastra/pull/19013))
+
+- Fixed GitHub plugin setup when running Mastra Code from a source-built bundle and installing plugins that require a different pnpm version. ([#19067](https://github.com/mastra-ai/mastra/pull/19067))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`358a0b2`](https://github.com/mastra-ai/mastra/commit/358a0b2230898edf85855727fbbaf61067e33816), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`189200a`](https://github.com/mastra-ai/mastra/commit/189200a325314505f45590dabd6c4c02790baa29), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`27492f2`](https://github.com/mastra-ai/mastra/commit/27492f24ee4960afefb1268a4d38201cd0779566), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92), [`a223279`](https://github.com/mastra-ai/mastra/commit/a223279c8658cc6cc40c554d6d3569c04823806c)]:
+  - @mastra/core@1.50.1
+  - @mastra/duckdb@1.5.1
+  - @mastra/playground-ui@40.0.1
+  - @mastra/memory@1.22.2
+  - @mastra/client-js@1.31.1
+  - @mastra/hono@1.5.6
+  - @mastra/react@1.2.4
+  - @mastra/server@1.50.1
+
+## 0.30.0-alpha.3
+
+### Patch Changes
+
+- Fixed GitHub plugin setup when running Mastra Code from a source-built bundle and installing plugins that require a different pnpm version. ([#19067](https://github.com/mastra-ai/mastra/pull/19067))
+
+- Updated dependencies [[`27492f2`](https://github.com/mastra-ai/mastra/commit/27492f24ee4960afefb1268a4d38201cd0779566)]:
+  - @mastra/memory@1.22.2-alpha.0
+  - @mastra/hono@1.5.6-alpha.2
+  - @mastra/server@1.50.1-alpha.2
+
+## 0.30.0-alpha.2
+
+### Minor Changes
+
+- Added URL-driven thread pages to the MastraCode web UI. Each conversation now lives at its own /threads/:threadId URL, so threads can be deep-linked, refreshed, and navigated with the browser's back/forward buttons. ([#19062](https://github.com/mastra-ai/mastra/pull/19062))
+
+  **What changed for users**
+  - Clicking a thread in the sidebar navigates to its page instead of swapping content in place
+  - /chat is now a draft page: composing there creates the thread on first send and then navigates to /threads/:id
+  - The new-thread button opens the /chat draft page instead of immediately creating an empty thread
+  - Cloning a thread lands on the new thread's URL; deleting the active thread returns to /chat
+  - Thread history now loads through a cached query with a skeleton loading state instead of a blank flash
+  - Fixed a race where switching threads from the sidebar could show an empty transcript instead of the thread's history
+
+### Patch Changes
+
+- Improved MastraCode web chat routing and composer layout. ([#19062](https://github.com/mastra-ai/mastra/pull/19062))
+
+- Updated dependencies [[`358a0b2`](https://github.com/mastra-ai/mastra/commit/358a0b2230898edf85855727fbbaf61067e33816), [`189200a`](https://github.com/mastra-ai/mastra/commit/189200a325314505f45590dabd6c4c02790baa29), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/duckdb@1.5.1-alpha.0
+  - @mastra/playground-ui@40.0.1-alpha.2
+  - @mastra/core@1.50.1-alpha.2
+  - @mastra/client-js@1.31.1-alpha.2
+  - @mastra/react@1.2.4-alpha.2
+  - @mastra/server@1.50.1-alpha.2
+  - @mastra/hono@1.5.6-alpha.2
+
 ## 0.29.1-alpha.1
 
 ### Patch Changes

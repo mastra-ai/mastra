@@ -13,7 +13,7 @@ A [`Session`](/reference/agent-controller/session) holds the live state of an Ag
 
 The Session is the live state of a single user's interaction with the AgentController. It answers "what is true right now": who the session belongs to, which thread is currently bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. A session has one active thread at a time but can list, switch between, and clone many threads over its lifetime. Anything that describes the current state lives here; the AgentController owns the shared infrastructure every session runs on.
 
-Because each session has its own identity and state, one AgentController can serve many users at once — each backed by its own Session — without one session's mode, grants, or active thread leaking into another.
+Because each session has its own identity and state, one AgentController can serve many users at once — each with a different `resourceId` backed by its own Session — without one session's mode, grants, or active thread leaking into another. Calling `createSession` with the same `resourceId` returns the existing session (get-or-create), so a resource always resumes its own session.
 
 The rest of this page walks through the Session's state. Each part is a focused sub-object on `agentController.session`:
 
