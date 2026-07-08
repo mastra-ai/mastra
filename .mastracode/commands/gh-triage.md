@@ -319,6 +319,7 @@ Only enter after Review is complete enough for final maintainer routing. Do not 
 
 - [ ] Use reviewed files/area from the working file.
 - [ ] Check CODEOWNERS first: `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`.
+- [ ] Do not recommend docs maintainers unless the PR explicitly changes docs or introduces/changes a feature that needs docs follow-up.
 - [ ] If CODEOWNERS is clear, recommend one matching person/team.
 - [ ] Otherwise use recent history for affected paths and recommend one person with recent context.
 - [ ] If unclear, say `No clear final approver identified` with a short reason.
