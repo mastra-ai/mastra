@@ -21,6 +21,7 @@ import type { ApprovalAction } from '../components/tool-approval-dialog.js';
 import { ToolExecutionComponentEnhanced } from '../components/tool-execution-enhanced.js';
 import type { ToolResult } from '../components/tool-execution-enhanced.js';
 import { showModalOverlay } from '../overlay.js';
+import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { getMarkdownTheme } from '../theme.js';
 
 import type { EventHandlerContext } from './types.js';
@@ -192,13 +193,13 @@ export function formatToolResult(result: unknown): string {
     return '';
   }
   if (typeof result === 'string') {
-    return result;
+    return sanitizeAnsiForRendering(result);
   }
   if (typeof result === 'object') {
     const obj = result as Record<string, unknown>;
     // Handle common tool return format: { content: "...", isError: boolean }
     if ('content' in obj && typeof obj.content === 'string') {
-      return obj.content;
+      return sanitizeAnsiForRendering(obj.content);
     }
     // Handle content array format: { content: [{ type: "text", text: "..." }] }
     if ('content' in obj && Array.isArray(obj.content)) {
@@ -209,16 +210,16 @@ export function formatToolResult(result: unknown): string {
         )
         .map((part: unknown) => (part as Record<string, unknown>).text || '');
       if (textParts.length > 0) {
-        return textParts.join('\n');
+        return sanitizeAnsiForRendering(textParts.join('\n'));
       }
     }
     try {
-      return safeStringify(result, 2);
+      return sanitizeAnsiForRendering(safeStringify(result, 2));
     } catch {
-      return String(result);
+      return sanitizeAnsiForRendering(String(result));
     }
   }
-  return String(result);
+  return sanitizeAnsiForRendering(String(result));
 }
 
 export function handleToolApprovalRequired(
