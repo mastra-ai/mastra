@@ -13,7 +13,7 @@
 
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { dirname, extname, join, normalize, resolve } from 'node:path';
+import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import type { Context } from 'hono';
@@ -98,7 +98,10 @@ export function createSpaStaticMiddleware(uiDist: string) {
     // Resolve the request path inside uiDist, rejecting traversal escapes.
     const relative = normalize(decodeURIComponent(path)).replace(/^[/\\]+/, '');
     const filePath = resolve(uiDist, relative);
-    if (filePath.startsWith(uiDist) && relative !== '' && (await isFile(filePath))) {
+    // Use a trailing separator so a sibling like "ui.key" can't slip past the
+    // prefix check (same pattern as fs-routes.ts isWithinRoot).
+    const uiDistPrefix = uiDist.endsWith(sep) ? uiDist : uiDist + sep;
+    if (filePath.startsWith(uiDistPrefix) && relative !== '' && (await isFile(filePath))) {
       return serveFile(c, filePath, relative.startsWith('assets/'));
     }
 
