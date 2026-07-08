@@ -30,9 +30,9 @@ packageExtensions:
       onnxruntime-common: '*'
 
 allowBuilds:
-  '@ffmpeg-installer/darwin-arm64': set this to true or false
-  '@livekit/local-inference': set this to true or false
+  '@ffmpeg-installer/darwin-arm64': true
+  '@livekit/local-inference': true
   esbuild: true
-  onnxruntime-node: set this to true or false
-  protobufjs: set this to true or false
-  sharp: set this to true or false
+  onnxruntime-node: true
+  protobufjs: true
+  sharp: true
