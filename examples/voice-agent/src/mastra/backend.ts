@@ -211,9 +211,11 @@ export const callRecords = new Map<string, CallSummaryRecord>();
 export async function saveCallSummary(record: Omit<CallSummaryRecord, 'savedAt'>): Promise<void> {
   await simulateBackendLatency();
   callRecords.set(record.callId, { ...record, savedAt: new Date().toISOString() });
-  // The store is in-memory, so print the record — this is how you SEE the end-of-call summary
-  // land when testing live calls (it appears in the worker terminal right after hang-up).
-  console.info('[backend] call summary saved', record);
+  // The store is in-memory, so print confirmation — this is how you SEE the end-of-call summary
+  // land when testing live calls (it appears in the worker terminal right after hang-up). Only
+  // non-sensitive metadata is logged; a real backend must not print raw caller PII (callerId,
+  // free-text summary) to stdout.
+  console.info('[backend] call summary saved', { callId: record.callId, sentiment: record.sentiment });
 }
 
 // --- Consent store (companion to configuration.requireConsent) ---------------
