@@ -1,6 +1,7 @@
 ---
 name: understand-issue
 description: Collaboratively investigate a GitHub issue or bug — trace history, understand architecture, diagnose root cause
+goal: true
 ---
 
 # Understand Issue

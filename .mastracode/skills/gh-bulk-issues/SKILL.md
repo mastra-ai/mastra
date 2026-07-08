@@ -1,3 +1,9 @@
+---
+name: gh-bulk-issues
+description: Orchestrate parallel Mastra Code headless instances to debug and fix multiple GitHub issues simultaneously
+goal: true
+---
+
 # Bulk Issue Solver
 
 Orchestrate parallel `mc` (mastracode) headless instances to debug and fix multiple GitHub issues simultaneously. You act as the supervisor — spawning workers, monitoring progress, reviewing output, and creating PRs.
@@ -33,7 +39,7 @@ For each issue number in the list:
    ```
    cd ../$(basename $PWD)-issue-<NUMBER> && pnpx tsx <path-to-mastracode>/src/main.ts --timeout 1800 --prompt "Activate the understand-issue skill for issue <NUMBER>"
    ```
-   Run all instances as background processes with a matching `timeout` on `execute_command`. Track each PID.
+   Run all instances as background processes with a matching timeout on `execute_command`. Track each PID.
 
 ## Monitoring
 
