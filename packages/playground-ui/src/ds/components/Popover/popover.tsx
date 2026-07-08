@@ -1,4 +1,5 @@
 import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
+import type { PopoverPopupProps, PopoverPositionerProps } from '@base-ui/react/popover';
 import * as React from 'react';
 
 import { usePortalContainer } from '@/ds/primitives/portal-container';
@@ -8,7 +9,7 @@ import { cn } from '@/lib/utils';
 const Popover = PopoverPrimitive.Root;
 
 type PopoverTriggerProps = PopoverPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -23,28 +24,57 @@ const PopoverTrigger = React.forwardRef<HTMLButtonElement, PopoverTriggerProps>(
 );
 PopoverTrigger.displayName = 'PopoverTrigger';
 
-type PopoverContentProps = PopoverPrimitive.Popup.Props &
-  Pick<PopoverPrimitive.Positioner.Props, 'align' | 'alignOffset' | 'side' | 'sideOffset'> & {
+type PopoverContentPositionerProps = Omit<PopoverPositionerProps, keyof PopoverPopupProps>;
+
+type PopoverContentProps = PopoverPopupProps &
+  PopoverContentPositionerProps & {
     /** Optional portal container, forwarded to `Popover.Portal`. */
     container?: HTMLElement | null;
   };
 
 const PopoverContent = React.forwardRef<HTMLDivElement, PopoverContentProps>(
-  ({ className, container, align = 'center', alignOffset = 0, side = 'bottom', sideOffset = 4, ...props }, ref) => {
+  (
+    {
+      className,
+      container,
+      align = 'center',
+      alignOffset = 0,
+      side = 'bottom',
+      sideOffset = 4,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
+    ref,
+  ) => {
     const classNameString = typeof className === 'string' ? className : undefined;
     // Default to the nearest SideDialog/Drawer popup so the content stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const positionerProps: PopoverContentPositionerProps = {
+      align,
+      alignOffset,
+      side,
+      sideOffset,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
 
     return (
       <PopoverPrimitive.Portal container={resolvedContainer}>
-        <PopoverPrimitive.Positioner
-          align={align}
-          alignOffset={alignOffset}
-          side={side}
-          sideOffset={sideOffset}
-          className="z-50 outline-none"
-        >
+        <PopoverPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <PopoverPrimitive.Popup
             ref={ref}
             data-slot="popover-content"

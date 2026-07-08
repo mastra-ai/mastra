@@ -1,6 +1,7 @@
 'use client';
 
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
+import type { TooltipPopupProps, TooltipPositionerProps } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
 import { cn } from '@/lib/utils';
@@ -29,7 +30,7 @@ function TooltipProvider({ delay, delayDuration, timeout, skipDelayDuration, ...
 const Tooltip = TooltipPrimitive.Root;
 
 type TooltipTriggerProps = TooltipPrimitive.Trigger.Props & {
-  /** Radix-style alias for Base UI's native `render` prop. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -47,51 +48,81 @@ const TooltipTrigger = React.forwardRef<HTMLButtonElement, TooltipTriggerProps>(
 );
 TooltipTrigger.displayName = 'TooltipTrigger';
 
-type TooltipContentProps = TooltipPrimitive.Popup.Props &
-  Pick<TooltipPrimitive.Positioner.Props, 'side' | 'sideOffset' | 'align' | 'alignOffset'>;
+type TooltipContentPositionerProps = Omit<TooltipPositionerProps, keyof TooltipPopupProps>;
+
+type TooltipContentProps = TooltipPopupProps & TooltipContentPositionerProps;
 
 const TooltipContent = React.forwardRef<HTMLDivElement, TooltipContentProps>(
-  ({ className, side = 'top', sideOffset = 8, align = 'center', alignOffset = 0, children, ...props }, ref) => (
-    <TooltipPrimitive.Portal>
-      <TooltipPrimitive.Positioner
-        side={side}
-        sideOffset={sideOffset}
-        align={align}
-        alignOffset={alignOffset}
-        arrowPadding={10}
-        className="isolate z-[100]"
-      >
-        <TooltipPrimitive.Popup
-          ref={ref}
-          // Base UI's Popup omits `role="tooltip"` by default (only the trigger
-          // gets `aria-describedby`). Radix used to set it on Content, and our
-          // consumers query via `getByRole('tooltip')`, so set it explicitly.
-          role="tooltip"
-          className={cn(
-            'relative z-[100] flex flex-col origin-(--transform-origin) rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition-[transform,scale,opacity] duration-150',
-            'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
-            'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
-            'data-[instant]:transition-none',
-            className,
-          )}
-          {...props}
-        >
-          {children}
-          <TooltipPrimitive.Arrow
+  (
+    {
+      className,
+      side = 'top',
+      sideOffset = 8,
+      align = 'center',
+      alignOffset = 0,
+      arrowPadding = 10,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      disableAnchorTracking,
+      collisionAvoidance,
+      children,
+      ...props
+    },
+    ref,
+  ) => {
+    const positionerProps: TooltipContentPositionerProps = {
+      side,
+      sideOffset,
+      align,
+      alignOffset,
+      arrowPadding,
+      anchor,
+      positionMethod,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
+    return (
+      <TooltipPrimitive.Portal>
+        <TooltipPrimitive.Positioner className="isolate z-[100]" {...positionerProps}>
+          <TooltipPrimitive.Popup
+            ref={ref}
+            // Base UI's Popup omits `role="tooltip"` by default (only the trigger
+            // gets `aria-describedby`). Radix used to set it on Content, and our
+            // consumers query via `getByRole('tooltip')`, so set it explicitly.
+            role="tooltip"
             className={cn(
-              'flex',
-              'data-[side=top]:-bottom-[8px] data-[side=top]:rotate-180',
-              'data-[side=bottom]:-top-[8px]',
-              'data-[side=left]:-right-[10px] data-[side=left]:rotate-90',
-              'data-[side=right]:-left-[10px] data-[side=right]:-rotate-90',
+              'relative z-[100] flex flex-col origin-(--transform-origin) rounded-lg border border-border1 bg-surface3 px-2.5 py-1.5 text-ui-sm leading-ui-sm text-neutral5 shadow-dialog transition-[transform,scale,opacity] duration-150',
+              'data-[starting-style]:scale-95 data-[starting-style]:opacity-0',
+              'data-[ending-style]:scale-95 data-[ending-style]:opacity-0',
+              'data-[instant]:transition-none',
+              className,
             )}
+            {...props}
           >
-            <TooltipArrowSvg />
-          </TooltipPrimitive.Arrow>
-        </TooltipPrimitive.Popup>
-      </TooltipPrimitive.Positioner>
-    </TooltipPrimitive.Portal>
-  ),
+            {children}
+            <TooltipPrimitive.Arrow
+              className={cn(
+                'flex',
+                'data-[side=top]:-bottom-[8px] data-[side=top]:rotate-180',
+                'data-[side=bottom]:-top-[8px]',
+                'data-[side=left]:-right-[10px] data-[side=left]:rotate-90',
+                'data-[side=right]:-left-[10px] data-[side=right]:-rotate-90',
+              )}
+            >
+              <TooltipArrowSvg />
+            </TooltipPrimitive.Arrow>
+          </TooltipPrimitive.Popup>
+        </TooltipPrimitive.Positioner>
+      </TooltipPrimitive.Portal>
+    );
+  },
 );
 TooltipContent.displayName = 'TooltipContent';
 

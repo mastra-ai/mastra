@@ -61,6 +61,7 @@ function makeInitData(overrides: Record<string, any> = {}) {
 function makeMessageList() {
   return {
     updateToolInvocation: vi.fn().mockReturnValue(true),
+    updateMessageMetadataByToolCallId: vi.fn().mockReturnValue(true),
     add: vi.fn(),
   };
 }
@@ -278,7 +279,7 @@ describe('durable tool-call background task dispatch', () => {
     expect(saveQueueManager.flushMessages).toHaveBeenCalledWith(messageList, 'thread-1', undefined);
   });
 
-  it('onExecution hook updates tool invocation metadata with startedAt/taskId', async () => {
+  it('onExecution hook updates message metadata with startedAt/taskId', async () => {
     const pubsub = mockPubsub();
     const { messageList } = setupRegistry();
     const initData = makeInitData();
@@ -312,14 +313,8 @@ describe('durable tool-call background task dispatch', () => {
       startedAt,
     });
 
-    expect(messageList.updateToolInvocation).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: 'tool-invocation',
-        toolInvocation: expect.objectContaining({
-          state: 'call',
-          toolCallId: TOOL_CALL_ID,
-        }),
-      }),
+    expect(messageList.updateMessageMetadataByToolCallId).toHaveBeenCalledWith(
+      TOOL_CALL_ID,
       expect.objectContaining({
         backgroundTasks: expect.objectContaining({
           [TOOL_CALL_ID]: expect.objectContaining({
@@ -329,6 +324,7 @@ describe('durable tool-call background task dispatch', () => {
         }),
       }),
     );
+    expect(messageList.updateToolInvocation).not.toHaveBeenCalled();
   });
 
   it('onChunk emits tool-call + tool-result chunks via PubSub on completion', async () => {

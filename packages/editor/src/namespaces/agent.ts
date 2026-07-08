@@ -13,6 +13,7 @@ import type { Workflow } from '@mastra/core/workflows';
 import type { MastraScorers } from '@mastra/core/evals';
 import type {
   StorageResolvedAgentType,
+  StorageAgentSnapshotType,
   StorageScorerConfig,
   StorageToolConfig,
   StorageMCPClientToolsConfig,
@@ -35,6 +36,7 @@ import type {
   StorageWorkspaceRef,
   StorageBrowserRef,
 } from '@mastra/core/storage';
+import type { AgentVersion, CreateVersionInput } from '@mastra/core/storage/domains/agents';
 import type { MastraBrowser } from '@mastra/core/browser';
 
 import { RequestContext } from '@mastra/core/request-context';
@@ -47,8 +49,32 @@ import { hydrateProcessorGraph, selectFirstMatchingGraph } from '../processor-gr
 import { CrudEditorNamespace } from './base';
 import type { StorageAdapter } from './base';
 import { EditorMCPNamespace } from './mcp';
+import { createVersionFromSnapshotUpdate, getProvidedSnapshotFields } from './versioned-update';
 
 type AgentEditorConfig = false | { instructions?: boolean; tools?: boolean | { description?: boolean } };
+
+const AGENT_SNAPSHOT_CONFIG_FIELDS = [
+  'name',
+  'description',
+  'instructions',
+  'model',
+  'tools',
+  'defaultOptions',
+  'workflows',
+  'agents',
+  'integrationTools',
+  'toolProviders',
+  'inputProcessors',
+  'outputProcessors',
+  'memory',
+  'scorers',
+  'requestContextSchema',
+  'mcpClients',
+  'skills',
+  'skillsFormat',
+  'workspace',
+  'browser',
+] as const satisfies (keyof StorageAgentSnapshotType)[];
 
 // ============================================================================
 // Builder Defaults
@@ -84,6 +110,9 @@ function defaultModelToStored(entry: DefaultModelEntryRuntime): StorageModelConf
 const BUILDER_BASELINE_DEFAULTS: Partial<Record<(typeof BUILDER_DEFAULT_FIELDS)[number], unknown>> = {
   memory: { observationalMemory: true } satisfies SerializedMemoryConfig,
 };
+
+/** Model used for observational memory when a builder agent stores `observationalMemory: true`. */
+const BUILDER_DEFAULT_OM_MODEL = 'openai/gpt-5.4-mini';
 
 /**
  * Apply builder defaults to agent creation input.
@@ -130,6 +159,19 @@ function applyBuilderDefaults(
   }
 
   return Object.keys(defaults).length > 0 ? { ...input, ...defaults } : input;
+}
+
+function getProvidedAgentRecordFields(input: StorageUpdateAgentInput): StorageUpdateAgentInput | null {
+  const { id, authorId, visibility, activeVersionId, metadata, status } = input;
+  const recordFields: StorageUpdateAgentInput = { id };
+
+  if (authorId !== undefined) recordFields.authorId = authorId;
+  if (visibility !== undefined) recordFields.visibility = visibility;
+  if (activeVersionId !== undefined) recordFields.activeVersionId = activeVersionId;
+  if (metadata !== undefined) recordFields.metadata = metadata;
+  if (status !== undefined) recordFields.status = status;
+
+  return Object.keys(recordFields).length > 1 ? recordFields : null;
 }
 
 // ============================================================================
@@ -205,6 +247,65 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
     return this.createAgentFromStoredConfig(storedAgent);
   }
 
+  override async update(input: StorageUpdateAgentInput): Promise<Agent> {
+    this.ensureRegistered();
+    const storage = this.mastra?.getStorage();
+    if (!storage) throw new Error('Storage is not configured');
+    const store = await storage.getStore('agents');
+    if (!store) throw new Error('Agents storage domain is not available');
+
+    const existing = await store.getById(input.id);
+    if (!existing) {
+      throw new Error(`Agent with id ${input.id} not found`);
+    }
+
+    const providedConfig = getProvidedSnapshotFields<StorageAgentSnapshotType>(
+      input as Record<string, unknown>,
+      AGENT_SNAPSHOT_CONFIG_FIELDS,
+    );
+    if ('workspace' in providedConfig) {
+      await this.ensureStoredWorkspaceRefs(providedConfig.workspace);
+    }
+
+    const versionResult =
+      Object.keys(providedConfig).length > 0
+        ? await createVersionFromSnapshotUpdate<AgentVersion, CreateVersionInput, StorageAgentSnapshotType>({
+            store,
+            parentId: input.id,
+            parentIdField: 'agentId',
+            snapshotFields: AGENT_SNAPSHOT_CONFIG_FIELDS,
+            providedConfig,
+          })
+        : { versionCreated: false as const };
+
+    const recordFields = getProvidedAgentRecordFields(input);
+    if (recordFields || versionResult.versionCreated) {
+      await store.update({
+        ...(recordFields ?? { id: input.id }),
+        ...(versionResult.versionCreated ? { activeVersionId: versionResult.version.id } : {}),
+      });
+    }
+
+    this._cache.delete(input.id);
+    this.onCacheEvict(input.id);
+
+    const existingCodeAgent = this.getCodeDefinedAgent(input.id);
+    if (existingCodeAgent) {
+      const hydrated = await this.applyStoredOverrides(existingCodeAgent, { status: 'draft' });
+      this._cache.set(input.id, hydrated);
+      return hydrated;
+    }
+
+    const resolved = await store.getByIdResolved(input.id, { status: 'draft' });
+    if (!resolved) {
+      throw new Error(`Failed to resolve entity ${input.id} after update`);
+    }
+
+    const hydrated = await this.hydrate(resolved);
+    this._cache.set(input.id, hydrated);
+    return hydrated;
+  }
+
   /**
    * Create a new agent, applying builder defaults for fields not specified in input.
    * Also ensures the referenced workspace (if any) is persisted as a stored workspace.
@@ -245,6 +346,21 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       return undefined;
     }
     return agent?.source === 'code' ? agent : undefined;
+  }
+
+  private async ensureStoredWorkspaceRefs(
+    workspace: StorageAgentSnapshotType['workspace'] | null | undefined,
+  ): Promise<void> {
+    if (!workspace) return;
+
+    if (this.isConditionalVariants(workspace)) {
+      for (const variant of workspace) {
+        await this.ensureStoredWorkspace(variant.value);
+      }
+      return;
+    }
+
+    await this.ensureStoredWorkspace(workspace);
   }
 
   /**
@@ -299,6 +415,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           ...workspaceRef.config,
         });
         this.logger?.debug(`[ensureStoredWorkspace] Persisted inline workspace '${workspaceId}' to DB`);
+      } else if (workspaceRef.type === 'provider') {
+        // Provider-based workspaces are resolved at hydration time via the editor's
+        // workspace provider registry. The provider ref is stored directly in the
+        // agent snapshot — no separate workspace record needed.
       }
     } catch (error) {
       // Don't fail agent creation if workspace persistence fails
@@ -1342,7 +1462,12 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       if (memoryConfig.observationalMemory) {
         options = {
           ...options,
-          observationalMemory: memoryConfig.observationalMemory,
+          // A literal `true` means "use the builder default OM model"; an explicit
+          // object (user/admin choice) passes through untouched.
+          observationalMemory:
+            memoryConfig.observationalMemory === true
+              ? { model: BUILDER_DEFAULT_OM_MODEL }
+              : memoryConfig.observationalMemory,
         };
       }
 
@@ -1626,6 +1751,10 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       // duplicate workspace instances on repeated calls.
       const configHash = createHash('sha256').update(JSON.stringify(workspaceRef.config)).digest('hex').slice(0, 12);
       return workspaceNs.hydrateSnapshotToWorkspace(`inline-${configHash}`, workspaceRef.config, hydrateOptions);
+    }
+
+    if (workspaceRef.type === 'provider') {
+      return workspaceNs.resolveWorkspaceProvider(workspaceRef.provider, workspaceRef.config);
     }
 
     return undefined;

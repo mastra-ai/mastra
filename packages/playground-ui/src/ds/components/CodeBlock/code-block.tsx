@@ -1,7 +1,10 @@
-import { Code } from '../Code';
-import { CopyButton } from '../CopyButton';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
-import { Tab, TabList, Tabs } from '../Tabs';
+import type { ReactNode } from 'react';
+import { Code } from '../Code/code';
+import { CopyButton } from '../CopyButton/copy-button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select/select';
+import { TabList } from '../Tabs/tabs-list';
+import { Tabs } from '../Tabs/tabs-root';
+import { Tab } from '../Tabs/tabs-tab';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -27,6 +30,7 @@ export interface CodeBlockProps {
   overflow?: CodeBlockOverflow;
   copyMessage?: string;
   copyTooltip?: string;
+  actions?: ReactNode;
   className?: string;
 }
 
@@ -41,12 +45,14 @@ export function CodeBlock({
   overflow = 'wrap',
   copyMessage,
   copyTooltip,
+  actions,
   className,
 }: CodeBlockProps) {
   const hasOptions = options && options.length > 0;
   const useTabs = hasOptions && selector === 'tabs';
   const useSelect = hasOptions && selector === 'select';
-  const activeValue = value ?? options?.[0]?.value;
+  const firstOption = options?.[0];
+  const activeValue = value ?? firstOption?.value;
 
   return (
     <figure
@@ -55,15 +61,20 @@ export function CodeBlock({
         className,
       )}
     >
-      {useTabs && options && (
-        <Tabs defaultTab={options[0].value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
-          <TabList>
-            {options.map(opt => (
-              <Tab key={opt.value} value={opt.value}>
-                {opt.label}
-              </Tab>
-            ))}
-          </TabList>
+      {useTabs && firstOption && (
+        <Tabs defaultTab={firstOption.value} value={activeValue} onValueChange={onValueChange ?? (() => {})}>
+          <div className="flex items-stretch">
+            <div className="min-w-0 flex-1">
+              <TabList>
+                {options.map(opt => (
+                  <Tab key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </Tab>
+                ))}
+              </TabList>
+            </div>
+            {actions && <div className="flex shrink-0 items-center border-b border-border1 pr-2 pl-3">{actions}</div>}
+          </div>
         </Tabs>
       )}
 
@@ -81,13 +92,19 @@ export function CodeBlock({
               ))}
             </SelectContent>
           </Select>
+          {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
       )}
 
       {!hasOptions && fileName && (
         <div className="flex items-center border-b border-border2/40 px-4 py-2">
           <figcaption className="font-mono text-ui-sm text-neutral4">{fileName}</figcaption>
+          {actions && <div className="ml-auto flex items-center">{actions}</div>}
         </div>
+      )}
+
+      {!hasOptions && !fileName && actions && (
+        <div className="flex items-center justify-end border-b border-border2/40 px-2 py-1.5">{actions}</div>
       )}
 
       <div className="relative">

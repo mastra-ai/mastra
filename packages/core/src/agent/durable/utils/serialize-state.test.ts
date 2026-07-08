@@ -270,11 +270,11 @@ describe('serializeDurableOptions', () => {
   it('serialises basic scalar options', () => {
     const result = serializeDurableOptions({
       maxSteps: 10,
-      temperature: 0.7,
+      modelSettings: { temperature: 0.7 },
       requireToolApproval: true,
     });
     expect(result.maxSteps).toBe(10);
-    expect(result.temperature).toBe(0.7);
+    expect(result.modelSettings?.temperature).toBe(0.7);
     expect(result.requireToolApproval).toBe(true);
   });
 
@@ -315,8 +315,37 @@ describe('serializeDurableOptions', () => {
   it('returns all undefined when options is empty', () => {
     const result = serializeDurableOptions({});
     expect(result.maxSteps).toBeUndefined();
-    expect(result.temperature).toBeUndefined();
+    expect(result.modelSettings?.temperature).toBeUndefined();
     expect(result.toolChoice).toBeUndefined();
+  });
+
+  it('strips ALL headers from serialized modelSettings — they live on RunRegistryEntry instead', () => {
+    // No headers should ever reach durable storage. Any header could carry
+    // credentials; the safest approach is to keep them all off the wire.
+    // Headers are stored on the in-process RunRegistryEntry and merged back
+    // at LLM call time.
+    const result = serializeDurableOptions({
+      modelSettings: {
+        temperature: 0.5,
+        headers: {
+          'X-Trace-Id': 'trace-1',
+          Authorization: 'Bearer sk-secret',
+          'X-Api-Key': 'sk-leaked',
+          'x-custom-header': 'custom-value',
+        },
+      } as any,
+    });
+
+    expect(result.modelSettings?.temperature).toBe(0.5);
+    // No headers property at all on the serialized output.
+    expect(result.modelSettings?.headers).toBeUndefined();
+
+    // Nothing on the serialized output should contain any header values.
+    const serialized = JSON.stringify(result);
+    expect(serialized).not.toContain('trace-1');
+    expect(serialized).not.toContain('sk-secret');
+    expect(serialized).not.toContain('sk-leaked');
+    expect(serialized).not.toContain('custom-value');
   });
 });
 

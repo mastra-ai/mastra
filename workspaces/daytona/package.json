@@ -1,6 +1,6 @@
 {
   "name": "@mastra/daytona",
-  "version": "0.4.2-alpha.0",
+  "version": "0.5.2",
   "description": "Daytona cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

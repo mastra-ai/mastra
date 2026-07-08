@@ -16,12 +16,14 @@ concurrency:
 jobs:
   e2e-docs:
     name: Docs E2E tests
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     timeout-minutes: 20
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        with:
+          persist-credentials: false
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node

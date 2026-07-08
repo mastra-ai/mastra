@@ -1,0 +1,14 @@
+.thread-rail-container {
+  container-type: inline-size;
+}
+
+.thread-rail-layer {
+  display: none;
+}
+
+/* 48rem chat column plus a rail-safe gutter on both sides. */
+@container (min-width: 58rem) {
+  .thread-rail-layer {
+    display: block;
+  }
+}

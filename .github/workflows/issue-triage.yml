@@ -7,18 +7,29 @@ jobs:
   issue_created:
     # Only run on the main repository, not on forks
     if: ${{ github.repository == 'mastra-ai/mastra' }}
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     permissions:
-      issues: write
+      contents: read
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        with:
+          persist-credentials: false
+
+      - name: Dane App Auth
+        id: app-auth
+        uses: ./.github/actions/app-auth
+        with:
+          client-id: ${{ vars.DANE_CLIENT_ID }}
+          private-key: ${{ secrets.DANE_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-issues: read
 
       - name: Setup Node.js 22.x
-        uses: actions/setup-node@v5
+        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
         with:
-          node-version: 22.13.0
+          node-version: 22.23.1
           package-manager-cache: false
 
       - name: Install dependencies
@@ -29,11 +40,11 @@ jobs:
         run: npx tsx index.ts
         working-directory: scripts/gh-issue-triage
         env:
-          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_PERSONAL_ACCESS_TOKEN: ${{ steps.app-auth.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
-          MASTRA_BASE_URL: 'https://shrilling-scarce-finland.mastra.cloud'
+          MASTRA_BASE_URL: ${{ vars.MASTRA_CLOUD_BASE_URL }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_TEAM_ID: ${{ secrets.SLACK_TEAM_ID }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}

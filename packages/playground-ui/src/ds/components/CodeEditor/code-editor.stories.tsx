@@ -27,6 +27,13 @@ const meta: Meta<typeof CodeEditor> = {
     highlightVariables: {
       control: { type: 'boolean' },
     },
+    lineWrapping: {
+      control: { type: 'boolean' },
+    },
+    variant: {
+      control: { type: 'select' },
+      options: ['default', 'embedded'],
+    },
   },
 };
 
@@ -90,6 +97,61 @@ export const ArrayData: Story = {
   },
 };
 
+export const FocusedDefault: Story = {
+  args: {
+    data: [
+      { id: 1, name: 'Agent 1', status: 'active' },
+      { id: 2, name: 'Agent 2', status: 'inactive' },
+      { id: 3, name: 'Agent 3', status: 'active' },
+    ],
+    className: 'w-150',
+  },
+  play: async ({ canvasElement }) => {
+    canvasElement.querySelector<HTMLElement>('[role="textbox"]')?.focus();
+  },
+};
+
+export const FocusedEmbedded: Story = {
+  args: {
+    value: `Use the agent instructions below.
+
+- Keep answers concise
+- Ask before taking destructive actions
+- Prefer tool-backed evidence over assumptions`,
+    variant: 'embedded',
+    language: 'markdown',
+    lineNumbers: false,
+    showCopyButton: false,
+    className: 'min-h-24 w-150',
+  },
+  play: async ({ canvasElement }) => {
+    canvasElement.querySelector<HTMLElement>('[role="textbox"]')?.focus();
+  },
+};
+
+export const FocusedEmbeddedInBlock: Story = {
+  args: {
+    value: `Use the agent instructions below.
+
+- Keep answers concise
+- Ask before taking destructive actions
+- Prefer tool-backed evidence over assumptions`,
+    variant: 'embedded',
+    language: 'markdown',
+    lineNumbers: false,
+    showCopyButton: false,
+    className: 'min-h-24',
+  },
+  render: args => (
+    <div className="w-150 rounded-md border border-border1 bg-surface3 p-3 transition-colors focus-within:border-neutral6/20">
+      <CodeEditor {...args} />
+    </div>
+  ),
+  play: async ({ canvasElement }) => {
+    canvasElement.querySelector<HTMLElement>('[role="textbox"]')?.focus();
+  },
+};
+
 export const WithoutCopyButton: Story = {
   args: {
     data: { message: 'Hello, World!' },
@@ -119,6 +181,17 @@ export const LargeContent: Story = {
       },
     },
     className: 'w-[600px] max-h-[400px] overflow-auto',
+  },
+};
+
+export const WithoutLineWrapping: Story = {
+  args: {
+    data: {
+      output:
+        'https://example.com/search?q=this-is-a-very-long-url-with-structured-query-parameters-that-should-stay-on-one-line-for-inspection&filter=recent&sort=created_at_desc',
+    },
+    lineWrapping: false,
+    className: 'w-[400px] overflow-x-auto',
   },
 };
 

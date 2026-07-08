@@ -1,5 +1,8 @@
 import type { DatasetItem } from '@mastra/client-js';
-import { Button, ButtonsGroup, DataList, EmptyState } from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { DataList } from '@mastra/playground-ui/components/DataList';
+import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { format, isThisYear, isToday } from 'date-fns';
 import { Plus, Upload, FileJson } from 'lucide-react';
 

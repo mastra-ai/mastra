@@ -9,10 +9,10 @@ on:
 
 jobs:
   labeler:
-    runs-on: ubuntu-latest
+    runs-on: starsling-ubuntu-24.04
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           fetch-depth: 1
           fetch-tags: false

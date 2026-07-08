@@ -10,7 +10,7 @@ export type DataListRowLinkProps = DataListRowSharedProps & {
   to: string;
   className?: string;
   style?: CSSProperties;
-  LinkComponent: LinkComponent;
+  LinkComponent?: LinkComponent;
 };
 
 export function DataListRowLink({
@@ -18,7 +18,7 @@ export function DataListRowLink({
   to,
   className,
   style,
-  LinkComponent: Link,
+  LinkComponent: Link = 'a',
   flushLeft,
   flushRight,
   colStart,
@@ -36,8 +36,8 @@ export function DataListRowLink({
         ...(isWrapped ? dataListRowInteractiveStyles : dataListRowStyles),
         !isWrapped && flushLeft && 'ml-0!',
         !isWrapped && flushRight && 'mr-0!',
-        // `!` so the selection fill wins over the striped variant's zebra tint
-        // (a higher-specificity root descendant rule); same color in `default`.
+        // `!` so the selection fill wins over borderless table root styling
+        // (higher-specificity descendant rules); same color in `default`.
         featured && 'bg-surface4!',
         dataListRowVariants({ variant }),
         className,

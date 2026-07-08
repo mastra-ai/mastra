@@ -16,6 +16,7 @@ packages:
   - "@mastra/s3vectors"
   - "@mastra/upstash"
   - "@mastra/vectorize"
+  - "@mastra/voyageai"
 ---
 
 import Tabs from "@theme/Tabs";
@@ -35,7 +36,7 @@ After generating embeddings, you need to store them in a database that supports 
     const store = new MongoDBVector({
       id: 'mongodb-vector',
       uri: process.env.MONGODB_URI,
-      dbName: process.env.MONGODB_DATABASE,
+      dbName: process.env.MONGODB_DB_NAME,
     })
     await store.createIndex({
       indexName: 'myCollection',
@@ -48,9 +49,13 @@ After generating embeddings, you need to store them in a database that supports 
     })
     ```
 
-    <h3>Using MongoDB Atlas Vector search</h3>
+    <h3>Using MongoDB Atlas Vector Search</h3>
 
     For detailed setup instructions and best practices, see the [official MongoDB Atlas Vector Search documentation](https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-overview/?utm_campaign=devrel\&utm_source=third-party-content\&utm_medium=cta\&utm_content=mastra-docs).
+
+    <h3>Using VoyageAI with MongoDB</h3>
+
+    MongoDB works seamlessly with VoyageAI's embedding models, which are optimized for retrieval tasks. For complete examples and specialized models, see the [VoyageAI embeddings documentation](/models/embeddings#voyageai) and [MongoDB vector reference](/reference/vectors/mongodb).
   </TabItem>
 
   <TabItem value="pg-vector" label="PgVector">
@@ -384,6 +389,7 @@ The dimension size must match the output dimension of your chosen embedding mode
 
 - `OpenAI text-embedding-3-small`: 1536 dimensions (or custom, e.g., 256)
 - `Cohere embed-multilingual-v3`: 1024 dimensions
+- `VoyageAI voyage-3.5`: 1024 dimensions (or custom: 256, 512, 1024, 2048)
 - `Google gemini-embedding-001`: 768 dimensions (or custom)
 
 :::warning

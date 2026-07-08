@@ -1,0 +1,128 @@
+---
+title: "Goals | Long-running agents"
+description: Learn how to set a durable objective on an agent that's judged in the execution loop, so the agent keeps working until the goal is complete or the run budget is exhausted.
+packages:
+  - "@mastra/core"
+  - "@mastra/memory"
+---
+
+# Goals
+
+**Added in:** `@mastra/core@1.42.0`
+
+:::experimental
+
+The Goals feature is in beta stage and subject to breaking changes in minor versions until it graduates from its beta status.
+
+:::
+
+A goal is a durable, thread-scoped objective: a standing instruction the agent keeps working toward across loop iterations until a judge model decides it's satisfied or a run budget is exhausted. The objective is persisted in thread state, so it survives reloads and is evaluated in-loop — even when a new message arrives in the middle of an already-running turn.
+
+Goals build on the same machinery as [`isTaskComplete`](/docs/agents/supervisor-agents): an LLM-as-judge scores the agent's output each iteration and gates the loop. The difference is that a goal is **durable** (stored in thread state, not passed per call) and is set and updated through `Agent` methods rather than per-`stream()` options.
+
+## When to use goals
+
+Use a goal when you want an agent to keep working toward a single objective across many iterations and messages, without re-supplying the success criteria on every call:
+
+- A standing objective the agent should pursue until a judge says it's done.
+- Work that should continue across mid-run messages (a message delivered into a live run is still judged against the goal).
+- An objective that must persist across thread reloads or process restarts.
+
+For a one-off completion check within a single `stream()` call, use [`isTaskComplete`](/docs/agents/supervisor-agents) instead.
+
+## Quickstart
+
+Goals require a configured [storage](/docs/storage/overview) backend and a memory-backed thread. Add a `goal` config to the agent — a judge model is required for the goal to do anything — then set an objective for a thread:
+
+```typescript title="src/mastra/agents/worker.ts" {8-11}
+import { Agent } from '@mastra/core/agent'
+
+const worker = new Agent({
+  id: 'worker',
+  name: 'worker',
+  instructions: 'You complete software tasks end to end.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory,
+  goal: {
+    judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+    maxRuns: 50,
+  },
+})
+
+// Set the durable objective for a thread.
+await worker.setObjective('Add and test a /health endpoint', {
+  threadId,
+  resourceId,
+})
+
+// The objective is judged each iteration until it's complete or maxRuns is hit.
+const stream = await worker.stream('Start working on the goal', {
+  memory: { thread: threadId, resource: resourceId },
+})
+```
+
+The `goal` config auto-registers the state-signal projection, so the model always sees the current objective as `<current-objective>` in its context — no extra setup needed.
+
+## How the goal step works
+
+A goal step runs inside the agentic execution loop, right after `isTaskComplete`. On a real candidate answer it scores the conversation against the objective and gates the loop:
+
+- **Not satisfied, budget remaining** → the loop continues; per-evaluation feedback is injected so the agent iterates.
+- **Satisfied** → the loop stops and the objective is marked `done`.
+- **Budget exhausted** (`runsUsed >= maxRuns`) → the loop stops but the objective stays `active`, so raising `maxRuns` later can resume it.
+
+The step is a no-op for background-task, mid-tool-loop, and working-memory-only iterations — the same gating as `isTaskComplete`.
+
+**The judge model is the activation switch.** If no judge resolves (neither the per-objective override nor the agent's `goal.judge`), the goal step does nothing: no scoring, no budget consumed, no `goal` chunk. Effective settings resolve as per-objective record value → agent `goal` config → built-in default (`maxRuns` `50`, a default judge prompt).
+
+By default the step uses a built-in LLM-as-judge scorer that returns `1` when the objective is achieved and `0` otherwise. Supply your own scorer with `goal.scorer` to customize judging.
+
+```typescript title="src/mastra/agents/worker.ts"
+const worker = new Agent({
+  id: 'worker',
+  name: 'worker',
+  instructions: 'You complete software tasks end to end.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory,
+  goal: {
+    // A resolver function lets you inject provider credentials and read the
+    // current judge selection at runtime; returning `undefined` keeps the
+    // goal step a no-op.
+    judge: ({ requestContext }) => resolveJudgeModel(requestContext),
+    maxRuns: 30,
+    prompt: 'Only mark the goal complete when tests pass.',
+  },
+})
+```
+
+Each evaluation emits a typed `goal` stream chunk (`GoalEvaluationPayload`: `objective`, `iteration`, `maxRuns`, `passed`, `status`, `results`, `reason`, `duration`, `timedOut`, `maxRunsReached`, `suppressFeedback`) so a UI can show goal progress mid-run.
+
+## Managing the objective
+
+Control the objective for a thread with `Agent` methods. All of them no-op when the run isn't memory-backed (they require storage and a `threadId`):
+
+```typescript title="src/mastra/objective.ts"
+// Read the current objective record.
+const record = await worker.getObjective({ threadId })
+
+// Update options on the active objective (only provided fields are written;
+// unset fields fall back to the agent's `goal` config).
+await worker.updateObjectiveOptions({ threadId, maxRuns: 100 })
+
+// Drop the objective.
+await worker.clearObjective({ threadId })
+```
+
+Per-objective values written by `setObjective` / `updateObjectiveOptions` take precedence over the agent's `goal` config, and that precedence is remembered in thread state.
+
+:::note
+
+See the [`GoalEvaluationPayload` in the ChunkType reference](/reference/streaming/ChunkType) for the full goal chunk shape.
+
+:::
+
+## Related
+
+- [Supervisor agents](/docs/agents/supervisor-agents) — `isTaskComplete` and the rubric scorer
+- [Signal providers](/docs/long-running-agents/signal-providers) — how the objective is projected into context
+- [Memory storage](/docs/storage/overview) — the storage backend goals require

@@ -1,0 +1,174 @@
+---
+title: "Reference: summarizeConversation() | Memory"
+description: "Documentation for the standalone `summarizeConversation()` function in Mastra, which summarizes messages you pass in and extracts structured values from them."
+packages:
+  - "@mastra/memory"
+---
+
+# summarizeConversation()
+
+The standalone `summarizeConversation()` function summarizes a conversation in one shot. It distills the messages you pass in with the same Observer plumbing that powers [Observational Memory](/reference/memory/observational-memory) — without Observational Memory attached to an agent, and without reading from or writing to storage.
+
+Nothing is written back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go — for example your own database.
+
+Use this when you already have the messages in hand and want explicit control over what gets summarized. To summarize a stored thread by ID instead, use [`Memory.summarizeThread()`](/reference/memory/summarizeThread), which loads the messages for you.
+
+## Usage example
+
+```typescript
+import { summarizeConversation } from '@mastra/memory'
+
+const result = await summarizeConversation({
+  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  messages,
+  instructions: 'Summarize this voicemail call for the business owner.',
+})
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'model',
+    type: 'string | LanguageModel | DynamicModel',
+    description: "Model that runs the summarization, such as a router string like '__GATEWAY_OPENAI_MODEL_MINI__'.",
+    isOptional: false,
+  },
+  {
+    name: 'messages',
+    type: 'MastraDBMessage[]',
+    description:
+      'The conversation to summarize. When empty, the function returns an empty result without calling the model.',
+    isOptional: false,
+  },
+  {
+    name: 'instructions',
+    type: 'string',
+    description:
+      "Extra guidance appended to the summarizer's system prompt, such as what to focus on or who the summary is for.",
+    isOptional: true,
+  },
+  {
+    name: 'extract',
+    type: 'Extractor[]',
+    description:
+      "Extractors to run over the conversation. Extractors with a Zod schema run as a follow-up structured output call; schema-less extractors are extracted inline. Each extractor's `onExtracted` hook fires with the extracted value.",
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description:
+      'Thread the conversation belongs to. Defaults to the first `threadId` found on `messages`. Passed to extractor contexts.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description:
+      'Resource (user) the conversation belongs to. Defaults to the first `resourceId` found on `messages`. Passed to extractor contexts.',
+    isOptional: true,
+  },
+  {
+    name: 'memory',
+    type: 'Memory',
+    description:
+      'Memory instance forwarded to extractor contexts. Set automatically when called through `Memory.summarizeThread()`.',
+    isOptional: true,
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description:
+      'Mastra instance used to resolve custom gateway models. Set automatically when called through `Memory.summarizeThread()`.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'RequestContext',
+    description: 'Request context forwarded to the summarizer model and extractor hooks.',
+    isOptional: true,
+  },
+  {
+    name: 'abortSignal',
+    type: 'AbortSignal',
+    description: 'Signal to cancel the summarization call.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'summary',
+    type: 'string',
+    description: 'The distilled observations produced from the conversation, in dense bullet form.',
+  },
+  {
+    name: 'extracted',
+    type: 'Record<string, unknown>',
+    description: 'Values produced by `extract` extractors, keyed by extractor slug.',
+  },
+  {
+    name: 'extractionFailures',
+    type: '{ slug: string; error: string }[]',
+    description:
+      'Extractors that failed to produce a valid value, with the reason. Only present when at least one extractor failed.',
+  },
+  {
+    name: 'usage',
+    type: '{ inputTokens?: number; outputTokens?: number; totalTokens?: number }',
+    description: 'Token usage of the summarization call.',
+  },
+]}
+/>
+
+## Extended usage example
+
+The following example summarizes an in-flight voice session from messages the application already holds, and extracts a structured record:
+
+```typescript title="src/session-summary.ts"
+import { summarizeConversation, Extractor } from '@mastra/memory'
+import type { MastraDBMessage } from '@mastra/core/agent'
+import { z } from 'zod'
+import { sessionRecords } from './db'
+
+const sessionSummary = new Extractor({
+  name: 'session-summary',
+  instructions: 'Return a concise summary of the session.',
+  schema: z.object({
+    summary: z.string(),
+    sentiment: z.enum(['positive', 'neutral', 'negative']),
+    followUps: z.array(z.string()),
+  }),
+  metadataKeyPath: false, // don't persist into memory metadata — the hook owns storage
+  onExtracted: async ({ current, threadId }) => {
+    await sessionRecords.upsert({ sessionId: threadId, record: current })
+  },
+})
+
+export async function onSessionEnd(messages: MastraDBMessage[]) {
+  const { summary, extracted, extractionFailures } = await summarizeConversation({
+    model: '__GATEWAY_OPENAI_MODEL_MINI__',
+    messages,
+    instructions: 'Summarize this support session for the account manager.',
+    extract: [sessionSummary],
+  })
+
+  if (extractionFailures?.length) {
+    console.warn('Some extractors failed', extractionFailures)
+  }
+
+  return { summary, extracted }
+}
+```
+
+### Related
+
+- [.summarizeThread()](/reference/memory/summarizeThread)
+- [Memory Class Reference](/reference/memory/memory-class)
+- [Observational Memory](/reference/memory/observational-memory)

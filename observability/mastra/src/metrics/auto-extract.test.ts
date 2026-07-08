@@ -619,4 +619,29 @@ describe('AutoExtractedMetrics', () => {
 
     expect(emittedMetrics[0]!.metric.labels).toEqual({ status: 'ok' });
   });
+
+  it('should fall back to the configured model when responseModel has no pricing match', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-4-6',
+        responseModel: 'anthropic/claude-4.6-sonnet-20260217',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputTokens!.metric.costContext?.costMetadata).not.toHaveProperty('error', 'no_matching_model');
+    expect(inputTokens!.metric.costContext?.costMetadata).toHaveProperty(
+      'pricing_id',
+      'openrouter-anthropic-claude-sonnet-4-6',
+    );
+  });
 });

@@ -26,6 +26,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -34,10 +35,13 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
+
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
@@ -67,9 +71,16 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetType', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'targetIds', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASETS, 'scorerIds', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'organizationId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'projectId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateKey', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASETS, 'candidateId', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'requestContext', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'source', 'TEXT');
     await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'expectedTrajectory', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'organizationId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'projectId', 'TEXT');
+    await this.#addColumnIfNotExists(TABLE_DATASET_ITEMS, 'toolMocks', 'TEXT');
 
     // T3.24/T3.25 — idempotent indexes
     await this.#client.batch(
@@ -94,6 +105,18 @@ export class DatasetsLibSQL extends DatasetsStorage {
           sql: `CREATE UNIQUE INDEX IF NOT EXISTS idx_dataset_versions_dataset_version_unique ON "${TABLE_DATASET_VERSIONS}" ("datasetId", "version")`,
           args: [],
         },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_datasets_tenancy_createdat ON "${TABLE_DATASETS}" ("organizationId", "projectId", "createdAt", "id")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_datasets_tenancy_candidate ON "${TABLE_DATASETS}" ("organizationId", "projectId", "candidateKey", "candidateId")`,
+          args: [],
+        },
+        {
+          sql: `CREATE INDEX IF NOT EXISTS idx_dataset_items_tenancy_list ON "${TABLE_DATASET_ITEMS}" ("organizationId", "projectId", "datasetId", "validTo", "isDeleted")`,
+          args: [],
+        },
       ],
       'write',
     );
@@ -112,6 +135,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#db.deleteData({ tableName: TABLE_DATASETS });
   }
 
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)`,
+        args: [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      });
+      const row = result.rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
+  }
+
   // --- Row transformers ---
 
   private transformDatasetRow(row: Record<string, any>): DatasetRecord {
@@ -128,6 +164,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
       targetIds: row.targetIds ? safelyParseJSON(row.targetIds) : undefined,
       scorerIds: row.scorerIds ? safelyParseJSON(row.scorerIds) : undefined,
       version: row.version as number,
+      organizationId: (row.organizationId as string | null | undefined) ?? null,
+      projectId: (row.projectId as string | null | undefined) ?? null,
+      candidateKey: (row.candidateKey as string | null | undefined) ?? null,
+      candidateId: (row.candidateId as string | null | undefined) ?? null,
       createdAt: ensureDate(row.createdAt)!,
       updatedAt: ensureDate(row.updatedAt)!,
     };
@@ -138,9 +178,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      organizationId: (row.organizationId as string | null | undefined) ?? null,
+      projectId: (row.projectId as string | null | undefined) ?? null,
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source as string) : undefined,
@@ -154,11 +197,14 @@ export class DatasetsLibSQL extends DatasetsStorage {
       id: row.id as string,
       datasetId: row.datasetId as string,
       datasetVersion: row.datasetVersion as number,
+      organizationId: (row.organizationId as string | null | undefined) ?? null,
+      projectId: (row.projectId as string | null | undefined) ?? null,
       validTo: row.validTo as number | null,
       isDeleted: Boolean(row.isDeleted),
       input: safelyParseJSON(row.input),
       groundTruth: row.groundTruth ? safelyParseJSON(row.groundTruth) : undefined,
       expectedTrajectory: row.expectedTrajectory ? safelyParseJSON(row.expectedTrajectory) : undefined,
+      toolMocks: row.toolMocks ? safelyParseJSON(row.toolMocks) : undefined,
       requestContext: row.requestContext ? safelyParseJSON(row.requestContext) : undefined,
       metadata: row.metadata ? safelyParseJSON(row.metadata) : undefined,
       source: row.source ? safelyParseJSON(row.source as string) : undefined,
@@ -195,9 +241,13 @@ export class DatasetsLibSQL extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           version: 0,
+          organizationId: input.organizationId ?? null,
+          projectId: input.projectId ?? null,
+          candidateKey: input.candidateKey ?? null,
+          candidateId: input.candidateId ?? null,
           createdAt: nowIso,
           updatedAt: nowIso,
         },
@@ -215,6 +265,10 @@ export class DatasetsLibSQL extends DatasetsStorage {
         targetIds: input.targetIds ?? undefined,
         scorerIds: input.scorerIds ?? undefined,
         version: 0,
+        organizationId: input.organizationId ?? null,
+        projectId: input.projectId ?? null,
+        candidateKey: input.candidateKey ?? null,
+        candidateId: input.candidateId ?? null,
         createdAt: now,
         updatedAt: now,
       };
@@ -230,11 +284,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
+      const { conditions, params } = tenancyWhere(filters);
+      const whereSql = ['id = ?', ...conditions].join(' AND ');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE id = ?`,
-        args: [id],
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE ${whereSql}`,
+        args: [id, ...params],
       });
       return result.rows?.[0] ? this.transformDatasetRow(result.rows[0]) : null;
     } catch (error) {
@@ -251,7 +313,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -343,36 +405,43 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // F3 fix: detach experiments (SET NULL) instead of deleting. Delete results for FK safety.
-      // Each operation wrapped separately — experiment_results table may not exist even if experiments does.
-      try {
-        await this.#client.execute({
+      // Atomic gate via scoped existence check + tenancy folded into the parent
+      // DELETE, so the destructive statement is itself tenant-scoped rather
+      // than relying only on a pre-check. Silent no-op on mismatch. libsql is
+      // single-writer serialized, so the check + delete cannot race.
+      const { conditions, params } = tenancyWhere(filters);
+      const scopedWhere = ['id = ?', ...conditions].join(' AND ');
+
+      const exists = await this.#client.execute({
+        sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
+        args: [id, ...params],
+      });
+      if (!exists.rows?.[0]) return;
+
+      // Detach experiments (SET NULL) + delete their results for FK safety.
+      // Probe sqlite_master rather than swallowing "no such table" errors.
+      const experimentTablesExist = await this.experimentTablesExist();
+
+      // Dataset cascade — atomic batch, parent DELETE scoped by tenancy. When
+      // experiment tables exist, fold the detach DMLs into the same batch so the
+      // whole cascade is one atomic transaction.
+      const statements: { sql: string; args: any[] }[] = [];
+      if (experimentTablesExist) {
+        statements.push({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
           args: [id],
         });
-      } catch {
-        // experiment_results table may not exist
-      }
-      try {
-        await this.#client.execute({
+        statements.push({
           sql: `UPDATE ${TABLE_EXPERIMENTS} SET datasetId = NULL, datasetVersion = NULL WHERE datasetId = ?`,
           args: [id],
         });
-      } catch {
-        // experiments table may not exist
       }
-
-      // Dataset cascade — atomic batch (T3.18)
-      await this.#client.batch(
-        [
-          { sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE id = ?`, args: [id] },
-        ],
-        'write',
-      );
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
+      await this.#client.batch(statements, 'write');
     } catch (error) {
       throw new MastraError(
         {
@@ -389,9 +458,46 @@ export class DatasetsLibSQL extends DatasetsStorage {
     try {
       const { page, perPage: perPageInput } = args.pagination;
 
+      const filterConditions: string[] = [];
+      const filterParams: InValue[] = [];
+      if (args.filters?.organizationId !== undefined) {
+        filterConditions.push('organizationId = ?');
+        filterParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        filterConditions.push('projectId = ?');
+        filterParams.push(args.filters.projectId);
+      }
+      if (args.filters?.candidateKey !== undefined) {
+        filterConditions.push('candidateKey = ?');
+        filterParams.push(args.filters.candidateKey);
+      }
+      if (args.filters?.candidateId !== undefined) {
+        filterConditions.push('candidateId = ?');
+        filterParams.push(args.filters.candidateId);
+      }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push('targetType = ?');
+        filterParams.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        // targetIds is stored as JSON text; check intersection via json_each.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM json_each(${TABLE_DATASETS}.targetIds) WHERE value IN (${placeholders}))`,
+        );
+        for (const id of args.filters.targetIds) filterParams.push(id);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        // Case-insensitive substring match (LIKE in SQLite is case-insensitive for ASCII)
+        filterConditions.push('LOWER(name) LIKE ?');
+        filterParams.push(`%${args.filters.name.toLowerCase()}%`);
+      }
+      const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
+
       const countResult = await this.#client.execute({
-        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASETS}`,
-        args: [],
+        sql: `SELECT COUNT(*) as count FROM ${TABLE_DATASETS} ${whereClause}`,
+        args: filterParams,
       });
       const total = Number(countResult.rows?.[0]?.count ?? 0);
 
@@ -408,8 +514,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const end = perPageInput === false ? total : start + perPage;
 
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
-        args: [limitValue, start],
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} ${whereClause} ORDER BY createdAt DESC, id ASC LIMIT ? OFFSET ?`,
+        args: [...filterParams, limitValue, start],
       });
 
       return {
@@ -437,6 +543,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doAddItem(args: AddDatasetItemInput): Promise<DatasetItem> {
     try {
+      // Fetch parent dataset for tenancy values returned to caller (Option B)
+      const dataset = await this.getDatasetById({ id: args.datasetId });
       const id = crypto.randomUUID();
       const versionId = crypto.randomUUID();
       const now = new Date();
@@ -450,14 +558,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
+              args.datasetId,
+              args.datasetId,
               args.datasetId,
               args.datasetId,
               jsonbArg(args.input)!,
               jsonbArg(args.groundTruth),
               jsonbArg(args.expectedTrajectory),
+              jsonbArg(args.toolMocks),
               jsonbArg(args.requestContext),
               jsonbArg(args.metadata),
               jsonbArg(args.source),
@@ -479,9 +590,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
         id,
         datasetId: args.datasetId,
         datasetVersion: newVersion,
+        organizationId: dataset?.organizationId ?? null,
+        projectId: dataset?.projectId ?? null,
         input: args.input,
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
+        toolMocks: args.toolMocks,
         requestContext: args.requestContext,
         metadata: args.metadata,
         source: args.source,
@@ -521,6 +635,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           details: { itemId: args.id, expectedDatasetId: args.datasetId, actualDatasetId: existing.datasetId },
         });
       }
+      // Fetch parent dataset for fresh tenancy returned to caller (Option B)
+      const dataset = await this.getDatasetById({ id: args.datasetId });
 
       const versionId = crypto.randomUUID();
       const now = new Date();
@@ -531,6 +647,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
       const mergedGroundTruth = args.groundTruth !== undefined ? args.groundTruth : existing.groundTruth;
       const mergedExpectedTrajectory =
         args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
+      const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
       const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
       const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
       const mergedSource = args.source !== undefined ? args.source : existing.source;
@@ -547,14 +664,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [args.datasetId, args.id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               args.id,
+              args.datasetId,
+              args.datasetId,
               args.datasetId,
               args.datasetId,
               jsonbArg(mergedInput)!,
               jsonbArg(mergedGroundTruth),
               jsonbArg(mergedExpectedTrajectory),
+              jsonbArg(mergedToolMocks),
               jsonbArg(mergedRequestContext),
               jsonbArg(mergedMetadata),
               jsonbArg(mergedSource),
@@ -575,9 +695,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
       return {
         ...existing,
         datasetVersion: newVersion,
+        organizationId: dataset?.organizationId ?? null,
+        projectId: dataset?.projectId ?? null,
         input: mergedInput,
         groundTruth: mergedGroundTruth,
         expectedTrajectory: mergedExpectedTrajectory,
+        toolMocks: mergedToolMocks,
         requestContext: mergedRequestContext,
         metadata: mergedMetadata,
         source: mergedSource,
@@ -596,7 +719,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       // Get current item — no-op if not found
       const existing = await this.getItemById({ id });
@@ -625,13 +748,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
             args: [datasetId, id],
           },
           {
-            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+            sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT organizationId FROM ${TABLE_DATASETS} WHERE id = ?), (SELECT projectId FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
             args: [
               id,
               datasetId,
               datasetId,
+              datasetId,
+              datasetId,
               jsonbArg(existing.input)!,
               jsonbArg(existing.groundTruth),
+              jsonbArg(existing.expectedTrajectory),
+              jsonbArg(existing.toolMocks),
               jsonbArg(existing.requestContext),
               jsonbArg(existing.metadata),
               jsonbArg(existing.source),
@@ -746,6 +873,15 @@ export class DatasetsLibSQL extends DatasetsStorage {
         ];
         const queryParams: InValue[] = [args.datasetId, args.version, args.version];
 
+        if (args.filters?.organizationId !== undefined) {
+          conditions.push('organizationId = ?');
+          queryParams.push(args.filters.organizationId);
+        }
+        if (args.filters?.projectId !== undefined) {
+          conditions.push('projectId = ?');
+          queryParams.push(args.filters.projectId);
+        }
+
         if (args.search) {
           conditions.push(`(LOWER(json(input)) LIKE ? OR LOWER(COALESCE(json(groundTruth), '')) LIKE ?)`);
           const searchPattern = `%${args.search.toLowerCase()}%`;
@@ -791,6 +927,15 @@ export class DatasetsLibSQL extends DatasetsStorage {
       // T3.16 — current items only (validTo IS NULL AND isDeleted = false)
       const conditions: string[] = ['datasetId = ?', 'validTo IS NULL', 'isDeleted = 0'];
       const queryParams: InValue[] = [args.datasetId];
+
+      if (args.filters?.organizationId !== undefined) {
+        conditions.push('organizationId = ?');
+        queryParams.push(args.filters.organizationId);
+      }
+      if (args.filters?.projectId !== undefined) {
+        conditions.push('projectId = ?');
+        queryParams.push(args.filters.projectId);
+      }
 
       if (args.search) {
         conditions.push(`(LOWER(json(input)) LIKE ? OR LOWER(COALESCE(json(groundTruth), '')) LIKE ?)`);
@@ -959,14 +1104,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
         const id = crypto.randomUUID();
         items.push({ id, input: itemInput });
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, expectedTrajectory, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, NULL, 0, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             id,
             input.datasetId,
             input.datasetId,
+            dataset.organizationId ?? null,
+            dataset.projectId ?? null,
             jsonbArg(itemInput.input)!,
             jsonbArg(itemInput.groundTruth),
             jsonbArg(itemInput.expectedTrajectory),
+            jsonbArg(itemInput.toolMocks),
             jsonbArg(itemInput.requestContext),
             jsonbArg(itemInput.metadata),
             jsonbArg(itemInput.source),
@@ -989,9 +1137,12 @@ export class DatasetsLibSQL extends DatasetsStorage {
         id,
         datasetId: input.datasetId,
         datasetVersion: newVersion,
+        organizationId: dataset.organizationId ?? null,
+        projectId: dataset.projectId ?? null,
         input: itemInput.input,
         groundTruth: itemInput.groundTruth,
         expectedTrajectory: itemInput.expectedTrajectory,
+        toolMocks: itemInput.toolMocks,
         requestContext: itemInput.requestContext,
         metadata: itemInput.metadata,
         source: itemInput.source,
@@ -1053,13 +1204,17 @@ export class DatasetsLibSQL extends DatasetsStorage {
         });
         // Insert tombstone
         statements.push({
-          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, validTo, isDeleted, input, groundTruth, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
+          sql: `INSERT INTO ${TABLE_DATASET_ITEMS} (id, datasetId, datasetVersion, organizationId, projectId, validTo, isDeleted, input, groundTruth, expectedTrajectory, toolMocks, requestContext, metadata, source, createdAt, updatedAt) VALUES (?, ?, (SELECT version FROM ${TABLE_DATASETS} WHERE id = ?), ?, ?, NULL, 1, jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), jsonb(?), ?, ?)`,
           args: [
             item.id,
             input.datasetId,
             input.datasetId,
+            dataset.organizationId ?? null,
+            dataset.projectId ?? null,
             jsonbArg(item.input)!,
             jsonbArg(item.groundTruth),
+            jsonbArg(item.expectedTrajectory),
+            jsonbArg(item.toolMocks),
             jsonbArg(item.requestContext),
             jsonbArg(item.metadata),
             jsonbArg(item.source),

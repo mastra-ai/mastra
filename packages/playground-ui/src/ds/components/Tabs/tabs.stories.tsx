@@ -15,7 +15,28 @@ const meta: Meta<typeof Tabs> = {
 export default meta;
 type Story = StoryObj<typeof Tabs>;
 
-export const Default: Story = {
+export const Recommended: Story = {
+  render: () => (
+    <Tabs defaultTab="tab1" className="w-[400px]">
+      <TabList variant="pill">
+        <Tab value="tab1">Overview</Tab>
+        <Tab value="tab2">Details</Tab>
+        <Tab value="tab3">Settings</Tab>
+      </TabList>
+      <TabContent value="tab1">
+        <div className="p-4 text-neutral5">Overview content goes here</div>
+      </TabContent>
+      <TabContent value="tab2">
+        <div className="p-4 text-neutral5">Details content goes here</div>
+      </TabContent>
+      <TabContent value="tab3">
+        <div className="p-4 text-neutral5">Settings content goes here</div>
+      </TabContent>
+    </Tabs>
+  ),
+};
+
+export const LegacyLineFallback: Story = {
   render: () => (
     <Tabs defaultTab="tab1" className="w-[400px]">
       <TabList>
@@ -24,7 +45,7 @@ export const Default: Story = {
         <Tab value="tab3">Settings</Tab>
       </TabList>
       <TabContent value="tab1">
-        <div className="p-4 text-neutral5">Overview content goes here</div>
+        <div className="p-4 text-neutral5">Line fallback content goes here</div>
       </TabContent>
       <TabContent value="tab2">
         <div className="p-4 text-neutral5">Details content goes here</div>
