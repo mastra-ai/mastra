@@ -17,20 +17,12 @@
       "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
-      },
-      "require": {
-        "types": "./dist/index.d.ts",
-        "default": "./dist/index.cjs"
       }
     },
     "./*": {
       "import": {
         "types": "./dist/*.d.ts",
         "default": "./dist/*.js"
-      },
-      "require": {
-        "types": "./dist/*.d.ts",
-        "default": "./dist/*.cjs"
       }
     },
     "./package.json": "./package.json"

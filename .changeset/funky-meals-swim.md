@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Fixed CommonJS imports for @mastra/code-sdk.
+Removed invalid CommonJS export entries from @mastra/code-sdk so package resolution matches the published ESM output.
