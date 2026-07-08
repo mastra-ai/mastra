@@ -322,8 +322,60 @@ describe('in-loop goal scoring', () => {
     }
 
     expect(judgeCalls.length).toBeGreaterThan(0);
-    expect(JSON.stringify(judgeCalls[0]?.prompt)).toContain('JSON schema');
+    expect(JSON.stringify(judgeCalls[0]?.prompt)).toContain('Return your response as JSON matching this schema');
     expect(judgeCalls.every(call => call.responseFormat === undefined)).toBe(true);
+  });
+
+  it('goal judge activity observation does not block structured-output fallback', async () => {
+    const streamCalls: any[] = [];
+    const generateCalls: any[] = [];
+    const judge = new MockLanguageModelV2({
+      doStream: async props => {
+        streamCalls.push(props);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            {
+              type: 'response-metadata',
+              id: `judge-stream-${streamCalls.length}`,
+              modelId: 'mock-judge-id',
+              timestamp: new Date(0),
+            },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 0, totalTokens: 1 } },
+          ]),
+        };
+      },
+      doGenerate: async props => {
+        generateCalls.push(props);
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          content: [{ type: 'text', text: '{"decision":"done","reason":"generated fallback"}' }],
+          warnings: [],
+        };
+      },
+    });
+    const agent = makeAgent({ judge: judge as any, maxRuns: 5 });
+    await agent.setObjective('Reach the goal', { threadId: THREAD, resourceId: RESOURCE });
+
+    const goalChunks: any[] = [];
+    const stream = await agent.stream('go', {
+      memory: { resource: RESOURCE, thread: { id: THREAD } },
+      maxSteps: 10,
+    });
+    for await (const chunk of stream.fullStream) {
+      if (chunk.type === 'goal') goalChunks.push(chunk);
+    }
+
+    expect(streamCalls.length).toBeGreaterThan(0);
+    expect(generateCalls.length).toBeGreaterThan(0);
+    expect(goalChunks.filter(c => !c.payload.pending).at(-1)?.payload).toMatchObject({
+      status: 'done',
+      reason: 'generated fallback',
+    });
   });
 
   it('direct agent goal loop pauses actionably when built-in scorer returns waiting', async () => {

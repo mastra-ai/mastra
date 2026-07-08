@@ -269,26 +269,32 @@ export function createDurableGoalStep() {
         const observeJudgeStream = (stream: { fullStream?: AsyncIterable<ChunkType> }) => {
           if (!stream.fullStream) return;
           void (async () => {
-            let streamedText = '';
-            let lastReason = '';
-            for await (const chunk of stream.fullStream!) {
-              if (chunk.type === 'text-delta') {
-                streamedText += (chunk as any).payload?.text ?? '';
-                const reason = extractPartialReasonFromStructuredText(streamedText);
-                if (reason && reason !== lastReason) {
-                  lastReason = reason;
-                  emitJudgeActivity({ type: 'reason', message: reason });
+            try {
+              let streamedText = '';
+              let lastReason = '';
+              for await (const chunk of stream.fullStream!) {
+                if (chunk.type === 'text-delta') {
+                  streamedText += (chunk as any).payload?.text ?? '';
+                  const reason = extractPartialReasonFromStructuredText(streamedText);
+                  if (reason && reason !== lastReason) {
+                    lastReason = reason;
+                    emitJudgeActivity({ type: 'reason', message: reason });
+                  }
+                } else if (chunk.type === 'tool-call') {
+                  emitJudgeActivity(
+                    {
+                      type: 'tool-call',
+                      name: (chunk as any).payload?.toolName,
+                      message: (chunk as any).payload?.toolName,
+                    },
+                    (chunk as any).payload?.args,
+                  );
                 }
-              } else if (chunk.type === 'tool-call') {
-                emitJudgeActivity(
-                  {
-                    type: 'tool-call',
-                    name: (chunk as any).payload?.toolName,
-                    message: (chunk as any).payload?.toolName,
-                  },
-                  (chunk as any).payload?.args,
-                );
               }
+            } catch {
+              // The scorer owns structured-output fallback and error reporting.
+              // Judge activity streaming is best-effort UI feedback and must not
+              // turn a recoverable scorer stream failure into an unhandled rejection.
             }
           })();
         };

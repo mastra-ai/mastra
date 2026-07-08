@@ -62,9 +62,14 @@ describe('createGoalScorer tool support', () => {
     expect(instructions).toBe(customPrompt);
   });
 
-  it('forwards jsonPromptInjection to the judge config', () => {
-    const scorer = createGoalScorer({ judgeModel, jsonPromptInjection: 'inline' });
+  it('defaults the judge config to inline JSON prompt injection', () => {
+    const scorer = createGoalScorer({ judgeModel });
     expect(scorer.config.judge?.jsonPromptInjection).toBe('inline');
+  });
+
+  it('forwards explicit jsonPromptInjection to the judge config', () => {
+    const scorer = createGoalScorer({ judgeModel, jsonPromptInjection: 'system' });
+    expect(scorer.config.judge?.jsonPromptInjection).toBe('system');
   });
 });
 
