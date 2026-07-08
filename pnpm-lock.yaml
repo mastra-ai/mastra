@@ -2067,7 +2067,7 @@ importers:
         specifier: workspace:*
         version: link:../../packages/_types-builder
       '@opencode-ai/plugin':
-        specifier: ^1.2.27
+        specifier: 1.14.48
         version: 1.14.48
       '@opencode-ai/sdk':
         specifier: ^1.17.4
