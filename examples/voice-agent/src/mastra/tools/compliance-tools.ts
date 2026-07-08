@@ -26,7 +26,14 @@ export const recordConsent = createConsentTool({
   items: REGULATED_CONSENT_ITEMS,
   onGrant: async ({ item, granted, resourceId }) => {
     console.info('[regulated] consent captured', { item, granted, resourceId });
-    if (resourceId) await recordConsentBackend(resourceId, item, granted);
+    if (resourceId) {
+      await recordConsentBackend(resourceId, item, granted);
+    } else {
+      // Without a resourceId there is nowhere to persist this consent — onCallEnd's audit trail
+      // and the summary-flush gate both read from the backend ledger, so a silent skip here means
+      // this consent never counts even though the caller granted it.
+      console.warn('[regulated] consent captured but not persisted — no resourceId', { item, granted });
+    }
   },
 });
 
@@ -50,7 +57,7 @@ export const endCall = createEndCallTool({
 export const lookupAccountStatus = createTool({
   id: 'lookupAccountStatus',
   description:
-    'Look up the caller\'s account status by the last four digits of their account number. Only use this after the caller has consented to call recording. Returns a short status summary to read back.',
+    'Look up the caller\'s account status by the last four digits of their account number. Only use this after all required consents (call recording, summary storage, data sharing, marketing) have been recorded. Returns a short status summary to read back.',
   inputSchema: z.object({
     lastFour: z.string().describe('The last four digits of the account number, e.g. "4921".'),
   }),
