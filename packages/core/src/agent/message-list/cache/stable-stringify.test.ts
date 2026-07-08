@@ -104,7 +104,7 @@ describe('stableStringify', () => {
     expect(stableStringify(fromJsonbColumn)).toBe(stableStringify(fromTextColumn));
   });
 
-  it('treats null and object-with-null-prototype-like values without throwing', () => {
+  it('treats objects containing null values without throwing', () => {
     const value = { a: null, b: { c: null } };
 
     expect(() => stableStringify(value)).not.toThrow();
