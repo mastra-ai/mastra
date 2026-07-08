@@ -597,6 +597,68 @@ describe('accumulateChunk - interleaved text and tool calls', () => {
   });
 });
 
+describe('accumulateChunk - interleaved text and non-text parts (general closing rule)', () => {
+  // A tool call is not special: any non-text part (reasoning, citation, file,
+  // step marker, …) closes the current text run. A reused text id after one of
+  // them must open a NEW text part rather than merging back into the earlier one.
+
+  it('keeps text → reasoning → text ordering when the textId is reused', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      reasoningStartChunk(),
+      reasoningDeltaChunk('thinking'),
+      reasoningEndChunk(),
+      // Reused text id for the post-reasoning continuation.
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'reasoning', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('splits the text run when a reused-id continuation arrives as a bare delta after reasoning (no second text-start)', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      reasoningStartChunk(),
+      reasoningDeltaChunk('thinking'),
+      // Continuation reuses t1 but never re-announces text-start.
+      textDeltaChunk('t1', 'After'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'reasoning', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+
+  it('keeps text → citation → text ordering when the textId is reused', () => {
+    const out = reduce([
+      startChunk(),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'Before'),
+      textEndChunk('t1'),
+      sourceUrlChunk('s-1', 'https://example.com', 'Example'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'After'),
+      textEndChunk('t1'),
+    ]);
+
+    const types = out[0].content.parts.map(p => p.type);
+    expect(types).toEqual(['text', 'source-url', 'text']);
+    expect((out[0].content.parts[0] as MastraTextPart).text).toBe('Before');
+    expect((out[0].content.parts[2] as MastraTextPart).text).toBe('After');
+  });
+});
+
 // =============================================================================
 // REASONING STREAMING
 // =============================================================================

@@ -639,16 +639,16 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         textPartIndex = parts.findLastIndex(part => part.type === 'text' && partState(part) === 'streaming');
       }
 
-      // A text run is closed once a tool invocation is emitted after it. If the
-      // matched text part is followed by a tool-invocation (text → tool → text
-      // interleaving), this delta belongs to a NEW text segment; appending to
-      // the earlier part would merge the two text blocks and push the tool chip
-      // out of order in the live view (issue #18964). Storage persists them as
-      // separate parts, which is why a reload already renders correctly.
-      if (
-        textPartIndex !== -1 &&
-        parts.some((part, index) => index > textPartIndex && part.type === 'tool-invocation')
-      ) {
+      // A text run is closed once ANY non-text part is emitted after it — a tool
+      // call, reasoning, a source/citation, a file, a step marker, etc. If the
+      // matched text part is followed by such a part (e.g. text → tool → text or
+      // text → reasoning → text, where a provider like DeepSeek reuses the same
+      // text id across segments), this delta belongs to a NEW text segment.
+      // Appending to the earlier part would merge the two text blocks and push
+      // the intervening part out of order in the live view (issue #18964).
+      // Storage persists them as separate parts, which is why a reload already
+      // renders correctly.
+      if (textPartIndex !== -1 && parts.some((part, index) => index > textPartIndex && part.type !== 'text')) {
         textPartIndex = -1;
       }
 
