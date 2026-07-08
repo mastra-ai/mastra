@@ -2026,3 +2026,15 @@ a.learn-sidebar-item.is-active {
   border: none;
   background: transparent;
 }
+
+/*
+ * Child result rows (in-page heading hits) render their title with Tailwind's
+ * `truncate` (overflow: hidden), which sets the flex item's automatic minimum
+ * size to 0. As a direct child of the flex-column row — sibling to the excerpt —
+ * the flex algorithm then collapses the title to height: 0, hiding the heading
+ * so every sub-result looks like a duplicate of its excerpt. Pin the title so it
+ * keeps its line box and can't be shrunk away.
+ */
+#docs-search-results .group > span.truncate {
+  flex-shrink: 0;
+}
