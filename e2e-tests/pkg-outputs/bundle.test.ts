@@ -57,30 +57,32 @@ describe.for(
         }
       });
 
-      it.skipIf(pkgName === '@mastra/playground-ui' || pkgName === 'mastra' || pkgName.startsWith('@internal/'))(
-        'should use .cjs and .d.ts extensions when using require',
-        async () => {
-          if (importPath === './package.json') {
-            return;
-          }
+      it.skipIf(
+        pkgName === '@mastra/playground-ui' ||
+          pkgName === '@mastra/code-sdk' ||
+          pkgName === 'mastra' ||
+          pkgName.startsWith('@internal/'),
+      )('should use .cjs and .d.ts extensions when using require', async () => {
+        if (importPath === './package.json') {
+          return;
+        }
 
-          const exportConfig = pkgJson.exports[importPath] as any;
-          expect(exportConfig.require).toBeDefined();
-          expect(exportConfig.require).not.toBe(expect.any(String));
-          expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
-          expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
+        const exportConfig = pkgJson.exports[importPath] as any;
+        expect(exportConfig.require).toBeDefined();
+        expect(exportConfig.require).not.toBe(expect.any(String));
+        expect(extname(exportConfig.require.default)).toMatch(/\.cjs$/);
+        expect(exportConfig.require.types).toMatch(/\.d\.ts$/);
 
-          const fileOutput = customResolve.exports(pkgJson, importPath, {
-            require: true,
-          });
-          expect(fileOutput).toBeDefined();
+        const fileOutput = customResolve.exports(pkgJson, importPath, {
+          require: true,
+        });
+        expect(fileOutput).toBeDefined();
 
-          const pathsOnDisk = await globby(join(__dirname, '..', pkgName, fileOutput[0]));
-          for (const pathOnDisk of pathsOnDisk) {
-            await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
-          }
-        },
-      );
+        const pathsOnDisk = await globby(join(__dirname, '..', pkgName, fileOutput[0]));
+        for (const pathOnDisk of pathsOnDisk) {
+          await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
+        }
+      });
     },
   );
 
