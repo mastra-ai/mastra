@@ -75,4 +75,5 @@ om-reflector-fixture.json
 !.mastracode/shared/
 !.mastracode/shared/pr-review-context.md
 !.mastracode/shared/issue-debug-context.md
+!.mastracode/CRITICAL_PATHS.md
 .tmp-mc-e2e-vitest/
