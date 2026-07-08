@@ -169,6 +169,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Code SDK',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-agent-controller',
+          label: 'mountAgentControllerOnMastra()',
+          customProps: { tags: ['beta'] },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Coding Agent',
       collapsed: true,
       items: [

@@ -47,7 +47,7 @@ jobs:
 
       - name: Publish packages to local registry storage
         working-directory: ./e2e-tests/_local-registry-setup
-        run: pnpm publish-ci-registry
+        run: pnpm run publish-ci-registry
         env:
           MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage

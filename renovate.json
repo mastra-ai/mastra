@@ -422,6 +422,11 @@
       "matchDepTypes": ["dependencies", "devDependencies"]
     },
     {
+      "description": "Disable @opencode-ai/plugin updates. Newer plugin versions pull effect@4.0.0-beta.83, which pnpm rejects as a trust downgrade under trustPolicy: no-downgrade. The plugin is exact-pinned to 1.14.48 (effect@4.0.0-beta.59) until upstream publishes a version that does not trigger ERR_PNPM_TRUST_DOWNGRADE.",
+      "matchPackageNames": ["@opencode-ai/plugin"],
+      "enabled": false
+    },
+    {
       "groupName": "OpenCode",
       "commitMessageTopic": "OpenCode",
       "matchFileNames": ["+(package.json)", "**/package.json"],
