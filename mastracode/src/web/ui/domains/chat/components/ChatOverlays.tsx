@@ -11,7 +11,10 @@ import { useAgentControllerModels } from '../hooks/useAgentControllerModels';
 import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
 import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import { useAgentControllerSettings } from '../hooks/useAgentControllerSettings';
-import { useSetAgentControllerStateMutation, useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
+import {
+  useSetAgentControllerStateMutation,
+  useSwitchAgentControllerModelMutation,
+} from '../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
@@ -37,7 +40,9 @@ export function ChatOverlays() {
 
   return (
     <>
-      {overlays.isOpen('palette') && activeProject && <CommandPalette onRun={runPaletteCommand} onClose={() => overlays.close('palette')} />}
+      {overlays.isOpen('palette') && activeProject && (
+        <CommandPalette onRun={runPaletteCommand} onClose={() => overlays.close('palette')} />
+      )}
 
       {overlays.isOpen('settings') && (
         <SettingsPanel
@@ -58,7 +63,9 @@ export function ChatOverlays() {
           }}
           permissions={permissionsQuery.data ?? null}
           pendingPermissionCategory={setPermissionForCategoryMutation.variables?.category ?? null}
-          setPermissionForCategory={(category, policy) => setPermissionForCategoryMutation.mutateAsync({ category, policy })}
+          setPermissionForCategory={(category, policy) =>
+            setPermissionForCategoryMutation.mutateAsync({ category, policy })
+          }
           onClose={() => overlays.close('settings')}
         />
       )}
@@ -66,7 +73,12 @@ export function ChatOverlays() {
       {overlays.isOpen('shortcuts') && <ShortcutsOverlay onClose={() => overlays.close('shortcuts')} />}
 
       {projectsOpen && (
-        <ProjectsModal projects={projects} activeProjectId={activeProject?.id ?? null} onSelectProject={project => void selectProject(project)} onClose={() => overlays.close('projects')} />
+        <ProjectsModal
+          projects={projects}
+          activeProjectId={activeProject?.id ?? null}
+          onSelectProject={project => void selectProject(project)}
+          onClose={() => overlays.close('projects')}
+        />
       )}
     </>
   );

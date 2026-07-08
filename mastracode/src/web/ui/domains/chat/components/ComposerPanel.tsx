@@ -29,7 +29,11 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
 
   return (
     <div className={composerPanelClass}>
-      <Composer variant={composerVariant} commandNameToApply={composerCommandName} onCommandApplied={clearComposerCommand} />
+      <Composer
+        variant={composerVariant}
+        commandNameToApply={composerCommandName}
+        onCommandApplied={clearComposerCommand}
+      />
 
       <StatusLine
         modelId={transcript.modelId}

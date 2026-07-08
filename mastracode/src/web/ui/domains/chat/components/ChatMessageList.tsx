@@ -12,8 +12,16 @@ import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatSessionApi } from '../context/ChatSessionProvider';
 import { useChatSession } from '../context/ChatSessionProvider';
-import { useClearAgentControllerGoalMutation, usePauseAgentControllerGoalMutation, useResumeAgentControllerGoalMutation, useSetAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
-import { useApproveAgentControllerToolMutation, useRespondAgentControllerSuspensionMutation } from '../hooks/useAgentControllerRunMutations';
+import {
+  useClearAgentControllerGoalMutation,
+  usePauseAgentControllerGoalMutation,
+  useResumeAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
+} from '../hooks/useAgentControllerGoalMutations';
+import {
+  useApproveAgentControllerToolMutation,
+  useRespondAgentControllerSuspensionMutation,
+} from '../hooks/useAgentControllerRunMutations';
 import { useTranscriptScroll } from '../hooks/useTranscriptScroll';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { GoalPanel } from './GoalPanel';
@@ -84,7 +92,9 @@ function ConnectionNotice({ status }: { status: ChatSessionApi['status'] }) {
   return (
     <div role="status" aria-live="polite" className="px-3 pt-2">
       <Notice variant={status === 'reconnecting' ? 'warning' : 'destructive'}>
-        {status === 'reconnecting' ? 'Connection lost — reconnecting…' : 'Disconnected. Check the server and reload to reconnect.'}
+        {status === 'reconnecting'
+          ? 'Connection lost — reconnecting…'
+          : 'Disconnected. Check the server and reload to reconnect.'}
       </Notice>
     </div>
   );
@@ -100,7 +110,15 @@ type TranscriptPanelProps = {
   onRespond: (toolCallId: string, data: string | string[] | PlanResume, id: string) => void;
 };
 
-function TranscriptPanel({ activeProject, transcript, showWorkingIndicator, messagesPending, threadRef, onApprove, onRespond }: TranscriptPanelProps) {
+function TranscriptPanel({
+  activeProject,
+  transcript,
+  showWorkingIndicator,
+  messagesPending,
+  threadRef,
+  onApprove,
+  onRespond,
+}: TranscriptPanelProps) {
   if (transcript.entries.length === 0 && messagesPending) {
     return (
       <div className={transcriptScrollClass} ref={threadRef}>
@@ -109,7 +127,8 @@ function TranscriptPanel({ activeProject, transcript, showWorkingIndicator, mess
     );
   }
 
-  const panelClassName = transcript.entries.length === 0 ? `${transcriptScrollClass} place-items-center` : transcriptScrollClass;
+  const panelClassName =
+    transcript.entries.length === 0 ? `${transcriptScrollClass} place-items-center` : transcriptScrollClass;
 
   return (
     <div className={panelClassName} ref={threadRef}>
@@ -157,7 +176,13 @@ function WorkingIndicator() {
 
 function ScrollToLatestButton({ onClick }: { onClick: () => void }) {
   return (
-    <Button variant="default" size="icon-sm" className="absolute bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full shadow-md" onClick={onClick} aria-label="Jump to latest message">
+    <Button
+      variant="default"
+      size="icon-sm"
+      className="absolute bottom-20 left-1/2 z-40 -translate-x-1/2 rounded-full shadow-md"
+      onClick={onClick}
+      aria-label="Jump to latest message"
+    >
       <ArrowDown size={18} />
     </Button>
   );

@@ -121,10 +121,7 @@ describe('agent-controller mutation hooks cache behavior', () => {
       http.post(`${sessionUrl}/threads`, async ({ request }) => {
         onCreateThread(await request.json());
         settings = { ...settings, yolo: true };
-        threads = [
-          { id: 'thread-two', title: 'New work', updatedAt: '2026-07-07T01:00:00.000Z' },
-          ...threads,
-        ];
+        threads = [{ id: 'thread-two', title: 'New work', updatedAt: '2026-07-07T01:00:00.000Z' }, ...threads];
         return HttpResponse.json(threads[0]);
       }),
     );
@@ -144,7 +141,9 @@ describe('agent-controller mutation hooks cache behavior', () => {
     });
     await waitForMutationsIdle(client);
 
-    await waitFor(() => expect(result.current.threadsQuery.data?.map(thread => thread.id)).toEqual(['thread-two', 'thread-one']));
+    await waitFor(() =>
+      expect(result.current.threadsQuery.data?.map(thread => thread.id)).toEqual(['thread-two', 'thread-one']),
+    );
     await waitFor(() => expect(result.current.settingsQuery.data?.yolo).toBe(true));
     expect(onReadThreads).toHaveBeenCalledTimes(2);
     expect(onReadState).toHaveBeenCalledTimes(2);

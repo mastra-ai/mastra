@@ -23,7 +23,12 @@ describe('agent-controller read hooks', () => {
         return HttpResponse.json({
           models: [
             { id: 'openai/gpt-4.1', label: 'GPT 4.1', provider: 'openai', hasApiKey: true },
-            { id: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4', provider: 'anthropic', hasApiKey: false },
+            {
+              id: 'anthropic/claude-sonnet-4-20250514',
+              label: 'Claude Sonnet 4',
+              provider: 'anthropic',
+              hasApiKey: false,
+            },
           ],
         });
       }),

@@ -120,9 +120,9 @@ describe('createVirtualDependencies', () => {
     expect(result.fileNameToDependencyMap.has('apps/mastra/.mastra/.build/@mastra__core__evals__scoreTraces')).toBe(
       false,
     );
-    expect(result.fileNameToDependencyMap.get('packages/core/node_modules/.cache/@mastra__core__evals__scoreTraces')).toBe(
-      '@mastra/core/evals/scoreTraces',
-    );
+    expect(
+      result.fileNameToDependencyMap.get('packages/core/node_modules/.cache/@mastra__core__evals__scoreTraces'),
+    ).toBe('@mastra/core/evals/scoreTraces');
     expect(result.optimizedDependencyEntries.get('@mastra/core/evals/scoreTraces')).toEqual({
       name: 'packages/core/node_modules/.cache/@mastra__core__evals__scoreTraces',
       virtual: "export { scoreTraces } from '@mastra/core/evals/scoreTraces';",
