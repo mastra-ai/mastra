@@ -36,7 +36,7 @@ const config: Config = {
       useCssCascadeLayers: false,
       removeLegacyPostBuildHeadAttribute: true,
     },
-    experimental_faster: true,
+    faster: true,
   },
   // Custom fields for HubSpot and Analytics
   customFields: {
