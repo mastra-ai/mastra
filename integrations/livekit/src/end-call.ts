@@ -68,11 +68,17 @@ export function createEndCallTool(options: EndCallToolOptions = {}) {
     }),
     outputSchema: z.object({ ended: z.boolean() }),
     execute: async ({ reason }, { agent }) => {
-      await options.onEndCall?.({
-        reason: reason ?? undefined,
-        resourceId: agent?.resourceId,
-        threadId: agent?.threadId,
-      });
+      try {
+        await options.onEndCall?.({
+          reason: reason ?? undefined,
+          resourceId: agent?.resourceId,
+          threadId: agent?.threadId,
+        });
+      } catch (error) {
+        // Bookkeeping is best-effort — the tool must still signal `{ ended: true }` so the worker's
+        // end-call detector runs and the call actually hangs up.
+        console.warn('@mastra/livekit: onEndCall hook threw', error);
+      }
       return { ended: true as const };
     },
   });

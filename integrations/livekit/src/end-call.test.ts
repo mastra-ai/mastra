@@ -32,6 +32,15 @@ describe('createEndCallTool', () => {
     await expect(tool.execute!({ reason: 'done' }, ctx({ resourceId: 'r' }))).resolves.toEqual({ ended: true });
   });
 
+  it('still returns { ended: true } when onEndCall throws', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onEndCall = vi.fn().mockRejectedValue(new Error('bookkeeping backend down'));
+    const tool = createEndCallTool({ onEndCall });
+    await expect(tool.execute!({ reason: 'done' }, ctx({ resourceId: 'r' }))).resolves.toEqual({ ended: true });
+    expect(consoleWarn).toHaveBeenCalledWith('@mastra/livekit: onEndCall hook threw', expect.any(Error));
+    consoleWarn.mockRestore();
+  });
+
   it('defaults the tool id to endCall and allows an override', () => {
     expect(createEndCallTool().id).toBe('endCall');
     expect(createEndCallTool({ id: 'hangUp' }).id).toBe('hangUp');
