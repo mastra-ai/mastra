@@ -2,6 +2,7 @@
 title: "Message history | Memory"
 description: "Learn how to configure message history in Mastra to store recent messages from the current conversation."
 packages:
+  - "@mastra/core"
   - "@mastra/memory"
   - "@mastra/libsql"
   - "@mastra/ai-sdk"
@@ -14,7 +15,7 @@ Message history is the most basic and important form of memory. It gives the LLM
 You can also retrieve message history to display past conversations in your UI.
 
 :::info
-Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](/docs/memory/storage#threads-and-resources) for more detail.
+Each message belongs to a thread (the conversation) and a resource (the user or entity it's associated with). See [Threads and resources](#threads-and-resources) for more detail.
 :::
 
 :::warning
@@ -25,9 +26,18 @@ Sending the full history is redundant because Mastra loads messages from storage
 For an AI SDK example, see [Using Mastra Memory](/guides/build-your-ui/ai-sdk-ui#using-mastra-memory).
 :::
 
+## Threads and resources
+
+Mastra organizes conversations using two identifiers:
+
+- **Thread**: A conversation session containing a sequence of messages.
+- **Resource**: The entity that owns the thread, such as a user, organization, project, or another domain entity in your application.
+
+Studio automatically generates a thread and resource ID for you. When calling `stream()` or `generate()` yourself, provide these identifiers explicitly.
+
 ## Getting started
 
-Install the Mastra memory module along with a [storage adapter](/docs/memory/storage#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
+Install the Mastra memory module along with a [storage adapter](/docs/storage/overview#supported-providers) for your database. The examples below use `@mastra/libsql`, which stores data locally in a `mastra.db` file.
 
 ```bash npm2yarn
 npm install @mastra/memory@latest @mastra/libsql@latest
@@ -113,6 +123,51 @@ You can use this history in two ways:
 When memory is enabled, [Studio](/docs/studio/overview) uses message history to display past conversations in the chat sidebar.
 
 :::
+
+## Thread title generation
+
+Mastra can automatically generate descriptive thread titles based on the user's first message when `generateTitle` is enabled. Use this option when you build a chat interface that renders conversation titles in a thread list or sidebar.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer customer support questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    options: {
+      generateTitle: true,
+    },
+  }),
+})
+```
+
+Title generation runs asynchronously after the agent responds and doesn't affect response time.
+
+To optimize cost or behavior, provide a smaller [`model`](/models) and custom `instructions`:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Answer customer support questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    options: {
+      generateTitle: {
+        model: '__GATEWAY_OPENAI_MODEL_MINI__',
+        instructions: 'Generate a one-word title.',
+      },
+    },
+  }),
+})
+```
 
 ## Accessing memory
 

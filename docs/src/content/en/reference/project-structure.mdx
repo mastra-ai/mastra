@@ -1,6 +1,8 @@
 ---
 title: "Project structure | Getting Started"
 description: Guide on organizing folders and files in Mastra, including best practices and recommended structures.
+packages:
+  - "@mastra/core"
 ---
 
 # Project structure
@@ -45,7 +47,7 @@ Mastra recommends organizing your code into the following folders:
 | `src/mastra/mcp` | Implement custom MCP servers to share your tools with external agents |
 | `src/mastra/scorers` | Define scorers for evaluating agent performance over time |
 
-There are two special folder conventions in Mastra:
+Mastra has two special folder conventions:
 
 - `src/mastra/agents/<name>`: You can define an agent by file convention instead of constructing it in code. Learn more in the [file-based agents](/docs/agents/file-based-agents) guide.
 - `src/mastra/public`: Contents are copied into the `.build/output` directory during the build process, making them available for serving at runtime.
@@ -60,10 +62,3 @@ Top-level files define how your Mastra project is configured, built, and connect
 | `.env.example` | Template for environment variables - copy and rename to `.env` to add your secret [model provider](/models) keys. |
 | `package.json` | Defines project metadata, dependencies, and available npm scripts. |
 | `tsconfig.json` | Configures TypeScript options such as path aliases, compiler settings, and build output. |
-
-## Next steps
-
-- Read more about [Mastra's features](/docs#what-you-can-build).
-- Integrate Mastra with your frontend framework: [Next.js](/guides/getting-started/next-js), [React](/guides/getting-started/vite-react), or [Astro](/guides/getting-started/astro).
-- Build an agent from scratch following one of our [guides](/guides).
-- Watch conceptual guides on our [YouTube channel](https://www.youtube.com/@mastra-ai) and [subscribe](https://www.youtube.com/@mastra-ai?sub_confirmation=1)!
