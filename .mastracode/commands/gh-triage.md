@@ -39,18 +39,21 @@ Use one GitHub comment for the lifecycle. Update the same comment across phases.
 **Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Critical-path owner review|Continue to Approve|Await final approval|Other>
 
 **Triage:**
+
 - Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
 - Maintainer read: <brief user-visible problem/goal and why this route was chosen>
 - Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Critical-path owner review|Other>
 - Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
 
 **Review:**
+
 - Status: <not started|in progress|complete>
 - Findings: <brief implementation/root-cause/check-risk summary, or `Not reviewed yet.`>
 - Confidence: <Pending Review|1/5|2/5|3/5|4/5|5/5> — <use only these exact values; no text labels>
 - Follow-up: <author/maintainer follow-up needed, or `None yet.`>
 
 **Approve:**
+
 - Status: <not started|waiting for final approval|approved|not approved>
 - Final approver: <@person or @org/team, or `Not identified yet.`>
 - Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
