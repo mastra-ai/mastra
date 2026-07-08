@@ -48,9 +48,20 @@ export function ChatConnectionGate({ children, resourceId, projectPath, sessionE
     return connection.status === 'error' ? <ConnectionErrorState /> : <ConnectionLoadingState />;
   }
 
+  const initialThreadId = eventHandlerRef.current
+    ? connection.state.threadId
+    : (connection.createdThreadId ?? connection.state.threadId);
+  const runtimeKey = [
+    'connected',
+    connection.stateUpdatedAt,
+    connection.state.threadId ?? '',
+    connection.state.modeId ?? '',
+    connection.state.modelId ?? '',
+  ].join(':');
+
   return (
     <ChatSessionRuntime
-      key="connected"
+      key={runtimeKey}
       resourceId={resourceId}
       sessionEnabled={sessionEnabled}
       status={connection.status}
@@ -58,7 +69,7 @@ export function ChatConnectionGate({ children, resourceId, projectPath, sessionE
       eventHandlerRef={eventHandlerRef}
       state={connection.state}
       stateUpdatedAt={connection.stateUpdatedAt}
-      createdThreadId={connection.createdThreadId}
+      initialThreadId={initialThreadId}
     >
       {children}
     </ChatSessionRuntime>

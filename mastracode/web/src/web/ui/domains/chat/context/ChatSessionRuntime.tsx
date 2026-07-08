@@ -1,5 +1,5 @@
 import type { AgentControllerEvent, AgentControllerMessage } from '@mastra/client-js';
-import { useState } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 import type { ReactNode, RefObject } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
@@ -26,7 +26,7 @@ interface ChatSessionRuntimeProps {
   eventHandlerRef: RefObject<((event: AgentControllerEvent) => void) | null>;
   state?: SessionStateSnapshot;
   stateUpdatedAt?: number;
-  createdThreadId?: string;
+  initialThreadId?: string;
 }
 
 export function ChatSessionRuntime({
@@ -38,7 +38,7 @@ export function ChatSessionRuntime({
   eventHandlerRef,
   state,
   stateUpdatedAt,
-  createdThreadId,
+  initialThreadId,
 }: ChatSessionRuntimeProps) {
   const { baseUrl } = useApiConfig();
   const {
@@ -56,40 +56,10 @@ export function ChatSessionRuntime({
     // First sync: the gate only mounts the connected runtime once session
     // state exists, so the reducer initializes from it directly — preferring
     // the freshly created thread over whatever the server was last on.
-    state ? { state, threadId: createdThreadId ?? state.threadId } : undefined,
+    state ? { state, threadId: initialThreadId ?? state.threadId } : undefined,
   );
 
   eventHandlerRef.current = onEvent;
-
-  // Subsequent syncs (poll refresh, reconnect after an SSE drop): adjust
-  // state during render instead of in an effect. React re-renders with the
-  // reset transcript before committing, so no stale frame is ever painted.
-  const [prevStateUpdatedAt, setPrevStateUpdatedAt] = useState(stateUpdatedAt);
-  if (stateUpdatedAt !== prevStateUpdatedAt) {
-    setPrevStateUpdatedAt(stateUpdatedAt);
-    if (state && stateUpdatedAt) reset(state, state.threadId);
-  }
-
-  // Thread history for the transcript's current thread. `syncEpoch` in the
-  // query key makes every re-sync fetch fresh history (replacing the old
-  // imperative queryClient eviction).
-  const messagesQuery = useAgentControllerThreadMessages({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    threadId: transcript.threadId,
-    baseUrl,
-    enabled: sessionEnabled,
-    syncEpoch: stateUpdatedAt,
-  });
-
-  // Fold fetched history into the transcript at render time. The reducer's
-  // hydrateMessages action is guarded (once per thread, empty idle transcript
-  // only), so this dispatch is idempotent.
-  const [prevMessages, setPrevMessages] = useState<AgentControllerMessage[] | undefined>(undefined);
-  if (messagesQuery.data !== prevMessages) {
-    setPrevMessages(messagesQuery.data);
-    hydrateMessages(messagesQuery.data);
-  }
 
   const { busy, showWorkingIndicator } = deriveRunIndicators(transcript);
 
@@ -110,9 +80,54 @@ export function ChatSessionRuntime({
 
   return (
     <ChatSessionContext.Provider value={value}>
-      <ChatThreadMessagesProvider messagesPending={Boolean(transcript.threadId) && messagesQuery.isPending}>
+      <ThreadMessagesHydrator
+        resourceId={resourceId}
+        sessionEnabled={sessionEnabled}
+        threadId={transcript.threadId}
+        baseUrl={baseUrl}
+        syncEpoch={stateUpdatedAt}
+        onMessages={hydrateMessages}
+      >
         {children}
-      </ChatThreadMessagesProvider>
+      </ThreadMessagesHydrator>
     </ChatSessionContext.Provider>
+  );
+}
+
+function ThreadMessagesHydrator({
+  children,
+  resourceId,
+  sessionEnabled,
+  threadId,
+  baseUrl,
+  syncEpoch,
+  onMessages,
+}: {
+  children: ReactNode;
+  resourceId: string;
+  sessionEnabled: boolean;
+  threadId?: string;
+  baseUrl?: string;
+  syncEpoch?: number;
+  onMessages: (messages?: AgentControllerMessage[]) => void;
+}) {
+  const messagesQuery = useAgentControllerThreadMessages({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    threadId,
+    baseUrl,
+    enabled: sessionEnabled,
+    syncEpoch,
+  });
+  const handleMessages = useEffectEvent(onMessages);
+
+  useEffect(() => {
+    handleMessages(messagesQuery.data);
+  }, [messagesQuery.data]);
+
+  return (
+    <ChatThreadMessagesProvider messagesPending={Boolean(threadId) && messagesQuery.isPending}>
+      {children}
+    </ChatThreadMessagesProvider>
   );
 }
