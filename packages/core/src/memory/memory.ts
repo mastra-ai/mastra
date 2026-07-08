@@ -916,33 +916,38 @@ https://mastra.ai/en/docs/memory/overview`,
       }
     }
 
+    // Message persistence (save) is registered independent of `lastMessages`.
+    // `lastMessages` gates recall on the input side only (see getInputProcessors);
+    // saving is on by default and is disabled via `readOnly` (checked at execution
+    // in MessageHistory.processOutputResult), matching the documented semantics:
+    // "To prevent saving new messages, use the readOnly option instead."
+    // This lets `lastMessages: false` act as a write-only memory — no recalled
+    // history is injected into the prompt, but each turn is still persisted.
     const lastMessages = effectiveConfig.lastMessages;
-    if (lastMessages) {
-      if (!memoryStore)
-        throw new MastraError({
-          category: 'USER',
-          domain: ErrorDomain.STORAGE,
-          id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
-          text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
-        });
+    if (!memoryStore)
+      throw new MastraError({
+        category: 'USER',
+        domain: ErrorDomain.STORAGE,
+        id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
+        text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
+      });
 
-      // Check if user already manually added MessageHistory
-      const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
+    // Check if user already manually added MessageHistory
+    const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');
 
-      // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
-      const hasObservationalMemory =
-        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
-        isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+    // Check if ObservationalMemory is present (via processor or config) - it handles its own message saving
+    const hasObservationalMemory =
+      configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'observational-memory') ||
+      isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
 
-      // Skip MessageHistory output processor if ObservationalMemory handles message saving
-      if (!hasMessageHistory && !hasObservationalMemory) {
-        processors.push(
-          new MessageHistory({
-            storage: memoryStore,
-            lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
-          }),
-        );
-      }
+    // Skip MessageHistory output processor if ObservationalMemory handles message saving
+    if (!hasMessageHistory && !hasObservationalMemory) {
+      processors.push(
+        new MessageHistory({
+          storage: memoryStore,
+          lastMessages: typeof lastMessages === 'number' ? lastMessages : undefined,
+        }),
+      );
     }
 
     // Return only the auto-generated processors (not the configured ones)
