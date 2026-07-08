@@ -11,8 +11,8 @@
   "license": "Apache-2.0",
   "description": "",
   "dependencies": {
-    "@mastra/client-js": "^1.26.0",
-    "@mastra/mcp": "^1.11.0",
+    "@mastra/client-js": "^1.31.0",
+    "@mastra/mcp": "^1.13.1",
     "hono": "^4.12.14",
     "octokit": "^5.0.5"
   },

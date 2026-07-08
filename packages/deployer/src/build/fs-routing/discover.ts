@@ -30,6 +30,10 @@ export interface DiscoveredFsAgent {
   workspaceSeedDir?: string;
   /** Tools discovered under `tools/`, in stable (sorted) order. */
   tools: { key: string; path: string }[];
+  /** Input processors discovered under `processors/input/`, in stable (sorted) order. */
+  inputProcessors: { key: string; path: string }[];
+  /** Output processors discovered under `processors/output/`, in stable (sorted) order. */
+  outputProcessors: { key: string; path: string }[];
   /** Skills discovered under `skills/`, in stable (sorted) order. */
   skills: DiscoveredFsSkill[];
   /**
@@ -158,6 +162,43 @@ async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools
   }
 
   return tools;
+}
+
+async function discoverProcessors(
+  processorsDir: string,
+): Promise<{ input: { key: string; path: string }[]; output: { key: string; path: string }[] }> {
+  const result = { input: [] as { key: string; path: string }[], output: [] as { key: string; path: string }[] };
+
+  for (const type of ['input', 'output'] as const) {
+    const typeDir = join(processorsDir, type);
+    if (!(await exists(typeDir))) {
+      continue;
+    }
+
+    let entries: string[];
+    try {
+      entries = await readdir(typeDir);
+    } catch {
+      continue;
+    }
+
+    for (const basename of entries.sort()) {
+      if (isTestFile(basename)) {
+        continue;
+      }
+      if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
+        continue;
+      }
+      const path = join(typeDir, basename);
+      const stats = await lstat(path);
+      if (stats.isSymbolicLink() || stats.isDirectory()) {
+        continue;
+      }
+      result[type].push({ key: toolKey(basename), path: slash(path) });
+    }
+  }
+
+  return result;
 }
 
 async function readReferences(referencesDir: string): Promise<Record<string, string>> {
@@ -295,6 +336,7 @@ async function discoverAgentDir(
   const memoryPath = await firstExisting(dir, MEMORY_BASENAMES);
   const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
   const tools = await discoverTools(join(dir, 'tools'));
+  const processors = await discoverProcessors(join(dir, 'processors'));
   const skills = await discoverSkills(join(dir, 'skills'));
   const subagents = await discoverSubagents(dir, depth, onWarn);
 
@@ -307,6 +349,8 @@ async function discoverAgentDir(
     memoryPath,
     workspaceSeedDir,
     tools,
+    inputProcessors: processors.input,
+    outputProcessors: processors.output,
     skills,
     subagents,
   };

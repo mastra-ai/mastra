@@ -57,7 +57,10 @@ export interface ServiceAreaResult {
 }
 
 /** Service-area validation: is this zip one the tenant covers? */
-export async function checkServiceArea(zip: string, workspaceId: string = DEFAULT_WORKSPACE.id): Promise<ServiceAreaResult> {
+export async function checkServiceArea(
+  zip: string,
+  workspaceId: string = DEFAULT_WORKSPACE.id,
+): Promise<ServiceAreaResult> {
   await simulateBackendLatency();
   const workspace = WORKSPACES.find(w => w.id === workspaceId) ?? DEFAULT_WORKSPACE;
   const normalized = normalizeZip(zip);
