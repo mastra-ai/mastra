@@ -1597,6 +1597,15 @@ export class DurableAgent<
       ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
       : undefined;
 
+    // Re-wire background-task state so the recovered segment can wait for
+    // pre-crash tasks (via `bg-task-check`), dispatch new background tool
+    // calls (via `tool-call`), and inject the background-task system prompt
+    // (via `llm-execution`). The manager is storage-backed, so in-flight
+    // tasks spawned before the crash are still discoverable via
+    // `bgManager.listTasks(...)`.
+    const backgroundTasksConfig = this.getBackgroundTasksConfig?.();
+    const backgroundTaskManager = this.#mastra?.backgroundTaskManager;
+
     // 5. Re-open an AGENT_RUN span for the recovered segment. Follow the same
     //    pattern as resume(): reuse the original traceId when possible so the
     //    recovered run stays linked to the original agent trace.
@@ -1660,6 +1669,8 @@ export class DurableAgent<
       agentSpan: recoverAgentSpan,
       abortController,
       abortSignal: abortController.signal,
+      backgroundTaskManager,
+      backgroundTasksConfig,
       cleanup: () => {},
     };
 

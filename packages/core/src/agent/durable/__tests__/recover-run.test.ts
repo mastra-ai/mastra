@@ -213,6 +213,39 @@ describe('DurableAgent.recover(runId)', () => {
     await expect(agent.recover('foreign-run')).rejects.toThrow(/does not contain a durable-agent workflow input/i);
   });
 
+  it('rehydrates the registry with backgroundTaskManager + backgroundTasksConfig so bg-task-check / tool-call / llm-execution steps can still see background state after recovery', async () => {
+    const agentId = 'bg-recover-agent';
+    const baseAgent = new Agent({
+      id: agentId,
+      name: agentId,
+      instructions: 'x',
+      model: makeMockModel(),
+      backgroundTasks: { tools: { research: true } },
+    });
+    const bgStore = new InMemoryStore();
+    const bgAgent = createDurableAgent({ agent: baseAgent });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { [agentId]: bgAgent as any },
+      storage: bgStore,
+      backgroundTasks: { enabled: true },
+    });
+
+    await seed(bgStore, 'run-bg', 'running', agentId);
+    stubWorkflow(bgAgent as any, 'success');
+
+    const { cleanup } = await (bgAgent as any).recover('run-bg');
+
+    const entry = globalRunRegistry.get('run-bg');
+    expect(entry?.backgroundTaskManager).toBeDefined();
+    expect(entry?.backgroundTaskManager).toBe(mastra.backgroundTaskManager);
+    expect(entry?.backgroundTasksConfig).toEqual(baseAgent.getBackgroundTasksConfig());
+
+    await entry?.workflowExecution;
+    cleanup();
+    await mastra.backgroundTaskManager?.shutdown();
+  });
+
   it('reports workflow execution failure via the pubsub error stream', async () => {
     await seed(store, 'run-fail', 'running', 'agent-A');
     const deleteWorkflowRunById = vi.fn(async () => {});
