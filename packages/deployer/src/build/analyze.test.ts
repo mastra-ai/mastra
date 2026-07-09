@@ -543,3 +543,211 @@ describe('Software Factory project type detection', () => {
     expect(result.projectType).toBeUndefined();
   });
 });
+
+describe('externalized packages and the validation pass (issues #18626, #16626)', () => {
+  /**
+   * Builds a workspace whose entry imports a bundled workspace package, which in turn imports
+   * an externalizable dependency that is executed at module-evaluation time.
+   *
+   * `dependencySource` decides whether that dependency is hostile (throws while loading, like an
+   * old CommonJS module touching an API removed in a newer Node) or perfectly healthy.
+   */
+  async function setupWorkspaceWithLoadTimeDependency(
+    prefix: string,
+    { dependencySource, consumerSource }: { dependencySource: string; consumerSource: string },
+  ) {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, prefix));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const dependencyDir = join(workspacePackageDir, 'node_modules', 'load-time-dependency');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(dependencyDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: { 'load-time-dependency': '1.0.0' },
+      }),
+    );
+    await writeFile(
+      join(dependencyDir, 'package.json'),
+      JSON.stringify({ name: 'load-time-dependency', version: '1.0.0', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(dependencyDir, 'index.js'), dependencySource);
+    await writeFile(join(workspacePackageDir, 'src', 'index.js'), consumerSource);
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { workspaceValue } from '@internal/workspace-package';\nexport const value = workspaceValue;\n`,
+    );
+
+    return { entryFile, outputDir, projectRoot: appDir, tempDir };
+  }
+
+  // Throws a TypeError while loading, the way `buffer-equal-constant-time` does on Node 26 when
+  // it reads `buffer.SlowBuffer.prototype` and `SlowBuffer` is gone.
+  const throwsOnLoad = `const removedApi = undefined;\nexport const value = removedApi.prototype;\n`;
+  const importsValue = `import { value } from 'load-time-dependency';\nexport const workspaceValue = value;\n`;
+
+  // A perfectly ordinary package that is *used* at module-evaluation time — `dotenv.config()`,
+  // `Sentry.init()`, a top-level client construction. Stubbing this one out breaks the build.
+  const healthyOnLoad = `export function init() {\n  return 'ok';\n}\nexport default { init };\n`;
+  const callsInit = `import ext from 'load-time-dependency';\nexport const workspaceValue = ext.init();\n`;
+
+  async function build(
+    { entryFile, outputDir, projectRoot, tempDir }: Awaited<ReturnType<typeof setupWorkspaceWithLoadTimeDependency>>,
+    externals: boolean | string[],
+  ) {
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      return await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot,
+          platform: 'node',
+          bundlerOptions: { externals, enableSourcemap: false },
+        },
+        noopLogger,
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }
+
+  it('fails the build when a dependency that throws while loading is not externalized', async () => {
+    const workspace = await setupWorkspaceWithLoadTimeDependency('mastra-externals-throw-repro-', {
+      dependencySource: throwsOnLoad,
+      consumerSource: importsValue,
+    });
+
+    await expect(build(workspace, [])).rejects.toThrow(/load-time-dependency/);
+  }, 20000);
+
+  it('builds when a dependency that throws while loading is listed in bundler.externals', async () => {
+    const workspace = await setupWorkspaceWithLoadTimeDependency('mastra-externals-throw-array-', {
+      dependencySource: throwsOnLoad,
+      consumerSource: importsValue,
+    });
+
+    await expect(build(workspace, ['load-time-dependency'])).resolves.toBeDefined();
+  }, 20000);
+
+  it('builds when a dependency that throws while loading is covered by externals: true', async () => {
+    const workspace = await setupWorkspaceWithLoadTimeDependency('mastra-externals-throw-preset-', {
+      dependencySource: throwsOnLoad,
+      consumerSource: importsValue,
+    });
+
+    await expect(build(workspace, true)).resolves.toBeDefined();
+  }, 20000);
+
+  it('still builds when a healthy externalized package is used at module-evaluation time', async () => {
+    const workspace = await setupWorkspaceWithLoadTimeDependency('mastra-externals-healthy-array-', {
+      dependencySource: healthyOnLoad,
+      consumerSource: callsInit,
+    });
+
+    await expect(build(workspace, ['load-time-dependency'])).resolves.toBeDefined();
+  }, 20000);
+
+  it('still builds when a healthy package used at module-evaluation time is covered by externals: true', async () => {
+    const workspace = await setupWorkspaceWithLoadTimeDependency('mastra-externals-healthy-preset-', {
+      dependencySource: healthyOnLoad,
+      consumerSource: callsInit,
+    });
+
+    await expect(build(workspace, true)).resolves.toBeDefined();
+  }, 20000);
+
+  /**
+   * The real shape of #18626: the package the user externalizes is the one they depend on
+   * (`jsonwebtoken`), while the package that actually throws is buried under it
+   * (`jsonwebtoken -> jws -> jwa -> buffer-equal-constant-time`). The thrower is the only package
+   * in the stack, so blame has to travel up the nested `node_modules` path to reach the external.
+   */
+  async function setupWorkspaceWithThrowingTransitiveDependency(prefix: string) {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, prefix));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const workspacePackageDir = join(tempDir, 'packages', 'workspace-package');
+    const rootDependencyDir = join(workspacePackageDir, 'node_modules', 'external-root');
+    const throwingDependencyDir = join(rootDependencyDir, 'node_modules', 'buried-thrower');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await mkdir(join(appDir, 'node_modules', '@internal'), { recursive: true });
+    await mkdir(throwingDependencyDir, { recursive: true });
+    await mkdir(join(workspacePackageDir, 'src'), { recursive: true });
+
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(
+      join(workspacePackageDir, 'package.json'),
+      JSON.stringify({
+        name: '@internal/workspace-package',
+        version: '1.0.0',
+        type: 'module',
+        main: './src/index.js',
+        dependencies: { 'external-root': '1.0.0' },
+      }),
+    );
+    await writeFile(
+      join(rootDependencyDir, 'package.json'),
+      JSON.stringify({
+        name: 'external-root',
+        version: '1.0.0',
+        type: 'module',
+        main: './index.js',
+        dependencies: { 'buried-thrower': '1.0.0' },
+      }),
+    );
+    await writeFile(
+      join(throwingDependencyDir, 'package.json'),
+      JSON.stringify({ name: 'buried-thrower', version: '1.0.0', type: 'module', main: './index.js' }),
+    );
+    await writeFile(join(throwingDependencyDir, 'index.js'), throwsOnLoad);
+    await writeFile(
+      join(rootDependencyDir, 'index.js'),
+      `import { value } from 'buried-thrower';\nexport const rootValue = value;\n`,
+    );
+    await writeFile(
+      join(workspacePackageDir, 'src', 'index.js'),
+      `import { rootValue } from 'external-root';\nexport const workspaceValue = rootValue;\n`,
+    );
+    await symlink(workspacePackageDir, join(appDir, 'node_modules', '@internal', 'workspace-package'));
+    await writeFile(
+      entryFile,
+      `import { workspaceValue } from '@internal/workspace-package';\nexport const value = workspaceValue;\n`,
+    );
+
+    return { entryFile, outputDir, projectRoot: appDir, tempDir };
+  }
+
+  it('builds when the externalized package is the parent of the one that throws', async () => {
+    const workspace = await setupWorkspaceWithThrowingTransitiveDependency('mastra-externals-transitive-array-');
+
+    await expect(build(workspace, ['external-root'])).resolves.toBeDefined();
+  }, 20000);
+});
