@@ -1,0 +1,9 @@
+{
+  "plugins": [
+    {
+      "id": "slack",
+      "name": "Slack",
+      "entry": "src/index.ts"
+    }
+  ]
+}
