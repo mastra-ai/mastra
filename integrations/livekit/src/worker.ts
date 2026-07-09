@@ -424,6 +424,11 @@ export interface GreetingConfiguration {
    * milliseconds have elapsed since the last disclosure, the next turn's reply is prefixed with a
    * short reminder — spoken at the turn boundary, never mid-turn. Omit (or `0`) to disable. Example:
    * `repeatEvery: 3 * 60_000` re-discloses roughly every three minutes.
+   *
+   * CAVEAT: don't combine with `turnHandling.preemptiveGeneration`. The reminder clock resets when
+   * the reminder is threaded into a reply stream; a speculative reply that gets discarded still
+   * consumes the interval, so the next real turn can miss its re-disclosure. (Preemptive
+   * generation is off by default and already incompatible with memory on this path.)
    */
   repeatEvery?: number;
   /** The short reminder spoken on each re-disclosure. Defaults to a generic AI-assistant reminder. */
@@ -656,7 +661,8 @@ export function waitForAgentDoneSpeaking(
  * the whole point of the sequence. `ctx.deleteRoom()` hangs up the caller (SIP-safe); `ctx.shutdown()`
  * ends the job and runs the registered shutdown callbacks (`onCallEnd`), so end-of-call work happens
  * exactly as it does on a caller hang-up. Both run in a `finally` so a hiccup while waiting still ends
- * the call. Exported for unit testing.
+ * the call. Never rejects — every step is guarded and failures are logged, so callers can safely
+ * fire-and-forget it (`void runEndCall(...)`) from hooks. Exported for unit testing.
  */
 export async function runEndCall(
   session: Pick<voice.AgentSession, 'agentState' | 'on' | 'off' | 'say'>,

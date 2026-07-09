@@ -497,6 +497,10 @@ export class MastraVoiceAgent extends voice.Agent {
     // the reminder. Done at the turn boundary (never mid-turn), riding the same stream so barge-in
     // cancellation still propagates to the underlying generation. The clock only resets once the
     // reminder is actually threaded into the outgoing reply below, not just because it was due.
+    // KNOWN LIMIT: "threaded into the reply" is stream-build time, not playout. Under LiveKit's
+    // preemptive generation a discarded speculative reply still resets the clock, so the next real
+    // turn can miss its reminder — hence the documented repeatEvery/preemptiveGeneration
+    // incompatibility. A playout-accurate reset needs a confirmed-turn signal llmNode doesn't have.
     const reminder = this.reminder?.due();
     if (!reminder) return reply;
     this.reminder?.markDelivered();
