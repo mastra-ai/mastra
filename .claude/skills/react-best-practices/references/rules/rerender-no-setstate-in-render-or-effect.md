@@ -61,28 +61,14 @@ function ProductPage({ productId }: { productId: string }) {
 function ProductSelectionBoundary({ productId }: { productId: string }) {
   const [selectedTab, setSelectedTab] = useState<ProductTab>('overview');
 
-  return (
-    <ProductDetails
-      productId={productId}
-      selectedTab={selectedTab}
-      onSelectedTabChange={setSelectedTab}
-    />
-  );
+  return <ProductDetails productId={productId} selectedTab={selectedTab} onSelectedTabChange={setSelectedTab} />;
 }
 
-function ProductDetails({
-  productId,
-  selectedTab,
-  onSelectedTabChange,
-}: ProductDetailsProps) {
+function ProductDetails({ productId, selectedTab, onSelectedTabChange }: ProductDetailsProps) {
   const visibleSections = getVisibleSections(productId, selectedTab);
 
   return (
-    <ProductSections
-      sections={visibleSections}
-      selectedTab={selectedTab}
-      onSelectedTabChange={onSelectedTabChange}
-    />
+    <ProductSections sections={visibleSections} selectedTab={selectedTab} onSelectedTabChange={onSelectedTabChange} />
   );
 }
 ```

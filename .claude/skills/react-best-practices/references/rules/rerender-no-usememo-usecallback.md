@@ -13,10 +13,7 @@ Agents must not introduce `useMemo` or `useCallback`. Memoization is an optimiza
 
 ```tsx
 function ProductList({ products, query }: ProductListProps) {
-  const visibleProducts = useMemo(
-    () => products.filter(product => product.name.includes(query)),
-    [products, query],
-  );
+  const visibleProducts = useMemo(() => products.filter(product => product.name.includes(query)), [products, query]);
 
   const handleSelect = useCallback((product: Product) => {
     trackSelection(product.id);
