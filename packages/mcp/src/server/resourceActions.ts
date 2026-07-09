@@ -1,11 +1,11 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerResourceActionsDependencies {
   getSubscriptions: () => Set<string>;
   getLogger: () => IMastraLogger;
-  getSdkServer: () => Server;
+  getSdkServers: () => Server[];
 }
 
 /**
@@ -13,11 +13,16 @@ interface ServerResourceActionsDependencies {
  *
  * This class provides methods for MCP servers to notify connected clients when
  * resources are updated or when the resource list changes.
+ *
+ * Notifications are broadcast to every active server instance (the main
+ * stdio/SSE instance plus each streamable HTTP session). Clients connected in
+ * stateless/serverless mode cannot receive notifications because each request
+ * uses a transient server instance.
  */
 export class ServerResourceActions {
   private readonly getSubscriptions: () => Set<string>;
   private readonly getLogger: () => IMastraLogger;
-  private readonly getSdkServer: () => Server;
+  private readonly getSdkServers: () => Server[];
 
   /**
    * @internal
@@ -25,7 +30,7 @@ export class ServerResourceActions {
   constructor(dependencies: ServerResourceActionsDependencies) {
     this.getSubscriptions = dependencies.getSubscriptions;
     this.getLogger = dependencies.getLogger;
-    this.getSdkServer = dependencies.getSdkServer;
+    this.getSdkServers = dependencies.getSdkServers;
   }
 
   /**
@@ -36,7 +41,7 @@ export class ServerResourceActions {
    *
    * @param params - Notification parameters
    * @param params.uri - URI of the resource that was updated
-   * @throws {MastraError} If sending the notification fails
+   * @throws {MastraError} If sending the notification fails on all server instances
    *
    * @example
    * ```typescript
@@ -47,27 +52,14 @@ export class ServerResourceActions {
   public async notifyUpdated({ uri }: { uri: string }): Promise<void> {
     if (this.getSubscriptions().has(uri)) {
       this.getLogger().info(`Sending notifications/resources/updated for externally notified resource: ${uri}`);
-      try {
-        await this.getSdkServer().sendResourceUpdated({ uri });
-      } catch (error) {
-        const mastraError = new MastraError(
-          {
-            id: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
-            domain: ErrorDomain.MCP,
-            category: ErrorCategory.THIRD_PARTY,
-            text: 'Failed to send resource updated notification',
-            details: {
-              uri,
-            },
-          },
-          error,
-        );
-        this.getLogger().trackException(mastraError);
-        this.getLogger().error('Failed to send resource updated notification:', {
-          error: mastraError.toString(),
-        });
-        throw mastraError;
-      }
+      await broadcastNotification({
+        servers: this.getSdkServers(),
+        send: server => server.sendResourceUpdated({ uri }),
+        logger: this.getLogger(),
+        errorId: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
+        errorText: 'Failed to send resource updated notification',
+        errorDetails: { uri },
+      });
     } else {
       this.getLogger().debug(`Resource ${uri} was updated, but no active subscriptions for it.`);
     }
@@ -80,7 +72,7 @@ export class ServerResourceActions {
    * them to re-fetch the resource list. Resource lists and templates are always evaluated
    * per request, so there is no server-side cache to clear.
    *
-   * @throws {MastraError} If sending the notification fails
+   * @throws {MastraError} If sending the notification fails on all server instances
    *
    * @example
    * ```typescript
@@ -90,23 +82,12 @@ export class ServerResourceActions {
    */
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Resource list change externally notified. Sending notification.');
-    try {
-      await this.getSdkServer().sendResourceListChanged();
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_RESOURCE_LIST_CHANGED_NOTIFICATION_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to send resource list changed notification',
-        },
-        error,
-      );
-      this.getLogger().trackException(mastraError);
-      this.getLogger().error('Failed to send resource list changed notification:', {
-        error: mastraError.toString(),
-      });
-      throw mastraError;
-    }
+    await broadcastNotification({
+      servers: this.getSdkServers(),
+      send: server => server.sendResourceListChanged(),
+      logger: this.getLogger(),
+      errorId: 'MCP_SERVER_RESOURCE_LIST_CHANGED_NOTIFICATION_FAILED',
+      errorText: 'Failed to send resource list changed notification',
+    });
   }
 }

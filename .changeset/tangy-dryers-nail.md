@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+Added optional `log` and `progress` functions to the MCP tool execution context type so tools running in an MCP server can send log and progress notifications to the calling client.
