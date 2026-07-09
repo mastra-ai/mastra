@@ -400,7 +400,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 currentToolChoice = merged.toolChoice as ToolChoice<ToolSet> | undefined;
                 currentActiveTools = merged.activeTools;
                 currentProviderOptions = merged.providerOptions;
-                currentModelSettings = merged.modelSettings;
+                currentModelSettings = merged.modelSettings ?? {};
                 structuredOutput = merged.structuredOutput;
               } catch (error) {
                 // Handle TripWire from processInputStep — emit tripwire chunk and
@@ -797,10 +797,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }),
                   modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
                   callTimeHeaders:
-                    registryEntry?.callTimeHeaders || currentModelSettings.headers
+                    registryEntry?.callTimeHeaders || currentModelSettings?.headers
                       ? {
                           ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
-                          ...(currentModelSettings.headers as Record<string, string> | undefined),
+                          ...(currentModelSettings?.headers as Record<string, string> | undefined),
                         }
                       : undefined,
                 }),
