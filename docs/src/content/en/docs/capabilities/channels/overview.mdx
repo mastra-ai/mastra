@@ -41,7 +41,7 @@ import { createSlackAdapter } from '@chat-adapter/slack'
 export const yourAgent = new Agent({
   id: 'your-agent',
   name: 'Your Agent',
-  instructions: 'You are a helpful support assistant.',
+  instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -213,7 +213,7 @@ import { waitUntil } from '@vercel/functions'
 export const yourAgent = new Agent({
   id: 'your-agent',
   name: 'Your Agent',
-  instructions: 'You are a helpful support assistant.',
+  instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -235,6 +235,7 @@ Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so l
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { yourAgent } from './agents/your-agent'
 
 export const mastra = new Mastra({
   agents: { yourAgent },
