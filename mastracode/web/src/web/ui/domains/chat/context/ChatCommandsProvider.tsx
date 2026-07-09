@@ -1,7 +1,6 @@
 import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
-import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
 import {
   useClearAgentControllerGoalMutation,
@@ -15,6 +14,7 @@ import type { SlashCommand } from '../services/commands';
 import { runNoArgCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatTranscript } from './ChatSessionProvider';
+import { useChatSessionContext } from './useChatSessionContext';
 
 export interface ChatCommandsApi {
   composerCommandName: string | null;
@@ -25,8 +25,8 @@ export interface ChatCommandsApi {
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeProject } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, pushNotice } = useChatTranscript();
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 

@@ -7,14 +7,13 @@ import { MoreHorizontal, Plus } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { useApiConfig } from '../../../../../shared/api/config';
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
@@ -27,10 +26,9 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 const MAX_THREADS = 5;
 
 export function ThreadList() {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const projectPath = deriveProjectPath(activeProject);
-  const { resetCurrentThread, syncState, pushNotice } = useChatTranscript();
+  const { activeProject } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { reset, syncState, pushNotice } = useChatTranscript();
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -71,12 +69,12 @@ export function ThreadList() {
   const activeThreadId = routeThreadId;
 
   const openThread = (threadId: string) => {
-    resetCurrentThread(threadId);
+    reset(threadId);
     void switchThreadMutation
       .mutateAsync(threadId)
       .then(state => syncState(state))
       .catch(err => {
-        resetCurrentThread();
+        reset();
         pushNotice(`Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`, 'error');
       });
     void navigate(`/threads/${threadId}`);
@@ -90,7 +88,7 @@ export function ThreadList() {
 
   const cloneThread = async (threadId: string) => {
     const thread = await cloneThreadMutation.mutateAsync({ sourceThreadId: threadId });
-    resetCurrentThread(thread.id);
+    reset(thread.id);
     toast('Thread cloned', 'success');
     void navigate(`/threads/${thread.id}`);
   };
@@ -99,7 +97,7 @@ export function ThreadList() {
     await deleteThreadMutation.mutateAsync(threadId);
     toast('Thread deleted');
     if (threadId === routeThreadId) {
-      resetCurrentThread();
+      reset();
       void navigate('/new');
     }
   };

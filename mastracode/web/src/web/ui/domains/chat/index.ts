@@ -10,21 +10,13 @@ export { StatusLine } from './components/StatusLine';
 export { ThreadList } from './components/ThreadList';
 export { Transcript } from './components/Transcript';
 export { SLASH_COMMANDS } from './services/commands';
-export {
-  ChatSessionProvider,
-  useChatConnection,
-  useChatModels,
-  useChatModes,
-  useChatSession,
-  useChatTranscript,
-} from './context/ChatSessionProvider';
-export type {
-  ChatConnectionApi,
-  ChatModelsApi,
-  ChatModesApi,
-  ChatSessionApi,
-  ChatTranscriptApi,
-} from './context/ChatSessionProvider';
+export { ChatSessionProvider, useChatConnection, useChatSession, useChatTranscript } from './context/ChatSessionProvider';
+export { useChatModels } from './context/useChatModels';
+export { useChatModes } from './context/useChatModes';
+export { useChatSessionContext } from './context/useChatSessionContext';
+export type { ChatConnectionApi, ChatSessionApi, ChatTranscriptApi } from './context/ChatSessionProvider';
+export type { ChatModelsApi } from './context/ChatModelsContext';
+export type { ChatModesApi } from './context/ChatModesContext';
 export { ChatCommandsProvider, useChatCommands } from './context/ChatCommandsProvider';
 export type { ChatCommandsApi } from './context/ChatCommandsProvider';
 export { useGlobalShortcuts } from './hooks/useGlobalShortcuts';

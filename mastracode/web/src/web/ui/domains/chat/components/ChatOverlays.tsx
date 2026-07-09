@@ -1,12 +1,12 @@
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 
-import { useApiConfig } from '../../../../../shared/api/config';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { SettingsPanel, useDensityPreference } from '../../settings';
 import { ProjectsModal, useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatModels } from '../context/ChatSessionProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatModels } from '../context/useChatModels';
 import { useAgentControllerModels } from '../hooks/useAgentControllerModels';
 import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
 import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
@@ -19,9 +19,9 @@ import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
 export function ChatOverlays() {
-  const { baseUrl } = useApiConfig();
   const overlays = useOverlays();
-  const { projects, activeProject, resourceId, sessionEnabled, selectProject } = useActiveProjectContext();
+  const { projects, activeProject, selectProject } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { activeModelId, setModel } = useChatModels();
   const { runPaletteCommand } = useChatCommands();
   const { theme, setTheme } = useTheme();

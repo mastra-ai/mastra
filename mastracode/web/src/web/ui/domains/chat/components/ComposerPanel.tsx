@@ -1,6 +1,7 @@
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatModes, useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatModes } from '../context/useChatModes';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 

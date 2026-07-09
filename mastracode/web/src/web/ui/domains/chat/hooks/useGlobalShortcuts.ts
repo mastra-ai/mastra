@@ -1,15 +1,15 @@
-import { useApiConfig } from '../../../../../shared/api/config';
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useAbortAgentControllerMutation } from './useAgentControllerRunMutations';
 
 export function useGlobalShortcuts() {
-  const { baseUrl } = useApiConfig();
   const overlays = useOverlays();
-  const { projects, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { projects } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { busy } = useChatTranscript();
   const abortMutation = useAbortAgentControllerMutation({
     agentControllerId: AGENT_CONTROLLER_ID,

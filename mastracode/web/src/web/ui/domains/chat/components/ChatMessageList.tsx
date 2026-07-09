@@ -6,12 +6,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { useApiConfig } from '../../../../../shared/api/config';
-import { SkeletonRows, Wordmark } from '../../../ui';
+import { Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatConnectionApi, ChatTranscriptApi } from '../context/ChatSessionProvider';
 import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -34,11 +34,10 @@ const transcriptScrollClass =
 const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm leading-relaxed text-icon3';
 
 export function ChatMessageList() {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeProject } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { status } = useChatConnection();
-  const { transcript, showWorkingIndicator, messagesPending, messagesError, messagesErrorMessage, resolvePrompt } =
-    useChatTranscript();
+  const { transcript, showWorkingIndicator, resolvePrompt } = useChatTranscript();
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
@@ -77,9 +76,6 @@ export function ChatMessageList() {
         activeProject={activeProject}
         transcript={transcript}
         showWorkingIndicator={showWorkingIndicator}
-        messagesPending={messagesPending}
-        messagesError={messagesError}
-        messagesErrorMessage={messagesErrorMessage}
         threadRef={threadRef}
         onApprove={onApprove}
         onRespond={onRespond}
@@ -108,9 +104,6 @@ type TranscriptPanelProps = {
   activeProject: Project;
   transcript: TranscriptState;
   showWorkingIndicator: boolean;
-  messagesPending: boolean;
-  messagesError: boolean;
-  messagesErrorMessage?: string;
   threadRef: RefObject<HTMLDivElement | null>;
   onApprove: (toolCallId: string, approved: boolean, id: string) => void;
   onRespond: (toolCallId: string, data: string | string[] | PlanResume, id: string) => void;
@@ -120,31 +113,10 @@ function TranscriptPanel({
   activeProject,
   transcript,
   showWorkingIndicator,
-  messagesPending,
-  messagesError,
-  messagesErrorMessage,
   threadRef,
   onApprove,
   onRespond,
 }: TranscriptPanelProps) {
-  if (transcript.entries.length === 0 && messagesPending) {
-    return (
-      <div className={transcriptScrollClass} ref={threadRef}>
-        <SkeletonRows label="Loading messages" rows={6} />
-      </div>
-    );
-  }
-
-  if (transcript.entries.length === 0 && messagesError) {
-    return (
-      <div className={`${transcriptScrollClass} place-items-center`} ref={threadRef}>
-        <Notice variant="destructive">
-          {messagesErrorMessage ? `Failed to load messages: ${messagesErrorMessage}` : 'Failed to load messages.'}
-        </Notice>
-      </div>
-    );
-  }
-
   const panelClassName =
     transcript.entries.length === 0 ? `${transcriptScrollClass} place-items-center` : transcriptScrollClass;
 

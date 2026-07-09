@@ -106,10 +106,10 @@ function Probe() {
   );
 }
 
-function renderProbe() {
+function renderProbe(threadId?: string) {
   return renderWithProviders(
     <ActiveProjectProvider>
-      <ChatSessionProvider threadId={THREAD_ID}>
+      <ChatSessionProvider threadId={threadId}>
         <OverlaysProvider>
           <Probe />
         </OverlaysProvider>
@@ -130,7 +130,7 @@ describe('useGlobalShortcuts', () => {
   it('given the app is idle, when mod+k is pressed twice, then the palette toggles open and closed', async () => {
     seedProject();
     useAgentControllerHandlers();
-    renderProbe();
+    renderProbe(THREAD_ID);
     await ready();
 
     await userEvent.keyboard('{Meta>}k{/Meta}');
@@ -142,7 +142,7 @@ describe('useGlobalShortcuts', () => {
   it('given focus is not in a text field, when ? is pressed, then the shortcuts overlay toggles', async () => {
     seedProject();
     useAgentControllerHandlers();
-    renderProbe();
+    renderProbe(THREAD_ID);
     await ready();
 
     await userEvent.keyboard('?');
@@ -154,7 +154,7 @@ describe('useGlobalShortcuts', () => {
   it('given focus is in a text field, when ? is typed, then the shortcuts overlay stays closed', async () => {
     seedProject();
     useAgentControllerHandlers();
-    renderProbe();
+    renderProbe(THREAD_ID);
     await ready();
 
     await userEvent.type(screen.getByLabelText('composer'), '?');
@@ -164,7 +164,7 @@ describe('useGlobalShortcuts', () => {
   it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → palette → sidebar', async () => {
     seedProject();
     useAgentControllerHandlers();
-    renderProbe();
+    renderProbe(THREAD_ID);
     await ready();
 
     for (const name of ['sidebar', 'palette', 'settings', 'shortcuts'] as const) {
@@ -190,7 +190,7 @@ describe('useGlobalShortcuts', () => {
   it('given the projects modal is open, when Escape is pressed, then nothing closes', async () => {
     seedProject();
     useAgentControllerHandlers();
-    renderProbe();
+    renderProbe(THREAD_ID);
     await ready();
 
     await userEvent.click(screen.getByRole('button', { name: 'open projects' }));
@@ -204,7 +204,7 @@ describe('useGlobalShortcuts', () => {
   it('given zero projects (forced projects modal), when Escape is pressed, then it is a no-op even with overlays open', async () => {
     // No seedProject(): the projects modal is force-opened by derivation.
     useAgentControllerHandlers();
-    renderProbe();
+    renderProbe(undefined);
 
     await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
     await userEvent.keyboard('{Escape}');
@@ -221,7 +221,7 @@ describe('useGlobalShortcuts', () => {
         return HttpResponse.json({ ok: true });
       }),
     );
-    renderProbe();
+    renderProbe(THREAD_ID);
     await waitFor(() => expect(screen.getByTestId('busy')).toHaveTextContent('yes'));
 
     await userEvent.keyboard('{Escape}');

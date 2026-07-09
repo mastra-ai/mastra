@@ -1,16 +1,15 @@
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
-import { useApiConfig } from '../../../../shared/api/config';
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
 import { ChatLayout } from '../../ui';
 import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
-import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
 import { useChatConnection, useChatTranscript } from './context/ChatSessionProvider';
+import { useChatSessionContext } from './context/useChatSessionContext';
 import { useSwitchAgentControllerThreadMutation } from './hooks/useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from './services/constants';
@@ -47,11 +46,9 @@ function ThreadComposer() {
 }
 
 function ThreadPageContent() {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { status } = useChatConnection();
-  const { transcript, resetCurrentThread, syncState, pushNotice } = useChatTranscript();
-  const projectPath = deriveProjectPath(activeProject);
+  const { transcript, reset, syncState, pushNotice } = useChatTranscript();
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -76,13 +73,13 @@ function ThreadPageContent() {
 
     if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
       const message = `Failed to switch thread: thread ${threadId} was not found`;
-      resetCurrentThread();
+      reset();
       pushNotice(message, 'error');
       void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       return;
     }
 
-    resetCurrentThread(threadId);
+    reset(threadId);
     void switchThreadMutation
       .mutateAsync(threadId)
       .then(state => {
@@ -92,7 +89,7 @@ function ThreadPageContent() {
       .catch(err => {
         if (!isLatestRequest()) return;
         const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
-        resetCurrentThread();
+        reset();
         pushNotice(message, 'error');
         void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       });

@@ -18,7 +18,10 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
-import { ChatSessionProvider, useChatConnection, useChatModels, useChatModes, useChatTranscript } from '../ChatSessionProvider';
+import { ChatSessionProvider, useChatConnection, useChatTranscript } from '../ChatSessionProvider';
+import { useChatModels } from '../useChatModels';
+import { useChatModes } from '../useChatModes';
+import { useChatSessionContext } from '../useChatSessionContext';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
@@ -119,7 +122,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
 
 function Probe() {
   const { status } = useChatConnection();
-  const { transcript, busy, showWorkingIndicator, messagesError, messagesErrorMessage } = useChatTranscript();
+  const { transcript, busy, showWorkingIndicator } = useChatTranscript();
   const { selectProject } = useActiveProjectContext();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
@@ -136,8 +139,6 @@ function Probe() {
       <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
       <span data-testid="working">{showWorkingIndicator ? 'yes' : 'no'}</span>
-      <span data-testid="messages-error">{messagesError ? 'yes' : 'no'}</span>
-      <span data-testid="messages-error-message">{messagesErrorMessage ?? ''}</span>
       <button onClick={() => void selectProject(nextProject)}>switch project</button>
     </div>
   );
@@ -162,13 +163,13 @@ function ModelsProbe() {
   return (
     <div>
       <span data-testid="active-model-id">{activeModelId ?? ''}</span>
-      <button onClick={() => void setModel('anthropic/claude-sonnet-4-20250514')}>switch model</button>
+      <button onClick={() => void setModel('openai/gpt-4o')}>switch model</button>
     </div>
   );
 }
 
 function TranscriptProbe() {
-  const { transcript, messagesError, messagesErrorMessage } = useChatTranscript();
+  const { transcript } = useChatTranscript();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
     .flatMap(entry => entry.message.content.parts)
@@ -181,8 +182,19 @@ function TranscriptProbe() {
       <span data-testid="focused-thread-id">{transcript.threadId ?? '(none)'}</span>
       <span data-testid="focused-entries-count">{transcript.entries.length}</span>
       <span data-testid="focused-message-text">{messageText}</span>
-      <span data-testid="focused-messages-error">{messagesError ? 'yes' : 'no'}</span>
-      <span data-testid="focused-messages-error-message">{messagesErrorMessage ?? ''}</span>
+    </div>
+  );
+}
+
+function SessionContextProbe() {
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+
+  return (
+    <div>
+      <span data-testid="session-resource-id">{resourceId}</span>
+      <span data-testid="session-enabled">{sessionEnabled ? 'yes' : 'no'}</span>
+      <span data-testid="session-project-path">{projectPath ?? ''}</span>
+      <span data-testid="session-base-url">{baseUrl}</span>
     </div>
   );
 }
@@ -281,12 +293,55 @@ describe('ChatSessionProvider', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'switch model' }));
 
-      await waitFor(() =>
-        expect(requests).toContain('model:{"modelId":"anthropic/claude-sonnet-4-20250514"}'),
+      await waitFor(() => expect(requests).toContain('model:{"modelId":"openai/gpt-4o"}'));
+      await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o'));
+    });
+
+    it('given session state omits mode, when the transcript receives a mode event, then the mode consumer uses the transcript fallback', async () => {
+      seedProject();
+      useAgentControllerHandlers([{ type: 'mode_changed', modeId: 'plan' }]);
+      server.use(
+        http.get(`${API}/modes`, () =>
+          HttpResponse.json({
+            modes: [
+              { id: 'build', name: 'Build' },
+              { id: 'plan', name: 'Plan' },
+            ],
+          }),
+        ),
+        http.get(SESSION, () =>
+          HttpResponse.json({
+            controllerId: 'code',
+            resourceId: RESOURCE_ID,
+            modelId: 'openai/gpt-4o-mini',
+            settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+          }),
+        ),
       );
-      await waitFor(() =>
-        expect(screen.getByTestId('active-model-id')).toHaveTextContent('anthropic/claude-sonnet-4-20250514'),
+
+      renderFocusedProbe(<ModesProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('active-mode-id')).toHaveTextContent('plan'));
+      expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan');
+    });
+
+    it('given session state omits model, when the transcript receives a model event, then the model consumer uses the transcript fallback', async () => {
+      seedProject();
+      useAgentControllerHandlers([{ type: 'model_changed', modelId: 'openai/gpt-4o' }]);
+      server.use(
+        http.get(SESSION, () =>
+          HttpResponse.json({
+            controllerId: 'code',
+            resourceId: RESOURCE_ID,
+            modeId: 'build',
+            settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+          }),
+        ),
       );
+
+      renderFocusedProbe(<ModelsProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o'));
     });
 
     it('given a route thread prop, when a transcript consumer renders, then it receives persisted route-thread messages', async () => {
@@ -335,6 +390,33 @@ describe('ChatSessionProvider', () => {
       expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted user question');
       expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted assistant answer');
     });
+
+    it('given session state names another thread, then the URL thread still owns the transcript identity', async () => {
+      const requests: string[] = [];
+      seedProject();
+      useAgentControllerHandlers([], requests);
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => {
+          requests.push('messages:route');
+          return HttpResponse.json({ messages: PERSISTED_MESSAGES });
+        }),
+        http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => {
+          requests.push('messages:session-state');
+          return HttpResponse.json({
+            messages: [{ id: 'wrong-thread-message', role: 'user', content: [{ type: 'text', text: 'Wrong thread text' }] }],
+          });
+        }),
+      );
+
+      renderProbe(ROUTE_THREAD_ID);
+
+      await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('2'));
+      expect(screen.getByTestId('thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
+      expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted user question');
+      expect(screen.getByTestId('message-text')).not.toHaveTextContent('Wrong thread text');
+      expect(requests).toContain('messages:route');
+      expect(requests).not.toContain('messages:session-state');
+    });
   });
 
   describe('when the route switches to another thread', () => {
@@ -365,8 +447,40 @@ describe('ChatSessionProvider', () => {
     });
   });
 
+  describe('when route thread messages are still loading', () => {
+    it('renders the loading skeleton before transcript consumers mount', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(
+          `${SESSION}/threads/${ROUTE_THREAD_ID}/messages`,
+          () => new Promise(() => undefined),
+        ),
+      );
+
+      renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
+
+      expect(await screen.findByLabelText('Loading messages')).toBeVisible();
+      expect(screen.queryByTestId('focused-thread-id')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when a chat session metadata consumer renders', () => {
+    it('reads session metadata from chat context without taking ownership of active project state', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+
+      renderFocusedProbe(<SessionContextProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('session-resource-id')).toHaveTextContent(RESOURCE_ID));
+      expect(screen.getByTestId('session-enabled')).toHaveTextContent('yes');
+      expect(screen.getByTestId('session-project-path')).toHaveTextContent('/tmp/mastracode-test');
+      expect(screen.getByTestId('session-base-url')).toHaveTextContent(TEST_BASE_URL);
+    });
+  });
+
   describe('when route thread messages fail to load', () => {
-    it('exposes the message fetch error through the session API', async () => {
+    it('shows a user-visible message loading error without exposing message query state through transcript context', async () => {
       seedProject();
       useAgentControllerHandlers();
       server.use(
@@ -375,11 +489,10 @@ describe('ChatSessionProvider', () => {
         ),
       );
 
-      renderProbe(ROUTE_THREAD_ID);
+      renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
 
-      await waitFor(() => expect(screen.getByTestId('messages-error')).toHaveTextContent('yes'));
-      expect(screen.getByTestId('thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
-      expect(screen.getByTestId('messages-error-message')).toHaveTextContent('messages unavailable');
+      expect(await screen.findByText(/Failed to load messages:/)).toBeVisible();
+      expect(screen.queryByTestId('focused-thread-id')).not.toBeInTheDocument();
     });
 
     it('shows a user-visible message loading error', async () => {

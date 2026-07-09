@@ -7,11 +7,11 @@ import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useActiveProjectContext } from '../../workspaces';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { useChatConnection, useChatModels, useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatModels } from '../context/useChatModels';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -50,14 +50,13 @@ type ComposerProps = {
 };
 
 export function Composer({ variant = 'inline', commandNameToApply, onCommandApplied }: ComposerProps) {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const projectPath = deriveProjectPath(activeProject);
+  const { activeProject } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { transcript, busy, localUser, resetCurrentThread, pushNotice } = useChatTranscript();
+  const { transcript, busy, localUser, reset, pushNotice } = useChatTranscript();
   const { activeModelId, setModel } = useChatModels();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
@@ -110,7 +109,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
-    resetCurrentThread(thread.id);
+    reset(thread.id);
     return thread.id;
   };
 

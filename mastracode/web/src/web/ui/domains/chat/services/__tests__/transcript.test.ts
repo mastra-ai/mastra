@@ -1,7 +1,7 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../transcript';
+import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
@@ -19,7 +19,7 @@ function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
 }
 
 describe('transcript reducer message entries', () => {
-  it('hydrates controller messages as ordered MastraDBMessage entries', () => {
+  it('creates initial transcript entries from ordered controller messages', () => {
     const messages: AgentControllerMessage[] = [
       { id: 'user-1', role: 'user', content: [{ type: 'text', text: 'Inspect this' }] },
       {
@@ -34,7 +34,7 @@ describe('transcript reducer message entries', () => {
       },
     ];
 
-    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages });
+    const state = createInitialTranscript({ messages });
 
     expect(state.entries).toHaveLength(2);
     expect(state.entries[0]).toMatchObject({

@@ -209,15 +209,6 @@ type Action =
       usage?: UsageSnapshot;
     }
   | {
-      type: 'hydrate';
-      messages: AgentControllerMessage[];
-      modeId?: string;
-      modelId?: string;
-      threadId?: string;
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
-    }
-  | {
       /**
        * Patch session-level metadata (mode/model/OM/usage) from an authoritative
        * `session.state()` fetch without touching the timeline or thread binding.
@@ -242,8 +233,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         omProgress: action.omProgress,
         usage: action.usage,
       };
-    case 'hydrate':
-      return hydrate(action.messages, action.modeId, action.modelId, action.threadId, action.omProgress, action.usage);
     case 'syncState':
       return {
         ...state,
@@ -554,21 +543,10 @@ export function createInitialTranscript({
   omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
 } = {}): TranscriptState {
-  return { ...initialTranscript, entries: hydrateEntries(messages), modeId, modelId, threadId, omProgress, usage };
+  return { ...initialTranscript, entries: messagesToEntries(messages), modeId, modelId, threadId, omProgress, usage };
 }
 
-function hydrate(
-  messages: AgentControllerMessage[],
-  modeId?: string,
-  modelId?: string,
-  threadId?: string,
-  omProgress?: AgentControllerOMProgress,
-  usage?: UsageSnapshot,
-): TranscriptState {
-  return createInitialTranscript({ messages, modeId, modelId, threadId, omProgress, usage });
-}
-
-function hydrateEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
+function messagesToEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
   return messages.map(message => toMessageEntry(toMastraDBMessage(message), { streaming: false }));
 }
 
