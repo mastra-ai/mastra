@@ -149,12 +149,30 @@ export function createDurableGoalStep() {
         }
       }
 
+      const debugGoalStep = (message: string, data?: Record<string, unknown>) => {
+        if (process.env.MASTRA_DEBUG_GOAL_STEP === '1') {
+          console.info(`[mastra:goal-step] ${message}`, data ? JSON.stringify(data) : '');
+        }
+      };
+
       // No goal configured → nothing to do.
-      if (!goal) return state;
+      if (!goal) {
+        debugGoalStep('skip:no-goal', {
+          runId: state.runId,
+          agentId: initData.agentId,
+          hasRegistryEntry: !!registryEntry,
+        });
+        return state;
+      }
 
       // Same gating as isTaskComplete: skip background results, mid-tool-loop
       // continuations, and working-memory-only iterations.
       if (state.backgroundTaskPending || state.lastStepResult?.isContinued) {
+        debugGoalStep('skip:gated', {
+          runId: state.runId,
+          backgroundTaskPending: !!state.backgroundTaskPending,
+          isContinued: !!state.lastStepResult?.isContinued,
+        });
         return state;
       }
 
@@ -164,6 +182,7 @@ export function createDurableGoalStep() {
         args?: unknown;
       }>;
       if (iterationToolCalls.length > 0 && iterationToolCalls.every(tc => isWorkingMemoryTool(tc.toolName ?? ''))) {
+        debugGoalStep('skip:working-memory-only', { runId: state.runId, toolCalls: iterationToolCalls.length });
         return state;
       }
 
@@ -182,8 +201,16 @@ export function createDurableGoalStep() {
 
       // No active objective → no gating, no chunk.
       if (!record || record.status !== 'active' || !store || !threadId) {
+        debugGoalStep('skip:no-active-objective', {
+          runId: state.runId,
+          hasRecord: !!record,
+          status: record?.status,
+          hasStore: !!store,
+          hasThreadId: !!threadId,
+        });
         return state;
       }
+      debugGoalStep('evaluate', { runId: state.runId, threadId, runsUsed: record.runsUsed });
 
       const effective = resolveEffectiveGoalSettings(record, {
         judgeModelId: typeof goal.judge === 'string' ? goal.judge : undefined,
