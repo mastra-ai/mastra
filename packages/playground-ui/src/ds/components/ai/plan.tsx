@@ -1,6 +1,6 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { createContext, Fragment, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ComponentProps, KeyboardEvent, ReactNode, RefObject } from 'react';
+import { createContext, Fragment, use, useCallback, useEffect, useMemo, useState } from 'react';
+import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -8,6 +8,7 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
+import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_COLLAPSED_HEIGHT = 220;
@@ -19,7 +20,6 @@ interface PlanContextValue {
   canExpand: boolean;
   collapsedHeight: number;
   isExpanded: boolean;
-  contentRef: RefObject<HTMLDivElement | null>;
   setCanExpand: (canExpand: boolean) => void;
   toggleExpanded: () => void;
 }
@@ -43,7 +43,6 @@ export interface PlanProps extends ComponentProps<'div'> {
 export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [canExpand, setCanExpand] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
 
   const toggleExpanded = useCallback(() => {
     if (!canExpand) return;
@@ -56,7 +55,6 @@ export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, cla
       canExpand,
       collapsedHeight,
       isExpanded,
-      contentRef,
       setCanExpand,
       toggleExpanded,
     }),
@@ -259,7 +257,12 @@ export interface PlanContentProps extends Omit<ComponentProps<'div'>, 'children'
 }
 
 export function PlanContent({ children, className, style, ...props }: PlanContentProps) {
-  const { canExpand, collapsedHeight, contentRef, isExpanded, setCanExpand, toggleExpanded } = usePlanContext();
+  const { canExpand, collapsedHeight, isExpanded, setCanExpand, toggleExpanded } = usePlanContext();
+  const {
+    ref: contentRef,
+    height: contentHeight,
+    measure: measureContentHeight,
+  } = useMeasuredAutoHeight<HTMLDivElement>();
   const shouldClipContent = canExpand && !isExpanded;
   const isContentClickable = shouldClipContent;
 
@@ -274,22 +277,17 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
   );
 
   useEffect(() => {
-    const content = contentRef.current;
-    if (!content) return;
+    const measuredHeight = measureContentHeight();
+    if (measuredHeight === null) return;
 
-    const measure = () => {
-      setCanExpand(content.scrollHeight > collapsedHeight);
-    };
+    setCanExpand(measuredHeight > collapsedHeight);
+  }, [children, collapsedHeight, measureContentHeight, setCanExpand]);
 
-    measure();
+  useEffect(() => {
+    if (contentHeight === null) return;
 
-    if (typeof ResizeObserver === 'undefined') return;
-
-    const observer = new ResizeObserver(measure);
-    observer.observe(content);
-
-    return () => observer.disconnect();
-  }, [children, collapsedHeight, contentRef, setCanExpand]);
+    setCanExpand(contentHeight > collapsedHeight);
+  }, [contentHeight, collapsedHeight, setCanExpand]);
 
   return (
     <div
