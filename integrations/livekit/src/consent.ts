@@ -7,7 +7,7 @@ import { z } from 'zod';
 /** A consent decision captured from the caller during a call. */
 export interface ConsentGrant {
   /**
-   * The consent item, matching a key in the worker's `configuration.requireConsent` (e.g.
+   * The consent item, matching a key in the worker's `configuration.consentPolicy` (e.g.
    * `'summaryStorage'`).
    */
   item: string;
@@ -44,12 +44,12 @@ const DEFAULT_DESCRIPTION =
 
 /**
  * Builds a Mastra tool that captures the caller's consent decisions at runtime — the companion to
- * the worker's `configuration.requireConsent`, which only DECLARES which consents a call needs. Add
+ * the worker's `configuration.consentPolicy`, which only DECLARES which consents a call needs. Add
  * it to the agent that answers the call; on each call the tool reads the caller's `resourceId` /
  * `threadId` from its execution context and hands the decision to your `onGrant` store. The runtime
  * grants live only where `onGrant` put them: enforce consent by reading them back from your own
  * store — at `onCallEnd` or before any consent-gated action — cross-checking against the declared
- * requirements in `VoiceCallEndArgs.configuration.requireConsent` (the configuration carries the
+ * requirements in `VoiceCallEndArgs.configuration.consentPolicy` (the configuration carries the
  * policy, never the grants).
  *
  * ```ts

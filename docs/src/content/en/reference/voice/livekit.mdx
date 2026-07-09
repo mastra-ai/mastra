@@ -170,10 +170,10 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
             isOptional: true,
           },
           {
-            name: 'requireConsent',
+            name: 'consentPolicy',
             type: 'ConsentConfiguration',
             description:
-              'Named consent requirements for the call (starting with summaryStorage). Capture grants at runtime with createConsentTool; the requirements surface on onCallEnd for enforcement.',
+              "The call's consent policy, as named requirements (starting with summaryStorage). Declarative only — the worker blocks nothing by itself. Capture grants at runtime with createConsentTool and enforce them in your own code; the declared policy surfaces on onCallEnd for cross-checking.",
             isOptional: true,
           },
           {

@@ -62,7 +62,7 @@ export interface VoiceCallEndArgs {
   /**
    * The worker's `configuration` (greeting, consent requirements, …). Read it here to honor policy
    * at end-of-call — e.g. only flush a call summary to observational memory when
-   * `configuration.requireConsent.summaryStorage` isn't required, or the caller granted it.
+   * `configuration.consentPolicy.summaryStorage` isn't required, or the caller granted it.
    */
   configuration?: LiveKitWorkerConfiguration;
   /** The LiveKit room name. */
@@ -448,12 +448,12 @@ export type ConsentRequirement =
     };
 
 /**
- * Consent requirements for the call, as a **named, extensible set** — each item independently
- * required and independently granted at runtime, rather than one global "consented" flag. New
- * consent items are added as named keys so the model grows without reshaping existing ones or
- * conflating unrelated permissions (a production consent model, not one-size-fits-all). The
- * requirements are declared here; capturing the caller's grant at runtime and enforcing it is the
- * companion piece (a consent tool / recording gate) — see the package TODO.
+ * The call's consent policy, as a **named, extensible set** — each item independently required
+ * and independently granted at runtime, rather than one global "consented" flag. New consent
+ * items are added as named keys so the model grows without reshaping existing ones or conflating
+ * unrelated permissions (a production consent model, not one-size-fits-all). Declaring a policy
+ * enforces nothing by itself: capture the caller's grant at runtime with `createConsentTool`, and
+ * enforce it in your own code (at `onCallEnd`, or before any consent-gated action).
  */
 export interface ConsentConfiguration {
   /**
@@ -504,8 +504,12 @@ export interface EndCallConfiguration {
 export interface LiveKitWorkerConfiguration {
   /** The opening greeting / AI-disclosure, plus optional periodic re-disclosure. See {@link GreetingConfiguration}. */
   greeting?: GreetingConfiguration;
-  /** Consent requirements for the call. See {@link ConsentConfiguration}. */
-  requireConsent?: ConsentConfiguration;
+  /**
+   * The call's consent policy. **Declarative only — the worker enforces nothing by itself.**
+   * Capture grants at runtime with `createConsentTool`; enforce them in your own code. See
+   * {@link ConsentConfiguration}.
+   */
+  consentPolicy?: ConsentConfiguration;
   /** Let the agent end the call itself (say goodbye → hang up). See {@link EndCallConfiguration}. */
   endCall?: EndCallConfiguration;
   /**

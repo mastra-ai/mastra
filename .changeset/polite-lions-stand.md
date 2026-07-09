@@ -36,7 +36,7 @@ greeting: {
 
 **Consent**
 
-`configuration.requireConsent` declares which data-use consents a call needs, as a named, extensible set (starting with `summaryStorage`) rather than one global flag. The new `createConsentTool` captures the caller's decision at runtime — add it to your agent and it hands each decision to your own store. Enforce the requirement at `onCallEnd` (or before any consent-gated step).
+`configuration.consentPolicy` declares which data-use consents a call needs, as a named, extensible set (starting with `summaryStorage`) rather than one global flag. Declaring the policy enforces nothing by itself: the new `createConsentTool` captures the caller's decision at runtime — add it to your agent and it hands each decision to your own store — and your code enforces the requirement at `onCallEnd` (or before any consent-gated step).
 
 ```ts
 import { createConsentTool } from '@mastra/livekit';
