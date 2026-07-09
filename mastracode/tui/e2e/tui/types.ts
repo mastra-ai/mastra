@@ -71,6 +71,7 @@ export type ScenarioName =
   | 'provider-history-rejection-retry'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
+  | 'prune-command'
   | 'visible-commands'
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
@@ -159,6 +160,8 @@ export type McE2eScenarioRuntime = {
   printScreen: (label: string, terminal: McE2eTerminal) => void;
   sleep: (ms: number) => Promise<void>;
   startLiveOutput: (terminal: McE2eTerminal) => void;
+  /** Match against the full terminal scrollback, including text printed after the TUI stopped. */
+  waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
 };

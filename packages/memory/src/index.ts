@@ -46,6 +46,12 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
+import type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+} from './processors/observational-memory/summarize';
+import { TokenCounter } from './processors/observational-memory/token-counter';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
@@ -62,6 +68,12 @@ export {
   type ExtractorSource,
 } from './processors/observational-memory';
 export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
+export type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+  SummarizeModel,
+} from './processors/observational-memory/summarize';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -2095,6 +2107,131 @@ Notes:
       throw new Error('Observational memory is not enabled');
     }
     await omEngine.updateRecordConfig(threadId, resourceId, config);
+  }
+
+  /**
+   * Summarize one of this memory's threads in one shot.
+   *
+   * Loads the thread's messages from storage and runs `summarizeConversation()` over them —
+   * Observational Memory's Observer plumbing as a standalone call. Nothing is written back to
+   * memory: the summary and extracted values are returned to you (and to each extractor's
+   * `onExtracted` hook), so you decide where they go. Works whether or not observational
+   * memory is enabled on this instance.
+   *
+   * Use this when a session ends and you want a summary or structured extraction of the whole
+   * conversation — for example a voice call at hang-up.
+   *
+   * Messages are loaded page-by-page starting from the newest, bounded by `lastMessages` and
+   * `maxInputTokens`, so summarizing a very long thread doesn't read its entire history from
+   * storage.
+   *
+   * @example
+   * ```ts
+   * const result = await memory.summarizeThread({
+   *   model: 'openai/gpt-4.1-mini',
+   *   threadId: call.threadId,
+   *   instructions: 'Summarize this voicemail call for the business owner.',
+   *   extract: [callSummaryExtractor],
+   * });
+   * ```
+   */
+  public async summarizeThread(
+    opts: {
+      threadId: string;
+      resourceId?: string;
+      /** Only summarize the last N messages of the thread. By default the whole thread is loaded, bounded by `maxInputTokens`. */
+      lastMessages?: number;
+      /**
+       * Stop loading older messages once the collected messages exceed this estimated token count,
+       * so very long threads don't get read from storage in full. The newest message is always
+       * included. Defaults to 1,000,000 tokens.
+       */
+      maxInputTokens?: number;
+    } & Omit<SummarizeConversationOptions, 'messages' | 'memory' | 'mastra' | 'threadId' | 'resourceId'>,
+  ): Promise<SummarizeConversationResult> {
+    const { lastMessages, maxInputTokens, ...summarizeOptions } = opts;
+    // TODO: when Observational Memory is enabled on this instance, build the summary from the
+    // thread's existing observations plus the still-unobserved messages instead of re-reading the
+    // raw message history. https://github.com/mastra-ai/mastra/pull/19135#discussion_r3546310808
+    const messages = await this.loadMessagesForSummarization({
+      threadId: opts.threadId,
+      resourceId: opts.resourceId,
+      lastMessages,
+      maxInputTokens: maxInputTokens ?? SUMMARIZE_THREAD_DEFAULTS.maxInputTokens,
+      abortSignal: summarizeOptions.abortSignal,
+    });
+    return summarizeConversation({
+      ...summarizeOptions,
+      messages,
+      memory: this,
+      mastra: this._mastraInstance,
+    });
+  }
+
+  /**
+   * Load a thread's messages for `summarizeThread()` without reading the whole thread from
+   * storage at once. Pages backwards from the newest message and stops once `lastMessages`
+   * messages are collected or the estimated token count crosses `maxInputTokens` (the newest
+   * message is always kept). Returns messages in chronological order.
+   */
+  private async loadMessagesForSummarization({
+    threadId,
+    resourceId,
+    lastMessages,
+    maxInputTokens,
+    abortSignal,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    lastMessages?: number;
+    maxInputTokens: number;
+    abortSignal?: AbortSignal;
+  }): Promise<MastraDBMessage[]> {
+    if (lastMessages !== undefined && lastMessages <= 0) return [];
+
+    const tokenCounter = new TokenCounter();
+    const collected: MastraDBMessage[] = [];
+    let tokens = 0;
+    let page = 0;
+
+    while (true) {
+      abortSignal?.throwIfAborted();
+
+      // Each page is the next-older slice of the thread, returned in chronological order
+      // (recall queries newest-first and reverses each page when no orderBy is given).
+      const { messages: batch, hasMore } = await this.recall({
+        threadId,
+        resourceId,
+        perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
+        page,
+      });
+      if (batch.length === 0) break;
+
+      let reachedLimit = false;
+      const kept: MastraDBMessage[] = [];
+      for (let i = batch.length - 1; i >= 0; i--) {
+        abortSignal?.throwIfAborted();
+
+        const message = batch[i]!;
+        if (lastMessages !== undefined && collected.length + kept.length >= lastMessages) {
+          reachedLimit = true;
+          break;
+        }
+        const messageTokens = tokenCounter.countMessage(message);
+        if (collected.length + kept.length > 0 && tokens + messageTokens > maxInputTokens) {
+          reachedLimit = true;
+          break;
+        }
+        kept.unshift(message);
+        tokens += messageTokens;
+      }
+
+      collected.unshift(...kept);
+      if (reachedLimit || !hasMore) break;
+      page++;
+    }
+
+    return collected;
   }
 
   /**

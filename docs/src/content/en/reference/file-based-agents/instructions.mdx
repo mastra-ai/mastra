@@ -1,0 +1,59 @@
+---
+title: "Instructions | File-based Agents"
+description: Write a file-based agent's always-on system prompt with instructions.md, and learn when to reach for tools or skills instead.
+packages:
+  - "@mastra/core"
+---
+
+# Instructions
+
+An agent's `instructions.md` holds its always-on system prompt: the model reads it on every turn. Use it to define the agent's identity, tone, role, and standing rules.
+
+Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
+
+## Quickstart
+
+Add an `instructions.md` at the agent root. Whatever you write becomes the prompt, so the shortest version is a single sentence.
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+## What goes in instructions
+
+Effective instructions cover the parts of an agent's behavior that don't change between requests:
+
+- Role and identity
+- Tone and style
+- Standing rules
+- Output format
+
+Move conditional, large, or action-oriented guidance into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
+
+## Dynamic instructions
+
+When the prompt needs to change per request, for example based on the current user or runtime context, set a dynamic `instructions` function in [`config.ts`](/reference/file-based-agents/config) instead of using `instructions.md`. A function `instructions` wins over `instructions.md`, so the static file is ignored when both are present.
+
+```typescript title="src/mastra/agents/support/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: ({ runtimeContext }) => {
+    const tier = runtimeContext.get('tier') ?? 'standard'
+    return `You are a support agent. Treat this as a ${tier}-tier customer.`
+  },
+})
+```
+
+## Build-time behavior
+
+Mastra reads `instructions.md` and inlines its contents into the generated code when the bundler builds your project. The deployed agent doesn't read the file at runtime, so changes to `instructions.md` take effect only after the next build.
+
+## Precedence with config
+
+Instructions can come from `instructions.md` or from the `instructions` field in [`config.ts`](/reference/file-based-agents/config):
+
+- A dynamic (function) `instructions` in `config.ts` wins over `instructions.md`.
+- Otherwise `instructions.md` wins over a static `instructions` string.
+- If neither is present, the build fails and names the agent directory.

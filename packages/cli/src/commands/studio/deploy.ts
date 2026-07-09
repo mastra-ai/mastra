@@ -562,6 +562,10 @@ async function runStudioDeploy(dir: string | undefined, opts: StudioDeployOption
   }
 
   // Pre-upload validation — catch USER-attributable errors before zipping/shipping.
+  // Unlike `mastra deploy` / `mastra server deploy`, the studio platform API has
+  // no endpoint to read stored env vars, so preflight only sees the local env
+  // file. Platform-provided vars (MASTRA_*, etc.) are still trusted via the
+  // preflight allowlist.
   if (!skipPreflight) {
     const issues = await preflightBuildOutput(targetDir, envVars);
     const outcome = await printPreflightIssues(issues, { autoAccept });

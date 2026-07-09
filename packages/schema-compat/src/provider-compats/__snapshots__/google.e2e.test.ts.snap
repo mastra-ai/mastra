@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`Google e2e test > should be succesful with structured_output 1`] = `
+exports[`Google e2e test > should be successful with structured_output 1`] = `
 {
   "properties": {
     "actualData": {
@@ -368,7 +368,7 @@ constraints: a valid uuid",
 }
 `;
 
-exports[`Google e2e test > should be succesful with structured_output 2`] = `
+exports[`Google e2e test > should be successful with structured_output 2`] = `
 {
   "value": {
     "actualData": 2023-01-01T00:00:00.000Z,
