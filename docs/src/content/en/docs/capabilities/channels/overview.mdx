@@ -9,7 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.22.0`
 
-Channels connect agents to messaging and collaboration platforms like Slack, Microsoft Teams, Discord, Telegram, WhatsApp, GitHub, and Linear. When a user sends a message or comment on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation.
+Channels connect agents to messaging and collaboration platforms like Slack, Microsoft Teams, Discord, Telegram, WhatsApp, GitHub, and Linear. When a user sends a message or comment on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation. Mastra uses [Chat SDK](https://chat-sdk.dev/) for this channel layer.
 
 Start with the page for your platform:
 
@@ -19,7 +19,7 @@ Start with the page for your platform:
 - [Telegram](/docs/capabilities/channels/telegram)
 - [WhatsApp](/docs/capabilities/channels/whatsapp)
 
-Mastra channels work with compatible [Chat SDK](https://chat-sdk.dev/adapters) adapters beyond the platforms listed here. The [More](/docs/capabilities/channels/other-adapters) page lists additional adapters and explains how the same Mastra-side pattern applies.
+[More](/docs/capabilities/channels/other-adapters) lists additional platforms. Mastra channels work with compatible [Chat SDK adapters](https://chat-sdk.dev/adapters) beyond the platforms listed here, and the same Mastra configuration pattern applies across adapters.
 
 ## When to use channels
 
@@ -32,16 +32,16 @@ Use channels when an agent needs to:
 
 ## Configure an agent
 
-Configure channels directly on your agent using adapters from the Chat SDK. The example below uses Slack, but other adapters follow the same shape: import the adapter factory, add it to `channels.adapters`, and use the adapter key in the generated webhook route.
+Channels use Chat SDK adapters and follow the same Mastra-side pattern: create a channel adapter and add it to the agent.
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You are a helpful support assistant.',
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -51,52 +51,52 @@ export const supportAgent = new Agent({
 })
 ```
 
-Register the agent in your Mastra instance with storage so channel state persists across restarts:
+:::note
+
+Channel adapters require provider-specific environment variables for credentials and request verification, such as bot tokens, signing secrets, app IDs, and webhook verification tokens. Check the guide for your platform or the [Chat SDK adapter catalog](https://chat-sdk.dev/adapters) for the exact variable names.
+
+:::
+
+We recommend configuring [storage](/docs/storage/overview) for channels. Storage lets Mastra persist channel state, thread subscriptions, tool approvals, and memory across restarts:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { LibSQLStore } from '@mastra/libsql'
-import { supportAgent } from './agents/support-agent'
+import { yourAgent } from './agents/your-agent'
 
 export const mastra = new Mastra({
-  agents: { supportAgent },
+  agents: { yourAgent },
   storage: new LibSQLStore({
     url: process.env.DATABASE_URL,
   }),
 })
 ```
 
-Each Chat SDK adapter documents the environment variables it reads by default, such as bot tokens, signing secrets, app IDs, and webhook verification tokens. Use the page for your platform in this section, or the [Chat SDK adapter catalog](https://chat-sdk.dev/adapters), to find the exact variable names.
-
 ## Webhook routes
 
-Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card.
+Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. This is how your agent receives a new message, starts processing it, and responds in the same channel.
 
-Mastra generates a webhook route for each configured adapter:
-
-```text
-/api/agents/{agentId}/channels/{platform}/webhook
-```
-
-For example, a Slack adapter on an agent with the `support-agent` ID uses:
+Mastra registers a webhook route for each configured adapter and handles the request for you:
 
 ```text
-/api/agents/support-agent/channels/slack/webhook
+/api/agents/<AGENT_ID>/channels/<PLATFORM>/webhook
 ```
 
-Point the platform's webhook, event, or interactions URL to this path. The Chat SDK adapter verifies the incoming request, normalizes the event, and passes it to the agent.
+For example, a Slack adapter on an agent with the `your-agent` ID uses:
 
-During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose `localhost:4111`:
+```text
+/api/agents/your-agent/channels/slack/webhook
+```
+
+Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters).
+
+During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose your server, `localhost:4111` by default:
 
 ```bash npm2yarn
 npx cloudflared tunnel --url http://localhost:4111
 ```
 
-```bash
-ngrok http 4111
-```
-
-Use the generated public URL as the base URL for webhook paths, for example `https://abc123.trycloudflare.com/api/agents/support-agent/channels/slack/webhook`.
+Use the generated public URL as the base URL for webhook paths, for example `https://abc123.trycloudflare.com/api/agents/your-agent/channels/slack/webhook`.
 
 :::note
 
@@ -205,15 +205,15 @@ A channel webhook returns a `200` response right away, then the agent runs in th
 
 On Vercel, pass `waitUntil` from `@vercel/functions`:
 
-```typescript title="src/mastra/agents/support-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 import { waitUntil } from '@vercel/functions'
 
-export const supportAgent = new Agent({
-  id: 'support-agent',
-  name: 'Support Agent',
-  instructions: 'You are a helpful support assistant.',
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL__',
   channels: {
     adapters: {
@@ -235,9 +235,10 @@ Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so l
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { yourAgent } from './agents/your-agent'
 
 export const mastra = new Mastra({
-  agents: { supportAgent },
+  agents: { yourAgent },
   pubsub: new RedisStreamsPubSub({
     url: process.env.REDIS_URL,
     keyPrefix: 'mastra:my-app',
@@ -247,9 +248,6 @@ export const mastra = new Mastra({
 
 Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
 
-## Next steps
+## Related
 
-- [Slack](/docs/capabilities/channels/slack)
-- [Microsoft Teams](/docs/capabilities/channels/teams)
-- [More](/docs/capabilities/channels/other-adapters)
 - [Channels reference](/reference/agents/channels)
