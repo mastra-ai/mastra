@@ -1,0 +1,23 @@
+{
+  "name": "mastracode-plugin-slack",
+  "private": true,
+  "type": "module",
+  "exports": "./src/index.ts",
+  "peerDependencies": {
+    "mastracode": "*"
+  },
+  "dependencies": {
+    "@chat-adapter/slack": "^4.29.0",
+    "@mastra/slack": "link:../../../channels/slack",
+    "ai": "^6.0.176",
+    "chat": "^4.29.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "check": "tsc --noEmit"
+  }
+}

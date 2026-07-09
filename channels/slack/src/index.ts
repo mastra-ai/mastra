@@ -57,6 +57,29 @@ export type {
   SlackUserCredentials,
 } from './user-auth';
 
+// Polling signal provider — watches Slack conversations as the user and
+// wakes agent threads on new messages. Zero infra (no webhooks/tunnels).
+export {
+  SlackSignals,
+  SLACK_SIGNALS_METADATA_KEY,
+  SLACK_SIGNALS_SOURCE,
+  slackExternalResourceId,
+  getSlackSignalsMetadata,
+  setSlackSignalsMetadata,
+  FetchSlackSignalsClient,
+  compareSlackTs,
+} from './signals';
+export type {
+  SlackSignalsOptions,
+  SlackSignalsThreadMetadata,
+  SlackSignalsThreadStore,
+  SlackSubscribeInput,
+  SlackThreadSubscriptionRecord,
+  SlackSignalsClient,
+  SlackConversationMessage,
+  FetchNewMessagesInput,
+} from './signals';
+
 // Re-export from @chat-adapter/slack for convenience
 export { createSlackAdapter } from '@chat-adapter/slack';
 export type { SlackAdapter } from '@chat-adapter/slack';

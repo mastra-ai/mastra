@@ -1,0 +1,5 @@
+# Marks this plugin as a standalone pnpm workspace root so `pnpm install`
+# does not attach to the monorepo workspace (plugin deps are installed with
+# --ignore-workspace and pinned by the local lockfile).
+packages:
+  - '.'

@@ -230,6 +230,23 @@ export const devAgent = new Agent({
 })
 ```
 
+The `@mastra/slack` package includes `SlackSignals`, a polling provider that watches Slack conversations as your Slack user account and wakes agent threads when new messages arrive. It needs no webhooks or public endpoints, and it persists subscriptions and last-seen cursors on thread metadata so restarts don't re-deliver old messages.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { SlackSignals } from '@mastra/slack'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Watch Slack threads and follow up on replies.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [new SlackSignals()],
+})
+```
+
+`SlackSignals` authenticates as a Slack user against a pre-existing Slack app using a PKCE OAuth connect flow, or accepts a static user token for headless environments. It exposes `slack_subscribe_thread`, `slack_unsubscribe_thread`, and `slack_list_subscriptions` tools so the agent can manage its own subscriptions.
+
 ## Related
 
 - [Guide: Building a signal provider](/guides/guide/signal-provider)
