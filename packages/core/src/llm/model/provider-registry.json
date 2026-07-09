@@ -2549,7 +2549,6 @@
         "fugu-ultra",
         "gemini-2.5-flash",
         "gemini-2.5-flash-lite",
-        "gemini-2.5-flash-lite-preview-09-2025",
         "gemini-2.5-pro",
         "gemini-3-flash-preview",
         "gemini-3.1-flash-lite",
@@ -4750,7 +4749,6 @@
         "sao10k/l3.3-euryale-70b",
         "stepfun/step-3.5-flash",
         "stepfun/step-3.7-flash",
-        "switchpoint/router",
         "tencent/hunyuan-a13b-instruct",
         "tencent/hy3",
         "tencent/hy3-preview",
@@ -5895,6 +5893,7 @@
         "claude-opus-4-5",
         "claude-opus-4-6",
         "claude-opus-4-7",
+        "claude-opus-4-8",
         "claude-sonnet-4",
         "claude-sonnet-4-5",
         "claude-sonnet-4-6",
@@ -5902,22 +5901,94 @@
         "gemini-2-5-pro",
         "gemini-3-1-flash-lite",
         "gemini-3-1-pro",
+        "gemini-3-5-flash",
         "gemini-3-flash",
         "gemini-3-pro",
+        "gemma-3-12b",
         "gpt-5",
         "gpt-5-1",
+        "gpt-5-1-codex-max",
+        "gpt-5-1-codex-mini",
         "gpt-5-2",
+        "gpt-5-2-codex",
+        "gpt-5-3-codex",
         "gpt-5-4",
         "gpt-5-4-mini",
         "gpt-5-4-nano",
-        "gpt-5-5",
         "gpt-5-mini",
         "gpt-5-nano",
         "gpt-oss-120b",
-        "gpt-oss-20b"
+        "gpt-oss-20b",
+        "llama-4-maverick",
+        "meta-llama-3-1-8b-instruct",
+        "meta-llama-3-3-70b-instruct",
+        "qwen3-next-80b-a3b-instruct",
+        "qwen35-122b-a10b"
       ],
       "docUrl": "https://neon.com/docs",
-      "gateway": "models.dev"
+      "gateway": "models.dev",
+      "modelOverrides": {
+        "gpt-5": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-1-codex-mini": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-1": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-2": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-3-codex": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-4-nano": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-4-mini": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-2-codex": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-mini": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-nano": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-4": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        },
+        "gpt-5-1-codex-max": {
+          "api": "${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1",
+          "shape": "responses",
+          "npm": "@ai-sdk/openai"
+        }
+      }
     },
     "upstage": {
       "url": "https://api.upstage.ai/v1/solar",
@@ -8111,7 +8182,6 @@
       "fugu-ultra",
       "gemini-2.5-flash",
       "gemini-2.5-flash-lite",
-      "gemini-2.5-flash-lite-preview-09-2025",
       "gemini-2.5-pro",
       "gemini-3-flash-preview",
       "gemini-3.1-flash-lite",
@@ -9767,7 +9837,6 @@
       "sao10k/l3.3-euryale-70b",
       "stepfun/step-3.5-flash",
       "stepfun/step-3.7-flash",
-      "switchpoint/router",
       "tencent/hunyuan-a13b-instruct",
       "tencent/hy3",
       "tencent/hy3-preview",
@@ -10725,6 +10794,7 @@
       "claude-opus-4-5",
       "claude-opus-4-6",
       "claude-opus-4-7",
+      "claude-opus-4-8",
       "claude-sonnet-4",
       "claude-sonnet-4-5",
       "claude-sonnet-4-6",
@@ -10732,19 +10802,29 @@
       "gemini-2-5-pro",
       "gemini-3-1-flash-lite",
       "gemini-3-1-pro",
+      "gemini-3-5-flash",
       "gemini-3-flash",
       "gemini-3-pro",
+      "gemma-3-12b",
       "gpt-5",
       "gpt-5-1",
+      "gpt-5-1-codex-max",
+      "gpt-5-1-codex-mini",
       "gpt-5-2",
+      "gpt-5-2-codex",
+      "gpt-5-3-codex",
       "gpt-5-4",
       "gpt-5-4-mini",
       "gpt-5-4-nano",
-      "gpt-5-5",
       "gpt-5-mini",
       "gpt-5-nano",
       "gpt-oss-120b",
-      "gpt-oss-20b"
+      "gpt-oss-20b",
+      "llama-4-maverick",
+      "meta-llama-3-1-8b-instruct",
+      "meta-llama-3-3-70b-instruct",
+      "qwen3-next-80b-a3b-instruct",
+      "qwen35-122b-a10b"
     ],
     "upstage": ["solar-mini", "solar-pro2", "solar-pro3"],
     "zhipuai-coding-plan": ["glm-4.5-air", "glm-4.6v", "glm-4.7", "glm-5-turbo", "glm-5.1", "glm-5.2", "glm-5v-turbo"],
