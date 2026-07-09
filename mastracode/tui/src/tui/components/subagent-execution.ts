@@ -8,13 +8,14 @@
  *  - Bottom border with agent type, model, status, duration
  */
 
-import { Container, Text } from '@earendil-works/pi-tui';
+import { Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
-import { BOX_INDENT, getTermWidth, theme } from '../theme.js';
+import { BOX_INDENT, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import type { IToolExecutionComponent } from './tool-execution-interface.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -69,7 +70,7 @@ export interface SubagentExecutionOptions {
   };
 }
 
-export class SubagentExecutionComponent extends Container implements IToolExecutionComponent {
+export class SubagentExecutionComponent extends WidthAwareContainer implements IToolExecutionComponent {
   private ui: TUI;
 
   // State
@@ -199,12 +200,11 @@ export class SubagentExecutionComponent extends Container implements IToolExecut
 
   // ── Rendering ──────────────────────────────────────────────────────────
 
-  private rebuild(): void {
+  protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
     const border = (char: string) =>
       theme.bold(colorText(this.colors.border, char, (text: string) => theme.fg('accent', text)));
-    const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
 
     // ── Bottom border with info (always rendered) ──
