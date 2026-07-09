@@ -15,8 +15,9 @@
  * The CLI adapter (`runMCCli`) wraps the same `createMastraCode` → `runMC` flow.
  */
 
-// Core runner
+// Core runners
 export { runMC } from './run-mc.js';
+export { runGoal } from './run-goal.js';
 
 // Resolution policy
 export { autoApprovePolicy, denyPolicy, permissionModeToPolicy } from './policy.js';
@@ -47,6 +48,10 @@ export type {
   RunMCError,
   RunMCThreadOptions,
   MCRun,
+  RunGoalOptions,
+  RunGoalResult,
+  RunGoalStatus,
+  MCGoalRun,
   ResolutionPolicy,
   RunMode,
   ThinkingLevel,

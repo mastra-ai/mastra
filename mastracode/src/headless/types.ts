@@ -7,6 +7,8 @@
  */
 import type { AgentController, AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 
+import type { GoalManager } from '../tui/goal-manager.js';
+
 export type RunMode = 'build' | 'plan' | 'fast';
 export type ThinkingLevel = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
 
@@ -137,5 +139,49 @@ export interface MCRun extends AsyncIterable<AgentControllerEvent> {
   /** Resolves once the run completes, times out, errors, or is aborted. */
   result: Promise<RunMCResult>;
   /** Abort the in-flight run. */
+  abort(): void;
+}
+
+export type RunGoalStatus = 'done' | 'paused' | 'error' | 'aborted' | 'timeout';
+
+export interface RunGoalOptions<TState extends Record<string, unknown> = Record<string, unknown>> {
+  /** Controller built via `createMastraCode(...)`. */
+  controller: AgentController<TState>;
+  /** Session built via `createMastraCode(...)`. */
+  session: Session<TState>;
+  /** Goal objective to set and run. */
+  objective: string;
+  /** Goal judge model id. */
+  judgeModelId: string;
+  /** Maximum goal attempts before core pauses. */
+  maxRuns: number;
+  /** Resource id for thread scoping. */
+  resourceId?: string;
+  /** Abort with `status: 'timeout'` if no terminal goal evaluation arrives in time. */
+  timeoutMs?: number;
+  /** External abort signal; aborting it aborts the run. */
+  signal?: AbortSignal;
+  /** Existing goal manager to update; defaults to a new one for headless use. */
+  goalManager?: GoalManager;
+}
+
+export interface RunGoalResult {
+  status: RunGoalStatus;
+  objective: string;
+  threadId?: string;
+  agentEndReason?: string;
+  reason?: string;
+  iterations?: number;
+  maxRuns?: number;
+  goalEvent?: Extract<AgentControllerEvent, { type: 'goal_evaluation' }>;
+  error?: RunMCError;
+  /** 0 success, 1 error/aborted/paused, 2 timeout. */
+  exitCode: number;
+}
+
+export interface MCGoalRun extends AsyncIterable<AgentControllerEvent> {
+  /** Resolves once a terminal goal_evaluation arrives, or the run errors/timeouts/aborts. */
+  result: Promise<RunGoalResult>;
+  /** Abort the in-flight goal run. */
   abort(): void;
 }

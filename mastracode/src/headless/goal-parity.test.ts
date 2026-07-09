@@ -10,6 +10,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import { startGoalWithDefaults } from '../tui/commands/goal.js';
 import { GoalManager } from '../tui/goal-manager.js';
+import { runGoal } from './run-goal.js';
 
 vi.mock('../onboarding/settings.js', () => ({
   loadSettings: () => ({
@@ -174,5 +175,99 @@ describe('headless goal parity', () => {
     } finally {
       unsubscribe();
     }
+  });
+
+  it('runGoal emits terminal goal_evaluation without manual continue messages', async () => {
+    const { controller, session, scorer } = await makeHarness();
+    const sendMessageSpy = vi.spyOn(session, 'sendMessage');
+
+    const run = runGoal({
+      controller,
+      session,
+      objective: 'finish the task',
+      judgeModelId: 'mock-judge',
+      maxRuns: 5,
+      goalManager: new GoalManager(),
+    });
+    const result = await run.result;
+
+    expect(result).toMatchObject({
+      status: 'done',
+      objective: 'finish the task',
+      exitCode: 0,
+    });
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+    expect(scorer.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('runGoal waits for terminal goal_evaluation even when agent_end arrives first', async () => {
+    let listener: ((event: AgentControllerEvent) => void) | undefined;
+    const objectiveRecord = {
+      id: 'goal-1',
+      objective: 'finish after agent end',
+      status: 'active' as const,
+      runsUsed: 0,
+      maxRuns: 5,
+      judgeModelId: 'mock-judge',
+      startedAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+    const fakeAgent = {
+      setObjective: vi.fn().mockResolvedValue(objectiveRecord),
+      updateObjectiveOptions: vi.fn().mockResolvedValue(objectiveRecord),
+    };
+    const controller = {
+      getCurrentAgent: vi.fn(() => fakeAgent),
+      setResourceId: vi.fn(),
+    };
+    const session = {
+      subscribe: vi.fn((handler: (event: AgentControllerEvent) => void) => {
+        listener = handler;
+        return vi.fn();
+      }),
+      sendSignal: vi.fn(() => ({
+        accepted: Promise.resolve().then(() => {
+          listener?.({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+          listener?.({
+            type: 'goal_evaluation',
+            payload: {
+              pending: false,
+              objective: 'finish after agent end',
+              status: 'done',
+              passed: true,
+              iteration: 1,
+              maxRuns: 5,
+              reason: 'done after agent_end',
+              results: [{ score: 1, reason: 'done after agent_end' }],
+            },
+          } as AgentControllerEvent);
+        }),
+      })),
+      sendMessage: vi.fn(),
+      abort: vi.fn(),
+      thread: {
+        getId: vi.fn(() => 'thread-1'),
+        create: vi.fn(),
+        setSetting: vi.fn(),
+      },
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+    };
+
+    const result = await runGoal({
+      controller: controller as any,
+      session: session as any,
+      objective: 'finish after agent end',
+      judgeModelId: 'mock-judge',
+      maxRuns: 5,
+      goalManager: new GoalManager(),
+    }).result;
+
+    expect(result).toMatchObject({
+      status: 'done',
+      agentEndReason: 'complete',
+      reason: 'done after agent_end',
+    });
+    expect(session.sendMessage).not.toHaveBeenCalled();
+    expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 });

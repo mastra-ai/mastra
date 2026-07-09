@@ -13,6 +13,7 @@
 import { Box, SelectList, Spacer, Text } from '@earendil-works/pi-tui';
 import type { SelectItem } from '@earendil-works/pi-tui';
 import type { AgentControllerMessage } from '@mastra/core/agent-controller';
+import { createGoalReminderSignal } from '../../goal-signal.js';
 import { loadSettings, saveSettings } from '../../onboarding/settings.js';
 import { GoalCyclesDialogComponent } from '../components/goal-cycles-dialog.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
@@ -362,19 +363,6 @@ async function startGoal(
     await goalManager.saveToThread(state);
     ctx.showError(`Goal paused — failed to start: ${err instanceof Error ? err.message : String(err)}`);
   }
-}
-
-function createGoalReminderSignal(goal: GoalState) {
-  return {
-    type: 'system-reminder' as const,
-    contents: goal.objective,
-    attributes: { type: 'goal' },
-    metadata: {
-      goalId: goal.id,
-      maxTurns: goal.maxTurns,
-      judgeModelId: goal.judgeModelId,
-    },
-  };
 }
 
 export function createGoalReminderMessage(
