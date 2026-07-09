@@ -678,6 +678,125 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
+  const createServerToolExecutionStep = (currentSpan: unknown) => {
+    const tools = {
+      perplexitySearch: {
+        type: 'provider' as const,
+        id: 'gateway.perplexity_search',
+        args: {},
+      },
+    };
+    const step = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream: vi.fn(async () => ({
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'tool-call',
+                  toolCallId: 'call-1',
+                  toolName: 'perplexity_search',
+                  input: '{"query":"latest AI agent news"}',
+                  providerExecuted: true,
+                },
+                {
+                  type: 'tool-result',
+                  toolCallId: 'call-1',
+                  toolName: 'perplexity_search',
+                  result: { answer: 'fresh gateway result' },
+                  providerExecuted: true,
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: testUsage,
+                },
+              ]),
+              request: {},
+              response: { headers: undefined },
+              warnings: [],
+            })),
+          } as any,
+        },
+      ],
+      tools,
+      streamState: { serialize: vi.fn(), deserialize: vi.fn() },
+      _internal: { generateId: () => 'generated-id' },
+      logger: { error: vi.fn(), warn: vi.fn(), debug: vi.fn() } as any,
+    } as unknown as OuterLLMRun<typeof tools>);
+    const executeParams = createExecuteParams(createIterationInput());
+    executeParams.tracingContext = { currentSpan } as any;
+    return { step, executeParams };
+  };
+
+  it('creates a server-tool span for provider-executed tools when traceServerTools is enabled', async () => {
+    const serverToolSpan = {
+      id: 'server-tool-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => serverToolSpan),
+      findParent: vi.fn(),
+      observabilityInstance: { getConfig: () => ({ traceServerTools: true }) },
+    };
+
+    const { step, executeParams } = createServerToolExecutionStep(agentRunSpan);
+    await step.execute(executeParams);
+
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        name: 'perplexity_search',
+        entityType: 'tool',
+        entityId: 'perplexity_search',
+        entityName: 'perplexity_search',
+        attributes: expect.objectContaining({ toolType: 'server-tool' }),
+        input: { query: 'latest AI agent news' },
+      }),
+    );
+    expect(serverToolSpan.end).toHaveBeenCalledWith({ output: { answer: 'fresh gateway result' } });
+  });
+
+  it('does not create a server-tool span when traceServerTools is disabled (opt-in)', async () => {
+    const agentRunSpan = {
+      id: 'agent-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(),
+      findParent: vi.fn(),
+      observabilityInstance: { getConfig: () => ({ traceServerTools: false }) },
+    };
+
+    const { step, executeParams } = createServerToolExecutionStep(agentRunSpan);
+    await step.execute(executeParams);
+
+    expect(agentRunSpan.createChildSpan).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        attributes: expect.objectContaining({ toolType: 'server-tool' }),
+      }),
+    );
+  });
+
   it('resolves streamed tool payload transforms without rescanning tools per delta', async () => {
     const onInputDelta = vi.fn();
     const rawTools = {

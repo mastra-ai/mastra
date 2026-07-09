@@ -450,6 +450,53 @@ async function processOutputStream<OUTPUT = undefined>({
     }
   >();
 
+  // Provider-executed (server-side) tools — e.g. Anthropic native code execution or
+  // server-side web search — run on the model provider, so this loop never enters Mastra's
+  // tool-execution path and no span is created; the tool's input/output are otherwise
+  // invisible in traces. When enabled via the `traceServerTools` observability option (off
+  // by default), reconstruct a TOOL_CALL span from the stream: open it on the tool-call
+  // chunk (input = args) and close it on the paired tool-result chunk (output = result).
+  // Anchored on the agent-run span, as client-tool spans are, so it survives
+  // `includeInternalSpans: false`.
+  const serverToolSpanByToolCallId = new Map<string, AnySpan>();
+  const openServerToolSpan = (toolCallId: string, toolName: string, args: unknown): void => {
+    const enabled =
+      tracingContext?.currentSpan?.observabilityInstance?.getConfig?.().traceServerTools === true ||
+      process.env.MASTRA_TRACE_SERVER_TOOLS === 'true';
+    if (!enabled || !tracingContext?.currentSpan || serverToolSpanByToolCallId.has(toolCallId)) {
+      return;
+    }
+    try {
+      const parentSpan =
+        tracingContext.currentSpan.type === SpanType.AGENT_RUN
+          ? tracingContext.currentSpan
+          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+      const span = parentSpan.createChildSpan({
+        type: SpanType.TOOL_CALL,
+        name: toolName,
+        entityType: EntityType.TOOL,
+        entityId: toolName,
+        entityName: toolName,
+        attributes: { toolType: 'server-tool' },
+        ...(args !== undefined ? { input: args } : {}),
+      });
+      if (span) {
+        serverToolSpanByToolCallId.set(toolCallId, span);
+      }
+    } catch (err) {
+      logger?.warn?.('failed to create server-tool span', {
+        error: err instanceof Error ? err.message : String(err),
+        toolName,
+      });
+    }
+  };
+  const closeServerToolSpan = (toolCallId: string, result: unknown): void => {
+    const span = serverToolSpanByToolCallId.get(toolCallId);
+    if (!span) return;
+    span.end(result !== undefined ? { output: result } : undefined);
+    serverToolSpanByToolCallId.delete(toolCallId);
+  };
+
   const endClientToolObservabilitySpan = (toolCallId: string, args?: unknown): void => {
     const entry = clientToolObservabilityByToolCallId.get(toolCallId);
     if (!entry || entry.ended) {
@@ -611,6 +658,11 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       });
+      if (chunk.payload.providerExecuted) {
+        openServerToolSpan(chunk.payload.toolCallId, chunk.payload.toolName, chunk.payload.args);
+      }
+    } else if (chunk.type === 'tool-result' && chunk.payload.providerExecuted) {
+      closeServerToolSpan(chunk.payload.toolCallId, chunk.payload.result);
     }
 
     // Collect every chunk for post-stream message building
@@ -779,6 +831,12 @@ async function processOutputStream<OUTPUT = undefined>({
     }
   }
   clientToolArgsTextByToolCallId.clear();
+
+  // Close any server-tool spans whose tool-result chunk never arrived (e.g. an aborted run).
+  for (const [, span] of serverToolSpanByToolCallId.entries()) {
+    span.end();
+  }
+  serverToolSpanByToolCallId.clear();
 
   return { collectedChunks };
 }

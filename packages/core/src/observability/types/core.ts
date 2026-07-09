@@ -465,6 +465,13 @@ export interface ObservabilityInstanceConfig {
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
+   * Set to `true` to emit tool-call spans for provider-executed (server-side) tools —
+   * e.g. Anthropic native code execution or server-side web search — whose input/output are
+   * otherwise invisible in traces because they run on the model provider, not in Mastra's
+   * tool-execution path. Off by default.
+   */
+  traceServerTools?: boolean;
+  /**
    * Span types to exclude from export. Spans of these types are silently dropped
    * before reaching exporters. This is useful for reducing noise and costs in
    * observability platforms that charge per-span (e.g., Langfuse).

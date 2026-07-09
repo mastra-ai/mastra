@@ -79,6 +79,13 @@ export interface ObservabilityInstanceConfig {
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
+   * Set to `true` to emit tool-call spans for provider-executed (server-side) tools —
+   * e.g. Anthropic native code execution or server-side web search. These tools run on the
+   * model provider, so Mastra never enters its own tool-execution path and emits no span by
+   * default; their input/output are otherwise invisible in traces. Off by default.
+   */
+  traceServerTools?: boolean;
+  /**
    * Span types to exclude from export. Spans of these types are silently dropped
    * before reaching exporters. This is useful for reducing noise and costs in
    * observability platforms that charge per-span (e.g., Langfuse).
@@ -235,6 +242,7 @@ const observabilityInstanceConfigFields = {
   bridge: z.any().optional(),
   spanOutputProcessors: z.array(z.any()).optional(),
   includeInternalSpans: z.boolean().optional(),
+  traceServerTools: z.boolean().optional(),
   excludeSpanTypes: z.array(z.nativeEnum(SpanType)).optional(),
   spanFilter: spanFilterSchema,
   requestContextKeys: z.array(z.string()).optional(),

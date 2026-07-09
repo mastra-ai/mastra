@@ -88,6 +88,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanOutputProcessors: config.spanOutputProcessors ?? [],
       bridge: config.bridge ?? undefined,
       includeInternalSpans: config.includeInternalSpans ?? false,
+      traceServerTools: config.traceServerTools ?? false,
       excludeSpanTypes: config.excludeSpanTypes,
       spanFilter: config.spanFilter,
       requestContextKeys: config.requestContextKeys ?? [],
