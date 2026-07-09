@@ -1,5 +1,136 @@
 # @mastra/livekit
 
+## 0.3.0-alpha.0
+
+### Minor Changes
+
+- Added per-call speech-to-text and text-to-speech selection to `createLiveKitWorker`. Set the new `configuration.stt` and `configuration.tts` resolvers to pick the transcriber and voice for each call — one voice or language per tenant — keyed off the dispatch metadata and request context. Each resolver runs once per call and falls back to the top-level `stt` / `tts` option when it returns `undefined`. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  ```ts
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3', // fallback voice
+    configuration: {
+      // Give each tenant its own voice, resolved per call from the dispatch metadata.
+      tts: ({ requestContext }) => tenantVoices[requestContext?.tenant as string],
+    },
+  });
+  ```
+
+  Previously the worker's speech pipeline was fixed at construction, so a multi-tenant worker could not vary voices or transcription per call. Customers who own their LiveKit session (the `MastraLLM` plugin path) already choose STT/TTS per call by construction; this brings the same flexibility to the batteries-included worker.
+
+- Added `MastraLLM`, a standard LiveKit LLM plugin, on the new `@mastra/livekit/plugin` entry point. Build your own `voice.AgentSession` and put a Mastra agent in the `llm` slot — the agent loop, tools, and memory run on a remote Mastra server reached over HTTP, so the worker process needs no Mastra app, database, or model provider keys. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  Before, the worker wrapper always owned the LiveKit session:
+
+  ```ts
+  import { createLiveKitWorker } from '@mastra/livekit/worker';
+  import { mastra } from './index';
+
+  export default createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+  });
+  ```
+
+  Now you can own the session and keep Mastra as the LLM component:
+
+  ```ts
+  import { voice } from '@livekit/agents';
+  import { MastraLLM } from '@mastra/livekit/plugin';
+
+  const session = new voice.AgentSession({
+    llm: new MastraLLM({
+      remote: { baseUrl: process.env.MASTRA_URL!, agentId: 'support' },
+      memory: { thread: callId, resource: userId },
+    }),
+    stt: 'deepgram/nova-3',
+    tts: 'cartesia/sonic-3',
+    // Required with `memory`: LiveKit enables preemptive generation by default.
+    turnHandling: { preemptiveGeneration: { enabled: false } },
+  });
+  ```
+
+  `createLiveKitWorker` stays the batteries-included path; the plugin is the composable one. Tools keep running server-side on the Mastra agent, and interrupting the agent aborts the server-side generation.
+
+  **New transport and helpers**
+  - Added `createRemoteAgentReplyGenerator()`: streams replies from a remote Mastra server over HTTP with per-turn abort, LiveKit-typed errors, and a connect + first-token timeout. It also plugs into `createLiveKitWorker`'s `generate` option to run the existing worker against a remote server.
+  - Promoted `speakGreeting()`, `waitForAgentDoneSpeaking()`, and `runEndCall()` to public exports of `@mastra/livekit/worker`, so a worker that owns its session can rebuild the greeting and agent-initiated hang-up patterns in a few lines.
+
+  **Improvements to the existing worker**
+  - Interrupted turns now self-heal: when a caller interrupts a reply, nothing is persisted at that moment, and the part the caller actually heard is backfilled into the memory thread on the next turn — so saved transcripts match the call.
+  - Added an `onToolCall` hook that fires as each tool call starts mid-reply, the building block for tool-driven side effects such as analytics or hang-up.
+  - `onTurnComplete` now receives the turn's token usage as `result.usage`.
+
+- Added a `configuration` option to `createLiveKitWorker` — one grouped home for conversation and compliance controls, so these don't each become a separate top-level worker option. It ships with greeting/AI-disclosure controls, a consent model, and agent-initiated hang-up, and is where further compliance controls will land. ([#19136](https://github.com/mastra-ai/mastra/pull/19136))
+
+  **Greeting and AI disclosure**
+
+  `configuration.greeting` controls the opening line spoken at call start. Set `allowInterruptions: false` so a legally-required AI disclosure plays through and can't be talked over (EU AI Act Art. 50), `awaitPlayout: true` to hold post-greeting work until it finishes, and `repeatEvery` to re-disclose periodically on long calls (spoken at the next turn boundary, never mid-sentence).
+
+  ```ts
+  createLiveKitWorker({
+    mastra,
+    agent: 'support',
+    configuration: {
+      greeting: {
+        text: 'You are speaking with an AI assistant. This call may be recorded. How can I help?',
+        allowInterruptions: false,
+        awaitPlayout: true,
+        repeatEvery: 3 * 60_000, // re-disclose ~every 3 minutes
+      },
+    },
+  });
+  ```
+
+  **Per-tenant greeting**
+
+  `greeting.text` also accepts a resolver, called once per call with the call context, so one multi-tenant agent can open differently per tenant based on the dispatch metadata:
+
+  ```ts
+  greeting: {
+    text: ({ metadata }) => `Thanks for calling ${tenantName(metadata)}. You're speaking with an AI assistant.`,
+    allowInterruptions: false,
+  }
+  ```
+
+  **Consent**
+
+  `configuration.consentPolicy` declares which data-use consents a call needs, as a named, extensible set (starting with `summaryStorage`) rather than one global flag. Declaring the policy enforces nothing by itself: the new `createConsentTool` captures the caller's decision at runtime — add it to your agent and it hands each decision to your own store — and your code enforces the requirement at `onCallEnd` (or before any consent-gated step).
+
+  ```ts
+  import { createConsentTool } from '@mastra/livekit';
+
+  // in your agent's tools:
+  recordConsent: createConsentTool({
+    items: ['summaryStorage'],
+    onGrant: async ({ item, granted, resourceId }) => {
+      if (resourceId) await db.saveConsent(resourceId, item, granted);
+    },
+  }),
+  ```
+
+  **Agent-initiated hang-up**
+
+  `configuration.endCall` lets the agent end the call itself. Add the new `createEndCallTool` to your agent and instruct it to say goodbye and then call the tool; the worker waits for the closing words to finish playing, holds a short audio drain (`drainMs`, default 800ms) so the tail of the goodbye isn't clipped while it's still buffered at the caller, then hangs up — running `onCallEnd` on the way out, exactly as a caller hang-up does. It works on both the agent and workflow reply paths.
+
+  ```ts
+  import { createEndCallTool } from '@mastra/livekit';
+
+  // in your agent's tools:
+  endCall: (createEndCallTool(),
+    // on the worker:
+    createLiveKitWorker({ mastra, agent: 'support', configuration: { endCall: {} } }));
+  ```
+
+  **Backwards compatible**
+
+  The previous top-level `greeting` (string) and `persistGreeting` options still work as deprecated aliases for `configuration.greeting.text` and `configuration.greeting.persist`. When both are set, `configuration.greeting` wins field by field, so existing worker configs keep running unchanged.
+
 ## 0.2.0
 
 ### Minor Changes

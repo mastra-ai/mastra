@@ -1,5 +1,13 @@
 # @mastra/fastify
 
+## 1.4.7-alpha.1
+
+### Patch Changes
+
+- Updated dependencies:
+  - @mastra/core@1.50.2-alpha.1
+  - @mastra/server@1.50.2-alpha.1
+
 ## 1.4.7-alpha.0
 
 ### Patch Changes

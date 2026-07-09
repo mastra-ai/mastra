@@ -169,6 +169,19 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Code SDK',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-agent-controller',
+          label: 'mountAgentControllerOnMastra()',
+          customProps: { tags: ['beta'] },
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Coding Agent',
       collapsed: true,
       items: [
@@ -360,12 +373,14 @@ const sidebars = {
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
+        { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },
         { type: 'doc', id: 'memory/getThreadById', label: '.getThreadById()' },
         { type: 'doc', id: 'memory/listThreads', label: '.listThreads()' },
         { type: 'doc', id: 'memory/recall', label: '.recall()' },
+        { type: 'doc', id: 'memory/summarizeThread', label: '.summarizeThread()' },
       ],
     },
     {
