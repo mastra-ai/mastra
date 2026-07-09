@@ -118,6 +118,15 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
     finish('aborted');
   }
 
+  function resetInactivityTimeout(): void {
+    if (!options.timeoutMs || settled) return;
+    if (timeoutId) clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => {
+      session.abort();
+      finish('timeout');
+    }, options.timeoutMs);
+  }
+
   if (options.signal) {
     if (options.signal.aborted) {
       queueMicrotask(() => abort());
@@ -127,15 +136,11 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
   }
 
   void (async () => {
-    if (options.timeoutMs) {
-      timeoutId = setTimeout(() => {
-        session.abort();
-        finish('timeout');
-      }, options.timeoutMs);
-    }
+    resetInactivityTimeout();
 
     unsubscribe = session.subscribe(event => {
       if (settled) return;
+      resetInactivityTimeout();
       queue.push(event);
 
       if (event.type === 'agent_end') {
@@ -165,7 +170,8 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
         await controller.setResourceId(session, { resourceId: options.resourceId });
       }
 
-      if (!session.thread.getId()) {
+      const threadId = session.thread.getId();
+      if (!threadId || !(await session.thread.getById({ threadId }))) {
         await session.thread.create();
       }
 

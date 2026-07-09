@@ -157,7 +157,7 @@ export interface RunGoalOptions<TState extends Record<string, unknown> = Record<
   maxRuns: number;
   /** Resource id for thread scoping. */
   resourceId?: string;
-  /** Abort with `status: 'timeout'` if no terminal goal evaluation arrives in time. */
+  /** Abort with `status: 'timeout'` after this many milliseconds without a controller event. */
   timeoutMs?: number;
   /** External abort signal; aborting it aborts the run. */
   signal?: AbortSignal;

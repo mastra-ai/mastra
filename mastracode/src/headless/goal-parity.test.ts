@@ -200,6 +200,26 @@ describe('headless goal parity', () => {
     expect(scorer.run).toHaveBeenCalledTimes(1);
   });
 
+  it('runGoal creates a persisted thread when the session is bound to a missing thread', async () => {
+    const { controller, session, scorer } = await makeHarness();
+    session.thread.set({ threadId: 'missing-thread' });
+
+    const run = runGoal({
+      controller,
+      session,
+      objective: 'finish on a fresh thread',
+      judgeModelId: 'mock-judge',
+      maxRuns: 5,
+      goalManager: new GoalManager(),
+    });
+    const result = await run.result;
+
+    expect(result.status).toBe('done');
+    expect(result.threadId).not.toBe('missing-thread');
+    expect(await session.thread.getById({ threadId: result.threadId! })).not.toBeNull();
+    expect(scorer.run).toHaveBeenCalledTimes(1);
+  });
+
   it('runGoal waits for terminal goal_evaluation even when agent_end arrives first', async () => {
     let listener: ((event: AgentControllerEvent) => void) | undefined;
     const objectiveRecord = {
@@ -248,6 +268,7 @@ describe('headless goal parity', () => {
       abort: vi.fn(),
       thread: {
         getId: vi.fn(() => 'thread-1'),
+        getById: vi.fn().mockResolvedValue({ id: 'thread-1' }),
         create: vi.fn(),
         setSetting: vi.fn(),
       },
@@ -293,6 +314,7 @@ describe('headless goal parity', () => {
       abort: vi.fn(),
       thread: {
         getId: vi.fn(() => 'thread-1'),
+        getById: vi.fn().mockResolvedValue({ id: 'thread-1' }),
         create: vi.fn(),
         setSetting: vi.fn(),
       },
