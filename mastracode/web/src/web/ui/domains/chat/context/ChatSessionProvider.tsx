@@ -60,7 +60,7 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
   }
 
   return (
-    <ChatTranscriptProvider threadId={threadId} initialMessages={messagesQuery.data}>
+    <ChatTranscriptProvider key={threadId ?? 'draft'} threadId={threadId} initialMessages={messagesQuery.data}>
       <ChatModesProvider>
         <ChatModelsProvider>
           <ChatPermissionsProvider>{children}</ChatPermissionsProvider>

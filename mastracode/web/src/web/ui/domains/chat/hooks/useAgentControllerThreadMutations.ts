@@ -77,13 +77,11 @@ export function useCloneAgentControllerThreadMutation(args: AgentControllerThrea
 
 export function useSwitchAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
   const { session } = createAgentControllerClient(args);
-  const invalidateSession = useThreadMutationInvalidation(args);
 
   return useMutation({
     mutationFn: async (threadId: string) => {
       await requireAgentControllerSession(session).switchThread(threadId);
       return requireAgentControllerSession(session).state();
     },
-    onSuccess: invalidateSession,
   });
 }

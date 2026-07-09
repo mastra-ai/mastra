@@ -28,7 +28,9 @@ export default function Chat() {
 
 function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const threadId = pathname.startsWith('/threads/') ? decodeURIComponent(pathname.slice('/threads/'.length)) : undefined;
+  const threadId = pathname.startsWith('/threads/')
+    ? decodeURIComponent(pathname.slice('/threads/'.length))
+    : undefined;
 
   return <ChatSessionProvider threadId={threadId}>{children}</ChatSessionProvider>;
 }

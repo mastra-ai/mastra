@@ -97,12 +97,14 @@ function useAgentControllerHandlers({
   boundThreadId = threadOne.id,
   messagesDelayMs = 0,
   stateDelayMs = 0,
+  switchDelayMsByThread = {},
   failSwitchFor = [],
 }: {
   boundThreadId?: string;
   messagesDelayMs?: number;
   /** Delays `GET /sessions/:resourceId` (the state fetch) to expose hydration races. */
   stateDelayMs?: number;
+  switchDelayMsByThread?: Partial<Record<string, number>>;
   failSwitchFor?: string[];
 } = {}): CapturedRequests {
   const captured: CapturedRequests = { sessionsCreated: 0, switched: [], created: 0, deleted: [], sent: [] };
@@ -145,6 +147,8 @@ function useAgentControllerHandlers({
     http.post(`${SESSION}/thread`, async ({ request }) => {
       const { threadId } = (await request.json()) as { threadId: string };
       captured.switched.push(threadId);
+      const switchDelayMs = switchDelayMsByThread[threadId] ?? 0;
+      if (switchDelayMs > 0) await delay(switchDelayMs);
       if (failSwitchFor.includes(threadId)) {
         stateShouldFail = true;
         return HttpResponse.json({ ok: false });
@@ -268,6 +272,26 @@ describe('MastraCode thread pages', () => {
     await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
     await act(() => delay(200));
     expect(screen.getByText('Reply from thread two')).toBeInTheDocument();
+  });
+
+  it('given a slow route switch response, when the route changes again, then the stale response does not replace the latest routed thread', async () => {
+    const captured = useAgentControllerHandlers({ switchDelayMsByThread: { [threadTwo.id]: 150 } });
+    const { router } = renderRoutes(`/threads/${threadOne.id}`);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+
+    await act(() => router.navigate(`/threads/${threadTwo.id}`));
+    await expectPathname(router, `/threads/${threadTwo.id}`);
+    await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
+
+    await act(() => router.navigate(`/threads/${threadOne.id}`));
+    await expectPathname(router, `/threads/${threadOne.id}`);
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+
+    await act(() => delay(200));
+    expect(router.state.location.pathname).toBe(`/threads/${threadOne.id}`);
+    expect(screen.getByText('Reply from thread one')).toBeInTheDocument();
+    expect(screen.queryByText('Reply from thread two')).not.toBeInTheDocument();
   });
 
   it('when deleting the thread of the current page, then the URL returns to /new', async () => {

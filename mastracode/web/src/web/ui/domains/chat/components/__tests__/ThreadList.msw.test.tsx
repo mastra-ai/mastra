@@ -157,7 +157,9 @@ function renderThreadList() {
 }
 
 async function openThreadActions(title: string) {
-  const row = (await screen.findByText(title)).closest('[role="listitem"]') as HTMLElement;
+  await screen.findByText(title);
+  const row = screen.getAllByRole('listitem').find(item => within(item).queryByText(title));
+  if (!row) throw new Error(`Thread row not found: ${title}`);
   await userEvent.click(within(row).getByRole('button', { name: 'Thread actions' }));
 }
 
@@ -232,6 +234,7 @@ describe('ThreadList', () => {
 
     await waitFor(() => expect(captured.renamed).toEqual([{ threadId: 'thread-one', title: 'Renamed thread' }]));
     expect(await screen.findByText('Thread renamed')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Thread title' })).not.toBeInTheDocument();
   });
 
   it('when a rename is cancelled with Escape, then no rename request fires', async () => {
