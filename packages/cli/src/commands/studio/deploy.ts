@@ -115,7 +115,7 @@ export function loadDeployEnvFromDotenv(projectDir: string): void {
   });
 }
 
-async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
+export async function getDeployEnvFiles(projectDir: string): Promise<string[]> {
   const entries = await readdir(projectDir, { withFileTypes: true });
 
   return entries

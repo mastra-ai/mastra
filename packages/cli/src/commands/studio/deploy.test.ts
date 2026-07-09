@@ -479,6 +479,31 @@ describe('readEnvVars', () => {
   });
 });
 
+describe('getDeployEnvFiles', () => {
+  it('returns an empty list when no .env* files exist (unified deploy uses this to fall back to environment-stored env vars)', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
+
+    const { getDeployEnvFiles } = await import('./deploy.js');
+
+    await expect(getDeployEnvFiles('/project')).resolves.toEqual([]);
+  });
+
+  it('returns sorted deploy env files, excluding .example files', async () => {
+    const { readdir } = await import('node:fs/promises');
+    vi.mocked(readdir).mockResolvedValue([
+      { name: '.env.production', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env.example', isFile: () => true, isSymbolicLink: () => false },
+      { name: '.env', isFile: () => true, isSymbolicLink: () => false },
+      { name: 'package.json', isFile: () => true, isSymbolicLink: () => false },
+    ] as unknown as Awaited<ReturnType<typeof readdir>>);
+
+    const { getDeployEnvFiles } = await import('./deploy.js');
+
+    await expect(getDeployEnvFiles('/project')).resolves.toEqual(['.env', '.env.production']);
+  });
+});
+
 describe('deployAction', () => {
   it('passes disablePlatformObservability to uploadDeploy and preserves it when saving config', async () => {
     const { access, readdir, readFile, stat } = await import('node:fs/promises');

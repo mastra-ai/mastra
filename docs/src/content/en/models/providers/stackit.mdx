@@ -53,9 +53,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.49,
-    "outputCost": 0.71
+    "maxOutput": 4096,
+    "inputCost": 0.53,
+    "outputCost": 0.76
   },
   {
     "model": "stackit/google/gemma-3-27b-it",
@@ -65,9 +65,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": false,
     "reasoning": false,
     "contextWindow": 37000,
-    "maxOutput": 8192,
-    "inputCost": 0.49,
-    "outputCost": 0.71
+    "maxOutput": 4096,
+    "inputCost": 0.53,
+    "outputCost": 0.76
   },
   {
     "model": "stackit/intfloat/e5-mistral-7b-instruct",
@@ -82,30 +82,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.02
   },
   {
-    "model": "stackit/neuralmagic/Meta-Llama-3.1-8B-Instruct-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.16,
-    "outputCost": 0.27
-  },
-  {
-    "model": "stackit/neuralmagic/Mistral-Nemo-Instruct-2407-FP8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 8192,
-    "inputCost": 0.49,
-    "outputCost": 0.71
-  },
-  {
     "model": "stackit/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -114,8 +90,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131000,
     "maxOutput": 8192,
-    "inputCost": 0.49,
-    "outputCost": 0.71
+    "inputCost": 0.53,
+    "outputCost": 0.76
+  },
+  {
+    "model": "stackit/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 8192,
+    "inputCost": 0.18,
+    "outputCost": 0.29
   },
   {
     "model": "stackit/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8",
@@ -125,9 +113,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 218000,
-    "maxOutput": 8192,
-    "inputCost": 1.64,
-    "outputCost": 1.91
+    "maxOutput": 16384,
+    "inputCost": 1.76,
+    "outputCost": 2.05
   },
   {
     "model": "stackit/Qwen/Qwen3-VL-Embedding-8B",
@@ -140,6 +128,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 4096,
     "inputCost": 0.09,
     "outputCost": 0.09
+  },
+  {
+    "model": "stackit/Qwen/Qwen3.6-27B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 0.53,
+    "outputCost": 0.76
   }
 ]}
 />
@@ -172,7 +172,7 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "stackit/openai/gpt-oss-120b"
+      ? "stackit/openai/gpt-oss-20b"
       : "stackit/Qwen/Qwen3-VL-235B-A22B-Instruct-FP8";
   }
 });

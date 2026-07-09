@@ -1,5 +1,6 @@
 packages:
-  - mastracode
+  - mastracode/sdk
+  - mastracode/tui
   - docs
   - packages/_vendored/*
   - packages/_internals/*
@@ -33,13 +34,13 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
-  '@vitest/coverage-v8': 4.1.8
-  '@vitest/ui': 4.1.8
+  '@vitest/coverage-v8': 4.1.9
+  '@vitest/ui': 4.1.9
   date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
-  vitest: 4.1.8
+  vitest: 4.1.9
   zod: ^4.4.3
   tsx: ^4.22.4
 
@@ -64,6 +65,12 @@ packageExtensions:
   '@arcadeai/arcadejs@^2.3.0':
     dependencies:
       zod: ^3.0.0
+  # transformers.js imports onnxruntime-common without declaring it; with the
+  # global virtual store there is no fallback hoist, so the import fails at
+  # runtime (hit via @livekit/agents-plugin-livekit's turn detector).
+  '@huggingface/transformers@*':
+    dependencies:
+      onnxruntime-common: '*'
 
 blockExoticSubdeps: true
 trustPolicy: no-downgrade
@@ -271,9 +278,18 @@ allowBuilds:
   '@datadog/native-iast-taint-tracking': false
   '@datadog/native-metrics': false
   '@datadog/pprof': false
+  '@ffmpeg-installer/darwin-arm64': false
+  '@ffmpeg-installer/darwin-x64': false
+  '@ffmpeg-installer/linux-arm': false
+  '@ffmpeg-installer/linux-arm64': false
+  '@ffmpeg-installer/linux-ia32': false
+  '@ffmpeg-installer/linux-x64': false
+  '@ffmpeg-installer/win32-ia32': false
+  '@ffmpeg-installer/win32-x64': false
   '@fingerprintjs/fingerprintjs-pro-react': false
   '@firebase/util': false
   '@google/genai': false
+  '@livekit/local-inference': false
   '@nestjs/core': false
   '@parcel/watcher': false
   '@scarf/scarf': false

@@ -149,6 +149,7 @@ export const WithErrorRows: Story = {
       </DataList.Top>
       {Array.from({ length: 10 }, (_, index) => {
         const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+        if (!run) return null;
         const failed = run.status === 'failed';
         return (
           <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}} variant={failed ? 'error' : 'default'}>
@@ -400,6 +401,7 @@ export const WideColumnsOverflow: Story = {
         </DataList.Top>
         {Array.from({ length: 14 }, (_, index) => {
           const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+          if (!run) return null;
           return (
             <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}}>
               <DataList.IdCell id={`${run.id}_${index}`} />
