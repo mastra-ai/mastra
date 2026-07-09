@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`OpenAI e2e test > should be succesful with structured_output 1`] = `
+exports[`OpenAI e2e test > should be successful with structured_output 1`] = `
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "additionalProperties": false,
@@ -326,7 +326,7 @@ constraints: a valid uuid",
 }
 `;
 
-exports[`OpenAI e2e test > should be succesful with structured_output 2`] = `
+exports[`OpenAI e2e test > should be successful with structured_output 2`] = `
 {
   "value": {
     "actualData": 2024-06-10T10:00:00.000Z,

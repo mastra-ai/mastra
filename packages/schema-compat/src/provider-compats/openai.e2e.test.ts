@@ -141,7 +141,7 @@ describe('OpenAI e2e test', () => {
   beforeAll(() => mock.start());
   afterAll(() => mock.saveAndStop());
 
-  it('should be succesful with structured_output', { timeout: 10000 }, async () => {
+  it('should be successful with structured_output', { timeout: 10000 }, async () => {
     const schema = z.object(allSchemas);
 
     const model = openai('gpt-4.1');
