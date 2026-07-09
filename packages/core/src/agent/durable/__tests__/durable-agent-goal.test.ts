@@ -20,6 +20,7 @@ import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 
 function createTextModel(text: string) {
   return new MockLanguageModelV2({
@@ -57,6 +58,33 @@ describe('DurableAgent goal step', () => {
 
   afterEach(async () => {
     await pubsub.close();
+  });
+
+  it('durable wrappers expose the wrapped agent goal config', () => {
+    const passingScorer = {
+      id: 'goal-scorer',
+      name: 'Goal Scorer',
+      run: vi.fn().mockResolvedValue({ score: 1, reason: 'Goal achieved' }),
+    };
+
+    const baseAgent = new Agent({
+      id: 'goal-wrapper-agent',
+      name: 'Goal Wrapper Agent',
+      instructions: 'noop',
+      model: createTextModel('done') as LanguageModelV2,
+      memory: new MockMemory(),
+      goal: {
+        judge: 'mock-judge',
+        maxRuns: 5,
+        scorer: passingScorer as any,
+      },
+    });
+
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+    const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
+
+    expect(durableAgent.__getGoalConfig()?.scorer).toBe(passingScorer);
+    expect(eventedAgent.__getGoalConfig()?.scorer).toBe(passingScorer);
   });
 
   it('goal config is stored on the run registry entry', async () => {

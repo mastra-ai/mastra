@@ -456,6 +456,10 @@ export class DurableAgent<
     return this.#wrappedAgent.getVoice();
   }
 
+  override __getGoalConfig() {
+    return this.#wrappedAgent.__getGoalConfig();
+  }
+
   // ===========================================================================
   // Editor / fork delegation
   //
