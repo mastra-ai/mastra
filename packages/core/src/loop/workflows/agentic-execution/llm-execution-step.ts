@@ -732,7 +732,10 @@ async function processOutputStream<OUTPUT = undefined>({
                 args: chunk.payload.args,
                 result: chunk.payload.result,
               },
-              providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
+              providerMetadata: withToolPayloadTransformProviderMetadata(
+                chunk.payload.providerMetadata,
+                chunk.metadata,
+              ),
               providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
             },
             // A same-stream result has no preceding state:'call' part yet (see above), so a
