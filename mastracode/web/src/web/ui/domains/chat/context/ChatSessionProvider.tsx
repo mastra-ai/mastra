@@ -1,4 +1,3 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 
@@ -8,19 +7,15 @@ import { SkeletonRows } from '../../../ui';
 // that consume this chat context, so importing it here would create a cycle.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
 import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
-import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import type { TranscriptState } from '../services/transcript';
-import { ChatConnectionContext } from './ChatConnectionContext';
 import type { ChatConnectionApi } from './ChatConnectionContext';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
-import { ChatSessionContext } from './ChatSessionContext';
-import { ChatTranscriptContext } from './ChatTranscriptContext';
-import type { ChatTranscriptApi } from './ChatTranscriptContext';
 import type { ChatModesApi } from './ChatModesContext';
+import { ChatSessionContext } from './ChatSessionContext';
+import { ChatTranscriptProvider } from './ChatTranscriptProvider';
+import type { ChatTranscriptApi } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
 import { useChatModes } from './useChatModes';
 import { useChatSessionContext } from './useChatSessionContext';
@@ -74,66 +69,11 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
   }
 
   return (
-    <ChatSessionBoundaryContent threadId={threadId} initialMessages={messagesQuery.data}>
-      {children}
-    </ChatSessionBoundaryContent>
-  );
-}
-
-function ChatSessionBoundaryContent({
-  children,
-  threadId,
-  initialMessages,
-}: {
-  children: ReactNode;
-  threadId?: string;
-  initialMessages?: AgentControllerMessage[];
-}) {
-  const { resourceId, projectPath, sessionEnabled, baseUrl } = useChatSessionContext();
-
-  const { transcript, reset, syncState, onEvent, localUser, resolvePrompt, pushNotice } = useAgentControllerTranscript({
-    initialThreadId: threadId,
-    initialMessages,
-  });
-
-  const connection = useAgentControllerConnection({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    projectPath,
-    baseUrl,
-    enabled: sessionEnabled,
-    onEvent,
-  });
-  const effectiveTranscript: TranscriptState = {
-    ...transcript,
-    threadId: transcript.threadId ?? threadId ?? connection.createdThreadId,
-    omProgress: transcript.omProgress ?? connection.state?.omProgress,
-    usage: transcript.usage ?? connection.state?.tokenUsage,
-  };
-
-  const busy = effectiveTranscript.running || effectiveTranscript.pending;
-  const lastEntry = effectiveTranscript.entries.at(-1);
-  const showWorkingIndicator = busy && !(lastEntry?.kind === 'message' && lastEntry.streaming);
-
-  const connectionValue: ChatConnectionApi = { status: connection.status, state: connection.state };
-  const transcriptValue: ChatTranscriptApi = {
-    transcript: effectiveTranscript,
-    busy,
-    showWorkingIndicator,
-    localUser,
-    syncState,
-    reset,
-    resolvePrompt,
-    pushNotice,
-  };
-  return (
-    <ChatConnectionContext.Provider value={connectionValue}>
-      <ChatTranscriptContext.Provider value={transcriptValue}>
-        <ChatModesProvider>
-          <ChatModelsProvider>{children}</ChatModelsProvider>
-        </ChatModesProvider>
-      </ChatTranscriptContext.Provider>
-    </ChatConnectionContext.Provider>
+    <ChatTranscriptProvider threadId={threadId} initialMessages={messagesQuery.data}>
+      <ChatModesProvider>
+        <ChatModelsProvider>{children}</ChatModelsProvider>
+      </ChatModesProvider>
+    </ChatTranscriptProvider>
   );
 }
 
