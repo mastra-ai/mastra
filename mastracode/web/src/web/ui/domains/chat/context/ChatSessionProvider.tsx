@@ -106,19 +106,20 @@ function ChatSessionBoundaryContent({
   });
   const effectiveTranscript: TranscriptState = {
     ...transcript,
-    modeId: transcript.modeId ?? connection.state?.modeId,
-    modelId: transcript.modelId ?? connection.state?.modelId,
     threadId: transcript.threadId ?? threadId ?? connection.createdThreadId,
     omProgress: transcript.omProgress ?? connection.state?.omProgress,
     usage: transcript.usage ?? connection.state?.tokenUsage,
   };
 
   const busy = effectiveTranscript.running || effectiveTranscript.pending;
+  const lastEntry = effectiveTranscript.entries.at(-1);
+  const showWorkingIndicator = busy && !(lastEntry?.kind === 'message' && lastEntry.streaming);
 
   const connectionValue: ChatConnectionApi = { status: connection.status, state: connection.state };
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
+    showWorkingIndicator,
     localUser,
     syncState,
     reset,

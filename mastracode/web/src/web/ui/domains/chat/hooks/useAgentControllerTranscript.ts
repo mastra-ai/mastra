@@ -5,8 +5,6 @@ import { createInitialTranscript, transcriptReducer } from '../services/transcri
 import type { TranscriptState, UsageSnapshot } from '../services/transcript';
 
 export interface SessionStateSnapshot {
-  modeId?: string;
-  modelId?: string;
   omProgress?: AgentControllerOMProgress;
   tokenUsage?: UsageSnapshot;
 }
@@ -26,8 +24,6 @@ export function useAgentControllerTranscript({
     () =>
       createInitialTranscript({
         messages: initialMessages,
-        modeId: initialState?.modeId,
-        modelId: initialState?.modelId,
         threadId: initialThreadId,
         omProgress: initialState?.omProgress,
         usage: initialState?.tokenUsage,
@@ -37,11 +33,8 @@ export function useAgentControllerTranscript({
   transcriptRef.current = transcript;
 
   const reset = (threadId?: string, state?: SessionStateSnapshot) => {
-    const prev = transcriptRef.current;
     dispatch({
       type: 'reset',
-      modeId: state?.modeId ?? prev.modeId,
-      modelId: state?.modelId ?? prev.modelId,
       threadId,
       omProgress: state?.omProgress,
       usage: state?.tokenUsage,
@@ -51,8 +44,6 @@ export function useAgentControllerTranscript({
   const syncState = (state: SessionStateSnapshot) => {
     dispatch({
       type: 'syncState',
-      modeId: state.modeId,
-      modelId: state.modelId,
       omProgress: state.omProgress,
       usage: state.tokenUsage,
     });

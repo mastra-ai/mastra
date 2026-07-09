@@ -297,52 +297,6 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o'));
     });
 
-    it('given session state omits mode, when the transcript receives a mode event, then the mode consumer uses the transcript fallback', async () => {
-      seedProject();
-      useAgentControllerHandlers([{ type: 'mode_changed', modeId: 'plan' }]);
-      server.use(
-        http.get(`${API}/modes`, () =>
-          HttpResponse.json({
-            modes: [
-              { id: 'build', name: 'Build' },
-              { id: 'plan', name: 'Plan' },
-            ],
-          }),
-        ),
-        http.get(SESSION, () =>
-          HttpResponse.json({
-            controllerId: 'code',
-            resourceId: RESOURCE_ID,
-            modelId: 'openai/gpt-4o-mini',
-            settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-          }),
-        ),
-      );
-
-      renderFocusedProbe(<ModesProbe />);
-
-      await waitFor(() => expect(screen.getByTestId('active-mode-id')).toHaveTextContent('plan'));
-      expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan');
-    });
-
-    it('given session state omits model, when the transcript receives a model event, then the model consumer uses the transcript fallback', async () => {
-      seedProject();
-      useAgentControllerHandlers([{ type: 'model_changed', modelId: 'openai/gpt-4o' }]);
-      server.use(
-        http.get(SESSION, () =>
-          HttpResponse.json({
-            controllerId: 'code',
-            resourceId: RESOURCE_ID,
-            modeId: 'build',
-            settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-          }),
-        ),
-      );
-
-      renderFocusedProbe(<ModelsProbe />);
-
-      await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o'));
-    });
 
     it('given a route thread prop, when a transcript consumer renders, then it receives persisted route-thread messages', async () => {
       seedProject();

@@ -6,6 +6,7 @@ import type { TranscriptState } from '../services/transcript';
 export interface ChatTranscriptApi {
   transcript: TranscriptState;
   busy: boolean;
+  showWorkingIndicator: boolean;
   localUser: (text: string, steer?: boolean) => void;
   syncState: (state: SessionStateSnapshot) => void;
   reset: (threadId?: string, state?: SessionStateSnapshot) => void;

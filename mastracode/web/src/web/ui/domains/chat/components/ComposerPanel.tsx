@@ -1,6 +1,7 @@
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
@@ -15,6 +16,7 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
   const { activeProject } = useActiveProjectContext();
   const { composerCommandName, clearComposerCommand } = useChatCommands();
   const { transcript } = useChatTranscript();
+  const { activeModelId } = useChatModels();
   const { modes, activeModeId, setMode } = useChatModes();
 
   if (!activeProject) return null;
@@ -28,7 +30,7 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
       />
 
       <StatusLine
-        modelId={transcript.modelId}
+        modelId={activeModelId}
         followUpCount={transcript.followUpCount}
         omPhase={transcript.omPhase}
         omProgress={transcript.omProgress}

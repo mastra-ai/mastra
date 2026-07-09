@@ -154,8 +154,6 @@ export interface TranscriptState {
    * when the run's start/end events arrive in a single batched flush.
    */
   pending: boolean;
-  modeId?: string;
-  modelId?: string;
   threadId?: string;
   /** Current task list from task_updated events. */
   tasks: AgentControllerTaskSnapshot[];
@@ -202,22 +200,18 @@ type Action =
   | { type: 'resolvePrompt'; id: string }
   | {
       type: 'reset';
-      modeId?: string;
-      modelId?: string;
       threadId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     }
   | {
       /**
-       * Patch session-level metadata (mode/model/OM/usage) from an authoritative
+       * Patch transcript-owned metadata (OM/usage) from an authoritative
        * `session.state()` fetch without touching the timeline or thread binding.
        * Used after thread switches, where the state fetch can resolve *after*
        * history hydration — it must never wipe already-rendered entries.
        */
       type: 'syncState';
-      modeId?: string;
-      modelId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     };
@@ -227,8 +221,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'reset':
       return {
         ...initialTranscript,
-        modeId: action.modeId,
-        modelId: action.modelId,
         threadId: action.threadId,
         omProgress: action.omProgress,
         usage: action.usage,
@@ -236,8 +228,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'syncState':
       return {
         ...state,
-        modeId: action.modeId,
-        modelId: action.modelId,
         omProgress: action.omProgress,
         usage: action.usage,
       };
@@ -346,9 +336,8 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       });
 
     case 'mode_changed':
-      return { ...state, modeId: event.modeId };
     case 'model_changed':
-      return { ...state, modelId: event.modelId };
+      return state;
     case 'thread_changed':
       return { ...state, threadId: event.threadId };
 
@@ -530,20 +519,16 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
  */
 export function createInitialTranscript({
   messages = [],
-  modeId,
-  modelId,
   threadId,
   omProgress,
   usage,
 }: {
   messages?: AgentControllerMessage[];
-  modeId?: string;
-  modelId?: string;
   threadId?: string;
   omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
 } = {}): TranscriptState {
-  return { ...initialTranscript, entries: messagesToEntries(messages), modeId, modelId, threadId, omProgress, usage };
+  return { ...initialTranscript, entries: messagesToEntries(messages), threadId, omProgress, usage };
 }
 
 function messagesToEntries(messages: AgentControllerMessage[]): TimelineEntry[] {

@@ -62,8 +62,10 @@ export interface NoArgCommandDeps {
     setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
     pushNotice: (text: string, level?: 'info' | 'error') => void;
   };
-  transcript: Pick<TranscriptState, 'usage' | 'omPhase' | 'modeId' | 'modelId' | 'threadId' | 'running'>;
+  transcript: Pick<TranscriptState, 'usage' | 'omPhase' | 'threadId' | 'running'>;
   activeProject: { name: string; path?: string } | null;
+  activeModeId?: string;
+  activeModelId?: string;
 }
 
 /**
@@ -71,7 +73,10 @@ export interface NoArgCommandDeps {
  * bare `/name` in the composer). Commands that need arguments fall through to
  * an error notice directing the user to the composer.
  */
-export async function runNoArgCommand(name: string, { session, transcript, activeProject }: NoArgCommandDeps) {
+export async function runNoArgCommand(
+  name: string,
+  { session, transcript, activeProject, activeModeId, activeModelId }: NoArgCommandDeps,
+) {
   switch (name) {
     case 'goal-clear':
       await session.clearGoal();
@@ -123,8 +128,8 @@ export async function runNoArgCommand(name: string, { session, transcript, activ
         [
           `Project: ${activeProject?.name ?? '(none)'}`,
           `Path: ${activeProject?.path ?? '(default workspace)'}`,
-          `Mode: ${transcript.modeId ?? '—'}`,
-          `Model: ${transcript.modelId ?? '—'}`,
+          `Mode: ${activeModeId ?? '—'}`,
+          `Model: ${activeModelId ?? '—'}`,
           `Thread: ${transcript.threadId ?? '—'}`,
           `Running: ${transcript.running}`,
         ].join('\n'),

@@ -121,6 +121,19 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('ignores active mode and model events because focused providers own that state', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'mode_changed', modeId: 'plan' },
+    });
+    const nextState = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'model_changed', modelId: 'openai/gpt-4o' },
+    });
+
+    expect(nextState).toBe(initialTranscript);
+  });
+
   it('preserves non-message state while using message entries', () => {
     const withTask = transcriptReducer(initialTranscript, {
       type: 'event',

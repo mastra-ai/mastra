@@ -14,6 +14,8 @@ interface DepsOverrides {
   session?: Partial<NoArgCommandDeps['session']>;
   transcript?: Partial<NoArgCommandDeps['transcript']>;
   activeProject?: NoArgCommandDeps['activeProject'];
+  activeModeId?: string;
+  activeModelId?: string;
 }
 
 function makeDeps(overrides: DepsOverrides = {}): NoArgCommandDeps {
@@ -31,13 +33,13 @@ function makeDeps(overrides: DepsOverrides = {}): NoArgCommandDeps {
     transcript: {
       usage: undefined,
       omPhase: 'idle',
-      modeId: undefined,
-      modelId: undefined,
       threadId: undefined,
       running: false,
       ...overrides.transcript,
     },
     activeProject: overrides.activeProject ?? null,
+    activeModeId: overrides.activeModeId,
+    activeModelId: overrides.activeModelId,
   };
 }
 
@@ -103,8 +105,10 @@ describe('runNoArgCommand', () => {
 
   it('given /settings, then it prints the session snapshot including the active project', async () => {
     const deps = makeDeps({
-      transcript: { modeId: 'build', modelId: 'openai/gpt-4o-mini', threadId: 'thread-1', running: true },
+      transcript: { threadId: 'thread-1', running: true },
       activeProject: { name: 'Demo', path: '/tmp/demo' },
+      activeModeId: 'build',
+      activeModelId: 'openai/gpt-4o-mini',
     });
     await runNoArgCommand('settings', deps);
     expect(deps.session.pushNotice).toHaveBeenCalledWith(

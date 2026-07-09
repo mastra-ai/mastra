@@ -14,6 +14,8 @@ import type { SlashCommand } from '../services/commands';
 import { runNoArgCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatTranscript } from './ChatSessionProvider';
+import { useChatModels } from './useChatModels';
+import { useChatModes } from './useChatModes';
 import { useChatSessionContext } from './useChatSessionContext';
 
 export interface ChatCommandsApi {
@@ -28,6 +30,8 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, pushNotice } = useChatTranscript();
+  const { activeModeId } = useChatModes();
+  const { activeModelId } = useChatModels();
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
@@ -61,6 +65,8 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
       },
       transcript,
       activeProject: activeProject ?? null,
+      activeModeId,
+      activeModelId,
     });
   };
 

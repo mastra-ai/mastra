@@ -1,11 +1,12 @@
 import { createContext } from 'react';
 
-import type { ConnectionStatus } from '../hooks/useAgentControllerConnection';
-import type { SessionStateSnapshot } from '../hooks/useAgentControllerTranscript';
+import type { ConnectionStatus, useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
+
+export type ChatConnectionState = ReturnType<typeof useAgentControllerConnection>['state'];
 
 export interface ChatConnectionApi {
   status: ConnectionStatus;
-  state?: SessionStateSnapshot;
+  state?: ChatConnectionState;
 }
 
 export const ChatConnectionContext = createContext<ChatConnectionApi | null>(null);

@@ -7,7 +7,6 @@ import { ChatModesContext } from './ChatModesContext';
 import type { ChatModesApi } from './ChatModesContext';
 import { useChatConnection } from './useChatConnection';
 import { useChatSessionContext } from './useChatSessionContext';
-import { useChatTranscript } from './useChatTranscript';
 
 interface ChatModesProviderProps {
   children: ReactNode;
@@ -16,7 +15,6 @@ interface ChatModesProviderProps {
 export function ChatModesProvider({ children }: ChatModesProviderProps) {
   const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
-  const { transcript } = useChatTranscript();
   const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -30,7 +28,7 @@ export function ChatModesProvider({ children }: ChatModesProviderProps) {
     enabled: sessionEnabled,
   });
   const modes = modesQuery.data ?? [];
-  const activeModeId = state?.modeId ?? transcript.modeId;
+  const activeModeId = state?.modeId;
   const value: ChatModesApi = {
     modes,
     activeModeId,

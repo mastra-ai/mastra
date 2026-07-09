@@ -12,6 +12,7 @@ import { useActiveProjectContext } from '../../workspaces';
 import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatModels } from '../context/useChatModels';
+import { useChatModes } from '../context/useChatModes';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -58,6 +59,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const { status } = useChatConnection();
   const { transcript, busy, localUser, reset, pushNotice } = useChatTranscript();
   const { activeModelId, setModel } = useChatModels();
+  const { activeModeId } = useChatModes();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
@@ -259,7 +261,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
           const lines = [
             `Project: ${activeProject?.name ?? '(none)'}`,
             `Path: ${activeProject?.path ?? '(default workspace)'}`,
-            `Mode: ${transcript.modeId ?? '—'}`,
+            `Mode: ${activeModeId ?? '—'}`,
             `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${transcript.running}`,
