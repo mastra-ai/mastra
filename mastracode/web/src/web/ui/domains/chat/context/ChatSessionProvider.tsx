@@ -13,7 +13,6 @@ import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
-import { useChatConnection } from './useChatConnection';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatTranscript } from './useChatTranscript';
 
@@ -69,4 +68,4 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
   );
 }
 
-export { useChatConnection, useChatTranscript };
+export { useChatTranscript };
