@@ -61,7 +61,6 @@ import {
   toLocalMessage,
   toLocalOMRecord,
 } from './gateway-memory-client';
-import { enrichSubmitPlanMessages } from './submit-plan-enrichment';
 import { validateBody, getEffectiveResourceId, getEffectiveThreadId, enforceThreadAccess } from './utils';
 
 interface MemoryContext extends Context {
@@ -1130,10 +1129,9 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           if (!result) {
             throw new HTTPException(404, { message: 'Thread not found' });
           }
-          const messages = await enrichSubmitPlanMessages(result.messages.map(toLocalMessage));
           return {
-            messages,
-            uiMessages: messages,
+            messages: result.messages.map(toLocalMessage),
+            uiMessages: result.messages.map(toLocalMessage),
           };
         }
       }
@@ -1166,8 +1164,7 @@ export const LIST_MESSAGES_ROUTE = createRoute({
         const uiMessages = (result as { uiMessages?: unknown }).uiMessages;
         return {
           ...result,
-          messages: await enrichSubmitPlanMessages(result.messages),
-          uiMessages: Array.isArray(uiMessages) ? await enrichSubmitPlanMessages(uiMessages) : null,
+          uiMessages: Array.isArray(uiMessages) ? uiMessages : null,
         };
       }
 
@@ -1199,7 +1196,6 @@ export const LIST_MESSAGES_ROUTE = createRoute({
           });
           return {
             ...result,
-            messages: await enrichSubmitPlanMessages(result.messages),
             uiMessages: null,
           };
         }

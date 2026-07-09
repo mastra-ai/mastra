@@ -5,8 +5,10 @@ import { createTool } from '../tool';
 /**
  * Payload carried by the native `tool-call-suspended` event when `submit_plan` pauses.
  *
- * The tool knows the plan file `path` on disk. Hosts validate that path, read the plan
- * from it, and fill `title`/`plan` for approval rendering and history replay.
+ * The tool reads the plan markdown at `path` and inlines `title`/`plan` when the file is
+ * available, so hosts render the plan (live, in storage, and on replay) without re-reading
+ * it. When the file cannot be read the payload carries only `path` and the host falls back
+ * to showing the path.
  */
 export interface SubmitPlanSuspendPayload {
   path: string;
@@ -44,10 +46,10 @@ const resumeSchema = z.object({
 /**
  * Built-in, agent-agnostic tool: submit an implementation plan for user review.
  *
- * Pausing uses the agent-native tool suspension primitive: the tool calls
- * `suspend({ path })`, which makes the agent emit a `tool-call-suspended` event and
- * persist run state. The host validates the plan file path, reads it, renders it,
- * collects an approve/reject decision, and continues the run via `agent.resumeStream({ action,
+ * Pausing uses the agent-native tool suspension primitive: the tool reads the plan file
+ * and calls `suspend({ path, title, plan })`, which makes the agent emit a
+ * `tool-call-suspended` event and persist run state. The host renders the plan, collects an
+ * approve/reject decision, and continues the run via `agent.resumeStream({ action,
  * feedback })`; the tool re-runs with `resumeData` set to that decision and reports it
  * back to the model.
  *
@@ -56,10 +58,11 @@ const resumeSchema = z.object({
  * a AgentController can layer mode-switch behavior on top of the approval in its own response
  * handling without the tool needing to change.
  *
- * The tool takes the plan file `path` — never the plan body. The host reads the plan from
- * disk at that path, so more than one plan can exist over time. When executed without an
- * agent `suspend` (e.g. direct invocation outside an agent run), the tool returns the path
- * as readable text so the submission is still surfaced.
+ * The tool takes the plan file `path` and reads the plan body from disk itself (from a
+ * `.md` file directly under `.mastracode/plans`), so the same file can be revised over time
+ * and hosts never re-read it. When the file cannot be read the tool still suspends with just
+ * `path`. When executed without an agent `suspend` (e.g. direct invocation outside an agent
+ * run), the tool returns the path as readable text so the submission is still surfaced.
  */
 export const submitPlanTool = createTool({
   id: 'submit_plan',
@@ -118,9 +121,16 @@ export const submitPlanTool = createTool({
 
       const suspend = context?.agent?.suspend;
       if (suspend) {
-        // The host validates `path`, reads that file to render the approval UI, and
-        // fills title/plan into the resume payload for history replay.
-        await suspend({ path });
+        // Read the plan body here and inline it into the suspend payload (like `ask_user`),
+        // so the live stream, persisted metadata, and replay all carry it without any host
+        // re-reading the file. Dynamic import keeps `node:fs` out of the static
+        // `@mastra/core/tools` graph so browser bundles stay clean. Falls back to `{ path }`
+        // when the file cannot be read, preserving the path-only rendering.
+        const { getSubmitPlanProjectRoot, resolveLocalPlanPath, readPlanFile } = await import('./plan-file');
+        const absPath = resolveLocalPlanPath(getSubmitPlanProjectRoot(), path);
+        const file = absPath ? await readPlanFile(absPath) : undefined;
+
+        await suspend(file ? { path, ...(file.title ? { title: file.title } : {}), plan: file.plan } : { path });
         return;
       }
 

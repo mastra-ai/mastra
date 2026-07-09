@@ -1,11 +1,26 @@
+import {
+  Plan,
+  PlanActionGroup,
+  PlanBody,
+  PlanContent,
+  PlanControls,
+  PlanCopyButton,
+  PlanExpandButton,
+  PlanHeader,
+  PlanHeaderActions,
+  PlanIntro,
+  PlanLabel,
+  PlanMain,
+  PlanPath,
+  PlanStatus,
+  PlanTitle,
+} from '@mastra/playground-ui/components/ai/plan';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { CheckIcon, MessageSquareText, XIcon } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 import type { SubmitPlanResult, SubmitPlanResumeData, SubmitPlanSuspendPayload } from './types';
-import { PlanPreview } from '@/lib/ai-ui/components/plan-preview';
-import type { PlanPreviewStatus } from '@/lib/ai-ui/components/plan-preview';
 import { useToolCall } from '@/services/tool-call-provider';
 
 export interface SubmitPlanBadgeProps {
@@ -30,7 +45,8 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   const { path, title, plan } = suspendPayload;
-  const hasPlan = typeof plan === 'string' && plan.length > 0;
+  const planContent = typeof plan === 'string' && plan.length > 0 ? plan : undefined;
+  const hasPlan = planContent !== undefined;
   const missingPlanMessage = `Could not read the plan file at \`${path}\`. Make sure the agent writes the markdown file before submitting it.`;
   const resolvedTitle = hasPlan ? (title ?? 'Submitted plan') : 'Plan file unavailable';
   const trimmedFeedback = feedback.trim();
@@ -38,9 +54,7 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
   const status = getSubmitPlanStatus(result);
   const statusLabel = status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Resolved';
   const statusVariant = status === 'approved' ? 'success' : status === 'rejected' ? 'error' : 'default';
-  const statusBadge = isResolved
-    ? ({ label: statusLabel, variant: statusVariant } satisfies PlanPreviewStatus)
-    : undefined;
+  const displayPlan = planContent ?? missingPlanMessage;
 
   const sharedResumeData = useMemo(
     () => ({
@@ -53,10 +67,10 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
 
   const copyContent = useMemo(
     () =>
-      [resolvedTitle, `File: ${path}`, hasPlan ? plan : missingPlanMessage]
+      [resolvedTitle, `File: ${path}`, displayPlan]
         .filter((value): value is string => typeof value === 'string' && value.length > 0)
         .join('\n\n'),
-    [hasPlan, missingPlanMessage, path, plan, resolvedTitle],
+    [displayPlan, path, resolvedTitle],
   );
 
   const buildResumeData = useCallback(
@@ -155,17 +169,34 @@ export const SubmitPlanBadge = ({ toolCallId, suspendPayload, result }: SubmitPl
   ) : undefined;
 
   return (
-    <PlanPreview
-      data-testid="submit-plan-badge"
-      contentTestId="submit-plan-content"
-      className="mb-4"
-      title={resolvedTitle}
-      path={path}
-      plan={hasPlan ? plan : missingPlanMessage}
-      status={statusBadge}
-      copyContent={copyContent}
-      leftActions={leftActions}
-      rightActions={rightActions}
-    />
+    <Plan data-testid="submit-plan-badge" className="mb-4">
+      <PlanHeader>
+        <PlanLabel />
+        <PlanHeaderActions>
+          {isResolved && <PlanStatus variant={statusVariant}>{statusLabel}</PlanStatus>}
+          <PlanCopyButton content={copyContent} />
+        </PlanHeaderActions>
+      </PlanHeader>
+
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>{resolvedTitle}</PlanTitle>
+          <PlanPath>{path}</PlanPath>
+        </PlanIntro>
+
+        <PlanMain>
+          <PlanContent data-testid="submit-plan-content">{displayPlan}</PlanContent>
+          {isResolved ? (
+            <PlanControls />
+          ) : (
+            <PlanControls>
+              <PlanActionGroup className="justify-end">{leftActions}</PlanActionGroup>
+              <PlanExpandButton />
+              <PlanActionGroup>{rightActions}</PlanActionGroup>
+            </PlanControls>
+          )}
+        </PlanMain>
+      </PlanBody>
+    </Plan>
   );
 };

@@ -79,7 +79,6 @@ import type { Context } from '../types';
 import { toSlug } from '../utils';
 
 import { handleError } from './error';
-import { enrichSubmitPlanStream, enrichSubmitPlanStreamChunk } from './submit-plan-enrichment';
 import {
   sanitizeBody,
   validateBody,
@@ -1690,7 +1689,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         ? await agent.stream(messages, { ...options, structuredOutput })
         : await agent.stream(messages, options);
 
-      return enrichSubmitPlanStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
     }
@@ -2107,7 +2106,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
 
           try {
             for await (const part of subscription.stream) {
-              controller.enqueue(await enrichSubmitPlanStreamChunk(part));
+              controller.enqueue(part);
               scheduleHeartbeat();
             }
             cleanup(controller);
@@ -2204,7 +2203,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         ? await agent.streamUntilIdle(messages, { ...options, structuredOutput })
         : await agent.streamUntilIdle(messages, options);
 
-      return enrichSubmitPlanStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
     }
@@ -2378,7 +2377,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         abortSignal,
       });
 
-      return enrichSubmitPlanStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error approving tool call');
     }
@@ -2566,7 +2565,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         abortSignal,
       });
 
-      return enrichSubmitPlanStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
     }
@@ -2675,7 +2674,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ? await agent.resumeStream(resumeData, { ...options, structuredOutput })
         : await agent.resumeStream(resumeData, options);
 
-      return enrichSubmitPlanStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
     }
@@ -2791,7 +2790,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         ? await agent.resumeStreamUntilIdle(resumeData, { ...options, structuredOutput })
         : await agent.resumeStreamUntilIdle(resumeData, options);
 
-      return enrichSubmitPlanStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error resuming agent stream');
     }
