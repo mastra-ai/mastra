@@ -11,7 +11,7 @@ The example watches build pipelines in a fake CI service, but the pattern applie
 
 :::experimental
 
-Signal providers are in alpha. Breaking changes may occur without a major version bump until the API is stable.
+Signal providers are in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -21,11 +21,11 @@ Signal providers are in alpha. Breaking changes may occur without a major versio
 - An API key from a supported [Model Provider](/models)
 - An existing Mastra project. Follow the [installation guide](/guides/getting-started/quickstart) if needed.
 
-This guide also assumes you understand [signals](/docs/agents/signals) at a high level. For the full API surface, see the [`SignalProvider` reference](/reference/signals/signal-provider).
+This guide also assumes you understand [signals](/docs/long-running-agents/signals) at a high level. For the full API surface, see the [`SignalProvider` reference](/reference/signals/signal-provider).
 
 ## Add notification storage
 
-A signal provider pushes [notification signals](/docs/agents/signals#notification-signals) into threads, and notifications require a storage adapter that supports the notifications domain. Configure storage on your Mastra instance.
+A signal provider pushes [notification signals](/docs/long-running-agents/signals#notification-signals) into threads, and notifications require a storage adapter that supports the notifications domain. Configure storage on your Mastra instance.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -197,13 +197,13 @@ You can extend this signal provider to:
 
 - Replace `fetchBuildStatus()` with a real API client.
 - Persist subscriptions so they survive a restart, then rehydrate them in [`start()`](/reference/signals/signal-provider#start).
-- Add a [webhook](/docs/agents/signal-providers#polling-and-webhook-providers) entry point with [`handleWebhook()`](/reference/signals/signal-provider#handlewebhookrequest) for push-based sources.
+- Add a [webhook](/docs/long-running-agents/signal-providers#polling-and-webhook-providers) entry point with [`handleWebhook()`](/reference/signals/signal-provider#handlewebhookrequest) for push-based sources.
 - Expose `subscribe` and `unsubscribe` tools with [`getTools()`](/reference/signals/signal-provider#gettools) so the agent can manage its own subscriptions.
 - Use [`dedupeKey` and `coalesceKey`](/reference/agents/agent#sendnotificationsignalnotification-options) when notifications need deduplication or batching.
 
 Learn more:
 
-- [Building signal providers](/docs/agents/signal-providers)
-- [Signals](/docs/agents/signals)
+- [Building signal providers](/docs/long-running-agents/signal-providers)
+- [Signals](/docs/long-running-agents/signals)
 - [`SignalProvider` reference](/reference/signals/signal-provider)
 - [`WebhookSignalProvider` reference](/reference/signals/webhook-signal-provider)

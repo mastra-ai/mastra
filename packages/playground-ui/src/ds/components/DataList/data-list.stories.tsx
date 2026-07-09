@@ -1,18 +1,22 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Pencil, Trash2 } from 'lucide-react';
-import { forwardRef, useState } from 'react';
+import { Columns3Icon, Pencil, Trash2 } from 'lucide-react';
+import { forwardRef, useCallback, useMemo, useState } from 'react';
 import { DataList } from './data-list';
-import type { DataListVariant } from './data-list-root';
+import type { DataListStickyHeaderBackground, DataListVariant } from './data-list-root';
 import { DataListSkeleton } from './data-list-skeleton';
+import { ScoresDataList } from './ScoresDataList/scores-data-list';
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
+import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import type { LinkComponent } from '@/ds/types/link-component';
 
 type DataListStoryArgs = {
   variant: DataListVariant;
+  stickyHeaderBackground: DataListStickyHeaderBackground;
 };
 
 const VARIANT_OPTIONS: DataListVariant[] = ['lined', 'striped'];
+const STICKY_HEADER_BACKGROUND_OPTIONS: DataListStickyHeaderBackground[] = ['tinted', 'surface', 'transparent'];
 
 const meta: Meta<DataListStoryArgs> = {
   title: 'DataDisplay/DataList',
@@ -21,11 +25,16 @@ const meta: Meta<DataListStoryArgs> = {
   },
   args: {
     variant: 'lined',
+    stickyHeaderBackground: 'tinted',
   },
   argTypes: {
     variant: {
       control: 'inline-radio',
       options: VARIANT_OPTIONS,
+    },
+    stickyHeaderBackground: {
+      control: 'inline-radio',
+      options: STICKY_HEADER_BACKGROUND_OPTIONS,
     },
   },
 };
@@ -140,6 +149,7 @@ export const WithErrorRows: Story = {
       </DataList.Top>
       {Array.from({ length: 10 }, (_, index) => {
         const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+        if (!run) return null;
         const failed = run.status === 'failed';
         return (
           <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}} variant={failed ? 'error' : 'default'}>
@@ -391,6 +401,7 @@ export const WideColumnsOverflow: Story = {
         </DataList.Top>
         {Array.from({ length: 14 }, (_, index) => {
           const run = SAMPLE_RUNS[index % SAMPLE_RUNS.length];
+          if (!run) return null;
           return (
             <DataList.RowButton key={`${run.id}-${index}`} onClick={() => {}}>
               <DataList.IdCell id={`${run.id}_${index}`} />
@@ -409,6 +420,49 @@ export const WideColumnsOverflow: Story = {
               <DataList.Cell height="compact">{120 + index * 37}ms</DataList.Cell>
               <DataList.DateCell timestamp={run.createdAt} />
               <DataList.MonoCell>trace_{String(index + 1).padStart(4, '0')}</DataList.MonoCell>
+            </DataList.RowButton>
+          );
+        })}
+      </DataList>
+    </div>
+  ),
+};
+
+/** Sticky row headers keep the first column visible while wide metric-like grids scroll horizontally. */
+export const StickyRowHeaders: Story = {
+  render: ({ variant, stickyHeaderBackground }) => (
+    <div className="max-w-[760px]">
+      <DataList
+        columns="minmax(12rem,auto) auto auto auto auto auto auto auto"
+        variant={variant}
+        stickyHeaderBackground={stickyHeaderBackground}
+        mask={{ left: false }}
+        className="max-h-80"
+      >
+        <DataList.Top>
+          <DataList.TopCell sticky="start">Model</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Input</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Output</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cache read</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cache write</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Latency</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Runs</DataList.TopCell>
+          <DataList.TopCell className="justify-end text-right">Cost</DataList.TopCell>
+        </DataList.Top>
+        {Array.from({ length: 12 }, (_, index) => {
+          const model = MODEL_TOKEN_PLACEHOLDERS[index % MODEL_TOKEN_PLACEHOLDERS.length];
+          return (
+            <DataList.RowButton key={`${model}-${index}`} onClick={() => {}}>
+              <DataList.RowHeaderCell height="compact" className="text-ui-sm">
+                {model}
+              </DataList.RowHeaderCell>
+              <DataList.NumberCell>{(index * 1300 + 6200).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{(index * 840 + 2100).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{(index * 260 + 900).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{(index * 120 + 300).toLocaleString()}</DataList.NumberCell>
+              <DataList.NumberCell>{180 + index * 24}ms</DataList.NumberCell>
+              <DataList.NumberCell>{(index + 1) * 17}</DataList.NumberCell>
+              <DataList.NumberCell highlight>${(index * 0.014 + 0.008).toFixed(3)}</DataList.NumberCell>
             </DataList.RowButton>
           );
         })}
@@ -500,4 +554,140 @@ export const WithSubheader: Story = {
       ))}
     </DataList>
   ),
+};
+
+type ToggleableColumn = 'input' | 'entity';
+const TOGGLEABLE_COLUMNS: ToggleableColumn[] = ['input', 'entity'];
+const COLUMN_LABELS: Record<ToggleableColumn, string> = { input: 'Input', entity: 'Entity' };
+
+const SCORE_ENTITIES = [
+  'weather-agent',
+  'summarise-workflow',
+  'translation-agent',
+  'recipe-generator',
+  'sentiment-scorer',
+];
+
+const SCORE_SAMPLE_INPUTS = [
+  'What is the current weather in Tokyo?',
+  'Summarise the Q2 sales report.',
+  'Translate this paragraph to Japanese.',
+  'Generate a recipe for banana bread.',
+  'Explain supervised vs unsupervised learning.',
+];
+
+const LONG_INPUT = JSON.stringify({
+  messages: [
+    {
+      role: 'system',
+      content:
+        'You are a highly capable AI assistant with deep expertise in data analysis, business intelligence, financial summarisation, multilingual translation, and multi-step reasoning. You always respond in a structured, concise, and actionable format, citing evidence from the provided context where possible.',
+    },
+    {
+      role: 'user',
+      content:
+        'Please analyse the following dataset in full detail and provide a comprehensive executive summary that includes: (1) overall revenue trends across Q1 and Q2, (2) top-performing and underperforming regions, (3) anomalies or outliers that may indicate data quality issues or exceptional market conditions, (4) year-over-year growth comparisons where data is available, and (5) at least three concrete, prioritised, actionable recommendations for the sales leadership team based on your findings.',
+    },
+  ],
+  model: 'claude-sonnet-4-5',
+  temperature: 0.7,
+  max_tokens: 4096,
+  metadata: { source: 'dashboard', requestId: 'req_abc123xyz', region: 'us-east-1' },
+});
+
+const SAMPLE_SCORES = Array.from({ length: 25 }, (_, i) => ({
+  id: `score_${String(i + 1).padStart(4, '0')}`,
+  createdAt: new Date(Date.now() - i * 1_800_000).toISOString(),
+  score: Number((0.4 + (i % 7) * 0.08).toFixed(2)),
+  entityId: SCORE_ENTITIES[i % SCORE_ENTITIES.length],
+  input:
+    i === 2
+      ? LONG_INPUT
+      : JSON.stringify({
+          messages: [{ role: 'user', content: SCORE_SAMPLE_INPUTS[i % SCORE_SAMPLE_INPUTS.length] }],
+          model: 'claude-sonnet-4-5',
+          temperature: 0.7,
+        }),
+}));
+
+function buildScoresColumns(visible: Set<ToggleableColumn>): string {
+  const parts = ['auto', 'auto', 'minmax(0, 10rem)'];
+  if (visible.has('entity')) parts.push('minmax(0, 14rem)');
+  if (visible.has('input')) parts.push('minmax(0, 100rem)');
+  return parts.join(' ');
+}
+
+/** Scorer data table: Score is always visible, Input/Entity are toggleable. */
+export const ScoresTable: Story = {
+  parameters: { layout: 'padded', controls: { exclude: ['variant', 'stickyHeaderBackground'] } },
+  render: function ScoresTableStory() {
+    const [hiddenColumns, setHiddenColumns] = useState<Set<ToggleableColumn>>(new Set());
+    const [selectedId, setSelectedId] = useState<string | undefined>(undefined);
+
+    const visibleColumns = useMemo(
+      () => new Set<ToggleableColumn>(TOGGLEABLE_COLUMNS.filter(c => !hiddenColumns.has(c))),
+      [hiddenColumns],
+    );
+    const columns = useMemo(() => buildScoresColumns(visibleColumns), [visibleColumns]);
+
+    const toggleColumn = useCallback((col: ToggleableColumn) => {
+      setHiddenColumns(prev => {
+        const next = new Set(prev);
+        if (next.has(col)) next.delete(col);
+        else next.add(col);
+        return next;
+      });
+    }, []);
+
+    return (
+      <div className="flex flex-col h-[480px] min-h-0 gap-0">
+        <div className="flex items-center justify-end pb-2 shrink-0">
+          <DropdownMenu>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="outline" size="sm">
+                <Columns3Icon className="size-3.5" />
+                Columns
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end">
+              <DropdownMenu.Label>Toggle columns</DropdownMenu.Label>
+              {TOGGLEABLE_COLUMNS.map(col => (
+                <DropdownMenu.CheckboxItem
+                  key={col}
+                  checked={visibleColumns.has(col)}
+                  onClick={() => toggleColumn(col)}
+                >
+                  {COLUMN_LABELS[col]}
+                </DropdownMenu.CheckboxItem>
+              ))}
+            </DropdownMenu.Content>
+          </DropdownMenu>
+        </div>
+
+        <ScoresDataList columns={columns} className="flex-1 min-h-0">
+          <ScoresDataList.Top>
+            <ScoresDataList.TopCell>Date</ScoresDataList.TopCell>
+            <ScoresDataList.TopCell>Time</ScoresDataList.TopCell>
+            <ScoresDataList.TopCell>Score</ScoresDataList.TopCell>
+            {visibleColumns.has('entity') && <ScoresDataList.TopCell>Entity</ScoresDataList.TopCell>}
+            {visibleColumns.has('input') && <ScoresDataList.TopCell>Input</ScoresDataList.TopCell>}
+          </ScoresDataList.Top>
+
+          {SAMPLE_SCORES.map(score => (
+            <ScoresDataList.RowButton
+              key={score.id}
+              onClick={() => setSelectedId(id => (id === score.id ? undefined : score.id))}
+              className={selectedId === score.id ? 'bg-surface4' : ''}
+            >
+              <ScoresDataList.DateCell timestamp={score.createdAt} />
+              <ScoresDataList.TimeCell timestamp={score.createdAt} />
+              <ScoresDataList.ScoreCell score={score.score} />
+              {visibleColumns.has('entity') && <ScoresDataList.EntityCell entityId={score.entityId} />}
+              {visibleColumns.has('input') && <ScoresDataList.InputCell input={score.input} />}
+            </ScoresDataList.RowButton>
+          ))}
+        </ScoresDataList>
+      </div>
+    );
+  },
 };

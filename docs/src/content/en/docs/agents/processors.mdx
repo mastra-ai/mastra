@@ -44,6 +44,7 @@ import { Agent } from '@mastra/core/agent'
 import { ModerationProcessor } from '@mastra/core/processors'
 
 export const moderatedAgent = new Agent({
+  id: 'moderated-agent',
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL_MINI__',
@@ -99,6 +100,7 @@ import { Agent } from '@mastra/core/agent'
 import { PrefillErrorHandler, TokenLimiter, ModerationProcessor } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'support-agent',
   name: 'support-agent',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   instructions: '...',
@@ -119,7 +121,7 @@ Each array also accepts a function that returns an array, so processors can be b
 
 ```typescript
 new Agent({
-  // ...
+  id: 'processors-agent',
   inputProcessors: ({ requestContext }) => {
     const limit = requestContext.get('tokenLimit') ?? 4000
     return [new TokenLimiter(limit)]
@@ -389,6 +391,7 @@ import { Agent } from '@mastra/core/agent'
 import { TokenLimiter } from '@mastra/core/processors'
 
 const agent = new Agent({
+  id: 'my-agent',
   name: 'my-agent',
   model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [new TokenLimiter(127000)],
@@ -437,7 +440,7 @@ See the [`ProviderHistoryCompat` reference](/reference/processors/provider-histo
 
 :::experimental
 
-This feature is in alpha. Breaking changes may occur without a major version bump until the API is stable.
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
@@ -461,6 +464,7 @@ import { ResponseCache } from '@mastra/core/processors'
 const cache = new InMemoryServerCache()
 
 export const searchAgent = new Agent({
+  id: 'search-agent',
   name: 'Search Agent',
   instructions: 'You answer questions concisely.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
@@ -506,7 +510,7 @@ Override explicitly when you need a different scope:
 
 ```typescript title="src/mastra/agents/scoped-agent.ts"
 new Agent({
-  // ...
+  id: 'processors-agent',
   inputProcessors: [
     new ResponseCache({
       cache,
@@ -530,6 +534,7 @@ import { RedisCache } from '@mastra/redis'
 const cache = new RedisCache({ url: process.env.REDIS_URL })
 
 export const agent = new Agent({
+  id: 'cached-agent',
   name: 'Cached Agent',
   instructions: '...',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
@@ -629,6 +634,7 @@ import { EnsureFinalResponseProcessor } from '../processors/ensure-final-respons
 const MAX_STEPS = 5
 
 const agent = new Agent({
+  id: 'agent',
   instructions: `You are a helpful assistant.
 
 Some messages you receive may contain <system-reminder>...</system-reminder> tags.
@@ -643,7 +649,7 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
 
 :::note
-Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/agents/signals#send-processor-context) for more on processor-emitted signals.
+Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/long-running-agents/signals#send-processor-context) for more on processor-emitted signals.
 :::
 
 ### Emit custom stream events

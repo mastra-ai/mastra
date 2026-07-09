@@ -1,0 +1,202 @@
+---
+title: "Skills | Agents"
+description: "Give agents reusable skills directly in code, without a full workspace."
+packages:
+  - "@mastra/core"
+---
+
+# Agent skills
+
+Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io).
+
+You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/workspace/overview). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required; use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach — defining skills in code, loading them from files, and resolving them per request.
+
+## When to use agent-level skills
+
+Use agent-level skills when:
+
+- You want self-contained agents that don't depend on a workspace
+- Skills are defined in code and don't need filesystem discovery
+- You're building packages or libraries that ship agent capabilities
+- You need per-request skill resolution based on context
+
+For filesystem-based skill discovery across a project, use [workspace skills](/docs/workspace/skills) instead.
+
+## Quickstart
+
+Define a skill inline and attach it to an agent:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSkill } from '@mastra/core/skills'
+
+const codeReview = createSkill({
+  name: 'code-review',
+  description: 'Use when reviewing code changes.',
+  instructions: `
+    When reviewing code:
+    1. Check for correctness and edge cases
+    2. Verify style consistency
+    3. Look for potential bugs
+  `,
+})
+
+export const reviewer = new Agent({
+  id: 'reviewer',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  instructions: 'You are a code review assistant.',
+  // highlight-next-line
+  skills: [codeReview],
+})
+```
+
+The agent automatically gets `skill`, `skill_read`, and `skill_search` tools so it can discover and load skills during conversations.
+
+## Defining inline skills
+
+Use `createSkill()` to create skills entirely in code:
+
+```typescript title="src/mastra/skills.ts"
+import { createSkill } from '@mastra/core/skills'
+
+export const releaseChecklist = createSkill({
+  name: 'release-checklist',
+  description: 'Use when preparing a release.',
+  instructions: `
+    ## Release Checklist
+    1. Run the full test suite
+    2. Update CHANGELOG.md
+    3. Bump version numbers
+    4. Create a git tag
+  `,
+  references: {
+    'changelog-format.md': '# Changelog Format\nUse Keep a Changelog...',
+  },
+})
+```
+
+The `references` field bundles supporting documents that the agent can read with the `skill_read` tool, like `references/` files in a filesystem skill.
+
+:::note
+Visit [`createSkill()` reference](/reference/agents/createSkill) for the full API.
+:::
+
+## Filesystem path skills
+
+Point to skill directories on disk without a workspace:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSkill } from '@mastra/core/skills'
+
+export const agent = new Agent({
+  id: 'my-agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  skills: [
+    './skills/code-review', // path to a SKILL.md directory
+    './skills/testing', // another filesystem skill
+    createSkill({
+      /* ... */
+    }), // inline skill
+  ],
+})
+```
+
+Filesystem paths use `LocalSkillSource` under the hood, which reads `SKILL.md` files following the same format as [workspace skills](/docs/workspace/skills#skillmd-format).
+
+## Dynamic skills
+
+For per-request skill resolution, pass a function:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSkill } from '@mastra/core/skills'
+
+const devSkill = createSkill({
+  name: 'dev-tools',
+  description: 'Developer productivity tools.',
+  instructions: '...',
+})
+
+const supportSkill = createSkill({
+  name: 'support-guide',
+  description: 'Customer support guidelines.',
+  instructions: '...',
+})
+
+export const agent = new Agent({
+  id: 'dynamic-agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  // highlight-start
+  skills: ({ requestContext }) => {
+    const role = requestContext.get('userRole')
+    if (role === 'developer') return [devSkill]
+    return [supportSkill]
+  },
+  // highlight-end
+})
+```
+
+The resolver function receives `{ requestContext }` and returns a `SkillInput[]` array or a `Promise<SkillInput[]>`.
+
+See [Request Context](/docs/server/request-context) for more on using request context with agents and workflows.
+
+## Merging with workspace skills
+
+When an agent has both `skills` and a workspace with skills configured, they merge. Agent-level skills take precedence on name conflicts:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+import { createSkill } from '@mastra/core/skills'
+
+const workspace = new Workspace({
+  filesystem: new LocalFilesystem({ basePath: './workspace' }),
+  skills: ['skills'], // provides "code-review" skill
+})
+
+const customReview = createSkill({
+  name: 'code-review', // same name as workspace skill
+  description: 'Custom review process.',
+  instructions: '...',
+})
+
+export const reviewer = new Agent({
+  id: 'reviewer',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  workspace,
+  skills: [customReview], // agent-level "code-review" wins
+})
+```
+
+## Programmatic skill access
+
+Use `agent.getSkill()` and `agent.listSkills()` to access skills from application code (e.g., in workflows or API routes):
+
+```typescript title="src/routes/skills.ts"
+import { reviewer } from '../mastra/agents'
+
+// Get a specific skill by name
+const skill = await reviewer.getSkill('code-review')
+if (skill) {
+  console.log(skill.instructions)
+}
+
+// List all available skills
+const allSkills = await reviewer.listSkills()
+for (const meta of allSkills) {
+  console.log(`${meta.name}: ${meta.description}`)
+}
+```
+
+:::note
+Visit [`.getSkill()` reference](/reference/agents/getSkill) and [`.listSkills()` reference](/reference/agents/listSkills) for the full API.
+:::
+
+## Related
+
+- [Workspace skills](/docs/workspace/skills)
+- [`createSkill()` reference](/reference/agents/createSkill)
+- [`.getSkill()` reference](/reference/agents/getSkill)
+- [`.listSkills()` reference](/reference/agents/listSkills)
+- [Agent skills specification](https://agentskills.io)

@@ -1,5 +1,5 @@
 import type { CoreUserMessage } from '@mastra/core/llm';
-import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui';
+import { fileToBase64, getFileContentType, isRemoteUrl } from '@mastra/playground-ui/utils/file';
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -76,7 +76,10 @@ const attachmentToCoreUserMessage = async (att: ComposerAttachment): Promise<Cor
   }
 
   if (att.kind === 'pdf') {
-    const data = att.isUrl ? att.name : `data:application/pdf;base64,${await fileToBase64(att.file)}`;
+    // `fileToBase64` already returns a full data URL (`data:application/pdf;base64,...`),
+    // so it must be used as-is. Prepending the prefix here produced a malformed,
+    // double-prefixed data URL that broke the PDF preview.
+    const data = att.isUrl ? att.name : await fileToBase64(att.file);
     return {
       role: 'user' as const,
       content: [

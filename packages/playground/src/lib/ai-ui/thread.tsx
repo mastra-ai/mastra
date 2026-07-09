@@ -1,9 +1,25 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { Avatar, Button, ButtonsGroup, cn, PendingIndicator, ScrollArea, useAutoscroll } from '@mastra/playground-ui';
+import { Avatar } from '@mastra/playground-ui/components/Avatar';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import {
+  MessageScroller,
+  MessageScrollerButton,
+  MessageScrollerContent,
+  MessageScrollerItem,
+  MessageScrollerProvider,
+  MessageScrollerViewport,
+} from '@mastra/playground-ui/components/MessageScroller';
+import { PendingIndicator } from '@mastra/playground-ui/components/PendingIndicator';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { buildThreadRailTurns, getClientMessageKey, ThreadRail } from '@mastra/playground-ui/components/ThreadRail';
+import type { ThreadRailTurn } from '@mastra/playground-ui/components/ThreadRail';
+import { useAutoscroll } from '@mastra/playground-ui/hooks/use-autoscroll';
+import { cn } from '@mastra/playground-ui/utils/cn';
 import type { MessageFactoryPart } from '@mastra/react';
-import { CLIENT_MESSAGE_ID_KEY, useSpeechRecognition } from '@mastra/react';
+import { useSpeechRecognition } from '@mastra/react';
 import { ArrowUp, Mic } from 'lucide-react';
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useMemo, useRef, useState } from 'react';
 
 import { AttachFilePopover } from './attachments/attach-file-popover';
 import { ComposerAttachments } from './attachments/attachment';
@@ -12,13 +28,17 @@ import { useChatMessages, useChatRunning, useChatSend } from './chat/chat-contex
 import { useReadAloud } from './chat/use-read-aloud';
 import { BracketOverlay } from './components/bracket-overlay';
 import './composer-sending.css';
+import './thread.css';
 import { SaveFullConversationAction } from './messages/dataset-save-action';
 import { MessageRow } from './messages/message-row';
+import { TaskPanel } from './task-panel';
 import { BrowserThumbnail, useBrowserSession } from '@/domains/agents';
 import { ComposerModelSettings } from '@/domains/agents/components/composer-model-settings';
 import { ComposerModelSwitcher, ComposerModelWarning } from '@/domains/agents/components/composer-model-switcher';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useThreadInput } from '@/domains/conversation';
+import { useVoiceCall, VoiceCallButton, VoiceCallPanel } from '@/domains/voice';
+import type { VoiceCallControls } from '@/domains/voice';
 import { usePlaygroundStore } from '@/store/playground-store';
 
 const SKELETON_DELAY_MS = 300;
@@ -63,6 +83,19 @@ const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   });
 };
 
+const ThreadRailLayer = ({ turns }: { turns: ThreadRailTurn[] }) => {
+  if (turns.length === 0) return null;
+
+  return (
+    <div
+      data-testid="thread-rail-layer"
+      className="thread-rail-layer pointer-events-none absolute inset-y-0 left-4 z-20"
+    >
+      <ThreadRail turns={turns} className="pointer-events-auto sticky top-1/2 -translate-y-1/2" />
+    </div>
+  );
+};
+
 export interface ThreadProps {
   agentName?: string;
   agentId?: string;
@@ -71,6 +104,11 @@ export interface ThreadProps {
   hideModelSwitcher?: boolean;
   /** Extra run-scoped controls (request context, tracing options) rendered in the composer action row */
   runOptionsSlot?: React.ReactNode;
+  /**
+   * Called when a voice call connects. On a brand-new chat the agent page passes its
+   * thread-list refresh here so the page navigates from /new to the real thread URL.
+   */
+  refreshThreadList?: () => Promise<void> | void;
 }
 
 export const Thread = ({
@@ -80,6 +118,7 @@ export const Thread = ({
   hasModelList,
   hideModelSwitcher,
   runOptionsSlot,
+  refreshThreadList,
 }: ThreadProps) => {
   const areaRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -97,61 +136,84 @@ export const Thread = ({
   const lastMessage = messages[messages.length - 1];
   const showPending = isRunning && (lastMessage?.role !== 'assistant' || !hasStreamingPart(lastMessage));
   const delayedPending = useDelayedFlag(showPending, SKELETON_DELAY_MS);
+  const threadRailTurns = useMemo(() => buildThreadRailTurns(messages), [messages]);
+  const threadRailAnchorIds = useMemo(() => new Set(threadRailTurns.map(turn => turn.messageId)), [threadRailTurns]);
 
   return (
     <ComposerAttachmentsProvider>
-      <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
-        <div ref={areaRef} className="overflow-y-scroll h-full" style={{ overflowAnchor: 'none' }}>
-          {isEmpty ? (
-            <ThreadWelcome agentName={agentName} />
-          ) : (
-            <div
-              ref={messagesContainerRef}
-              className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+      <MessageScrollerProvider>
+        <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+          <MessageScroller>
+            <MessageScrollerViewport
+              ref={areaRef}
+              className="overflow-y-scroll h-full"
+              style={{ overflowAnchor: 'none' }}
             >
-              <BracketOverlay containerRef={messagesContainerRef} />
-              <div className="flex flex-col gap-6 py-6">
-                {messages.map(message => {
-                  // Prefer the optimistic `clientMessageId` as the React key so the
-                  // user row keeps a stable identity when `data-user-message`
-                  // reconciliation swaps `message.id` to the server signal id. A
-                  // changing key would unmount/remount the row and shift the
-                  // trailing pending indicator. Falls back to `message.id` for
-                  // messages without a correlation key (assistant, reloaded).
-                  const messageKey =
-                    (message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] as string | undefined) ?? message.id;
-                  return (
-                    <MessageRow
-                      key={messageKey}
-                      message={message}
-                      hasModelList={hasModelList}
-                      isSpeaking={isSpeaking}
-                      onReadAloud={readAloud}
-                      onStopSpeaking={stopSpeaking}
-                    />
-                  );
-                })}
-                {delayedPending && <PendingIndicator />}
-              </div>
+              {isEmpty ? (
+                <ThreadWelcome agentName={agentName} />
+              ) : (
+                <div data-testid="thread-rail-container" className="thread-rail-container relative min-h-full">
+                  <ThreadRailLayer turns={threadRailTurns} />
+                  <div
+                    ref={messagesContainerRef}
+                    data-testid="thread-message-column"
+                    className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                  >
+                    <BracketOverlay containerRef={messagesContainerRef} />
+                    <MessageScrollerContent className="flex flex-col gap-6 py-6">
+                      {messages.map(message => {
+                        // Prefer the optimistic `clientMessageId` as the React key so the
+                        // user row keeps a stable identity when `data-user-message`
+                        // reconciliation swaps `message.id` to the server signal id. A
+                        // changing key would unmount/remount the row and shift the
+                        // trailing pending indicator. Falls back to `message.id` for
+                        // messages without a correlation key (assistant, reloaded).
+                        const messageKey = getClientMessageKey(message);
+                        return (
+                          <MessageScrollerItem
+                            key={messageKey}
+                            messageId={message.id}
+                            scrollAnchor={threadRailAnchorIds.has(message.id)}
+                          >
+                            <MessageRow
+                              message={message}
+                              hasModelList={hasModelList}
+                              isSpeaking={isSpeaking}
+                              onReadAloud={readAloud}
+                              onStopSpeaking={stopSpeaking}
+                            />
+                          </MessageScrollerItem>
+                        );
+                      })}
+                      {delayedPending && <PendingIndicator />}
+                    </MessageScrollerContent>
 
-              {!isRunning && <SaveFullConversationAction />}
+                    {!isRunning && <SaveFullConversationAction />}
+                  </div>
+                </div>
+              )}
+            </MessageScrollerViewport>
+            <MessageScrollerButton className="z-30" />
+          </MessageScroller>
+
+          {showThumbnailInChat && agentId && threadId && (
+            <div className="mb-2 max-w-3xl w-full mx-auto px-4">
+              <BrowserThumbnail agentName={agentName} />
             </div>
           )}
+
+          <TaskPanel />
+
+          <Composer
+            agentId={agentId}
+            threadId={threadId}
+            hasModelList={hasModelList}
+            hideModelSwitcher={hideModelSwitcher}
+            runOptionsSlot={runOptionsSlot}
+            refreshThreadList={refreshThreadList}
+          />
         </div>
-
-        {showThumbnailInChat && agentId && threadId && (
-          <div className="mb-2 max-w-3xl w-full mx-auto px-4">
-            <BrowserThumbnail agentName={agentName} />
-          </div>
-        )}
-
-        <Composer
-          agentId={agentId}
-          hasModelList={hasModelList}
-          hideModelSwitcher={hideModelSwitcher}
-          runOptionsSlot={runOptionsSlot}
-        />
-      </div>
+      </MessageScrollerProvider>
     </ComposerAttachmentsProvider>
   );
 };
@@ -171,21 +233,32 @@ const ThreadWelcome = ({ agentName }: ThreadWelcomeProps) => {
 
 interface ComposerProps {
   agentId?: string;
+  threadId?: string;
   hasModelList?: boolean;
   hideModelSwitcher?: boolean;
   runOptionsSlot?: React.ReactNode;
+  refreshThreadList?: () => Promise<void> | void;
 }
 
-const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: ComposerProps) => {
-  const { setThreadInput } = useThreadInput();
+const Composer = ({
+  agentId,
+  threadId,
+  hasModelList,
+  hideModelSwitcher,
+  runOptionsSlot,
+  refreshThreadList,
+}: ComposerProps) => {
+  const { threadInput: text, setThreadInput } = useThreadInput(threadId);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [text, setText] = useState('');
   const send = useChatSend();
   const { attachments, toCoreUserMessages, clear } = useComposerAttachments();
   const { isRunning, canSendWhileStreaming, cancelRun } = useChatRunning();
   const [sendPulseKey, setSendPulseKey] = useState(0);
   const { canExecute } = usePermissions();
   const canExecuteAgent = canExecute('agents');
+  // On a brand-new chat, starting the call must transition the page out of its
+  // new-thread state (same as the first text send) or the chat never loads messages.
+  const voiceCall = useVoiceCall({ agentId, threadId, onCallStarted: refreshThreadList });
 
   const isEmpty = text.trim().length === 0 && attachments.length === 0;
   const sendBlocked = isRunning && !canSendWhileStreaming;
@@ -194,8 +267,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
     if (isEmpty || sendBlocked || !canExecuteAgent) return;
     const coreUserMessages = attachments.length > 0 ? await toCoreUserMessages() : undefined;
     const message = text;
-    setText('');
-    setThreadInput?.('');
+    setThreadInput('');
     clear();
     setSendPulseKey(k => k + 1);
     send({ message, attachments: coreUserMessages });
@@ -215,6 +287,8 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
           <ComposerAttachments />
         </div>
 
+        <VoiceCallPanel voiceCall={voiceCall} />
+
         <div
           className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
           onClick={e => {
@@ -233,8 +307,7 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
                 className="field-sizing-content min-h-17 w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
                 placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
                 onChange={e => {
-                  setText(e.target.value);
-                  setThreadInput?.(e.target.value);
+                  setThreadInput(e.target.value);
                 }}
                 onKeyDown={e => {
                   // Ignore Enter while an IME composition is active (e.g. committing a
@@ -262,9 +335,9 @@ const Composer = ({ agentId, hasModelList, hideModelSwitcher, runOptionsSlot }: 
               canSendWhileStreaming={canSendWhileStreaming}
               onCancel={() => void cancelRun()}
               onSetText={value => {
-                setText(value);
-                setThreadInput?.(value);
+                setThreadInput(value);
               }}
+              voiceCall={voiceCall}
             />
           </div>
         </div>
@@ -329,6 +402,7 @@ interface ComposerActionRowProps {
   canSendWhileStreaming: boolean;
   onCancel: () => void;
   onSetText: (text: string) => void;
+  voiceCall?: VoiceCallControls;
 }
 
 const ComposerActionRow = ({
@@ -341,6 +415,7 @@ const ComposerActionRow = ({
   canSendWhileStreaming,
   onCancel,
   onSetText,
+  voiceCall,
 }: ComposerActionRowProps) => {
   return (
     <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
@@ -362,6 +437,7 @@ const ComposerActionRow = ({
         <ButtonsGroup spacing="close">
           {canExecute && <AttachFilePopover />}
           {canExecute && <SpeechInput agentId={agentId} onTranscript={onSetText} />}
+          {canExecute && agentId && voiceCall && <VoiceCallButton voiceCall={voiceCall} />}
         </ButtonsGroup>
         <ComposerSendButton
           canExecute={canExecute}

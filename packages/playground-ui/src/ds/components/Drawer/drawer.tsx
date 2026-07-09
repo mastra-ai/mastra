@@ -231,6 +231,7 @@ Drawer.displayName = 'Drawer';
 
 // Generic (not `forwardRef`) so `handle` / `payload` stay type-safe on detached triggers.
 type DrawerTriggerProps<Payload = unknown> = DrawerPrimitive.Trigger.Props<Payload> & {
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 
@@ -246,6 +247,7 @@ function DrawerTrigger<Payload = unknown>({ asChild, children, ...props }: Drawe
 DrawerTrigger.displayName = 'DrawerTrigger';
 
 type DrawerCloseProps = DrawerPrimitive.Close.Props & {
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 

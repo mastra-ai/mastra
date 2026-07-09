@@ -1,5 +1,133 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+
+## 0.14.3
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3
+
+## 0.14.3-alpha.1
+
+### Patch Changes
+
+- Updated the ws dependency to ^8.21.0 to pull in fixes for an uninitialized memory disclosure (GHSA-58qx-3vcg-4xpx) and a memory exhaustion denial-of-service (GHSA-96hv-2xvq-fx4p) in the WebSocket server. ([#18789](https://github.com/mastra-ai/mastra/pull/18789))
+
+## 0.14.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8)]:
+  - @mastra/schema-compat@1.3.3-alpha.0
+
+## 0.14.2
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb), [`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2
+
+## 0.14.2-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`d0702ee`](https://github.com/mastra-ai/mastra/commit/d0702eedc1594cb2d0d83476440cfc2ec8820adb)]:
+  - @mastra/schema-compat@1.3.2-alpha.1
+
+## 0.14.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`9feeaa0`](https://github.com/mastra-ai/mastra/commit/9feeaa0f9a1af07039e5b4f22b932b0cb18617e8), [`213feb8`](https://github.com/mastra-ai/mastra/commit/213feb87bfdd1d8ec00ea660e218f9bcfcb34e7b)]:
+  - @mastra/schema-compat@1.3.2-alpha.0
+
+## 0.14.1
+
+### Patch Changes
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1
+
+## 0.14.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`d5fa3cd`](https://github.com/mastra-ai/mastra/commit/d5fa3cda1788c3cb93a361a3c6ec47de6ba21e98)]:
+  - @mastra/schema-compat@1.3.1-alpha.0
+
+## 0.14.0
+
+### Minor Changes
+
+- Added `sendContext()` method to `GeminiLiveVoice` for seeding conversation history into a fresh voice session without triggering a model response. This lets apps replay prior turns from Mastra Memory (or any external store) on a cold connect so the model has full context before the user speaks — enabling seamless handoff between text chat and voice on a shared thread. ([#18286](https://github.com/mastra-ai/mastra/pull/18286))
+
+  **Usage:**
+
+  ```ts
+  await voice.connect();
+
+  await voice.sendContext([
+    { role: 'user', content: 'What is the weather?' },
+    { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+  ]);
+
+  // Model stays silent until the user actually speaks
+  await voice.send(micStream);
+  ```
+
+### Patch Changes
+
+- Fix resumeSession() always timing out. Session resumption now works end-to-end: new sessions request server-issued tokens, inbound handles are stored and emitted, and resuming reconnects with the correct handle in the setup frame. ([#18190](https://github.com/mastra-ai/mastra/pull/18190))
+
+- Fix sendContext() being rejected (WS 1007) on gemini-3.1-flash-live-preview by emitting `history_config: { initial_history_in_client_content: true }` in the setup frame. Also exposes `initialHistoryInClientContent` on `GeminiSessionConfig` so callers can opt out explicitly. ([#18368](https://github.com/mastra-ai/mastra/pull/18368))
+
+- Fixed realtime audio streaming being immediately rejected by the Gemini Live API. Audio frames now use the current API format, replacing a deprecated payload shape that caused the connection to close on the first frame. ([#18291](https://github.com/mastra-ai/mastra/pull/18291))
+
+  The `session` event for disconnections now includes `code` and `reason` fields, so consumers can see why the server closed the connection.
+
+## 0.14.0-alpha.1
+
+### Patch Changes
+
+- Fix sendContext() being rejected (WS 1007) on gemini-3.1-flash-live-preview by emitting `history_config: { initial_history_in_client_content: true }` in the setup frame. Also exposes `initialHistoryInClientContent` on `GeminiSessionConfig` so callers can opt out explicitly. ([#18368](https://github.com/mastra-ai/mastra/pull/18368))
+
+## 0.14.0-alpha.0
+
+### Minor Changes
+
+- Added `sendContext()` method to `GeminiLiveVoice` for seeding conversation history into a fresh voice session without triggering a model response. This lets apps replay prior turns from Mastra Memory (or any external store) on a cold connect so the model has full context before the user speaks — enabling seamless handoff between text chat and voice on a shared thread. ([#18286](https://github.com/mastra-ai/mastra/pull/18286))
+
+  **Usage:**
+
+  ```ts
+  await voice.connect();
+
+  await voice.sendContext([
+    { role: 'user', content: 'What is the weather?' },
+    { role: 'assistant', content: 'It is 72°F in San Francisco.' },
+  ]);
+
+  // Model stays silent until the user actually speaks
+  await voice.send(micStream);
+  ```
+
+### Patch Changes
+
+- Fix resumeSession() always timing out. Session resumption now works end-to-end: new sessions request server-issued tokens, inbound handles are stored and emitted, and resuming reconnects with the correct handle in the setup frame. ([#18190](https://github.com/mastra-ai/mastra/pull/18190))
+
+- Fixed realtime audio streaming being immediately rejected by the Gemini Live API. Audio frames now use the current API format, replacing a deprecated payload shape that caused the connection to close on the first frame. ([#18291](https://github.com/mastra-ai/mastra/pull/18291))
+
+  The `session` event for disconnections now includes `code` and `reason` fields, so consumers can see why the server closed the connection.
+
 ## 0.13.0
 
 ### Minor Changes

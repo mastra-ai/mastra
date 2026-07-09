@@ -18,13 +18,13 @@ concurrency:
 jobs:
   changed-tests:
     # This workflow runs PR code in the unprivileged pull_request sandbox, without
-    # secrets or write permissions. Keep PR Triage on pull_request_target for labels.
+    # secrets or write permissions.
     if: ${{ github.repository == 'mastra-ai/mastra' && github.event.pull_request.draft == false }}
     runs-on: starsling-ubuntu-24.04
     timeout-minutes: 30
     steps:
       - name: Checkout base
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           persist-credentials: false
           ref: ${{ github.event.pull_request.base.sha }}
@@ -76,22 +76,9 @@ jobs:
           HEAD_REPO_FULL_NAME: ${{ github.event.pull_request.head.repo.full_name }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
-      - name: Setup pnpm
+      - name: Setup pnpm and Node.js
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
-        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
-        with:
-          run_install: false
-          cache: true
-
-      - name: Setup Node.js
-        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
-        with:
-          node-version: 22.13.0
-
-      - name: Install dependencies
-        if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}
-        run: pnpm install --frozen-lockfile
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Build
         if: ${{ steps.changed_tests.outputs.has_tests == 'true' }}

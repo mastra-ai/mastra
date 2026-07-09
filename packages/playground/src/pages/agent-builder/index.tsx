@@ -1,4 +1,4 @@
-import { Spinner } from '@mastra/playground-ui';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 
 import { Navigate } from 'react-router';
 import { useAgentBuilderInternalRedirect } from '@/domains/agent-builder/hooks/use-agent-builder-internal-redirect';

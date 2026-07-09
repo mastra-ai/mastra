@@ -1,17 +1,10 @@
 'use client';
-
-import {
-  Button,
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogBody,
-  Input,
-  Label,
-  SelectFieldBlock,
-  toast,
-} from '@mastra/playground-ui';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@mastra/playground-ui/components/Dialog';
+import { SelectFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { useReducer } from 'react';
 import { useDatasetMutations } from '../hooks/use-dataset-mutations';
 import { SchemaConfigSection } from './schema-config-section';

@@ -57,6 +57,8 @@ export type ThreadOMMetadata = {
   suggestedResponse?: string;
   /** Observer-generated thread title */
   threadTitle?: string;
+  /** Extracted Observational Memory values keyed by extractor slug */
+  extracted?: Record<string, unknown>;
   /** Timestamp of the last observed message in this thread (ISO string for JSON serialization) */
   lastObservedAt?: string;
   /** Cursor pointing at the last observed message (for replay pruning fallback) */
@@ -194,6 +196,14 @@ type BaseWorkingMemory = {
    * @see docs/src/content/en/docs/agents/signals.mdx
    */
   useStateSignals?: boolean;
+  /**
+   * Whether the main agent manages working memory directly through tool/instruction injection.
+   * Set to false when another path, such as Observational Memory extractors,
+   * owns working memory updates.
+   *
+   * @default true
+   */
+  agentManaged?: boolean;
   /** @deprecated The `use` option has been removed. Working memory always uses tool-call mode. */
   use?: never;
 };
@@ -433,6 +443,16 @@ export interface ObservationalMemoryObservationConfig {
    * @default 'google/gemini-2.5-flash'
    */
   model?: AgentConfig['model'];
+
+  /**
+   * Manage working memory through Observational Memory extraction.
+   * When enabled alongside `workingMemory.enabled`, Memory supplies defaults that
+   * disable main-agent working memory management and add the WorkingMemoryExtractor.
+   * Set `workingMemory.agentManaged: true` to keep main-agent tools/instructions enabled.
+   *
+   * @default false
+   */
+  manageWorkingMemory?: boolean;
 
   /**
    * Token count of unobserved messages that triggers observation.
@@ -852,7 +872,7 @@ export interface ObservationalMemoryOptions {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers
+   * Enable retrieval-mode observation groups as durable pointers
    * to raw message history. When enabled, observation groups keep `_range`
    * metadata visible in context and a `recall` tool is registered so the actor
    * can inspect raw messages behind a stored observation summary.
@@ -865,7 +885,6 @@ export interface ObservationalMemoryOptions {
    * `scope` defaults to `'resource'` (cross-thread browsing, thread listing, and search).
    * Set to `'thread'` to restrict to the current thread only.
    *
-   * @experimental
    * @default false
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
@@ -1305,8 +1324,7 @@ export type SerializedObservationalMemoryConfig = {
   temporalMarkers?: boolean;
 
   /**
-   * **Experimental.** Enable retrieval-mode observation groups as durable pointers to raw message history.
-   * @experimental
+   * Enable retrieval-mode observation groups as durable pointers to raw message history.
    */
   retrieval?: boolean | { vector?: boolean; scope?: 'thread' | 'resource' };
 
@@ -1321,6 +1339,9 @@ export type SerializedObservationalMemoryConfig = {
 export type SerializedObservationalMemoryObservationConfig = {
   /** Observer model ID */
   model?: string;
+  /** Manage working memory through Observational Memory extraction. */
+  manageWorkingMemory?: boolean;
+
   /** Token count threshold that triggers observation */
   messageTokens?: number;
   /** Model settings (temperature, maxOutputTokens, etc.) */

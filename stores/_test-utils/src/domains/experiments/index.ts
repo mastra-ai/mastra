@@ -1,9 +1,17 @@
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import type { MastraStorage, ExperimentsStorage, DatasetsStorage, Experiment } from '@mastra/core/storage';
+import type { TestCapabilities } from '../../factory';
 
-export function createExperimentsTests({ storage }: { storage: MastraStorage }) {
+export function createExperimentsTests({
+  storage,
+  capabilities = {},
+}: {
+  storage: MastraStorage;
+  capabilities?: TestCapabilities;
+}) {
   // Skip tests if storage doesn't have experiments domain
   const describeExperiments = storage.stores?.experiments ? describe : describe.skip;
+  const supportsToolMocks = capabilities.toolMocks !== false;
 
   let experimentsStorage: ExperimentsStorage;
   // Optional — needed for cascade / filter-by-datasetId tests
@@ -335,6 +343,52 @@ export function createExperimentsTests({ storage }: { storage: MastraStorage }) 
         expect(result.retryCount).toBe(1);
       });
 
+      const toolMockReportFixture = {
+        served: [{ mockIndex: 0, toolName: 'getWeather', args: { city: 'Seattle' } }],
+        unconsumed: [{ mockIndex: 1, toolName: 'getWeather', args: { city: 'Paris' } }],
+        liveCalls: [{ toolName: 'search', args: { q: 'x' } }],
+        failure: { code: 'TOOL_MOCK_MISMATCH' as const, toolName: 'getWeather', args: { city: 'NYC' } },
+      };
+
+      (supportsToolMocks ? it : it.skip)('addExperimentResult persists toolMockReport and reads it back', async () => {
+        const toolMockReport = toolMockReportFixture;
+        const created = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-mock',
+          itemDatasetVersion: null,
+          input: { q: 'hello' },
+          output: null,
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          toolMockReport,
+        });
+        expect(created.toolMockReport).toEqual(toolMockReport);
+
+        const found = await experimentsStorage.getExperimentResultById({ id: created.id });
+        expect(found!.toolMockReport).toEqual(toolMockReport);
+      });
+
+      (supportsToolMocks ? it.skip : it)('rejects toolMockReport when the adapter does not support it', async () => {
+        await expect(
+          experimentsStorage.addExperimentResult({
+            experimentId: exp.id,
+            itemId: 'item-mock-reject',
+            itemDatasetVersion: null,
+            input: { q: 'hello' },
+            output: null,
+            groundTruth: null,
+            error: null,
+            startedAt: new Date(),
+            completedAt: new Date(),
+            retryCount: 0,
+            toolMockReport: toolMockReportFixture,
+          }),
+        ).rejects.toThrow();
+      });
+
       it('getExperimentResultById returns result or null', async () => {
         const result = await experimentsStorage.addExperimentResult({
           experimentId: exp.id,
@@ -467,6 +521,498 @@ export function createExperimentsTests({ storage }: { storage: MastraStorage }) 
 
         const list = await experimentsStorage.listExperiments({ pagination: { page: 0, perPage: 10 } });
         expect(list.experiments).toHaveLength(0);
+      });
+    });
+
+    // ---------------------------------------------------------------------------
+    // Tenancy
+    // ---------------------------------------------------------------------------
+    describe('Tenancy', () => {
+      beforeEach(async () => {
+        await experimentsStorage.dangerouslyClearAll();
+      });
+
+      it('createExperiment persists organizationId and projectId', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'tenancy-create',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        expect(exp.organizationId).toBe('org_a');
+        expect(exp.projectId).toBe('proj_a');
+
+        const reread = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(reread?.organizationId).toBe('org_a');
+        expect(reread?.projectId).toBe('proj_a');
+      });
+
+      it('createExperiment defaults tenancy fields to null when omitted', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'tenancy-null',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+        });
+
+        expect(exp.organizationId).toBeNull();
+        expect(exp.projectId).toBeNull();
+      });
+
+      it('listExperiments filters by organizationId and projectId', async () => {
+        await experimentsStorage.createExperiment({
+          name: 'a-1',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_1',
+        });
+        await experimentsStorage.createExperiment({
+          name: 'a-2',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_2',
+        });
+        await experimentsStorage.createExperiment({
+          name: 'b-1',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_b',
+          projectId: 'proj_1',
+        });
+
+        const byOrg = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a' },
+        });
+        expect(byOrg.experiments.map(e => e.name).sort()).toEqual(['a-1', 'a-2']);
+
+        const byOrgAndProject = await experimentsStorage.listExperiments({
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a', projectId: 'proj_1' },
+        });
+        expect(byOrgAndProject.experiments.map(e => e.name)).toEqual(['a-1']);
+      });
+
+      it('addExperimentResult persists tenancy inherited from parent and listExperimentResults filters by it', async () => {
+        // Two experiments under distinct tenancies — results denormalize their
+        // parent's tenancy, mirroring the materializer/runner contract. We do
+        // NOT cross-stamp results from a different tenancy onto the same
+        // experiment: that would violate the parent→child invariant.
+        const expA = await experimentsStorage.createExperiment({
+          name: 'results-tenancy-a',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+        const expB = await experimentsStorage.createExperiment({
+          name: 'results-tenancy-b',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_b',
+          projectId: 'proj_b',
+        });
+
+        await experimentsStorage.addExperimentResult({
+          experimentId: expA.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { x: 1 },
+          output: { y: 1 },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: expA.organizationId,
+          projectId: expA.projectId,
+        });
+        await experimentsStorage.addExperimentResult({
+          experimentId: expB.id,
+          itemId: 'item-2',
+          itemDatasetVersion: null,
+          input: { x: 2 },
+          output: { y: 2 },
+          groundTruth: null,
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: expB.organizationId,
+          projectId: expB.projectId,
+        });
+
+        // Filtering expA's results by org_a returns the one inherited result;
+        // filtering by org_b returns nothing because expA's results inherit
+        // expA's tenancy.
+        const expAOrgA = await experimentsStorage.listExperimentResults({
+          experimentId: expA.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_a' },
+        });
+        expect(expAOrgA.results.map(r => r.itemId)).toEqual(['item-1']);
+        expect(expAOrgA.results[0]!.organizationId).toBe('org_a');
+        expect(expAOrgA.results[0]!.projectId).toBe('proj_a');
+
+        const expAOrgB = await experimentsStorage.listExperimentResults({
+          experimentId: expA.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { organizationId: 'org_b' },
+        });
+        expect(expAOrgB.results).toEqual([]);
+
+        // Symmetric check for expB filtered by its own project.
+        const expBProjB = await experimentsStorage.listExperimentResults({
+          experimentId: expB.id,
+          pagination: { page: 0, perPage: 50 },
+          filters: { projectId: 'proj_b' },
+        });
+        expect(expBProjB.results.map(r => r.itemId)).toEqual(['item-2']);
+        expect(expBProjB.results[0]!.organizationId).toBe('org_b');
+        expect(expBProjB.results[0]!.projectId).toBe('proj_b');
+      });
+
+      it('getExperimentById returns row when tenancy filters match', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'get-tenancy-match',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const reread = await experimentsStorage.getExperimentById({
+          id: exp.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_a' },
+        });
+        expect(reread?.id).toBe(exp.id);
+        expect(reread?.organizationId).toBe('org_a');
+        expect(reread?.projectId).toBe('proj_a');
+      });
+
+      it('getExperimentById returns null on tenancy mismatch (no cross-tenant existence leak)', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'get-tenancy-mismatch',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        // Wrong organization
+        const wrongOrg = await experimentsStorage.getExperimentById({
+          id: exp.id,
+          filters: { organizationId: 'org_b' },
+        });
+        expect(wrongOrg).toBeNull();
+
+        // Wrong project (right org)
+        const wrongProject = await experimentsStorage.getExperimentById({
+          id: exp.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_b' },
+        });
+        expect(wrongProject).toBeNull();
+      });
+
+      it('getExperimentById ignores filters when omitted (backward compatible)', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'get-no-filters',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const reread = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(reread?.id).toBe(exp.id);
+      });
+
+      it('getExperimentResultById returns row when tenancy filters match', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'result-tenancy-match',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const result = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { text: 'hi' },
+          groundTruth: null,
+          output: { text: 'ok' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: exp.organizationId,
+          projectId: exp.projectId,
+        });
+
+        const reread = await experimentsStorage.getExperimentResultById({
+          id: result.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_a' },
+        });
+        expect(reread?.id).toBe(result.id);
+        expect(reread?.organizationId).toBe('org_a');
+        expect(reread?.projectId).toBe('proj_a');
+      });
+
+      it('getExperimentResultById returns null on tenancy mismatch', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'result-tenancy-mismatch',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const result = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { text: 'hi' },
+          groundTruth: null,
+          output: { text: 'ok' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: exp.organizationId,
+          projectId: exp.projectId,
+        });
+
+        const wrongOrg = await experimentsStorage.getExperimentResultById({
+          id: result.id,
+          filters: { organizationId: 'org_b' },
+        });
+        expect(wrongOrg).toBeNull();
+
+        const wrongProject = await experimentsStorage.getExperimentResultById({
+          id: result.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_b' },
+        });
+        expect(wrongProject).toBeNull();
+      });
+
+      it('deleteExperiment is a silent no-op on tenancy mismatch and preserves the row', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'delete-tenancy-mismatch',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const result = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { text: 'hi' },
+          groundTruth: null,
+          output: { text: 'ok' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: exp.organizationId,
+          projectId: exp.projectId,
+        });
+
+        // Wrong org — must not throw and must not delete
+        await experimentsStorage.deleteExperiment({
+          id: exp.id,
+          filters: { organizationId: 'org_b' },
+        });
+
+        // Wrong project (right org) — must not throw and must not delete
+        await experimentsStorage.deleteExperiment({
+          id: exp.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_b' },
+        });
+
+        const stillThere = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(stillThere?.id).toBe(exp.id);
+        const stillHasResult = await experimentsStorage.getExperimentResultById({ id: result.id });
+        expect(stillHasResult?.id).toBe(result.id);
+      });
+
+      it('deleteExperiment deletes when tenancy filters match and cascades to results', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'delete-tenancy-match',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const result = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { text: 'hi' },
+          groundTruth: null,
+          output: { text: 'ok' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: exp.organizationId,
+          projectId: exp.projectId,
+        });
+
+        await experimentsStorage.deleteExperiment({
+          id: exp.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_a' },
+        });
+
+        const gone = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(gone).toBeNull();
+        const goneResult = await experimentsStorage.getExperimentResultById({ id: result.id });
+        expect(goneResult).toBeNull();
+      });
+
+      it('deleteExperiment ignores filters when omitted (backward compatible)', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'delete-no-filters',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        await experimentsStorage.deleteExperiment({ id: exp.id });
+        const gone = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(gone).toBeNull();
+      });
+
+      it('deleteExperimentResults is a silent no-op on tenancy mismatch and preserves rows', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'delete-results-tenancy-mismatch',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const result = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { text: 'hi' },
+          groundTruth: null,
+          output: { text: 'ok' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: exp.organizationId,
+          projectId: exp.projectId,
+        });
+
+        await experimentsStorage.deleteExperimentResults({
+          experimentId: exp.id,
+          filters: { organizationId: 'org_b' },
+        });
+        await experimentsStorage.deleteExperimentResults({
+          experimentId: exp.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_b' },
+        });
+
+        const stillThere = await experimentsStorage.getExperimentResultById({ id: result.id });
+        expect(stillThere?.id).toBe(result.id);
+      });
+
+      it('deleteExperimentResults removes all results when tenancy filters match', async () => {
+        const exp = await experimentsStorage.createExperiment({
+          name: 'delete-results-tenancy-match',
+          datasetId: null,
+          datasetVersion: null,
+          targetType: 'agent',
+          targetId: 'agent-1',
+          totalItems: 1,
+          organizationId: 'org_a',
+          projectId: 'proj_a',
+        });
+
+        const result = await experimentsStorage.addExperimentResult({
+          experimentId: exp.id,
+          itemId: 'item-1',
+          itemDatasetVersion: null,
+          input: { text: 'hi' },
+          groundTruth: null,
+          output: { text: 'ok' },
+          error: null,
+          startedAt: new Date(),
+          completedAt: new Date(),
+          retryCount: 0,
+          organizationId: exp.organizationId,
+          projectId: exp.projectId,
+        });
+
+        await experimentsStorage.deleteExperimentResults({
+          experimentId: exp.id,
+          filters: { organizationId: 'org_a', projectId: 'proj_a' },
+        });
+
+        const gone = await experimentsStorage.getExperimentResultById({ id: result.id });
+        expect(gone).toBeNull();
+        // Parent experiment stays; only results were removed.
+        const parent = await experimentsStorage.getExperimentById({ id: exp.id });
+        expect(parent?.id).toBe(exp.id);
       });
     });
   }); // describeExperiments

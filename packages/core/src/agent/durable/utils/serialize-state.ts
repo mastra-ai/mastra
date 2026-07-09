@@ -10,6 +10,7 @@ import type {
   SerializableModelListEntry,
   SerializableDurableState,
   SerializableDurableOptions,
+  SerializableModelSettings,
   SerializableScorersConfig,
   SerializableScorerEntry,
   DurableAgenticWorkflowInput,
@@ -156,13 +157,57 @@ export function serializeDurableState(params: {
 }
 
 /**
+ * Pick the JSON-safe call settings out of an arbitrary `modelSettings` input.
+ * Drops any field that is not a primitive value of the expected type so that
+ * non-serializable fields (functions, AbortSignal, etc.) never reach the
+ * workflow input.
+ */
+export function serializeModelSettings(
+  settings: SerializableModelSettings | Record<string, unknown> | undefined,
+): SerializableModelSettings | undefined {
+  if (!settings || typeof settings !== 'object') return undefined;
+
+  const source = settings as Record<string, unknown>;
+  const out: SerializableModelSettings = {};
+  const pickNumber = (key: keyof SerializableModelSettings) => {
+    const value = source[key as string];
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      (out as Record<string, unknown>)[key as string] = value;
+    }
+  };
+
+  pickNumber('maxOutputTokens');
+  pickNumber('temperature');
+  pickNumber('topP');
+  pickNumber('topK');
+  pickNumber('presencePenalty');
+  pickNumber('frequencyPenalty');
+  pickNumber('seed');
+  pickNumber('maxRetries');
+
+  if (Array.isArray(source.stopSequences) && source.stopSequences.every(v => typeof v === 'string')) {
+    out.stopSequences = source.stopSequences as string[];
+  }
+
+  // Headers are never serialized into the workflow input. They are stored
+  // exclusively on the in-process RunRegistryEntry so they never reach
+  // durable storage. The durable llm-execution step merges them back from
+  // the registry at call time.
+  // (Previously we had a denylist of "sensitive" header names, but any
+  // header could carry credentials — the safest approach is to keep them
+  // all off the wire.)
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
  * Extract serializable options from agent execution options
  */
 export function serializeDurableOptions(options: {
   maxSteps?: number;
   toolChoice?: any;
   activeTools?: string[];
-  temperature?: number;
+  modelSettings?: SerializableModelSettings | Record<string, unknown>;
   requireToolApproval?: boolean;
   toolCallConcurrency?: number;
   autoResumeSuspendedTools?: boolean;
@@ -173,6 +218,13 @@ export function serializeDurableOptions(options: {
   providerOptions?: SerializableDurableOptions['providerOptions'];
   structuredOutput?: SerializableDurableOptions['structuredOutput'];
   skipBgTaskWait?: boolean;
+  disableBackgroundTasks?: boolean;
+  tracingOptions?: SerializableDurableOptions['tracingOptions'];
+  actor?: SerializableDurableOptions['actor'];
+  instructionsOverride?: SerializableDurableOptions['instructionsOverride'];
+  systemMessage?: SerializableDurableOptions['systemMessage'];
+  transform?: SerializableDurableOptions['transform'];
+  isTaskComplete?: SerializableDurableOptions['isTaskComplete'];
 }): SerializableDurableOptions {
   // Normalize toolChoice to serializable form
   let serializedToolChoice: SerializableDurableOptions['toolChoice'];
@@ -193,7 +245,7 @@ export function serializeDurableOptions(options: {
     maxSteps: options.maxSteps,
     toolChoice: serializedToolChoice,
     activeTools: options.activeTools,
-    temperature: options.temperature,
+    modelSettings: serializeModelSettings(options.modelSettings),
     requireToolApproval: options.requireToolApproval,
     toolCallConcurrency: options.toolCallConcurrency,
     autoResumeSuspendedTools: options.autoResumeSuspendedTools,
@@ -204,6 +256,13 @@ export function serializeDurableOptions(options: {
     providerOptions: options.providerOptions,
     structuredOutput: options.structuredOutput,
     skipBgTaskWait: options.skipBgTaskWait,
+    disableBackgroundTasks: options.disableBackgroundTasks,
+    tracingOptions: options.tracingOptions,
+    actor: options.actor,
+    instructionsOverride: options.instructionsOverride,
+    systemMessage: options.systemMessage,
+    transform: options.transform,
+    isTaskComplete: options.isTaskComplete,
   };
 }
 
@@ -224,6 +283,7 @@ export function createWorkflowInput(params: {
   messageId: string;
   agentSpanData?: unknown;
   modelSpanData?: unknown;
+  requestContextEntries?: Record<string, unknown>;
 }): DurableAgenticWorkflowInput {
   return {
     __workflowKind: 'durable-agent',
@@ -240,6 +300,7 @@ export function createWorkflowInput(params: {
     messageId: params.messageId,
     agentSpanData: params.agentSpanData,
     modelSpanData: params.modelSpanData,
+    requestContextEntries: params.requestContextEntries,
   };
 }
 

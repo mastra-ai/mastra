@@ -55,3 +55,19 @@ These scorers evaluate adherence to format, style, and safety requirements:
 - [`toxicity`](/reference/evals/toxicity): Detects harmful or inappropriate content (`0-1`, lower is better)
 - [`bias`](/reference/evals/bias): Detects potential biases in the output (`0-1`, lower is better)
 - [`keyword-coverage`](/reference/evals/keyword-coverage): Assesses technical terminology usage (`0-1`, higher is better)
+
+### Quick Checks
+
+Zero-LLM micro-scorers for fast, deterministic assertions. See the [Quick Checks](/docs/evals/quick-checks) guide for usage details.
+
+- [`checks.includes`](/reference/evals/checks#checksincludesexpected-options): Scores 1 if output contains a substring (`0` or `1`)
+- [`checks.excludes`](/reference/evals/checks#checksexcludesunwanted-options): Scores 1 if output doesn't contain a substring (`0` or `1`)
+- [`checks.equals`](/reference/evals/checks#checksequalsexpected-options): Scores 1 if output exactly matches a string (`0` or `1`)
+- [`checks.matches`](/reference/evals/checks#checksmatchespattern-options): Scores 1 if output matches a regex (`0` or `1`)
+- [`checks.similarity`](/reference/evals/checks#checkssimilarityexpected-options): String similarity via Dice coefficient (`0-1`, or binary with threshold)
+- [`checks.calledTool`](/reference/evals/checks#checkscalledtooltoolname-options): Scores 1 if a tool was called at least N times (`0` or `1`)
+- [`checks.didNotCall`](/reference/evals/checks#checksdidnotcalltoolname): Scores 1 if a tool wasn't called (`0` or `1`)
+- [`checks.toolOrder`](/reference/evals/checks#checkstoolorderexpectedorder): Scores 1 if tools were called in order (`0` or `1`)
+- [`checks.maxToolCalls`](/reference/evals/checks#checksmaxtoolcallsmax): Scores 1 if tool call count is within limit (`0` or `1`)
+- [`checks.usedNoTools`](/reference/evals/checks#checksusednotools): Scores 1 if no tools were called (`0` or `1`)
+- [`checks.noToolErrors`](/reference/evals/checks#checksnotoolerrors): Scores 1 if no tool calls had errors (`0` or `1`)

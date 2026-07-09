@@ -1,6 +1,6 @@
 {
   "name": "@mastra/dsql",
-  "version": "1.1.0",
+  "version": "1.1.2",
   "description": "Amazon Aurora DSQL storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",

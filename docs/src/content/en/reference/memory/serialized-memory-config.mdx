@@ -73,7 +73,8 @@ new MastraEditor({
           {
             name: 'lastMessages',
             type: 'number | false',
-            description: 'Number of recent messages to include in context, or `false` to disable.',
+            description:
+              'Number of recent messages to include in context, or `false` to disable message history entirely (messages are not loaded or saved).',
             isOptional: true,
           },
           {
@@ -146,7 +147,7 @@ new MastraEditor({
   {
     name: 'retrieval',
     type: "boolean | { vector?: boolean; scope?: 'thread' | 'resource' }",
-    description: 'Experimental. Enable retrieval-mode observation groups as durable pointers to raw message history.',
+    description: 'Enable retrieval-mode observation groups as durable pointers to raw message history.',
     isOptional: true,
   },
   {

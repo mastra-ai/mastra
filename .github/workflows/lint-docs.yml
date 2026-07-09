@@ -21,7 +21,7 @@ jobs:
       docs: ${{ steps.filter.outputs.docs }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           fetch-depth: 0
 
@@ -41,7 +41,7 @@ jobs:
     runs-on: starsling-ubuntu-24.04
     steps:
       - name: Checkout PR branch
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           fetch-depth: 0
 
@@ -56,9 +56,9 @@ jobs:
 
       - name: Setup Node.js
         if: steps.mdx-changes.outputs.has_changes == 'true'
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
+        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
         with:
-          node-version: '22.13.0'
+          node-version: '22.23.1'
           package-manager-cache: false
 
       - name: Check for removed pages without redirects
@@ -123,10 +123,16 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+
+      - name: Verify generated vercel redirects are up to date
+        working-directory: ./docs
+        run: |
+          pnpm generate-vercel-redirects
+          git diff --exit-code -- vercel.json vercel.redirects.json
 
       - name: Run validate-redirects
         run: node .github/scripts/validate-redirects.js
@@ -185,7 +191,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           fetch-depth: 0
 

@@ -1,8 +1,8 @@
-// @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import type { TaskItem } from '@mastra/core/signals';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
@@ -10,9 +10,17 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
+import { memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
+import { ThreadInputProvider } from '@/domains/conversation';
 import { server } from '@/test/msw-server';
+
+declare global {
+  interface Window {
+    MASTRA_AGENT_SIGNALS?: string;
+  }
+}
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -50,8 +58,18 @@ const baseHandlers = () => [
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
   http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+  http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
   http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () => workingMemoryResponse()),
+  // Drive the real memory hooks; the sidebar consumers aren't rendered here, so empty payloads suffice.
+  http.get(`${BASE_URL}/api/memory/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+  http.get(`${BASE_URL}/api/memory/observational-memory`, () => HttpResponse.json({ record: null })),
+  http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
   http.get(`${BASE_URL}/api/agents/:agentId/voice/speakers`, () => HttpResponse.json([])),
+  http.get(`${BASE_URL}/api/agents/:agentId`, () => HttpResponse.json(v2Agent)),
+  http.get(`${BASE_URL}/api/editor/builder/settings`, () =>
+    HttpResponse.json({ enabled: false, modelPolicy: { active: false } }),
+  ),
+  http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
   http.post(
     `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
     () =>
@@ -66,14 +84,14 @@ const baseHandlers = () => [
   ),
 ];
 
-const Wrapper = ({ children }: { children: ReactNode }) => {
+const Wrapper = ({ children, threadId = 'thread-1' }: { children: ReactNode; threadId?: string }) => {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter>
-          <BrowserSessionProvider agentId="agent-1" threadId="thread-1" enabled={false}>
-            <WorkingMemoryProvider agentId="agent-1" threadId="thread-1" resourceId="agent-1">
+          <BrowserSessionProvider agentId="agent-1" threadId={threadId} enabled={false}>
+            <WorkingMemoryProvider agentId="agent-1" threadId={threadId} resourceId="agent-1">
               {children}
             </WorkingMemoryProvider>
           </BrowserSessionProvider>
@@ -83,20 +101,58 @@ const Wrapper = ({ children }: { children: ReactNode }) => {
   );
 };
 
-const renderThread = (initialMessages: MastraDBMessage[], props: { hasModelList?: boolean } = { hasModelList: true }) =>
-  render(
-    <Wrapper>
-      <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
-        <Thread agentId="agent-1" agentName="Helper" threadId="thread-1" hasModelList={props.hasModelList} />
-      </ChatProvider>
-    </Wrapper>,
+const renderThreadTree = (
+  initialMessages: MastraDBMessage[],
+  options: { hasModelList?: boolean; threadId?: string } = {},
+) => {
+  const { hasModelList = true, threadId = 'thread-1' } = options;
+
+  return (
+    <Wrapper threadId={threadId}>
+      <ThreadInputProvider>
+        <ChatProvider
+          key={threadId}
+          agentId="agent-1"
+          threadId={threadId}
+          initialMessages={initialMessages}
+          supportsMemory={true}
+          settings={{ modelSettings: { chatWithLegacyStream: false } }}
+        >
+          <Thread agentId="agent-1" agentName="Helper" threadId={threadId} hasModelList={hasModelList} />
+        </ChatProvider>
+      </ThreadInputProvider>
+    </Wrapper>
   );
+};
+
+const renderThread = (
+  initialMessages: MastraDBMessage[],
+  options: { hasModelList?: boolean; threadId?: string } = { hasModelList: true },
+) => render(renderThreadTree(initialMessages, options));
 
 const userMessage = (text: string): MastraDBMessage => ({
   id: `m-${text}`,
   role: 'user',
   createdAt: new Date(),
   content: { format: 2, parts: [{ type: 'text', text }] },
+});
+
+const userMessageWithFiles = (text: string, filenames: string[]): MastraDBMessage => ({
+  id: `m-${text}`,
+  role: 'user',
+  createdAt: new Date(),
+  content: {
+    format: 2,
+    parts: [
+      { type: 'text', text },
+      ...filenames.map(filename => ({
+        type: 'file' as const,
+        filename,
+        mimeType: 'application/pdf',
+        data: `https://files.example.com/${filename}`,
+      })),
+    ],
+  },
 });
 
 const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['metadata']): MastraDBMessage => ({
@@ -107,13 +163,13 @@ const assistantMessage = (text: string, metadata?: MastraDBMessage['content']['m
 });
 
 afterEach(() => {
-  delete (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS;
+  delete window.MASTRA_AGENT_SIGNALS;
   cleanup();
 });
 
 describe('Thread', () => {
   beforeEach(() => {
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
+    window.MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
   });
 
@@ -134,8 +190,177 @@ describe('Thread', () => {
       renderThread([userMessage('previous question')]);
     });
 
-    expect(screen.getByText('previous question')).toBeTruthy();
+    expect(screen.getByText('previous question', { selector: 'p' })).toBeTruthy();
     expect(screen.queryByText('How can I help you today?')).toBeFalsy();
+  });
+
+  describe('when rendering the thread rail', () => {
+    it('does not render for the empty welcome state', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([]);
+      });
+
+      expect(screen.queryByTestId('thread-rail')).toBeFalsy();
+    });
+
+    it('renders one tick per user turn with preview labels and the latest turn marked in view', async () => {
+      server.use(...baseHandlers());
+
+      await act(async () => {
+        renderThread([
+          userMessageWithFiles('first question', ['plan.md', 'notes.pdf', 'trace.json']),
+          assistantMessage('first answer'),
+          userMessage('second question'),
+        ]);
+      });
+
+      expect(screen.getByRole('navigation', { name: 'Conversation timeline' })).toBeTruthy();
+      expect(screen.getAllByRole('button', { name: /Jump to/ })).toHaveLength(2);
+      const rail = screen.getByTestId('thread-rail');
+      expect(screen.getByTestId('thread-rail-container').className).toContain('thread-rail-container');
+      expect(screen.getByTestId('thread-rail-layer').className).toContain('thread-rail-layer');
+      expect(screen.getByTestId('thread-rail-layer').className).toContain('left-4');
+      expect(screen.getByTestId('thread-rail-layer').className).not.toContain('xl:block');
+      expect(screen.getByTestId('thread-rail-scroll-area')).toBeTruthy();
+      expect(screen.getByTestId('thread-message-column').contains(rail)).toBe(false);
+
+      const firstTurn = screen.getByRole('button', { name: 'Jump to first question' });
+      const secondTurn = screen.getByRole('button', { name: 'Jump to second question' });
+
+      fireEvent.mouseEnter(firstTurn);
+
+      const previewCurrent = within(screen.getByTestId('thread-rail-preview-current'));
+      expect(previewCurrent.getByText('first answer')).toBeTruthy();
+      expect(previewCurrent.getByText('plan.md')).toBeTruthy();
+      expect(previewCurrent.getByText('notes.pdf')).toBeTruthy();
+      expect(previewCurrent.getByText('+1')).toBeTruthy();
+
+      expect(firstTurn.getAttribute('aria-current')).toBeNull();
+      expect(firstTurn.getAttribute('data-in-view')).toBeNull();
+      expect(secondTurn.getAttribute('aria-current')).toBe('location');
+      expect(secondTurn.getAttribute('data-in-view')).toBe('true');
+      expect(secondTurn.getAttribute('data-active')).toBe('true');
+    });
+
+    it('scrolls to the selected user message', async () => {
+      const scrollTo = vi.fn();
+      const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+        configurable: true,
+        writable: true,
+        value: scrollTo,
+      });
+      server.use(...baseHandlers());
+
+      try {
+        await act(async () => {
+          renderThread([
+            userMessage('first question'),
+            assistantMessage('first answer'),
+            userMessage('second question'),
+          ]);
+        });
+
+        const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+        if (!viewport) throw new Error('missing message scroller viewport');
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 20 });
+        Object.defineProperty(viewport, 'getBoundingClientRect', {
+          configurable: true,
+          value: vi.fn(() => ({
+            top: 0,
+            bottom: 40,
+            left: 0,
+            right: 100,
+            width: 100,
+            height: 40,
+            x: 0,
+            y: 0,
+            toJSON: () => ({}),
+          })),
+        });
+        const firstMessage = document.querySelector<HTMLElement>('[data-message-id="m-first question"]');
+        if (!firstMessage) throw new Error('missing first message scroller item');
+        Object.defineProperty(firstMessage, 'getBoundingClientRect', {
+          configurable: true,
+          value: vi.fn(() => ({
+            top: -20,
+            bottom: 20,
+            left: 0,
+            right: 100,
+            width: 100,
+            height: 40,
+            x: 0,
+            y: -20,
+            toJSON: () => ({}),
+          })),
+        });
+
+        await act(async () => {
+          fireEvent.click(screen.getByRole('button', { name: 'Jump to first question' }));
+        });
+
+        expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: 'smooth' });
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalDescriptor);
+        } else {
+          delete HTMLElement.prototype.scrollTo;
+        }
+      }
+    });
+
+    it('shows a scroll-to-bottom control when the viewport is not at the bottom', async () => {
+      const scrollTo = vi.fn();
+      const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
+      Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
+        configurable: true,
+        writable: true,
+        value: scrollTo,
+      });
+      server.use(...baseHandlers());
+
+      try {
+        await act(async () => {
+          renderThread([
+            userMessage('first question'),
+            assistantMessage('first answer'),
+            userMessage('second question'),
+          ]);
+        });
+
+        const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
+        if (!viewport) throw new Error('missing message scroller viewport');
+
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 40 });
+        Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 100 });
+        Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 320 });
+
+        const scrollToEnd = screen.getByRole('button', { name: 'Scroll to end' });
+        expect(scrollToEnd.getAttribute('data-active')).toBe('false');
+
+        await act(async () => {
+          fireEvent.scroll(viewport);
+        });
+
+        await waitFor(() => {
+          expect(scrollToEnd.getAttribute('data-active')).toBe('true');
+        });
+
+        await act(async () => {
+          fireEvent.click(scrollToEnd);
+        });
+
+        expect(scrollTo).toHaveBeenCalledWith({ top: 220, behavior: 'smooth' });
+      } finally {
+        if (originalDescriptor) {
+          Object.defineProperty(HTMLElement.prototype, 'scrollTo', originalDescriptor);
+        } else {
+          delete HTMLElement.prototype.scrollTo;
+        }
+      }
+    });
   });
 
   it('shows assistant model attribution when model-list metadata is available', async () => {
@@ -185,7 +410,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'hello from composer' } });
     });
@@ -198,7 +423,46 @@ describe('Thread', () => {
     expect(captured).toHaveLength(1);
     expect(JSON.stringify(captured[0].body.messages ?? [])).toContain('hello from composer');
     // Composer clears after sending.
-    expect((textarea as HTMLTextAreaElement).value).toBe('');
+    expect(textarea.value).toBe('');
+  });
+
+  it('restores unsent composer drafts when switching threads', async () => {
+    server.use(...baseHandlers());
+
+    let rendered: ReturnType<typeof render> | undefined;
+    await act(async () => {
+      rendered = render(renderThreadTree([], { threadId: 'thread-1' }));
+    });
+
+    const firstThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    await act(async () => {
+      fireEvent.change(firstThreadTextarea, { target: { value: 'first thread draft' } });
+    });
+    expect(firstThreadTextarea.value).toBe('first thread draft');
+
+    await act(async () => {
+      rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
+    });
+
+    const secondThreadTextarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    expect(secondThreadTextarea.value).toBe('');
+
+    await act(async () => {
+      fireEvent.change(secondThreadTextarea, { target: { value: 'second thread draft' } });
+    });
+    expect(secondThreadTextarea.value).toBe('second thread draft');
+
+    await act(async () => {
+      rendered?.rerender(renderThreadTree([], { threadId: 'thread-1' }));
+    });
+
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('first thread draft');
+
+    await act(async () => {
+      rendered?.rerender(renderThreadTree([], { threadId: 'thread-2' }));
+    });
+
+    expect(screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...').value).toBe('second thread draft');
   });
 
   it('does not send when the composer is empty', async () => {
@@ -215,7 +479,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
       await new Promise(resolve => setTimeout(resolve, 50));
@@ -251,8 +515,10 @@ describe('Thread', () => {
       fireEvent.change(urlInput, { target: { value: 'https://files.example.com/pic.png' } });
     });
 
+    const composerForm = urlInput.closest<HTMLFormElement>('form');
+    if (!composerForm) throw new Error('composer form not found');
     await act(async () => {
-      fireEvent.submit(urlInput.closest('form') as HTMLFormElement);
+      fireEvent.submit(composerForm);
       await new Promise(resolve => setTimeout(resolve, 80));
     });
 
@@ -289,7 +555,7 @@ describe('Thread', () => {
       renderThread([]);
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'long running' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -309,9 +575,185 @@ describe('Thread', () => {
 
 const sseChunk = (chunk: unknown) => `data: ${JSON.stringify(chunk)}\n\n`;
 
+const taskSignalChunk = (tasks: TaskItem[], tagName = 'current-task-list') =>
+  sseChunk({
+    type: 'data-signal',
+    data: {
+      id: 'tasks',
+      type: 'state',
+      tagName,
+      metadata: { value: { tasks } },
+    },
+  });
+
+const taskPlanMenu: TaskItem = {
+  id: 'task-plan-menu',
+  content: 'Plan menu',
+  status: 'in_progress',
+  activeForm: 'Planning menu',
+};
+
+const taskShop: TaskItem = {
+  id: 'task-shop',
+  content: 'Create shopping list',
+  status: 'pending',
+  activeForm: 'Creating shopping list',
+};
+
+const taskCook: TaskItem = {
+  id: 'task-cook',
+  content: 'Cook meal',
+  status: 'pending',
+  activeForm: 'Cooking meal',
+};
+
+describe('TaskPanel', () => {
+  beforeEach(() => {
+    window.MASTRA_AGENT_SIGNALS = 'true';
+    server.resetHandlers();
+  });
+
+  const renderWithControlledSubscription = async () => {
+    let subscribeController: ReadableStreamDefaultController<Uint8Array> | null = null;
+    const encoder = new TextEncoder();
+    const subscribeStream = () =>
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          subscribeController = controller;
+        },
+      });
+
+    server.use(...baseHandlers());
+    server.use(
+      http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+      http.post(
+        `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+        () =>
+          new HttpResponse(subscribeStream(), {
+            status: 200,
+            headers: { 'content-type': 'text/event-stream' },
+          }),
+      ),
+      http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () =>
+        HttpResponse.json({ accepted: true, runId: 'run-1', signal: { id: 'task-signal-id' } }),
+      ),
+    );
+
+    await act(async () => {
+      renderThread([]);
+    });
+
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
+    await act(async () => {
+      fireEvent.change(textarea, { target: { value: 'track these tasks' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+    });
+
+    await waitFor(() => {
+      expect(subscribeController).toBeTruthy();
+    });
+
+    const pushTasks = async (tasks: TaskItem[], tagName = 'current-task-list') => {
+      await act(async () => {
+        subscribeController?.enqueue(encoder.encode(taskSignalChunk(tasks, tagName)));
+      });
+    };
+
+    const close = async () => {
+      await act(async () => {
+        subscribeController?.close();
+        await new Promise(resolve => setTimeout(resolve, 10));
+      });
+    };
+
+    return { pushTasks, close };
+  };
+
+  it('renders task items when a data-signal task snapshot streams in', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    await pushTasks([taskPlanMenu, taskShop, taskCook]);
+
+    expect(await screen.findByTestId('task-panel')).toBeTruthy();
+    expect(screen.getByText('0/3 completed')).toBeTruthy();
+    expect(screen.getByText('Planning menu')).toBeTruthy();
+    expect(screen.getByText('Create shopping list')).toBeTruthy();
+    expect(screen.getByText('Cook meal')).toBeTruthy();
+
+    await close();
+  });
+
+  it('updates the task list when a task-list-update delta streams in', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+    const completedPlan: TaskItem = { ...taskPlanMenu, status: 'completed' };
+    const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+
+    await pushTasks([taskPlanMenu, taskShop]);
+    await pushTasks([completedPlan, activeShop], 'task-list-update');
+
+    expect(await screen.findByText('1/2 completed')).toBeTruthy();
+    expect(screen.getByText('Plan menu')).toBeTruthy();
+    expect(screen.getByText('Shopping for ingredients')).toBeTruthy();
+    expect(screen.queryByText('Planning menu')).toBeFalsy();
+
+    await close();
+  });
+
+  it('scrolls the active task into view when task state updates', async () => {
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = scrollIntoView;
+
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    try {
+      const activeShop: TaskItem = { ...taskShop, status: 'in_progress', activeForm: 'Shopping for ingredients' };
+
+      await pushTasks([taskPlanMenu, activeShop, taskCook], 'task-list-update');
+
+      await waitFor(() => {
+        expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+      });
+    } finally {
+      Element.prototype.scrollIntoView = originalScrollIntoView;
+      await close();
+    }
+  });
+
+  it('hides when all tasks are complete', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    await pushTasks([
+      { ...taskPlanMenu, status: 'completed' },
+      { ...taskShop, status: 'completed' },
+    ]);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('task-panel')).toBeFalsy();
+    });
+
+    await close();
+  });
+
+  it('hides when task_write clears tasks', async () => {
+    const { pushTasks, close } = await renderWithControlledSubscription();
+
+    await pushTasks([taskPlanMenu]);
+    expect(await screen.findByTestId('task-panel')).toBeTruthy();
+
+    await pushTasks([]);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('task-panel')).toBeFalsy();
+    });
+
+    await close();
+  });
+});
+
 describe('Thread signal-path user-message reconciliation', () => {
   beforeEach(() => {
-    (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'true';
+    window.MASTRA_AGENT_SIGNALS = 'true';
     server.resetHandlers();
   });
 
@@ -331,6 +773,7 @@ describe('Thread signal-path user-message reconciliation', () => {
 
     server.use(
       http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
       http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
       http.get(`${BASE_URL}/api/memory/threads/:threadId/working-memory`, () =>
         HttpResponse.json({
@@ -350,9 +793,7 @@ describe('Thread signal-path user-message reconciliation', () => {
           }),
       ),
       http.post(`${BASE_URL}/api/agents/agent-1/send-message`, async ({ request }) => {
-        const body = (await request.json()) as {
-          message?: { metadata?: { clientMessageId?: string } };
-        };
+        const body: { message?: { metadata?: { clientMessageId?: string } } } = await request.json();
         capturedClientMessageId = body.message?.metadata?.clientMessageId;
         return HttpResponse.json({ accepted: true, runId: 'run-1', signal: { id: serverSignalId } });
       }),
@@ -367,7 +808,7 @@ describe('Thread signal-path user-message reconciliation', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
     });
 
-    const textarea = screen.getByPlaceholderText('Enter your message...');
+    const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message...');
     await act(async () => {
       fireEvent.change(textarea, { target: { value: 'echo reconciliation' } });
       fireEvent.keyDown(textarea, { key: 'Enter' });
@@ -377,9 +818,9 @@ describe('Thread signal-path user-message reconciliation', () => {
     // The optimistic pending bubble is rendered. Capture its DOM node and the
     // client-generated correlation id sent to the server.
     const userRow = await waitFor(() => {
-      const el = document.querySelector('[data-message-pending="true"]');
+      const el = document.querySelector<HTMLElement>('[data-message-pending="true"]');
       if (!el) throw new Error('pending user row not yet rendered');
-      return el as HTMLElement;
+      return el;
     });
     expect(capturedClientMessageId).toBeTruthy();
     const optimisticId = userRow.getAttribute('data-message-id');
@@ -411,7 +852,7 @@ describe('Thread signal-path user-message reconciliation', () => {
     expect(userRow.isConnected).toBe(true);
     expect(userRow.getAttribute('data-message-pending')).toBeNull();
     // Still exactly one user bubble for this turn (no duplicate from reconciliation).
-    expect(screen.getByText('echo reconciliation')).toBeTruthy();
+    expect(screen.getAllByText('echo reconciliation', { selector: 'p' })).toHaveLength(1);
 
     await act(async () => {
       subscribeController?.close();

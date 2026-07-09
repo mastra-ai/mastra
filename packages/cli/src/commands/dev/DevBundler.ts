@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
@@ -67,13 +67,21 @@ export class DevBundler extends Bundler {
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
 
+    const devServerAnalysisEntry = `
+      import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
+      import { createNodeServer, getToolExports } from '#server';
+      export { scoreTracesWorkflow, createNodeServer, getToolExports };
+    `;
     const inputOptions = await getWatcherInputOptions(
       entryFile,
       this.platform,
       {
         'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development'),
       },
-      { sourcemap: sourcemapEnabled },
+      {
+        sourcemap: sourcemapEnabled,
+        analysisEntries: [entryFile, devServerAnalysisEntry],
+      },
     );
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
@@ -102,7 +110,7 @@ export class DevBundler extends Bundler {
             name: 'env-watcher',
             buildStart() {
               for (const envFile of envFiles) {
-                this.addWatchFile(envFile);
+                this.addWatchFile(resolve(envFile));
               }
             },
           },

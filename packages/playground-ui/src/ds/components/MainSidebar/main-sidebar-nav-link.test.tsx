@@ -1,11 +1,18 @@
 // @vitest-environment jsdom
+
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MainSidebarProvider } from './main-sidebar-context';
 import { MainSidebarNavLink } from './main-sidebar-nav-link';
 import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
+
+const getTooltipPopup = () => {
+  const popup = document.querySelector<HTMLElement>('.bg-surface3');
+  assert(popup, 'Expected tooltip popup');
+  return popup;
+};
 
 // MainSidebarProvider reads matchMedia at mount to decide mobile vs desktop.
 // jsdom does not implement it, so polyfill before any render.
@@ -79,6 +86,25 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     ).toThrow(/asChild.*SlottedNavChildProps.*itemClassName/);
   });
 
+  it('hides nested subitems in collapsed icon-only mode', () => {
+    render(
+      <ul>
+        <MainSidebarNavLink
+          state="collapsed"
+          link={{ name: 'Agents', url: '/agents' }}
+          subItems={
+            <ul>
+              <MainSidebarNavLink state="collapsed" link={{ name: 'Templates', url: '/agents/templates' }} />
+            </ul>
+          }
+        />
+      </ul>,
+    );
+
+    expect(screen.getByRole('link', { name: 'Agents' })).toBeDefined();
+    expect(screen.queryByRole('link', { name: 'Templates' })).toBeNull();
+  });
+
   it('does not apply CSS margin utilities on TooltipContent that would dislocate the arrow', async () => {
     render(
       <TooltipProvider delay={0}>
@@ -95,11 +121,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     // The Positioner and Popup both expose data-side. Target the Popup
     // specifically via its unique design-system class (bg-surface3) so the
     // assertions cannot accidentally pass against the Positioner wrapper.
-    const popup = await waitFor(() => {
-      const el = document.querySelector<HTMLElement>('.bg-surface3');
-      expect(el).not.toBeNull();
-      return el!;
-    });
+    const popup = await waitFor(getTooltipPopup);
 
     // Critical: no margin classes on the popup. Margins shift the popup AFTER
     // Floating UI calculated the arrow's anchor; use `sideOffset` instead.
@@ -121,11 +143,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
     // The Positioner and Popup both expose data-side. Target the Popup
     // specifically via its unique design-system class (bg-surface3) so the
     // assertions cannot accidentally pass against the Positioner wrapper.
-    const popup = await waitFor(() => {
-      const el = document.querySelector<HTMLElement>('.bg-surface3');
-      expect(el).not.toBeNull();
-      return el!;
-    });
+    const popup = await waitFor(getTooltipPopup);
 
     // jsdom has no layout, so Floating UI may flip the requested side away
     // from "right". Assert only that *some* side is set, which proves the
@@ -149,11 +167,7 @@ describe('MainSidebarNavLink (collapsed) — tooltip regression', () => {
       </TooltipProvider>,
     );
 
-    const popup = await waitFor(() => {
-      const el = document.querySelector<HTMLElement>('.bg-surface3');
-      expect(el).not.toBeNull();
-      return el!;
-    });
+    const popup = await waitFor(getTooltipPopup);
 
     expect(popup.getAttribute('role')).toBe('tooltip');
   });

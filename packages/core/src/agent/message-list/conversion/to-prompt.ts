@@ -285,3 +285,57 @@ export function aiV5ModelMessageToV2PromptMessage(modelMessage: AIV5Type.ModelMe
     `Encountered unknown role ${role} when converting V5 ModelMessage -> V5 LanguageModelV2Message, input message: ${JSON.stringify(modelMessage, null, 2)}`,
   );
 }
+
+/**
+ * Convert a V2 (AI SDK v5 / spec `v2`) prompt into the shape AI SDK v6
+ * (spec `v3`) providers expect, by translating tool-result `media` parts into
+ * the `image-data`/`file-data` content parts that v6 providers consume.
+ *
+ * This is a single-responsibility conversion meant to be chained after the
+ * base v5 prompt build: `aiV6.llmPrompt()` = `aiV5.llmPrompt()` -> this.
+ *
+ * Mastra's `toModelOutput` and the vendored AI SDK v5 use `{ type: 'media' }`
+ * as the authored multimodal tool-result content type. AI SDK v6 added a
+ * `mapToolResultOutput` step that converts `media` -> `image-data` (for
+ * `image/*` media types) or `file-data` (everything else) before the prompt
+ * reaches the provider, and v6 providers (e.g. `@ai-sdk/anthropic@3`) only
+ * recognize `image-data`/`file-data` — they have no `media` case. The vendored
+ * v5 converter does not run that translation, so a v5-built prompt handed to a
+ * v6 provider drops the raw `media` part (image tool results arrive empty).
+ *
+ * This MUST only run for v6 (`v3`) providers: v5 providers (spec `v2`) accept
+ * `media` and have no `image-data`/`file-data` case, so translating for them
+ * would re-break v5.
+ *
+ * See: https://github.com/mastra-ai/mastra/issues/17876
+ */
+export function aiV5PromptToAIV6Prompt(prompt: LanguageModelV2Prompt): LanguageModelV2Prompt {
+  return prompt.map(message => {
+    if (message.role !== `tool`) return message;
+
+    let messageModified = false;
+    const content = message.content.map(part => {
+      if (part.type !== `tool-result`) return part;
+      const output = part.output as { type?: unknown; value?: unknown } | undefined;
+      if (!output || output.type !== `content` || !Array.isArray(output.value)) return part;
+
+      let outputModified = false;
+      const value = (output.value as unknown[]).map(item => {
+        if (item == null || typeof item !== `object`) return item;
+        const contentPart = item as Record<string, unknown>;
+        if (contentPart.type !== `media` || typeof contentPart.data !== `string`) return item;
+        outputModified = true;
+        const mediaType = typeof contentPart.mediaType === `string` ? contentPart.mediaType : ``;
+        return mediaType.startsWith(`image/`)
+          ? { type: `image-data`, data: contentPart.data, mediaType }
+          : { type: `file-data`, data: contentPart.data, mediaType };
+      });
+
+      if (!outputModified) return part;
+      messageModified = true;
+      return { ...part, output: { ...output, value } };
+    });
+
+    return messageModified ? { ...message, content } : message;
+  }) as LanguageModelV2Prompt;
+}

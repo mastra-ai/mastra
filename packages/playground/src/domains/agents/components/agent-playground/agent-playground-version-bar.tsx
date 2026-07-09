@@ -1,17 +1,9 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import {
-  Badge,
-  Button,
-  ButtonsGroup,
-  CopyButton,
-  DropdownMenu,
-  Input,
-  Label,
-  HoverPopover,
-  PopoverTrigger,
-  PopoverContent,
-  Spinner,
-  Txt,
-  Icon,
   Dialog,
   DialogContent,
   DialogHeader,
@@ -19,9 +11,15 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@mastra/playground-ui';
-import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import { Check, ChevronDown, Clock, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+} from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { Input } from '@mastra/playground-ui/components/Input';
+import { Label } from '@mastra/playground-ui/components/Label';
+import { HoverPopover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 import { useAgentVersions } from '../../hooks/use-agent-versions';
@@ -133,10 +131,6 @@ export function AgentPlaygroundVersionBar({
   return {
     versionSelector: (
       <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface3">
-        <Icon size="sm" className="text-neutral3 shrink-0">
-          <Clock />
-        </Icon>
-
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}

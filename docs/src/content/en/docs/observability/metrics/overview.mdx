@@ -17,9 +17,9 @@ Three categories of metrics are emitted automatically:
 
 :::note
 
-Metrics require an OLAP-capable store for observability. Relational databases like PostgreSQL, LibSQL, etc. aren't supported for metrics. In-memory storage resets on restart.
+Metrics require an analytics-capable store for observability. Most relational databases (LibSQL, MSSQL) aren't supported for metrics. In-memory storage resets on restart.
 
-For local development, use [DuckDB](https://duckdb.org/) through `@mastra/duckdb`. For production, use [ClickHouse](https://clickhouse.com/) through `@mastra/clickhouse`.
+For local development, use [DuckDB](https://duckdb.org/) through `@mastra/duckdb`. For production, use [ClickHouse](https://clickhouse.com/) through `@mastra/clickhouse`. `PostgresStoreVNext` with the observability domain enabled also supports metrics, but always provide a time range to avoid full partition scans.
 
 Google Cloud Spanner supports metrics, but it's not recommended for heavy metrics workloads. The Spanner adapter disables metrics by default because metrics are write-heavy and scan-heavy. Set `disableMetrics: false` only for light workloads, or route metrics to an OLAP store.
 

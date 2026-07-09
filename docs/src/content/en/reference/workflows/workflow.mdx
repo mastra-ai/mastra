@@ -220,6 +220,13 @@ You can define the workflow's `inputSchema` and `outputSchema` with any library 
             defaultValue: '() => true',
           },
           {
+            name: 'pruneSnapshot',
+            type: '(params: { snapshot: WorkflowRunState; workflowStatus: WorkflowRunStatus }) => WorkflowRunState',
+            description:
+              'Optional hook to transform the workflow snapshot immediately before it is persisted. Must return JSON-serializable data and preserve everything the workflow needs to resume (suspended step suspendPayloads, suspendedPaths, executionPath, etc.). Used internally by agent runs to keep snapshots minimal; user workflows persist full snapshots by default.',
+            isOptional: true,
+          },
+          {
             name: 'onFinish',
             type: '(result: WorkflowFinishCallbackResult) => void | Promise<void>',
             description:

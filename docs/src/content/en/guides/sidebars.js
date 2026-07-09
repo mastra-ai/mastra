@@ -75,6 +75,11 @@ const sidebars = {
           id: 'concepts/multi-agent-systems',
           label: 'Multi-agent systems',
         },
+        {
+          type: 'doc',
+          id: 'concepts/streaming',
+          label: 'Streaming',
+        },
       ],
     },
     {
@@ -101,13 +106,29 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'build-your-ui/copilotkit',
-          label: 'CopilotKit',
-        },
-        {
-          type: 'doc',
           id: 'build-your-ui/assistant-ui',
           label: 'Assistant UI',
+        },
+        {
+          type: 'category',
+          label: 'CopilotKit',
+          items: [
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/overview',
+              label: 'Overview',
+            },
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/generative-ui',
+              label: 'Generative UI',
+            },
+            {
+              type: 'doc',
+              id: 'build-your-ui/copilotkit/channels',
+              label: 'Channels',
+            },
+          ],
         },
         {
           type: 'doc',

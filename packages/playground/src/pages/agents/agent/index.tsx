@@ -1,13 +1,17 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import { PermissionDenied, SessionExpired, is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
 import { AgentChat } from '@/domains/agents/components/agent-chat';
-import { AgentLayout } from '@/domains/agents/components/agent-layout';
-import { AgentViewLoadingSkeleton } from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
+import {
+  AgentSidebarLoadingSkeleton,
+  AgentViewLoadingSkeleton,
+} from '@/domains/agents/components/agent-loading-skeletons';
 import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
-import { AgentViewHeader } from '@/domains/agents/components/agent-view-header';
 import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
 import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
 import '@/domains/agents/components/agent-view-transition.css';
@@ -17,6 +21,7 @@ import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-obse
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
 import { useAgent } from '@/domains/agents/hooks/use-agent';
 import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
 import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
@@ -32,7 +37,7 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
-  const { data: memory, isLoading: isMemoryLoading } = useMemory(agentId!);
+  const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
   const isSettingsView = view === 'settings';
   const isNewThread = threadId === 'new';
@@ -124,24 +129,21 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
             >
               <ThreadInputProvider>
                 <ObservationalMemoryProvider>
-                  <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                    <AgentLayout
-                      agentId={agentId!}
-                      leftDrawerLabel="Open threads and memory"
-                      leftSlot={
-                        <AgentSidebar
-                          agentId={agentId!}
-                          threadId={actualThreadId!}
-                          threads={sidebarThreads}
-                          isLoading={isMemoryLoading || isThreadsLoading}
-                          memoryType={memory?.memoryType}
-                          hasMemory={isMemoryLoading || hasMemory}
-                        />
-                      }
-                      browserOverlay={<BrowserViewPanel />}
-                    >
-                      <div className="grid grid-rows-[auto_1fr] h-full min-h-0">
-                        <AgentViewHeader agentId={agentId!} view={view} />
+                  <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
+                    <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                      <AgentChatShell
+                        agentId={agentId!}
+                        view={view}
+                        leftDrawerLabel="Open threads and memory"
+                        leftSlot={
+                          isThreadsLoading ? (
+                            <AgentSidebarLoadingSkeleton />
+                          ) : (
+                            <AgentSidebar agentId={agentId!} threadId={actualThreadId!} threads={sidebarThreads} />
+                          )
+                        }
+                        browserOverlay={<BrowserViewPanel />}
+                      >
                         <div
                           key={view}
                           className={
@@ -169,9 +171,9 @@ function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
                             />
                           )}
                         </div>
-                      </div>
-                    </AgentLayout>
-                  </ActivatedSkillsProvider>
+                      </AgentChatShell>
+                    </ActivatedSkillsProvider>
+                  </MemoryTimelineProvider>
                 </ObservationalMemoryProvider>
               </ThreadInputProvider>
             </BrowserSessionProvider>

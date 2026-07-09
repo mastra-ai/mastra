@@ -94,6 +94,23 @@ describe('skill tool', () => {
     expect(result).toBe('# Brand Guidelines\n\nUse blue.');
   });
 
+  it('calls maybeRefresh before resolving so on-disk edits are picked up (#16640)', async () => {
+    const skill = makeSkill({ instructions: 'stale' });
+    const maybeRefresh = vi.fn(async () => {});
+    const getFn = vi.fn(async () => skill);
+    const skills = createMockWorkspaceSkills({ maybeRefresh, get: getFn });
+    const { skill: tool } = createSkillTools(skills);
+
+    await exec(tool, { name: 'test-skill' });
+
+    expect(maybeRefresh).toHaveBeenCalledTimes(1);
+    // Order matters: refresh must happen before get(), otherwise we still
+    // resolve against the cached (stale) skill entry.
+    const refreshOrder = maybeRefresh.mock.invocationCallOrder[0]!;
+    const getOrder = getFn.mock.invocationCallOrder[0]!;
+    expect(refreshOrder).toBeLessThan(getOrder);
+  });
+
   it('activates a symlinked local skill by bare name when two roots point to the same canonical path on disk', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-skill-tool-'));
 
@@ -298,6 +315,20 @@ describe('skill_search tool', () => {
     const result = await exec(tool, { query: 'something' });
 
     expect(result).toBe('No results found.');
+  });
+
+  it('calls maybeRefresh before searching so newly-edited skills are searchable (#16640)', async () => {
+    const maybeRefresh = vi.fn(async () => {});
+    const search = vi.fn(async () => []);
+    const skills = createMockWorkspaceSkills({ maybeRefresh, search });
+    const { skill_search: tool } = createSkillTools(skills);
+
+    await exec(tool, { query: 'anything' });
+
+    expect(maybeRefresh).toHaveBeenCalledTimes(1);
+    const refreshOrder = maybeRefresh.mock.invocationCallOrder[0]!;
+    const searchOrder = search.mock.invocationCallOrder[0]!;
+    expect(refreshOrder).toBeLessThan(searchOrder);
   });
 
   it('formats results with skill name, score, and preview', async () => {

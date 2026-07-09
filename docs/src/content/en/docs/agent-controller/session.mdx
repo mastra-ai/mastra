@@ -1,0 +1,154 @@
+---
+title: "Session | AgentController"
+description: "Understand the Session — the live state object on an AgentController — and the identity, thread, mode, grants, run, and display state it tracks."
+packages:
+  - "@mastra/core"
+---
+
+# Session
+
+A [`Session`](/reference/agent-controller/session) holds the live state of an AgentController: who the session is for, which thread is active, the selected mode and model, permission grants, queued follow-ups, token usage, application state, and the display snapshot. You reach it through `agentController.session`.
+
+## What the Session tracks
+
+The Session is the live state of a single user's interaction with the AgentController. It answers "what's true right now": who the session belongs to, which thread is currently bound, which mode and model are selected, what the user has approved, what's queued or running, the application state, and the snapshot to render. A session has one active thread at a time but can list, switch between, and clone many threads over its lifetime. Anything that describes the current state lives here; the AgentController owns the shared infrastructure every session runs on.
+
+Because each session has its own identity and state, one AgentController can serve many users at once — each with a different `resourceId` backed by its own Session — without one session's mode, grants, or active thread leaking into another. Calling `createSession` with the same `resourceId` returns the existing session (get-or-create), so a resource always resumes its own session.
+
+The rest of this page walks through the Session's state. Each part is a focused sub-object on `agentController.session`:
+
+- **Who and where**: [Identity](#identity) sets the stable session `id`, `ownerId`, and resource the session belongs to, and [Thread](#thread) tracks the currently bound thread.
+- **How the agent behaves**: [Mode and model](#mode-and-model) controls which agent profile and model are active, and [Permission grants](#permission-grants) records what the user has approved to run without prompting.
+- **What's happening right now**: [Run state](#run-state) reflects the in-flight generation, and [Follow-ups](#follow-ups) holds messages queued to send when it finishes.
+- **What you store and render**: [State](#state) holds your application's structured data, and [Display state](#display-state) is the single snapshot your UI renders from.
+
+The AgentController performs actions that change this state — switching threads, modes, or models — because those operations coordinate shared infrastructure and emit events. The Session is where you read the result. The sections below note this split where it matters.
+
+## Identity
+
+`session.identity` holds three stable identifiers for the conversation: a session `id`, an `ownerId`, and the resource ID. Threads are scoped to a resource ID, so this is what groups a conversation's threads together:
+
+```typescript
+const sessionId = agentController.session.identity.getId()
+const ownerId = agentController.session.identity.getOwnerId()
+const resourceId = agentController.session.identity.getResourceId()
+const threadId = agentController.session.thread.getId()
+```
+
+The session `id` and `ownerId` are stable for the life of the session — they don't change when the resource ID is switched. They mirror the `id` and `ownerId` fields on `SessionRecord` in storage, so storage layers can key sessions by a stable identifier rather than the mutable resource ID.
+
+The resource ID is set when creating a session via [`agentController.createSession()`](/reference/agent-controller/agent-controller-class#createsession-id-ownerid-resourceid-tags-workspace-browser-requestcontext-) and defaults to the agentController `id`. See [Resource IDs](/docs/agent-controller/threads-and-state#resource-ids) for how it scopes threads.
+
+## Thread
+
+`session.thread` owns the active thread binding and read access to threads and messages. The AgentController performs lifecycle transitions; the Session reads the result:
+
+```typescript
+// Lifecycle transitions live on the AgentController
+await agentController.switchThread({ threadId: 'thread-abc123' })
+
+// Reads live on the Session
+const threads = await agentController.session.thread.list()
+const messages = await agentController.session.thread.listActiveMessages()
+```
+
+See [Threads and state](/docs/agent-controller/threads-and-state) for the full lifecycle.
+
+## Mode and model
+
+The AgentController defines the available modes in `config.modes`. The Session tracks which mode and model are _currently_ selected:
+
+```typescript
+// Switch mode (aborts the run, emits events)
+await agentController.session.mode.switch({ modeId: 'build' })
+
+// Read the current selection (Session state)
+const modeId = agentController.session.mode.get()
+const mode = agentController.session.mode.resolve()
+const modelId = agentController.session.model.get()
+```
+
+See [Modes](/docs/agent-controller/modes) for how modes carry their own model.
+
+## Permission grants
+
+The AgentController owns permission _policy_ — which categories or tools require approval. The Session owns the _grants_ a user makes during the conversation. A grant lets a tool run for the rest of the session without prompting again:
+
+```typescript
+// Grant a category or tool for the rest of the session
+agentController.session.grantCategory('edit')
+agentController.session.grantTool('mastra_workspace_execute_command')
+
+// Inspect current grants
+const grants = agentController.session.getGrants()
+```
+
+Grants are intentionally in-memory and reset when the session restarts. See [Tool approvals](/docs/agent-controller/tool-approvals) for the approval flow.
+
+## Run state
+
+`session.run` tracks the in-flight generation: whether a run is active, its run and trace IDs, and the abort signal. Use it to reflect run status in your UI:
+
+```typescript
+if (agentController.session.run.isRunning()) {
+  // show a stop button
+}
+
+// Abort the active run (AgentController orchestration clears related state)
+agentController.abort()
+```
+
+## Follow-ups
+
+A user may want to add to the conversation while the agent is still working. Instead of dropping or interrupting those messages, the Session queues them on `session.followUps` and sends them when the current run finishes:
+
+```typescript
+const queued = agentController.session.followUps.count()
+```
+
+Queue a follow-up with `agentController.followUp({ content })`. To redirect the agent mid-run instead of waiting, use `agentController.steer({ content })`. Both build on [signals](/docs/long-running-agents/signals).
+
+## State
+
+`session.state` holds the conversation's application state — structured values that agents and the UI share, such as model preferences, feature flags, or progress. The AgentController defines the shape with a `stateSchema`; the Session owns the live snapshot, validates updates against the schema, and emits `state_changed` on every write:
+
+```typescript
+const state = agentController.session.state.get()
+await agentController.session.state.set({ theme: 'light' })
+```
+
+See [Threads and state](/docs/agent-controller/threads-and-state) for defining a schema.
+
+## Display state
+
+A conversation emits many fine-grained events: tokens streaming in, tools starting and finishing, approvals pending, tasks updating, token usage climbing. Subscribing to each event type and reassembling the current picture yourself is tedious and error-prone. `session.displayState` does that work for you.
+
+It's a reducer-maintained snapshot. The Session keeps one `AgentControllerDisplayState` object and folds every agentController event into it as it happens, so the snapshot always reflects the latest state. It captures everything a UI needs to render: whether the agent is running and what it's streaming, which tools and subagents are active, anything waiting on the user such as approvals, the current task list, and running totals like token usage and queued follow-ups.
+
+Because it's a single object, you can drive an entire UI from one place: read the current snapshot with `get()`, and re-render whenever the AgentController emits `display_state_changed` (fired after every other event):
+
+```typescript
+const snapshot = agentController.session.displayState.get()
+
+// Re-render from the snapshot on every change
+agentController.subscribe(event => {
+  if (event.type === 'display_state_changed') {
+    render(agentController.session.displayState.get())
+  }
+})
+```
+
+This is the recommended pattern for most UIs. Subscribe to individual typed events only when you need to react to a specific transition rather than re-render the whole view.
+
+:::note
+
+Visit the [Session reference](/reference/agent-controller/session) for the full list of sub-objects and method signatures.
+
+:::
+
+## Related
+
+- [AgentController overview](/docs/agent-controller/overview)
+- [Threads and state](/docs/agent-controller/threads-and-state)
+- [Tool approvals](/docs/agent-controller/tool-approvals)
+- [Session reference](/reference/agent-controller/session)
