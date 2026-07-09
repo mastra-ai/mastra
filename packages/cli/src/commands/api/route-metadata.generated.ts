@@ -257,6 +257,28 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /agents/:agentId/suspended-runs": {
+    "method": "GET",
+    "path": "/agents/:agentId/suspended-runs",
+    "pathParams": [
+      "agentId"
+    ],
+    "queryParams": [
+      "fromDate",
+      "page",
+      "perPage",
+      "resourceId",
+      "threadId",
+      "toDate"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "runs"
+    }
+  },
   "POST /agents/:agentId/approve-tool-call-generate": {
     "method": "POST",
     "path": "/agents/:agentId/approve-tool-call-generate",
@@ -4772,9 +4794,12 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -4786,7 +4811,10 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [
       "description",
       "groundTruthSchema",
@@ -4799,7 +4827,7 @@ export const API_ROUTE_METADATA = {
       "targetIds",
       "targetType"
     ],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": true,
     "responseShape": {
       "kind": "single"
@@ -4811,9 +4839,12 @@ export const API_ROUTE_METADATA = {
     "pathParams": [
       "datasetId"
     ],
-    "queryParams": [],
+    "queryParams": [
+      "organizationId",
+      "projectId"
+    ],
     "bodyParams": [],
-    "hasQuery": false,
+    "hasQuery": true,
     "hasBody": false,
     "responseShape": {
       "kind": "single"
@@ -5563,9 +5594,11 @@ export const API_ROUTE_METADATA = {
     "path": "/schedules",
     "pathParams": [],
     "queryParams": [
-      "ownerId",
-      "ownerType",
+      "agentId",
+      "name",
+      "resourceId",
       "status",
+      "threadId",
       "workflowId"
     ],
     "bodyParams": [],
@@ -5578,6 +5611,62 @@ export const API_ROUTE_METADATA = {
   },
   "GET /schedules/:scheduleId": {
     "method": "GET",
+    "path": "/schedules/:scheduleId",
+    "pathParams": [
+      "scheduleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /schedules": {
+    "method": "POST",
+    "path": "/schedules",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /schedules/:scheduleId": {
+    "method": "PATCH",
+    "path": "/schedules/:scheduleId",
+    "pathParams": [
+      "scheduleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "attributes",
+      "cron",
+      "ifActive",
+      "ifIdle",
+      "initialState",
+      "inputData",
+      "metadata",
+      "name",
+      "prompt",
+      "providerOptions",
+      "requestContext",
+      "signalType",
+      "status",
+      "tagName",
+      "timezone"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /schedules/:scheduleId": {
+    "method": "DELETE",
     "path": "/schedules/:scheduleId",
     "pathParams": [
       "scheduleId"
@@ -5626,6 +5715,20 @@ export const API_ROUTE_METADATA = {
   "POST /schedules/:scheduleId/resume": {
     "method": "POST",
     "path": "/schedules/:scheduleId/resume",
+    "pathParams": [
+      "scheduleId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /schedules/:scheduleId/run": {
+    "method": "POST",
+    "path": "/schedules/:scheduleId/run",
     "pathParams": [
       "scheduleId"
     ],

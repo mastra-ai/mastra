@@ -6,7 +6,8 @@ import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
+import { ChunkFrom } from '../../stream/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
@@ -16,13 +17,8 @@ import { AGENT_STREAM_TOPIC } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
-import { createDurableAgentStream, emitErrorEvent } from './stream-adapter';
-import type {
-  AgentFinishEventData,
-  AgentStepFinishEventData,
-  AgentSuspendedEventData,
-  DurableAgenticWorkflowInput,
-} from './types';
+import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
+import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
 /**
@@ -86,10 +82,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-  /** Callback when execution finishes */
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  /** Callback when execution finishes — receives rich step data (text, steps, toolResults) */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback on error */
-  onError?: (error: Error) => void | Promise<void>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -588,7 +584,6 @@ export class DurableAgent<
       requestContext,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
-
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
       await this.emitError(runId, error);
@@ -724,10 +719,8 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -740,18 +733,30 @@ export class DurableAgent<
           scheduleAutoCleanup();
         }
       },
-      onIterationComplete: options?.onIterationComplete
-        ? async data => {
-            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
-          }
-        : undefined,
+      // onIterationComplete is NOT forwarded here — the dowhile predicate
+      // now calls it in-process from globalRunRegistry and honors its return
+      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
+      // still fires for external observability subscribers.
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      structuredOutput: registryEntry.structuredOutput as any,
+      outputProcessors: registryEntry.outputProcessors,
+      messageList,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
     const workflowExecution = ready
-      .then(() => this.executeWorkflow(runId, workflowInput))
+      .then(async () => {
+        // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+        // Only the initial stream() path emits 'start'; resume() does not.
+        await emitChunkEvent(this.pubsub, runId, {
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: workflowInput.agentId, messageId },
+        });
+        return this.executeWorkflow(runId, workflowInput);
+      })
       .catch(error => {
         void this.emitError(runId, error);
       });
@@ -803,8 +808,8 @@ export class DurableAgent<
     options?: {
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
       /**
        * Optional abort signal scoped to the resumed segment. Forwarded onto a
@@ -914,16 +919,17 @@ export class DurableAgent<
       offset: resumeOffset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      structuredOutput: entry.structuredOutput as any,
+      outputProcessors: entry.outputProcessors,
+      messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready, then resume workflow
@@ -981,8 +987,26 @@ export class DurableAgent<
       }
     }
 
+    // Capture the prior workflow execution BEFORE creating the new promise.
+    // If we read it inside the `.then()` callback, the global registry will
+    // already point to the NEW promise (assigned synchronously below),
+    // causing a self-referential deadlock.
+    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+
     const workflowExecution = ready
       .then(async () => {
+        // Wait for the prior workflow execution (stream / previous resume) to
+        // fully settle so the snapshot is persisted as 'suspended' before we
+        // attempt to resume it.  Without this, the pubsub tool-call-suspended
+        // event can arrive (and the consumer can call resumeStream) before the
+        // engine has finished writing the snapshot, leading to
+        // "This workflow run was not suspended".
+        if (priorExecution) {
+          await priorExecution.catch(() => {
+            /* errors already handled by the prior segment */
+          });
+        }
+
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
         const result = await run.resume({
           resumeData,
@@ -1033,6 +1057,53 @@ export class DurableAgent<
       cleanup,
       abort,
     };
+  }
+
+  /**
+   * Override the inherited `resumeStream()` so that callers using the base
+   * `Agent` API (including `approveToolCall` / `declineToolCall`) are routed
+   * through the durable `resume()` path instead of the regular Agent's
+   * snapshot-based resume.
+   *
+   * Returns just the `MastraModelOutput` (matching the base Agent's return
+   * type) while internally delegating to `this.resume()`.
+   */
+  override async resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>> {
+    const runId = streamOptions?.runId;
+    if (!runId) {
+      throw new Error('resumeStream() on DurableAgent requires a runId in streamOptions.');
+    }
+    const result = await this.resume(runId, resumeData, {
+      onChunk: streamOptions?.onChunk,
+      onStepFinish: streamOptions?.onStepFinish,
+      onFinish: streamOptions?.onFinish,
+      onError: streamOptions?.onError,
+      // Close the stream when the workflow re-suspends so the caller's
+      // `for await` loop terminates. Without this the stream stays open
+      // indefinitely when the resumed turn hits another suspend point.
+      [CLOSE_ON_SUSPEND]: true,
+    } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
+    return result.output;
+  }
+
+  /**
+   * Override the inherited `approveToolCall()` to route through the durable
+   * `resume()` path.
+   */
+  override async approveToolCall(
+    options: { runId: string; toolCallId?: string } & Record<string, any>,
+  ): Promise<MastraModelOutput<any>> {
+    return this.resumeStream({ approved: true }, options);
+  }
+
+  /**
+   * Override the inherited `declineToolCall()` to route through the durable
+   * `resume()` path.
+   */
+  override async declineToolCall(
+    options: { runId: string; toolCallId?: string } & Record<string, any>,
+  ): Promise<MastraModelOutput<any>> {
+    return this.resumeStream({ approved: false }, options);
   }
 
   /**
@@ -1141,10 +1212,8 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -1157,18 +1226,30 @@ export class DurableAgent<
           scheduleAutoCleanup();
         }
       },
-      onIterationComplete: options?.onIterationComplete
-        ? async data => {
-            await (options.onIterationComplete as (ctx: any) => void | Promise<void>)?.(data);
-          }
-        : undefined,
+      // onIterationComplete is NOT forwarded here — the dowhile predicate
+      // now calls it in-process from globalRunRegistry and honors its return
+      // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
+      // still fires for external observability subscribers.
       closeOnSuspend: true,
+      structuredOutput: registryEntry.structuredOutput as any,
+      outputProcessors: registryEntry.outputProcessors,
+      messageList,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
     // This prevents race conditions where events are published before subscription
     const workflowExecution = ready
-      .then(() => this.executeWorkflow(runId, workflowInput))
+      .then(async () => {
+        // Emit 'start' chunk before the workflow begins (matches regular agent's stream.ts).
+        // Only the initial generate()/stream() path emits 'start'; resume() does not.
+        await emitChunkEvent(this.pubsub, runId, {
+          type: 'start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { id: workflowInput.agentId, messageId },
+        });
+        return this.executeWorkflow(runId, workflowInput);
+      })
       .catch(error => {
         void this.emitError(runId, error);
       });
@@ -1282,8 +1363,8 @@ export class DurableAgent<
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
@@ -1323,15 +1404,16 @@ export class DurableAgent<
       offset: options?.offset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
+      structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
+      outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready

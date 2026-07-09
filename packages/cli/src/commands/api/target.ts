@@ -39,12 +39,12 @@ export async function resolveTarget(
   const customHeaders = parseHeaders(options.header);
   const apiPrefix = resolveApiPrefix(options);
 
-  if (isObservabilityPath(path)) {
-    return resolveObservabilityTarget(options, customHeaders, timeoutMs);
-  }
-
   if (options.url) {
     return { baseUrl: options.url, headers: customHeaders, timeoutMs, apiPrefix };
+  }
+
+  if (isObservabilityPath(path)) {
+    return resolveObservabilityTarget(customHeaders, timeoutMs);
   }
 
   if (await canReachLocal(timeoutMs, fetchFn, apiPrefix)) {
@@ -86,7 +86,6 @@ export async function resolveTarget(
 }
 
 async function resolveObservabilityTarget(
-  options: ApiGlobalOptions,
   customHeaders: Record<string, string>,
   timeoutMs: number,
 ): Promise<ResolvedTarget> {
@@ -94,10 +93,10 @@ async function resolveObservabilityTarget(
   const explicitAuthorization = getHeader(customHeaders, AUTHORIZATION_HEADER);
   const explicitProjectId = getHeader(customHeaders, PROJECT_ID_HEADER);
   const envToken = process.env.MASTRA_PLATFORM_ACCESS_TOKEN || env.MASTRA_PLATFORM_ACCESS_TOKEN;
-  const cliToken = explicitAuthorization || options.url ? undefined : await getOptionalToken();
+  const cliToken = explicitAuthorization ? undefined : await getOptionalToken();
   const envProjectId = process.env.MASTRA_PROJECT_ID || env.MASTRA_PROJECT_ID;
   const configProjectId =
-    explicitProjectId || envProjectId || options.url ? undefined : (await loadProjectConfig(process.cwd()))?.projectId;
+    explicitProjectId || envProjectId ? undefined : (await loadProjectConfig(process.cwd()))?.projectId;
   const projectId = explicitProjectId || envProjectId || configProjectId;
   const headers = { ...customHeaders };
 
@@ -117,7 +116,7 @@ async function resolveObservabilityTarget(
       : undefined;
 
   return {
-    baseUrl: options.url ?? OBSERVABILITY_URL,
+    baseUrl: OBSERVABILITY_URL,
     headers,
     timeoutMs,
     fallbackHeaders,

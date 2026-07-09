@@ -16,6 +16,16 @@ export interface MastraCodeState {
   subagentModelId?: string;
   projectPath?: string;
   projectName?: string;
+  /** When set, this project is a GitHub/cloud-sandbox-backed project. */
+  githubProjectId?: string;
+  /** Persisted sandbox id for reattaching the project's cloud workspace. */
+  sandboxId?: string;
+  /** Path inside the sandbox the repo is cloned into. */
+  sandboxWorkdir?: string;
+  /** Active git worktree path inside the sandbox for the current unit of work. */
+  worktreePath?: string;
+  /** Active feature branch checked out in the worktree. */
+  branch?: string;
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -42,6 +52,9 @@ export interface MastraCodeState {
     activeForm: string;
   }>;
   sandboxAllowedPaths: string[];
+  pluginSkillPaths: string[];
+  pluginCommandPaths: string[];
+  pluginInstructions: string[];
   activePlan: {
     title: string;
     plan: string;
@@ -74,6 +87,11 @@ export const stateSchema = z.object({
   subagentModelId: z.string().optional(),
   projectPath: z.string().optional(),
   projectName: z.string().optional(),
+  githubProjectId: z.string().optional(),
+  sandboxId: z.string().optional(),
+  sandboxWorkdir: z.string().optional(),
+  worktreePath: z.string().optional(),
+  branch: z.string().optional(),
   configDir: z.string().default(DEFAULT_CONFIG_DIR),
   homeDir: z.string().optional(),
   gitBranch: z.string().optional(),
@@ -122,6 +140,10 @@ export const stateSchema = z.object({
     .default([]),
   // Sandbox allowed paths (per-thread, absolute paths allowed in addition to project root)
   sandboxAllowedPaths: z.array(z.string()).default([]),
+  // Asset directories contributed by active plugins.
+  pluginSkillPaths: z.array(z.string()).default([]),
+  pluginCommandPaths: z.array(z.string()).default([]),
+  pluginInstructions: z.array(z.string()).default([]),
   // Active plan (set when a plan is approved in Plan mode)
   activePlan: z
     .object({

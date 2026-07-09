@@ -17,7 +17,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout automation scripts
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           persist-credentials: false
           sparse-checkout: |
@@ -26,7 +26,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Generate GitHub App token
-        id: app_token
+        id: app-auth
         uses: ./.github/actions/app-auth
         with:
           client-id: ${{ vars.DANE_CLIENT_ID }}
@@ -51,7 +51,7 @@ jobs:
         working-directory: scripts/pr-test-gate
         env:
           PHASE: label
-          GITHUB_TOKEN: ${{ steps.app_token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}

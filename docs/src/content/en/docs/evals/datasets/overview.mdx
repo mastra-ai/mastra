@@ -160,7 +160,15 @@ const { items: matches } = await dataset.listItems({
   search: 'Hello',
 })
 
-// List items at a specific version
+// Search and pagination can be combined with a specific version
+const { items: v2Matches } = await dataset.listItems({
+  version: 2,
+  search: 'Hello',
+  page: 0,
+  perPage: 50,
+})
+
+// Version-only snapshot returns a bare DatasetItem[]
 const v2Items = await dataset.listItems({ version: 2 })
 ```
 

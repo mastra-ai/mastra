@@ -175,4 +175,13 @@ export const toolCallInputSchema = z.object({
 export const toolCallOutputSchema = toolCallInputSchema.extend({
   result: z.any().optional(),
   error: z.any().optional(),
+  // HITL approval decision, present when the tool required approval and was resumed.
+  // Without this field Zod would strip `approval` from the step output before persistence.
+  approval: z
+    .object({
+      id: z.string(),
+      approved: z.boolean(),
+      reason: z.string().optional(),
+    })
+    .optional(),
 });

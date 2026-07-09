@@ -144,6 +144,19 @@ export interface SubscribeAgentThreadParams {
   threadId: string;
 }
 
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
+ */
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
 /**
  * @experimental Agent signals are experimental and may change in a future release.
  */
@@ -2710,6 +2723,10 @@ export interface UpdateDatasetParams {
   targetType?: string;
   targetIds?: string[];
   scorerIds?: string[] | null;
+  /** Restrict the lookup to a specific tenant organization. */
+  organizationId?: string;
+  /** Restrict the lookup to a specific tenant project. */
+  projectId?: string;
 }
 
 export interface AddDatasetItemParams {
@@ -2988,14 +3005,6 @@ export type StreamBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /bac
 
 export type ScheduleStatus = 'active' | 'paused';
 
-export interface ScheduleTarget {
-  type: 'workflow';
-  workflowId: string;
-  inputData?: unknown;
-  initialState?: unknown;
-  requestContext?: Record<string, unknown>;
-}
-
 export interface ScheduleRunSummary {
   status: WorkflowRunStatus;
   startedAt?: number;
@@ -3004,9 +3013,71 @@ export interface ScheduleRunSummary {
   error?: string;
 }
 
-export interface ScheduleResponse {
+/** Attributes rendered onto the signal's XML tag. */
+export type ScheduleSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+
+/** Mirrors the core `AgentSignalType` union. */
+export type ScheduleSignalType = 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+
+/** Behavior applied when the thread is already streaming. */
+export interface ScheduleIfActive {
+  behavior?: 'deliver' | 'persist' | 'discard';
+  attributes?: ScheduleSignalAttributes;
+}
+
+/**
+ * Behavior applied when the thread is idle, plus a serializable subset of
+ * stream options forwarded to the woken run.
+ */
+export interface ScheduleIfIdle {
+  behavior?: 'wake' | 'persist' | 'discard';
+  attributes?: ScheduleSignalAttributes;
+  streamOptions?: {
+    requestContext?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Flat agent-schedule view returned by the unified `/schedules` surface.
+ * Discriminate from workflow schedules by the presence of `agentId`.
+ */
+export interface AgentSchedule {
   id: string;
-  target: ScheduleTarget;
+  agentId: string;
+  /** Mirror of the workflow-schedule discriminator — always absent on agent schedules. */
+  workflowId?: undefined;
+  /** Workflow-run summary — never hydrated for agent schedules. */
+  lastRun?: undefined;
+  name?: string;
+  threadId?: string;
+  resourceId?: string;
+  prompt: string;
+  cron: string;
+  timezone?: string;
+  status: ScheduleStatus;
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Flat workflow-schedule view returned by the unified `/schedules` surface.
+ * Discriminate from agent schedules by the presence of `workflowId`.
+ */
+export interface WorkflowSchedule {
+  id: string;
+  workflowId: string;
+  /** Mirror of the agent-schedule discriminator — always absent on workflow schedules. */
+  agentId?: undefined;
   cron: string;
   timezone?: string;
   status: ScheduleStatus;
@@ -3014,26 +3085,28 @@ export interface ScheduleResponse {
   lastFireAt?: number;
   lastRunId?: string;
   lastRun?: ScheduleRunSummary;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
-  ownerType?: string;
-  ownerId?: string;
   createdAt: number;
   updatedAt: number;
 }
 
+/** Union of the flat views returned by the unified `/schedules` surface. */
+export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
+
 export type ScheduleTriggerOutcome =
   | 'published'
-  | 'failed'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
   | 'skipped'
-  | 'acked'
-  | 'alerted'
-  | 'deferred'
-  | 'appended-from-queue'
-  | 'dropped-stale'
-  | 'dropped-superseded'
-  | 'dropped-busy';
+  | 'aborted'
+  | 'failed';
 
-export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain';
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
 
 export interface ScheduleTriggerResponse {
   id?: string;
@@ -3049,10 +3122,19 @@ export interface ScheduleTriggerResponse {
   run?: ScheduleRunSummary;
 }
 
-export type ListSchedulesParams = {
+export interface ListSchedulesParams {
+  /** Scope the list to a single agent's schedules. */
+  agentId?: string;
+  /** Scope the list to a single workflow's schedules. */
   workflowId?: string;
   status?: ScheduleStatus;
-} & ({ ownerType?: undefined; ownerId?: undefined } | { ownerType: string; ownerId?: string });
+  /** Agent-schedule only: match the target threadId. */
+  threadId?: string;
+  /** Agent-schedule only: match the target resourceId. */
+  resourceId?: string;
+  /** Agent-schedule only: match the free-form target name. */
+  name?: string;
+}
 
 export interface ListSchedulesResponse {
   schedules: ScheduleResponse[];
@@ -3066,6 +3148,93 @@ export interface ListScheduleTriggersParams {
 
 export interface ListScheduleTriggersResponse {
   triggers: ScheduleTriggerResponse[];
+}
+
+/**
+ * Agent variant of the `client.createSchedule(...)` body — targets an agent
+ * by `agentId`. Mirrors `CreateAgentScheduleInput` on the core Schedules
+ * service.
+ */
+export interface CreateAgentScheduleInput {
+  /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  agentId: string;
+  cron: string;
+  prompt: string;
+  name?: string;
+  timezone?: string;
+  threadId?: string;
+  resourceId?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Workflow variant of the `client.createSchedule(...)` body — targets a
+ * workflow by `workflowId`. Mirrors `CreateWorkflowScheduleInput` on the
+ * core Schedules service.
+ */
+export interface CreateWorkflowScheduleInput {
+  /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  workflowId: string;
+  cron: string;
+  timezone?: string;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Body for `client.createSchedule(...)`. Discriminated by which target id is
+ * present: `agentId` creates an agent schedule, `workflowId` a workflow
+ * schedule.
+ */
+export type CreateScheduleInput = CreateAgentScheduleInput | CreateWorkflowScheduleInput;
+
+/**
+ * Patch body for `client.updateSchedule(...)`. Fields apply to the matching
+ * target type; agent-only fields on a workflow schedule are rejected by the
+ * server. `threadId` / `resourceId` are part of an agent schedule's identity
+ * and cannot be changed — to retarget, delete and recreate.
+ */
+export interface UpdateScheduleInput {
+  cron?: string;
+  timezone?: string;
+  status?: ScheduleStatus;
+  metadata?: Record<string, unknown>;
+  // Agent-schedule fields
+  prompt?: string;
+  name?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  // Workflow-schedule fields
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * Response for POST /schedules/:scheduleId/run.
+ *
+ * The fire runs asynchronously through the same worker pipeline as scheduled
+ * fires. `claimId` is the trigger row's `runId` (used to look up the
+ * resulting trigger row via `listScheduleTriggers`).
+ */
+export interface RunScheduleResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
 }
 
 export interface ExperimentReviewCounts {

@@ -5,14 +5,13 @@ For work in packages read package local packages/<name>/AGENTS.md first
 turborepo pnpm workspace
 packages use strict TypeScript
 vitest tests are colocated with source
-When adding a model name or ID to docs, changesets, or comments, use a placeholder token from docs/src/plugins/remark-model-tokens/models.ts (remark replaces them at docs build time); in executable tests use a real provider/model value, not a bare token
+When adding a model name or ID to changesets or comments, use a literal value from docs/src/plugins/remark-model-tokens/models.ts (do not use placeholder tokens, remark does not replace them in changesets/comments)
 
-Prefer narrowest build test lint typecheck for packages
-when package splits unit integration or E2E coverage run narrowest suite first
-From root prefer specific scripts like pnpm build:core or pnpm --filter ./packages/name script
-Do not pnpm run setup pnpm build pnpm build:packages or repo wide test runs when package local is enough
-Building whole monorepo is slow and should be last resort
-Before pushing commits or opening PRs run the narrowest relevant local checks; if CodeRabbit CLI is installed and configured, run a local CodeRabbit review too
+Prefer narrowest package build/test/lint/typecheck; start with unit/integration before E2E
+Use specific root scripts like pnpm build:core, pnpm --filter ./packages/name script, or pnpm turbo build --filter ./packages/<name>; these build that package's dependency graph
+Avoid pnpm setup/build/build:packages unless package-local options are insufficient whole monorepo builds are slow and usually unneeded
+Fresh clone: pnpm install, then build relevant packages
+Unresolvable internal/workspace imports means deps aren't built
 some integration tests need pnpm i --ignore-workspace
 
 features and new packages need related docs updates
@@ -42,6 +41,7 @@ playground-msw-tests PRIMARY test approach for packages/playground packages/play
 e2e-tests-studio SECONDARY test approach for packages/playground-ui packages/playground
 mastra-docs
 react-best-practices
-tailwind-best-practices
+tailwind-v4
+mastra-frontend build app UI with the design system
 mastra-smoke-test
 smoke-test create Mastra project and smoke test studio

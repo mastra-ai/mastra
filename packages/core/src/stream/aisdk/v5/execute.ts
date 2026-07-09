@@ -13,6 +13,41 @@ import { prepareToolsAndToolChoice } from './compat';
 import type { ModelSpecVersion } from './compat';
 import { AISDKV5InputStream } from './input';
 
+function buildJsonInstruction(schema: unknown) {
+  return `Return your response as JSON matching this schema:\n\n${JSON.stringify(schema)}\n\nReturn only valid JSON. Do not include markdown or explanatory text.`;
+}
+
+function injectJsonInstructionIntoLatestUserMessage({
+  messages,
+  schema,
+}: {
+  messages: LanguageModelV2Prompt;
+  schema: unknown;
+}): LanguageModelV2Prompt {
+  const instruction = buildJsonInstruction(schema);
+  const prompt = messages.map(message => ({
+    ...message,
+    content: Array.isArray(message.content) ? [...message.content] : message.content,
+  })) as LanguageModelV2Prompt;
+
+  for (let i = prompt.length - 1; i >= 0; i--) {
+    const message = prompt[i];
+    if (message?.role !== 'user') {
+      continue;
+    }
+
+    message.content = Array.isArray(message.content)
+      ? [...message.content, { type: 'text', text: instruction }]
+      : [
+          { type: 'text', text: String(message.content ?? '') },
+          { type: 'text', text: instruction },
+        ];
+    return prompt;
+  }
+
+  return [...prompt, { role: 'user', content: [{ type: 'text', text: instruction }] }] as LanguageModelV2Prompt;
+}
+
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
   const newObj = { ...obj };
   for (const key of keys) {
@@ -99,13 +134,21 @@ export function execute<OUTPUT = undefined>({
     : undefined;
 
   let prompt = inputMessages;
+  const jsonPromptInjection = structuredOutput?.jsonPromptInjection;
+  const injectionMode = jsonPromptInjection === true ? 'system' : jsonPromptInjection;
 
   // For direct mode (no model provided for structuring agent), inject JSON schema instruction if opting out of native response format with jsonPromptInjection
-  if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && structuredOutput?.jsonPromptInjection) {
-    prompt = injectJsonInstructionIntoMessages({
-      messages: inputMessages,
-      schema: responseFormat.schema,
-    });
+  if (structuredOutputMode === 'direct' && responseFormat?.type === 'json' && injectionMode) {
+    prompt =
+      injectionMode === 'inline'
+        ? injectJsonInstructionIntoLatestUserMessage({
+            messages: inputMessages,
+            schema: responseFormat.schema,
+          })
+        : injectJsonInstructionIntoMessages({
+            messages: inputMessages,
+            schema: responseFormat.schema,
+          });
   }
 
   // For processor mode without agent reuse, inject a custom prompt to inform the main agent
@@ -130,8 +173,7 @@ export function execute<OUTPUT = undefined>({
    * @see https://platform.openai.com/docs/guides/structured-outputs#structured-outputs-vs-json-mode
    * @see https://ai-sdk.dev/docs/ai-sdk-core/generating-structured-data#accessing-reasoning
    */
-  const isOpenAIStrictMode =
-    model.provider.startsWith('openai') && responseFormat?.type === 'json' && !structuredOutput?.jsonPromptInjection;
+  const isOpenAIStrictMode = model.provider.startsWith('openai') && responseFormat?.type === 'json' && !injectionMode;
 
   // For OpenAI strict mode, ensure all properties are required and additionalProperties: false
   if (isOpenAIStrictMode && responseFormat?.schema) {
@@ -169,10 +211,7 @@ export function execute<OUTPUT = undefined>({
               providerOptions: providerOptionsToUse,
               abortSignal,
               includeRawChunks,
-              responseFormat:
-                structuredOutputMode === 'direct' && !structuredOutput?.jsonPromptInjection
-                  ? responseFormat
-                  : undefined,
+              responseFormat: structuredOutputMode === 'direct' && !injectionMode ? responseFormat : undefined,
               ...filteredModelSettings,
               headers,
             });

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { MastraError } from '../../../error/index.js';
 import type {
   GatewayAuthRequest,
   GatewayAuthResult,
@@ -75,6 +76,33 @@ describe('GatewayManager', () => {
       const manager = new GatewayManager([enabled, disabled]);
       expect(manager.gateways.map(g => g.id)).not.toContain('off-gateway');
       expect(manager.gateways.map(g => g.id)).toContain('on-gateway');
+    });
+
+    it('deduplicates by gateway id — first (custom) gateway wins', () => {
+      const custom = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['custom-model'] });
+      const defaultLike = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['default-model'] });
+      const manager = new GatewayManager([custom, defaultLike]);
+      expect(manager.gateways).toHaveLength(1);
+      expect(manager.gateways[0]).toBe(custom);
+    });
+
+    it('removes later duplicates when custom appears before defaults', () => {
+      const custom = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['custom-model'] });
+      const other = createFakeGateway({ id: 'models.dev', provider: 'openai' });
+      const duplicate = createFakeGateway({ id: 'netlify', provider: 'openai', models: ['dup-model'] });
+      const manager = new GatewayManager([custom, other, duplicate]);
+      expect(manager.gateways.map(g => g.id)).toEqual(['netlify', 'models.dev']);
+      expect(manager.gateways[0]).toBe(custom);
+    });
+
+    it('does not reserve a gateway id from a disabled gateway before an enabled duplicate', () => {
+      const disabled = createFakeGateway({ id: 'shared', enabled: false, models: ['disabled-model'] });
+      const enabled = createFakeGateway({ id: 'shared', models: ['enabled-model'] });
+      const manager = new GatewayManager([disabled, enabled]);
+      // The disabled gateway is filtered out before dedup, so the enabled
+      // duplicate is kept — not removed by the disabled one's id.
+      expect(manager.gateways).toHaveLength(1);
+      expect(manager.gateways[0]).toBe(enabled);
     });
   });
 
@@ -237,6 +265,64 @@ describe('GatewayManager', () => {
       const manager = new GatewayManager([createFakeGateway({ id: 'test-gateway' })]);
       expect(await manager.hasAuth('unknown/garbage/model')).toBe(false);
     });
+
+    it('returns false when resolveAuth throws a MastraError for a missing API key', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        resolveAuth: () => {
+          throw new MastraError({
+            id: 'MASTRA_GATEWAY_NO_API_KEY',
+            domain: 'LLM',
+            category: 'UNKNOWN',
+            text: 'Could not find API key',
+          });
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
+    });
+
+    it('returns false when getApiKey throws a plain Error for a missing env var', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        apiKey: () => {
+          throw new Error('Missing OPENAI_API_KEY environment variable');
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(await manager.hasAuth('test-gateway/acme/sonic-fast')).toBe(false);
+    });
+
+    it('re-throws unexpected gateway failures (e.g. token exchange)', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        resolveAuth: () => {
+          throw new Error('token exchange failed');
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      await expect(manager.hasAuth('test-gateway/acme/sonic-fast')).rejects.toThrow('token exchange failed');
+    });
+
+    it('re-throws unexpected MastraError IDs (e.g. token exchange error)', async () => {
+      const gateway = createFakeGateway({
+        id: 'test-gateway',
+        provider: 'acme',
+        resolveAuth: () => {
+          throw new MastraError({
+            id: 'NETLIFY_GATEWAY_TOKEN_ERROR',
+            domain: 'LLM',
+            category: 'UNKNOWN',
+            text: 'token exchange failed',
+          });
+        },
+      });
+      const manager = new GatewayManager([gateway]);
+      await expect(manager.hasAuth('test-gateway/acme/sonic-fast')).rejects.toThrow('token exchange failed');
+    });
   });
 
   describe('listProviders', () => {
@@ -314,6 +400,85 @@ describe('GatewayManager', () => {
 
       const models = await manager.listAvailableModels();
       expect(models[0].apiKeyEnvVar).toBe('FIRST_KEY');
+    });
+  });
+
+  describe('provider-equals-gateway (two-part router ids)', () => {
+    // A gateway whose provider id is the same as its gateway id (e.g. a
+    // standalone amazon-bedrock gateway) emits two-part catalog ids like
+    // `amazon-bedrock/<model>` rather than `amazon-bedrock/amazon-bedrock/<model>`.
+    it('parses a two-part router id when gateway id equals provider id', () => {
+      const gateway = createFakeGateway({
+        id: 'amazon-bedrock',
+        provider: 'amazon-bedrock',
+        models: ['anthropic.claude-sonnet-4-5'],
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(manager.parseModelId('amazon-bedrock/anthropic.claude-sonnet-4-5')).toEqual({
+        gatewayId: 'amazon-bedrock',
+        providerId: 'amazon-bedrock',
+        modelId: 'anthropic.claude-sonnet-4-5',
+      });
+    });
+
+    it('listAvailableModels emits unprefixed amazon-bedrock/<model> ids', async () => {
+      const gateway = createFakeGateway({
+        id: 'amazon-bedrock',
+        provider: 'amazon-bedrock',
+        models: ['anthropic.claude-sonnet-4-5', 'anthropic.claude-haiku-4-5'],
+        resolveAuth: () => ({ apiKey: 'aws-credential-chain', source: 'gateway' }),
+      });
+      const manager = new GatewayManager([gateway]);
+
+      const models = await manager.listAvailableModels();
+      expect(models.map(m => m.id)).toEqual([
+        'amazon-bedrock/anthropic.claude-sonnet-4-5',
+        'amazon-bedrock/anthropic.claude-haiku-4-5',
+      ]);
+      expect(models[0]).toMatchObject({
+        provider: 'amazon-bedrock',
+        modelName: 'anthropic.claude-sonnet-4-5',
+        hasApiKey: true,
+      });
+    });
+
+    it('resolveAuth calls the gateway with the two-part router id', async () => {
+      const resolveAuth = vi.fn(
+        (_req: GatewayAuthRequest): GatewayAuthResult => ({
+          apiKey: 'aws-credential-chain',
+          source: 'gateway',
+        }),
+      );
+      const gateway = createFakeGateway({
+        id: 'amazon-bedrock',
+        provider: 'amazon-bedrock',
+        models: ['anthropic.claude-sonnet-4-5'],
+        resolveAuth,
+      });
+      const manager = new GatewayManager([gateway]);
+
+      const auth = await manager.resolveAuth('amazon-bedrock/anthropic.claude-sonnet-4-5');
+      expect(auth.apiKey).toBe('aws-credential-chain');
+      expect(resolveAuth).toHaveBeenCalledWith({
+        gatewayId: 'amazon-bedrock',
+        providerId: 'amazon-bedrock',
+        modelId: 'anthropic.claude-sonnet-4-5',
+        routerId: 'amazon-bedrock/anthropic.claude-sonnet-4-5',
+      });
+    });
+
+    it('still parses standard three-part gateway/provider/model ids', () => {
+      const gateway = createFakeGateway({
+        id: 'netlify',
+        provider: 'anthropic',
+        models: ['claude-sonnet-4-5'],
+      });
+      const manager = new GatewayManager([gateway]);
+      expect(manager.parseModelId('netlify/anthropic/claude-sonnet-4-5')).toEqual({
+        gatewayId: 'netlify',
+        providerId: 'anthropic',
+        modelId: 'claude-sonnet-4-5',
+      });
     });
   });
 });

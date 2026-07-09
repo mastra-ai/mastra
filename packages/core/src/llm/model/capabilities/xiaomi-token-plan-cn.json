@@ -1,3 +1,4 @@
 {
-  "attachment": ["mimo-v2.5"]
+  "attachment": ["mimo-v2.5"],
+  "temperature": ["mimo-v2.5", "mimo-v2.5-pro"]
 }

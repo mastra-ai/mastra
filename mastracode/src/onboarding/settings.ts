@@ -10,6 +10,7 @@ import type { MastraBrowser } from '@mastra/core/browser';
 import type { LSPConfig } from '@mastra/core/workspace';
 import { AuthStorage } from '../auth/storage.js';
 import { buildCodexStagehandFetch, createCodexMiddleware } from '../providers/openai-codex.js';
+import { DEFAULT_STT_PROVIDER, resolveSTTModel } from '../tui/voice/stt-registry.js';
 import { getAppDataDir } from '../utils/project.js';
 
 /** A saved custom pack — user-defined model selections for each mode. */
@@ -82,6 +83,21 @@ export interface ShellPassthroughSettings {
   mode?: ShellPassthroughSettingsMode | string;
   executable?: string;
   family?: ShellPassthroughSettingsFamily | string;
+}
+
+/** STT engine: on-device macOS recognizer or a cloud provider. */
+export type VoiceEngine = 'macos-native' | 'cloud';
+
+/** Voice (hold-space dictation) configuration persisted in global settings. */
+export interface VoiceSettings {
+  /** Whether hold-space voice input is enabled. */
+  enabled: boolean;
+  /** Which STT engine to use. Defaults to macOS native on darwin, else cloud. */
+  engine: VoiceEngine;
+  /** Cloud provider id (matches an STT registry entry). Cloud engine only. */
+  provider: string;
+  /** Cloud model id; defaults to the provider's first registry model. */
+  model?: string;
 }
 
 /** Stagehand environment type. */
@@ -224,6 +240,8 @@ export interface GlobalSettings {
   browser: BrowserSettings;
   // Direct TUI `!` shell passthrough configuration
   shellPassthrough: ShellPassthroughSettings;
+  // Hold-space voice input configuration
+  voice: VoiceSettings;
   // Signal routing configuration
   signals: SignalSettings;
   // Cloud observability configuration (per-resource project IDs; tokens stored in auth.json)
@@ -259,6 +277,11 @@ export const STORAGE_DEFAULTS: StorageSettings = {
   libsql: {},
   pg: {},
 };
+
+/** Default STT engine: on-device macOS recognizer where available, else cloud. */
+export function defaultVoiceEngine(): VoiceEngine {
+  return process.platform === 'darwin' ? 'macos-native' : 'cloud';
+}
 
 const DEFAULTS: GlobalSettings = {
   onboarding: {
@@ -306,6 +329,7 @@ const DEFAULTS: GlobalSettings = {
     stagehand: { env: 'LOCAL' },
   },
   shellPassthrough: { mode: 'default' },
+  voice: { enabled: false, engine: defaultVoiceEngine(), provider: DEFAULT_STT_PROVIDER },
   signals: { unixSocketPubSub: false, experimentalGithubSignals: false },
   observability: { resources: {}, localTracing: false },
 };
@@ -522,6 +546,24 @@ function parseShellPassthroughSettings(rawShellPassthrough: unknown): ShellPasst
   };
 }
 
+function parseVoiceSettings(rawVoice: unknown): VoiceSettings {
+  const raw = rawVoice && typeof rawVoice === 'object' ? (rawVoice as Record<string, unknown>) : {};
+  const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULTS.voice.enabled;
+  const engine: VoiceEngine =
+    raw.engine === 'macos-native' || raw.engine === 'cloud' ? raw.engine : defaultVoiceEngine();
+  // Validate provider/model against the registry, falling back to a usable entry
+  // so old `{ enabled }`-only files and unknown values still resolve cleanly.
+  const provider = typeof raw.provider === 'string' ? raw.provider : DEFAULTS.voice.provider;
+  const model = typeof raw.model === 'string' ? raw.model : undefined;
+  const resolved = resolveSTTModel(provider, model);
+  return {
+    enabled,
+    engine,
+    provider: resolved.provider,
+    model: resolved.model,
+  };
+}
+
 const VALID_PROJECT_ID = /^[a-zA-Z0-9_-]+$/;
 
 function parseObservabilitySettings(raw: unknown): ObservabilitySettings {
@@ -588,6 +630,7 @@ function migrateFromAuth(settingsPath: string): boolean {
         lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
         browser: parseBrowserSettings(raw.browser),
         shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+        voice: parseVoiceSettings(raw.voice),
         signals: parseSignalSettings(raw.signals),
         observability: parseObservabilitySettings(raw.observability),
       };
@@ -710,6 +753,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
       lsp: raw.lsp && typeof raw.lsp === 'object' ? (raw.lsp as LSPConfig) : undefined,
       browser: parseBrowserSettings(raw.browser),
       shellPassthrough: parseShellPassthroughSettings(raw.shellPassthrough),
+      voice: parseVoiceSettings(raw.voice),
       signals: parseSignalSettings(raw.signals),
       observability: parseObservabilitySettings(raw.observability),
     };

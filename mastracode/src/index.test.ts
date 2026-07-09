@@ -5,6 +5,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 const createSessionCalls = vi.hoisted<Array<{ id?: string; ownerId?: string; resourceId?: string }>>(() => []);
 
 vi.mock('@mastra/core/llm', () => ({
+  MastraModelGateway: class {},
   GatewayRegistry: {
     getInstance: vi.fn(() => ({
       syncGateways: vi.fn(),
@@ -23,10 +24,10 @@ vi.mock('@mastra/core/agent-controller', () => ({
   AgentController: class {
     constructor(config: {
       resourceId?: string;
-      heartbeatHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
+      intervalHandlers?: Array<{ immediate?: boolean; handler: () => unknown }>;
     }) {
-      for (const heartbeat of config.heartbeatHandlers ?? []) {
-        if (heartbeat.immediate !== false) void heartbeat.handler();
+      for (const interval of config.intervalHandlers ?? []) {
+        if (interval.immediate !== false) void interval.handler();
       }
     }
 

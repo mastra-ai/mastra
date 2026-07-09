@@ -547,6 +547,84 @@ describe('ModelsDevGateway', () => {
     );
   });
 
+  describe('per-model provider overrides', () => {
+    it('captures a model-level provider override from models.dev into modelOverrides', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          neon: {
+            id: 'neon',
+            name: 'Neon',
+            npm: '@ai-sdk/openai-compatible',
+            api: '${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/mlflow/v1',
+            env: ['NEON_AI_GATEWAY_BASE_URL', 'NEON_AI_GATEWAY_TOKEN'],
+            models: {
+              'gpt-5-mini': {
+                name: 'GPT-5 mini',
+                provider: {
+                  npm: '@ai-sdk/openai',
+                  api: '${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1',
+                  shape: 'responses',
+                },
+              },
+              'claude-haiku-4-5': { name: 'Claude Haiku 4.5' },
+            },
+          },
+        }),
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers.neon.modelOverrides).toEqual({
+        'gpt-5-mini': {
+          npm: '@ai-sdk/openai',
+          api: '${NEON_AI_GATEWAY_BASE_URL}/ai-gateway/openai/v1',
+          shape: 'responses',
+        },
+      });
+    });
+
+    const overrideGateway = () =>
+      new ModelsDevGateway({
+        neon: {
+          apiKeyEnvVar: 'NEON_AI_GATEWAY_TOKEN',
+          name: 'Neon',
+          models: ['gpt-5-mini', 'claude-haiku-4-5'],
+          gateway: 'models.dev',
+          url: 'https://ex.neon.tech/ai-gateway/mlflow/v1',
+          modelOverrides: {
+            'gpt-5-mini': { api: 'https://ex.neon.tech/ai-gateway/openai/v1', shape: 'responses' },
+          },
+        },
+      });
+
+    it('routes a shape="responses" model via the OpenAI Responses API on a chat-completions provider', async () => {
+      gateway = overrideGateway();
+
+      const result = await gateway.resolveLanguageModel({
+        providerId: 'neon',
+        modelId: 'gpt-5-mini',
+        apiKey: 'nt_live_test',
+        headers: { 'x-test': 'true' },
+      });
+
+      expect(result).toEqual({ provider: 'openai' });
+      expect(createOpenAIMock).toHaveBeenCalledWith({
+        apiKey: 'nt_live_test',
+        baseURL: 'https://ex.neon.tech/ai-gateway/openai/v1',
+        headers: expect.objectContaining({ 'x-test': 'true' }),
+      });
+      expect(openAIResponsesMock).toHaveBeenCalledWith('gpt-5-mini');
+    });
+
+    it('buildUrl prefers the per-model override endpoint over the provider default', () => {
+      gateway = overrideGateway();
+
+      expect(gateway.buildUrl('neon/gpt-5-mini')).toBe('https://ex.neon.tech/ai-gateway/openai/v1');
+      expect(gateway.buildUrl('neon/claude-haiku-4-5')).toBe('https://ex.neon.tech/ai-gateway/mlflow/v1');
+    });
+  });
+
   describe('integration', () => {
     it('should handle full flow: fetch, buildUrl, buildHeaders', async () => {
       mockFetch.mockResolvedValueOnce({

@@ -57,6 +57,15 @@ export type ScenarioName =
   | 'persistent-goal-commands'
   | 'persistent-goal-judge-decision'
   | 'persistent-goal-reload'
+  | 'plugins-local-tool'
+  | 'plugins-local-hot-reload'
+  | 'plugins-github-install-gh-cli'
+  | 'plugins-github-install-missing-package-manager'
+  | 'plugins-github-poll-update'
+  | 'plugins-blocked-config'
+  | 'plugins-scaffold-install-tool'
+  | 'plugins-assets-loading'
+  | 'plugins-command-ui'
   | 'process-shortcuts'
   | 'provider-history-compat'
   | 'provider-history-rejection-retry'
@@ -65,6 +74,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
+  | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
@@ -120,6 +130,7 @@ export type ScenarioName =
   | 'task-prompt-context-next-turn'
   | 'thread-history'
   | 'tool-history-reload'
+  | 'plugins-streaming-tool-output'
   | 'tool-schema-compat'
   | 'tool-suspension-same-run-resume'
   | 'update-command-prompt'
@@ -129,6 +140,7 @@ export type ScenarioName =
   | 'workspace-plan-mode-tools'
   | 'workspace-tool-names'
   | 'workspace-tool-output-rendering'
+  | 'work-idle-status'
   | 'worktree-cross-thread-resume'
   | 'worktree-thread-scoping'
   | 'resourceid-drift-prompt-accept'
@@ -168,6 +180,7 @@ export type McE2eMastraCodeAppResult = Awaited<ReturnType<typeof createMastraCod
 export type McE2eStartMastraCodeAppOptions = {
   config?: MastraCodeConfig;
   onCreated?: (result: McE2eMastraCodeAppResult) => Promise<void> | void;
+  onTuiCreated?: (tui: unknown) => Promise<void> | void;
   setupDebugLogging?: boolean;
   startupWarnings?: string[];
   tui?: Partial<Pick<MastraTUIOptions, 'appName' | 'initialMessage' | 'inlineQuestions' | 'verbose'>>;
@@ -187,7 +200,7 @@ export type McE2eScenario = {
   description: string;
   testName: string;
   skipReason?: string;
-  projectFixture?: 'long-branch';
+  projectFixture?: 'long-branch' | 'manual';
   useOpenAIModel?: boolean;
   disableMemory?: boolean;
   aimockFixture?: string;

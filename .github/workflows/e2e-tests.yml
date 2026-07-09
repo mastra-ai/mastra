@@ -28,7 +28,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -94,7 +94,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -127,7 +127,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -158,7 +158,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -191,7 +191,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -216,7 +216,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        shard: [1, 2, 3, 4]
     permissions:
       contents: read
     env:
@@ -226,7 +226,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -234,7 +234,17 @@ jobs:
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Build
-        run: pnpm build
+        run: >-
+          pnpm turbo
+          --filter "@mastra/core"
+          --filter "mastra"
+          --filter "@mastra/editor"
+          --filter "@mastra/memory"
+          --filter "@mastra/libsql"
+          --filter "@mastra/loggers"
+          --filter "@mastra/mcp"
+          --filter "@internal/playground"
+          build
 
       - name: Setup e2e project dependencies
         working-directory: ./packages/playground
@@ -258,7 +268,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
         with:
           ref: ${{ inputs.head_sha }}
 

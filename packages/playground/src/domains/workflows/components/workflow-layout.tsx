@@ -1,5 +1,7 @@
-import { CollapsiblePanel, PanelDrawer, PanelSeparator } from '@mastra/playground-ui';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
