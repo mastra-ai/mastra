@@ -1098,11 +1098,16 @@ export class MessageList {
    * If the message was already persisted (e.g. as a memory message), it is
    * moved to the response source so it will be re-saved.
    *
+   * @param options.warnOnMissing - when `false`, suppress the "no matching tool call"
+   *   warning if no part is found. Defaults to `true`. Used by callers that legitimately
+   *   expect a miss (e.g. same-stream provider-executed results, which are merged later by
+   *   buildMessagesFromChunks rather than updated here).
    * @returns true if the tool call was found and updated, false otherwise.
    */
   public updateToolInvocation(
     inputPart: Extract<MastraMessagePart, { type: 'tool-invocation' }>,
     metadata?: Record<string, unknown>,
+    options?: { warnOnMissing?: boolean },
   ): boolean {
     if (!inputPart.toolInvocation?.toolCallId) {
       return false;
@@ -1172,7 +1177,9 @@ export class MessageList {
         }
       }
     }
-    this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    if (options?.warnOnMissing !== false) {
+      this.logger?.warn(`updateToolInvocation: no matching tool call found for toolCallId=${toolCallId}`);
+    }
     return false;
   }
 

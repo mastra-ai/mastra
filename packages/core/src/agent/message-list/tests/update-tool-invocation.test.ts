@@ -703,4 +703,46 @@ describe('MessageList.updateToolInvocation', () => {
       mastra: { modelOutput: true },
     });
   });
+
+  it('warns by default when no matching tool call exists', () => {
+    const warn = vi.fn();
+    const messageList = new MessageList({ logger: { warn } as any });
+
+    const result = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'missing-1',
+        toolName: 'web_search',
+        args: {},
+        result: { ok: true },
+      },
+    });
+
+    expect(result).toBe(false);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('missing-1'));
+  });
+
+  it('does not warn when warnOnMissing is false (e.g. same-stream provider-executed result)', () => {
+    const warn = vi.fn();
+    const messageList = new MessageList({ logger: { warn } as any });
+
+    const result = messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'srvtoolu_1',
+          toolName: 'code_execution',
+          args: {},
+          result: { stdout: 'ok' },
+        },
+      },
+      undefined,
+      { warnOnMissing: false },
+    );
+
+    expect(result).toBe(false);
+    expect(warn).not.toHaveBeenCalled();
+  });
 });
