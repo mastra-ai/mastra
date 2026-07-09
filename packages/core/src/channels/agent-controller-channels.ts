@@ -1,0 +1,148 @@
+import type { Message, Thread } from 'chat';
+
+import type { Agent } from '../agent/agent';
+import type { MastraProviderMetadata } from '../agent/message-list/state/types';
+import type { AgentSignalContents } from '../agent/signals';
+import type { AgentController } from '../agent-controller/agent-controller';
+import type { Session } from '../agent-controller/session';
+import type { Mastra } from '../mastra';
+import type { StorageThreadType } from '../memory/types';
+import type { RequestContext } from '../request-context';
+
+import { AgentChannels } from './agent-channels';
+import type { ChannelConfig } from './types';
+
+/** Configuration for {@link AgentControllerChannels}. Same shape as agent channels. */
+export type AgentControllerChannelsConfig = ChannelConfig;
+
+/**
+ * Runs an AgentController inside chat channels (Slack, Discord, ...).
+ *
+ * Extends {@link AgentChannels} so all inbound machinery (thread mapping,
+ * history, attachments, event context) and all outbound rendering
+ * (`ChatChannelOutputProcessor` with native streaming, tool cards, typing
+ * status) are reused unchanged. Only the dispatch seams differ: instead of
+ * routing into a bare agent, inbound messages route into a controller
+ * `Session` — one durable session per chat thread, keyed by the mapped
+ * Mastra thread's `resourceId`.
+ *
+ * V1 targets long-lived servers: controller sessions are in-memory objects
+ * and do not survive process restarts.
+ */
+export class AgentControllerChannels extends AgentChannels {
+  private controller: AgentController<any> | null = null;
+
+  /** @internal Called by AgentController's constructor to bind itself. */
+  __setController(controller: AgentController<any>): void {
+    this.controller = controller;
+  }
+
+  /**
+   * @internal No-op override. The controller attaches this instance to its
+   * mode agents via `Agent.setChannels`, which calls `__setAgent(agent)` —
+   * with multiple mode agents the last one would win. Every `this.agent` use
+   * is overridden in this subclass, so keep the base field unset rather than
+   * holding a misleading ref.
+   */
+  override __setAgent(_agent: Agent<any, any, any, any>): void {}
+
+  protected override getOwnerId(): string | null {
+    return this.controller?.id ?? null;
+  }
+
+  protected override getWebhookBasePath(): string {
+    return `/api/agent-controllers/${this.getOwnerId()}`;
+  }
+
+  protected override getMastra(): Mastra | undefined {
+    return this.controller?.getMastra();
+  }
+
+  /**
+   * One session per chat thread: unless the user supplied a custom
+   * `resolveResourceId`, key new Mastra threads (and therefore controller
+   * sessions) off the platform + external thread id.
+   */
+  protected override resolveChannelResourceId(args: {
+    platform: string;
+    chatThread: Thread;
+    message: Message;
+    defaultResourceId: string;
+  }): string | (() => string | Promise<string>) {
+    const base = super.resolveChannelResourceId(args);
+    // The base returns a thunk only when a custom resolveResourceId was
+    // configured — honor it. Otherwise derive the channel-thread key.
+    if (typeof base === 'function') return base;
+    return `channel:${args.platform}:${args.chatThread.id}`;
+  }
+
+  /**
+   * Route an inbound chat message into the controller session bound to this
+   * chat thread. Output renders back to the platform through the channels
+   * output processor: the `requestContext` built by the base class (carrying
+   * the channel context and render context) flows through the session into
+   * the run.
+   */
+  protected override async dispatchInboundMessage(args: {
+    signalContents: AgentSignalContents;
+    attributes: Record<string, string | undefined>;
+    providerOptions: MastraProviderMetadata;
+    requestContext: RequestContext;
+    thread: StorageThreadType;
+    memory: { thread: string; resource: string };
+    autoResumeSuspendedTools: true | undefined;
+  }): Promise<void> {
+    const { signalContents, attributes, requestContext, thread, autoResumeSuspendedTools } = args;
+    // NOTE: `providerOptions` (per-message metadata stamping) is not carried —
+    // the session signal surface has no slot for it. Recorded v1 follow-up.
+
+    const session = await this.getSessionForThread(thread);
+
+    // The session equivalent of the base path's `autoResumeSuspendedTools`:
+    // controller runs set `requireToolApproval: !yolo`, so on adapters that
+    // can't render approval buttons, seed `yolo: true` to keep runs from
+    // parking forever on an approval nobody can answer.
+    if (autoResumeSuspendedTools && (session.state.get() as Record<string, unknown>).yolo !== true) {
+      await session.state.set({ yolo: true } as never);
+    }
+
+    const result = session.sendSignal({
+      content: signalContents,
+      ifActive: { attributes },
+      ifIdle: { attributes },
+      requestContext,
+    });
+    await result.accepted;
+  }
+
+  /**
+   * Get-or-create the durable controller session for a mapped channel thread
+   * and bind it to that thread. Keyed off the thread's own `resourceId` so
+   * pre-existing threads (custom resolveResourceId, or created before this
+   * feature) always pass the session's thread-ownership check.
+   */
+  protected async getSessionForThread(thread: StorageThreadType): Promise<Session<any>> {
+    const controller = this.requireController();
+    const channelResourceId = thread.resourceId;
+    const session = await controller.createSession({
+      resourceId: channelResourceId,
+      id: channelResourceId,
+      ownerId: controller.id,
+    });
+    // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
+    // run, so never re-switch when the session is already on this thread.
+    if (session.thread.getId() !== thread.id) {
+      await session.thread.switch({ threadId: thread.id });
+    }
+    return session;
+  }
+
+  private requireController(): AgentController<any> {
+    if (!this.controller) {
+      throw new Error(
+        'AgentControllerChannels is not bound to an AgentController. Pass it via `channels` in AgentControllerConfig.',
+      );
+    }
+    return this.controller;
+  }
+}

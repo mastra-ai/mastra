@@ -5,6 +5,7 @@ import type { MastraDBMessage } from '../agent/message-list/state/types';
 import { mastraDBMessageToSignal } from '../agent/signals';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import { AgentControllerChannels } from '../channels/agent-controller-channels';
 import { getErrorFromUnknown } from '../error';
 import { GatewayManager } from '../llm/model/gateways';
 import { defaultGateways } from '../llm/model/gateways/defaults';
@@ -210,6 +211,10 @@ export class AgentController<TState = {}> {
   #externalMastra: Mastra | undefined = undefined;
   #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
+  /** Chat channels running this controller inside messaging threads (from `config.channels`). */
+  readonly #channels: AgentControllerChannels | null = null;
+  /** Mode agents already warned about keeping their own pre-existing channels. */
+  readonly #warnedAgentOwnChannels = new Set<string>();
 
   constructor(config: AgentControllerConfig<TState>) {
     validateModes(config.modes);
@@ -217,6 +222,10 @@ export class AgentController<TState = {}> {
     this.id = config.id;
     this.config = config;
     this.#instructions = config.instructions;
+    if (config.channels) {
+      this.#channels = new AgentControllerChannels(config.channels);
+      this.#channels.__setController(this);
+    }
     // Gateway manager merges configured gateways with the router defaults
     // (custom takes precedence). Shared by listAvailableModels,
     // getCurrentModelAuthStatus, and the OM model resolver.
@@ -1059,13 +1068,44 @@ export class AgentController<TState = {}> {
     return agent;
   }
 
+  /**
+   * Chat channels configured on this controller (from `config.channels`),
+   * or null when the controller has no channels.
+   */
+  getChannels(): AgentControllerChannels | null {
+    return this.#channels;
+  }
+
+  /**
+   * Attach the controller's channels instance to a resolved mode agent so
+   * the agent picks up the channel input/output processors — this is what
+   * makes controller runs render back to the originating chat platform.
+   * Agents that already carry their own channels are left alone (warn once).
+   */
+  #attachChannelsToAgent(agent: Agent<any, any, any, any>): Agent<any, any, any, any> {
+    if (!this.#channels) return agent;
+    const existing = agent.getChannels();
+    if (existing === this.#channels) return agent;
+    if (existing) {
+      if (!this.#warnedAgentOwnChannels.has(agent.id)) {
+        this.#warnedAgentOwnChannels.add(agent.id);
+        console.warn(
+          `[AgentController:${this.id}] Mode agent "${agent.id}" already has its own channels; leaving them in place. Controller channel messages will still route into controller sessions, but this agent renders through its own channels config.`,
+        );
+      }
+      return agent;
+    }
+    agent.setChannels(this.#channels);
+    return agent;
+  }
+
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
     // Deprecated per-mode agent — use directly, no forking.
     if (mode.agent) {
       if (!this.#legacyAgentMode[mode.id]) {
         this.#legacyAgentMode[mode.id] = mode.agent;
       }
-      return this.#legacyAgentMode[mode.id]!;
+      return this.#attachChannelsToAgent(this.#legacyAgentMode[mode.id]!);
     }
 
     // Shared backing agent — reuse the single instance.
@@ -1073,7 +1113,7 @@ export class AgentController<TState = {}> {
     // Mode instructions are passed at call time via buildAgentMessageStreamOptions;
     // mode tools are resolved at execution time via buildToolsets.
     if (this.config.agent) {
-      return this.config.agent;
+      return this.#attachChannelsToAgent(this.config.agent);
     }
 
     // No backing agent — construct one per mode (cached).
@@ -1101,7 +1141,7 @@ export class AgentController<TState = {}> {
         tools: modeTools,
       });
     }
-    return this.#legacyAgentMode[mode.id]!;
+    return this.#attachChannelsToAgent(this.#legacyAgentMode[mode.id]!);
   }
 
   /**
