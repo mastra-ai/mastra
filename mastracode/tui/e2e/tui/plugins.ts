@@ -157,21 +157,21 @@ export default defineMastraCodePlugin({
       type: 'callback',
       label: 'Authenticate',
       description: 'Connect the E2E account.',
-      isEnabled: config => config.connected !== true,
+      isEnabled: ctx => ctx.config.connected !== true,
       run: async () => ({ message: 'E2E callback connected.', config: { connected: true } }),
     },
     disconnect: {
       type: 'callback',
       label: 'Disconnect',
       description: 'Disconnect the E2E account.',
-      isEnabled: config => config.connected === true,
+      isEnabled: ctx => ctx.config.connected === true,
       run: async () => ({ config: { connected: undefined } }),
     },
     connected: { type: 'boolean', isEnabled: () => false },
   },
   tools: {
     ${TOOL_NAME}: {
-      isEnabled: config => config.connected === true,
+      isEnabled: ctx => ctx.config.connected === true,
       tool: createTool({
         id: '${TOOL_NAME}',
         description: 'Return an E2E plugin lookup result.',

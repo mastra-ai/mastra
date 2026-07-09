@@ -163,7 +163,7 @@ describe('PluginManager', () => {
         tools: {
           gated_tool: {
             tool: { id: 'gated_tool', description: 'needs connection' },
-            isEnabled: config => config.connected === true
+            isEnabled: ctx => ctx.config.connected === true
           }
         }
       };`,
@@ -210,7 +210,7 @@ describe('PluginManager', () => {
           status_tool: { tool: { id: 'status_tool', description: 'always on' } },
           gated_tool: {
             tool: { id: 'gated_tool', description: 'needs connection' },
-            isEnabled: config => config.connected === true
+            isEnabled: ctx => ctx.config.connected === true
           }
         }
       };`,

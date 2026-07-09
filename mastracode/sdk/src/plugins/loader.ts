@@ -207,7 +207,7 @@ function normalizePluginToolEntries(
     if (typeof entry.isEnabled === 'function') {
       // Fail-closed: a throwing predicate hides the tool instead of exposing it or failing the load.
       try {
-        if (!entry.isEnabled(configValues)) continue;
+        if (!entry.isEnabled({ config: configValues })) continue;
       } catch (error) {
         process.stderr.write(
           `Plugin "${pluginId}" tool "${name}" isEnabled threw (${error instanceof Error ? error.message : String(error)}); tool disabled\n`,

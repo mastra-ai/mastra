@@ -82,6 +82,10 @@ export type MastraCodePluginCallbackContext = {
   config: Readonly<Record<string, MastraCodePluginConfigValue>>;
 };
 
+export type MastraCodePluginEnabledContext = {
+  config: Readonly<Record<string, MastraCodePluginConfigValue>>;
+};
+
 export type MastraCodePluginCallbackResult = {
   message?: string;
   config?: Record<string, MastraCodePluginConfigValue>;
@@ -92,14 +96,14 @@ export type MastraCodePluginValueConfigOption = {
   label?: string;
   description?: string;
   default?: string | boolean;
-  isEnabled?: (config: Readonly<Record<string, MastraCodePluginConfigValue>>) => boolean;
+  isEnabled?: (context: MastraCodePluginEnabledContext) => boolean;
 };
 
 export type MastraCodePluginCallbackConfigOption = {
   type: 'callback';
   label?: string;
   description?: string;
-  isEnabled?: (config: Readonly<Record<string, MastraCodePluginConfigValue>>) => boolean;
+  isEnabled?: (context: MastraCodePluginEnabledContext) => boolean;
   run: (context: MastraCodePluginCallbackContext) => Promise<MastraCodePluginCallbackResult | void>;
 };
 
@@ -120,7 +124,7 @@ export type MastraCodePluginTool = Tool | ToolAction<any, any, any, any, any, an
 export type MastraCodePluginToolEntry = {
   tool: MastraCodePluginTool;
   render?: MastraCodeToolRenderConfig;
-  isEnabled?: (config: Readonly<Record<string, MastraCodePluginConfigValue>>) => boolean;
+  isEnabled?: (context: MastraCodePluginEnabledContext) => boolean;
 };
 
 export type MastraCodePluginTools = Record<string, MastraCodePluginTool>;

@@ -138,7 +138,7 @@ describe('plugin loader', () => {
             type: 'callback',
             label: 'Authenticate',
             description: 'Connect account',
-            isEnabled: config => config.connected !== true,
+            isEnabled: ctx => ctx.config.connected !== true,
             run: async () => ({ message: 'Connected', config: { connected: true } })
           },
           connected: { type: 'boolean', isEnabled: () => false }
@@ -177,7 +177,7 @@ describe('plugin loader', () => {
     // Callback options never produce a config value.
     expect(plugin?.configValues).toEqual({ connected: false });
     if (authenticate?.type === 'callback') {
-      expect(authenticate.isEnabled?.({ connected: true })).toBe(false);
+      expect(authenticate.isEnabled?.({ config: { connected: true } })).toBe(false);
       await expect(authenticate.run({ config: {} })).resolves.toEqual({
         message: 'Connected',
         config: { connected: true },
@@ -228,7 +228,7 @@ describe('plugin loader', () => {
     expect(plugin?.configValues).toEqual({ valid: 'kept' });
   });
 
-  it('gates tools on isEnabled(config) at tool resolution', async () => {
+  it('gates tools on isEnabled(context) at tool resolution', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
     const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
@@ -244,7 +244,7 @@ describe('plugin loader', () => {
           gated_tool: {
             tool: { id: 'gated_tool', description: 'needs connection' },
             render: { type: 'subagent', agentType: 'gated' },
-            isEnabled: config => config.connected === true
+            isEnabled: ctx => ctx.config.connected === true
           }
         }
       };`,

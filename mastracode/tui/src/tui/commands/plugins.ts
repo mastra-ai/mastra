@@ -256,7 +256,7 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
 function isConfigOptionEnabled(plugin: LoadedPlugin, key: string, option: MastraCodePluginConfigOption): boolean {
   if (typeof option.isEnabled !== 'function') return true;
   try {
-    return option.isEnabled(plugin.configValues ?? {}) === true;
+    return option.isEnabled({ config: plugin.configValues ?? {} }) === true;
   } catch (error) {
     // Fail closed: a throwing predicate hides the option.
     process.stderr.write(
