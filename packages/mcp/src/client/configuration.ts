@@ -233,7 +233,7 @@ To fix this you have three different options:
        */
       onRequest: async (serverName: string, handler: (request: ElicitRequest['params']) => Promise<ElicitResult>) => {
         try {
-          const internalClient = await this.getConnectedClientForServer(serverName);
+          const internalClient = await this.getClientForServer(serverName);
           return internalClient.elicitation.onRequest(handler);
         } catch (err) {
           throw new MastraError(
@@ -997,7 +997,11 @@ To fix this you have three different options:
       if (!existingClient) {
         throw new Error(`Client ${name} exists but is undefined`);
       }
-      await existingClient.connect();
+      try {
+        await existingClient.connect();
+      } catch (e) {
+        throw this.handleConnectError(name, e);
+      }
       return existingClient;
     }
 
@@ -1018,25 +1022,31 @@ To fix this you have three different options:
     try {
       await mcpClient.connect();
     } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_CLIENT_CONNECT_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
-          details: {
-            name,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
-      this.mcpClientsById.delete(name);
-      throw mastraError;
+      throw this.handleConnectError(name, e);
     }
     this.logger.debug('Connected to MCP server', { name });
     return mcpClient;
+  }
+
+  private handleConnectError(name: string, error: unknown): MastraError {
+    const mastraError = new MastraError(
+      {
+        id: 'MCP_CLIENT_CONNECT_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Failed to connect to MCP server ${name}: ${
+          error instanceof Error ? error.stack || error.message : String(error)
+        }`,
+        details: {
+          name,
+        },
+      },
+      error,
+    );
+    this.logger.trackException(mastraError);
+    this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
+    this.mcpClientsById.delete(name);
+    return mastraError;
   }
 
   private async getConnectedClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
@@ -1045,6 +1055,33 @@ To fix this you have three different options:
       throw new Error(`Server configuration not found for name: ${serverName}`);
     }
     return this.getConnectedClient(serverName, serverConfig);
+  }
+
+  private async getClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
+    if (this.disconnectPromise) {
+      await this.disconnectPromise;
+    }
+
+    const serverConfig = this.serverConfigs[serverName];
+    if (!serverConfig) {
+      throw new Error(`Server configuration not found for name: ${serverName}`);
+    }
+
+    const existingClient = this.mcpClientsById.get(serverName);
+    if (existingClient) {
+      return existingClient;
+    }
+
+    const mcpClient = new InternalMastraMCPClient({
+      name: serverName,
+      server: serverConfig,
+      timeout: serverConfig.timeout ?? this.defaultTimeout,
+      capabilities: serverConfig.capabilities,
+    });
+
+    mcpClient.__setLogger(this.logger);
+    this.mcpClientsById.set(serverName, mcpClient);
+    return mcpClient;
   }
 
   private async getToolsForServer(serverName: string): Promise<Record<string, Tool<any, any, any, any>>> {
