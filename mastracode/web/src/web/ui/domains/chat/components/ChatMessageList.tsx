@@ -11,7 +11,7 @@ import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
 import type { ChatConnectionApi } from '../context/ChatConnectionContext';
 import type { ChatTranscriptApi } from '../context/ChatTranscriptContext';
-import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
   useClearAgentControllerGoalMutation,
@@ -27,6 +27,7 @@ import { useTranscriptScroll } from '../hooks/useTranscriptScroll';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { GoalPanel } from './GoalPanel';
 import { Transcript } from './Transcript';
+import { useChatConnection } from '../context/useChatConnection';
 
 type TranscriptState = ChatTranscriptApi['transcript'];
 

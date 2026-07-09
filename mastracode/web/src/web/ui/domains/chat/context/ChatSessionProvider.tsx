@@ -11,10 +11,10 @@ import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThr
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
+import { ChatPermissionsProvider } from './ChatPermissionsProvider';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
-import { useChatTranscript } from './useChatTranscript';
 
 export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
@@ -62,10 +62,10 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
   return (
     <ChatTranscriptProvider threadId={threadId} initialMessages={messagesQuery.data}>
       <ChatModesProvider>
-        <ChatModelsProvider>{children}</ChatModelsProvider>
+        <ChatModelsProvider>
+          <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
+        </ChatModelsProvider>
       </ChatModesProvider>
     </ChatTranscriptProvider>
   );
 }
-
-export { useChatTranscript };

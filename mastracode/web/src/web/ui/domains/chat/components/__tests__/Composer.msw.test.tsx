@@ -9,7 +9,8 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider, useChatTranscript } from '../../context/ChatSessionProvider';
+import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import { useChatTranscript } from '../../context/useChatTranscript';
 import { Composer } from '../Composer';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;

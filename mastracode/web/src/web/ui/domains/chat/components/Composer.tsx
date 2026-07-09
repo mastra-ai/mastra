@@ -1,4 +1,4 @@
-import type { AgentControllerMessage, PermissionPolicy, ToolCategory } from '@mastra/client-js';
+import type { AgentControllerMessage } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
@@ -9,18 +9,18 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useActiveProjectContext } from '../../workspaces';
-import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatConnection } from '../context/useChatConnection';
+import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
+import { useChatPermissions } from '../context/useChatPermissions';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
   useSetAgentControllerGoalMutation,
 } from '../hooks/useAgentControllerGoalMutations';
-import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
-import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import {
   useAbortAgentControllerMutation,
   useFollowUpAgentControllerMutation,
@@ -71,8 +71,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
-  const { data: permissionRules, isLoading: permissionsLoading } = useAgentControllerPermissions(hookArgs);
-  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
+  const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
 
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -150,9 +149,6 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
     await followUpMutation.mutateAsync(text);
   };
 
-  const setPermissionForCategory = (category: ToolCategory, policy: PermissionPolicy) =>
-    setPermissionForCategoryMutation.mutateAsync({ category, policy });
-
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     const text = draft.trim();
@@ -221,7 +217,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
           return;
         case 'permissions': {
           if (permissionsLoading) return;
-          const rules = permissionRules ?? { categories: {}, tools: {} };
+          const rules = permissions ?? { categories: {}, tools: {} };
           const cats =
             Object.entries(rules.categories ?? {})
               .map(([k, v]) => `  ${k}: ${v}`)

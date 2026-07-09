@@ -6,7 +6,13 @@
  * props again. Driven end-to-end: real fetch/SSE transport, MSW at the
  * network boundary.
  */
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
+import type {
+  AgentControllerEvent,
+  AgentControllerMessage,
+  AgentControllerSessionState,
+  PermissionPolicy,
+  PermissionRules,
+} from '@mastra/client-js';
 import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -18,8 +24,13 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
-import { ChatSessionProvider, useChatConnection, useChatTranscript } from '../ChatSessionProvider';
+import { SLASH_COMMANDS } from '../../services/commands';
+import { ChatCommandsProvider, useChatCommands } from '../ChatCommandsProvider';
+import { ChatSessionProvider } from '../ChatSessionProvider';
+import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
+import { useChatPermissions } from '../useChatPermissions';
+import { useChatTranscript } from '../useChatTranscript';
 import { useChatModes } from '../useChatModes';
 import { useChatSessionContext } from '../useChatSessionContext';
 
@@ -168,6 +179,26 @@ function ModelsProbe() {
   );
 }
 
+function PermissionsProbe() {
+  const { permissions, permissionsLoading, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const categories = Object.entries(permissions?.categories ?? {})
+    .map(([category, policy]) => `${category}:${policy}`)
+    .join(',');
+  const tools = Object.entries(permissions?.tools ?? {})
+    .map(([tool, policy]) => `${tool}:${policy}`)
+    .join(',');
+
+  return (
+    <div>
+      <span data-testid="permissions-loading">{permissionsLoading ? 'yes' : 'no'}</span>
+      <span data-testid="permissions-categories">{categories}</span>
+      <span data-testid="permissions-tools">{tools}</span>
+      <span data-testid="pending-permission-category">{pendingPermissionCategory ?? ''}</span>
+      <button onClick={() => void setPermissionForCategory('execute', 'allow')}>allow execute</button>
+    </div>
+  );
+}
+
 function TranscriptProbe() {
   const { transcript } = useChatTranscript();
   const messageText = transcript.entries
@@ -199,6 +230,19 @@ function SessionContextProbe() {
   );
 }
 
+function PaletteCommandProbe({ commandName }: { commandName: string }) {
+  const { composerCommandName, run } = useChatCommands();
+  const command = SLASH_COMMANDS.find(command => command.name === commandName);
+  if (!command) throw new Error(`Missing slash command: ${commandName}`);
+
+  return (
+    <>
+      <button onClick={() => run(command)}>run {command.name}</button>
+      <span data-testid="composer-command-name">{composerCommandName}</span>
+    </>
+  );
+}
+
 function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
   return (
     <ActiveProjectProvider>
@@ -213,6 +257,17 @@ function renderProbe(threadId?: string) {
 
 function renderFocusedProbe(children: ReactNode, threadId?: string) {
   return renderWithProviders(<ProbeSession threadId={threadId}>{children}</ProbeSession>);
+}
+
+function renderPaletteCommandProbe(commandName: string, threadId?: string) {
+  return renderWithProviders(
+    <ProbeSession threadId={threadId}>
+      <ChatCommandsProvider>
+        <PaletteCommandProbe commandName={commandName} />
+        <ChatMessageList />
+      </ChatCommandsProvider>
+    </ProbeSession>,
+  );
 }
 
 function renderMessageList(threadId?: string) {
@@ -298,6 +353,50 @@ describe('ChatSessionProvider', () => {
     });
 
 
+    it('given permission rules, when a permissions consumer updates a category, then it reads fetched rules and exposes pending category state', async () => {
+      const requests: string[] = [];
+      let permissions: PermissionRules = { categories: { execute: 'ask', read: 'allow' }, tools: { 'shell.run': 'deny' } };
+      let resolvePermissionUpdate: (() => void) | undefined;
+      seedProject();
+      useAgentControllerHandlers([], requests);
+      server.use(
+        http.get(`${SESSION}/permissions`, () => HttpResponse.json(permissions)),
+        http.put(`${SESSION}/permissions/category`, async ({ request }) => {
+          const body = await request.json();
+          requests.push(`permission:${JSON.stringify(body)}`);
+          if (typeof body === 'object' && body && 'category' in body && 'policy' in body) {
+            const category = body.category;
+            const policy = body.policy;
+            if (typeof category === 'string' && typeof policy === 'string') {
+              permissions = {
+                ...permissions,
+                categories: { ...permissions.categories, [category]: policy as PermissionPolicy },
+              };
+            }
+          }
+
+          return new Promise<Response>(resolve => {
+            resolvePermissionUpdate = () => resolve(HttpResponse.json({ ok: true }));
+          });
+        }),
+      );
+
+      renderFocusedProbe(<PermissionsProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('permissions-loading')).toHaveTextContent('no'));
+      expect(screen.getByTestId('permissions-categories')).toHaveTextContent('execute:ask');
+      expect(screen.getByTestId('permissions-categories')).toHaveTextContent('read:allow');
+      expect(screen.getByTestId('permissions-tools')).toHaveTextContent('shell.run:deny');
+
+      await userEvent.click(screen.getByRole('button', { name: 'allow execute' }));
+
+      await waitFor(() => expect(requests).toContain('permission:{"category":"execute","policy":"allow"}'));
+      expect(screen.getByTestId('pending-permission-category')).toHaveTextContent('execute');
+      resolvePermissionUpdate?.();
+      await waitFor(() => expect(screen.getByTestId('pending-permission-category')).toBeEmptyDOMElement());
+      await waitFor(() => expect(screen.getByTestId('permissions-categories')).toHaveTextContent('execute:allow'));
+    });
+
     it('given a route thread prop, when a transcript consumer renders, then it receives persisted route-thread messages', async () => {
       seedProject();
       useAgentControllerHandlers();
@@ -324,6 +423,135 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(screen.getByTestId('focused-thread-id')).toHaveTextContent('(none)'));
       expect(screen.getByTestId('focused-entries-count')).toHaveTextContent('0');
       expect(screen.getByTestId('focused-message-text')).toBeEmptyDOMElement();
+    });
+  });
+
+  describe('palette command execution', () => {
+    it('given an argument command, when it runs from the palette, then it opens composer command state without mutations', async () => {
+      const requests: string[] = [];
+      seedProject();
+      useAgentControllerHandlers([], requests);
+      server.use(
+        http.delete(`${SESSION}/goal`, () => {
+          requests.push('goal-clear');
+          return HttpResponse.json({ ok: true });
+        }),
+        http.put(`${SESSION}/permissions/category`, () => {
+          requests.push('permission-category');
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      renderPaletteCommandProbe('model');
+
+      await userEvent.click(screen.getByRole('button', { name: 'run model' }));
+
+      expect(screen.getByTestId('composer-command-name')).toHaveTextContent('model');
+      expect(requests).not.toContain('goal-clear');
+      expect(requests).not.toContain('permission-category');
+    });
+
+    it('given /goal-clear, when it runs from the palette, then it clears the session goal through the mutation stack', async () => {
+      const requests: string[] = [];
+      seedProject();
+      useAgentControllerHandlers([], requests);
+      server.use(
+        http.delete(`${SESSION}/goal`, () => {
+          requests.push('goal-clear');
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      renderPaletteCommandProbe('goal-clear');
+
+      await userEvent.click(screen.getByRole('button', { name: 'run goal-clear' }));
+
+      await waitFor(() => expect(requests).toContain('goal-clear'));
+    });
+
+    it('given permission rules are loaded, when /permissions runs from the palette, then it pushes the formatted rules notice', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/permissions`, () =>
+          HttpResponse.json({ categories: { read: 'ask', edit: 'deny' }, tools: { shell: 'allow' } }),
+        ),
+      );
+
+      renderPaletteCommandProbe('permissions');
+
+      await waitFor(() => expect(screen.getByRole('button', { name: 'run permissions' })).toBeEnabled());
+      await userEvent.click(screen.getByRole('button', { name: 'run permissions' }));
+
+      expect(await screen.findByText(/Categories:/)).toBeVisible();
+      expect(screen.getByText(/read: ask/)).toBeVisible();
+      expect(screen.getByText(/edit: deny/)).toBeVisible();
+      expect(screen.getByText(/shell: allow/)).toBeVisible();
+    });
+
+    it('given permission mutations are available, when /yolo runs from the palette, then it allows every category and pushes success notice', async () => {
+      const categories: string[] = [];
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.put(`${SESSION}/permissions/category`, async ({ request }) => {
+          const body = await request.json();
+          if (typeof body === 'object' && body && 'category' in body && typeof body.category === 'string') {
+            categories.push(body.category);
+          }
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      renderPaletteCommandProbe('yolo');
+
+      await userEvent.click(screen.getByRole('button', { name: 'run yolo' }));
+
+      await waitFor(() => expect(categories).toEqual(['read', 'edit', 'execute', 'mcp', 'other']));
+      expect(await screen.findByText('YOLO mode: all tool categories set to auto-allow')).toBeVisible();
+    });
+
+    it('given permission rules are still loading, when /permissions runs from the palette, then it does not emit stale rules', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(http.get(`${SESSION}/permissions`, () => new Promise(() => undefined)));
+
+      renderPaletteCommandProbe('permissions');
+
+      await userEvent.click(screen.getByRole('button', { name: 'run permissions' }));
+
+      expect(screen.queryByText(/Categories:/)).not.toBeInTheDocument();
+    });
+
+    it('given no usage has streamed, when /cost runs from the palette, then it reports no token usage', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+
+      renderPaletteCommandProbe('cost');
+
+      await userEvent.click(screen.getByRole('button', { name: 'run cost' }));
+
+      expect(await screen.findByText('No token usage recorded yet.')).toBeVisible();
+    });
+
+    it('given a synced session, when /settings runs from the palette, then it prints project and session diagnostics', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => HttpResponse.json({ messages: PERSISTED_MESSAGES })),
+      );
+
+      renderPaletteCommandProbe('settings', ROUTE_THREAD_ID);
+
+      await waitFor(() => expect(screen.getByText('Persisted user question')).toBeVisible());
+      await userEvent.click(screen.getByRole('button', { name: 'run settings' }));
+
+      expect(await screen.findByText(/Project: MastraCode Test/)).toBeVisible();
+      expect(screen.getByText(/Path: \/tmp\/mastracode-test/)).toBeVisible();
+      expect(screen.getByText(/Mode: build/)).toBeVisible();
+      expect(screen.getByText(/Model: openai\/gpt-4o-mini/)).toBeVisible();
+      expect(screen.getByText(/Thread: route-thread-test/)).toBeVisible();
+      expect(screen.getByText(/Running: false/)).toBeVisible();
     });
   });
 

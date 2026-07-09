@@ -10,7 +10,7 @@ import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
 import { Transcript } from './components/Transcript';
-import { useChatTranscript } from './context/ChatSessionProvider';
+import { useChatTranscript } from './context/useChatTranscript';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 

@@ -19,7 +19,9 @@ import type { OverlayName } from '../../../../lib/overlays';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider, useChatConnection, useChatTranscript } from '../../context/ChatSessionProvider';
+import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import { useChatConnection } from '../../context/useChatConnection';
+import { useChatTranscript } from '../../context/useChatTranscript';
 import { useGlobalShortcuts } from '../useGlobalShortcuts';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;

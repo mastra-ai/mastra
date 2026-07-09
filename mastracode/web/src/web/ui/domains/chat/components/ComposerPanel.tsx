@@ -1,6 +1,6 @@
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatTranscript } from '../context/ChatSessionProvider';
+import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatModels } from '../context/useChatModels';
 import { useChatModes } from '../context/useChatModes';
 import { Composer } from './Composer';
@@ -25,7 +25,7 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
     <div className={composerPanelClass}>
       <Composer
         variant={composerVariant}
-        commandNameToApply={composerCommandName}
+        commandNameToApply={composerCommandName ?? null}
         onCommandApplied={clearComposerCommand}
       />
 
