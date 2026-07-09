@@ -145,6 +145,56 @@ describe('PluginManager', () => {
     ).toEqual({ connected: true });
   });
 
+  it('applies a multi-key config patch with one reload via setConfigValues', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.batch',
+        config: {
+          authenticate: { type: 'callback', run: async () => undefined },
+          connected: { type: 'boolean' },
+          label: { type: 'string' }
+        },
+        tools: {
+          gated_tool: {
+            tool: { id: 'gated_tool', description: 'needs connection' },
+            isEnabled: config => config.connected === true
+          }
+        }
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const pluginTools = manager.getPluginTools();
+
+    await manager.installLocal(pluginDir, 'project');
+    await manager.setConfigValue('acme.batch', 'project', 'label', 'old');
+    expect(Object.keys(pluginTools)).toEqual([]);
+
+    // Set + clear in one call, one registry write, one reload.
+    const reloadSpy = vi.spyOn(manager, 'reload');
+    await manager.setConfigValues('acme.batch', 'project', { connected: true, label: undefined });
+    expect(reloadSpy).toHaveBeenCalledTimes(1);
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.batch']?.config,
+    ).toEqual({ connected: true });
+    // The single reload re-gated tools.
+    expect(Object.keys(pluginTools)).toEqual(['gated_tool']);
+    reloadSpy.mockRestore();
+
+    // Callback-typed keys are rejected before any write.
+    await expect(
+      manager.setConfigValues('acme.batch', 'project', { authenticate: 'x', connected: false }),
+    ).rejects.toThrow(/callback/i);
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.batch']?.config,
+    ).toEqual({ connected: true });
+  });
+
   it('re-gates tools after setConfigValue reloads the plugin', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

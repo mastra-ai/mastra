@@ -77,6 +77,7 @@ import { planApprovalRequestChangesScenario } from './plan-approval-request-chan
 import {
   pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
+  pluginsCallbackConfigScenario,
   pluginsCommandUiScenario,
   pluginsGithubInstallGhCliScenario,
   pluginsGithubInstallMissingPackageManagerScenario,
@@ -231,6 +232,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plugins-github-install-missing-package-manager': pluginsGithubInstallMissingPackageManagerScenario,
   'plugins-github-poll-update': pluginsGithubPollUpdateScenario,
   'plugins-blocked-config': pluginsBlockedConfigScenario,
+  'plugins-callback-config': pluginsCallbackConfigScenario,
   'plugins-scaffold-install-tool': pluginsScaffoldInstallToolScenario,
   'plugins-streaming-tool-output': pluginsStreamingToolOutputScenario,
   'plugins-assets-loading': pluginsAssetsLoadingScenario,

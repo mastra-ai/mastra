@@ -443,6 +443,34 @@ export class PluginManager {
     await this.reload();
   }
 
+  /** Apply a multi-key config patch with one registry write and one reload. */
+  async setConfigValues(
+    pluginId: string,
+    scope: PluginScope,
+    patch: Record<string, MastraCodePluginConfigValue>,
+  ): Promise<void> {
+    for (const key of Object.keys(patch)) {
+      this.assertNotCallbackConfigKey(pluginId, scope, key);
+    }
+    const paths = getPluginScopePaths(scope, this.options);
+    const registry = loadPluginRegistry(paths.registryPath);
+    const record = registry.plugins[pluginId];
+    if (!record) {
+      throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+    }
+    const config = { ...(record.config ?? {}) };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined || value === '') {
+        delete config[key];
+      } else {
+        config[key] = value;
+      }
+    }
+    const nextRecord = { ...record, config: Object.keys(config).length > 0 ? config : undefined };
+    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, nextRecord));
+    await this.reload();
+  }
+
   async uninstall(pluginId: string, scope: PluginScope): Promise<void> {
     const paths = getPluginScopePaths(scope, this.options);
     const registry = loadPluginRegistry(paths.registryPath);

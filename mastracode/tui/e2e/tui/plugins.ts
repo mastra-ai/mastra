@@ -138,6 +138,55 @@ export default defineMastraCodePlugin({
   return pluginDir;
 }
 
+function writeCallbackConfigPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
+  const pluginDir = join(projectDir, 'fixtures', 'plugins', 'callback-config-plugin');
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { createTool, defineMastraCodePlugin, z } from 'mastracode/plugin';
+
+export default defineMastraCodePlugin({
+  id: '${PLUGIN_ID}',
+  name: '${PLUGIN_NAME}',
+  description: 'Plugin used by Mastra Code E2E callback config tests.',
+  config: {
+    authenticate: {
+      type: 'callback',
+      label: 'Authenticate',
+      description: 'Connect the E2E account.',
+      isEnabled: config => config.connected !== true,
+      run: async () => ({ message: 'E2E callback connected.', config: { connected: true } }),
+    },
+    disconnect: {
+      type: 'callback',
+      label: 'Disconnect',
+      description: 'Disconnect the E2E account.',
+      isEnabled: config => config.connected === true,
+      run: async () => ({ config: { connected: undefined } }),
+    },
+    connected: { type: 'boolean', isEnabled: () => false },
+  },
+  tools: {
+    ${TOOL_NAME}: {
+      isEnabled: config => config.connected === true,
+      tool: createTool({
+        id: '${TOOL_NAME}',
+        description: 'Return an E2E plugin lookup result.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ context }) => ({ query: context.query, source: '${PLUGIN_ID}' }),
+      }),
+    },
+  },
+});
+`,
+  );
+
+  return pluginDir;
+}
+
 function writeHotReloadPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>, result: string): string {
   const pluginDir = join(projectDir, 'fixtures', 'plugins', 'hot-reload-plugin');
   writeHotReloadPluginSource(pluginDir, result);
@@ -939,5 +988,83 @@ export const pluginsCommandUiScenario: McE2eScenario = {
 
     terminal.write('\x1b');
     terminal.keyCtrlC();
+  },
+};
+
+export const pluginsCallbackConfigScenario: McE2eScenario = {
+  name: 'plugins-callback-config',
+  description:
+    'Runs a callback config option from /plugins configure and gates plugin tools on the persisted config patch.',
+  testName: 'runs callback config options and re-gates tools on the config patch',
+  useOpenAIModel: true,
+  aimockFixture: 'plugins-callback-config.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    const pluginDir = writeCallbackConfigPlugin({ projectDir });
+    writePluginRegistry(projectDir, pluginDir);
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    return startMastraCodeApp({
+      config: {
+        pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }),
+      },
+      onTuiCreated: tui => {
+        currentTui = tui;
+      },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+
+    // Detail screen: gated tool is hidden while connected is unset.
+    terminal.submit(`/plugins ${PLUGIN_ID}`);
+    await runtime.waitForScreenText(/tools:\s*\(none\)/i, terminal, 8_000);
+
+    // Configure is the first action; the hidden `connected` marker and the
+    // gated-off Disconnect callback must not be listed.
+    terminal.write('\r');
+    await runtime.waitForScreenText(new RegExp(`Configure ${PLUGIN_NAME}`), terminal, 8_000);
+    await runtime.waitForScreenText(/Authenticate/, terminal, 8_000);
+    await runtime.waitForScreenTextAbsent(/Disconnect/, terminal, 2_000);
+    await runtime.waitForScreenTextAbsent(/connected/, terminal, 2_000);
+
+    // Run the Authenticate callback: its config patch persists connected=true,
+    // the reload re-gates options, and Configure re-renders from the fresh plugin.
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Disconnect/, terminal, 8_000);
+    // The authenticate option (description "Connect the E2E account.") is gated off.
+    await runtime.waitForScreenTextAbsent(/Connect the E2E account\./, terminal, 2_000);
+
+    // Back out to the detail screen: the gated tool is now resolved.
+    terminal.write('\x1b');
+    await runtime.waitForScreenText(new RegExp(`tools:\\s*${TOOL_NAME}`), terminal, 8_000);
+    terminal.write('\x1b');
+    await runtime.sleep(100);
+
+    (
+      currentTui as { state?: { ui?: { hideOverlay?: () => void; requestRender?: () => void } } } | undefined
+    )?.state?.ui?.hideOverlay?.();
+    (currentTui as { state?: { ui?: { requestRender?: () => void } } } | undefined)?.state?.ui?.requestRender?.();
+    await runtime.sleep(100);
+
+    // The callback's message was rendered into the chat log (visible now that
+    // the overlays are gone).
+    await runtime.waitForScreenText(/E2E callback connected\./, terminal, 8_000);
+
+    // Prove the gated tool reaches the model request (build mode, live proxies).
+    terminal.submit(PROMPT);
+    await runtime.waitForScreenText(new RegExp(RESPONSE), terminal, 10_000);
+
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    if (!names.includes(TOOL_NAME)) {
+      throw new Error(
+        `Expected provider request to expose callback-gated plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`,
+      );
+    }
   },
 };
