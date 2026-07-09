@@ -106,14 +106,20 @@ export function buildContinuationDirective(batch: Array<Record<string, unknown>>
     .map(e => `${e.toolCallId} (${e.toolName})`)
     .join(', ');
 
-  return (
+  let directive =
     `Background task(s) you previously dispatched have completed. ` +
     `Process ONLY these tool-call IDs (their results are now in the conversation): ${idList}. ` +
     `IMPORTANT: Do NOT process any tool-call IDs that were not in the list, ` +
     `and do NOT call the same tool again — the result is already available. ` +
-    `Use these result(s) to answer the user's original question.` +
-    `IMPORTANT: The following tool-call IDs are suspended: ${suspendedIdList}. Do not attempt to resume them; let the user know they are waiting for explicit resume input.`
-  );
+    `Use these result(s) to answer the user's original question.`;
+
+  if (suspendedIdList) {
+    directive +=
+      ` IMPORTANT: The following tool-call IDs are suspended: ${suspendedIdList}. ` +
+      `Do not attempt to resume them; let the user know they are waiting for explicit resume input.`;
+  }
+
+  return directive;
 }
 
 /**
@@ -395,9 +401,7 @@ export async function runIdleLoop<
       outerController = controller;
     },
     cancel() {
-      closed = true;
-      outerAbort.abort();
-      clearIdleTimer();
+      forceClose();
     },
   });
 
