@@ -23,7 +23,13 @@ Mastra agents can be configured to store [message history](/docs/memory/message-
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 
-Memory results will be stored in one or more of your configured [storage providers](/docs/memory/storage).
+Memory results will be stored in one or more of your configured [storage providers](/docs/storage/overview).
+
+:::tip[📹 Watch]
+
+Watch [Mastra memory concepts](https://www.youtube.com/watch?v=18iIHQtIPmc) for a conceptual overview of the memory layers agents can use.
+
+:::
 
 ## When to use memory
 
@@ -51,7 +57,7 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
 
     :::note
 
-    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/memory/storage) documentation.
+    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/storage/overview) documentation.
 
     :::
   </StepItem>
@@ -179,7 +185,7 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 
 :::note
 
-Title generation (`generateTitle`) is a top-level thread concern and is **not** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
+Title generation (`generateTitle`) is a top-level thread concern and **isn't** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
 
 :::
 

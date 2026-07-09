@@ -9,7 +9,7 @@ packages:
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io).
 
-You can attach skills directly to an agent without setting up a workspace, filesystem, or sandbox. This is useful when you want portable, code-defined capabilities that travel with your agent definition.
+You can attach skills directly to an agent through its `skills` config, or configure them on a [workspace](/docs/workspace/overview). Attach them to the agent when the skills belong to that specific agent and you want to define them in code with no workspace required; use a workspace when you want skills discovered from the filesystem and shared across every agent that uses it. This page covers the agent-level approach — defining skills in code, loading them from files, and resolving them per request.
 
 ## When to use agent-level skills
 
@@ -75,7 +75,7 @@ export const releaseChecklist = createSkill({
 })
 ```
 
-The `references` field bundles supporting documents that the agent can read with the `skill_read` tool, just like `references/` files in a filesystem skill.
+The `references` field bundles supporting documents that the agent can read with the `skill_read` tool, like `references/` files in a filesystem skill.
 
 :::note
 Visit [`createSkill()` reference](/reference/agents/createSkill) for the full API.

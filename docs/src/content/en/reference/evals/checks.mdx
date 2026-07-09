@@ -9,7 +9,7 @@ packages:
 
 Quick Checks are zero-LLM, composable micro-scorers for common assertions. They plug into the existing `scorers: [...]` array anywhere scorers are used — in `runEvals`, live scoring, experiments, and Studio.
 
-Internally they are standard `createScorer()` instances, so they have the same observability, storage, and pipeline integration as any other scorer.
+Internally they're standard `createScorer()` instances, so they have the same observability, storage, and pipeline integration as any other scorer.
 
 ## Usage example
 
@@ -64,7 +64,7 @@ Returns: `1` if found, `0` otherwise.
 
 ### `checks.excludes(unwanted, options?)`
 
-Scores 1 if the agent's output text does NOT contain the substring, 0 otherwise.
+Scores 1 if the agent's output text doesn't contain the substring, 0 otherwise.
 
 ```typescript
 checks.excludes('error')
@@ -212,7 +212,7 @@ Returns: `1` if called at least `times` times, `0` otherwise.
 
 ### `checks.didNotCall(toolName)`
 
-Scores 1 if the agent did NOT call the specified tool.
+Scores 1 if the agent didn't call the specified tool.
 
 ```typescript
 checks.didNotCall('delete_user')
@@ -228,7 +228,7 @@ checks.didNotCall('delete_user')
 ]}
 />
 
-Returns: `1` if the tool was not called, `0` otherwise.
+Returns: `1` if the tool wasn't called, `0` otherwise.
 
 ### `checks.toolOrder(expectedOrder)`
 
