@@ -55,10 +55,19 @@ function extractPrimaryArg(_toolName: string, args: unknown): string | undefined
   return undefined;
 }
 
-/** Simple glob matching: `*` matches any sequence of characters. */
+/** Simple glob matching: `*` matches any sequence of characters. Linear-time, no regex. */
 function globMatch(input: string, pattern: string): boolean {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  return new RegExp(`^${escaped}$`).test(input);
+  const segments = pattern.split('*');
+  if (segments.length === 1) return input === pattern;
+  if (!input.startsWith(segments[0])) return false;
+  let pos = segments[0].length;
+  for (let i = 1; i < segments.length; i++) {
+    const seg = segments[i];
+    const idx = input.indexOf(seg, pos);
+    if (idx === -1) return false;
+    pos = idx + seg.length;
+  }
+  return segments[segments.length - 1] === '' || pos === input.length;
 }
 
 /**
@@ -2855,19 +2864,28 @@ export class Session<TState = unknown> {
     const toolPolicy = rules.tools[toolName];
     if (toolPolicy === 'deny') return 'deny';
 
+    // Deny patterns are a hard safety floor — checked before YOLO.
+    if (rules.patterns?.length && args) {
+      const argStr = extractPrimaryArg(toolName, args);
+      if (argStr !== undefined) {
+        const denyMatch = rules.patterns.find(
+          r => r.policy === 'deny' && (r.toolName === toolName || r.toolName === '*') && globMatch(argStr, r.pattern),
+        );
+        if (denyMatch) return 'deny';
+      }
+    }
+
     if (state.yolo === true) return 'allow';
 
     if (toolPolicy) return toolPolicy;
 
+    // Allow patterns (non-deny) checked after YOLO.
     if (rules.patterns?.length && args) {
       const argStr = extractPrimaryArg(toolName, args);
       if (argStr !== undefined) {
-        const matchingPatterns = rules.patterns.filter(
-          r => (r.toolName === toolName || r.toolName === '*') && globMatch(argStr, r.pattern),
+        const allowMatch = rules.patterns.find(
+          r => r.policy === 'allow' && (r.toolName === toolName || r.toolName === '*') && globMatch(argStr, r.pattern),
         );
-        const denyMatch = matchingPatterns.find(r => r.policy === 'deny');
-        if (denyMatch) return 'deny';
-        const allowMatch = matchingPatterns.find(r => r.policy === 'allow');
         if (allowMatch) return 'allow';
       }
     }

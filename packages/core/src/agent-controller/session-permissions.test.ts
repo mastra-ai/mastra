@@ -157,5 +157,20 @@ describe('session.permissions', () => {
 
       expect(session.resolveToolApproval('execute_command')).toBe('ask');
     });
+
+    it('deny patterns override YOLO mode', async () => {
+      const { session } = await createSession(storage);
+      await session.state.set({
+        yolo: true,
+        permissionRules: {
+          categories: {},
+          tools: {},
+          patterns: [{ toolName: 'execute_command', pattern: 'rm -rf*', policy: 'deny' }],
+        },
+      } as any);
+
+      expect(session.resolveToolApproval('execute_command', { command: 'rm -rf /' })).toBe('deny');
+      expect(session.resolveToolApproval('execute_command', { command: 'echo hello' })).toBe('allow');
+    });
   });
 });
