@@ -68,6 +68,7 @@ type SlackTokenResponse = {
   ok?: boolean;
   error?: string;
   team?: { id?: string; name?: string };
+  /** Present on the initial `authorization_code` exchange (user token nested). */
   authed_user?: {
     id?: string;
     access_token?: string;
@@ -75,6 +76,15 @@ type SlackTokenResponse = {
     expires_in?: number;
     token_type?: string;
   };
+  /**
+   * Present on `refresh_token` grants: Slack returns the rotated user token at
+   * the TOP level (`token_type: "user"`), NOT nested under `authed_user`.
+   */
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+  user_id?: string;
+  token_type?: string;
 };
 
 export function tokenResponseToCredentials(
@@ -85,19 +95,22 @@ export function tokenResponseToCredentials(
   if (!json.ok) {
     throw new Error(`Slack OAuth failed: ${json.error ?? 'unknown_error'}`);
   }
+  // Initial code exchange nests the user token under `authed_user`; refresh
+  // responses return it at the top level with `token_type: "user"`.
   const user = json.authed_user;
-  if (!user?.access_token) {
+  const accessToken = user?.access_token ?? json.access_token;
+  if (!accessToken) {
     throw new Error('Slack OAuth response missing user access token');
   }
   return {
-    accessToken: user.access_token,
+    accessToken,
     // Slack omits refresh_token when token rotation is off; keep the old one.
-    refreshToken: user.refresh_token ?? previous?.refreshToken,
-    expiresAt: Date.now() + (user.expires_in ?? DEFAULT_TOKEN_EXPIRES_IN_SECONDS) * 1000,
+    refreshToken: user?.refresh_token ?? json.refresh_token ?? previous?.refreshToken,
+    expiresAt: Date.now() + (user?.expires_in ?? json.expires_in ?? DEFAULT_TOKEN_EXPIRES_IN_SECONDS) * 1000,
     clientId,
     teamId: json.team?.id ?? previous?.teamId,
     teamName: json.team?.name ?? previous?.teamName,
-    userId: user.id ?? previous?.userId,
+    userId: user?.id ?? json.user_id ?? previous?.userId,
   };
 }
 

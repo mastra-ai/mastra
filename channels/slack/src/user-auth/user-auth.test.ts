@@ -14,17 +14,20 @@ function jsonResponse(body: Record<string, unknown>) {
   });
 }
 
+/**
+ * Real `refresh_token` grant response shape (verified against the live API):
+ * the rotated user token comes back at the TOP level with `token_type: "user"`
+ * — there is no `authed_user` nesting like the initial code exchange.
+ */
 function refreshResponse(overrides: Record<string, unknown> = {}) {
   return jsonResponse({
     ok: true,
+    access_token: 'xoxe.xoxp-refreshed',
+    refresh_token: 'xoxe-1-rotated',
+    expires_in: 43200,
+    token_type: 'user',
+    user_id: 'U1',
     team: { id: 'T1', name: 'Team One' },
-    authed_user: {
-      id: 'U1',
-      access_token: 'xoxe.xoxp-refreshed',
-      refresh_token: 'xoxe-1-rotated',
-      expires_in: 43200,
-      token_type: 'user',
-    },
     ...overrides,
   });
 }
@@ -109,8 +112,12 @@ describe('SlackUserAuth.getToken', () => {
   it('keeps the previous refresh token when the response omits one', async () => {
     const storage = new InMemorySlackCredentialStorage(expiredCredentials());
     mockFetch.mockResolvedValueOnce(
-      refreshResponse({
-        authed_user: { id: 'U1', access_token: 'xoxp-new', expires_in: 43200 },
+      jsonResponse({
+        ok: true,
+        access_token: 'xoxp-new',
+        expires_in: 43200,
+        token_type: 'user',
+        user_id: 'U1',
       }),
     );
     const auth = new SlackUserAuth({ storage });
@@ -119,6 +126,29 @@ describe('SlackUserAuth.getToken', () => {
 
     const stored = await storage.load();
     expect(stored?.refreshToken).toBe('xoxe-1-old');
+  });
+
+  it('also accepts a refresh response nested under authed_user (code-exchange shape)', async () => {
+    // Defensive: the initial code exchange nests the user token; tolerate both.
+    const storage = new InMemorySlackCredentialStorage(expiredCredentials());
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({
+        ok: true,
+        team: { id: 'T1', name: 'Team One' },
+        authed_user: {
+          id: 'U1',
+          access_token: 'xoxe.xoxp-nested',
+          refresh_token: 'xoxe-1-nested-rotated',
+          expires_in: 43200,
+          token_type: 'user',
+        },
+      }),
+    );
+    const auth = new SlackUserAuth({ storage });
+
+    await expect(auth.getToken()).resolves.toBe('xoxe.xoxp-nested');
+    const stored = await storage.load();
+    expect(stored?.refreshToken).toBe('xoxe-1-nested-rotated');
   });
 
   it('dedupes concurrent refreshes into a single rotation', async () => {
