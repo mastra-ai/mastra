@@ -458,6 +458,13 @@ async function processOutputStream<OUTPUT = undefined>({
   // chunk (input = args) and close it on the paired tool-result chunk (output = result).
   // Anchored on the agent-run span, as client-tool spans are, so it survives
   // `includeInternalSpans: false`.
+  //
+  // Scope: this handles same-stream results (call + result in one step), which covers native
+  // code execution. A provider result DEFERRED to a later step (e.g. a server-side search
+  // called alongside a client tool) is closed without output at end of stream, since this
+  // map is per-step; full deferred support is left as a follow-up.
+  const resolveAgentRunSpan = (span: AnySpan): AnySpan =>
+    span.type === SpanType.AGENT_RUN ? span : (span.findParent(SpanType.AGENT_RUN) ?? span);
   const serverToolSpanByToolCallId = new Map<string, AnySpan>();
   const openServerToolSpan = (toolCallId: string, toolName: string, args: unknown): void => {
     const enabled =
@@ -467,11 +474,7 @@ async function processOutputStream<OUTPUT = undefined>({
       return;
     }
     try {
-      const parentSpan =
-        tracingContext.currentSpan.type === SpanType.AGENT_RUN
-          ? tracingContext.currentSpan
-          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
-      const span = parentSpan.createChildSpan({
+      const span = resolveAgentRunSpan(tracingContext.currentSpan).createChildSpan({
         type: SpanType.TOOL_CALL,
         name: toolName,
         entityType: EntityType.TOOL,
@@ -563,11 +566,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     try {
-      const parentSpan =
-        tracingContext.currentSpan.type === SpanType.AGENT_RUN
-          ? tracingContext.currentSpan
-          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
-      const clientToolSpan = parentSpan.createChildSpan({
+      const clientToolSpan = resolveAgentRunSpan(tracingContext.currentSpan).createChildSpan({
         type: SpanType.CLIENT_TOOL_CALL,
         name: `client_tool: '${toolName}'`,
         entityType: EntityType.TOOL,
@@ -651,17 +650,22 @@ async function processOutputStream<OUTPUT = undefined>({
         endClientToolObservabilitySpan(chunk.payload.toolCallId, parsedArgs);
       }
     } else if (chunk.type === 'tool-call') {
-      injectClientToolObservability({
+      const { inferredProviderExecuted } = injectClientToolObservability({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       });
-      if (chunk.payload.providerExecuted) {
+      // Use the normalized value: gateway/`type:'provider'` tools infer providerExecuted
+      // from the tool definition rather than carrying it on the chunk.
+      if (inferredProviderExecuted) {
         openServerToolSpan(chunk.payload.toolCallId, chunk.payload.toolName, chunk.payload.args);
       }
-    } else if (chunk.type === 'tool-result' && chunk.payload.providerExecuted) {
+    } else if (
+      chunk.type === 'tool-result' &&
+      inferProviderExecuted(chunk.payload.providerExecuted, resolveDirectOrProviderTool(chunk.payload.toolName))
+    ) {
       closeServerToolSpan(chunk.payload.toolCallId, chunk.payload.result);
     }
 

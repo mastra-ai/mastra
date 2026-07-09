@@ -678,7 +678,10 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     });
   });
 
-  const createServerToolExecutionStep = (currentSpan: unknown) => {
+  const createServerToolExecutionStep = (
+    currentSpan: unknown,
+    { withProviderExecutedFlag = true }: { withProviderExecutedFlag?: boolean } = {},
+  ) => {
     const tools = {
       perplexitySearch: {
         type: 'provider' as const,
@@ -712,14 +715,14 @@ describe('createLLMExecutionStep gateway provider tools', () => {
                   toolCallId: 'call-1',
                   toolName: 'perplexity_search',
                   input: '{"query":"latest AI agent news"}',
-                  providerExecuted: true,
+                  ...(withProviderExecutedFlag ? { providerExecuted: true } : {}),
                 },
                 {
                   type: 'tool-result',
                   toolCallId: 'call-1',
                   toolName: 'perplexity_search',
                   result: { answer: 'fresh gateway result' },
-                  providerExecuted: true,
+                  ...(withProviderExecutedFlag ? { providerExecuted: true } : {}),
                 },
                 {
                   type: 'finish',
@@ -795,6 +798,39 @@ describe('createLLMExecutionStep gateway provider tools', () => {
         attributes: expect.objectContaining({ toolType: 'server-tool' }),
       }),
     );
+  });
+
+  it('creates a server-tool span for provider tools whose providerExecuted is inferred (not on the chunk)', async () => {
+    const serverToolSpan = {
+      id: 'server-tool-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.TOOL_CALL,
+      end: vi.fn(),
+    };
+    const agentRunSpan = {
+      id: 'agent-span',
+      traceId: '1234567890abcdef1234567890abcdef',
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => serverToolSpan),
+      findParent: vi.fn(),
+      observabilityInstance: { getConfig: () => ({ traceServerTools: true }) },
+    };
+
+    // The `type: 'provider'` tool infers providerExecuted from its definition even though the
+    // raw stream chunks don't carry the flag — the span should still be created and closed.
+    const { step, executeParams } = createServerToolExecutionStep(agentRunSpan, {
+      withProviderExecutedFlag: false,
+    });
+    await step.execute(executeParams);
+
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.TOOL_CALL,
+        attributes: expect.objectContaining({ toolType: 'server-tool' }),
+        input: { query: 'latest AI agent news' },
+      }),
+    );
+    expect(serverToolSpan.end).toHaveBeenCalledWith({ output: { answer: 'fresh gateway result' } });
   });
 
   it('resolves streamed tool payload transforms without rescanning tools per delta', async () => {

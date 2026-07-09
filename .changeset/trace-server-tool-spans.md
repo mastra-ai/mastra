@@ -14,7 +14,21 @@ Enable the new `traceServerTools` observability config option (off by default) t
 reconstruct a `TOOL_CALL` span from the stream — input = tool args from the `tool-call`
 chunk, output = result from the paired `tool-result` chunk. The span is anchored on the
 agent-run span (as client-tool spans are) so it is durable regardless of
-`includeInternalSpans`. Can also be enabled with the `MASTRA_TRACE_SERVER_TOOLS=true`
+`includeInternalSpans`. It can also be enabled with the `MASTRA_TRACE_SERVER_TOOLS=true`
 environment variable.
+
+```ts
+import { Observability, MastraStorageExporter } from '@mastra/observability';
+
+new Observability({
+  configs: {
+    default: {
+      serviceName: 'my-service',
+      traceServerTools: true, // record provider-executed (server-side) tool calls
+      exporters: [new MastraStorageExporter()],
+    },
+  },
+});
+```
 
 Resolves #19180.
