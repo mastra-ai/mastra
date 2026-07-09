@@ -3,7 +3,7 @@ import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerResourceActionsDependencies {
-  getSubscriptions: () => Set<string>;
+  getSubscribedServers: (uri: string) => Server[];
   getLogger: () => IMastraLogger;
   getSdkServers: () => Server[];
 }
@@ -20,7 +20,7 @@ interface ServerResourceActionsDependencies {
  * uses a transient server instance.
  */
 export class ServerResourceActions {
-  private readonly getSubscriptions: () => Set<string>;
+  private readonly getSubscribedServers: (uri: string) => Server[];
   private readonly getLogger: () => IMastraLogger;
   private readonly getSdkServers: () => Server[];
 
@@ -28,7 +28,7 @@ export class ServerResourceActions {
    * @internal
    */
   constructor(dependencies: ServerResourceActionsDependencies) {
-    this.getSubscriptions = dependencies.getSubscriptions;
+    this.getSubscribedServers = dependencies.getSubscribedServers;
     this.getLogger = dependencies.getLogger;
     this.getSdkServers = dependencies.getSdkServers;
   }
@@ -36,12 +36,13 @@ export class ServerResourceActions {
   /**
    * Notifies subscribed clients that a specific resource has been updated.
    *
-   * If clients are subscribed to the resource URI, they will receive a
-   * `notifications/resources/updated` message to re-fetch the resource content.
+   * Only clients that subscribed to the resource URI (via `resources/subscribe`)
+   * receive a `notifications/resources/updated` message prompting them to
+   * re-fetch the resource content.
    *
    * @param params - Notification parameters
    * @param params.uri - URI of the resource that was updated
-   * @throws {MastraError} If sending the notification fails on all server instances
+   * @throws {MastraError} If sending the notification fails on all subscribed server instances
    *
    * @example
    * ```typescript
@@ -50,19 +51,20 @@ export class ServerResourceActions {
    * ```
    */
   public async notifyUpdated({ uri }: { uri: string }): Promise<void> {
-    if (this.getSubscriptions().has(uri)) {
-      this.getLogger().info(`Sending notifications/resources/updated for externally notified resource: ${uri}`);
-      await broadcastNotification({
-        servers: this.getSdkServers(),
-        send: server => server.sendResourceUpdated({ uri }),
-        logger: this.getLogger(),
-        errorId: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
-        errorText: 'Failed to send resource updated notification',
-        errorDetails: { uri },
-      });
-    } else {
+    const subscribedServers = this.getSubscribedServers(uri);
+    if (subscribedServers.length === 0) {
       this.getLogger().debug(`Resource ${uri} was updated, but no active subscriptions for it.`);
+      return;
     }
+    this.getLogger().info(`Sending notifications/resources/updated for externally notified resource: ${uri}`);
+    await broadcastNotification({
+      servers: subscribedServers,
+      send: server => server.sendResourceUpdated({ uri }),
+      logger: this.getLogger(),
+      errorId: 'MCP_SERVER_RESOURCE_UPDATED_NOTIFICATION_FAILED',
+      errorText: 'Failed to send resource updated notification',
+      errorDetails: { uri },
+    });
   }
 
   /**

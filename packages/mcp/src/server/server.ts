@@ -124,7 +124,10 @@ export class MCPServer extends MCPServerBase {
   private jsonSchemaValidator?: jsonSchemaValidator;
   private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
   private fga?: MCPServerFGAConfig;
-  private subscriptions: Set<string> = new Set();
+  // Resource subscriptions per server instance (main + per HTTP session), set via
+  // resources/subscribe. Note: legacy SSE sessions share the main instance, so they
+  // share one subscription set; streamable HTTP sessions are isolated per session.
+  private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
   // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
   private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
 
@@ -404,7 +407,8 @@ export class MCPServer extends MCPServerBase {
     this.registerHandlersOnServer(this.server);
 
     this.resources = new ServerResourceActions({
-      getSubscriptions: () => this.subscriptions,
+      getSubscribedServers: (uri: string) =>
+        this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
       getLogger: () => this.logger,
       getSdkServers: () => this.getAllSdkServers(),
     });
@@ -1115,14 +1119,19 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/subscribe request', { uri });
-      this.subscriptions.add(uri);
+      let subscriptions = this.subscriptionsByInstance.get(serverInstance);
+      if (!subscriptions) {
+        subscriptions = new Set();
+        this.subscriptionsByInstance.set(serverInstance, subscriptions);
+      }
+      subscriptions.add(uri);
       return {};
     });
 
     serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/unsubscribe request', { uri });
-      this.subscriptions.delete(uri);
+      this.subscriptionsByInstance.get(serverInstance)?.delete(uri);
       return {};
     });
   }

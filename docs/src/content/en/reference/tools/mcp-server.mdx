@@ -1116,7 +1116,7 @@ execute: async ({ items }, context) => {
 
 ## Notification delivery
 
-Notification methods (`resources.notifyUpdated()`, `resources.notifyListChanged()`, `prompts.notifyListChanged()`, `toolActions.notifyListChanged()`, and `sendLoggingMessage()`) broadcast to every connected client across all transports: the stdio/SSE connection and each streamable HTTP session. Clients using the stateless serverless mode can't receive notifications because each request uses a transient server instance.
+Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChanged()`, `toolActions.notifyListChanged()`, and `sendLoggingMessage()`) broadcast to every connected client across all transports: the stdio/SSE connection and each streamable HTTP session. `resources.notifyUpdated()` is the exception: it only notifies clients that subscribed to the resource URI via `resources/subscribe`. Subscriptions are tracked per session for streamable HTTP clients; legacy SSE clients share the main server instance and therefore share one subscription set. Clients using the stateless serverless mode can't receive notifications because each request uses a transient server instance.
 
 ## Examples
 

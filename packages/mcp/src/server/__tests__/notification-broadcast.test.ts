@@ -127,3 +127,93 @@ describe('Notification broadcast to streamable HTTP sessions', () => {
     await client.unsubscribeResource(uri);
   });
 });
+
+describe('Per-session resource subscriptions', () => {
+  let server: MCPServer;
+  let httpServer: http.Server;
+  let clientA: InternalMastraMCPClient;
+  let clientB: InternalMastraMCPClient;
+
+  const uri = 'test://resource/1';
+  const resources: MCPServerResources = {
+    listResources: async () => [{ uri, name: 'Resource One', mimeType: 'text/plain' }],
+    getResourceContent: async () => ({ text: 'hello' }),
+  };
+
+  beforeAll(async () => {
+    server = new MCPServer({
+      name: 'SubscriptionIsolationTestServer',
+      version: '1.0.0',
+      tools: {},
+      resources,
+    });
+
+    let port = 0;
+    httpServer = http.createServer(async (req, res) => {
+      const url = new URL(req.url || '', `http://localhost:${port}`);
+      await server.startHTTP({ url, httpPath: '/mcp', req, res });
+    });
+    port = await listenOnFreePort(httpServer);
+
+    const makeClient = (name: string) =>
+      new InternalMastraMCPClient({ name, server: { url: new URL(`http://localhost:${port}/mcp`) } });
+    clientA = makeClient('subscriber-client');
+    clientB = makeClient('non-subscriber-client');
+    await clientA.connect();
+    await clientB.connect();
+    expect(clientA.sessionId).toBeDefined();
+    expect(clientB.sessionId).toBeDefined();
+    expect(clientA.sessionId).not.toBe(clientB.sessionId);
+  });
+
+  afterAll(async () => {
+    await clientA?.disconnect();
+    await clientB?.disconnect();
+    httpServer?.closeAllConnections?.();
+    if (httpServer) {
+      await new Promise<void>(resolve => httpServer.close(() => resolve()));
+    }
+    await server?.close();
+  });
+
+  it('only delivers resources/updated to the session that subscribed', async () => {
+    let bNotified = 0;
+    clientB.setResourceUpdatedNotificationHandler(() => {
+      bNotified++;
+    });
+    const aReceived = new Promise<void>(resolve => {
+      clientA.setResourceUpdatedNotificationHandler((params: { uri: string }) => {
+        if (params.uri === uri) resolve();
+      });
+    });
+
+    await clientA.subscribeResource(uri);
+
+    await notifyUntilReceived(() => server.resources.notifyUpdated({ uri }), aReceived);
+    await expect(aReceived).resolves.toBeUndefined();
+
+    // Give any in-flight notification to B time to arrive before asserting it never did.
+    await new Promise(resolve => setTimeout(resolve, 500));
+    expect(bNotified).toBe(0);
+
+    await clientA.unsubscribeResource(uri);
+  });
+
+  it('one session unsubscribing does not remove another session subscription', async () => {
+    const aReceived = new Promise<void>(resolve => {
+      clientA.setResourceUpdatedNotificationHandler((params: { uri: string }) => {
+        if (params.uri === uri) resolve();
+      });
+    });
+
+    await clientA.subscribeResource(uri);
+    await clientB.subscribeResource(uri);
+    // Previously subscriptions were global, so B unsubscribing clobbered A's subscription.
+    await clientB.unsubscribeResource(uri);
+
+    await notifyUntilReceived(() => server.resources.notifyUpdated({ uri }), aReceived);
+    await expect(aReceived).resolves.toBeUndefined();
+
+    await clientA.unsubscribeResource(uri);
+  });
+});
