@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { createLiveKitWorker, runLiveKitWorker } from '@mastra/livekit/worker';
 import { recordContact } from './backend';
 import { mastra } from './index';
-import { callCenterMemory, flushObservationalMemory } from './memory';
+import { callCenterMemory, summarizeCall } from './memory';
 
 export default createLiveKitWorker({
   mastra,
@@ -34,7 +34,17 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
-  greeting: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+  // Permissive default, same as the agent worker — no consent gating or re-disclosure here; every
+  // compliance safeguard is demonstrated in voice-worker-regulated.ts instead.
+  configuration: {
+    greeting: {
+      text: 'Thanks for calling Meridian Trades, this is Jordan. How can I help you today?',
+    },
+    // Agent-initiated hang-up — works on the workflow path too: the reply step pipes the agent's
+    // fullStream, so the `endCall` tool call reaches the worker, which waits for the goodbye then
+    // disconnects. Same detection as the agent worker.
+    endCall: {},
+  },
   // Spoken filler while a tool runs, so the caller isn't left in silence — same map as the agent
   // worker. On the workflow path it fires because the reply step pipes the agent's fullStream, so
   // tool-call chunks reach the package.
@@ -61,10 +71,12 @@ export default createLiveKitWorker({
       interrupted: result.interrupted,
     });
   },
-  // Same end-of-call OM flush as the agent worker — distill the call into durable memory once,
-  // after hang-up, off the audio path.
+  // Same permissive end-of-call summary as the agent worker — one `summarizeThread()` pass into
+  // the business's own records, after hang-up, off the audio path. Always runs; the consent-gated
+  // version lives in voice-worker-regulated.ts.
   onCallEnd: async ({ memory }) => {
-    await flushObservationalMemory(memory);
+    if (!memory) return;
+    await summarizeCall(memory);
   },
 });
 

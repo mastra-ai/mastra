@@ -13,6 +13,7 @@
     "gemini-3.5-flash",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
+    "gemini-omni-flash-preview",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it"
   ],
@@ -32,6 +33,7 @@
     "gemini-3.5-flash",
     "gemini-flash-latest",
     "gemini-flash-lite-latest",
+    "gemini-omni-flash-preview",
     "gemma-4-26b-a4b-it",
     "gemma-4-31b-it"
   ]

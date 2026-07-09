@@ -48,7 +48,7 @@ export const weatherTool = createTool({
 })
 ```
 
-If you need to create an agent, create a new file and use `import { Agent } from "@mastra/core/agent"`. The constructor takes `{ id, name, instructions, model }`. The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`. For OpenAI models, use `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Do not install any AI SDK package unless Mastra's documentation says otherwise.
+If you need to create an agent, create a new file and use `import { Agent } from "@mastra/core/agent"`. The constructor takes `{ id, name, instructions, model }`. The `model` property is a string in Mastra's model router format: `provider/model`, for example `__GATEWAY_OPENAI_MODEL__`. For OpenAI models, use `openai/<model>`, not `openai:<model>`, and don't pass a provider object. No provider import is needed for this format. Don't install any AI SDK package unless Mastra's documentation says otherwise.
 
 Add a tool an agent by importing the tool and passing it to the agent constructor as a tools object.
 

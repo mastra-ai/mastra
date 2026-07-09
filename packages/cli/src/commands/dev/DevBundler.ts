@@ -1,5 +1,5 @@
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
@@ -110,7 +110,7 @@ export class DevBundler extends Bundler {
             name: 'env-watcher',
             buildStart() {
               for (const envFile of envFiles) {
-                this.addWatchFile(envFile);
+                this.addWatchFile(resolve(envFile));
               }
             },
           },

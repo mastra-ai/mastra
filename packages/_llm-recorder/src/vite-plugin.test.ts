@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { defaultNameGenerator, llmRecorderPlugin } from './vite-plugin';
 
@@ -212,7 +213,13 @@ describe('My Tests', () => {
     const result = transform('describe("test", () => {});', '/project/packages/core/src/agent.test.ts');
 
     expect(result).not.toBeNull();
-    expect(result!.code).toContain(`import { normalizeRequest as __autoTransformRequest } from "./my-transform";`);
+    const expectedImportPath = path.relative(
+      '/project/packages/core/src',
+      path.resolve(process.cwd(), './my-transform'),
+    );
+    expect(result!.code).toContain(
+      `import { normalizeRequest as __autoTransformRequest } from ${JSON.stringify(expectedImportPath)};`,
+    );
     expect(result!.code).toContain('transformRequest: __autoTransformRequest');
   });
 

@@ -1,0 +1,253 @@
+---
+title: "Channels overview"
+description: "Channels connect Mastra agents to messaging platforms like Slack, Discord, and Telegram."
+packages:
+  - "@mastra/core"
+---
+
+# Channels overview
+
+**Added in:** `@mastra/core@1.22.0`
+
+Channels connect agents to messaging and collaboration platforms like Slack, Microsoft Teams, Discord, Telegram, WhatsApp, GitHub, and Linear. When a user sends a message or comment on a platform, the agent receives it, processes it through the normal agent pipeline, and streams the response back to the conversation. Mastra uses [Chat SDK](https://chat-sdk.dev/) for this channel layer.
+
+Start with the page for your platform:
+
+- [Slack](/docs/capabilities/channels/slack)
+- [Microsoft Teams](/docs/capabilities/channels/teams)
+- [Discord](/docs/capabilities/channels/discord)
+- [Telegram](/docs/capabilities/channels/telegram)
+- [WhatsApp](/docs/capabilities/channels/whatsapp)
+
+[More](/docs/capabilities/channels/other-adapters) lists additional platforms. Mastra channels work with compatible [Chat SDK adapters](https://chat-sdk.dev/adapters) beyond the platforms listed here, and the same Mastra configuration pattern applies across adapters.
+
+## When to use channels
+
+Use channels when an agent needs to:
+
+- Meet users where they already talk or work.
+- Respond in chat platforms like Slack, Microsoft Teams, Discord, Telegram, and WhatsApp.
+- Support multiplayer agents where several people interact with the same agent in a shared channel or thread.
+- Integrate with collaboration workflows like GitHub issues, pull request threads, and Linear comments.
+
+## Configure an agent
+
+Channels use Chat SDK adapters and follow the same Mastra-side pattern: create a channel adapter and add it to the agent.
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+  },
+})
+```
+
+:::note
+
+Channel adapters require provider-specific environment variables for credentials and request verification, such as bot tokens, signing secrets, app IDs, and webhook verification tokens. Check the guide for your platform or the [Chat SDK adapter catalog](https://chat-sdk.dev/adapters) for the exact variable names.
+
+:::
+
+We recommend configuring [storage](/docs/storage/overview) for channels. Storage lets Mastra persist channel state, thread subscriptions, tool approvals, and memory across restarts:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+import { yourAgent } from './agents/your-agent'
+
+export const mastra = new Mastra({
+  agents: { yourAgent },
+  storage: new LibSQLStore({
+    url: process.env.DATABASE_URL,
+  }),
+})
+```
+
+## Webhook routes
+
+Platforms send channel activity to Mastra through webhooks. A webhook is an HTTP endpoint that the platform calls when something happens, such as a new message, a mention, or a user selecting "Approve" on an interactive tool approval card. This is how your agent receives a new message, starts processing it, and responds in the same channel.
+
+Mastra registers a webhook route for each configured adapter and handles the request for you:
+
+```text
+/api/agents/<AGENT_ID>/channels/<PLATFORM>/webhook
+```
+
+For example, a Slack adapter on an agent with the `your-agent` ID uses:
+
+```text
+/api/agents/your-agent/channels/slack/webhook
+```
+
+Point the platform's webhook, event, or interactions URL to this path. Follow the guide for your platform or the [Chat SDK docs](https://chat-sdk.dev/adapters).
+
+During local development, platform webhooks need a public URL to reach your local server. Use a tunnel like [cloudflared](https://github.com/cloudflare/cloudflared) or [ngrok](https://ngrok.com/) to expose your server, `localhost:4111` by default:
+
+```bash npm2yarn
+npx cloudflared tunnel --url http://localhost:4111
+```
+
+Use the generated public URL as the base URL for webhook paths, for example `https://abc123.trycloudflare.com/api/agents/your-agent/channels/slack/webhook`.
+
+:::note
+
+Tunnel URLs are for local development. After you deploy the Mastra server, update the platform's webhook, event, or interactions URL to your production URL.
+
+:::
+
+## Thread context
+
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform on the first mention.
+
+1. On the first mention in a thread, the agent fetches recent messages from the platform.
+1. These messages are prepended to the user's message as conversation context.
+1. After responding, the agent subscribes to the thread and has full history through Mastra memory.
+1. Subsequent messages in that thread don't re-fetch from the platform.
+
+Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-direct message threads.
+
+Mastra also adds a short system message that tells the agent which channel and platform the request came from, such as whether the message came from a direct message or public channel. Set `threadContext: { addSystemMessage: false }` to skip it.
+
+## Tool approval
+
+Tools with `requireApproval: true` render as interactive cards with Approve and Deny buttons:
+
+```typescript title="src/mastra/tools/delete-file.ts"
+import { promises as fs } from 'node:fs'
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export const deleteFile = createTool({
+  id: 'delete-file',
+  description: 'Delete a file from the system',
+  inputSchema: z.object({
+    path: z.string().describe('Path to the file to delete'),
+  }),
+  requireApproval: true,
+  execute: async ({ path }) => {
+    await fs.unlink(path)
+    return { deleted: path }
+  },
+})
+```
+
+When the agent calls this tool, users see a card with the tool name, arguments, and Approve and Deny actions. The tool only executes after approval.
+
+Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume suspended tools when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses the approval buttons.
+
+## Multi-user awareness
+
+In group conversations, Mastra prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:
+
+```text
+[Alice (@U123ABC)]: Can you help me with this?
+[Bob (@U456DEF)]: I have a question too.
+```
+
+## Multimodal content
+
+Models like Gemini can process images, video, and audio natively. Combine `inlineMedia` and `inlineLinks` to let users share rich content with your agent across platforms:
+
+```typescript title="src/mastra/agents/vision-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createDiscordAdapter } from '@chat-adapter/discord'
+
+export const visionAgent = new Agent({
+  id: 'vision-agent',
+  name: 'Vision Agent',
+  instructions: 'You can see images, watch videos, and listen to audio.',
+  model: '__GATEWAY_GOOGLE_MODEL_FLASH__',
+  channels: {
+    adapters: {
+      discord: createDiscordAdapter(),
+    },
+    inlineMedia: ['image/*', 'video/*', 'audio/*'],
+    inlineLinks: [
+      { match: 'youtube.com', mimeType: 'video/*' },
+      { match: 'youtu.be', mimeType: 'video/*' },
+      'imgur.com',
+    ],
+  },
+})
+```
+
+With this configuration:
+
+- A user uploads a screenshot and the agent describes what it sees.
+- A user uploads an `.mp4` clip and the agent summarizes the video.
+- A user pastes a YouTube link and the agent watches and discusses the video.
+- A user pastes an imgur link and the agent sees the image directly.
+
+By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without failing on models that reject them.
+
+:::note
+
+See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced MIME types.
+
+:::
+
+## Serverless deployment
+
+On serverless platforms like Vercel, each request runs in a separate, short-lived instance. Channels need two things to work reliably in that environment: a way to keep the function alive while the agent responds, and a shared pub/sub so instances can coordinate.
+
+### Keep the function alive with `waitUntil`
+
+A channel webhook returns a `200` response right away, then the agent runs in the background to post its reply. On most serverless platforms the function is frozen as soon as it responds, which stops the run before the agent answers. Pass a `waitUntil` function so the platform keeps the instance alive until the run finishes.
+
+On Vercel, pass `waitUntil` from `@vercel/functions`:
+
+```typescript title="src/mastra/agents/your-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createSlackAdapter } from '@chat-adapter/slack'
+import { waitUntil } from '@vercel/functions'
+
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      slack: createSlackAdapter(),
+    },
+    waitUntil,
+  },
+})
+```
+
+Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soon as the response is sent. Cloudflare Workers and Netlify Functions are detected automatically from the request context, so they don't need it. For runtimes where `waitUntil` lives on the request context but isn't detected automatically, use `resolveWaitUntil`. See the [Channels reference](/reference/agents/channels#parameters) for details.
+
+### Coordinate instances with a shared pub/sub
+
+Channels route messages through the agent's [signal pipeline](/docs/long-running-agents/signals), and each run acquires a lease on its thread so one run owns the conversation at a time. The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can land on a different instance than the one running the agent. Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+
+Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { RedisStreamsPubSub } from '@mastra/redis-streams'
+import { yourAgent } from './agents/your-agent'
+
+export const mastra = new Mastra({
+  agents: { yourAgent },
+  pubsub: new RedisStreamsPubSub({
+    url: process.env.REDIS_URL,
+    keyPrefix: 'mastra:my-app',
+  }),
+})
+```
+
+Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+
+## Related
+
+- [Channels reference](/reference/agents/channels)

@@ -1,0 +1,164 @@
+---
+title: 'Reference: mountAgentControllerOnMastra() | Code SDK'
+description: 'API reference for mountAgentControllerOnMastra, which mounts the Mastra Code agent controller on a Mastra instance so you can build your own UIs on top of the Mastra Code coding agent.'
+packages:
+  - '@mastra/code-sdk'
+---
+
+# mountAgentControllerOnMastra()
+
+:::experimental
+
+The `@mastra/code-sdk` package is experimental and subject to breaking changes in minor versions.
+
+:::
+
+The `mountAgentControllerOnMastra()` function builds the Mastra Code agent controller — the coding agent behind the [`mastracode`](https://www.npmjs.com/package/mastracode) CLI, with its modes, tools, memory, and thread management — and registers it on a server-owned [Mastra](/reference/core/mastra-class) instance. Use it to serve the Mastra Code agent to your own UI (web app, editor, bot): each client creates or resumes its own isolated session through the returned [`AgentController`](/reference/agent-controller/agent-controller-class).
+
+To construct the `Mastra` instance yourself (for example in a deployable entry file), use `prepareAgentControllerMount()` from the same package, which returns the constructor args plus a `finalize()` callback.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { mountAgentControllerOnMastra } from '@mastra/code-sdk'
+
+const { mastra, controller } = await mountAgentControllerOnMastra({
+  cwd: process.cwd(),
+})
+
+// Each client drives its own session
+const session = await controller.createSession({ resourceId: 'user-123' })
+```
+
+Pass an existing `mastra` to mount the controller onto a Mastra instance that already hosts other primitives:
+
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { mountAgentControllerOnMastra } from '@mastra/code-sdk'
+
+const mastra = new Mastra({
+  /* ... */
+})
+
+const { controller } = await mountAgentControllerOnMastra({ mastra })
+```
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'cwd',
+    type: 'string',
+    description: 'Working directory for project detection.',
+    isOptional: true,
+    defaultValue: 'process.cwd()',
+  },
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description:
+      'Existing Mastra instance to mount onto. When omitted, a Mastra is created that owns the controller storage.',
+    isOptional: true,
+  },
+  {
+    name: 'controllerId',
+    type: 'string',
+    description: 'Id under which the controller is registered on the Mastra instance.',
+    isOptional: true,
+  },
+  {
+    name: 'modes',
+    type: 'AgentControllerMode[]',
+    description: 'Override agent modes (model ids, colors, which modes exist).',
+    isOptional: true,
+    defaultValue: 'build/plan/fast',
+  },
+  {
+    name: 'subagents',
+    type: 'AgentControllerSubagent[]',
+    description: 'Override or extend subagent definitions.',
+    isOptional: true,
+    defaultValue: 'explore/plan/execute',
+  },
+  {
+    name: 'extraTools',
+    type: 'Record<string, ToolAction> | (ctx) => Record<string, ToolAction>',
+    description: 'Extra tools merged into the dynamic tool set.',
+    isOptional: true,
+  },
+  {
+    name: 'disabledTools',
+    type: 'string[]',
+    description: 'Tools removed from the dynamic tool set before exposure to the model.',
+    isOptional: true,
+  },
+  {
+    name: 'storage',
+    type: 'StorageConfig',
+    description: 'Custom storage config instead of the auto-detected default.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'AgentControllerConfig["workspace"]',
+    description: 'Override the workspace.',
+    isOptional: true,
+    defaultValue: 'local filesystem + local sandbox based on the detected project',
+  },
+  {
+    name: 'configDir',
+    type: 'string',
+    description:
+      'Override the config directory name used for all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions).',
+    isOptional: true,
+    defaultValue: "'.mastracode'",
+  },
+  {
+    name: 'mcpServers',
+    type: 'Record<string, McpServerConfig>',
+    description: 'Programmatic MCP server configurations, merged with (and overriding) file-based configs.',
+    isOptional: true,
+  },
+  {
+    name: 'buildApiRoutes',
+    type: '(deps: { controller, authStorage }) => ApiRoute[]',
+    description: 'Additional API routes registered on the constructed Mastra. Ignored when `mastra` is provided.',
+    isOptional: true,
+  },
+  {
+    name: 'buildServerConfig',
+    type: '(deps: { controller, authStorage }) => ServerConfig',
+    description:
+      'Additional server config (middleware, CORS) folded onto the constructed Mastra. Ignored when `mastra` is provided.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Returns
+
+<PropertiesTable
+  content={[
+  {
+    name: 'mastra',
+    type: 'Mastra',
+    description: 'The Mastra instance the controller is mounted on (created or passed in).',
+  },
+  {
+    name: 'controller',
+    type: 'AgentController',
+    description: 'The initialized Mastra Code agent controller. Create sessions with `controller.createSession()`.',
+  },
+  {
+    name: 'authStorage',
+    type: 'AuthStorage',
+    description: 'Credential storage used by the built-in model gateway.',
+  },
+]}
+/>
+
+## Related
+
+- [AgentController class](/reference/agent-controller/agent-controller-class)
+- [Session class](/reference/agent-controller/session)
