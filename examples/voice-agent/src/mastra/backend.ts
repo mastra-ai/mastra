@@ -87,7 +87,9 @@ export interface IntakeRecord {
 
 export const intakes: IntakeRecord[] = [];
 
-let nextIntakeNumber = 5000;
+// Seeded from the clock so references don't repeat across worker restarts (the mock CRM is
+// in-memory) — a demo the day after yesterday's shouldn't hand out yesterday's MT-INT-5001.
+let nextIntakeNumber = 5000 + (Date.now() % 9000);
 
 export interface ReconcileInput {
   scenario: IntakeScenario;
