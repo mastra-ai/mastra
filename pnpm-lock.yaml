@@ -2202,6 +2202,9 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
+      libsql:
+        specifier: ^0.5.29
+        version: 0.5.29
       posthog-node:
         specifier: ^5.37.0
         version: 5.37.0(rxjs@7.8.2)
@@ -2227,6 +2230,9 @@ importers:
       '@internal/types-builder':
         specifier: workspace:*
         version: link:../../packages/_types-builder
+      '@libsql/client':
+        specifier: ^0.17.4
+        version: 0.17.4(bufferutil@4.1.0)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
