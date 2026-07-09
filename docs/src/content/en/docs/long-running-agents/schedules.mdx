@@ -91,8 +91,7 @@ With a `threadId`, the schedule sends a [signal](/docs/long-running-agents/signa
 
 :::warning
 
-The thread must exist before the first fire. `agent.sendSignal()` throws if the target thread is missing, and every fire will fail with `thread "<id>" not found`. Create the thread with `memory.createThread()` before calling `mastra.schedules.create()`.
-
+The thread must exist before the first fire. `agent.sendSignal()` throws if the target thread is missing, and every fire will fail with `thread "<id>" not found`. Create the thread with `memory.createThread()` before the first cron fire.
 :::
 
 ```typescript title="src/mastra/schedules.ts"
