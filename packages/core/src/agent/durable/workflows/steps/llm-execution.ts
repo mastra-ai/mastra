@@ -629,6 +629,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepNumber: (inputData as any).stepIndex ?? 0,
                   steps: [],
                   requestContext,
+                  tracingContext,
                 });
                 if (retry) {
                   logger?.debug?.(`processAPIError requested retry for model ${modelId}`, { runId });
