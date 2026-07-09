@@ -275,42 +275,62 @@ export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGenerat
                 abortController.signal,
               )) {
                 if (cancelled) break;
-                // First chunk: the server has committed to this generation — stop the watchdog and
-                // forbid any further retry so the turn can't be replayed mid-stream.
-                if (retryable) {
-                  retryable = false;
-                  clearWatchdog();
-                }
+                // First chunk: the server has committed to this generation — forbid any further
+                // retry so the turn can't be replayed mid-stream. The watchdog is NOT cleared here:
+                // lifecycle metadata (step-start, text-start, ...) isn't proof the model is
+                // producing anything, and disarming on it would turn a post-metadata stall into
+                // indefinite dead air. It disarms on the first sign of model output below.
+                retryable = false;
                 const payload = chunk.payload ?? {};
                 switch (chunk.type) {
                   case 'text-delta': {
                     const text = payload.text;
                     if (typeof text === 'string' && text) {
+                      clearWatchdog();
                       replyText += text;
                       controller.enqueue(text);
                     }
                     break;
                   }
                   case 'tool-call': {
+                    // A tool call is first-token progress too — the model committed to a tool run,
+                    // which may legitimately outlast the connect budget before any text streams.
+                    clearWatchdog();
                     const toolCall: VoiceToolCall = {
                       toolCallId: String(payload.toolCallId ?? ''),
                       toolName: String(payload.toolName ?? ''),
                       args: payload.args,
                     };
                     toolCalls.push(toolCall);
-                    onToolCall?.(toolCall);
+                    // Observer hooks are customer code: a throw must not tear down an otherwise
+                    // healthy reply stream (same isolation as onTurnComplete).
+                    try {
+                      onToolCall?.(toolCall);
+                    } catch (error) {
+                      console.warn('@mastra/livekit: onToolCall hook threw', error);
+                    }
                     if (toolFeedback) {
-                      const filler = toolFeedback(toolCall);
+                      let filler: string | undefined | void;
+                      try {
+                        filler = toolFeedback(toolCall);
+                      } catch (error) {
+                        console.warn('@mastra/livekit: toolFeedback hook threw', error);
+                      }
                       if (filler) controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
                     }
                     break;
                   }
                   case 'finish': {
+                    clearWatchdog();
                     const output = payload.output as { usage?: unknown } | undefined;
                     const turnUsage = mapTurnUsage(output?.usage);
                     if (turnUsage) {
                       usage = turnUsage;
-                      ctx.onUsage?.(turnUsage);
+                      try {
+                        ctx.onUsage?.(turnUsage);
+                      } catch (error) {
+                        console.warn('@mastra/livekit: onUsage hook threw', error);
+                      }
                     }
                     break;
                   }

@@ -466,6 +466,21 @@ describe('createRemoteAgentReplyGenerator — first-token timeout (D9)', () => {
     expect(await readAll(stream)).toEqual(['quick']);
   });
 
+  it('still times out when the server stalls after lifecycle metadata (watchdog survives step-start)', async () => {
+    const server = await startFakeServer(({ res }) => {
+      openSSE(res);
+      // Lifecycle metadata is not model output; the watchdog must stay armed through it.
+      writeChunk(res, { type: 'step-start', payload: {} });
+    });
+    const gen = createRemoteAgentReplyGenerator({ baseUrl: server.url, agentId: 'test', retries: 1, timeoutMs: 80 });
+    const stream = (await gen(makeCtx())) as ReadableStream<string>;
+    const error = await readAll(stream).catch(e => e);
+    expect(error).toBeInstanceOf(APITimeoutError);
+    // The server committed to this generation at its first chunk — the timeout must not replay it.
+    expect((error as APITimeoutError).retryable).toBe(false);
+    expect(server.state.requests).toHaveLength(1);
+  });
+
   it('recovers on a retry after the watchdog aborts the first attempt (fresh AbortController per attempt)', async () => {
     let requestCount = 0;
     const server = await startFakeServer(({ res }) => {

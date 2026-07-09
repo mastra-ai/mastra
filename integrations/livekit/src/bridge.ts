@@ -270,9 +270,20 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
                 args: chunk.payload.args,
               };
               toolCalls.push(toolCall);
-              onToolCall?.(toolCall);
+              // Observer hooks are customer code: a throw must not tear down an otherwise healthy
+              // reply stream (same isolation as onTurnComplete).
+              try {
+                onToolCall?.(toolCall);
+              } catch (error) {
+                console.warn('@mastra/livekit: onToolCall hook threw', error);
+              }
               if (toolFeedback) {
-                const filler = toolFeedback(toolCall);
+                let filler: string | undefined | void;
+                try {
+                  filler = toolFeedback(toolCall);
+                } catch (error) {
+                  console.warn('@mastra/livekit: toolFeedback hook threw', error);
+                }
                 if (filler) controller.enqueue(filler.endsWith(' ') ? filler : `${filler} `);
               }
             } else if (chunk.type === 'finish') {
@@ -282,7 +293,11 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
               const turnUsage = mapTurnUsage(output?.usage);
               if (turnUsage) {
                 usage = turnUsage;
-                ctx.onUsage?.(turnUsage);
+                try {
+                  ctx.onUsage?.(turnUsage);
+                } catch (error) {
+                  console.warn('@mastra/livekit: onUsage hook threw', error);
+                }
               }
             } else if (chunk.type === 'error') {
               const error = chunk.payload.error;
