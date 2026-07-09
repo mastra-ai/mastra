@@ -3068,7 +3068,15 @@ export class Session<TState = unknown> {
       } catch (error) {
         throw error;
       }
-      void result.accepted.catch(() => {});
+      void result.accepted
+        .then(accepted => {
+          if (accepted.action === 'wake') {
+            void this.runEngine.processStream(accepted.output, requestContextInput).catch(error => {
+              this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+            });
+          }
+        })
+        .catch(() => {});
       return { accepted: true as const, runId: undefined };
     });
 
