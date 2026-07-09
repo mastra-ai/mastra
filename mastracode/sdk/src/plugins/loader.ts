@@ -66,6 +66,7 @@ export async function loadPluginRecord(
       pluginDir,
       config: configValues,
     };
+    const initState = typeof plugin.init === 'function' ? await plugin.init({ config: configValues }) : undefined;
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
 
@@ -76,6 +77,7 @@ export async function loadPluginRecord(
       description: plugin.description,
       instructions,
       status: 'active',
+      initState,
       tools,
       renderConfigs,
       toolNames: Object.keys(tools).sort(),
@@ -159,6 +161,10 @@ function validatePluginExport(value: unknown): MastraCodePlugin {
 
   if (plugin.tools !== undefined && typeof plugin.tools !== 'object' && typeof plugin.tools !== 'function') {
     throw new Error('Plugin tools must be an object or function');
+  }
+
+  if (plugin.init !== undefined && typeof plugin.init !== 'function') {
+    throw new Error('Plugin init must be a function');
   }
 
   return plugin;

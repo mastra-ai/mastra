@@ -81,6 +81,18 @@ export class PluginManager {
     return this.pluginTools;
   }
 
+  /** Init state per active plugin id, for exposure under PLUGIN_STATE_KEY on request context. */
+  getPluginInitStates(): Record<string, unknown> {
+    const states: Record<string, unknown> = {};
+    for (const plugin of this.loadedPlugins) {
+      if (plugin.status !== 'active' || plugin.initState === undefined) continue;
+      if (!(plugin.id in states)) {
+        states[plugin.id] = plugin.initState;
+      }
+    }
+    return states;
+  }
+
   getToolRenderConfig(toolName: string) {
     return this.toolRenderConfigs.get(toolName);
   }

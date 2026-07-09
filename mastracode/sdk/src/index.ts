@@ -573,7 +573,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     workspace: undefined,
     instructions: getDynamicInstructions,
     model: getDynamicModel,
-    tools: createDynamicTools(mcpManager, config?.extraTools, config?.disabledTools, storage, pluginTools),
+    tools: createDynamicTools(
+      mcpManager,
+      config?.extraTools,
+      config?.disabledTools,
+      storage,
+      pluginTools,
+      pluginManager ? () => pluginManager.getPluginInitStates() : undefined,
+    ),
     hooks: createToolHooks(hookManager),
     scorers: {
       outcome: {

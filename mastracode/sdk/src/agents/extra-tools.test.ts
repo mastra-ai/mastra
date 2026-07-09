@@ -11,6 +11,7 @@ vi.mock('../tools/index.js', () => ({
 }));
 
 import { getToolCategory } from '../permissions.js';
+import { PLUGIN_STATE_KEY } from '../plugin.js';
 import { MC_TOOLS } from '../tool-names.js';
 import { buildToolGuidance } from './prompts/tool-guidance.js';
 import { createDynamicTools } from './tools.js';
@@ -120,6 +121,26 @@ describe('createDynamicTools – extraTools', () => {
     const tools = getDynamicTools({ requestContext: makeRequestContext() });
 
     expect(tools.shared_tool).toBe(extraTool);
+  });
+
+  it('should expose plugin init state under PLUGIN_STATE_KEY on the request context', () => {
+    const chat = { post: () => 'posted' };
+    const getDynamicTools = createDynamicTools(undefined, undefined, undefined, undefined, undefined, () => ({
+      slack: { chat },
+    }));
+
+    const requestContext = makeRequestContext();
+    getDynamicTools({ requestContext });
+
+    const states = requestContext.get(PLUGIN_STATE_KEY) as Record<string, { chat: unknown }>;
+    expect(states.slack.chat).toBe(chat);
+  });
+
+  it('should not set PLUGIN_STATE_KEY when no init-state getter is provided', () => {
+    const requestContext = makeRequestContext();
+    createDynamicTools(undefined, undefined)({ requestContext });
+
+    expect(requestContext.get(PLUGIN_STATE_KEY)).toBeUndefined();
   });
 
   it('should return extraTools even when no MCP manager is provided', () => {

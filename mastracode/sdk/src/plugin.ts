@@ -78,6 +78,16 @@ export async function writeToolProgress(
 
 export type MastraCodePluginConfigValue = string | boolean | undefined;
 
+/**
+ * Request-context key under which the host exposes plugin init state at tool
+ * execution time: `requestContext.get(PLUGIN_STATE_KEY)` → `{ [pluginId]: initState }`.
+ */
+export const PLUGIN_STATE_KEY = 'mastracode_plugins';
+
+export type MastraCodePluginInitContext = {
+  config: Readonly<Record<string, MastraCodePluginConfigValue>>;
+};
+
 export type MastraCodePluginCallbackContext = {
   config: Readonly<Record<string, MastraCodePluginConfigValue>>;
 };
@@ -138,6 +148,14 @@ export type MastraCodePlugin = {
   description?: string;
   config?: MastraCodePluginConfigSchema;
   instructions?: MastraCodePluginInstructions;
+  /**
+   * Runs once per plugin load (and re-runs on every reload, e.g. after a config
+   * change). The returned value is plugin-controlled state (e.g. stateful client
+   * instances), kept in memory on the loaded plugin and exposed to tool executes
+   * via `requestContext.get(PLUGIN_STATE_KEY)[pluginId]`. A throw fails the
+   * plugin load.
+   */
+  init?: (context: MastraCodePluginInitContext) => Promise<unknown> | unknown;
   tools?:
     | MastraCodePluginToolEntries
     | ((context: MastraCodePluginContext) => MastraCodePluginToolEntries | Promise<MastraCodePluginToolEntries>);

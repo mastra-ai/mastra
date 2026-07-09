@@ -13,6 +13,7 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
+import { PLUGIN_STATE_KEY } from '../plugin.js';
 import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
 import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools/index.js';
@@ -98,10 +99,16 @@ export function createDynamicTools(
   disabledTools?: string[],
   storage?: MastraCompositeStore,
   pluginTools?: Record<string, ToolLike>,
+  getPluginInitStates?: () => Record<string, unknown>,
 ) {
   return function getDynamicTools({ requestContext }: { requestContext: RequestContext }) {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
+
+    // Expose plugin init state so plugin tool executes can read it at execution time.
+    if (getPluginInitStates) {
+      requestContext.set(PLUGIN_STATE_KEY, getPluginInitStates());
+    }
 
     const modelId = ctx?.session?.modelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');

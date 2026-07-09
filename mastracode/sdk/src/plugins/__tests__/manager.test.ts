@@ -232,6 +232,35 @@ describe('PluginManager', () => {
     expect((await manager.listPlugins())[0]?.toolNames).toEqual(['status_tool']);
   });
 
+  it('re-runs init on reload and exposes fresh init state via getPluginInitStates', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `const g = globalThis;
+      export default {
+        id: 'acme.initstate',
+        config: { mode: { type: 'string', default: 'off' } },
+        init: context => ({ mode: context.config.mode, run: (g.__mcInitRuns = (g.__mcInitRuns ?? 0) + 1) }),
+        tools: { state_tool: { tool: { id: 'state_tool', description: 'state' } } }
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'project');
+    const first = manager.getPluginInitStates()['acme.initstate'] as { mode: string; run: number };
+    expect(first.mode).toBe('off');
+
+    await manager.setConfigValue('acme.initstate', 'project', 'mode', 'on');
+    const second = manager.getPluginInitStates()['acme.initstate'] as { mode: string; run: number };
+    expect(second.mode).toBe('on');
+    // init re-ran on reload — a fresh state object, not the cached first result.
+    expect(second.run).toBeGreaterThan(first.run);
+  });
+
   it('hot reloads local plugin source changes into the stable tools object', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

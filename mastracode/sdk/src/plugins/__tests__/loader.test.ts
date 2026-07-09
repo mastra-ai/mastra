@@ -335,6 +335,82 @@ describe('plugin loader', () => {
     }
   });
 
+  it('runs init with resolved config and stores the returned state on the loaded plugin', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.init',
+        config: { label: { type: 'string', default: 'from-default' } },
+        init: context => ({ label: context.config.label }),
+        tools: { init_tool: { tool: { id: 'init_tool', description: 'init' } } }
+      };`,
+    );
+
+    const record = {
+      enabled: true,
+      source: 'local',
+      specifier: '../plugin',
+      path: pluginDir,
+      entry: 'src/index.ts',
+    } as const;
+
+    const withDefaults = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: { plugins: { 'acme.init': { ...record } } },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(withDefaults[0]).toMatchObject({ id: 'acme.init', status: 'active', initState: { label: 'from-default' } });
+
+    const withConfig = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: { plugins: { 'acme.init': { ...record, config: { label: 'configured' } } } },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(withConfig[0]?.initState).toEqual({ label: 'configured' });
+  });
+
+  it('marks the plugin load failed when init throws', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.initfail',
+        init: () => { throw new Error('init exploded'); },
+        tools: { unreachable_tool: { tool: { id: 'unreachable_tool', description: 'never' } } }
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.initfail': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]?.status).toBe('load failed');
+    expect(loaded[0]?.error).toContain('init exploded');
+    expect(loaded[0]?.toolNames).toEqual([]);
+  });
+
   it('normalizes first-class tool render entries and discovers bundled assets and instructions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
