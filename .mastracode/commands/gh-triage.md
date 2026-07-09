@@ -106,11 +106,12 @@ gh api "repos/$OWNER/$REPO/issues/<number>" --jq '{number, state, isPr: has("pul
 Fetch enough to classify and write the note. Do not do implementation review.
 
 ```bash
-gh issue view "$ISSUE" --comments --json number,title,state,author,assignees,labels,createdAt,updatedAt,body,comments,url
-gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,labels,createdAt,updatedAt,body,comments,url,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
+gh issue view "$ISSUE" --comments --json number,title,state,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url
+gh pr view "$PR" --comments --json number,title,state,isDraft,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
 ```
 
 - [ ] Stop if issue/PR is not open or PR is draft.
+- [ ] Stop if the author is a core contributor (`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`) unless the user explicitly asks for triage.
 - [ ] For issues, find PRs that explicitly close/fix the issue.
 - [ ] Treat mention-only/cross-referenced PRs as context unless they clearly close/fix.
 - [ ] For PRs, fetch linked/closing issues and their current states; a PR linked only to already-closed/resolved issues is often duplicate or stale.
