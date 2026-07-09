@@ -15,7 +15,7 @@ The package has three entry points:
 
 - `@mastra/livekit`: server-side APIs — [`liveKitConnectionRoute()`](#livekitconnectionroute), [`dispatchVoiceSession()`](#dispatchvoicesession), [`pipeAgentReplyToWriter()`](#pipeagentreplytowriter), [`serializeSessionMetadata()`](#livekitsessionmetadata), and [`createEndCallTool()`](#createendcalltool). Import these from Mastra server code. This entry never loads the LiveKit agents runtime.
 - `@mastra/livekit/worker`: the worker runtime — [`createLiveKitWorker()`](#createlivekitworker), [`runLiveKitWorker()`](#runlivekitworker), [`chatContextToMessages()`](#chatcontexttomessages), and the session helpers [`speakGreeting()`](#speakgreeting), [`waitForAgentDoneSpeaking()`](#waitforagentdonespeaking), and [`runEndCall()`](#runendcall). Import it only from the worker entry file.
-- `@mastra/livekit/plugin`: the LLM-component plugin — [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. Both symbols are also re-exported from `@mastra/livekit/worker`.
+- `@mastra/livekit/plugin`: the LLM-component plugin — [`MastraLLM`](#mastrallm) and [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator). Import it in workers that build their own `voice.AgentSession`. `createRemoteAgentReplyGenerator()` is also exported from `@mastra/livekit/worker` because it plugs into `createLiveKitWorker()`'s `generate` option; `MastraLLM` is plugin-only.
 
 ## `createLiveKitWorker()`
 

@@ -34,10 +34,11 @@ Peer dependencies (`@mastra/core` and `@livekit/agents` are required; the two pl
 | `@livekit/agents-plugin-silero`  | the default `vad: 'silero'`                  |
 | `@livekit/agents-plugin-livekit` | `turnDetection: 'multilingual' \| 'english'` |
 
-The package has two entry points, one per process:
+The package has three entry points:
 
 - `@mastra/livekit` — server-side helpers (`liveKitConnectionRoute`, `dispatchVoiceSession`, `pipeAgentReplyToWriter`) and the agent tool factories (`createConsentTool`, `createEndCallTool` — they go on agents defined in server/shared code). Safe to import from Mastra server code; never loads the `@livekit/agents` runtime.
 - `@mastra/livekit/worker` — the worker runtime (`createLiveKitWorker`, `runLiveKitWorker`). Import it only from the worker entry file.
+- `@mastra/livekit/plugin` — the `MastraLLM` plugin, for customers who own their `voice.AgentSession` and want a Mastra agent in the `llm` slot (a standard LiveKit `llm.LLM`; in-process agent, remote Mastra server, or custom generator). Also loads the `@livekit/agents` runtime — keep it out of Mastra server code.
 
 ## Quick start
 
