@@ -98,13 +98,26 @@ function hasExplicitRetryMessage(payload: Record<string, unknown>): boolean {
   return message !== undefined && OPENAI_RETRY_MESSAGE_PATTERN.test(message);
 }
 
-export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
-  const payload = getOpenAIErrorPayload(error);
-  if (!payload) {
-    return false;
+function getErrorMessage(error: unknown): string | undefined {
+  if (error instanceof Error) {
+    return error.message;
   }
 
-  return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
+  if (!isRecord(error)) {
+    return undefined;
+  }
+
+  return getStringProperty(error, 'message');
+}
+
+export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
+  const payload = getOpenAIErrorPayload(error);
+  if (payload) {
+    return hasRetryableOpenAIErrorCode(payload) || hasExplicitRetryMessage(payload);
+  }
+
+  const message = getErrorMessage(error);
+  return message !== undefined && OPENAI_RETRY_MESSAGE_PATTERN.test(message);
 }
 
 /**

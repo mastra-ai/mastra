@@ -117,6 +117,16 @@ describe('StreamErrorRetryProcessor', () => {
     await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
   });
 
+  it('retries plain OpenAI retry guidance errors by default', async () => {
+    const processor = new StreamErrorRetryProcessor();
+    const error = new Error(
+      'An error occurred while processing your request. You can retry your request, or contact us through our help center at help.openai.com if the error persists. Please include the request ID f8c5b61a-372c-4fcd-98d1-45a2744470cc in your message.',
+    );
+
+    expect(isRetryableOpenAIResponsesStreamError(error)).toBe(true);
+    await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
+  });
+
   it('retries stream errors through additional matchers', async () => {
     const processor = new StreamErrorRetryProcessor({
       matchers: [error => error instanceof Error && error.message === 'custom retryable stream error'],
