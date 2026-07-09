@@ -352,10 +352,12 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o'));
     });
 
-
     it('given permission rules, when a permissions consumer updates a category, then it reads fetched rules and exposes pending category state', async () => {
       const requests: string[] = [];
-      let permissions: PermissionRules = { categories: { execute: 'ask', read: 'allow' }, tools: { 'shell.run': 'deny' } };
+      let permissions: PermissionRules = {
+        categories: { execute: 'ask', read: 'allow' },
+        tools: { 'shell.run': 'deny' },
+      };
       let resolvePermissionUpdate: (() => void) | undefined;
       seedProject();
       useAgentControllerHandlers([], requests);
@@ -538,7 +540,9 @@ describe('ChatSessionProvider', () => {
       seedProject();
       useAgentControllerHandlers();
       server.use(
-        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => HttpResponse.json({ messages: PERSISTED_MESSAGES })),
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
+          HttpResponse.json({ messages: PERSISTED_MESSAGES }),
+        ),
       );
 
       renderPaletteCommandProbe('settings', ROUTE_THREAD_ID);
@@ -585,7 +589,9 @@ describe('ChatSessionProvider', () => {
         http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => {
           requests.push('messages:session-state');
           return HttpResponse.json({
-            messages: [{ id: 'wrong-thread-message', role: 'user', content: [{ type: 'text', text: 'Wrong thread text' }] }],
+            messages: [
+              { id: 'wrong-thread-message', role: 'user', content: [{ type: 'text', text: 'Wrong thread text' }] },
+            ],
           });
         }),
       );
@@ -608,12 +614,16 @@ describe('ChatSessionProvider', () => {
       server.use(
         http.get(`${SESSION}/threads/thread-one/messages`, () =>
           HttpResponse.json({
-            messages: [{ id: 'thread-one-message', role: 'user', content: [{ type: 'text', text: 'Thread one text' }] }],
+            messages: [
+              { id: 'thread-one-message', role: 'user', content: [{ type: 'text', text: 'Thread one text' }] },
+            ],
           }),
         ),
         http.get(`${SESSION}/threads/thread-two/messages`, () =>
           HttpResponse.json({
-            messages: [{ id: 'thread-two-message', role: 'user', content: [{ type: 'text', text: 'Thread two text' }] }],
+            messages: [
+              { id: 'thread-two-message', role: 'user', content: [{ type: 'text', text: 'Thread two text' }] },
+            ],
           }),
         ),
       );
@@ -633,12 +643,7 @@ describe('ChatSessionProvider', () => {
     it('renders the loading skeleton before transcript consumers mount', async () => {
       seedProject();
       useAgentControllerHandlers();
-      server.use(
-        http.get(
-          `${SESSION}/threads/${ROUTE_THREAD_ID}/messages`,
-          () => new Promise(() => undefined),
-        ),
-      );
+      server.use(http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => new Promise(() => undefined)));
 
       renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
 

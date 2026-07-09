@@ -18,16 +18,13 @@ export function useAgentControllerTranscript({
   initialMessages?: AgentControllerMessage[];
   initialState?: SessionStateSnapshot;
 } = {}) {
-  const [transcript, dispatch] = useReducer(
-    transcriptReducer,
-    undefined,
-    () =>
-      createInitialTranscript({
-        messages: initialMessages,
-        threadId: initialThreadId,
-        omProgress: initialState?.omProgress,
-        usage: initialState?.tokenUsage,
-      }),
+  const [transcript, dispatch] = useReducer(transcriptReducer, undefined, () =>
+    createInitialTranscript({
+      messages: initialMessages,
+      threadId: initialThreadId,
+      omProgress: initialState?.omProgress,
+      usage: initialState?.tokenUsage,
+    }),
   );
   const transcriptRef = useRef<TranscriptState>(transcript);
   transcriptRef.current = transcript;

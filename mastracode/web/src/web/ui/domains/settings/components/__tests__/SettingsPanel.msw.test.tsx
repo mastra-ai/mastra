@@ -58,7 +58,9 @@ function useAgentControllerHandlers(): CapturedRequests {
   const captured: CapturedRequests = { modelIds: [], stateUpdates: [], permissions: [] };
 
   server.use(
-    http.post(`${API}/sessions`, () => HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID })),
+    http.post(`${API}/sessions`, () =>
+      HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
+    ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
     http.get(`${API}/models`, () =>
       HttpResponse.json({

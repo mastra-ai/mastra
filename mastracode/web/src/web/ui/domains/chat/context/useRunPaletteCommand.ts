@@ -73,7 +73,9 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
         return;
       }
       case 'think':
-        pushNotice('Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.');
+        pushNotice(
+          'Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.',
+        );
         return;
       case 'om':
         pushNotice(`Observational memory phase: ${transcript.omPhase ?? 'idle'}`);

@@ -7,7 +7,13 @@ import { ChatConnectionContext } from './ChatConnectionContext';
 import type { ChatConnectionApi } from './ChatConnectionContext';
 import { useChatSessionContext } from './useChatSessionContext';
 
-export function ChatConnectionProvider({ children, onEvent }: { children: ReactNode; onEvent: (event: AgentControllerEvent) => void }) {
+export function ChatConnectionProvider({
+  children,
+  onEvent,
+}: {
+  children: ReactNode;
+  onEvent: (event: AgentControllerEvent) => void;
+}) {
   const { resourceId, projectPath, sessionEnabled, baseUrl } = useChatSessionContext();
   const connection = useAgentControllerConnection({
     agentControllerId: AGENT_CONTROLLER_ID,

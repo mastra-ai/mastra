@@ -146,11 +146,15 @@ function useAgentControllerHandlers({
 
 function useAuthMe(state: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null) {
   server.use(
-    http.get(`${TEST_BASE_URL}/auth/me`, () => (state ? HttpResponse.json(state) : HttpResponse.json({}, { status: 404 }))),
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      state ? HttpResponse.json(state) : HttpResponse.json({}, { status: 404 }),
+    ),
   );
 }
 
-function renderSeededApp(authState: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null) {
+function renderSeededApp(
+  authState: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null,
+) {
   seedProject();
   useAgentControllerHandlers();
   if (authState) window.__MASTRACODE_CONFIG__ = { authEnabled: true };

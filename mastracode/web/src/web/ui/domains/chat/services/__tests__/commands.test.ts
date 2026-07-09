@@ -12,7 +12,12 @@ describe('matchCommands', () => {
   });
 
   it('given a command prefix, then it narrows suggestions by command name', () => {
-    expect(matchCommands('/go').map(command => command.name)).toEqual(['goal', 'goal-clear', 'goal-pause', 'goal-resume']);
+    expect(matchCommands('/go').map(command => command.name)).toEqual([
+      'goal',
+      'goal-clear',
+      'goal-pause',
+      'goal-resume',
+    ]);
   });
 
   it('given a complete command followed by whitespace, then it stops suggesting while arguments are typed', () => {
