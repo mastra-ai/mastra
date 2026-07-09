@@ -1313,6 +1313,20 @@ describe('MastraMCPClient - Elicitation Tests', () => {
     expect(result.content).toEqual([{ type: 'text', text: 'NEEDS_INPUT: please confirm' }]);
   });
 
+  it('should throw when registering an elicitation handler after connecting without capability', async () => {
+    client = new InternalMastraMCPClient({
+      name: 'late-elicitation-handler-client',
+      server: {
+        url: testServer.baseUrl,
+      },
+    });
+    await client.connect();
+
+    expect(() => client.elicitation.onRequest(async () => ({ action: 'decline' }))).toThrow(
+      'Cannot register an elicitation handler after connecting',
+    );
+  });
+
   it('should validate elicitation request schema structure', async () => {
     const mockHandler = vi.fn(async request => {
       // Verify the request has the expected structure

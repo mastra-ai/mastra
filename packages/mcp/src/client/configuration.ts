@@ -981,7 +981,15 @@ To fix this you have three different options:
     return client.stderr;
   }
 
-  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
+  private getServerConfig(serverName: string): MastraMCPServerDefinition {
+    const serverConfig = this.serverConfigs[serverName];
+    if (!serverConfig) {
+      throw new Error(`Server configuration not found for name: ${serverName}`);
+    }
+    return serverConfig;
+  }
+
+  private async getOrCreateClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
     if (this.disconnectPromise) {
       await this.disconnectPromise;
     }
@@ -997,17 +1005,9 @@ To fix this you have three different options:
       if (!existingClient) {
         throw new Error(`Client ${name} exists but is undefined`);
       }
-      try {
-        await existingClient.connect();
-      } catch (e) {
-        throw this.handleConnectError(name, e);
-      }
       return existingClient;
     }
 
-    this.logger.debug('Connecting to MCP server', { name });
-
-    // Create client with server configuration including log handler
     const mcpClient = new InternalMastraMCPClient({
       name,
       server: config,
@@ -1018,6 +1018,14 @@ To fix this you have three different options:
     mcpClient.__setLogger(this.logger);
 
     this.mcpClientsById.set(name, mcpClient);
+
+    return mcpClient;
+  }
+
+  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
+    this.logger.debug('Connecting to MCP server', { name });
+
+    const mcpClient = await this.getOrCreateClient(name, config);
 
     try {
       await mcpClient.connect();
@@ -1050,38 +1058,11 @@ To fix this you have three different options:
   }
 
   private async getConnectedClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
-    const serverConfig = this.serverConfigs[serverName];
-    if (!serverConfig) {
-      throw new Error(`Server configuration not found for name: ${serverName}`);
-    }
-    return this.getConnectedClient(serverName, serverConfig);
+    return this.getConnectedClient(serverName, this.getServerConfig(serverName));
   }
 
   private async getClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
-    if (this.disconnectPromise) {
-      await this.disconnectPromise;
-    }
-
-    const serverConfig = this.serverConfigs[serverName];
-    if (!serverConfig) {
-      throw new Error(`Server configuration not found for name: ${serverName}`);
-    }
-
-    const existingClient = this.mcpClientsById.get(serverName);
-    if (existingClient) {
-      return existingClient;
-    }
-
-    const mcpClient = new InternalMastraMCPClient({
-      name: serverName,
-      server: serverConfig,
-      timeout: serverConfig.timeout ?? this.defaultTimeout,
-      capabilities: serverConfig.capabilities,
-    });
-
-    mcpClient.__setLogger(this.logger);
-    this.mcpClientsById.set(serverName, mcpClient);
-    return mcpClient;
+    return this.getOrCreateClient(serverName, this.getServerConfig(serverName));
   }
 
   private async getToolsForServer(serverName: string): Promise<Record<string, Tool<any, any, any, any>>> {

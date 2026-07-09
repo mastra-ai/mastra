@@ -779,9 +779,10 @@ export class InternalMastraMCPClient extends MastraBase {
         this.client.registerCapabilities({ elicitation: { form: {} } });
         this.hasElicitationCapability = true;
       } catch (error) {
-        this.log('debug', 'Unable to register elicitation capability after connect', {
-          error: error instanceof Error ? error.message : String(error),
-        });
+        throw new Error(
+          'Cannot register an elicitation handler after connecting unless elicitation capability was configured before initialization.',
+          { cause: error },
+        );
       }
     }
 
