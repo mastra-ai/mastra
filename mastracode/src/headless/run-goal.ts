@@ -89,6 +89,8 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
   let aborted = false;
   let unsubscribe: (() => void) | undefined;
   let lastAgentEndReason: string | undefined;
+  let goalSignal: ReturnType<typeof createGoalReminderSignal> | undefined;
+  let sentPostAgentEndGoalSignal = false;
   let resolveResult!: (result: RunGoalResult) => void;
 
   const result = new Promise<RunGoalResult>(resolve => {
@@ -140,6 +142,12 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
 
       if (event.type === 'agent_end') {
         lastAgentEndReason = event.reason;
+        if (goalSignal && !sentPostAgentEndGoalSignal) {
+          sentPostAgentEndGoalSignal = true;
+          setTimeout(() => {
+            if (!settled && goalSignal) void session.sendSignal(goalSignal).accepted.catch(() => {});
+          }, 250);
+        }
         return;
       }
 
@@ -186,9 +194,10 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
       }
 
       await goalManager.saveToThread(state);
+      goalSignal = createGoalReminderSignal(goal);
 
       if (aborted || settled) return;
-      await session.sendSignal(createGoalReminderSignal(goal)).accepted;
+      await session.sendSignal(goalSignal).accepted;
     } catch (error) {
       finish('error', { error: createError(error) });
     }
