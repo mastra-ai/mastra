@@ -210,6 +210,11 @@ function normalizePluginToolEntries(
     if (!isToolEntryObject(entry)) {
       throw new Error(`Plugin tool "${name}" must be an object with a tool property`);
     }
+    if (entry.isEnabled !== undefined && typeof entry.isEnabled !== 'function') {
+      // Fail-closed: a malformed gate hides the tool instead of exposing it.
+      process.stderr.write(`Plugin "${pluginId}" tool "${name}" has a non-function isEnabled; tool disabled\n`);
+      continue;
+    }
     if (typeof entry.isEnabled === 'function') {
       // Fail-closed: a throwing predicate hides the tool instead of exposing it or failing the load.
       try {
@@ -239,7 +244,7 @@ function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSche
   for (const [key, option] of Object.entries(schema)) {
     if (!option || typeof option !== 'object' || Array.isArray(option)) continue;
     const record = option as Record<string, unknown>;
-    if ('isEnabled' in record && typeof record.isEnabled !== 'function') continue;
+    if ('isEnabled' in record && record.isEnabled !== undefined && typeof record.isEnabled !== 'function') continue;
     const isEnabled =
       typeof record.isEnabled === 'function'
         ? (record.isEnabled as NonNullable<MastraCodePluginConfigSchema[string]['isEnabled']>)

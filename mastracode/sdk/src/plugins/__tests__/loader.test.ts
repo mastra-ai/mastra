@@ -335,6 +335,101 @@ describe('plugin loader', () => {
     }
   });
 
+  it('keeps config options with an explicit isEnabled: undefined', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.undefined-gate',
+        config: {
+          value: { type: 'string', default: 'kept', isEnabled: undefined },
+          action: { type: 'callback', run: async () => {}, isEnabled: undefined }
+        },
+        tools: {}
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.undefined-gate': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    const plugin = loaded[0];
+    expect(plugin).toMatchObject({ id: 'acme.undefined-gate', status: 'active' });
+    expect(Object.keys(plugin?.configSchema ?? {}).sort()).toEqual(['action', 'value']);
+    expect(plugin?.configValues).toEqual({ value: 'kept' });
+  });
+
+  it('fails closed when a tool isEnabled is present but not a function', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.malformed-gate',
+        tools: {
+          safe_tool: { tool: { id: 'safe_tool', description: 'safe' } },
+          explicit_undefined_tool: {
+            tool: { id: 'explicit_undefined_tool', description: 'treated as ungated' },
+            isEnabled: undefined
+          },
+          malformed_tool: {
+            tool: { id: 'malformed_tool', description: 'non-function gate' },
+            isEnabled: false
+          }
+        }
+      };`,
+    );
+
+    const stderrWrites: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      const loaded = await loadPlugins({
+        projectRoot,
+        homeDir: path.join(tempDir, 'home'),
+        projectRegistry: {
+          plugins: {
+            'acme.malformed-gate': {
+              enabled: true,
+              source: 'local',
+              specifier: '../plugin',
+              path: pluginDir,
+              entry: 'src/index.ts',
+            },
+          },
+        },
+        globalRegistry: { plugins: {} },
+      });
+
+      expect(loaded[0]).toMatchObject({ id: 'acme.malformed-gate', status: 'active' });
+      expect(loaded[0]?.toolNames.sort()).toEqual(['explicit_undefined_tool', 'safe_tool']);
+      expect(stderrWrites.join('')).toContain('malformed_tool');
+      expect(stderrWrites.join('')).toContain('non-function isEnabled');
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+
   it('runs init with resolved config and stores the returned state on the loaded plugin', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');
