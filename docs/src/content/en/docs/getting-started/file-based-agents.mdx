@@ -7,15 +7,19 @@ packages:
 
 # File-based agents
 
+**Added in:** `@mastra/core@1.50.0`
+
 :::experimental
 
-This feature is in beta. Breaking changes may occur without a major version bump until the API is stable. Mastra values your feedback in shaping the final design.
+This feature is in beta. Breaking changes may occur without a major version bump until the API is stable.
 
 :::
 
-File-based agents let you define Mastra agents and project primitives from a directory structure under `src/mastra/`.
+File-based agents are a new, convention-based way to define Mastra agents and project primitives from a directory structure under `src/mastra/`. You'll like this approach if you want an agent to be self-contained, easy to scan and extend.
 
-Compared to creating a [`new Mastra()`](/reference/core/mastra-class) instance and registering primitives in code, file-based agents split these concerns into discrete files. Mastra gives you the options to use one or another or both in the same project. Use file-based agents when you want to define an agent and its capabilities by convention; use code registration when you need dynamic configuration or runtime wiring.
+Adopting this feature is a fundamental decision about how to structure your project. You'll need to follow the file conventions and be aware of its limitations, namely that you can't use dynamic configuration or runtime wiring.
+
+However, you can use file-based agents, code-defined agents, or both in the same project. All Mastra docs currently use code-first examples. As file-based agents mature, more examples may use this structure where it makes sense.
 
 Under the hood Mastra is assembling code-defined agents and primitives from the files you create. So explanations and concepts you can find on other docs pages apply to file-based agents as well.
 
