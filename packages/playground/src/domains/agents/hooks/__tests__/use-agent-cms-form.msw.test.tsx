@@ -1,4 +1,3 @@
-import type { ListStoredPromptBlocksResponse, StoredPromptBlockResponse } from '@mastra/client-js';
 import type { AgentEditorConfig } from '@mastra/core/agent';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -10,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createInstructionBlock } from '../../components/agent-edit-page/utils/form-validation';
 import type { AgentDataSource } from '../../utils/compute-agent-initial-values';
 import { useAgentCmsForm } from '../use-agent-cms-form';
-import { createdCodeAgent } from './fixtures/use-agent-cms-form';
+import { createdCodeAgent, promptBlock, storedPromptBlockList } from './fixtures/use-agent-cms-form';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -179,25 +178,6 @@ const waitForPromptBlocksLoaded = async (queryClient: QueryClient) => {
   });
 };
 
-/** Minimal prompt block list fixture, typed from the client SDK response. */
-const promptBlock = (overrides: Partial<StoredPromptBlockResponse>): StoredPromptBlockResponse => ({
-  id: 'block',
-  status: 'draft',
-  name: 'Block',
-  content: 'Block content.',
-  createdAt: new Date().toISOString(),
-  updatedAt: new Date().toISOString(),
-  ...overrides,
-});
-
-const listResponse = (blocks: StoredPromptBlockResponse[]): ListStoredPromptBlocksResponse => ({
-  promptBlocks: blocks,
-  total: blocks.length,
-  page: 0,
-  perPage: 100,
-  hasMore: false,
-});
-
 // Module-level constants on purpose: `useAgentCmsForm` keys its `initialValues`
 // memo and form-reset effect on the `dataSource` reference, so a fresh object
 // per render would retrigger the reset effect in a loop.
@@ -216,7 +196,7 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
     server.use(
       http.get(`${BASE_URL}/api/stored/prompt-blocks`, () =>
         // Draft block — no activeVersionId, so runtime would skip it.
-        HttpResponse.json(listResponse([promptBlock({ id: 'draft-block', status: 'draft' })])),
+        HttpResponse.json(storedPromptBlockList([promptBlock({ id: 'draft-block', status: 'draft' })])),
       ),
       http.patch(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}`, () => {
         patchCalled = true;
@@ -258,7 +238,7 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
       // before `useStoredPromptBlocks` has settled.
       http.get(`${BASE_URL}/api/stored/prompt-blocks`, async () => {
         await delay('infinite');
-        return HttpResponse.json(listResponse([]));
+        return HttpResponse.json(storedPromptBlockList([]));
       }),
       // The guard falls back to an on-demand lookup, which resolves the ref to an
       // unpublished draft.
@@ -305,7 +285,7 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
       http.get(`${BASE_URL}/api/stored/prompt-blocks`, () =>
         // Published block — has an active version, so runtime keeps it.
         HttpResponse.json(
-          listResponse([promptBlock({ id: 'live-block', status: 'published', activeVersionId: 'v1' })]),
+          storedPromptBlockList([promptBlock({ id: 'live-block', status: 'published', activeVersionId: 'v1' })]),
         ),
       ),
       http.patch(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}`, () => {
@@ -344,7 +324,7 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
     let activateCalled = false;
     server.use(
       http.get(`${BASE_URL}/api/stored/prompt-blocks`, () =>
-        HttpResponse.json(listResponse([promptBlock({ id: 'draft-block', status: 'draft' })])),
+        HttpResponse.json(storedPromptBlockList([promptBlock({ id: 'draft-block', status: 'draft' })])),
       ),
       http.post(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}/versions/:versionId/activate`, () => {
         activateCalled = true;
@@ -382,7 +362,7 @@ describe('useAgentCmsForm — empty-runtime guard', () => {
     const onSuccess = vi.fn();
     server.use(
       http.get(`${BASE_URL}/api/stored/prompt-blocks`, () =>
-        HttpResponse.json(listResponse([promptBlock({ id: 'draft-block', status: 'draft' })])),
+        HttpResponse.json(storedPromptBlockList([promptBlock({ id: 'draft-block', status: 'draft' })])),
       ),
       http.post(`${BASE_URL}/api/stored/agents/${GUARD_AGENT_ID}/versions/:versionId/activate`, ({ params }) => {
         activatedVersionId = params.versionId as string;
