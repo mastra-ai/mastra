@@ -9,7 +9,7 @@ packages:
 
 Skills are reusable instructions that teach agents how to perform specific tasks. They follow the [Agent Skills specification](https://agentskills.io).
 
-Attaching skills directly to an agent is the simplest way to get started. Your capabilities are defined in code and travel with the agent definition, so there's nothing extra to configure. As your project grows and you want to share skills across many agents or load them from files on disk, you can also organize them in a [workspace](/docs/workspace/skills).
+You can attach skills directly to an agent through its `skills` config, or manage them centrally on a [workspace](/docs/workspace/skills) that agents share. This page covers the agent-level approach — defining skills in code, loading them from files, and resolving them per request.
 
 ## When to use agent-level skills
 
