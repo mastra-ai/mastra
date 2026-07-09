@@ -46,7 +46,7 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
-  // Cron fields must be a valid cron expression (heartbeat/schedule create routes).
+  // Cron fields must be a valid cron expression (schedule create routes).
   if (field === 'cron') return '* * * * *';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
   // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
@@ -370,7 +370,6 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   }
   if (route.path.includes(':workflowId')) params.workflowId = 'test-workflow';
   if (route.path.includes(':scheduleId')) params.scheduleId = 'test-schedule';
-  if (route.path.includes(':heartbeatId')) params.heartbeatId = 'hb_test-heartbeat';
   if (route.path.includes(':backgroundTaskId')) params.backgroundTaskId = 'test-background-task-id';
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';

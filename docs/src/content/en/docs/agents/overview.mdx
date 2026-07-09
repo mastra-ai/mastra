@@ -7,10 +7,15 @@ packages:
 
 import Tabs from "@theme/Tabs";
 import TabItem from "@theme/TabItem";
+import AgentQuickstart from "@site/src/content/en/docs/getting-started/_partial-agent-quickstart.mdx";
 
 # Agents overview
 
 Agents use LLMs and tools to solve open-ended tasks. They reason about goals, decide which tools to use, retain conversation memory, and iterate internally until the model emits a final answer or an optional stop condition is met. Agents produce structured responses you can render in your UI or process programmatically. Use agents directly or compose them into workflows or multi-agent systems.
+
+<Inject>
+  <AgentQuickstart />
+</Inject>
 
 ## When to use agents
 
@@ -115,8 +120,8 @@ Once your agent is running, use this table to find the right page for what you w
 | Keep your agent safe | [Guardrails](/docs/agents/guardrails) |
 | Build agents that correct their work | [Rubric scorer](/docs/agents/supervisor-agents#rubric-scorer) |
 | Swap instructions or models based on request context | [Dynamic configuration](/docs/server/request-context) |
-| Add speech-to-text or text-to-speech | [Voice](/docs/agents/adding-voice) |
-| Connect to Slack, Discord, or Telegram | [Channels](/docs/agents/channels) |
+| Add speech-to-text or text-to-speech | [Voice](/docs/voice/overview) |
+| Connect to Slack, Discord, or Telegram | [Channels](/docs/capabilities/channels/overview) |
 
 ## Multi-agent systems
 

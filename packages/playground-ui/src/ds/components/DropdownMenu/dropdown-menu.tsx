@@ -28,7 +28,7 @@ const popupClass = cn(
 );
 
 type DropdownMenuTriggerProps = MenuPrimitive.Trigger.Props & {
-  /** @deprecated Use Base UI's `render` prop instead, e.g. `render={<Button />}`. */
+  /** @deprecated Use Base UI's native `render` prop instead for stronger composition typing. */
   asChild?: boolean;
 };
 

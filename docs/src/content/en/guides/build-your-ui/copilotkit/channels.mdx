@@ -1,0 +1,63 @@
+---
+title: "CopilotKit channels | Frameworks"
+description: "Deploy the same Mastra agent to Slack, Discord, Telegram, and other messaging channels"
+---
+
+# CopilotKit channels
+
+The same Mastra agent that powers your in-app copilot can also run as a bot in messaging platforms. CopilotKit's bot layer connects your agent to Slack, Discord, Telegram, WhatsApp, and Microsoft Teams, with threads, tool calls, and human-in-the-loop approvals handled in the channel.
+
+:::info
+
+The full setup lives in the [CopilotKit bot documentation](https://docs.copilotkit.ai/slack). This page shows how it fits together with a Mastra agent.
+
+:::
+
+## How it fits together
+
+Your Mastra agent stays where it's, exposed through `registerCopilotKit()` as described in [CopilotKit overview](/guides/build-your-ui/copilotkit/overview). The bot is a separate process built with `@copilotkit/bot`: you attach one or more platform adapters and point the bot at your agent. `createBot` takes an array of adapters, so a single bot can serve several platforms at once.
+
+```typescript title="bot.ts"
+import { createBot } from '@copilotkit/bot'
+import { slack } from '@copilotkit/bot-slack'
+
+const bot = createBot({
+  adapters: [
+    slack({
+      botToken: process.env.SLACK_BOT_TOKEN!,
+      appToken: process.env.SLACK_APP_TOKEN!,
+    }),
+  ],
+  // Point the bot at your agent.
+  agent: threadId => {
+    // ...connect to your CopilotKit runtime / Mastra agent
+  },
+})
+
+bot.onMention(async ({ thread }) => {
+  await thread.runAgent()
+})
+
+await bot.start()
+```
+
+Rich messages are written as JSX and rendered to each platform's native message format (Block Kit on Slack, for example), so an interactive card degrades gracefully where a platform has no equivalent.
+
+## Slack
+
+The [Slack quickstart](https://docs.copilotkit.ai/slack) takes you from zero to a bot you can `@`-mention in a channel, then adds an interactive button card. Slack runs over Socket Mode, which opens an outbound WebSocket to Slack, so no public URL or tunnel is required during development.
+
+Install the packages:
+
+```bash npm2yarn
+npm install @copilotkit/bot @copilotkit/bot-ui @copilotkit/bot-slack
+```
+
+Set the Slack credentials in your environment:
+
+- `SLACK_BOT_TOKEN`: Bot User OAuth token (`xoxb-...`)
+- `SLACK_APP_TOKEN`: App-level token with the `connections:write` scope (`xapp-...`)
+
+## Other platforms
+
+The bot adapters share one `@copilotkit/bot` API and differ only in what each platform natively supports. For Discord, Telegram, WhatsApp, and Microsoft Teams, set the relevant platform credentials and add the matching adapter to the `adapters` array. See the [CopilotKit bot documentation](https://docs.copilotkit.ai/slack) for platform-specific setup.

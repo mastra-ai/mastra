@@ -26,6 +26,7 @@ import type {
   UpdateDatasetInput,
   AddDatasetItemInput,
   UpdateDatasetItemInput,
+  DeleteDatasetItemInput,
   ListDatasetsInput,
   ListDatasetsOutput,
   ListDatasetItemsInput,
@@ -34,10 +35,13 @@ import type {
   ListDatasetVersionsOutput,
   BatchInsertItemsInput,
   BatchDeleteItemsInput,
+  DatasetTenancyFilters,
 } from '@mastra/core/storage';
+
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { tenancyWhere } from '../utils';
 
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
@@ -129,6 +133,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     await this.#db.deleteData({ tableName: TABLE_DATASET_VERSIONS });
     await this.#db.deleteData({ tableName: TABLE_DATASET_ITEMS });
     await this.#db.deleteData({ tableName: TABLE_DATASETS });
+  }
+
+  private async experimentTablesExist(): Promise<boolean> {
+    try {
+      const result = await this.#client.execute({
+        sql: `SELECT COUNT(*) AS c FROM sqlite_master WHERE type = 'table' AND name IN (?, ?)`,
+        args: [TABLE_EXPERIMENTS, TABLE_EXPERIMENT_RESULTS],
+      });
+      const row = result.rows?.[0] as { c?: number | string } | undefined;
+      return Number(row?.c ?? 0) === 2;
+    } catch {
+      return false;
+    }
   }
 
   // --- Row transformers ---
@@ -224,8 +241,8 @@ export class DatasetsLibSQL extends DatasetsStorage {
           groundTruthSchema: input.groundTruthSchema ?? null,
           requestContextSchema: input.requestContextSchema ?? null,
           targetType: input.targetType ?? null,
-          targetIds: input.targetIds ? JSON.stringify(input.targetIds) : null,
-          scorerIds: input.scorerIds ? JSON.stringify(input.scorerIds) : null,
+          targetIds: input.targetIds ?? null,
+          scorerIds: input.scorerIds ?? null,
           version: 0,
           organizationId: input.organizationId ?? null,
           projectId: input.projectId ?? null,
@@ -267,11 +284,19 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async getDatasetById({ id }: { id: string }): Promise<DatasetRecord | null> {
+  async getDatasetById({
+    id,
+    filters,
+  }: {
+    id: string;
+    filters?: DatasetTenancyFilters;
+  }): Promise<DatasetRecord | null> {
     try {
+      const { conditions, params } = tenancyWhere(filters);
+      const whereSql = ['id = ?', ...conditions].join(' AND ');
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE id = ?`,
-        args: [id],
+        sql: `SELECT ${buildSelectColumns(TABLE_DATASETS)} FROM ${TABLE_DATASETS} WHERE ${whereSql}`,
+        args: [id, ...params],
       });
       return result.rows?.[0] ? this.transformDatasetRow(result.rows[0]) : null;
     } catch (error) {
@@ -288,7 +313,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
 
   protected async _doUpdateDataset(args: UpdateDatasetInput): Promise<DatasetRecord> {
     try {
-      const existing = await this.getDatasetById({ id: args.id });
+      const existing = await this.getDatasetById({ id: args.id, filters: args.filters });
       if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('LIBSQL', 'UPDATE_DATASET', 'NOT_FOUND'),
@@ -380,36 +405,43 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  async deleteDataset({ id }: { id: string }): Promise<void> {
+  async deleteDataset({ id, filters }: { id: string; filters?: DatasetTenancyFilters }): Promise<void> {
     try {
-      // F3 fix: detach experiments (SET NULL) instead of deleting. Delete results for FK safety.
-      // Each operation wrapped separately — experiment_results table may not exist even if experiments does.
-      try {
-        await this.#client.execute({
+      // Atomic gate via scoped existence check + tenancy folded into the parent
+      // DELETE, so the destructive statement is itself tenant-scoped rather
+      // than relying only on a pre-check. Silent no-op on mismatch. libsql is
+      // single-writer serialized, so the check + delete cannot race.
+      const { conditions, params } = tenancyWhere(filters);
+      const scopedWhere = ['id = ?', ...conditions].join(' AND ');
+
+      const exists = await this.#client.execute({
+        sql: `SELECT id FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`,
+        args: [id, ...params],
+      });
+      if (!exists.rows?.[0]) return;
+
+      // Detach experiments (SET NULL) + delete their results for FK safety.
+      // Probe sqlite_master rather than swallowing "no such table" errors.
+      const experimentTablesExist = await this.experimentTablesExist();
+
+      // Dataset cascade — atomic batch, parent DELETE scoped by tenancy. When
+      // experiment tables exist, fold the detach DMLs into the same batch so the
+      // whole cascade is one atomic transaction.
+      const statements: { sql: string; args: any[] }[] = [];
+      if (experimentTablesExist) {
+        statements.push({
           sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE datasetId = ?)`,
           args: [id],
         });
-      } catch {
-        // experiment_results table may not exist
-      }
-      try {
-        await this.#client.execute({
+        statements.push({
           sql: `UPDATE ${TABLE_EXPERIMENTS} SET datasetId = NULL, datasetVersion = NULL WHERE datasetId = ?`,
           args: [id],
         });
-      } catch {
-        // experiments table may not exist
       }
-
-      // Dataset cascade — atomic batch (T3.18)
-      await this.#client.batch(
-        [
-          { sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] },
-          { sql: `DELETE FROM ${TABLE_DATASETS} WHERE id = ?`, args: [id] },
-        ],
-        'write',
-      );
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_VERSIONS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASET_ITEMS} WHERE datasetId = ?`, args: [id] });
+      statements.push({ sql: `DELETE FROM ${TABLE_DATASETS} WHERE ${scopedWhere}`, args: [id, ...params] });
+      await this.#client.batch(statements, 'write');
     } catch (error) {
       throw new MastraError(
         {
@@ -443,6 +475,23 @@ export class DatasetsLibSQL extends DatasetsStorage {
       if (args.filters?.candidateId !== undefined) {
         filterConditions.push('candidateId = ?');
         filterParams.push(args.filters.candidateId);
+      }
+      if (args.filters?.targetType !== undefined) {
+        filterConditions.push('targetType = ?');
+        filterParams.push(args.filters.targetType);
+      }
+      if (args.filters?.targetIds !== undefined && args.filters.targetIds.length > 0) {
+        const placeholders = args.filters.targetIds.map(() => '?').join(',');
+        // targetIds is stored as JSON text; check intersection via json_each.
+        filterConditions.push(
+          `EXISTS (SELECT 1 FROM json_each(${TABLE_DATASETS}.targetIds) WHERE value IN (${placeholders}))`,
+        );
+        for (const id of args.filters.targetIds) filterParams.push(id);
+      }
+      if (args.filters?.name !== undefined && args.filters.name.length > 0) {
+        // Case-insensitive substring match (LIKE in SQLite is case-insensitive for ASCII)
+        filterConditions.push('LOWER(name) LIKE ?');
+        filterParams.push(`%${args.filters.name.toLowerCase()}%`);
       }
       const whereClause = filterConditions.length > 0 ? `WHERE ${filterConditions.join(' AND ')}` : '';
 
@@ -670,7 +719,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
     }
   }
 
-  protected async _doDeleteItem({ id, datasetId }: { id: string; datasetId: string }): Promise<void> {
+  protected async _doDeleteItem({ id, datasetId }: DeleteDatasetItemInput): Promise<void> {
     try {
       // Get current item — no-op if not found
       const existing = await this.getItemById({ id });

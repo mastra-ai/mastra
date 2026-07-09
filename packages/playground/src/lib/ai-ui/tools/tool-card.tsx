@@ -133,7 +133,14 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
 
   // OM observation markers render as ObservationMarkerBadge.
   if (toolName === 'mastra-memory-om-observation') {
-    return <ObservationMarkerBadge toolName={toolName} args={args} metadata={metadata} />;
+    const omData = result?.omData ?? args;
+    return (
+      <ObservationMarkerBadge
+        toolName={toolName}
+        args={omData}
+        metadata={metadata ? { ...metadata, omData } : undefined}
+      />
+    );
   }
 
   const isAgent = (metadata?.mode === 'network' && metadata.from === 'AGENT') || toolName.startsWith('agent-');

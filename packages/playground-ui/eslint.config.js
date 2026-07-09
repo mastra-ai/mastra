@@ -21,6 +21,12 @@ export default [
       'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
     },
   },
+  {
+    files: ['**/*.ts?(x)'],
+    rules: {
+      '@typescript-eslint/no-non-null-assertion': 'error',
+    },
+  },
   ...storybook.configs['flat/recommended'],
   {
     files: ['**/*.stories.tsx'],

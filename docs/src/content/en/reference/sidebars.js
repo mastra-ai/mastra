@@ -9,6 +9,7 @@ const sidebars = {
   referenceSidebar: [
     { type: 'doc', id: 'index', label: 'Overview' },
     { type: 'doc', id: 'configuration', label: 'Configuration' },
+    { type: 'doc', id: 'project-structure', label: 'Project Structure' },
     {
       type: 'category',
       label: 'ACP',
@@ -164,6 +165,28 @@ const sidebars = {
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Code SDK',
+      collapsed: true,
+      items: [
+        {
+          type: 'doc',
+          id: 'code-sdk/mount-agent-controller',
+          label: 'mountAgentControllerOnMastra()',
+          customProps: { tags: ['beta'] },
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Coding Agent',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'coding-agent/build-base-prompt', label: 'buildBasePrompt()' },
+        { type: 'doc', id: 'coding-agent/create-coding-agent', label: 'createCodingAgent()' },
       ],
     },
     {
@@ -350,12 +373,14 @@ const sidebars = {
         { type: 'doc', id: 'memory/memory-class', label: 'Memory Class' },
         { type: 'doc', id: 'memory/observational-memory', label: 'Observational Memory' },
         { type: 'doc', id: 'memory/serialized-memory-config', label: 'SerializedMemoryConfig' },
+        { type: 'doc', id: 'memory/summarizeConversation', label: 'summarizeConversation()' },
         { type: 'doc', id: 'memory/cloneThread', label: '.cloneThread()' },
         { type: 'doc', id: 'memory/createThread', label: '.createThread()' },
         { type: 'doc', id: 'memory/deleteMessages', label: '.deleteMessages()' },
         { type: 'doc', id: 'memory/getThreadById', label: '.getThreadById()' },
         { type: 'doc', id: 'memory/listThreads', label: '.listThreads()' },
         { type: 'doc', id: 'memory/recall', label: '.recall()' },
+        { type: 'doc', id: 'memory/summarizeThread', label: '.summarizeThread()' },
       ],
     },
     {
@@ -363,6 +388,11 @@ const sidebars = {
       label: 'Observability',
       collapsed: true,
       items: [
+        {
+          type: 'category',
+          label: 'Feedback',
+          items: [{ type: 'doc', id: 'observability/feedback', label: 'Feedback' }],
+        },
         {
           type: 'category',
           label: 'Logging',
@@ -532,6 +562,12 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Schedules',
+      collapsed: true,
+      items: [{ type: 'doc', id: 'schedules/overview', label: 'Overview' }],
+    },
+    {
+      type: 'category',
       label: 'Server',
       collapsed: true,
       items: [
@@ -598,6 +634,7 @@ const sidebars = {
         { type: 'doc', id: 'storage/mssql', label: 'MSSQL Storage' },
         { type: 'doc', id: 'storage/postgresql', label: 'PostgreSQL Storage' },
         { type: 'doc', id: 'storage/redis', label: 'Redis Storage' },
+        { type: 'doc', id: 'storage/retention', label: 'Retention (prune)' },
         { type: 'doc', id: 'storage/upstash', label: 'Upstash Storage' },
       ],
     },
@@ -641,9 +678,10 @@ const sidebars = {
     },
     {
       type: 'category',
-      label: 'Tools & MCP',
+      label: 'Tools and MCP',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'tools/ask-user-tool', label: 'askUserTool' },
         { type: 'doc', id: 'tools/brightdata', label: 'Bright Data Tools' },
         {
           type: 'doc',
@@ -658,6 +696,8 @@ const sidebars = {
         { type: 'doc', id: 'tools/mcp-client', label: 'MCPClient' },
         { type: 'doc', id: 'tools/mcp-server', label: 'MCPServer' },
         { type: 'doc', id: 'tools/perplexity', label: 'Perplexity Tools' },
+        { type: 'doc', id: 'tools/submit-plan-tool', label: 'submitPlanTool' },
+        { type: 'doc', id: 'tools/task-tools', label: 'Task tools' },
         { type: 'doc', id: 'tools/tavily', label: 'Tavily Tools' },
       ],
     },
@@ -701,6 +741,7 @@ const sidebars = {
         { type: 'doc', id: 'voice/google-gemini-live', label: 'Google Gemini Live' },
         { type: 'doc', id: 'voice/inworld', label: 'Inworld' },
         { type: 'doc', id: 'voice/inworld-realtime', label: 'Inworld Realtime' },
+        { type: 'doc', id: 'voice/livekit', label: 'LiveKit' },
         { type: 'doc', id: 'voice/mastra-voice', label: 'Mastra Voice' },
         { type: 'doc', id: 'voice/murf', label: 'Murf' },
         { type: 'doc', id: 'voice/openai', label: 'OpenAI' },
@@ -774,6 +815,7 @@ const sidebars = {
           label: 'AgentCoreRuntimeSandbox',
         },
         { type: 'doc', id: 'workspace/agentfs-filesystem', label: 'AgentFSFilesystem' },
+        { type: 'doc', id: 'workspace/apple-container-sandbox', label: 'AppleContainerSandbox' },
         { type: 'doc', id: 'workspace/archil-filesystem', label: 'ArchilFilesystem' },
         { type: 'doc', id: 'workspace/azure-blob-filesystem', label: 'AzureBlobFilesystem' },
         { type: 'doc', id: 'workspace/blaxel-sandbox', label: 'BlaxelSandbox' },
@@ -785,12 +827,13 @@ const sidebars = {
         { type: 'doc', id: 'workspace/google-drive-filesystem', label: 'GoogleDriveFilesystem' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
+        { type: 'doc', id: 'workspace/mesa-filesystem', label: 'MesaFilesystem' },
         { type: 'doc', id: 'workspace/modal-sandbox', label: 'ModalSandbox' },
         { type: 'doc', id: 'workspace/railway-sandbox', label: 'RailwaySandbox' },
         { type: 'doc', id: 'workspace/s3-filesystem', label: 'S3Filesystem' },
         { type: 'doc', id: 'workspace/process-manager', label: 'SandboxProcessManager' },
-        { type: 'doc', id: 'workspace/vercel-microvm-sandbox', label: 'VercelMicroVMSandbox' },
-        { type: 'doc', id: 'workspace/vercel', label: 'VercelSandbox' },
+        { type: 'doc', id: 'workspace/vercel-sandbox', label: 'VercelSandbox' },
+        { type: 'doc', id: 'workspace/vercel-serverless', label: 'VercelServerlessSandbox' },
         { type: 'doc', id: 'workspace/workspace-class', label: 'Workspace Class' },
         { type: 'doc', id: 'workspace/filesystem', label: 'WorkspaceFilesystem' },
         { type: 'doc', id: 'workspace/sandbox', label: 'WorkspaceSandbox' },

@@ -69,6 +69,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { complexTool },
         memory: sharedMemory,
+        engine,
       });
 
       const threadId = 'snapshot-integrity-thread';
@@ -200,6 +201,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { toolA, toolB },
         memory: sharedMemory,
+        engine,
       });
 
       const threadId = 'multi-suspend-thread';
@@ -352,6 +354,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { toolX, toolY },
         memory: sharedMemory,
+        engine,
       });
 
       const { output, chunks } = await runLoopScenario({
@@ -437,5 +440,5 @@ describeForAllEngines(
       }
     });
   },
-  { skip: ['durable', 'evented'] },
+  { skip: ['evented', 'fs'] },
 );

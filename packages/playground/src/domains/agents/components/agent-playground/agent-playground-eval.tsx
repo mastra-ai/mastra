@@ -354,7 +354,7 @@ export function ExperimentResultsPanel({
   });
   const { data: scoresByItemId } = useScoresByExperimentId(experiment.id, experimentStatus);
 
-  const agentId = experiment.targetType === 'agent' ? experiment.targetId : '';
+  const agentId = experiment.targetType === 'agent' ? experiment.targetId : undefined;
   const { data: agentVersionsData } = useAgentVersions({ agentId });
   const agentVersions = agentVersionsData?.versions ?? [];
   const { navigate } = useLinkComponent();

@@ -95,11 +95,13 @@ export function TracesDataListEntityCell({ entityType, entityName }: TracesDataL
 // StatusCell
 // ---------------------------------------------------------------------------
 
+const UNSET_STATUS_CONFIG = { label: '-', color: Colors.neutral4 };
+
 const STATUS_CONFIG: Record<string, { label: string; color: string }> = {
   completed: { label: 'OK', color: Colors.accent2 },
   ok: { label: 'OK', color: Colors.accent2 },
   error: { label: 'ERR', color: Colors.error },
-  unset: { label: '-', color: Colors.neutral4 },
+  unset: UNSET_STATUS_CONFIG,
 };
 
 export interface TracesDataListStatusCellProps {
@@ -108,7 +110,7 @@ export interface TracesDataListStatusCellProps {
 
 export function TracesDataListStatusCell({ status }: TracesDataListStatusCellProps) {
   const key = (status ?? 'unset').toLowerCase();
-  const config = STATUS_CONFIG[key] ?? STATUS_CONFIG['unset'];
+  const config = STATUS_CONFIG[key] ?? UNSET_STATUS_CONFIG;
 
   return (
     <DataListCell height="compact">

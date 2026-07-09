@@ -62,7 +62,7 @@ export const WithSelect: Story = {
     const [pm, setPm] = useState('pnpm');
     return (
       <CodeBlock
-        code={commands[pm]}
+        code={commands[pm] ?? ''}
         options={packageManagers}
         value={pm}
         onValueChange={setPm}
@@ -95,7 +95,7 @@ export const WithTabs: Story = {
     const [pm, setPm] = useState('pnpm');
     return (
       <CodeBlock
-        code={commands[pm]}
+        code={commands[pm] ?? ''}
         options={packageManagers}
         value={pm}
         onValueChange={setPm}
@@ -117,7 +117,7 @@ export const TabsWithCode: Story = {
     };
     return (
       <CodeBlock
-        code={snippets[provider]}
+        code={snippets[provider] ?? ''}
         lang="typescript"
         selector="tabs"
         options={[
@@ -154,7 +154,7 @@ export const Highlighted: Story = {
     };
     return (
       <CodeBlock
-        code={snippets[provider]}
+        code={snippets[provider] ?? ''}
         lang="typescript"
         options={[
           { label: 'OpenAI', value: 'openai' },
