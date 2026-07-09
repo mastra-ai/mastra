@@ -72,7 +72,9 @@ export function updateStatusLine(state: TUIState): void {
   const SEP = '  '; // double-space separator between parts
 
   // --- Determine if we're showing observer/reflector instead of main mode ---
-  const omStatus = state.session.displayState.get().omProgress.status;
+  const displayState = state.session.displayState.get();
+  const omStatus = displayState.omProgress.status;
+  const isOMBuffering = displayState.bufferingMessages || displayState.bufferingObservations;
   const isJudging = Boolean(state.activeGoalJudge);
   const isObserving = omStatus === 'observing';
   const isReflecting = omStatus === 'reflecting';
@@ -114,7 +116,7 @@ export function updateStatusLine(state: TUIState): void {
     ];
     // Pulse the badge bg brightness opposite to the gradient sweep
     let badgeBrightness = 0.9;
-    if (state.gradientAnimator?.isRunning()) {
+    if (!isOMBuffering && state.gradientAnimator?.isRunning()) {
       const fade = state.gradientAnimator.getFadeProgress();
       const easedFade = fade * fade * (3 - 2 * fade); // smoothstep
       const offset = state.gradientAnimator.getOffset() % 1;
@@ -210,7 +212,7 @@ export function updateStatusLine(state: TUIState): void {
       return theme.fg('dim', id) + theme.fg('error', ' ✗') + theme.fg('muted', envVar ? ` (${envVar})` : ' (no key)');
     }
 
-    if (state.gradientAnimator?.isRunning() && modeColor) {
+    if (!isOMBuffering && state.gradientAnimator?.isRunning() && modeColor) {
       const fade = state.gradientAnimator.getFadeProgress();
       const easedFade = fade * fade * (3 - 2 * fade); // smoothstep
       const text = applyGradientSweep(id, state.gradientAnimator.getOffset(), modeColor, easedFade);
@@ -251,7 +253,7 @@ export function updateStatusLine(state: TUIState): void {
       parseInt(modeColor.slice(5, 7), 16),
     ];
     let sBadgeBrightness = 0.9;
-    if (state.gradientAnimator?.isRunning()) {
+    if (!isOMBuffering && state.gradientAnimator?.isRunning()) {
       const fade = state.gradientAnimator.getFadeProgress();
       if (fade < 1) {
         const offset = state.gradientAnimator.getOffset() % 1;
@@ -332,7 +334,7 @@ export function updateStatusLine(state: TUIState): void {
     });
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
-    const ds = state.session.displayState.get();
+    const ds = displayState;
     const messageSegmentStyler =
       ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (segment: string) =>

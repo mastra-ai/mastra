@@ -492,8 +492,12 @@ describe('updateStatusLine', () => {
     expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('[━━━─────━━] 60/120k ↓4k');
   });
 
-  it('animates only the message segment while keeping the middle and text static', () => {
+  it('animates only the message segment while keeping the middle, model, badge, and text static', () => {
     const state = createState();
+    state.controller.listModes.mockReturnValue([
+      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
+      { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
+    ]);
     const displayState = state.session.displayState.get();
     state.session.displayState.get.mockReturnValue({ ...displayState, bufferingMessages: true });
     state.gradientAnimator = {
