@@ -1,5 +1,33 @@
 # mastracode
 
+## 0.31.0-alpha.3
+
+### Minor Changes
+
+- Added storage retention and a new `/prune` command to keep the local database from growing without bound. ([#19059](https://github.com/mastra-ai/mastra/pull/19059))
+
+  **Default retention policies** are now applied to Mastra Code storage: chat messages and threads are kept for 90 days, observability spans and logs for 14 days, scores and workflow snapshots for 30 days. Rows older than these limits are only removed when you run `/prune` — nothing is deleted automatically.
+
+  **New `/prune` command:**
+  - `/prune` closes the TUI, hands the terminal over to a maintenance run that deletes rows older than the retention policies with live progress output, then exits (start `mastracode` again for a new session)
+  - `/prune vacuum` additionally compacts local libsql database files to return the freed space to your disk, and reports the reclaimed size. Compaction streams a `VACUUM INTO` copy and swaps it into place — bounded memory and no WAL growth even on multi-GB databases — and refuses to start without enough free disk space for the copy
+  - `/prune keep-memory` skips chat history (messages and threads) so conversations are preserved for later use (fine-tuning, evals) while telemetry and run records are still deleted. Flags combine in any order, e.g. `/prune vacuum keep-memory`
+  - Compaction proves it has exclusive access to each database file before swapping. If another Mastra Code session still has the file open, `/prune vacuum` refuses with a clear message instead of silently orphaning that session's writes
+
+  Maintenance runs outside the TUI so retention deletes and `VACUUM` never contend with a live session for the database.
+
+  Also, when local tracing is disabled, observability data is no longer written to the libsql database at all.
+
+### Patch Changes
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/schema-compat@1.3.4-alpha.1
+  - @mastra/libsql@1.16.0-alpha.0
+  - @mastra/code-sdk@0.1.0-alpha.2
+  - @mastra/mcp@1.13.1
+  - @mastra/memory@1.23.0-alpha.2
+
 ## 0.30.1-alpha.2
 
 ### Patch Changes
