@@ -36,7 +36,9 @@ const DEFAULT_DESCRIPTION =
   'End the phone call. Call this only after you have said goodbye and there is nothing left to do — ' +
   'for example the caller says goodbye, or the task is complete and you have wrapped up. Say your ' +
   'closing line first, then call this as your final action; the call hangs up once your words finish ' +
-  'playing. Do not call it if the caller still needs something.';
+  'playing. Your closing line must be a final statement, never a question — if you are asking the ' +
+  'caller anything (for example whether they need anything else), do NOT call this in that reply; ' +
+  'wait for their answer. Do not call it if the caller still needs something.';
 
 /**
  * Builds a Mastra tool the agent calls to end the call itself (say goodbye → hang up). It is the
