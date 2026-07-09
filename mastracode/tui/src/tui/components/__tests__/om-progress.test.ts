@@ -1,3 +1,4 @@
+import { visibleWidth } from '@earendil-works/pi-tui';
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('chalk', () => {
@@ -26,60 +27,149 @@ vi.mock('../../theme.js', () => ({
   },
 }));
 
-import { formatObservationStatus, formatReflectionStatus } from '../om-progress.js';
+import { formatOMContextIndicator } from '../om-progress.js';
 
-const baseState = {
-  status: 'idle',
-  pendingTokens: 8200,
-  threshold: 30000,
-  thresholdPercent: 27,
-  observationTokens: 9100,
-  reflectionThreshold: 40000,
-  reflectionThresholdPercent: 23,
-  buffered: {
-    observations: {
-      projectedMessageRemoval: 0,
-    },
-    reflection: {
-      status: 'idle',
-      inputObservationTokens: 0,
-      observationTokens: 0,
-    },
-  },
-} as any;
-
-describe('om progress label styling', () => {
-  it('renders messages label without bold styling by default', () => {
-    const rendered = formatObservationStatus(baseState, 'full');
-
-    expect(rendered).toContain('messages ');
-  });
-
-  it('renders memory label without bold styling by default', () => {
-    const rendered = formatReflectionStatus(baseState, 'full');
-
-    expect(rendered).toContain('memory ');
-  });
-
-  it('hides reflection savings when compression saved no tokens', () => {
-    const rendered = formatReflectionStatus(
-      {
-        ...baseState,
-        observationTokens: 300,
-        buffered: {
-          ...baseState.buffered,
-          reflection: {
-            status: 'complete',
-            inputObservationTokens: 300,
-            observationTokens: 300,
-          },
-        },
+function createState(
+  values: Partial<{
+    pendingTokens: number;
+    observationTokens: number;
+    threshold: number;
+    reflectionThreshold: number;
+    messageSavings: number;
+    reflectionInput: number;
+    reflectionOutput: number;
+  }> = {},
+) {
+  return {
+    status: 'idle',
+    pendingTokens: values.pendingTokens ?? 0,
+    threshold: values.threshold ?? 80_000,
+    thresholdPercent: 0,
+    observationTokens: values.observationTokens ?? 0,
+    reflectionThreshold: values.reflectionThreshold ?? 40_000,
+    reflectionThresholdPercent: 0,
+    buffered: {
+      observations: {
+        projectedMessageRemoval: values.messageSavings ?? 0,
       },
-      'full',
+      reflection: {
+        status: 'complete',
+        inputObservationTokens: values.reflectionInput ?? 0,
+        observationTokens: values.reflectionOutput ?? 0,
+      },
+    },
+  } as any;
+}
+
+describe('formatOMContextIndicator', () => {
+  it('renders an empty track for no usage', () => {
+    const indicator = formatOMContextIndicator(createState());
+
+    expect(indicator).toMatchObject({
+      plain: '[──────────] 0/120k',
+      messageCells: 0,
+      memoryCells: 0,
+      unusedCells: 10,
+    });
+  });
+
+  it('renders an empty track when combined capacity is zero', () => {
+    const indicator = formatOMContextIndicator(createState({ threshold: 0, reflectionThreshold: 0 }));
+
+    expect(indicator.plain).toBe('[──────────] 0/0k');
+    expect(indicator.messageCells + indicator.memoryCells).toBe(0);
+  });
+
+  it('fills only the left segment for messages', () => {
+    expect(formatOMContextIndicator(createState({ pendingTokens: 60_000 })).plain).toBe('[━━━━━─────] 60/120k');
+  });
+
+  it('fills only the right segment for memory', () => {
+    expect(formatOMContextIndicator(createState({ observationTokens: 60_000 })).plain).toBe('[─────━━━━━] 60/120k');
+  });
+
+  it('splits balanced usage into three message cells and two memory cells', () => {
+    const indicator = formatOMContextIndicator(createState({ pendingTokens: 30_000, observationTokens: 30_000 }));
+
+    expect(indicator).toMatchObject({
+      plain: '[━━━─────━━] 60/120k',
+      messageCells: 3,
+      memoryCells: 2,
+      unusedCells: 5,
+    });
+  });
+
+  it('splits asymmetric usage into three message cells and one memory cell', () => {
+    const indicator = formatOMContextIndicator(createState({ pendingTokens: 45_000, observationTokens: 5_000 }));
+
+    expect(indicator).toMatchObject({
+      plain: '[━━━──────━] 50/120k',
+      messageCells: 3,
+      memoryCells: 1,
+      unusedCells: 6,
+    });
+  });
+
+  it('rounds split ties toward messages', () => {
+    const indicator = formatOMContextIndicator(
+      createState({ pendingTokens: 20_000, observationTokens: 20_000, threshold: 40_000, reflectionThreshold: 40_000 }),
     );
 
-    expect(rendered).toContain('memory 0.3/40k');
-    expect(rendered).not.toContain('↓');
-    expect(rendered).not.toContain('-0k');
+    expect(indicator).toMatchObject({ messageCells: 3, memoryCells: 2, unusedCells: 5 });
+  });
+
+  it('leaves one occupied cell for each nonzero source when possible', () => {
+    const indicator = formatOMContextIndicator(
+      createState({ pendingTokens: 23_000, observationTokens: 1_000, threshold: 80_000, reflectionThreshold: 40_000 }),
+    );
+
+    expect(indicator).toMatchObject({ messageCells: 1, memoryCells: 1, unusedCells: 8 });
+  });
+
+  it('fills the track at capacity and clamps over-capacity usage', () => {
+    expect(formatOMContextIndicator(createState({ pendingTokens: 80_000, observationTokens: 40_000 }))).toMatchObject({
+      messageCells: 7,
+      memoryCells: 3,
+      unusedCells: 0,
+    });
+    expect(formatOMContextIndicator(createState({ pendingTokens: 160_000, observationTokens: 80_000 }))).toMatchObject({
+      messageCells: 7,
+      memoryCells: 3,
+      unusedCells: 0,
+    });
+  });
+
+  it('sums each positive savings source independently', () => {
+    const indicator = formatOMContextIndicator(
+      createState({ messageSavings: 2_000, reflectionInput: 5_000, reflectionOutput: 1_000 }),
+    );
+
+    expect(indicator.plain).toContain('↓6k');
+  });
+
+  it('does not let negative savings cancel a positive source', () => {
+    const indicator = formatOMContextIndicator(
+      createState({ messageSavings: 2_000, reflectionInput: 1_000, reflectionOutput: 5_000 }),
+    );
+
+    expect(indicator.plain).toContain('↓2k');
+  });
+
+  it('suppresses zero savings and preserves visible width in styled output', () => {
+    const indicator = formatOMContextIndicator(createState({ reflectionInput: 300, reflectionOutput: 300 }));
+
+    expect(indicator.plain).not.toContain('↓');
+    expect(visibleWidth(indicator.styled)).toBe(visibleWidth(indicator.plain));
+  });
+
+  it('allows occupied segments to be styled independently', () => {
+    const indicator = formatOMContextIndicator(createState({ pendingTokens: 30_000, observationTokens: 30_000 }), {
+      messages: segment => `<orange>${segment}</orange>`,
+      memory: segment => `<pink>${segment}</pink>`,
+    });
+
+    expect(indicator.styled).toContain('<orange>━━━</orange>');
+    expect(indicator.styled).toContain('<pink>━━</pink>');
+    expect(indicator.styled).toContain('─────');
   });
 });

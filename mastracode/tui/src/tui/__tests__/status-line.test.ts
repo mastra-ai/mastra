@@ -1,3 +1,4 @@
+import type * as PiTui from '@earendil-works/pi-tui';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(() => ({
@@ -6,7 +7,8 @@ const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(()
   applyGradientSweepMock: vi.fn((value: string) => value),
 }));
 
-vi.mock('@earendil-works/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', async importOriginal => ({
+  ...(await importOriginal<typeof PiTui>()),
   visibleWidth: visibleWidthMock,
 }));
 
@@ -36,11 +38,6 @@ vi.mock('../components/obi-loader.js', () => ({
   applyGradientSweep: applyGradientSweepMock,
 }));
 
-vi.mock('../components/om-progress.js', () => ({
-  formatObservationStatus: vi.fn(() => ''),
-  formatReflectionStatus: vi.fn(() => ''),
-}));
-
 vi.mock('../theme.js', () => ({
   theme: {
     fg: (_tone: string, value: string) => value,
@@ -62,7 +59,6 @@ vi.mock('../theme.js', () => ({
   getTermWidth: () => process.stdout.columns || 200,
 }));
 
-import { formatObservationStatus, formatReflectionStatus } from '../components/om-progress.js';
 import { updateStatusLine } from '../status-line.js';
 
 function createState() {
@@ -72,7 +68,19 @@ function createState() {
   const session = {
     displayState: {
       get: vi.fn(() => ({
-        omProgress: { status: 'idle' },
+        omProgress: {
+          status: 'idle',
+          pendingTokens: 30_000,
+          threshold: 80_000,
+          thresholdPercent: 37.5,
+          observationTokens: 30_000,
+          reflectionThreshold: 40_000,
+          reflectionThresholdPercent: 75,
+          buffered: {
+            observations: { projectedMessageRemoval: 2_000 },
+            reflection: { status: 'complete', inputObservationTokens: 5_000, observationTokens: 3_000 },
+          },
+        },
         bufferingMessages: false,
         bufferingObservations: false,
       })),
@@ -125,9 +133,8 @@ describe('updateStatusLine', () => {
   beforeEach(() => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
-    vi.mocked(formatObservationStatus).mockReturnValue('');
-    vi.mocked(formatReflectionStatus).mockReturnValue('');
     applyGradientSweepMock.mockClear();
+    applyGradientSweepMock.mockImplementation((value: string) => value);
     process.stdout.columns = 200;
   });
 
@@ -306,7 +313,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('fireworks/kimi-k2.6');
+    expect(rendered).toContain('kimi-k2.6');
     expect(rendered).not.toContain('fireworks-ai/accounts/fireworks/models/');
     expect(rendered).not.toContain('kimi-k2p6');
   });
@@ -361,7 +368,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('feature/supe..tra-long');
+    expect(rendered).toContain('feature/supe..tr…');
     expect(rendered).not.toContain('mastra--feat-mc-queueing-ux…');
   });
 
@@ -437,8 +444,6 @@ describe('updateStatusLine', () => {
   });
 
   it('keeps judge status ahead of OM and long model details on narrow screens', () => {
-    vi.mocked(formatObservationStatus).mockReturnValue('msg 100%');
-    vi.mocked(formatReflectionStatus).mockReturnValue('mem 100%');
     const state = createState();
     state.controller.session.displayState.get.mockReturnValue({
       omProgress: { status: 'observing' },
@@ -463,8 +468,82 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('j');
     expect(rendered).toContain('gpt-5.4-mini');
     expect(rendered).not.toContain('observe');
-    expect(rendered).not.toContain('msg 100%');
-    expect(rendered).not.toContain('mem 100%');
+    expect(rendered).not.toContain('━');
     expect(rendered).not.toContain('claude-sonnet-4-20250514');
+  });
+
+  it('renders one unified context indicator with combined totals and savings', () => {
+    const state = createState();
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('[━━━─────━━] 60/120k ↓4k');
+    expect(rendered).not.toContain('messages');
+    expect(rendered).not.toContain('memory');
+  });
+
+  it('keeps the unified indicator at 60 columns', () => {
+    const state = createState();
+    process.stdout.columns = 60;
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('[━━━─────━━] 60/120k ↓4k');
+  });
+
+  it('animates only the message segment while keeping the middle and text static', () => {
+    const state = createState();
+    const displayState = state.session.displayState.get();
+    state.session.displayState.get.mockReturnValue({ ...displayState, bufferingMessages: true });
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+    applyGradientSweepMock.mockImplementation((value: string) => `<sweep>${value}</sweep>`);
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#f97316', 0);
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('<sweep>━━━</sweep>─────━━] 60/120k ↓4k');
+  });
+
+  it('animates only the memory segment', () => {
+    const state = createState();
+    const displayState = state.session.displayState.get();
+    state.session.displayState.get.mockReturnValue({ ...displayState, bufferingObservations: true });
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.25),
+      getFadeProgress: vi.fn(() => 0.1),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━', 0.25, '#ec4899', 0.1);
+  });
+
+  it('animates both occupied segments independently when both buffers are active', () => {
+    const state = createState();
+    const displayState = state.session.displayState.get();
+    state.session.displayState.get.mockReturnValue({
+      ...displayState,
+      bufferingMessages: true,
+      bufferingObservations: true,
+    });
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
+    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual(['━━━', '━━']);
   });
 });

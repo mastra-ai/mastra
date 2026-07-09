@@ -67,6 +67,7 @@ import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persis
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
 import { omPackStartupRestoreScenario } from './om-pack-startup-restore.js';
 import { omSettingsScenario } from './om-settings.js';
+import { omStatusIndicatorScenario } from './om-status-indicator.js';
 import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
@@ -220,6 +221,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,
   'om-settings': omSettingsScenario,
+  'om-status-indicator': omStatusIndicatorScenario,
   'om-threshold-persistence': omThresholdPersistenceScenario,
   'openai-strict-schema': openaiStrictSchemaScenario,
   'persistent-goal-commands': persistentGoalCommandsScenario,

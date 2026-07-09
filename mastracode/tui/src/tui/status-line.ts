@@ -5,7 +5,7 @@
 import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
-import { formatObservationStatus, formatReflectionStatus } from './components/om-progress.js';
+import { formatOMContextIndicator } from './components/om-progress.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
 import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
@@ -295,7 +295,7 @@ export function updateStatusLine(state: TUIState): void {
 
   const buildLine = (opts: {
     modelId: string;
-    memCompact?: 'percentOnly' | 'noBuffer' | 'full';
+    showOM?: boolean;
     showDir: boolean;
     dir?: string | null;
     allowDirTruncation?: boolean;
@@ -332,36 +332,33 @@ export function updateStatusLine(state: TUIState): void {
     });
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
-    // Memory info — animate label text when buffering is active
     const ds = state.session.displayState.get();
-    const msgLabelStyler =
+    const messageSegmentStyler =
       ds.bufferingMessages && state.gradientAnimator?.isRunning()
-        ? (label: string) =>
+        ? (segment: string) =>
             applyGradientSweep(
-              label,
+              segment,
               state.gradientAnimator!.getOffset(),
               getObserverColor(),
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const obsLabelStyler =
+    const memorySegmentStyler =
       ds.bufferingObservations && state.gradientAnimator?.isRunning()
-        ? (label: string) =>
+        ? (segment: string) =>
             applyGradientSweep(
-              label,
+              segment,
               state.gradientAnimator!.getOffset(),
               getReflectorColor(),
               state.gradientAnimator!.getFadeProgress(),
             )
         : undefined;
-    const omProg = state.session.displayState.get().omProgress;
-    const obs = isJudging ? '' : formatObservationStatus(omProg, opts.memCompact, msgLabelStyler);
-    const ref = isJudging ? '' : formatReflectionStatus(omProg, opts.memCompact, obsLabelStyler);
-    if (obs) {
-      parts.push({ plain: obs, styled: obs });
-    }
-    if (ref) {
-      parts.push({ plain: ref, styled: ref });
+    if (!isJudging && opts.showOM !== false) {
+      const indicator = formatOMContextIndicator(ds.omProgress, {
+        messages: messageSegmentStyler,
+        memory: memorySegmentStyler,
+      });
+      parts.push({ plain: indicator.plain, styled: indicator.styled });
     }
     if (state.tokensPerSec > 0) {
       const tpsLabel = `${state.tokensPerSec} tok/s`;
@@ -451,99 +448,39 @@ export function updateStatusLine(state: TUIState): void {
     return { plain: '', styled: styledLine };
   };
   // Try progressively more compact layouts.
-  // Priority: token fractions + buffer > labels > provider > badge > buffer > fractions
+  // Priority: context indicator > provider > badge > queue/goal details.
   const result =
-    // 1. Full badge + full model + long labels + queue count + full dir
     buildLine({
       modelId: fullModelId,
-      memCompact: 'full',
       showDir: false,
       dir: dirFull,
       allowDirTruncation: false,
       showQueue: true,
     }) ??
-    // 2. Full badge + full model + queue count + branch only (drop path)
     buildLine({
       modelId: fullModelId,
-      memCompact: 'full',
       showDir: false,
       dir: dirBranchOnly,
       allowDirTruncation: false,
       showQueue: true,
     }) ??
-    // 3. Full badge + full model + queue count + abbreviated branch
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, dir: dirBranchShort, showQueue: true }) ??
-    // 4. Drop directory entirely
-    buildLine({ modelId: fullModelId, memCompact: 'full', showDir: false, showQueue: true }) ??
-    // 5. Drop provider + "claude-" prefix, keep full labels + queue count
-    buildLine({ modelId: tinyModelId, memCompact: 'full', showDir: false, showQueue: true }) ??
-    // 6. Short labels (msg/mem) + queue count
+    buildLine({ modelId: fullModelId, showDir: false, dir: dirBranchShort, showQueue: true }) ??
+    buildLine({ modelId: fullModelId, showDir: false, showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showDir: false, showQueue: true }) ??
-    // 7. Short badge + short labels + queue count
     buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true }) ??
-    // 8. Short badge + short labels + compact goal label
     buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true, compactGoal: true }) ??
-    // 9. Short badge + fractions (drop buffer indicator, keep queue count)
+    buildLine({ modelId: tinyModelId, showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({
       modelId: tinyModelId,
-      memCompact: 'noBuffer',
-      showDir: false,
-      badge: 'short',
-      showQueue: true,
-    }) ??
-    // 10. Short badge + fractions + compact goal label
-    buildLine({
-      modelId: tinyModelId,
-      memCompact: 'noBuffer',
+      showOM: false,
       showDir: false,
       badge: 'short',
       showQueue: true,
       compactGoal: true,
     }) ??
-    // 11. Full badge + percent only + queue count
-    buildLine({
-      modelId: tinyModelId,
-      memCompact: 'percentOnly',
-      showDir: false,
-      badge: 'full',
-      showQueue: true,
-    }) ??
-    // 12. Full badge + percent only + compact goal label
-    buildLine({
-      modelId: tinyModelId,
-      memCompact: 'percentOnly',
-      showDir: false,
-      badge: 'full',
-      showQueue: true,
-      compactGoal: true,
-    }) ??
-    // 13. Short badge + percent only + queue count
-    buildLine({
-      modelId: tinyModelId,
-      memCompact: 'percentOnly',
-      showDir: false,
-      badge: 'short',
-      showQueue: true,
-    }) ??
-    // 14. Short badge + percent only + compact goal label
-    buildLine({
-      modelId: tinyModelId,
-      memCompact: 'percentOnly',
-      showDir: false,
-      badge: 'short',
-      showQueue: true,
-      compactGoal: true,
-    }) ??
-    // 15. Model only + queue count
-    buildLine({ modelId: tinyModelId, showDir: false, badge: undefined, showQueue: true }) ??
-    // 16. Model only + compact goal label
-    buildLine({ modelId: tinyModelId, showDir: false, badge: undefined, showQueue: true, compactGoal: true }) ??
-    // 17. Badge only + queue count
-    buildLine({ modelId: '', showDir: false, badge: 'short', showQueue: true }) ??
-    // 13. Model only
-    buildLine({ modelId: tinyModelId, showDir: false, badge: undefined }) ??
-    // 14. Badge only
-    buildLine({ modelId: '', showDir: false, badge: 'short' });
+    buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
+    buildLine({ modelId: tinyModelId, showOM: false, showDir: false }) ??
+    buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short' });
 
   state.statusLine.setText(result?.styled ?? shortModeBadge + styleModelId(tinyModelId));
 
