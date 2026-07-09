@@ -164,10 +164,17 @@
     "@mastra/modal": "0.3.0",
     "@mastra/railway": "0.3.0",
     "@mastra/s3": "0.6.0",
-    "@mastra/vercel": "1.2.0"
+    "@mastra/vercel": "1.2.0",
+    "@mastra/code-sdk": "0.0.0"
   },
   "changesets": [
     "automated-provider-registry-20260708-005256",
-    "green-birds-knock"
+    "bright-swans-wave",
+    "funky-meals-swim",
+    "green-birds-knock",
+    "meta-deepseek-number-constraints",
+    "proud-hats-jump",
+    "quick-rules-sniff",
+    "salty-mugs-read"
   ]
 }
