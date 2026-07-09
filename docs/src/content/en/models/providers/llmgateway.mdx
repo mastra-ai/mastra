@@ -334,18 +334,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.4
   },
   {
-    "model": "llmgateway/gemini-2.5-flash-lite-preview-09-2025",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 1048576,
-    "maxOutput": 1048576,
-    "inputCost": 0.1,
-    "outputCost": 0.4
-  },
-  {
     "model": "llmgateway/gemini-2.5-pro",
     "imageInput": true,
     "audioInput": true,
@@ -1100,6 +1088,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 30000,
     "inputCost": 1.25,
     "outputCost": 2.5
+  },
+  {
+    "model": "llmgateway/grok-4-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 500000,
+    "maxOutput": 500000,
+    "inputCost": 2,
+    "outputCost": 6
   },
   {
     "model": "llmgateway/grok-build-0-1",

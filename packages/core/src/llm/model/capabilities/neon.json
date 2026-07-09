@@ -5,6 +5,7 @@
     "claude-opus-4-5",
     "claude-opus-4-6",
     "claude-opus-4-7",
+    "claude-opus-4-8",
     "claude-sonnet-4",
     "claude-sonnet-4-5",
     "claude-sonnet-4-6",
@@ -12,17 +13,23 @@
     "gemini-2-5-pro",
     "gemini-3-1-flash-lite",
     "gemini-3-1-pro",
+    "gemini-3-5-flash",
     "gemini-3-flash",
     "gemini-3-pro",
+    "gemma-3-12b",
     "gpt-5",
     "gpt-5-1",
+    "gpt-5-1-codex-max",
+    "gpt-5-1-codex-mini",
     "gpt-5-2",
+    "gpt-5-2-codex",
+    "gpt-5-3-codex",
     "gpt-5-4",
     "gpt-5-4-mini",
     "gpt-5-4-nano",
-    "gpt-5-5",
     "gpt-5-mini",
-    "gpt-5-nano"
+    "gpt-5-nano",
+    "llama-4-maverick"
   ],
   "temperature": [
     "claude-haiku-4-5",
@@ -36,9 +43,16 @@
     "gemini-2-5-pro",
     "gemini-3-1-flash-lite",
     "gemini-3-1-pro",
+    "gemini-3-5-flash",
     "gemini-3-flash",
     "gemini-3-pro",
+    "gemma-3-12b",
     "gpt-oss-120b",
-    "gpt-oss-20b"
+    "gpt-oss-20b",
+    "llama-4-maverick",
+    "meta-llama-3-1-8b-instruct",
+    "meta-llama-3-3-70b-instruct",
+    "qwen3-next-80b-a3b-instruct",
+    "qwen35-122b-a10b"
   ]
 }
