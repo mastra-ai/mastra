@@ -952,7 +952,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/filesystem/overview",
+      "destination": "/docs/getting-started/file-based-agents",
       "permanent": true
     },
     {
@@ -1627,7 +1627,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents/llms.txt",
-      "destination": "/docs/filesystem/overview/llms.txt",
+      "destination": "/docs/getting-started/file-based-agents/llms.txt",
       "permanent": true
     }
   ]

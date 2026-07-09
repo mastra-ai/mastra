@@ -937,7 +937,7 @@
     },
     {
       "source": "/docs/agents/file-based-agents",
-      "destination": "/docs/filesystem/overview",
+      "destination": "/docs/getting-started/file-based-agents",
       "permanent": true
     }
   ]
