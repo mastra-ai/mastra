@@ -410,12 +410,22 @@ export class PluginManager {
     await this.reload();
   }
 
+  private assertNotCallbackConfigKey(pluginId: string, scope: PluginScope, key: string): void {
+    const plugin = this.loadedPlugins.find(loaded => loaded.id === pluginId && loaded.scope === scope);
+    // Defense in depth only: when no schema is available (plugin load failed or
+    // schema absent), skip the check and allow the write.
+    if (plugin?.configSchema?.[key]?.type === 'callback') {
+      throw new Error(`Config option "${key}" of plugin "${pluginId}" is a callback and stores no value`);
+    }
+  }
+
   async setConfigValue(
     pluginId: string,
     scope: PluginScope,
     key: string,
     value: MastraCodePluginConfigValue,
   ): Promise<void> {
+    this.assertNotCallbackConfigKey(pluginId, scope, key);
     const paths = getPluginScopePaths(scope, this.options);
     const registry = loadPluginRegistry(paths.registryPath);
     const record = registry.plugins[pluginId];

@@ -110,6 +110,41 @@ describe('PluginManager', () => {
     ).toBeUndefined();
   });
 
+  it('rejects setConfigValue for callback-typed config keys', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.callback',
+        config: {
+          authenticate: { type: 'callback', run: async () => ({ config: { connected: true } }) },
+          connected: { type: 'boolean' }
+        },
+        tools: {}
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+
+    await manager.installLocal(pluginDir, 'project');
+
+    await expect(manager.setConfigValue('acme.callback', 'project', 'authenticate', 'anything')).rejects.toThrow(
+      /callback/i,
+    );
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.callback']?.config,
+    ).toBeUndefined();
+
+    // Value-typed keys still write normally.
+    await manager.setConfigValue('acme.callback', 'project', 'connected', true);
+    expect(
+      loadPluginRegistry(path.join(projectRoot, '.mastracode/plugins/plugins.json')).plugins['acme.callback']?.config,
+    ).toEqual({ connected: true });
+  });
+
   it('hot reloads local plugin source changes into the stable tools object', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

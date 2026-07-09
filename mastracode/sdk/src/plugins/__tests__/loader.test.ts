@@ -125,6 +125,109 @@ describe('plugin loader', () => {
     expect(loaded[0]?.tools.configured_tool?.description).toContain('chosen-model');
   });
 
+  it('accepts callback config options and preserves run/isEnabled functions', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.callback',
+        config: {
+          authenticate: {
+            type: 'callback',
+            label: 'Authenticate',
+            description: 'Connect account',
+            isEnabled: config => config.connected !== true,
+            run: async () => ({ message: 'Connected', config: { connected: true } })
+          },
+          connected: { type: 'boolean', isEnabled: () => false }
+        },
+        tools: {}
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.callback': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    const plugin = loaded[0];
+    expect(plugin).toMatchObject({ id: 'acme.callback', status: 'active' });
+    const authenticate = plugin?.configSchema?.authenticate;
+    expect(authenticate?.type).toBe('callback');
+    expect(authenticate?.label).toBe('Authenticate');
+    expect(authenticate?.description).toBe('Connect account');
+    expect(typeof authenticate?.isEnabled).toBe('function');
+    expect(authenticate?.type === 'callback' && typeof authenticate.run).toBe('function');
+    expect(plugin?.configSchema?.connected?.type).toBe('boolean');
+    expect(typeof plugin?.configSchema?.connected?.isEnabled).toBe('function');
+    // Callback options never produce a config value.
+    expect(plugin?.configValues).toEqual({ connected: false });
+    if (authenticate?.type === 'callback') {
+      expect(authenticate.isEnabled?.({ connected: true })).toBe(false);
+      await expect(authenticate.run({ config: {} })).resolves.toEqual({
+        message: 'Connected',
+        config: { connected: true },
+      });
+    }
+  });
+
+  it('drops malformed callback and isEnabled config options without failing the plugin load', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.malformed',
+        config: {
+          missingRun: { type: 'callback', label: 'No run' },
+          nonFunctionRun: { type: 'callback', run: 'not-a-function' },
+          callbackWithDefault: { type: 'callback', run: async () => {}, default: 'oops' },
+          badIsEnabled: { type: 'string', isEnabled: 'not-a-function' },
+          badCallbackIsEnabled: { type: 'callback', run: async () => {}, isEnabled: 42 },
+          valid: { type: 'string', default: 'kept' }
+        },
+        tools: {}
+      };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.malformed': {
+            enabled: true,
+            source: 'local',
+            specifier: '../plugin',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    const plugin = loaded[0];
+    expect(plugin).toMatchObject({ id: 'acme.malformed', status: 'active' });
+    expect(Object.keys(plugin?.configSchema ?? {})).toEqual(['valid']);
+    expect(plugin?.configValues).toEqual({ valid: 'kept' });
+  });
+
   it('normalizes first-class tool render entries and discovers bundled assets and instructions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');

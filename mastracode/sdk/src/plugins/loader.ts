@@ -218,12 +218,30 @@ function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSche
   for (const [key, option] of Object.entries(schema)) {
     if (!option || typeof option !== 'object' || Array.isArray(option)) continue;
     const record = option as Record<string, unknown>;
+    if ('isEnabled' in record && typeof record.isEnabled !== 'function') continue;
+    const isEnabled =
+      typeof record.isEnabled === 'function'
+        ? (record.isEnabled as NonNullable<MastraCodePluginConfigSchema[string]['isEnabled']>)
+        : undefined;
+    if (record.type === 'callback') {
+      if (typeof record.run !== 'function') continue;
+      if ('default' in record && record.default !== undefined) continue;
+      validated[key] = {
+        type: 'callback',
+        run: record.run as Extract<MastraCodePluginConfigSchema[string], { type: 'callback' }>['run'],
+        ...(typeof record.label === 'string' ? { label: record.label } : {}),
+        ...(typeof record.description === 'string' ? { description: record.description } : {}),
+        ...(isEnabled ? { isEnabled } : {}),
+      };
+      continue;
+    }
     if (record.type !== 'model' && record.type !== 'boolean' && record.type !== 'string') continue;
     validated[key] = {
       type: record.type,
       ...(typeof record.label === 'string' ? { label: record.label } : {}),
       ...(typeof record.description === 'string' ? { description: record.description } : {}),
       ...(typeof record.default === 'string' || typeof record.default === 'boolean' ? { default: record.default } : {}),
+      ...(isEnabled ? { isEnabled } : {}),
     };
   }
   return Object.keys(validated).length > 0 ? validated : undefined;
@@ -236,6 +254,7 @@ function resolvePluginConfigValues(
   const values: MastraCodePluginConfigValues = {};
   if (!schema) return values;
   for (const [key, option] of Object.entries(schema)) {
+    if (option.type === 'callback') continue;
     const value = recordValues?.[key];
     if (option.type === 'boolean') {
       values[key] = typeof value === 'boolean' ? value : typeof option.default === 'boolean' ? option.default : false;
