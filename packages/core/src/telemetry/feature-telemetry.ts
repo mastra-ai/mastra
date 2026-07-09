@@ -9,6 +9,10 @@ type StorageLike = {
   stores?: { observability?: unknown };
 };
 
+type AgentLike = {
+  hasOwnMemory?: () => boolean;
+};
+
 function countCollection(collection: unknown): number {
   if (!collection || typeof collection !== 'object') {
     return 0;
@@ -18,6 +22,20 @@ function countCollection(collection: unknown): number {
   }
 
   return Object.keys(collection).length;
+}
+
+function countAgentsWithMemory(agents: unknown): number {
+  if (!agents || typeof agents !== 'object') {
+    return 0;
+  }
+
+  return Object.values(agents).filter(agent => {
+    try {
+      return (agent as AgentLike | undefined)?.hasOwnMemory?.() === true;
+    } catch {
+      return false;
+    }
+  }).length;
 }
 
 function bucketStorageType(storage: StorageLike | undefined): string | null {
@@ -80,6 +98,8 @@ export function syncFeatureUsageTelemetry(mastra: Mastra): void {
       return;
     }
 
+    const agents = mastra.listAgents?.();
+    const agentsWithMemoryCount = countAgentsWithMemory(agents);
     const memory = mastra.listMemory?.();
     const workspaces = mastra.listWorkspaces?.();
     const tts = mastra.getTTS?.();
@@ -89,37 +109,26 @@ export function syncFeatureUsageTelemetry(mastra: Mastra): void {
     const storage = mastra.getStorage?.() as StorageLike | undefined;
 
     trackFeatureUsage('project_surfaces', {
-      agent_count: countCollection(mastra.listAgents?.()),
+      agent_count: countCollection(agents),
+      agents_with_memory_count: agentsWithMemoryCount,
       agent_controller_count: countCollection(mastra.listAgentControllers?.()),
       workflow_count: countCollection(mastra.listWorkflows?.()),
       tool_count: countCollection(mastra.listTools?.()),
       processor_count: countCollection(mastra.listProcessors?.()),
       processor_configuration_count: countCollection(processorConfigurations),
-      processor_configurations_enabled: countCollection(processorConfigurations) > 0,
       memory_count: countCollection(memory),
-      memory_enabled: countCollection(memory) > 0,
       vector_count: countCollection(mastra.listVectors?.()),
       scorer_count: countCollection(mastra.listScorers?.()),
       workspace_count: countCollection(workspaces),
-      workspace_enabled: countCollection(workspaces) > 0 || !!mastra.getWorkspace?.(),
       mcp_server_count: countCollection(mastra.listMCPServers?.()),
       gateway_count: countCollection(mastra.listGateways?.()),
       channel_count: countCollection(mastra.getChannelProviders?.()),
       agent_channel_count: countCollection(agentChannels),
       tts_count: countCollection(tts),
-      voice_enabled: countCollection(tts) > 0,
       prompt_block_count: countCollection(promptBlocks),
-      prompt_blocks_enabled: countCollection(promptBlocks) > 0,
       editor_enabled: !!mastra.getEditor?.(),
       studio_enabled: !!mastra.getStudio?.(),
-      server_enabled: !!mastra.getServer?.(),
-      mastra_server_enabled: !!mastra.getMastraServer?.(),
       server_middleware_enabled: !!mastra.getServerMiddleware?.(),
-      server_cache_enabled: !!mastra.getServerCache?.(),
-      deployer_enabled: !!mastra.getDeployer?.(),
-      version_overrides_enabled: !!mastra.getVersionOverrides?.(),
-      tool_payload_transform_enabled: !!mastra.getToolPayloadTransform?.(),
-      environment_configured: !!mastra.getEnvironment?.(),
       storage_type: bucketStorageType(storage),
       observability_enabled: !!storage?.stores?.observability,
     });
