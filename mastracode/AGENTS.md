@@ -1,17 +1,16 @@
-Mastra Code is split into `mastracode/sdk` (`@mastra/code-sdk`), `mastracode/tui` (`mastracode`), and the standalone `mastracode/web` project. Scope package commands to the package being changed.
+Packages: `mastracode/sdk` (`@mastra/code-sdk`), `mastracode/tui` (`mastracode`), and standalone `mastracode/web`. Scope commands to the changed package.
 
-Build the TUI and its dependency graph from root: pnpm build:mastracode
-Test SDK and TUI from root: pnpm test:mastracode
-Typecheck TUI from root: pnpm --filter ./mastracode/tui check
-Lint TUI from root: pnpm --filter ./mastracode/tui lint
+Build TUI dependencies from root: pnpm build:mastracode
+Test SDK and TUI: pnpm test:mastracode
+Typecheck TUI: pnpm --filter ./mastracode/tui check
+Lint TUI: pnpm --filter ./mastracode/tui lint
 
-Run pnpm build:mastracode before broad Mastra Code test audits so workspace dependency dist artifacts are available.
-For focused TUI tests, prefer pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1 before the full package suite.
+Run pnpm build:mastracode before broad tests so workspace dist artifacts exist.
+Focused TUI test: pnpm --filter ./mastracode/tui exec vitest run <test-file> --reporter=dot --bail 1
 
-Most unit tests live under `mastracode/sdk/src` or `mastracode/tui/src` and are colocated with the code they cover.
-Run focused agent, model, headless, TUI, command, MCP, plugin, or processor tests in the owning package before broader validation when those areas change.
+Unit tests are colocated under `mastracode/sdk/src` or `mastracode/tui/src`. Test the owning package first.
 
-Mastra Code TUI/e2e scenarios live under mastracode/tui/e2e/tui/ with fixtures in mastracode/tui/e2e/fixtures/.
+TUI/e2e scenarios are in mastracode/tui/e2e/tui/; fixtures are in mastracode/tui/e2e/fixtures/.
 List scenarios with pnpm --filter ./mastracode/tui run e2e:list.
 Run smoke scenarios with pnpm --filter ./mastracode/tui run e2e:smoke.
 For focused scenario development, use MC_E2E_VITEST_SCENARIOS=<scenario> pnpm --filter ./mastracode/tui exec vitest run --config e2e/vitest.config.ts --reporter=dot.
