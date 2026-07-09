@@ -219,17 +219,6 @@ type Action =
     }
   | {
       /**
-       * Fold persisted messages into the timeline while keeping all live state
-       * (mode/model/usage/goal/OM). Used by the query-driven history hydration,
-       * which can resolve after live stream events have already arrived —
-       * entries the history doesn't know about (matched by id) are preserved.
-       */
-      type: 'hydrateMessages';
-      messages: AgentControllerMessage[];
-      threadId: string;
-    }
-  | {
-      /**
        * Patch session-level metadata (mode/model/OM/usage) from an authoritative
        * `session.state()` fetch without touching the timeline or thread binding.
        * Used after thread switches, where the state fetch can resolve *after*
@@ -255,12 +244,6 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
       };
     case 'hydrate':
       return hydrate(action.messages, action.modeId, action.modelId, action.threadId, action.omProgress, action.usage);
-    case 'hydrateMessages': {
-      const hydrated = hydrateEntries(action.messages);
-      const known = new Set(hydrated.map(entry => entry.id));
-      const liveExtras = state.entries.filter(entry => !known.has(entry.id));
-      return { ...state, threadId: action.threadId, entries: [...hydrated, ...liveExtras] };
-    }
     case 'syncState':
       return {
         ...state,
@@ -556,6 +539,24 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
  * and tool calls in content order, so we emit the running text and each tool
  * call (matched to its result) as part of the same assistant entry.
  */
+export function createInitialTranscript({
+  messages = [],
+  modeId,
+  modelId,
+  threadId,
+  omProgress,
+  usage,
+}: {
+  messages?: AgentControllerMessage[];
+  modeId?: string;
+  modelId?: string;
+  threadId?: string;
+  omProgress?: AgentControllerOMProgress;
+  usage?: UsageSnapshot;
+} = {}): TranscriptState {
+  return { ...initialTranscript, entries: hydrateEntries(messages), modeId, modelId, threadId, omProgress, usage };
+}
+
 function hydrate(
   messages: AgentControllerMessage[],
   modeId?: string,
@@ -564,7 +565,7 @@ function hydrate(
   omProgress?: AgentControllerOMProgress,
   usage?: UsageSnapshot,
 ): TranscriptState {
-  return { ...initialTranscript, entries: hydrateEntries(messages), modeId, modelId, threadId, omProgress, usage };
+  return createInitialTranscript({ messages, modeId, modelId, threadId, omProgress, usage });
 }
 
 function hydrateEntries(messages: AgentControllerMessage[]): TimelineEntry[] {

@@ -6,7 +6,8 @@
  * props again. Driven end-to-end: real fetch/SSE transport, MSW at the
  * network boundary.
  */
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type { AgentControllerEvent, AgentControllerMessage, AgentControllerSessionState } from '@mastra/client-js';
+import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -16,7 +17,8 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
-import { ChatSessionProvider, useChatSession } from '../ChatSessionProvider';
+import { ChatMessageList } from '../../components/ChatMessageList';
+import { ChatSessionProvider, useChatConnection, useChatModels, useChatModes, useChatTranscript } from '../ChatSessionProvider';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';
@@ -24,6 +26,11 @@ const NEXT_RESOURCE_ID = 'resource-next';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const NEXT_SESSION = `${API}/sessions/${NEXT_RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
+const ROUTE_THREAD_ID = 'route-thread-test';
+const PERSISTED_MESSAGES: AgentControllerMessage[] = [
+  { id: 'persisted-user', role: 'user', content: [{ type: 'text', text: 'Persisted user question' }] },
+  { id: 'persisted-assistant', role: 'assistant', content: [{ type: 'text', text: 'Persisted assistant answer' }] },
+];
 
 afterEach(() => {
   localStorage.clear();
@@ -80,7 +87,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
       requests.push('create');
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID });
     }),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => {
       requests.push('state');
@@ -111,31 +118,298 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
 }
 
 function Probe() {
-  const { status, transcript, busy, showWorkingIndicator } = useChatSession();
+  const { status } = useChatConnection();
+  const { transcript, busy, showWorkingIndicator, messagesError, messagesErrorMessage } = useChatTranscript();
   const { selectProject } = useActiveProjectContext();
+  const messageText = transcript.entries
+    .filter(entry => entry.kind === 'message')
+    .flatMap(entry => entry.message.content.parts)
+    .filter(part => part.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+
   return (
     <div>
       <span data-testid="status">{status}</span>
       <span data-testid="thread-id">{transcript.threadId ?? '(none)'}</span>
       <span data-testid="entries-count">{transcript.entries.length}</span>
+      <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
       <span data-testid="working">{showWorkingIndicator ? 'yes' : 'no'}</span>
+      <span data-testid="messages-error">{messagesError ? 'yes' : 'no'}</span>
+      <span data-testid="messages-error-message">{messagesErrorMessage ?? ''}</span>
       <button onClick={() => void selectProject(nextProject)}>switch project</button>
     </div>
   );
 }
 
-function renderProbe() {
+function ModesProbe() {
+  const { activeMode, activeModeId, modes, setMode } = useChatModes();
+
+  return (
+    <div>
+      <span data-testid="active-mode-id">{activeModeId ?? ''}</span>
+      <span data-testid="active-mode-label">{activeMode?.name ?? ''}</span>
+      <span data-testid="modes-count">{modes.length}</span>
+      <button onClick={() => void setMode('plan')}>switch to plan</button>
+    </div>
+  );
+}
+
+function ModelsProbe() {
+  const { activeModelId, setModel } = useChatModels();
+
+  return (
+    <div>
+      <span data-testid="active-model-id">{activeModelId ?? ''}</span>
+      <button onClick={() => void setModel('anthropic/claude-sonnet-4-20250514')}>switch model</button>
+    </div>
+  );
+}
+
+function TranscriptProbe() {
+  const { transcript, messagesError, messagesErrorMessage } = useChatTranscript();
+  const messageText = transcript.entries
+    .filter(entry => entry.kind === 'message')
+    .flatMap(entry => entry.message.content.parts)
+    .filter(part => part.type === 'text')
+    .map(part => part.text)
+    .join('\n');
+
+  return (
+    <div>
+      <span data-testid="focused-thread-id">{transcript.threadId ?? '(none)'}</span>
+      <span data-testid="focused-entries-count">{transcript.entries.length}</span>
+      <span data-testid="focused-message-text">{messageText}</span>
+      <span data-testid="focused-messages-error">{messagesError ? 'yes' : 'no'}</span>
+      <span data-testid="focused-messages-error-message">{messagesErrorMessage ?? ''}</span>
+    </div>
+  );
+}
+
+function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
+  return (
+    <ActiveProjectProvider>
+      <ChatSessionProvider threadId={threadId}>{children ?? <Probe />}</ChatSessionProvider>
+    </ActiveProjectProvider>
+  );
+}
+
+function renderProbe(threadId?: string) {
+  return renderWithProviders(<ProbeSession threadId={threadId} />);
+}
+
+function renderFocusedProbe(children: ReactNode, threadId?: string) {
+  return renderWithProviders(<ProbeSession threadId={threadId}>{children}</ProbeSession>);
+}
+
+function renderMessageList(threadId?: string) {
   return renderWithProviders(
     <ActiveProjectProvider>
-      <ChatSessionProvider>
-        <Probe />
+      <ChatSessionProvider threadId={threadId}>
+        <ChatMessageList />
       </ChatSessionProvider>
     </ActiveProjectProvider>,
   );
 }
 
 describe('ChatSessionProvider', () => {
+  describe('focused provider consumers', () => {
+    it('given a seeded project and synced session, when a mode consumer renders, then it reads modes and switches through the mode mutation path', async () => {
+      const requests: string[] = [];
+      let activeModeId = 'build';
+      seedProject();
+      useAgentControllerHandlers([], requests);
+      server.use(
+        http.get(`${API}/modes`, () =>
+          HttpResponse.json({
+            modes: [
+              { id: 'build', name: 'Build' },
+              { id: 'plan', name: 'Plan' },
+            ],
+          }),
+        ),
+        http.get(SESSION, () => {
+          requests.push('state');
+          return HttpResponse.json({ ...sessionState(), modeId: activeModeId });
+        }),
+        http.post(`${SESSION}/mode`, async ({ request }) => {
+          const body = await request.json();
+          requests.push(`mode:${JSON.stringify(body)}`);
+          if (typeof body === 'object' && body && 'modeId' in body && typeof body.modeId === 'string') {
+            activeModeId = body.modeId;
+          }
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      renderFocusedProbe(<ModesProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Build'));
+      expect(screen.getByTestId('active-mode-id')).toHaveTextContent('build');
+      expect(screen.getByTestId('modes-count')).toHaveTextContent('2');
+
+      await userEvent.click(screen.getByRole('button', { name: 'switch to plan' }));
+
+      await waitFor(() => expect(requests).toContain('mode:{"modeId":"plan"}'));
+      await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan'));
+    });
+
+    it('given a synced model, when a model consumer renders, then it reads and switches model without transcript context', async () => {
+      const requests: string[] = [];
+      let activeModelId = 'openai/gpt-4o-mini';
+      seedProject();
+      useAgentControllerHandlers([], requests);
+      server.use(
+        http.get(SESSION, () => {
+          requests.push('state');
+          return HttpResponse.json({ ...sessionState(), modelId: activeModelId });
+        }),
+        http.post(`${SESSION}/model`, async ({ request }) => {
+          const body = await request.json();
+          requests.push(`model:${JSON.stringify(body)}`);
+          if (typeof body === 'object' && body && 'modelId' in body && typeof body.modelId === 'string') {
+            activeModelId = body.modelId;
+          }
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      renderFocusedProbe(<ModelsProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o-mini'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'switch model' }));
+
+      await waitFor(() =>
+        expect(requests).toContain('model:{"modelId":"anthropic/claude-sonnet-4-20250514"}'),
+      );
+      await waitFor(() =>
+        expect(screen.getByTestId('active-model-id')).toHaveTextContent('anthropic/claude-sonnet-4-20250514'),
+      );
+    });
+
+    it('given a route thread prop, when a transcript consumer renders, then it receives persisted route-thread messages', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
+          HttpResponse.json({ messages: PERSISTED_MESSAGES }),
+        ),
+      );
+
+      renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
+
+      await waitFor(() => expect(screen.getByTestId('focused-entries-count')).toHaveTextContent('2'));
+      expect(screen.getByTestId('focused-thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
+      expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Persisted user question');
+      expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Persisted assistant answer');
+    });
+
+    it('given /new with no threadId, when a transcript consumer renders, then it remains an empty draft session', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+
+      renderFocusedProbe(<TranscriptProbe />);
+
+      await waitFor(() => expect(screen.getByTestId('focused-thread-id')).toHaveTextContent('(none)'));
+      expect(screen.getByTestId('focused-entries-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('focused-message-text')).toBeEmptyDOMElement();
+    });
+  });
+
+  describe('when a route thread has persisted messages', () => {
+    it('renders fetched messages through the provider session', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
+          HttpResponse.json({ messages: PERSISTED_MESSAGES }),
+        ),
+      );
+
+      renderProbe(ROUTE_THREAD_ID);
+
+      await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('2'));
+      expect(screen.getByTestId('thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
+      expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted user question');
+      expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted assistant answer');
+    });
+  });
+
+  describe('when the route switches to another thread', () => {
+    it('renders only the new thread messages after they load', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/thread-one/messages`, () =>
+          HttpResponse.json({
+            messages: [{ id: 'thread-one-message', role: 'user', content: [{ type: 'text', text: 'Thread one text' }] }],
+          }),
+        ),
+        http.get(`${SESSION}/threads/thread-two/messages`, () =>
+          HttpResponse.json({
+            messages: [{ id: 'thread-two-message', role: 'user', content: [{ type: 'text', text: 'Thread two text' }] }],
+          }),
+        ),
+      );
+
+      const { rerender } = renderProbe('thread-one');
+
+      await waitFor(() => expect(screen.getByTestId('message-text')).toHaveTextContent('Thread one text'));
+      rerender(<ProbeSession threadId="thread-two" />);
+
+      await waitFor(() => expect(screen.getByTestId('message-text')).toHaveTextContent('Thread two text'));
+      expect(screen.getByTestId('thread-id')).toHaveTextContent('thread-two');
+      expect(screen.getByTestId('message-text')).not.toHaveTextContent('Thread one text');
+    });
+  });
+
+  describe('when route thread messages fail to load', () => {
+    it('exposes the message fetch error through the session API', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
+          HttpResponse.json({ error: 'messages unavailable' }, { status: 500 }),
+        ),
+      );
+
+      renderProbe(ROUTE_THREAD_ID);
+
+      await waitFor(() => expect(screen.getByTestId('messages-error')).toHaveTextContent('yes'));
+      expect(screen.getByTestId('thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
+      expect(screen.getByTestId('messages-error-message')).toHaveTextContent('messages unavailable');
+    });
+
+    it('shows a user-visible message loading error', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      server.use(
+        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
+          HttpResponse.json({ error: 'messages unavailable' }, { status: 500 }),
+        ),
+      );
+
+      renderMessageList(ROUTE_THREAD_ID);
+
+      expect(await screen.findByText(/Failed to load messages:/)).toBeVisible();
+    });
+  });
+
+  describe('when no route thread is provided', () => {
+    it('starts with an empty draft transcript while the connection becomes ready', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+
+      renderProbe();
+
+      await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+      expect(screen.getByTestId('entries-count')).toHaveTextContent('0');
+      expect(screen.getByTestId('message-text')).toBeEmptyDOMElement();
+    });
+  });
+
   it('given a seeded project, when the session connects, then it binds the session to the workspace path before ready', async () => {
     const requests: string[] = [];
     seedProject();
@@ -143,7 +417,6 @@ describe('ChatSessionProvider', () => {
     renderProbe();
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
-    expect(screen.getByTestId('thread-id')).toHaveTextContent(THREAD_ID);
     expect(requests.slice(0, 3)).toEqual([
       'create',
       'setState:{"state":{"projectPath":"/tmp/mastracode-test"}}',
@@ -183,7 +456,7 @@ describe('ChatSessionProvider', () => {
     expect(screen.getByTestId('working')).toHaveTextContent('no');
   });
 
-  it('given a reconnect re-sync returns a new state, then the thread messages cache is dropped and the transcript rehydrates', async () => {
+  it('given a reconnect re-sync returns a new state without a route thread, then the draft transcript remains empty', async () => {
     const requests: string[] = [];
     seedProject();
 
@@ -191,7 +464,7 @@ describe('ChatSessionProvider', () => {
       http.post(`${API}/sessions`, () =>
         HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: 'thread-before-drop' }),
       ),
-      http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+      http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
       http.get(SESSION, () => {
         requests.push('state');
         const threadId =
@@ -229,13 +502,10 @@ describe('ChatSessionProvider', () => {
 
     renderProbe();
 
-    await waitFor(() => expect(screen.getByTestId('thread-id')).toHaveTextContent('thread-before-drop'));
-    await waitFor(() => expect(requests).toContain('messages:before'));
-    await waitFor(() => expect(screen.getByTestId('thread-id')).toHaveTextContent('thread-after-drop'), {
-      timeout: 2500,
-    });
-    await waitFor(() => expect(requests).toContain('messages:after'));
-    await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('1'));
+    await waitFor(() => expect(requests.filter(request => request === 'state')).toHaveLength(2), { timeout: 2500 });
+    expect(requests).not.toContain('messages:before');
+    expect(requests).not.toContain('messages:after');
+    expect(screen.getByTestId('entries-count')).toHaveTextContent('0');
   });
 
   it('given a run started without streamed assistant text, then busy is on and the working indicator shows', async () => {
@@ -262,7 +532,7 @@ describe('ChatSessionProvider', () => {
     await waitFor(() => expect(screen.getByTestId('working')).toHaveTextContent('no'));
   });
 
-  it('given no provider, when useChatSession is called, then it throws a descriptive error', () => {
-    expect(() => render(<Probe />)).toThrow('useChatSession must be used within a ChatSessionProvider');
+  it('given no provider, when a focused chat consumer renders, then it throws a descriptive error', () => {
+    expect(() => render(<Probe />)).toThrow('useChatConnection must be used within a ChatSessionProvider');
   });
 });

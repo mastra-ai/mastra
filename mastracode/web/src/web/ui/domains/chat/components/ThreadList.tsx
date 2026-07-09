@@ -14,7 +14,7 @@ import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { useChatSession } from '../context/ChatSessionProvider';
+import { useChatTranscript } from '../context/ChatSessionProvider';
 import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
@@ -30,7 +30,7 @@ export function ThreadList() {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const projectPath = deriveProjectPath(activeProject);
-  const { resetCurrentThread, resetHydration, syncState, pushNotice } = useChatSession();
+  const { resetCurrentThread, syncState, pushNotice } = useChatTranscript();
   const overlays = useOverlays();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -71,7 +71,6 @@ export function ThreadList() {
   const activeThreadId = routeThreadId;
 
   const openThread = (threadId: string) => {
-    resetHydration();
     resetCurrentThread(threadId);
     void switchThreadMutation
       .mutateAsync(threadId)
@@ -91,7 +90,6 @@ export function ThreadList() {
 
   const cloneThread = async (threadId: string) => {
     const thread = await cloneThreadMutation.mutateAsync({ sourceThreadId: threadId });
-    resetHydration();
     resetCurrentThread(thread.id);
     toast('Thread cloned', 'success');
     void navigate(`/threads/${thread.id}`);

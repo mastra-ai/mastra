@@ -10,7 +10,7 @@ import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatMessageList } from './components/ChatMessageList';
 import { ComposerPanel } from './components/ComposerPanel';
-import { useChatSession } from './context/ChatSessionProvider';
+import { useChatConnection, useChatTranscript } from './context/ChatSessionProvider';
 import { useSwitchAgentControllerThreadMutation } from './hooks/useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from './services/constants';
@@ -49,7 +49,8 @@ function ThreadComposer() {
 function ThreadPageContent() {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const { status, transcript, resetCurrentThread, resetHydration, syncState, pushNotice } = useChatSession();
+  const { status } = useChatConnection();
+  const { transcript, resetCurrentThread, syncState, pushNotice } = useChatTranscript();
   const projectPath = deriveProjectPath(activeProject);
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -81,7 +82,6 @@ function ThreadPageContent() {
       return;
     }
 
-    resetHydration();
     resetCurrentThread(threadId);
     void switchThreadMutation
       .mutateAsync(threadId)
@@ -101,10 +101,14 @@ function ThreadPageContent() {
   useEffect(() => {
     latestRouteThreadId.current = routeThreadId ?? null;
     if (!routeThreadId) return;
-    if (status !== 'ready' || !transcript.threadId || transcript.threadId === routeThreadId || !threadsQuery.isSuccess)
+    if (status !== 'ready' || !threadsQuery.isSuccess) return;
+    if (!threadsQuery.data?.some(thread => thread.id === routeThreadId)) {
+      switchToRouteThread(routeThreadId);
       return;
+    }
+    if (transcript.threadId === routeThreadId) return;
     switchToRouteThread(routeThreadId);
-  }, [routeThreadId, status, transcript.threadId, threadsQuery.isSuccess]);
+  }, [routeThreadId, status, transcript.threadId, threadsQuery.isSuccess, threadsQuery.data]);
 
   return <ChatMessageList />;
 }

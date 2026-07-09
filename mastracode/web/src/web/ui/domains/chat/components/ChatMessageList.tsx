@@ -10,8 +10,8 @@ import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows, Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
-import type { ChatSessionApi } from '../context/ChatSessionProvider';
-import { useChatSession } from '../context/ChatSessionProvider';
+import type { ChatConnectionApi, ChatTranscriptApi } from '../context/ChatSessionProvider';
+import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -27,7 +27,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { GoalPanel } from './GoalPanel';
 import { Transcript } from './Transcript';
 
-type TranscriptState = ChatSessionApi['transcript'];
+type TranscriptState = ChatTranscriptApi['transcript'];
 
 const transcriptScrollClass =
   'flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]';
@@ -36,7 +36,9 @@ const emptyThreadClass = 'w-full max-w-[80ch] px-7 text-left font-mono text-sm l
 export function ChatMessageList() {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const { transcript, status, showWorkingIndicator, messagesPending, resolvePrompt } = useChatSession();
+  const { status } = useChatConnection();
+  const { transcript, showWorkingIndicator, messagesPending, messagesError, messagesErrorMessage, resolvePrompt } =
+    useChatTranscript();
   const { threadRef, showScrollDown, scrollToBottom } = useTranscriptScroll(transcript);
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
@@ -75,7 +77,9 @@ export function ChatMessageList() {
         activeProject={activeProject}
         transcript={transcript}
         showWorkingIndicator={showWorkingIndicator}
-        messagesPending={messagesPending || status === 'connecting'}
+        messagesPending={messagesPending}
+        messagesError={messagesError}
+        messagesErrorMessage={messagesErrorMessage}
         threadRef={threadRef}
         onApprove={onApprove}
         onRespond={onRespond}
@@ -86,7 +90,7 @@ export function ChatMessageList() {
   );
 }
 
-function ConnectionNotice({ status }: { status: ChatSessionApi['status'] }) {
+function ConnectionNotice({ status }: { status: ChatConnectionApi['status'] }) {
   if (status !== 'reconnecting' && status !== 'error') return null;
 
   return (
@@ -105,6 +109,8 @@ type TranscriptPanelProps = {
   transcript: TranscriptState;
   showWorkingIndicator: boolean;
   messagesPending: boolean;
+  messagesError: boolean;
+  messagesErrorMessage?: string;
   threadRef: RefObject<HTMLDivElement | null>;
   onApprove: (toolCallId: string, approved: boolean, id: string) => void;
   onRespond: (toolCallId: string, data: string | string[] | PlanResume, id: string) => void;
@@ -115,6 +121,8 @@ function TranscriptPanel({
   transcript,
   showWorkingIndicator,
   messagesPending,
+  messagesError,
+  messagesErrorMessage,
   threadRef,
   onApprove,
   onRespond,
@@ -123,6 +131,16 @@ function TranscriptPanel({
     return (
       <div className={transcriptScrollClass} ref={threadRef}>
         <SkeletonRows label="Loading messages" rows={6} />
+      </div>
+    );
+  }
+
+  if (transcript.entries.length === 0 && messagesError) {
+    return (
+      <div className={`${transcriptScrollClass} place-items-center`} ref={threadRef}>
+        <Notice variant="destructive">
+          {messagesErrorMessage ? `Failed to load messages: ${messagesErrorMessage}` : 'Failed to load messages.'}
+        </Notice>
       </div>
     );
   }

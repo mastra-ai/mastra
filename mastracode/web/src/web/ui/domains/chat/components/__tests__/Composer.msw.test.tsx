@@ -9,7 +9,7 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider, useChatSession } from '../../context/ChatSessionProvider';
+import { ChatSessionProvider, useChatTranscript } from '../../context/ChatSessionProvider';
 import { Composer } from '../Composer';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -55,7 +55,8 @@ function useAgentControllerHandlers() {
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
+    http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
@@ -86,7 +87,7 @@ function useAgentControllerHandlers() {
 }
 
 function NoticeProbe() {
-  const { transcript } = useChatSession();
+  const { transcript } = useChatTranscript();
   return (
     <output aria-label="Notices">
       {transcript.entries.map(entry => (entry.kind === 'notice' ? <div key={entry.id}>{entry.text}</div> : null))}
@@ -102,7 +103,7 @@ function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = 
           path="/threads/:threadId"
           element={
             <ActiveProjectProvider>
-              <ChatSessionProvider>
+              <ChatSessionProvider threadId={THREAD_ID}>
                 <Composer commandNameToApply={null} onCommandApplied={() => undefined} {...props} />
                 <NoticeProbe />
               </ChatSessionProvider>
@@ -141,17 +142,16 @@ describe('Composer', () => {
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      const input = await screen.findByRole('textbox');
-      await waitFor(() => expect(input).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
       await waitFor(() => expect(onPermissions).toHaveBeenCalled());
       const permissionsRequestsBeforeYolo = onPermissions.mock.calls.length;
 
-      await userEvent.type(input, '/yolo{Enter}');
+      await userEvent.type(screen.getByRole('textbox'), '/yolo{Enter}');
 
       await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('YOLO mode'));
       await waitFor(() => expect(onPermissions.mock.calls.length).toBeGreaterThan(permissionsRequestsBeforeYolo));
       const permissionsRequestsBeforeCommand = onPermissions.mock.calls.length;
-      await userEvent.type(input, '/permissions{Enter}');
+      await userEvent.type(screen.getByRole('textbox'), '/permissions{Enter}');
 
       await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
       expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: allow');
@@ -166,13 +166,12 @@ describe('Composer', () => {
       const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      const input = await screen.findByRole('textbox');
-      await waitFor(() => expect(input).toBeEnabled());
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
       await waitFor(() => expect(onPermissions).toHaveBeenCalled());
       const permissionsRequestsBeforeCompletion = onPermissions.mock.calls.length;
-      await userEvent.type(input, '/he{Enter}');
+      await userEvent.type(screen.getByRole('textbox'), '/he{Enter}');
 
-      expect(input).toHaveValue('/help ');
+      expect(screen.getByRole('textbox')).toHaveValue('/help ');
       expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCompletion);
       expect(onSend).not.toHaveBeenCalled();
     });

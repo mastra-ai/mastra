@@ -2,7 +2,7 @@
  * BDD coverage for `useGlobalShortcuts` (`domains/chat/hooks`).
  *
  * The hook is now zero-args: it observes `useOverlays()`,
- * `useChatSession()` (busy + abort), and `useActiveProjectContext()` (zero
+ * `useChatTranscript()` (busy + abort), and `useActiveProjectContext()` (zero
  * projects force the projects modal open) directly. Specs preserve the
  * pre-refactor behavior: mod+k palette toggle, `?` shortcuts toggle unless
  * typing, and the Escape priority cascade.
@@ -19,7 +19,7 @@ import type { OverlayName } from '../../../../lib/overlays';
 import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
-import { ChatSessionProvider, useChatSession } from '../../context/ChatSessionProvider';
+import { ChatSessionProvider, useChatConnection, useChatTranscript } from '../../context/ChatSessionProvider';
 import { useGlobalShortcuts } from '../useGlobalShortcuts';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -71,7 +71,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => HttpResponse.json(sessionState)),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState)),
@@ -85,7 +85,8 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
 function Probe() {
   useGlobalShortcuts();
   const overlays = useOverlays();
-  const { status, busy } = useChatSession();
+  const { status } = useChatConnection();
+  const { busy } = useChatTranscript();
   return (
     <div>
       <span data-testid="status">{status}</span>
@@ -108,7 +109,7 @@ function Probe() {
 function renderProbe() {
   return renderWithProviders(
     <ActiveProjectProvider>
-      <ChatSessionProvider>
+      <ChatSessionProvider threadId={THREAD_ID}>
         <OverlaysProvider>
           <Probe />
         </OverlaysProvider>

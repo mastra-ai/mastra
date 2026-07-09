@@ -14,7 +14,7 @@ import { useAbortAgentControllerMutation } from '../hooks/useAgentControllerRunM
 import type { SlashCommand } from '../services/commands';
 import { runNoArgCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { useChatSession } from './ChatSessionProvider';
+import { useChatTranscript } from './ChatSessionProvider';
 
 export interface ChatCommandsApi {
   composerCommandName: string | null;
@@ -27,7 +27,7 @@ const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const { transcript, pushNotice } = useChatSession();
+  const { transcript, pushNotice } = useChatTranscript();
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };

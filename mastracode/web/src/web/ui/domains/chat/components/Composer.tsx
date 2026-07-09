@@ -1,15 +1,17 @@
-import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
+import type { AgentControllerMessage, PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { queryKeys } from '../../../../../shared/api/keys';
 import { useActiveProjectContext } from '../../workspaces';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { useChatSession } from '../context/ChatSessionProvider';
+import { useChatConnection, useChatModels, useChatTranscript } from '../context/ChatSessionProvider';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -24,7 +26,6 @@ import {
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../hooks/useAgentControllerRunMutations';
-import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
 import { useTextareaAutoResize } from '../hooks/useTextareaAutoResize';
 import { matchCommands, SLASH_COMMANDS } from '../services/commands';
@@ -54,7 +55,10 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const projectPath = deriveProjectPath(activeProject);
   const location = useLocation();
   const navigate = useNavigate();
-  const { transcript, status, busy, localUser, resetCurrentThread, resetHydration, pushNotice } = useChatSession();
+  const queryClient = useQueryClient();
+  const { status } = useChatConnection();
+  const { transcript, busy, localUser, resetCurrentThread, pushNotice } = useChatTranscript();
+  const { activeModelId, setModel } = useChatModels();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
@@ -62,7 +66,6 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
-  const switchModelMutation = useSwitchAgentControllerModelMutation(hookArgs);
   const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
@@ -107,9 +110,17 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
-    resetHydration();
     resetCurrentThread(thread.id);
     return thread.id;
+  };
+
+  const seedThreadMessageCache = (threadId: string, text: string) => {
+    const message: AgentControllerMessage = {
+      id: `local-${Date.now()}`,
+      role: 'user',
+      content: [{ type: 'text', text }],
+    };
+    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [message]);
   };
 
   const send = async (text: string) => {
@@ -118,6 +129,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
       const threadId = await createThread();
       localUser(text);
       await sendMutation.mutateAsync(text);
+      seedThreadMessageCache(threadId, text);
       void navigate(`/threads/${threadId}`, { replace: true });
       return;
     }
@@ -192,7 +204,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
       const arg = rest.join(' ');
       switch (cmd) {
         case 'model':
-          if (arg) await switchModelMutation.mutateAsync(arg);
+          if (arg) await setModel(arg);
           return;
         case 'goal':
           if (arg) await setGoalMutation.mutateAsync(arg);
@@ -249,7 +261,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
             `Project: ${activeProject?.name ?? '(none)'}`,
             `Path: ${activeProject?.path ?? '(default workspace)'}`,
             `Mode: ${transcript.modeId ?? '—'}`,
-            `Model: ${transcript.modelId ?? '—'}`,
+            `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${transcript.running}`,
           ];

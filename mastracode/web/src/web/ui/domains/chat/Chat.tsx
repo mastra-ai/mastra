@@ -1,4 +1,5 @@
-import { Outlet } from 'react-router';
+import type { ReactNode } from 'react';
+import { Outlet, useLocation } from 'react-router';
 
 import { OverlaysProvider } from '../../lib/overlays';
 import { ActiveProjectProvider } from '../workspaces';
@@ -14,15 +15,22 @@ import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 export default function Chat() {
   return (
     <ActiveProjectProvider>
-      <ChatSessionProvider>
+      <ChatSessionRouteProvider>
         <OverlaysProvider>
           <ChatCommandsProvider>
             <ChatShell />
           </ChatCommandsProvider>
         </OverlaysProvider>
-      </ChatSessionProvider>
+      </ChatSessionRouteProvider>
     </ActiveProjectProvider>
   );
+}
+
+function ChatSessionRouteProvider({ children }: { children: ReactNode }) {
+  const { pathname } = useLocation();
+  const threadId = pathname.startsWith('/threads/') ? decodeURIComponent(pathname.slice('/threads/'.length)) : undefined;
+
+  return <ChatSessionProvider threadId={threadId}>{children}</ChatSessionProvider>;
 }
 
 function ChatShell() {

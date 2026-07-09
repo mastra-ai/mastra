@@ -6,14 +6,13 @@ import { useToast } from '../../../ui';
 import { SettingsPanel, useDensityPreference } from '../../settings';
 import { ProjectsModal, useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatSession } from '../context/ChatSessionProvider';
+import { useChatModels } from '../context/ChatSessionProvider';
 import { useAgentControllerModels } from '../hooks/useAgentControllerModels';
 import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
 import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import { useAgentControllerSettings } from '../hooks/useAgentControllerSettings';
 import {
   useSetAgentControllerStateMutation,
-  useSwitchAgentControllerModelMutation,
 } from '../hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { CommandPalette } from './CommandPalette';
@@ -23,7 +22,7 @@ export function ChatOverlays() {
   const { baseUrl } = useApiConfig();
   const overlays = useOverlays();
   const { projects, activeProject, resourceId, sessionEnabled, selectProject } = useActiveProjectContext();
-  const { transcript } = useChatSession();
+  const { activeModelId, setModel } = useChatModels();
   const { runPaletteCommand } = useChatCommands();
   const { theme, setTheme } = useTheme();
   const { density, changeDensity } = useDensityPreference();
@@ -32,7 +31,6 @@ export function ChatOverlays() {
   const modelsQuery = useAgentControllerModels(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const permissionsQuery = useAgentControllerPermissions(hookArgs);
-  const switchModelMutation = useSwitchAgentControllerModelMutation(hookArgs);
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
@@ -49,13 +47,13 @@ export function ChatOverlays() {
           theme={theme}
           density={density}
           models={modelsQuery.data ?? []}
-          currentModelId={transcript.modelId ?? null}
+          currentModelId={activeModelId ?? null}
           settings={settingsQuery.data ?? null}
           resourceId={sessionEnabled ? resourceId : undefined}
           onThemeChange={setTheme}
           onDensityChange={changeDensity}
           onModelChange={modelId => {
-            void switchModelMutation.mutateAsync(modelId).then(() => toast('Model updated', 'success'));
+            void setModel(modelId).then(() => toast('Model updated', 'success'));
           }}
           onBehaviorChange={updates => {
             void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));

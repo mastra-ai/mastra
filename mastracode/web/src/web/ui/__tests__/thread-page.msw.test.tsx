@@ -125,10 +125,21 @@ function useAgentControllerHandlers({
     }),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(bound))),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [threadOne, threadTwo] })),
+    http.get(`${SESSION}/threads`, () =>
+      HttpResponse.json({ threads: captured.created > 0 ? [newThread, threadOne, threadTwo] : [threadOne, threadTwo] }),
+    ),
     http.get(`${SESSION}/threads/:threadId/messages`, async ({ params }) => {
       if (messagesDelayMs > 0) await delay(messagesDelayMs);
-      return HttpResponse.json({ messages: MESSAGES[String(params.threadId)] ?? [] });
+      const threadId = String(params.threadId);
+      if (threadId === newThread.id && captured.sent.length > 0) {
+        const messages: AgentControllerMessage[] = captured.sent.map((text, index) => ({
+          id: `sent-${index}`,
+          role: 'user',
+          content: [{ type: 'text', text }],
+        }));
+        return HttpResponse.json({ messages });
+      }
+      return HttpResponse.json({ messages: MESSAGES[threadId] ?? [] });
     }),
     http.get(`${SESSION}/stream`, () => emptySse()),
     http.post(`${SESSION}/thread`, async ({ request }) => {
@@ -180,7 +191,7 @@ describe('MastraCode thread pages', () => {
 
     expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
 
-    expect(await screen.findByText('Reply from thread one')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Thread composer' })).toHaveClass('max-w-[80ch]');
     expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
   });
@@ -189,13 +200,13 @@ describe('MastraCode thread pages', () => {
     const captured = useAgentControllerHandlers();
     const { router } = renderRoutes(`/threads/${threadOne.id}`);
 
-    expect(await screen.findByText('Reply from thread one')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
     await userEvent.click(await screen.findByText('Second thread'));
 
     await expectPathname(router, `/threads/${threadTwo.id}`);
     await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
-    expect(await screen.findByText('Reply from thread two')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
     expect(captured.sessionsCreated).toBe(1);
   });
 
@@ -226,14 +237,14 @@ describe('MastraCode thread pages', () => {
     await waitFor(() => expect(captured.created).toBe(1));
     await expectPathname(router, `/threads/${newThread.id}`);
     await waitFor(() => expect(captured.sent).toEqual(['Hello draft']));
-    expect(await screen.findByText('Hello draft')).toBeInTheDocument();
+    await waitFor(() => expect(document.body).toHaveTextContent('Hello draft'));
   });
 
   it('when clicking the new-thread button in the sidebar, then it navigates to the /new draft page without persisting a thread', async () => {
     const captured = useAgentControllerHandlers();
     const { router } = renderRoutes(`/threads/${threadOne.id}`);
 
-    expect(await screen.findByText('Reply from thread one')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
     await userEvent.click(await screen.findByRole('button', { name: 'New thread' }));
 
@@ -247,14 +258,14 @@ describe('MastraCode thread pages', () => {
     const captured = useAgentControllerHandlers({ stateDelayMs: 150 });
     const { router } = renderRoutes(`/threads/${threadOne.id}`);
 
-    expect(await screen.findByText('Reply from thread one')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
 
     await userEvent.click(await screen.findByText('Second thread'));
 
     await expectPathname(router, `/threads/${threadTwo.id}`);
     await waitFor(() => expect(captured.switched).toContain(threadTwo.id));
     // The slow state re-sync must not wipe the already-hydrated history.
-    expect(await screen.findByText('Reply from thread two')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
     await act(() => delay(200));
     expect(screen.getByText('Reply from thread two')).toBeInTheDocument();
   });
@@ -263,7 +274,7 @@ describe('MastraCode thread pages', () => {
     const captured = useAgentControllerHandlers();
     const { router } = renderRoutes(`/threads/${threadOne.id}`);
 
-    expect(await screen.findByText('Reply from thread one')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     // The thread page must survive bootstrap — no wildcard redirect to /new.
     expect(router.state.location.pathname).toBe(`/threads/${threadOne.id}`);
 

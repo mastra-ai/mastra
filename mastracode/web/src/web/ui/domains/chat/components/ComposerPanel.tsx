@@ -1,9 +1,6 @@
-import { useApiConfig } from '../../../../../shared/api/config';
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatSession } from '../context/ChatSessionProvider';
-import { useSwitchAgentControllerModeMutation } from '../hooks/useAgentControllerStateMutations';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { useChatModes, useChatTranscript } from '../context/ChatSessionProvider';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 
@@ -14,16 +11,10 @@ type ComposerPanelProps = {
 };
 
 export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeProject } = useActiveProjectContext();
   const { composerCommandName, clearComposerCommand } = useChatCommands();
-  const { transcript, modes, syncState } = useChatSession();
-  const switchModeMutation = useSwitchAgentControllerModeMutation({
-    agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    baseUrl,
-    enabled: sessionEnabled,
-  });
+  const { transcript } = useChatTranscript();
+  const { modes, activeModeId, setMode } = useChatModes();
 
   if (!activeProject) return null;
 
@@ -43,9 +34,9 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
         goal={transcript.goal}
         tokensPerSec={transcript.tokensPerSec}
         modes={modes}
-        activeModeId={transcript.modeId}
+        activeModeId={activeModeId ?? modes[0]?.id}
         onModeChange={modeId => {
-          void switchModeMutation.mutateAsync(modeId).then(() => syncState({ modeId }));
+          void setMode(modeId);
         }}
       />
     </div>
