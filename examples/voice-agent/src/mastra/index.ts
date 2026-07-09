@@ -3,14 +3,16 @@ import { LibSQLStore } from '@mastra/libsql';
 import { liveKitConnectionRoute } from '@mastra/livekit';
 import { Observability, MastraStorageExporter, SensitiveDataFilter } from '@mastra/observability';
 import { callCenterAgent } from './agents/call-center-agent';
+import { superRegulatedAgent } from './agents/super-regulated-agent';
 import { triageAgent } from './agents/triage-agent';
 import { voiceAgentDbUrl } from './db';
 import { phoneConversationWorkflow } from './workflows/phone-conversation';
 
 export const mastra = new Mastra({
   // `callCenter` answers the agent worker; `triage` is the classifier used by the workflow
-  // worker's per-turn workflow.
-  agents: { callCenter: callCenterAgent, triage: triageAgent },
+  // worker's per-turn workflow; `superRegulated` answers the regulated worker
+  // (voice-worker-regulated.ts) and demonstrates every compliance control at once.
+  agents: { callCenter: callCenterAgent, triage: triageAgent, superRegulated: superRegulatedAgent },
   workflows: { phoneConversation: phoneConversationWorkflow },
   // One LibSQL file for memory, threads, traces, and the semantic-recall vector index
   // (see ./db). SQLite handles concurrent access from the server and the voice worker;
