@@ -73,17 +73,20 @@ export default createLiveKitWorker({
       interrupted: result.interrupted,
     });
   },
-  // End-of-call compliance close-out. Prints the full consent ledger and the gate decision so the
+  // End-of-call compliance close-out. Prints the consent ledger and the gate decision so the
   // whole regulatory outcome is visible in the worker console, then runs the consent-gated call
   // summary: one `summarizeThread()` pass into the business's own records, ONLY if summary-storage
   // consent was granted (the correct compliance behavior — no consent, no stored summary).
+  // The log is keyed by the call (thread), NOT the caller identifier — this file demonstrates
+  // regulated-line behavior, and a caller id (often a phone number) is PII that must not land in
+  // stdout/log aggregators. Same rule as `saveCallSummary` in backend.ts.
   onCallEnd: async ({ memory, configuration }) => {
     if (!memory) return;
     const callerId = memory.resource ?? memory.thread;
     const consents = getConsentLedger(callerId);
     const gated = summaryStorageRequired(configuration?.consentPolicy) && !hasSummaryConsent(callerId);
     console.info('[regulated] call ended — compliance summary', {
-      callerId,
+      call: memory.thread,
       consents,
       callSummary: gated ? 'SKIPPED (no summaryStorage consent)' : 'RUNNING (summarizing call)',
     });

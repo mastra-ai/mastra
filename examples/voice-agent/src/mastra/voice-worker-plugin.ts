@@ -41,6 +41,10 @@ export default defineAgent<PluginWorkerUserData>({
     } catch {
       // Dispatch metadata is caller-controlled and may not be JSON; fall back to the room name.
     }
+    // DEMO ONLY: these ids come from the connection request body, i.e. they are caller-controlled —
+    // a caller who picks another `resourceId` reads that caller's memory. In production, derive
+    // `resource` from a VERIFIED identity (the SIP caller number, your authenticated user id) and
+    // mint `thread` server-side; never trust client-supplied memory scope.
     const thread = metadata.threadId ?? roomName;
     const resource = metadata.resourceId ?? thread;
 
