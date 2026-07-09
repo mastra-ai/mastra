@@ -760,6 +760,8 @@ describe('ChatSessionProvider', () => {
         HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: 'thread-before-drop' }),
       ),
       http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
+      http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
+      http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
       http.get(SESSION, () => {
         requests.push('state');
         const threadId =

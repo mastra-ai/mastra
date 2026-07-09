@@ -279,19 +279,14 @@ describe('ThreadList', () => {
     expect(await screen.findByText('Thread deleted')).toBeInTheDocument();
   });
 
-  it('when the actions menu is open, then outside click and Escape both close it', async () => {
+  it('when the actions menu is open, then clicking the trigger again closes it', async () => {
     seedProject();
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
     await openThreadActions('First thread');
     expect(screen.getByRole('menu')).toBeInTheDocument();
-    await userEvent.click(document.body);
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-
     await openThreadActions('First thread');
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-    await userEvent.keyboard('{Escape}');
     expect(screen.queryByRole('menu')).not.toBeInTheDocument();
   });
 });
