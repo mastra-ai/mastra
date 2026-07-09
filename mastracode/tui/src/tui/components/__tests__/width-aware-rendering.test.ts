@@ -89,6 +89,11 @@ describe('width-aware custom component rendering', () => {
     expect(component.render(140).join('\n')).toContain('unique-restored-tail');
   });
 
+  it('renders slash-command output at widths narrower than its fixed chrome', () => {
+    const component = new SlashCommandComponent('review', source);
+    expect(component.render(8).length).toBeGreaterThan(0);
+  });
+
   it('reflows subagent activity without changing completion or expansion state', () => {
     const component = new SubagentExecutionComponent('explore', source, ui);
     component.setExpanded(true);
@@ -96,6 +101,11 @@ describe('width-aware custom component rendering', () => {
     component.finish(false, 25, source);
     expectReflow(component);
     expect(component.render(140).join('\n')).toContain('unique-restored-tail');
+  });
+
+  it('renders subagent tasks at widths narrower than their fixed chrome', () => {
+    const component = new SubagentExecutionComponent('explore', source, ui);
+    expect(component.render(8).length).toBeGreaterThan(0);
   });
 
   it('reflows expanded system reminders without collapsing them', () => {

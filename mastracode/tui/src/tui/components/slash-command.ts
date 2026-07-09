@@ -46,7 +46,7 @@ export class SlashCommandComponent extends WidthAwareContainer {
     this.clear();
 
     const border = (char: string) => chalk.bold.hex(getBorderColor())(char);
-    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
+    const maxLineWidth = Math.max(1, termWidth - 6 - BOX_INDENT * 2);
 
     const heading = chalk.hex(mastra.specialGray)(`/${this.commandName}`);
 

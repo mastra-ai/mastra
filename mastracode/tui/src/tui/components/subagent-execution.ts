@@ -205,7 +205,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
 
     const border = (char: string) =>
       theme.bold(colorText(this.colors.border, char, (text: string) => theme.fg('accent', text)));
-    const maxLineWidth = termWidth - 6 - BOX_INDENT * 2;
+    const maxLineWidth = Math.max(1, termWidth - 6 - BOX_INDENT * 2);
 
     // ── Bottom border with info (always rendered) ──
     const typeLabelText = this.forked ? 'fork' : this.agentType;
