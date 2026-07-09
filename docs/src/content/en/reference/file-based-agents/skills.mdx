@@ -11,10 +11,6 @@ A file-based agent discovers skills from its `skills/` directory and bundles the
 
 Use this page for the file-based convention. For code-defined skills, see [Agent skills](/docs/agents/skills). For the `SKILL.md` package format, see [Workspace skills](/docs/workspace/skills).
 
-## When to use skills
-
-Use skills for detailed guidance that should be available to the agent without filling the context window every turn. Use a tool instead when the agent needs to call code or perform an action, and use instructions when guidance must apply to every response.
-
 ## Quickstart
 
 The simplest skill is one markdown file under `skills/`. The filename becomes the skill name, and `description` tells the agent when to load it.

@@ -133,3 +133,49 @@ Mastra uses the `weather` directory name as the default agent `id` and `name`. T
 - [Subagents](/reference/file-based-agents/subagents): Split work across specialist child agents
 - [Workflows](/reference/file-based-agents/workflows): Register project-level workflows by file convention
 - [`Agent` reference](/reference/agents/agent): Review the runtime API used after assembly
+
+---
+
+TEMP COPY OVER:
+
+## When you need memory
+
+Add memory when the agent needs to remember context beyond a single call. See [Memory overview](/docs/memory/overview) for message history, threads, resources, working memory, and multi-agent memory patterns.
+
+Skip memory for one-shot agents where every request is independent.
+
+## When to configure observability
+
+Add observability when you need to inspect runtime behavior, monitor production, collect quality signals, or export traces and logs to another system.
+
+## When to use processors
+
+Use processors when message handling should happen outside the main prompt or tool logic. See [Processors](/docs/agents/processors) for use cases such as moderation, PII detection, prompt-injection detection, token limiting, response validation, and caching.
+
+## When to customize the server
+
+Add `server.ts` when the default HTTP server needs project-specific settings, such as host and port, CORS, middleware, request limits, API prefixes, generated API docs, or custom routes.
+
+## When to use skills
+
+Use skills for detailed guidance that should be available to the agent without filling the context window every turn. Use a tool instead when the agent needs to call code or perform an action, and use instructions when guidance must apply to every response.
+
+## When to set storage
+
+Add `storage.ts` when your project needs durable state beyond one process lifetime. Without `storage.ts` or a code-registered store, Mastra falls back to in-memory storage, which is useful for quick local tests but isn't safe for production.
+
+## When to configure Studio
+
+For local development, you don't need `studio.ts`; Studio runs without authentication. Add `studio.ts` when a shared or production Studio deployment needs access control.
+
+## When to use subagents
+
+Use subagents when one agent would become too broad, too tool-heavy, or too context-heavy. Subagents keep the parent focused on coordination while each child handles a specific job.
+
+## When to use tools
+
+Add a tool when the agent needs a callable capability with structured inputs and runtime logic. Use [`instructions.md`](/reference/file-based-agents/instructions) for always-on behavior guidance and [`skills/`](/reference/file-based-agents/skills) for on-demand procedures or reference material.
+
+## When to use file-based workflows
+
+Use file-based workflows when you want each workflow to live in its own module and be registered automatically. Keep manually registered workflows in code when they need custom wiring in `src/mastra/index.ts`.

@@ -11,10 +11,6 @@ Mastra discovers project-level workflows from `.ts` and `.js` files under `src/m
 
 Use this page for the file-based convention. For steps, schemas, control flow, streaming, state, and workflow execution, see [Workflows overview](/docs/workflows/overview).
 
-## When to use file-based workflows
-
-Use file-based workflows when you want each workflow to live in its own module and be registered automatically. Keep manually registered workflows in code when they need custom wiring in `src/mastra/index.ts`.
-
 ## Quickstart
 
 Create a file under `src/mastra/workflows/`, build the workflow with [`createWorkflow()`](/reference/workflows/workflow), and default-export it.

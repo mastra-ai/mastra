@@ -11,10 +11,6 @@ A file-based agent discovers [processors](/docs/agents/processors) from its `pro
 
 Files under `processors/input/` run before messages reach the model. Files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its discovery key.
 
-## When to use processors
-
-Use processors when message handling should happen outside the main prompt or tool logic. See [Processors](/docs/agents/processors) for use cases such as moderation, PII detection, prompt-injection detection, token limiting, response validation, and caching.
-
 ## Quickstart
 
 Add an input processor by placing a processor file under `processors/input/`:

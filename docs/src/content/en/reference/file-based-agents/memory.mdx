@@ -13,12 +13,6 @@ A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` file 
 
 Without `memory.ts` or `config.memory`, the agent has no memory by default. Each `generate()` or `stream()` call starts without remembered conversation state unless you pass the prior context yourself.
 
-## When you need memory
-
-Add memory when the agent needs to remember context beyond a single call. See [Memory overview](/docs/memory/overview) for message history, threads, resources, working memory, and multi-agent memory patterns.
-
-Skip memory for one-shot agents where every request is independent.
-
 ## Quickstart
 
 Create `memory.ts` next to the agent's `config.ts`:

@@ -12,10 +12,6 @@ Mastra sets the project's default [storage](/docs/storage/overview) from a `stor
 
 Use this page for the file-based convention. For backend choice, storage domains, retention, and provider details, see [storage overview](/docs/storage/overview).
 
-## When to set storage
-
-Add `storage.ts` when your project needs durable state beyond one process lifetime. Without `storage.ts` or a code-registered store, Mastra falls back to in-memory storage, which is useful for quick local tests but isn't safe for production.
-
 ## Quickstart
 
 Use [`LibSQLStore`](/reference/storage/libsql) for a local file-backed store:
