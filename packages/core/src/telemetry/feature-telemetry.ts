@@ -81,7 +81,7 @@ export function trackFeatureUsage(name: string, metadata?: Record<string, unknow
 
     const { projectId, distinctId, command, nodeEnv } = getServerTelemetryContext();
     captureTelemetryEvent(FEATURE_USAGE_EVENT, distinctId, {
-      feature: name,
+      feature_name: name,
       project_id: projectId,
       command,
       node_env: nodeEnv,
