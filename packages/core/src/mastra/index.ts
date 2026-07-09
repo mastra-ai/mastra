@@ -3398,8 +3398,6 @@ export class Mastra<
       }
     }
 
-    console.dir({ agents: durableAgents.length, recovered, succeeded, failed }, { depth: null });
-
     return { agents: durableAgents.length, recovered, succeeded, failed };
   }
 

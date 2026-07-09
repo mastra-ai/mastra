@@ -2169,7 +2169,7 @@ export class DurableAgent<
         | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
         | undefined;
       const runAgentId = input?.agentId;
-      if (runAgentId !== this.agent.id) continue;
+      if (runAgentId !== this.id) continue;
 
       const memoryInfo = input?.messageListState?.memoryInfo;
       const runThreadId = memoryInfo?.threadId;
