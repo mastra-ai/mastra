@@ -218,11 +218,11 @@ export async function saveCallSummary(record: Omit<CallSummaryRecord, 'savedAt'>
   console.info('[backend] call summary saved', { callId: record.callId, sentiment: record.sentiment });
 }
 
-// --- Consent store (companion to configuration.requireConsent) ---------------
+// --- Consent store (companion to configuration.consentPolicy) ---------------
 
 /**
  * Consent ledger: caller (the memory `resource`) → consent item → granted. A named, per-item set
- * rather than one global "consented" flag — mirroring `configuration.requireConsent` and the
+ * rather than one global "consented" flag — mirroring `configuration.consentPolicy` and the
  * `createConsentTool` item set — so a regulated line can capture several independent consents
  * (call recording, summary storage, data sharing, marketing). Only the REGULATED line uses this:
  * its `recordConsent` tool (tools/compliance-tools) writes here, and its `onCallEnd` reads it back
@@ -266,9 +266,9 @@ export function hasSummaryConsent(resourceId: string): boolean {
 }
 
 /** Whether the deployment requires consent before storing a call summary. */
-export function summaryStorageRequired(requireConsent?: {
+export function summaryStorageRequired(consentPolicy?: {
   summaryStorage?: boolean | { required?: boolean };
 }): boolean {
-  const req = requireConsent?.summaryStorage;
+  const req = consentPolicy?.summaryStorage;
   return req === true || (typeof req === 'object' && req?.required !== false);
 }

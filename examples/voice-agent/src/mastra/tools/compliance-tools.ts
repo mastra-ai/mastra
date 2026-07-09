@@ -5,7 +5,7 @@ import { recordConsent as recordConsentBackend } from '../backend';
 
 /**
  * The named, extensible consent set this regulated line captures at runtime — the companion to the
- * worker's `configuration.requireConsent`. `summaryStorage` is the one wired to a consequence (the
+ * worker's `configuration.consentPolicy`. `summaryStorage` is the one wired to a consequence (the
  * end-of-call observational-memory summary flush is gated on it in the worker's `onCallEnd`); the
  * others show how the SAME runtime-capture mechanism scales to a full regulated consent model
  * without one global "consented" flag: a call-recording notice, third-party data sharing, and

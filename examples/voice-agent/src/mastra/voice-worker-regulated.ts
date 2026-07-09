@@ -40,7 +40,7 @@ export default createLiveKitWorker({
     // (the OM flush gate in onCallEnd below). The object form carries the audit-friendly metadata.
     // The broader consent set (callRecording, dataSharing, marketing) is captured at runtime by the
     // recordConsent tool (see tools/compliance-tools) — the named, extensible model in action.
-    requireConsent: {
+    consentPolicy: {
       summaryStorage: { required: true, purpose: 'storing a short summary of this call' },
     },
     // Agent-initiated hang-up with a GUARANTEED compliance sign-off: after the agent calls endCall
@@ -81,7 +81,7 @@ export default createLiveKitWorker({
     if (!memory) return;
     const callerId = memory.resource ?? memory.thread;
     const consents = getConsentLedger(callerId);
-    const gated = summaryStorageRequired(configuration?.requireConsent) && !hasSummaryConsent(callerId);
+    const gated = summaryStorageRequired(configuration?.consentPolicy) && !hasSummaryConsent(callerId);
     console.info('[regulated] call ended — compliance summary', {
       callerId,
       consents,

@@ -15,7 +15,7 @@ export default createLiveKitWorker({
   turnDetection: 'multilingual',
   // Grouped conversation config. This default worker is deliberately PERMISSIVE — no consent
   // gating, no periodic re-disclosure — so the demo flows friction-free; every compliance
-  // safeguard (`requireConsent`, `greeting.repeatEvery`, `allowInterruptions: false`, consent
+  // safeguard (`consentPolicy`, `greeting.repeatEvery`, `allowInterruptions: false`, consent
   // sweep) lives in voice-worker-regulated.ts, which exists to demonstrate them all at once.
   // `greeting.text` is spoken at call start; it also accepts a resolver — `({ metadata }) =>
   // string` — to open differently per tenant off the dispatch metadata when one agent serves many.
