@@ -10,7 +10,7 @@ import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, XIcon } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { findMatchRanges, getNextMatchIndex } from './search-matches';
+import { findMatchRanges } from './search-matches';
 import type { MatchRange } from './search-matches';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
@@ -26,6 +26,7 @@ import {
 } from '@/ds/components/Dialog';
 import { SearchFieldBlock } from '@/ds/components/FormFieldBlocks/fields/search-field-block';
 import { useTheme } from '@/ds/components/ThemeProvider';
+import { useMatchNavigation } from '@/hooks/use-match-navigation';
 import { cn } from '@/lib/utils';
 
 // -- Search highlight extension -----------------------------------------------
@@ -103,29 +104,31 @@ interface CodeSearchControls {
 
 // Drives one search field together with its CodeMirror editor: finds matches, highlights them all,
 // and lets the user step through them (Enter / Shift+Enter or the next/prev buttons) with the
-// active match scrolled into view — like a browser's find bar.
+// active match scrolled into view — like a browser's find bar. Owns only the CodeMirror-specific
+// parts (match finding over the document, highlight dispatch); the active-index/keyboard/counter
+// mechanics come from the generic `useMatchNavigation` hook.
 function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, text: string): CodeSearchControls {
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<MatchRange[]>([]);
-  const [activeIndex, setActiveIndex] = useState(0);
 
   const applyMatches = useCallback(
-    (ranges: MatchRange[], index: number) => {
+    (index: number, ranges: MatchRange[]) => {
       const view = editorRef.current?.view;
       if (view) dispatchMatchHighlights(view, ranges, index);
     },
     [editorRef],
   );
 
+  // Fires `applyMatches` on every navigation step and once per new match list (also when it's
+  // empty, which is what clears stale highlights after the query or document changes).
+  const nav = useMatchNavigation({ matches, onActiveChange: applyMatches });
+
   const runSearch = useCallback(
     (value: string) => {
       setQuery(value);
-      const ranges = findMatchRanges(text, value);
-      setMatches(ranges);
-      setActiveIndex(0);
-      applyMatches(ranges, 0);
+      setMatches(findMatchRanges(text, value));
     },
-    [text, applyMatches],
+    [text],
   );
 
   // Re-run the active query whenever the document text changes (e.g. a different span is selected)
@@ -136,35 +139,15 @@ function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, te
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [text]);
 
-  const goToMatch = useCallback(
-    (direction: 1 | -1) => {
-      if (matches.length === 0) return;
-      const nextIndex = getNextMatchIndex(activeIndex, matches.length, direction);
-      setActiveIndex(nextIndex);
-      applyMatches(matches, nextIndex);
-    },
-    [matches, activeIndex, applyMatches],
-  );
-
   const onChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => runSearch(e.target.value), [runSearch]);
   const onReset = useCallback(() => runSearch(''), [runSearch]);
-  const onKeyDown = useCallback(
-    (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === 'Enter') {
-        e.preventDefault();
-        goToMatch(e.shiftKey ? -1 : 1);
-      }
-    },
-    [goToMatch],
-  );
-  const onNext = useCallback(() => goToMatch(1), [goToMatch]);
-  const onPrev = useCallback(() => goToMatch(-1), [goToMatch]);
 
   // Re-apply the current highlights when a CodeMirror instance (re)mounts — e.g. after toggling the
   // multiline view or reopening the expanded dialog — since a fresh editor starts with no decorations.
+  const { activeIndex } = nav;
   const onCreateEditor = useCallback(
     (view: EditorView) => {
-      const index = activeIndex < matches.length ? activeIndex : 0;
+      const index = activeIndex >= 0 && activeIndex < matches.length ? activeIndex : 0;
       dispatchMatchHighlights(view, matches, index);
     },
     [matches, activeIndex],
@@ -172,13 +155,13 @@ function useCodeSearch(editorRef: React.RefObject<ReactCodeMirrorRef | null>, te
 
   return {
     query,
-    matchCount: matches.length,
-    currentMatch: matches.length > 0 ? activeIndex + 1 : 0,
+    matchCount: nav.total,
+    currentMatch: nav.current,
     onChange,
     onReset,
-    onKeyDown,
-    onNext,
-    onPrev,
+    onKeyDown: nav.onSearchKeyDown,
+    onNext: nav.goToNext,
+    onPrev: nav.goToPrevious,
     onCreateEditor,
   };
 }

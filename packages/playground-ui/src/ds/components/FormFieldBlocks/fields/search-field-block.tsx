@@ -1,8 +1,9 @@
-import { ChevronDownIcon, ChevronUpIcon, SearchIcon, XIcon } from 'lucide-react';
+import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
+import { MatchNav } from '../../MatchNav';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
@@ -138,37 +139,7 @@ export function SearchFieldBlock({
           />
           <div className="absolute top-1/2 right-0 -translate-y-1/2 flex items-center">
             {hasMatchNav && (
-              <div className="flex items-center gap-0.5">
-                <span
-                  aria-live="polite"
-                  aria-label={`${matchCount === 0 ? 0 : (currentMatch ?? 0)} of ${matchCount} matches`}
-                  className="text-neutral3 text-ui-xs tabular-nums whitespace-nowrap select-none px-1"
-                >
-                  {matchCount === 0 ? '0/0' : `${currentMatch ?? 0}/${matchCount}`}
-                </span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Previous match"
-                  tooltip="Previous match (Shift+Enter)"
-                  disabled={!matchCount}
-                  onClick={onPrev}
-                >
-                  <ChevronUpIcon />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="Next match"
-                  tooltip="Next match (Enter)"
-                  disabled={!matchCount}
-                  onClick={onNext}
-                >
-                  <ChevronDownIcon />
-                </Button>
-              </div>
+              <MatchNav current={currentMatch ?? 0} total={matchCount} onNext={onNext} onPrevious={onPrev} />
             )}
             {onReset && (value || isMinimized === false) && (
               <Button

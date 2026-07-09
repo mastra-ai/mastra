@@ -39,12 +39,6 @@ export function findMatchRanges(text: string, query: string): MatchRange[] {
   return ranges;
 }
 
-/**
- * Returns the index of the next match when stepping `direction` (1 = forward, -1 = backward) from
- * `current`, wrapping around at both ends (like a browser's find bar). Returns -1 when there are no
- * matches so callers can treat "no active match" uniformly.
- */
-export function getNextMatchIndex(current: number, count: number, direction: 1 | -1): number {
-  if (count <= 0) return -1;
-  return (current + direction + count) % count;
-}
+// The index-cycling logic lives with the generic match-navigation hook; re-exported here so the
+// code-search module keeps a single import surface for its pure helpers.
+export { getNextMatchIndex } from '@/hooks/use-match-navigation';
