@@ -49,7 +49,7 @@ export function matchCommands(draft: string): SlashCommand[] {
 /**
  * The narrow slice of session/transcript/project state the no-arg command
  * dispatcher needs. Kept structural so it is trivially stubbed in unit tests
- * and satisfied by the real `useChatSession()` / `useActiveProjectContext()`
+ * and satisfied by the focused chat hooks plus `useActiveProjectContext()`
  * values.
  */
 export interface NoArgCommandDeps {

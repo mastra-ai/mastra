@@ -9,21 +9,13 @@ import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectP
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import type { ChatConnectionApi } from './ChatConnectionContext';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
-import type { ChatModesApi } from './ChatModesContext';
 import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
-import type { ChatTranscriptApi } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
-import { useChatModes } from './useChatModes';
 import { useChatSessionContext } from './useChatSessionContext';
 import { useChatTranscript } from './useChatTranscript';
-
-export interface ChatSessionApi extends ChatConnectionApi, ChatTranscriptApi {
-  modes: ChatModesApi['modes'];
-}
 
 export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
@@ -75,14 +67,6 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
       </ChatModesProvider>
     </ChatTranscriptProvider>
   );
-}
-
-export function useChatSession(): ChatSessionApi {
-  const connection = useChatConnection();
-  const transcript = useChatTranscript();
-  const modes = useChatModes();
-  if (!connection) throw new Error('useChatSession must be used within a ChatSessionProvider');
-  return { ...connection, ...transcript, modes: modes.modes };
 }
 
 export { useChatConnection, useChatTranscript };
