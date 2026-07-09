@@ -1,6 +1,6 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
+import { createContext, Fragment, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ComponentProps, KeyboardEvent, ReactNode, RefObject } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -15,28 +15,172 @@ const TITLE_CODE_SPAN_PATTERN = /(`[^`]+`)/g;
 
 type BadgeVariant = ComponentProps<typeof Badge>['variant'];
 
-export interface PlanStatus {
-  label: ReactNode;
+interface PlanContextValue {
+  canExpand: boolean;
+  collapsedHeight: number;
+  isExpanded: boolean;
+  contentRef: RefObject<HTMLDivElement | null>;
+  setCanExpand: (canExpand: boolean) => void;
+  toggleExpanded: () => void;
+}
+
+const PlanContext = createContext<PlanContextValue | null>(null);
+
+const usePlanContext = () => {
+  const context = use(PlanContext);
+
+  if (!context) {
+    throw new Error('Plan compound components must be rendered inside <Plan>.');
+  }
+
+  return context;
+};
+
+export interface PlanRootProps extends ComponentProps<'div'> {
+  collapsedHeight?: number;
+}
+
+export function PlanRoot({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanRootProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [canExpand, setCanExpand] = useState(false);
+  const contentRef = useRef<HTMLDivElement>(null);
+
+  const toggleExpanded = useCallback(() => {
+    if (!canExpand) return;
+
+    setIsExpanded(current => !current);
+  }, [canExpand]);
+
+  const contextValue = useMemo(
+    () => ({
+      canExpand,
+      collapsedHeight,
+      isExpanded,
+      contentRef,
+      setCanExpand,
+      toggleExpanded,
+    }),
+    [canExpand, collapsedHeight, isExpanded, toggleExpanded],
+  );
+
+  return (
+    <PlanContext.Provider value={contextValue}>
+      <div
+        data-slot="plan"
+        className={cn('w-full max-w-full overflow-hidden rounded-xl bg-surface3', className)}
+        {...props}
+      >
+        {children}
+      </div>
+    </PlanContext.Provider>
+  );
+}
+
+export type PlanHeaderProps = ComponentProps<'div'>;
+
+export function PlanHeader({ children, className, ...props }: PlanHeaderProps) {
+  return (
+    <div
+      data-slot="plan-header"
+      className={cn('flex min-h-10 items-center justify-between gap-3 px-4 pt-3', className)}
+      {...props}
+    >
+      {children}
+    </div>
+  );
+}
+
+export interface PlanLabelProps extends Omit<ComponentProps<'div'>, 'children'> {
+  children?: ReactNode;
+}
+
+export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelProps) {
+  return (
+    <div data-slot="plan-label" className={cn('flex min-w-0 items-center gap-2', className)} {...props}>
+      <Icon size="sm" className="text-icon3">
+        <ClipboardList />
+      </Icon>
+      <Txt as="span" variant="ui-sm" className="text-neutral4">
+        {children}
+      </Txt>
+    </div>
+  );
+}
+
+export type PlanHeaderActionsProps = ComponentProps<'div'>;
+
+export function PlanHeaderActions({ children, className, ...props }: PlanHeaderActionsProps) {
+  return (
+    <div data-slot="plan-header-actions" className={cn('flex shrink-0 items-center gap-1', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface PlanStatusProps extends Omit<ComponentProps<typeof Badge>, 'icon' | 'size'> {
   variant?: BadgeVariant;
 }
 
-export interface PlanProps extends Omit<ComponentProps<'div'>, 'children' | 'title'> {
-  title: ReactNode;
-  label?: ReactNode;
-  path?: string;
-  children?: string;
-  status?: PlanStatus;
-  copyContent?: string;
-  leftActions?: ReactNode;
-  rightActions?: ReactNode;
-  collapsedHeight?: number;
-  contentTestId?: string;
+export function PlanStatus({ children, variant = 'default', ...props }: PlanStatusProps) {
+  return (
+    <Badge variant={variant} size="xs" icon={<span className="size-1 rounded-full bg-current" />} {...props}>
+      {children}
+    </Badge>
+  );
 }
 
-const getFileName = (path: string) => {
-  const segments = path.split(/[\\/]/).filter(Boolean);
-  return segments[segments.length - 1] ?? path;
-};
+export interface PlanCopyButtonProps extends Omit<
+  ComponentProps<typeof Button>,
+  'children' | 'onClick' | 'size' | 'tooltip' | 'variant'
+> {
+  content: string;
+}
+
+export function PlanCopyButton({ content, ...props }: PlanCopyButtonProps) {
+  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
+
+  const handleCopy = useCallback(() => {
+    copyToClipboard(content);
+  }, [content, copyToClipboard]);
+
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon-sm"
+      tooltip="Copy plan"
+      aria-label="Copy plan"
+      onClick={handleCopy}
+      {...props}
+    >
+      {isCopied ? <CheckIcon /> : <CopyIcon />}
+    </Button>
+  );
+}
+
+export type PlanBodyProps = ComponentProps<'div'>;
+
+export function PlanBody({ children, className, ...props }: PlanBodyProps) {
+  return (
+    <div data-slot="plan-body" className={cn('px-5 pt-4 pb-5', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export type PlanIntroProps = ComponentProps<'div'>;
+
+export function PlanIntro({ children, className, ...props }: PlanIntroProps) {
+  return (
+    <div data-slot="plan-intro" className={cn('mb-5 space-y-1', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 'children' | 'variant'> {
+  children: ReactNode;
+}
 
 const renderStringTitle = (title: string) => {
   let offset = 0;
@@ -65,42 +209,59 @@ const renderTitle = (title: ReactNode) => {
   return title;
 };
 
-export function Plan({
-  title,
-  label = 'Plan',
-  path,
-  children,
-  status,
-  copyContent,
-  leftActions,
-  rightActions,
-  collapsedHeight = DEFAULT_COLLAPSED_HEIGHT,
-  contentTestId = 'plan-content',
-  className,
-  ...props
-}: PlanProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const [canExpand, setCanExpand] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
+export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
+  return (
+    <Txt as="h3" variant="header-sm" className={cn('font-semibold text-neutral7', className)} {...props}>
+      {renderTitle(children)}
+    </Txt>
+  );
+}
 
-  const fileName = useMemo(() => (path ? getFileName(path) : undefined), [path]);
-  const hasActions = Boolean(leftActions || rightActions);
+export interface PlanPathProps extends Omit<
+  ComponentProps<typeof Txt>,
+  'as' | 'children' | 'font' | 'title' | 'variant'
+> {
+  children: string;
+}
+
+const getFileName = (path: string) => {
+  const segments = path.split(/[\\/]/).filter(Boolean);
+  return segments[segments.length - 1] ?? path;
+};
+
+export function PlanPath({ children, className, ...props }: PlanPathProps) {
+  return (
+    <Txt
+      as="p"
+      variant="ui-xs"
+      font="mono"
+      title={children}
+      className={cn('max-w-full overflow-hidden truncate text-neutral3', className)}
+      {...props}
+    >
+      {getFileName(children)}
+    </Txt>
+  );
+}
+
+export type PlanMainProps = ComponentProps<'div'>;
+
+export function PlanMain({ children, className, ...props }: PlanMainProps) {
+  return (
+    <div data-slot="plan-main" className={cn('relative', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface PlanContentProps extends Omit<ComponentProps<'div'>, 'children'> {
+  children: string;
+}
+
+export function PlanContent({ children, className, style, ...props }: PlanContentProps) {
+  const { canExpand, collapsedHeight, contentRef, isExpanded, setCanExpand, toggleExpanded } = usePlanContext();
   const shouldClipContent = canExpand && !isExpanded;
-  const showControls = canExpand || hasActions;
   const isContentClickable = shouldClipContent;
-
-  const handleCopy = useCallback(() => {
-    if (!copyContent) return;
-
-    copyToClipboard(copyContent);
-  }, [copyContent, copyToClipboard]);
-
-  const toggleExpanded = useCallback(() => {
-    if (!canExpand) return;
-
-    setIsExpanded(current => !current);
-  }, [canExpand]);
 
   const handleContentKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
@@ -128,144 +289,120 @@ export function Plan({
     observer.observe(content);
 
     return () => observer.disconnect();
-  }, [children, collapsedHeight, path]);
+  }, [children, collapsedHeight, contentRef, setCanExpand]);
 
   return (
     <div
-      data-slot="plan"
-      className={cn('w-full max-w-full overflow-hidden rounded-xl bg-surface3', className)}
+      data-slot="plan-content"
+      role={isContentClickable ? 'button' : undefined}
+      tabIndex={isContentClickable ? 0 : undefined}
+      aria-label={isContentClickable ? 'Expand plan' : undefined}
+      onClick={isContentClickable ? toggleExpanded : undefined}
+      onKeyDown={isContentClickable ? handleContentKeyDown : undefined}
+      className={cn(
+        'relative outline-none',
+        shouldClipContent && 'overflow-hidden pb-16',
+        isContentClickable && 'cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-border2',
+        className,
+      )}
+      style={shouldClipContent ? { ...style, maxHeight: collapsedHeight } : style}
       {...props}
     >
-      <div data-slot="plan-header" className="flex min-h-10 items-center justify-between gap-3 px-4 pt-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <Icon size="sm" className="text-icon3">
-            <ClipboardList />
-          </Icon>
-          <Txt as="span" variant="ui-sm" className="text-neutral4">
-            {label}
-          </Txt>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1">
-          {status && (
-            <Badge
-              variant={status.variant ?? 'default'}
-              size="xs"
-              icon={<span className="size-1 rounded-full bg-current" />}
-            >
-              {status.label}
-            </Badge>
-          )}
-          {copyContent && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              tooltip="Copy plan"
-              aria-label="Copy plan"
-              onClick={handleCopy}
-            >
-              {isCopied ? <CheckIcon /> : <CopyIcon />}
-            </Button>
-          )}
+      <div ref={contentRef}>
+        <div className="text-neutral6 [&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
+          <MarkdownRenderer>{children}</MarkdownRenderer>
         </div>
       </div>
 
-      <div data-slot="plan-body" className="px-5 pt-4 pb-5">
-        <div className="mb-5 space-y-1">
-          <Txt as="h3" variant="header-sm" className="font-semibold text-neutral7">
-            {renderTitle(title)}
-          </Txt>
-          {fileName && (
-            <Txt
-              as="p"
-              variant="ui-xs"
-              font="mono"
-              title={path}
-              className="max-w-full overflow-hidden truncate text-neutral3"
-            >
-              {fileName}
-            </Txt>
-          )}
-        </div>
+      {shouldClipContent && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-b from-transparent via-surface3/90 to-surface3"
+        />
+      )}
+    </div>
+  );
+}
 
-        <div className="relative">
-          <div
-            data-slot="plan-content"
-            data-testid={contentTestId}
-            role={isContentClickable ? 'button' : undefined}
-            tabIndex={isContentClickable ? 0 : undefined}
-            aria-label={isContentClickable ? 'Expand plan' : undefined}
-            onClick={isContentClickable ? toggleExpanded : undefined}
-            onKeyDown={isContentClickable ? handleContentKeyDown : undefined}
-            className={cn(
-              'relative outline-none',
-              shouldClipContent && 'overflow-hidden pb-16',
-              isContentClickable && 'cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-border2',
-            )}
-            style={shouldClipContent ? { maxHeight: collapsedHeight } : undefined}
-          >
-            <div ref={contentRef}>
-              {children ? (
-                <div className="text-neutral6 [&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
-                  <MarkdownRenderer>{children}</MarkdownRenderer>
-                </div>
-              ) : path ? (
-                <div>
-                  <Txt as="p" variant="ui-xs" className="mb-2 text-neutral3">
-                    Plan file
-                  </Txt>
-                  <Txt as="p" variant="ui-sm" className="break-all font-mono text-neutral6">
-                    {path}
-                  </Txt>
-                </div>
-              ) : null}
-            </div>
+export interface PlanFileProps extends Omit<ComponentProps<'div'>, 'children'> {
+  children: string;
+}
 
-            {shouldClipContent && (
-              <div
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-b from-transparent via-surface3/90 to-surface3"
-              />
-            )}
-          </div>
+export function PlanFile({ children, className, ...props }: PlanFileProps) {
+  return (
+    <div data-slot="plan-file" className={className} {...props}>
+      <Txt as="p" variant="ui-xs" className="mb-2 text-neutral3">
+        Plan file
+      </Txt>
+      <Txt as="p" variant="ui-sm" className="break-all font-mono text-neutral6">
+        {children}
+      </Txt>
+    </div>
+  );
+}
 
-          {showControls && (
-            <div
-              data-slot="plan-controls"
-              className={cn('relative z-10 flex justify-center', shouldClipContent ? '-mt-14 pb-1' : 'mt-4')}
-              onClick={event => event.stopPropagation()}
-            >
-              <div
-                className={cn(
-                  'grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2',
-                  !hasActions && 'max-w-max',
-                  hasActions && 'px-10',
-                )}
-              >
-                <div className="flex justify-end">{leftActions}</div>
+export type PlanControlsProps = ComponentProps<'div'>;
 
-                {canExpand ? (
-                  <Button
-                    type="button"
-                    variant="primary"
-                    size="sm"
-                    aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
-                    onClick={toggleExpanded}
-                  >
-                    {isExpanded ? <Minimize2 /> : <Maximize2 />}
-                    {isExpanded ? 'Collapse plan' : 'Expand plan'}
-                  </Button>
-                ) : (
-                  <span aria-hidden="true" />
-                )}
+export function PlanControls({ children, className, ...props }: PlanControlsProps) {
+  const { canExpand, isExpanded } = usePlanContext();
+  const shouldClipContent = canExpand && !isExpanded;
+  const controls = children ?? <PlanExpandButton />;
+  const hasActions = Boolean(children);
+  const shouldRender = canExpand || hasActions;
 
-                <div className="flex justify-start gap-2">{rightActions}</div>
-              </div>
-            </div>
-          )}
-        </div>
+  if (!shouldRender) return null;
+
+  return (
+    <div
+      data-slot="plan-controls"
+      className={cn('relative z-10 flex justify-center', shouldClipContent ? '-mt-14 pb-1' : 'mt-4', className)}
+      onClick={event => event.stopPropagation()}
+      {...props}
+    >
+      <div
+        className={cn(
+          'grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2',
+          !hasActions && 'max-w-max',
+          hasActions && 'px-10',
+        )}
+      >
+        {controls}
       </div>
     </div>
+  );
+}
+
+export type PlanActionGroupProps = ComponentProps<'div'>;
+
+export function PlanActionGroup({ children, className, ...props }: PlanActionGroupProps) {
+  return (
+    <div data-slot="plan-action-group" className={cn('flex justify-start gap-2 empty:hidden', className)} {...props}>
+      {children}
+    </div>
+  );
+}
+
+export interface PlanExpandButtonProps extends Omit<
+  ComponentProps<typeof Button>,
+  'aria-label' | 'children' | 'onClick' | 'size' | 'variant'
+> {}
+
+export function PlanExpandButton(props: PlanExpandButtonProps) {
+  const { canExpand, isExpanded, toggleExpanded } = usePlanContext();
+
+  if (!canExpand) return <span aria-hidden="true" />;
+
+  return (
+    <Button
+      type="button"
+      variant="primary"
+      size="sm"
+      aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
+      onClick={toggleExpanded}
+      {...props}
+    >
+      {isExpanded ? <Minimize2 /> : <Maximize2 />}
+      {isExpanded ? 'Collapse plan' : 'Expand plan'}
+    </Button>
   );
 }

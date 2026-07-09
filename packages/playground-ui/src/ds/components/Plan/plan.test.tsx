@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
-import { Plan } from './plan';
+import { Plan } from './plan-compound';
 
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
 
@@ -23,10 +23,21 @@ afterEach(() => {
 });
 
 describe('Plan', () => {
-  it('renders a title, filename, and markdown body', () => {
+  it('renders a composed title, filename, and markdown body', () => {
     renderPlan(
-      <Plan title="Review migration plan" path="/workspace/plans/migration.md">
-        {'## Steps\n\n- Move data\n- Verify output'}
+      <Plan>
+        <Plan.Header>
+          <Plan.Label />
+        </Plan.Header>
+        <Plan.Body>
+          <Plan.Intro>
+            <Plan.Title>Review migration plan</Plan.Title>
+            <Plan.Path>/workspace/plans/migration.md</Plan.Path>
+          </Plan.Intro>
+          <Plan.Main>
+            <Plan.Content>{'## Steps\n\n- Move data\n- Verify output'}</Plan.Content>
+          </Plan.Main>
+        </Plan.Body>
       </Plan>,
     );
 
@@ -38,24 +49,34 @@ describe('Plan', () => {
   });
 
   it('renders code spans in string titles', () => {
-    renderPlan(<Plan title="Approve `submit_plan` output">{'Plan content'}</Plan>);
+    renderPlan(
+      <Plan>
+        <Plan.Body>
+          <Plan.Title>Approve `submit_plan` output</Plan.Title>
+        </Plan.Body>
+      </Plan>,
+    );
 
     const code = screen.getByText('submit_plan');
 
     expect(code.tagName).toBe('CODE');
   });
 
-  it('copies the configured content', async () => {
+  it('copies the configured content from a composed header action', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     mockClipboard(writeText);
 
     renderPlan(
-      <Plan
-        title="Review migration plan"
-        path="/workspace/plans/migration.md"
-        copyContent={'Review migration plan\n\nFile: /workspace/plans/migration.md\n\n## Steps'}
-      >
-        {'## Steps'}
+      <Plan>
+        <Plan.Header>
+          <Plan.Label />
+          <Plan.HeaderActions>
+            <Plan.CopyButton content={'Review migration plan\n\nFile: /workspace/plans/migration.md\n\n## Steps'} />
+          </Plan.HeaderActions>
+        </Plan.Header>
+        <Plan.Body>
+          <Plan.Content>{'## Steps'}</Plan.Content>
+        </Plan.Body>
       </Plan>,
     );
 
@@ -68,23 +89,44 @@ describe('Plan', () => {
     );
   });
 
-  it('renders the path when markdown content is unavailable', () => {
-    renderPlan(<Plan title="Submitted plan" path="/workspace/.mastra/plans/review.md" />);
+  it('renders the path fallback when markdown content is unavailable', () => {
+    renderPlan(
+      <Plan>
+        <Plan.Body>
+          <Plan.Title>Submitted plan</Plan.Title>
+          <Plan.File>/workspace/.mastra/plans/review.md</Plan.File>
+        </Plan.Body>
+      </Plan>,
+    );
 
     expect(screen.getByText('Submitted plan')).toBeTruthy();
     expect(screen.getByText('Plan file')).toBeTruthy();
     expect(screen.getByText('/workspace/.mastra/plans/review.md')).toBeTruthy();
   });
 
-  it('renders status and action slots', () => {
+  it('renders composed status and action slots', () => {
     renderPlan(
-      <Plan
-        title="Review migration plan"
-        status={{ label: 'Approved', variant: 'success' }}
-        leftActions={<Button aria-label="Reject plan">Reject</Button>}
-        rightActions={<Button aria-label="Approve plan">Approve</Button>}
-      >
-        {'Plan'}
+      <Plan>
+        <Plan.Header>
+          <Plan.Label />
+          <Plan.HeaderActions>
+            <Plan.Status variant="success">Approved</Plan.Status>
+          </Plan.HeaderActions>
+        </Plan.Header>
+        <Plan.Body>
+          <Plan.Main>
+            <Plan.Content>{'Plan'}</Plan.Content>
+            <Plan.Controls>
+              <Plan.ActionGroup className="justify-end">
+                <Button aria-label="Reject plan">Reject</Button>
+              </Plan.ActionGroup>
+              <Plan.ExpandButton />
+              <Plan.ActionGroup>
+                <Button aria-label="Approve plan">Approve</Button>
+              </Plan.ActionGroup>
+            </Plan.Controls>
+          </Plan.Main>
+        </Plan.Body>
       </Plan>,
     );
 
@@ -96,13 +138,25 @@ describe('Plan', () => {
   it('expands from the clipped content click target', async () => {
     vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(260);
 
-    renderPlan(<Plan title="Review migration plan">{'## Steps\n\n- Move data'}</Plan>);
+    renderPlan(
+      <Plan>
+        <Plan.Body>
+          <Plan.Main>
+            <Plan.Content>{'## Steps\n\n- Move data'}</Plan.Content>
+            <Plan.Controls />
+          </Plan.Main>
+        </Plan.Body>
+      </Plan>,
+    );
 
     await waitFor(() => {
-      expect(screen.getByTestId('plan-content').getAttribute('aria-label')).toBe('Expand plan');
+      const content = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
+      expect(content?.getAttribute('aria-label')).toBe('Expand plan');
     });
 
-    fireEvent.click(screen.getByTestId('plan-content'));
+    const content = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
+    if (!content) throw new Error('Expected plan content to render.');
+    fireEvent.click(content);
 
     expect(screen.getByRole('button', { name: /collapse plan/i })).toBeTruthy();
   });
