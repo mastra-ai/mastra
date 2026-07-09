@@ -763,6 +763,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/zenifra',
+          label: 'Zenifra',
+        },
+        {
+          type: 'doc',
           id: 'providers/zenmux',
           label: 'ZenMux',
         },

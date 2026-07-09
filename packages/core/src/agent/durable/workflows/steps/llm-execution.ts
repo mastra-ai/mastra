@@ -36,7 +36,7 @@ import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { DurableStepIds } from '../../constants';
 import { endRunSpansWithError, globalRunRegistry } from '../../run-registry';
-import { emitAbortEvent, emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
+import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
@@ -167,7 +167,30 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
       const { messageList, tools, model: resolvedModel, modelList: resolvedModelList } = resolved;
 
-      // 1b. Check for tripwire from processInput (initial input processing).
+      // 1b. Check for abort signal before doing any work. If the signal is
+      // already aborted (e.g. pre-aborted before the loop starts), return a
+      // clean output so the dowhile predicate sees isContinued: false and
+      // stops the loop. The FINISH event will be emitted by the finalization
+      // block with stepResult.reason: 'abort' (set by the predicate's abort
+      // guard). We intentionally do NOT emit an ABORT event here because
+      // that would close the stream before the FINISH event arrives.
+      const executionAbortSignalEarly = globalRunRegistry.get(runId)?.abortSignal ?? abortSignal;
+      if (executionAbortSignalEarly?.aborted) {
+        return {
+          messageListState: messageList.serialize(),
+          text: '',
+          toolCalls: [],
+          stepResult: {
+            reason: 'abort' as any,
+            warnings: [],
+            isContinued: false,
+          },
+          metadata: {},
+          state: typedInput.state,
+        } satisfies DurableLLMStepOutput;
+      }
+
+      // 1c. Check for tripwire from processInput (initial input processing).
       // If an input processor called abort() during preparation, the tripwire
       // data is stored on the registry entry. Emit a tripwire chunk and bail
       // immediately — the model must never be called.
@@ -377,7 +400,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 currentToolChoice = merged.toolChoice as ToolChoice<ToolSet> | undefined;
                 currentActiveTools = merged.activeTools;
                 currentProviderOptions = merged.providerOptions;
-                currentModelSettings = merged.modelSettings;
+                currentModelSettings = merged.modelSettings ?? {};
                 structuredOutput = merged.structuredOutput;
               } catch (error) {
                 // Handle TripWire from processInputStep — emit tripwire chunk and
@@ -774,10 +797,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }),
                   modelConfigHeaders: resolvedModelList?.find(m => m.id === modelEntry.id)?.headers,
                   callTimeHeaders:
-                    registryEntry?.callTimeHeaders || currentModelSettings.headers
+                    registryEntry?.callTimeHeaders || currentModelSettings?.headers
                       ? {
                           ...(registryEntry?.callTimeHeaders as Record<string, string> | undefined),
-                          ...(currentModelSettings.headers as Record<string, string> | undefined),
+                          ...(currentModelSettings?.headers as Record<string, string> | undefined),
                         }
                       : undefined,
                 }),
@@ -839,6 +862,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               let stepStartEmitted = false;
               for await (const rawChunk of trackedStream) {
                 if (!rawChunk) continue;
+
+                // Mirror the regular agent: if the abort signal fired between
+                // chunks, stop consuming the stream immediately so we don't
+                // send additional data to the client after cancellation.
+                if (executionAbortSignal?.aborted) break;
 
                 // Emit step-start before the first stream chunk so the
                 // ordering matches the regular agent: start → step-start → response-metadata → …
@@ -1066,12 +1094,22 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // the canonical AbortError name or an actual aborted signal.
               const isAbort = executionAbortSignal?.aborted === true || errorObj.name === 'AbortError';
               if (isAbort) {
-                if (pubsub) {
-                  await emitAbortEvent(pubsub, runId, { steps: [] });
-                }
-                // Re-throw so the outer fallback catch also bypasses retry /
-                // processAPIError and terminates the step cleanly.
-                throw errorObj;
+                // Return a clean output instead of throwing so the workflow
+                // engine doesn't crash. The dowhile predicate will see
+                // isContinued: false and stop the loop. The FINISH event
+                // (emitted by the finalization block) will carry reason: 'abort'.
+                return {
+                  messageListState: messageList.serialize(),
+                  text: textDeltas.join(''),
+                  toolCalls: [],
+                  stepResult: {
+                    reason: 'abort' as any,
+                    warnings: [],
+                    isContinued: false,
+                  },
+                  metadata: { modelId: currentModel.modelId },
+                  state: typedInput.state,
+                } satisfies DurableLLMStepOutput;
               }
 
               lastError = errorObj;
@@ -1129,14 +1167,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               // Mirror the iterator catch: a captured stream error that turns out
-              // to be a confirmed abort must short-circuit retry/fallback and
-              // publish the abort event so the client bridge closes cleanly.
+              // to be a confirmed abort must short-circuit retry/fallback.
               const isStreamErrorAbort = executionAbortSignal?.aborted === true || streamErrorObj.name === 'AbortError';
               if (isStreamErrorAbort) {
-                if (pubsub) {
-                  await emitAbortEvent(pubsub, runId, { steps: [] });
-                }
-                throw streamErrorObj;
+                return {
+                  messageListState: messageList.serialize(),
+                  text: textDeltas.join(''),
+                  toolCalls: [],
+                  stepResult: {
+                    reason: 'abort' as any,
+                    warnings: [],
+                    isContinued: false,
+                  },
+                  metadata: { modelId: currentModel.modelId },
+                  state: typedInput.state,
+                } satisfies DurableLLMStepOutput;
               }
 
               lastError = streamErrorObj;
@@ -1444,7 +1489,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const outerAbortSignal = outerRegistryEntry?.abortSignal ?? abortSignal;
             const isAbort = outerAbortSignal?.aborted === true || lastError.name === 'AbortError';
             if (isAbort) {
-              throw lastError;
+              // Return a clean output instead of throwing so the workflow
+              // engine doesn't crash. The abort event was already emitted
+              // by the inner catch.
+              return {
+                messageListState: messageList.serialize(),
+                text: '',
+                toolCalls: [],
+                stepResult: {
+                  reason: 'abort' as any,
+                  warnings: [],
+                  isContinued: false,
+                },
+                metadata: { modelId: modelEntry.config.modelId },
+                state: typedInput.state,
+              } satisfies DurableLLMStepOutput;
             }
 
             const modelId = modelEntry.config.modelId;

@@ -1,5 +1,79 @@
 # @mastra/memory
 
+## 1.23.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/schema-compat@1.3.4-alpha.1
+
+## 1.23.0-alpha.1
+
+### Minor Changes
+
+- Added one-shot conversation summarization: a standalone `summarizeConversation()` function and a `Memory.summarizeThread()` method. Both distill a whole conversation with the same Observer plumbing that powers Observational Memory — without Observational Memory attached to an agent, and without writing anything back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go. ([#19135](https://github.com/mastra-ai/mastra/pull/19135))
+
+  ```ts
+  import { Extractor } from '@mastra/memory';
+  import { z } from 'zod';
+
+  // e.g. in an end-of-call or end-of-session hook
+  const result = await memory.summarizeThread({
+    model: 'openai/gpt-5-mini',
+    threadId,
+    resourceId,
+    instructions: 'Summarize this voicemail call for the business owner.',
+    extract: [
+      new Extractor({
+        name: 'call-summary',
+        instructions: 'Return a concise summary of the call.',
+        schema: z.object({
+          summary: z.string(),
+          sentiment: z.enum(['positive', 'neutral', 'negative']),
+        }),
+        metadataKeyPath: false,
+        onExtracted: async ({ current, threadId, resourceId }) => {
+          await callRecords.upsert({ callId: threadId, callerId: resourceId, record: current });
+        },
+      }),
+    ],
+  });
+  ```
+
+  `summarizeConversation({ model, messages, instructions, extract })` takes the same options with messages you already have in hand instead of a `threadId`.
+
+  `summarizeThread` loads the thread's messages page-by-page starting from the newest, and accepts `lastMessages` (only summarize the last N messages) and `maxInputTokens` (stop loading older messages past this estimated token count, default 1,000,000) to bound how much history is read from storage.
+
+  **Why:** session-based agents (for example voice calls) often need a summary or structured extraction of the finished conversation — sentiment, requested services, follow-ups — stored in the application's own database. Observational Memory's observer and extractors are built for exactly this distillation, but attaching OM to an agent just to summarize at session end forces the whole observe/activate lifecycle onto a use case that doesn't need it. These APIs expose the summarization/extraction logic directly.
+
+### Patch Changes
+
+- Improved memory integration coverage for AI SDK v6 models and stabilized replayed semantic recall tests. ([#19133](https://github.com/mastra-ai/mastra/pull/19133))
+
+## 1.22.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+  - @mastra/core@1.50.2-alpha.1
+
+## 1.22.2
+
+### Patch Changes
+
+- Fixed the recall tool throwing "Either cursor or threadId is required" when browsing messages with thread-scoped retrieval. In thread scope, the tool now falls back to the current thread when no cursor is given, and error messages explain how to proceed when no thread context can be resolved. ([#19065](https://github.com/mastra-ai/mastra/pull/19065))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1
+
+## 1.22.2-alpha.0
+
+### Patch Changes
+
+- Fixed the recall tool throwing "Either cursor or threadId is required" when browsing messages with thread-scoped retrieval. In thread scope, the tool now falls back to the current thread when no cursor is given, and error messages explain how to proceed when no thread context can be resolved. ([#19065](https://github.com/mastra-ai/mastra/pull/19065))
+
 ## 1.22.1
 
 ### Patch Changes

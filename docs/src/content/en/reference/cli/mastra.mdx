@@ -225,7 +225,7 @@ If the project doesn't exist yet, the CLI creates it from the `package.json` `na
 mastra deploy --env staging --yes
 ```
 
-When `--env <name>` is set and `--env-file` is not, the CLI auto-selects `.env.<name>` from the project directory if present (for example `.env.staging`). The `<name>` value is validated against a strict allowlist before being interpolated into a file path.
+When `--env <name>` is set and `--env-file` isn't, the CLI auto-selects `.env.<name>` from the project directory if present (for example `.env.staging`). The `<name>` value is validated against a strict allowlist before being interpolated into a file path.
 
 ### Arguments
 
@@ -237,7 +237,7 @@ Project directory. Defaults to the current directory.
 
 #### `--env`
 
-Target environment name. Defaults to `production`. Auto-selects `.env.<name>` from the project directory when `--env-file` is not set. If the environment doesn't exist, the CLI creates it after confirmation.
+Target environment name. Defaults to `production`. Auto-selects `.env.<name>` from the project directory when `--env-file` isn't set. If the environment doesn't exist, the CLI creates it after confirmation.
 
 #### `--org`
 
@@ -754,6 +754,7 @@ Runs database migrations to update your storage schema. This command is useful w
 The command bundles your project, connects to your configured storage backend, and executes any pending migrations. Currently supports:
 
 - **Duplicate spans migration**: Removes duplicate `(traceId, spanId)` entries and adds a unique constraint to ensure data integrity.
+- **ClickHouse legacy-to-vNext span migration**: Copies historical spans from the legacy `mastra_ai_spans` table to the vNext `mastra_span_events` schema. Runs in batches to stay within memory limits. See the [ClickHouse storage reference](/reference/storage/clickhouse#migrating-from-legacy-to-vnext) for details.
 
 ```bash
 mastra migrate

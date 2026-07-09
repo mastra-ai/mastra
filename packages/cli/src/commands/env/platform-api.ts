@@ -19,6 +19,12 @@ export interface Environment {
   customServerUrl: string | null;
   observabilityProjectId: string | null;
   envVars: Record<string, string> | null;
+  /**
+   * Names of env vars injected at deploy time by managed platform resources
+   * (e.g. an attached Turso database). Names only — values are secrets.
+   * Absent on platforms that predate the field.
+   */
+  managedEnvVarNames?: string[];
   createdAt: string;
   updatedAt: string;
 }
