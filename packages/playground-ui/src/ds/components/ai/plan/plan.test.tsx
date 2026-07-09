@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { Button } from '../Button';
-import { TooltipProvider } from '../Tooltip';
+import { Button } from '../../Button';
+import { TooltipProvider } from '../../Tooltip';
 import {
   Plan,
   PlanActionGroup,
@@ -63,20 +63,6 @@ describe('Plan', () => {
     expect(screen.getByRole('heading', { name: 'Steps' })).toBeTruthy();
     expect(screen.getByText('Move data')).toBeTruthy();
     expect(screen.queryByText('/workspace/plans/migration.md')).toBeNull();
-  });
-
-  it('renders code spans in string titles', () => {
-    renderPlan(
-      <Plan>
-        <PlanBody>
-          <PlanTitle>Approve `submit_plan` output</PlanTitle>
-        </PlanBody>
-      </Plan>,
-    );
-
-    const code = screen.getByText('submit_plan');
-
-    expect(code.tagName).toBe('CODE');
   });
 
   it('copies the configured content from a composed header action', async () => {

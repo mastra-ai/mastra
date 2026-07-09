@@ -1,5 +1,5 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { createContext, Fragment, use, useCallback, useMemo, useState } from 'react';
+import { createContext, use, useCallback, useMemo, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
@@ -11,7 +11,6 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_COLLAPSED_HEIGHT = 220;
-const TITLE_CODE_SPAN_PATTERN = /(`[^`]+`)/g;
 
 type BadgeVariant = ComponentProps<typeof Badge>['variant'];
 
@@ -172,37 +171,10 @@ export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 
   children: ReactNode;
 }
 
-const renderStringTitle = (title: string) => {
-  let offset = 0;
-
-  return title.split(TITLE_CODE_SPAN_PATTERN).flatMap(part => {
-    const key = `${offset}:${part}`;
-    offset += part.length;
-
-    if (!part) return [];
-
-    if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
-      return (
-        <code key={key} className="rounded-md bg-surface4 px-1.5 py-0.5 font-mono text-ui-sm text-neutral6">
-          {part.slice(1, -1)}
-        </code>
-      );
-    }
-
-    return <Fragment key={key}>{part}</Fragment>;
-  });
-};
-
-const renderTitle = (title: ReactNode) => {
-  if (typeof title === 'string') return renderStringTitle(title);
-
-  return title;
-};
-
 export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   return (
     <Txt as="h3" variant="header-sm" className={cn('font-semibold text-neutral7', className)} {...props}>
-      {renderTitle(children)}
+      {children}
     </Txt>
   );
 }
@@ -323,12 +295,12 @@ export function PlanExpandButton(props: PlanExpandButtonProps) {
 
   return (
     <Button
+      {...props}
       type="button"
       variant="primary"
       size="sm"
       aria-label={isExpanded ? 'Collapse plan' : 'Expand plan'}
       onClick={toggleExpanded}
-      {...props}
     >
       {isExpanded ? <Minimize2 /> : <Maximize2 />}
       {isExpanded ? 'Collapse plan' : 'Expand plan'}

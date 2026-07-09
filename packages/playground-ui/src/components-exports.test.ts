@@ -10,7 +10,17 @@ import { describe, expect, it } from 'vitest';
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
 const componentsDir = resolve(pkgRoot, 'src/ds/components');
-const componentNamespaceDirs = new Set(['ai']);
+
+const hasIndex = (directory: string) => existsSync(resolve(directory, 'index.ts'));
+
+const hasNestedComponentEntry = (directory: string): boolean =>
+  readdirSync(directory, { withFileTypes: true }).some(dirent => {
+    if (!dirent.isDirectory()) return false;
+    if (dirent.name === '__tests__') return false;
+
+    const childDirectory = resolve(directory, dirent.name);
+    return hasIndex(childDirectory) || hasNestedComponentEntry(childDirectory);
+  });
 
 describe('components/* subpath exports', () => {
   it('exposes the wildcard export pointing into dist/components', () => {
@@ -26,12 +36,15 @@ describe('components/* subpath exports', () => {
     expect(pkg.sideEffects).toEqual(['**/*.css']);
   });
 
-  it('has an index.ts in every component folder outside namespace folders', () => {
-    const folders = readdirSync(componentsDir, { withFileTypes: true }).filter(
-      d => d.isDirectory() && !componentNamespaceDirs.has(d.name),
-    );
+  it('has an index.ts entry in every component folder or nested namespace child', () => {
+    const folders = readdirSync(componentsDir, { withFileTypes: true }).filter(d => d.isDirectory());
     expect(folders.length).toBeGreaterThan(0);
-    const missing = folders.filter(d => !existsSync(resolve(componentsDir, d.name, 'index.ts'))).map(d => d.name);
+    const missing = folders
+      .filter(d => {
+        const directory = resolve(componentsDir, d.name);
+        return !hasIndex(directory) && !hasNestedComponentEntry(directory);
+      })
+      .map(d => d.name);
     expect(missing).toEqual([]);
   });
 

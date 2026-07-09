@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, MessageSquareText, XIcon } from 'lucide-react';
 
-import { Button } from '../Button';
-import { TooltipProvider } from '../Tooltip';
+import { Button } from '../../Button';
+import { TooltipProvider } from '../../Tooltip';
 import {
   Plan,
   PlanActionGroup,
@@ -147,7 +147,7 @@ export const WithStatusAndActions: Story = {
       </PlanHeader>
       <PlanBody>
         <PlanIntro>
-          <PlanTitle>Approve `submit_plan` output</PlanTitle>
+          <PlanTitle>Approve submit_plan output</PlanTitle>
           <PlanPath>/workspace/.mastracode/plans/submit-plan.md</PlanPath>
         </PlanIntro>
         <PlanMain>
