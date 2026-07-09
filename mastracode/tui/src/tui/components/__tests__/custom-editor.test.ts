@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   superHandleInput: vi.fn(),
   superRender: vi.fn((_width?: number, _text?: string, _cursorCol?: number) => ['────', 'hello', '────']),
+  superRenderCursorLine: vi.fn(),
   editorSetText: vi.fn(),
   getClipboardImage: vi.fn(),
   getClipboardText: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@earendil-works/pi-tui', () => {
     }
 
     render(width: number): string[] {
+      mocks.superRenderCursorLine(this.state.cursorLine);
       return mocks.superRender(width, this.state.lines.join('\n'), this.state.cursorCol);
     }
 
@@ -244,7 +246,10 @@ describe('CustomEditor image paste handling', () => {
       const contentRows = output.slice(1, -1).map(line => stripAnsi(line));
 
       expect(mocks.superRender).toHaveBeenCalledWith(8, '1234567\n7654321', 0);
+      expect(mocks.superRenderCursorLine).toHaveBeenCalledWith(-1);
+      expect(output[1]).toContain(`\x1b[7m${marker}\x1b[0m`);
       expect(editor.getText()).toBe(`${marker}1234567\n7654321`);
+      expect(state).toMatchObject({ cursorLine: 0, cursorCol: 0 });
       expect(contentRows).toHaveLength(2);
       expect(contentRows.every(line => line.length === 14 && line.endsWith('│'))).toBe(true);
     });

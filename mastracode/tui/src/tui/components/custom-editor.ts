@@ -317,17 +317,25 @@ export class CustomEditor extends Editor {
     const markerIndex = firstLine?.search(/\S/) ?? -1;
     const shouldHideDecorativePrompt =
       decorativePrompt !== undefined && firstLine !== undefined && firstLine[markerIndex] === decorativePrompt;
+    const cursorLine = editorState.cursorLine;
     const cursorCol = editorState.cursorCol;
+    const cursorOnDecorativePrompt = shouldHideDecorativePrompt && cursorLine === 0 && cursorCol === markerIndex;
+    if (cursorOnDecorativePrompt && !this.voiceListening) {
+      prompt = `\x1b[7m${prompt}\x1b[0m`;
+    }
     let editorLines: string[];
     if (shouldHideDecorativePrompt) {
       editorState.lines[0] = firstLine.slice(0, markerIndex) + firstLine.slice(markerIndex + 1);
-      if (editorState.cursorLine === 0 && cursorCol > markerIndex) {
+      if (cursorOnDecorativePrompt) {
+        editorState.cursorLine = -1;
+      } else if (editorState.cursorLine === 0 && cursorCol > markerIndex) {
         editorState.cursorCol = cursorCol - 1;
       }
       try {
         editorLines = super.render(contentWidth);
       } finally {
         editorState.lines[0] = firstLine;
+        editorState.cursorLine = cursorLine;
         editorState.cursorCol = cursorCol;
       }
     } else {
