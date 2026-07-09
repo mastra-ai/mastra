@@ -5,6 +5,9 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@livekit/agents': link:../../integrations/livekit/node_modules/@livekit/agents
+  '@livekit/agents-plugin-livekit': link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit
+  '@livekit/agents-plugin-silero': link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero
   '@mastra/core': link:../../packages/core
   '@mastra/libsql': link:../../stores/libsql
   '@mastra/memory': link:../../packages/memory
@@ -17,6 +20,15 @@ importers:
 
   .:
     dependencies:
+      '@livekit/agents':
+        specifier: link:../../integrations/livekit/node_modules/@livekit/agents
+        version: link:../../integrations/livekit/node_modules/@livekit/agents
+      '@livekit/agents-plugin-livekit':
+        specifier: link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit
+        version: link:../../integrations/livekit/node_modules/@livekit/agents-plugin-livekit
+      '@livekit/agents-plugin-silero':
+        specifier: link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero
+        version: link:../../integrations/livekit/node_modules/@livekit/agents-plugin-silero
       '@mastra/core':
         specifier: link:../../packages/core
         version: link:../../packages/core
