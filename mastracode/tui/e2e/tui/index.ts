@@ -91,6 +91,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
+import { pruneCommandScenario } from './prune-command.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -239,6 +240,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
+  'prune-command': pruneCommandScenario,
   'quiet-settings': quietSettingsScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
