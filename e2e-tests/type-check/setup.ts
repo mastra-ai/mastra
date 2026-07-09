@@ -6,8 +6,9 @@ import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { startRegistry } from '../_local-registry-setup';
+import { setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
+import { getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 import { createRequire } from 'node:module';
 
 let require = global.require;
@@ -18,6 +19,11 @@ if (typeof require === 'undefined') {
 export default async function setup(project: TestProject) {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const rootDir = join(__dirname, '..', '..');
+  const publishedRegistryTeardown = await setupPublishedRegistryFromEnv(project);
+  if (publishedRegistryTeardown) {
+    return publishedRegistryTeardown;
+  }
+
   const tag = 'type-check-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
@@ -32,12 +38,7 @@ export default async function setup(project: TestProject) {
   project.provide('tag', tag);
   project.provide('registry', registry.toString());
 
-  await publishPackages(
-    ['--filter="@mastra/core..."', '--filter="@mastra/client-js..."', '--filter="@mastra/auth-workos..."'],
-    tag,
-    rootDir,
-    registry,
-  );
+  await publishPackages(await getSuitePublishFilters(rootDir, 'type-check'), tag, rootDir, registry);
 
   return () => {
     teardown();
