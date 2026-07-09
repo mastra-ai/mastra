@@ -15,14 +15,6 @@ import { PlatformClient } from './client.js';
 
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
-/**
- * Curated menu of sandbox flavors. Only `default` is guaranteed today —
- * `node` and `python` are accepted names that currently fall through to
- * `default` on the server side until snapshot builds ship, so agent code
- * can commit to a name now and pick up the fast path automatically later.
- */
-export type PlatformSandboxTemplate = 'default' | 'node' | 'python';
-
 export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'processes'>, PlatformClientOptions {
   id?: string;
   environmentId?: string;
@@ -30,7 +22,6 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   idleTimeoutMinutes?: number;
   networkIsolation?: PlatformSandboxNetworkIsolation;
   env?: Record<string, string>;
-  template?: PlatformSandboxTemplate;
   timeout?: number;
   instructions?: InstructionsOption;
 }
@@ -128,7 +119,6 @@ export class PlatformSandbox extends MastraSandbox {
   private readonly _idleTimeoutMinutes?: number;
   private readonly _networkIsolation?: PlatformSandboxNetworkIsolation;
   private readonly _env: Record<string, string>;
-  private readonly _template?: PlatformSandboxTemplate;
   private readonly _timeout?: number;
   private readonly _instructionsOverride?: InstructionsOption;
   private _createdAt: Date | null = null;
@@ -143,7 +133,6 @@ export class PlatformSandbox extends MastraSandbox {
     this._idleTimeoutMinutes = options.idleTimeoutMinutes;
     this._networkIsolation = options.networkIsolation;
     this._env = options.env ?? {};
-    this._template = options.template;
     this._timeout = options.timeout;
     this._instructionsOverride = options.instructions;
   }
@@ -166,7 +155,6 @@ export class PlatformSandbox extends MastraSandbox {
         idleTimeoutMinutes: this._idleTimeoutMinutes,
         networkIsolation: this._networkIsolation,
         env: this._env,
-        template: this._template,
       }),
     });
     const json = (await response.json()) as CreateSandboxResponse;

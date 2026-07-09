@@ -33,7 +33,7 @@ describe('PlatformSandbox', () => {
     expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/projects/proj_123/sandbox/sbx_1/exec');
   });
 
-  it('forwards template selection as the `template` wire field', async () => {
+  it('does not send a template field on the create wire body', async () => {
     vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
     const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
 
@@ -41,15 +41,13 @@ describe('PlatformSandbox', () => {
       accessToken: 'sk_test',
       projectId: 'proj_123',
       environmentId: 'env_123',
-      template: 'python',
       fetch: fetchMock,
     });
 
     await sandbox._start();
 
     const body = JSON.parse(fetchMock.mock.calls[0]![1].body as string);
-    expect(body.template).toBe('python');
-    expect(body.templateId).toBeUndefined();
+    expect(body.template).toBeUndefined();
   });
 
   it('reattaches when constructed with a sandbox id', async () => {
