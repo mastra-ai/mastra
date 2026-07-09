@@ -60,11 +60,17 @@ export interface StorageSettings {
   pg: PgStorageSettings;
 }
 
-/** Mastra gateway provider key used in AuthStorage. */
+/** Gateway provider key used in AuthStorage. */
 export const MASTRA_GATEWAY_PROVIDER = 'mastra-gateway';
 
 /** Default gateway URL. */
 export const MASTRA_GATEWAY_DEFAULT_URL = 'https://gateway-api.mastra.ai';
+
+/** @deprecated Renamed to {@link MASTRA_GATEWAY_PROVIDER}. */
+export const MEMORY_GATEWAY_PROVIDER = MASTRA_GATEWAY_PROVIDER;
+
+/** @deprecated Renamed to {@link MASTRA_GATEWAY_DEFAULT_URL}. */
+export const MEMORY_GATEWAY_DEFAULT_URL = MASTRA_GATEWAY_DEFAULT_URL;
 
 /** Valid persisted thinking level values. */
 export type ThinkingLevelSetting = 'off' | 'low' | 'medium' | 'high' | 'xhigh';
