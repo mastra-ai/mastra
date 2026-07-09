@@ -16,6 +16,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/agents/channels",
+      "destination": "/docs/capabilities/channels/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -946,6 +951,16 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/getting-started/file-based-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/channels/llms.txt",
+      "destination": "/docs/capabilities/channels/overview/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud/llms.txt",
       "destination": "/docs/observability/integrations/exporters/mastra-platform/llms.txt",
       "permanent": true
@@ -1608,6 +1623,11 @@
     {
       "source": "/docs/memory/storage/llms.txt",
       "destination": "/docs/storage/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/file-based-agents/llms.txt",
       "permanent": true
     }
   ]
