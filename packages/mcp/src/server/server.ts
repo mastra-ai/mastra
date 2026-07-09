@@ -872,11 +872,16 @@ export class MCPServer extends MCPServerBase {
           const resourcesContent = Array.isArray(resourcesOrResourceContent)
             ? resourcesOrResourceContent
             : [resourcesOrResourceContent];
+          // Preserve the resource's `_meta` on the read contents. MCP Apps hosts
+          // read the UI CSP (connectDomains) from `contents[]._meta.ui.csp`, so
+          // dropping it here silently ignores appResources CSP config.
+          const resourceMeta = resource._meta ? { _meta: resource._meta } : {};
           const contents: (TextResourceContents | BlobResourceContents)[] = resourcesContent.map(resourceContent => {
             if ('text' in resourceContent && resourceContent.text !== undefined) {
               return {
                 uri: resource.uri,
                 mimeType: resource.mimeType,
+                ...resourceMeta,
                 text: resourceContent.text,
               } as TextResourceContents;
             }
@@ -889,6 +894,7 @@ export class MCPServer extends MCPServerBase {
             return {
               uri: resource.uri,
               mimeType: resource.mimeType,
+              ...resourceMeta,
               blob,
             } as BlobResourceContents;
           });

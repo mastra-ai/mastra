@@ -423,6 +423,9 @@ describe('MCPServer', () => {
       'weather://historical': {
         text: JSON.stringify({ averageHigh: 20, averageLow: 10 }),
       },
+      'weather://ui': {
+        text: '<html><body>widget</body></html>',
+      },
     };
 
     const initialResourcesForTest: Resource[] = [
@@ -443,6 +446,12 @@ describe('MCPServer', () => {
         name: 'Historical Weather Data',
         description: 'Past 30 days weather data',
         mimeType: 'application/json',
+      },
+      {
+        uri: 'weather://ui',
+        name: 'Weather UI Widget',
+        mimeType: 'text/html',
+        _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
       },
     ];
 
@@ -553,6 +562,14 @@ describe('MCPServer', () => {
         code: ErrorCode.InvalidParams,
         message: expect.stringContaining('Resource not found: weather://nonexistent'),
       });
+    });
+
+    it('should preserve resource `_meta` on read contents (MCP Apps CSP)', async () => {
+      const uri = 'weather://ui';
+      const resourceContentResult = (await resourceTestInternalClient.readResource(uri)) as ReadResourceResult;
+      expect(resourceContentResult.contents.length).toBe(1);
+      const content = resourceContentResult.contents[0] as { _meta?: Record<string, unknown> };
+      expect(content._meta).toEqual({ ui: { csp: { connectDomains: ['https://api.example.com'] } } });
     });
   });
 
