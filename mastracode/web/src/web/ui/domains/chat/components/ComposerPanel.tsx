@@ -1,8 +1,4 @@
 import { useActiveProjectContext } from '../../workspaces';
-import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatTranscript } from '../context/useChatTranscript';
-import { useChatModels } from '../context/useChatModels';
-import { useChatModes } from '../context/useChatModes';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 
@@ -14,34 +10,13 @@ type ComposerPanelProps = {
 
 export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
   const { activeProject } = useActiveProjectContext();
-  const { composerCommandName, clearComposerCommand } = useChatCommands();
-  const { transcript } = useChatTranscript();
-  const { activeModelId } = useChatModels();
-  const { modes, activeModeId, setMode } = useChatModes();
 
   if (!activeProject) return null;
 
   return (
     <div className={composerPanelClass}>
-      <Composer
-        variant={composerVariant}
-        commandNameToApply={composerCommandName ?? null}
-        onCommandApplied={clearComposerCommand}
-      />
-
-      <StatusLine
-        modelId={activeModelId}
-        followUpCount={transcript.followUpCount}
-        omPhase={transcript.omPhase}
-        omProgress={transcript.omProgress}
-        goal={transcript.goal}
-        tokensPerSec={transcript.tokensPerSec}
-        modes={modes}
-        activeModeId={activeModeId ?? modes[0]?.id}
-        onModeChange={modeId => {
-          void setMode(modeId);
-        }}
-      />
+      <Composer variant={composerVariant} />
+      <StatusLine />
     </div>
   );
 }

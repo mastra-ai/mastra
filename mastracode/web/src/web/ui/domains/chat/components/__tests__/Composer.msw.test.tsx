@@ -9,8 +9,10 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
+import { ChatCommandsProvider, useChatCommands } from '../../context/ChatCommandsProvider';
 import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { useChatTranscript } from '../../context/useChatTranscript';
+import { SLASH_COMMANDS } from '../../services/commands';
 import { Composer } from '../Composer';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -96,6 +98,19 @@ function NoticeProbe() {
   );
 }
 
+function PaletteCommandProbe() {
+  const { composerCommandName, run } = useChatCommands();
+  const modelCommand = SLASH_COMMANDS.find(command => command.name === 'model');
+  return (
+    <>
+      <output aria-label="Composer command state">{composerCommandName ?? 'none'}</output>
+      <button type="button" onClick={() => modelCommand && run(modelCommand)}>
+        Run model command
+      </button>
+    </>
+  );
+}
+
 function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
@@ -105,8 +120,11 @@ function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = 
           element={
             <ActiveProjectProvider>
               <ChatSessionProvider threadId={THREAD_ID}>
-                <Composer commandNameToApply={null} onCommandApplied={() => undefined} {...props} />
-                <NoticeProbe />
+                <ChatCommandsProvider>
+                  <Composer {...props} />
+                  <PaletteCommandProbe />
+                  <NoticeProbe />
+                </ChatCommandsProvider>
               </ChatSessionProvider>
             </ActiveProjectProvider>
           }
@@ -179,14 +197,21 @@ describe('Composer', () => {
   });
 
   describe('when a palette command is applied', () => {
-    it('prefills the composer and acknowledges the handoff', async () => {
+    it('prefills the composer once and clears the command state', async () => {
       seedProject();
       useAgentControllerHandlers();
-      const onCommandApplied = vi.fn();
-      renderComposer({ commandNameToApply: 'model', onCommandApplied });
+      renderComposer();
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
 
       await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
-      expect(onCommandApplied).toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
+      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
     });
   });
 });

@@ -3,12 +3,13 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useActiveProjectContext } from '../../workspaces';
+import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -46,11 +47,9 @@ const composerVariantRows: Record<ComposerVariant, number> = {
 
 type ComposerProps = {
   variant?: ComposerVariant;
-  commandNameToApply: string | null;
-  onCommandApplied: () => void;
 };
 
-export function Composer({ variant = 'inline', commandNameToApply, onCommandApplied }: ComposerProps) {
+export function Composer({ variant = 'inline' }: ComposerProps) {
   const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
@@ -58,6 +57,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const { transcript, busy, localUser, reset, pushNotice } = useChatTranscript();
+  const { composerCommandName, clearComposerCommand } = useChatCommands();
   const { activeModelId, setModel } = useChatModels();
   const { activeModeId } = useChatModes();
 
@@ -85,26 +85,25 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
     setActiveSuggestion(0);
   };
 
-  const applyCommandDraft = (name: string) => {
+  const applyCommandDraft = useCallback((name: string) => {
     updateDraft(`/${name} `);
     inputRef.current?.focus();
-  };
+  }, []);
 
   const applyCommand = (name: string) => {
     applyCommandDraft(name);
-    onCommandApplied();
   };
 
   useEffect(() => {
-    if (!commandNameToApply) {
+    if (!composerCommandName) {
       appliedCommandNameRef.current = null;
       return;
     }
-    if (appliedCommandNameRef.current === commandNameToApply) return;
-    appliedCommandNameRef.current = commandNameToApply;
-    applyCommandDraft(commandNameToApply);
-    onCommandApplied();
-  }, [commandNameToApply, applyCommandDraft, onCommandApplied]);
+    if (appliedCommandNameRef.current === composerCommandName) return;
+    appliedCommandNameRef.current = composerCommandName;
+    applyCommandDraft(composerCommandName);
+    clearComposerCommand();
+  }, [composerCommandName, applyCommandDraft, clearComposerCommand]);
 
   useTextareaAutoResize(inputRef, draft);
 
@@ -120,7 +119,9 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
       role: 'user',
       content: [{ type: 'text', text }],
     };
-    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [message]);
+    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
+      message,
+    ]);
   };
 
   const send = async (text: string) => {
