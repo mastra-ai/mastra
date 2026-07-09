@@ -814,6 +814,14 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
         ? new RequestContext<unknown>(Object.entries(metadata.requestContext))
         : undefined;
 
+      // Agent-initiated hang-up: watch each turn for the end-call tool, then (once) wait for the
+      // agent's closing words to play out and disconnect. Composed with the user's onTurnComplete
+      // before the reply generator is built, because each path owns its hook differently: the
+      // workflow generator bakes it in at creation, the agent path threads it through the bridge.
+      // The closure reads `session`, assigned below before any turn runs.
+      const endCallDetector = buildEndCallDetector(options.configuration?.endCall, () => session, ctx, logger);
+      const onTurnComplete = composeTurnComplete(options.onTurnComplete, endCallDetector);
+
       // Resolve the per-turn reply generator. Precedence: an explicit `generate` function, then
       // a `workflow` (run-to-completion per turn), then a Mastra `agent` (the default).
       let mastraAgent: MastraAgent | undefined;
@@ -832,7 +840,7 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           replyStep: options.replyStep,
           resultText: options.resultText,
           toolFeedback: options.toolFeedback,
-          onTurnComplete: options.onTurnComplete,
+          onTurnComplete,
         });
       } else {
         mastraAgent = await resolveMastraAgent(options, args);
@@ -928,18 +936,13 @@ export function createLiveKitWorker(options: CreateLiveKitWorkerOptions) {
           ? { everyMs: greetingConfig.repeatEvery, text: greetingConfig.repeatText }
           : undefined;
 
-      // Agent-initiated hang-up: watch each turn for the end-call tool, then (once) wait for the
-      // agent's closing words to play out and disconnect. Detected at the turn boundary alongside the
-      // user's onTurnComplete; the closure reads `session` (assigned just below, before any turn).
-      const endCallDetector = buildEndCallDetector(options.configuration?.endCall, () => session, ctx, logger);
-
       const agent = createMastraVoiceAgent({
         ...(replyGenerator ? { generate: replyGenerator } : { agent: mastraAgent! }),
         instructions: mastraAgent ? await resolveInstructions(mastraAgent, requestContext) : undefined,
         memory,
         requestContext,
         toolFeedback: options.toolFeedback,
-        onTurnComplete: composeTurnComplete(options.onTurnComplete, endCallDetector),
+        onTurnComplete,
         greetingReminder,
         streamOptions: voiceObs ? { tracingContext: voiceObs.tracingContext } : undefined,
       });
