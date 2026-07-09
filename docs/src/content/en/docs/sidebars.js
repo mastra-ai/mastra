@@ -44,6 +44,14 @@ const sidebars = {
           id: 'storage/overview',
           label: 'Storage',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/file-based-agents',
+          label: 'File-based Agents',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
       ],
     },
     {
@@ -98,14 +106,6 @@ const sidebars = {
               type: 'doc',
               id: 'agents/processors',
               label: 'Processors',
-            },
-            {
-              type: 'doc',
-              id: 'agents/file-based-agents',
-              label: 'File-based Agents',
-              customProps: {
-                tags: ['beta'],
-              },
             },
             {
               type: 'doc',
