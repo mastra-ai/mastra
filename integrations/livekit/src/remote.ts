@@ -11,9 +11,9 @@ import type {
 } from './bridge';
 
 const DEFAULT_API_PREFIX = '/api';
-/** Connect + first-token budget when not overridden. Plugin mode passes `connOptions.timeoutMs`. See D9. */
+/** Connect + first-token budget when not overridden. Plugin mode passes `connOptions.timeoutMs`. */
 export const DEFAULT_REMOTE_TIMEOUT_MS = 10_000;
-/** Standalone initial-connection retry attempts. Plugin mode forces this to 0 (base class owns retries). See D8. */
+/** Standalone initial-connection retry attempts. Plugin mode forces this to 0 (base class owns retries). */
 export const DEFAULT_REMOTE_RETRIES = 2;
 
 /** Thrown (as a plain, non-retryable error) when the server emits a chunk that needs client action. */
@@ -39,13 +39,13 @@ export interface RemoteMastraAgentOptions {
   fetch?: typeof globalThis.fetch;
   /**
    * Connect + first-token timeout in ms. Plugin mode default: LiveKit's `connOptions.timeoutMs` (10s).
-   * Standalone default: {@link DEFAULT_REMOTE_TIMEOUT_MS}. See D9.
+   * Standalone default: {@link DEFAULT_REMOTE_TIMEOUT_MS}.
    */
   timeoutMs?: number;
   /**
    * Initial-connection retry attempts (before the first chunk only). Standalone default:
    * {@link DEFAULT_REMOTE_RETRIES}. In plugin mode the LiveKit base class owns retries and this is
-   * forced to 0. See D8.
+   * forced to 0.
    */
   retries?: number;
   /** Extra fields merged into each stream request body (advanced). */
@@ -160,8 +160,8 @@ export async function* readMastraSSE(
  *
  * Usable standalone via the worker's `generate:` hatch (a minimum-viable remote worker mode), and as
  * the transport `MastraLLM` wraps. Errors are thrown as LiveKit `APIError` subclasses so the plugin's
- * base-class retry loop and `FallbackAdapter` behave (D8); a connect + first-token watchdog prevents
- * indefinite dead air (D9).
+ * base-class retry loop and `FallbackAdapter` behave; a connect + first-token watchdog prevents
+ * indefinite dead air.
  */
 export function createRemoteAgentReplyGenerator(options: RemoteAgentReplyGeneratorOptions): VoiceReplyGenerator {
   const {

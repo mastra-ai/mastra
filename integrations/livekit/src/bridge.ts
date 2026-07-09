@@ -75,7 +75,7 @@ export interface VoiceToolCall {
 
 /**
  * Token usage for one turn, captured from the model's `finish` chunk. Field names mirror LiveKit's
- * `CompletionUsage` so the plugin can forward it into `metrics_collected` without remapping. See D10.
+ * `CompletionUsage` so the plugin can forward it into `metrics_collected` without remapping.
  */
 export interface VoiceTurnUsage {
   /** Tokens in the prompt (LiveKit `promptTokens`). */
@@ -152,7 +152,7 @@ export interface VoiceTurnContext {
   /** Voice-call span context, so each turn's generation nests under the call trace. */
   tracingContext?: TracingContext;
   /**
-   * Internal, per-turn side channel for token usage (D10). A generator invokes this once, when the
+   * Internal, per-turn side channel for token usage. A generator invokes this once, when the
    * `finish` chunk carries usage, so the caller (e.g. `MastraLLMStream`) can attribute usage to
    * exactly this turn — kept on the context (not on generator options) so overlapping turns from
    * preemptive generation can't misattribute usage. Fire-and-forget; the generator does not await it.
@@ -170,7 +170,7 @@ export interface VoiceTurnResult {
   toolCalls: VoiceToolCall[];
   /** True when barge-in cut the turn short before it finished streaming. */
   interrupted: boolean;
-  /** Token usage for the turn when the model reported it in its `finish` chunk (D10). */
+  /** Token usage for the turn when the model reported it in its `finish` chunk. */
   usage?: VoiceTurnUsage;
 }
 
@@ -288,7 +288,7 @@ export function createAgentReplyGenerator(options: AgentReplyGeneratorOptions): 
               }
             } else if (chunk.type === 'finish') {
               // Usage is dropped from the spoken stream but surfaced via the per-turn side channel
-              // (D10) and on the turn result, so the plugin and onTurnComplete consumers can read it.
+              // and on the turn result, so the plugin and onTurnComplete consumers can read it.
               const output = (chunk.payload as { output?: { usage?: unknown } }).output;
               const turnUsage = mapTurnUsage(output?.usage);
               if (turnUsage) {

@@ -37,7 +37,7 @@ export interface MastraLLMOptions {
    * history. When omitted/false, the full LiveKit chat context is sent every turn.
    *
    * NOTE: incompatible with the session's `preemptiveGeneration` option — a speculative turn that
-   * completes before being discarded pollutes the thread (D13). Leave preemptive generation off when
+   * completes before being discarded pollutes the thread. Leave preemptive generation off when
    * using `memory`.
    */
   memory?: MastraVoiceAgentMemory | false;
@@ -91,7 +91,7 @@ function livekitToolNames(toolCtx: object): string[] {
  * Tools are defined and executed **server-side** on the Mastra agent; LiveKit-side `toolCtx` is
  * ignored (with a one-time warning). Tool activity surfaces via `toolFeedback` (spoken) and
  * `onToolCall` / `onTurnComplete` (programmatic). `voice.Agent` instructions do **not** reach the
- * Mastra agent — put instructions on the Mastra agent instead (D11).
+ * Mastra agent — put instructions on the Mastra agent instead.
  *
  * @example
  * ```ts
@@ -172,7 +172,7 @@ export class MastraLLM extends llm.LLM {
   /**
    * Resolves the reply generator for a turn. Non-remote sources are built once; the remote transport
    * is built per turn so its connect + first-token timeout can come from the session's
-   * `connOptions.timeoutMs` (D9), with base-class retries owning retry (transport `retries: 0`, D8).
+   * `connOptions.timeoutMs`, with base-class retries owning retry (transport `retries: 0`).
    */
   private resolveGenerator(connOptions: APIConnectOptions): VoiceReplyGenerator {
     if (this.#staticGenerator) return this.#staticGenerator;
@@ -196,7 +196,7 @@ export class MastraLLM extends llm.LLM {
     toolChoice?: llm.ToolChoice;
     extraKwargs?: Record<string, unknown>;
   }): llm.LLMStream {
-    // D14: tools run server-side; warn once if the customer wired LiveKit-side tools.
+    // Tools run server-side; warn once if the customer wired LiveKit-side tools.
     if (!this.#warnedToolCtx && toolCtx) {
       const ignored = livekitToolNames(toolCtx);
       if (ignored.length > 0) {
@@ -231,10 +231,10 @@ interface MastraLLMStreamOptions {
 }
 
 /**
- * The `llm.LLMStream` `MastraLLM` returns per turn. `run()` extracts the turn's messages (D3), drives
+ * The `llm.LLMStream` `MastraLLM` returns per turn. `run()` extracts the turn's messages, drives
  * the reply generator, and pushes assistant `ChatChunk`s into `this.queue` (NOT `this.output` — the
  * base class drains queue → output and computes TTFT / duration / usage). Barge-in aborts via
- * `this.abortController` and `run()` returns silently (D5).
+ * `this.abortController` and `run()` returns silently.
  */
 class MastraLLMStream extends llm.LLMStream {
   readonly #generator: VoiceReplyGenerator;

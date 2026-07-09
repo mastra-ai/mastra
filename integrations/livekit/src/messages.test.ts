@@ -40,13 +40,13 @@ describe('extractNewTurnMessages', () => {
     expect(extractNewTurnMessages(ctx)).toEqual([{ role: 'user', content: 'part one\npart two', id: 'u1' }]);
   });
 
-  it('carries the LiveKit ChatMessage.id on each message (D12)', () => {
+  it('carries the LiveKit ChatMessage.id on each message', () => {
     const ctx = llm.ChatContext.empty();
     ctx.addMessage({ role: 'user', content: 'Hello', id: 'msg-42' });
     expect(extractNewTurnMessages(ctx)).toEqual([{ role: 'user', content: 'Hello', id: 'msg-42' }]);
   });
 
-  describe('D11 — filters the LiveKit-injected instructions system message', () => {
+  describe('filters the LiveKit-injected instructions system message', () => {
     it('drops it on the first turn (no assistant message yet)', () => {
       const ctx = llm.ChatContext.empty();
       ctx.addMessage({ role: 'system', content: 'LiveKit-side instructions', id: LIVEKIT_INSTRUCTIONS_MESSAGE_ID });
@@ -63,7 +63,7 @@ describe('extractNewTurnMessages', () => {
     });
   });
 
-  describe('D7 — self-heals an interrupted assistant fragment on the next turn', () => {
+  describe('self-heals an interrupted assistant fragment on the next turn', () => {
     it('re-sends the interrupted fragment first, before the new user message', () => {
       const ctx = llm.ChatContext.empty();
       ctx.addMessage({ role: 'user', content: 'first question', id: 'u1' });
@@ -132,7 +132,7 @@ describe('chatContextToMessages', () => {
     ]);
   });
 
-  it('excludes the LiveKit-injected instructions message (D11) and carries ids (D12)', () => {
+  it('excludes the LiveKit-injected instructions message and carries ids', () => {
     const ctx = llm.ChatContext.empty();
     ctx.addMessage({ role: 'system', content: 'LiveKit-side instructions', id: LIVEKIT_INSTRUCTIONS_MESSAGE_ID });
     ctx.addMessage({ role: 'user', content: 'First question', id: 'u1' });

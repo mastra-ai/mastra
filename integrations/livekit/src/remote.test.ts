@@ -130,10 +130,10 @@ function streamFromStringChunks(chunks: string[]): globalThis.ReadableStream<Uin
 }
 
 // ===========================================================================
-// A1 — SSE reader framing
+// SSE reader framing
 // ===========================================================================
 
-describe('readMastraSSE (A1)', () => {
+describe('readMastraSSE', () => {
   async function collect(stream: globalThis.ReadableStream<Uint8Array>, signal = new AbortController().signal) {
     const out: unknown[] = [];
     for await (const chunk of readMastraSSE(stream, signal)) out.push(chunk);
@@ -193,10 +193,10 @@ describe('readMastraSSE (A1)', () => {
 });
 
 // ===========================================================================
-// A2 — chunk loop, request shaping, hooks
+// chunk loop, request shaping, hooks
 // ===========================================================================
 
-describe('createRemoteAgentReplyGenerator — streaming (A2)', () => {
+describe('createRemoteAgentReplyGenerator — streaming', () => {
   it('accumulates text deltas into the spoken stream', async () => {
     const server = await startFakeServer(
       respondWithChunks([
@@ -254,7 +254,7 @@ describe('createRemoteAgentReplyGenerator — streaming (A2)', () => {
     expect(server.state.requests).toHaveLength(1);
   });
 
-  it('sends messages (with ids), memory, and requestContext in the body (D12)', async () => {
+  it('sends messages (with ids), memory, and requestContext in the body', async () => {
     const server = await startFakeServer(respondWithChunks([{ type: 'text-delta', payload: { text: 'ok' } }]));
     const gen = createRemoteAgentReplyGenerator({ baseUrl: server.url, agentId: 'callCenter', retries: 0 });
     const stream = (await gen(
@@ -311,10 +311,10 @@ describe('createRemoteAgentReplyGenerator — streaming (A2)', () => {
 });
 
 // ===========================================================================
-// D10 — usage side channel
+// usage side channel
 // ===========================================================================
 
-describe('createRemoteAgentReplyGenerator — usage (D10)', () => {
+describe('createRemoteAgentReplyGenerator — usage', () => {
   it('maps finish-chunk usage to ctx.onUsage (once) and the turn result', async () => {
     const server = await startFakeServer(
       respondWithChunks([
@@ -344,7 +344,7 @@ describe('createRemoteAgentReplyGenerator — usage (D10)', () => {
 // onTurnComplete + barge-in
 // ===========================================================================
 
-describe('createRemoteAgentReplyGenerator — onTurnComplete + barge-in (D5)', () => {
+describe('createRemoteAgentReplyGenerator — onTurnComplete + barge-in', () => {
   it('fires onTurnComplete once with interrupted:false on completion', async () => {
     const server = await startFakeServer(
       respondWithChunks([
@@ -384,10 +384,10 @@ describe('createRemoteAgentReplyGenerator — onTurnComplete + barge-in (D5)', (
 });
 
 // ===========================================================================
-// A3 — error typing, retry, timeout (D8/D9)
+// error typing, retry, timeout
 // ===========================================================================
 
-describe('createRemoteAgentReplyGenerator — error typing (D8)', () => {
+describe('createRemoteAgentReplyGenerator — error typing', () => {
   async function expectError(server: FakeServer, retries: number) {
     const gen = createRemoteAgentReplyGenerator({ baseUrl: server.url, agentId: 'test', retries });
     const stream = (await gen(makeCtx())) as ReadableStream<string>;
@@ -448,7 +448,7 @@ describe('createRemoteAgentReplyGenerator — error typing (D8)', () => {
   });
 });
 
-describe('createRemoteAgentReplyGenerator — first-token timeout (D9)', () => {
+describe('createRemoteAgentReplyGenerator — first-token timeout', () => {
   it('throws APITimeoutError when the server accepts but never writes', async () => {
     const server = await startFakeServer(({ res }) => {
       // Accept the connection and hang: never write a byte.
@@ -503,10 +503,10 @@ describe('createRemoteAgentReplyGenerator — first-token timeout (D9)', () => {
 });
 
 // ===========================================================================
-// D4 — HITL chunks fail fast
+// HITL chunks fail fast
 // ===========================================================================
 
-describe('createRemoteAgentReplyGenerator — HITL chunks fail loudly (D4)', () => {
+describe('createRemoteAgentReplyGenerator — HITL chunks fail loudly', () => {
   for (const type of ['tool-call-approval', 'tool-call-suspended'] as const) {
     it(`throws a descriptive error on a ${type} chunk without hanging`, async () => {
       const server = await startFakeServer(

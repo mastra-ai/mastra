@@ -246,7 +246,7 @@ describe('MastraVoiceAgent onTurnComplete hook', () => {
   });
 });
 
-describe('MastraVoiceAgent onToolCall + usage side channels (D4/D10)', () => {
+describe('MastraVoiceAgent onToolCall + usage side channels', () => {
   it('fires onToolCall mid-stream for each tool call, in order', async () => {
     const { agent } = fakeMastraAgent([
       { type: 'text-delta', payload: { id: '1', text: 'one moment ' } },
@@ -353,7 +353,7 @@ describe('DisclosureReminder', () => {
   });
 });
 
-describe('mapTurnUsage (D10)', () => {
+describe('mapTurnUsage', () => {
   it('maps the flat V2 usage shape to LiveKit field names', () => {
     expect(mapTurnUsage({ inputTokens: 12, outputTokens: 34, totalTokens: 46, cachedInputTokens: 3 })).toEqual({
       promptTokens: 12,

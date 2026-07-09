@@ -94,7 +94,7 @@ describe('MastraLLM — options + contract (B1)', () => {
     stream.close();
   });
 
-  it('warns once about ignored LiveKit-side tools (D14)', () => {
+  it('warns once about ignored LiveKit-side tools', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { gen } = capturingGenerator();
     const mastraLLM = new MastraLLM({ generate: gen });
@@ -142,7 +142,7 @@ describe('MastraLLM — options + contract (B1)', () => {
 // MastraLLMStream — run() behavior (B2)
 // ===========================================================================
 
-describe('MastraLLMStream — message extraction (D3)', () => {
+describe('MastraLLMStream — message extraction', () => {
   it('sends only the new turn when memory is set (extractNewTurnMessages)', async () => {
     const { gen, calls } = capturingGenerator();
     const mastraLLM = new MastraLLM({ generate: gen, memory: { thread: 't1', resource: 'r1' } });
@@ -253,7 +253,7 @@ describe('MastraLLMStream — chunk mapping + metrics (B2)', () => {
   });
 });
 
-describe('MastraLLMStream — barge-in (D5)', () => {
+describe('MastraLLMStream — barge-in', () => {
   it('returns silently on close(): output stops and no error is emitted', async () => {
     let cancelled = false;
     const gen: VoiceReplyGenerator = () =>
