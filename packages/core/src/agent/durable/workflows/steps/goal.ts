@@ -140,7 +140,14 @@ export function createDurableGoalStep() {
       };
 
       const registryEntry = globalRunRegistry.get(state.runId);
-      const goal = registryEntry?.goal;
+      let goal = registryEntry?.goal;
+      if (!goal && initData.agentId) {
+        try {
+          goal = (mastra as any)?.getAgent?.(initData.agentId)?.__getGoalConfig?.();
+        } catch {
+          goal = undefined;
+        }
+      }
 
       // No goal configured → nothing to do.
       if (!goal) return state;
