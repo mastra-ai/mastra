@@ -134,9 +134,12 @@ export class SessionRunEngine {
       if (chunk.type === 'abort') {
         aborted = true;
       }
+      if (chunk.type === 'finish') {
+        result ??= this.finishStreamState(state);
+        continue;
+      }
       if (
         result ||
-        chunk.type === 'finish' ||
         chunk.type === 'error' ||
         chunk.type === 'abort' ||
         chunk.type === 'tool-call-suspended' ||
