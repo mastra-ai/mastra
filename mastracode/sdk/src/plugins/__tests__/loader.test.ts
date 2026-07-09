@@ -228,6 +228,113 @@ describe('plugin loader', () => {
     expect(plugin?.configValues).toEqual({ valid: 'kept' });
   });
 
+  it('gates tools on isEnabled(config) at tool resolution', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.gated',
+        config: {
+          connected: { type: 'boolean', isEnabled: () => false }
+        },
+        tools: {
+          ungated_tool: { tool: { id: 'ungated_tool', description: 'always on' } },
+          gated_tool: {
+            tool: { id: 'gated_tool', description: 'needs connection' },
+            render: { type: 'subagent', agentType: 'gated' },
+            isEnabled: config => config.connected === true
+          }
+        }
+      };`,
+    );
+
+    const record = {
+      enabled: true,
+      source: 'local',
+      specifier: '../plugin',
+      path: pluginDir,
+      entry: 'src/index.ts',
+    } as const;
+
+    const disconnected = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: { plugins: { 'acme.gated': { ...record } } },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(disconnected[0]).toMatchObject({ id: 'acme.gated', status: 'active' });
+    expect(disconnected[0]?.toolNames).toEqual(['ungated_tool']);
+    expect(Object.keys(disconnected[0]?.tools ?? {})).toEqual(['ungated_tool']);
+    expect(disconnected[0]?.renderConfigs?.gated_tool).toBeUndefined();
+    expect(Object.keys(collectActivePluginTools(disconnected))).toEqual(['ungated_tool']);
+
+    const connected = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: { plugins: { 'acme.gated': { ...record, config: { connected: true } } } },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(connected[0]?.toolNames).toEqual(['gated_tool', 'ungated_tool']);
+    expect(connected[0]?.renderConfigs?.gated_tool).toEqual({ type: 'subagent', agentType: 'gated' });
+    expect(Object.keys(collectActivePluginTools(connected)).sort()).toEqual(['gated_tool', 'ungated_tool']);
+  });
+
+  it('fails closed when a tool isEnabled predicate throws without failing the plugin load', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'plugin');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.throwing',
+        tools: {
+          safe_tool: { tool: { id: 'safe_tool', description: 'safe' } },
+          broken_tool: {
+            tool: { id: 'broken_tool', description: 'broken predicate' },
+            isEnabled: () => { throw new Error('predicate exploded'); }
+          }
+        }
+      };`,
+    );
+
+    const stderrWrites: string[] = [];
+    const originalWrite = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => {
+      stderrWrites.push(String(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+
+    try {
+      const loaded = await loadPlugins({
+        projectRoot,
+        homeDir: path.join(tempDir, 'home'),
+        projectRegistry: {
+          plugins: {
+            'acme.throwing': {
+              enabled: true,
+              source: 'local',
+              specifier: '../plugin',
+              path: pluginDir,
+              entry: 'src/index.ts',
+            },
+          },
+        },
+        globalRegistry: { plugins: {} },
+      });
+
+      expect(loaded[0]).toMatchObject({ id: 'acme.throwing', status: 'active' });
+      expect(loaded[0]?.toolNames).toEqual(['safe_tool']);
+      expect(stderrWrites.join('')).toContain('broken_tool');
+      expect(stderrWrites.join('')).toContain('predicate exploded');
+    } finally {
+      process.stderr.write = originalWrite;
+    }
+  });
+
   it('normalizes first-class tool render entries and discovers bundled assets and instructions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');

@@ -145,6 +145,43 @@ describe('PluginManager', () => {
     ).toEqual({ connected: true });
   });
 
+  it('re-gates tools after setConfigValue reloads the plugin', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const homeDir = path.join(tempDir, 'home');
+    const pluginDir = path.join(tempDir, 'plugin');
+    fs.mkdirSync(path.join(pluginDir, 'src'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default {
+        id: 'acme.gated',
+        config: { connected: { type: 'boolean', isEnabled: () => false } },
+        tools: {
+          status_tool: { tool: { id: 'status_tool', description: 'always on' } },
+          gated_tool: {
+            tool: { id: 'gated_tool', description: 'needs connection' },
+            isEnabled: config => config.connected === true
+          }
+        }
+      };`,
+    );
+    const manager = new PluginManager({ projectRoot, homeDir });
+    const pluginTools = manager.getPluginTools();
+
+    await manager.installLocal(pluginDir, 'project');
+    expect(Object.keys(pluginTools)).toEqual(['status_tool']);
+    expect((await manager.listPlugins())[0]?.toolNames).toEqual(['status_tool']);
+
+    await manager.setConfigValue('acme.gated', 'project', 'connected', true);
+    expect(manager.getPluginTools()).toBe(pluginTools);
+    expect(Object.keys(pluginTools).sort()).toEqual(['gated_tool', 'status_tool']);
+    expect((await manager.listPlugins())[0]?.toolNames).toEqual(['gated_tool', 'status_tool']);
+
+    await manager.setConfigValue('acme.gated', 'project', 'connected', undefined);
+    expect(Object.keys(pluginTools)).toEqual(['status_tool']);
+    expect((await manager.listPlugins())[0]?.toolNames).toEqual(['status_tool']);
+  });
+
   it('hot reloads local plugin source changes into the stable tools object', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-manager-'));
     const projectRoot = path.join(tempDir, 'project');

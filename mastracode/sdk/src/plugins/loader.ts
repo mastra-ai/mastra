@@ -173,7 +173,7 @@ async function resolvePluginTools(
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
     throw new Error('Plugin tools function must return an object');
   }
-  return normalizePluginToolEntries(entries);
+  return normalizePluginToolEntries(plugin.id, entries, context.config);
 }
 
 async function resolvePluginInstructions(
@@ -190,7 +190,11 @@ async function resolvePluginInstructions(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): {
+function normalizePluginToolEntries(
+  pluginId: string,
+  entries: MastraCodePluginToolEntries,
+  configValues: MastraCodePluginConfigValues,
+): {
   tools: MastraCodePluginTools;
   renderConfigs: Record<string, MastraCodeToolRenderConfig>;
 } {
@@ -199,6 +203,17 @@ function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): {
   for (const [name, entry] of Object.entries(entries)) {
     if (!isToolEntryObject(entry)) {
       throw new Error(`Plugin tool "${name}" must be an object with a tool property`);
+    }
+    if (typeof entry.isEnabled === 'function') {
+      // Fail-closed: a throwing predicate hides the tool instead of exposing it or failing the load.
+      try {
+        if (!entry.isEnabled(configValues)) continue;
+      } catch (error) {
+        process.stderr.write(
+          `Plugin "${pluginId}" tool "${name}" isEnabled threw (${error instanceof Error ? error.message : String(error)}); tool disabled\n`,
+        );
+        continue;
+      }
     }
     tools[name] = entry.tool;
     if (entry.render) renderConfigs[name] = entry.render;
