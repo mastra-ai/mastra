@@ -934,6 +934,11 @@
       "source": "/docs/memory/storage",
       "destination": "/docs/storage/overview",
       "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/getting-started/file-based-agents",
+      "permanent": true
     }
   ]
 }

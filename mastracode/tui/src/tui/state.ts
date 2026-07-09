@@ -15,6 +15,7 @@ import type { PluginManager } from '@mastra/code-sdk/plugins/manager';
 import { detectProject } from '@mastra/code-sdk/utils/project';
 import type { ProjectInfo } from '@mastra/code-sdk/utils/project';
 import type { SlashCommandMetadata } from '@mastra/code-sdk/utils/slash-command-loader';
+import type { StorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
 import type { AgentController, AgentControllerMessage, Session } from '@mastra/core/agent-controller';
 import type { SkillMetadata, Workspace } from '@mastra/core/workspace';
 import type { GithubSignals } from '@mastra/github-signals';
@@ -138,6 +139,9 @@ export interface MastraTUIOptions {
 
   /** GitHub PR signal processor used for status-line polling state. */
   githubSignals?: GithubSignals;
+
+  /** Storage maintenance handle for /prune (retention pruning + disk reclamation). */
+  storageMaintenance?: StorageMaintenance;
 
   /** Optional terminal injection for in-process tests. Defaults to ProcessTerminal. */
   terminal?: Terminal;
