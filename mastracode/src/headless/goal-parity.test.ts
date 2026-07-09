@@ -214,6 +214,7 @@ describe('headless goal parity', () => {
     };
     const fakeAgent = {
       setObjective: vi.fn().mockResolvedValue(objectiveRecord),
+      getObjective: vi.fn().mockResolvedValue(objectiveRecord),
       updateObjectiveOptions: vi.fn().mockResolvedValue(objectiveRecord),
     };
     const controller = {
@@ -269,5 +270,48 @@ describe('headless goal parity', () => {
     });
     expect(session.sendMessage).not.toHaveBeenCalled();
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
+  });
+
+  it('runGoal errors instead of sending a signal when objective persistence falls back locally', async () => {
+    let listener: ((event: AgentControllerEvent) => void) | undefined;
+    const fakeAgent = {
+      setObjective: vi.fn().mockResolvedValue(undefined),
+      getObjective: vi.fn().mockResolvedValue(undefined),
+      updateObjectiveOptions: vi.fn(),
+    };
+    const controller = {
+      getCurrentAgent: vi.fn(() => fakeAgent),
+      setResourceId: vi.fn(),
+    };
+    const session = {
+      subscribe: vi.fn((handler: (event: AgentControllerEvent) => void) => {
+        listener = handler;
+        return vi.fn();
+      }),
+      sendSignal: vi.fn(() => ({ accepted: Promise.resolve() })),
+      sendMessage: vi.fn(),
+      abort: vi.fn(),
+      thread: {
+        getId: vi.fn(() => 'thread-1'),
+        create: vi.fn(),
+        setSetting: vi.fn(),
+      },
+      identity: { getResourceId: vi.fn(() => 'resource-1') },
+    };
+
+    const result = await runGoal({
+      controller: controller as any,
+      session: session as any,
+      objective: 'finish the task',
+      judgeModelId: 'mock-judge',
+      maxRuns: 5,
+      goalManager: new GoalManager(),
+    }).result;
+
+    expect(listener).toBeTypeOf('function');
+    expect(result.status).toBe('error');
+    expect(result.error?.message).toContain('Failed to persist goal objective');
+    expect(session.sendSignal).not.toHaveBeenCalled();
+    expect(session.sendMessage).not.toHaveBeenCalled();
   });
 });

@@ -178,6 +178,13 @@ export function runGoal<TState extends Record<string, unknown>>(options: RunGoal
       } as any;
       const goal = await goalManager.setGoal(state, objective, options.judgeModelId, options.maxRuns);
       if (!goal) throw new Error('Failed to set goal.');
+
+      const agent = controller.getCurrentAgent(session);
+      const persisted = await agent.getObjective({ threadId: session.thread.getId()! });
+      if (!persisted || persisted.id !== goal.id) {
+        throw new Error('Failed to persist goal objective before sending goal signal.');
+      }
+
       await goalManager.saveToThread(state);
 
       if (aborted || settled) return;
