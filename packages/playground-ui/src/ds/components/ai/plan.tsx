@@ -1,6 +1,6 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { createContext, Fragment, use, useCallback, useEffect, useMemo, useState } from 'react';
-import type { ComponentProps, KeyboardEvent, ReactNode } from 'react';
+import { createContext, Fragment, use, useCallback, useMemo, useState } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
 import { Button } from '@/ds/components/Button';
@@ -8,7 +8,6 @@ import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
 import { cn } from '@/lib/utils';
 
 const DEFAULT_COLLAPSED_HEIGHT = 220;
@@ -17,10 +16,8 @@ const TITLE_CODE_SPAN_PATTERN = /(`[^`]+`)/g;
 type BadgeVariant = ComponentProps<typeof Badge>['variant'];
 
 interface PlanContextValue {
-  canExpand: boolean;
   collapsedHeight: number;
   isExpanded: boolean;
-  setCanExpand: (canExpand: boolean) => void;
   toggleExpanded: () => void;
 }
 
@@ -42,23 +39,18 @@ export interface PlanProps extends ComponentProps<'div'> {
 
 export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanProps) {
   const [isExpanded, setIsExpanded] = useState(false);
-  const [canExpand, setCanExpand] = useState(false);
 
   const toggleExpanded = useCallback(() => {
-    if (!canExpand) return;
-
     setIsExpanded(current => !current);
-  }, [canExpand]);
+  }, []);
 
   const contextValue = useMemo(
     () => ({
-      canExpand,
       collapsedHeight,
       isExpanded,
-      setCanExpand,
       toggleExpanded,
     }),
-    [canExpand, collapsedHeight, isExpanded, toggleExpanded],
+    [collapsedHeight, isExpanded, toggleExpanded],
   );
 
   return (
@@ -257,67 +249,18 @@ export interface PlanContentProps extends Omit<ComponentProps<'div'>, 'children'
 }
 
 export function PlanContent({ children, className, style, ...props }: PlanContentProps) {
-  const { canExpand, collapsedHeight, isExpanded, setCanExpand, toggleExpanded } = usePlanContext();
-  const {
-    ref: contentRef,
-    height: contentHeight,
-    measure: measureContentHeight,
-  } = useMeasuredAutoHeight<HTMLDivElement>();
-  const shouldClipContent = canExpand && !isExpanded;
-  const isContentClickable = shouldClipContent;
-
-  const handleContentKeyDown = useCallback(
-    (event: KeyboardEvent<HTMLDivElement>) => {
-      if (event.key !== 'Enter' && event.key !== ' ') return;
-
-      event.preventDefault();
-      toggleExpanded();
-    },
-    [toggleExpanded],
-  );
-
-  useEffect(() => {
-    const measuredHeight = measureContentHeight();
-    if (measuredHeight === null) return;
-
-    setCanExpand(measuredHeight > collapsedHeight);
-  }, [children, collapsedHeight, measureContentHeight, setCanExpand]);
-
-  useEffect(() => {
-    if (contentHeight === null) return;
-
-    setCanExpand(contentHeight > collapsedHeight);
-  }, [contentHeight, collapsedHeight, setCanExpand]);
+  const { collapsedHeight, isExpanded } = usePlanContext();
 
   return (
     <div
       data-slot="plan-content"
-      role={isContentClickable ? 'button' : undefined}
-      tabIndex={isContentClickable ? 0 : undefined}
-      aria-label={isContentClickable ? 'Expand plan' : undefined}
-      onClick={isContentClickable ? toggleExpanded : undefined}
-      onKeyDown={isContentClickable ? handleContentKeyDown : undefined}
-      className={cn(
-        'relative outline-none',
-        shouldClipContent && 'overflow-hidden pb-16',
-        isContentClickable && 'cursor-pointer rounded-lg focus-visible:ring-2 focus-visible:ring-border2',
-        className,
-      )}
-      style={shouldClipContent ? { ...style, maxHeight: collapsedHeight } : style}
+      className={cn('relative outline-none', !isExpanded && 'overflow-hidden', className)}
+      style={!isExpanded ? { ...style, maxHeight: collapsedHeight } : style}
       {...props}
     >
-      <div ref={contentRef}>
-        <div className="text-neutral6 [&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
-          <MarkdownRenderer>{children}</MarkdownRenderer>
-        </div>
+      <div className="text-neutral6 [&_code]:bg-surface4 [&_h1]:text-header-md [&_h1]:leading-header-md [&_h2]:text-header-sm [&_h2]:leading-header-sm [&_h3]:text-ui-lg [&_h3]:leading-ui-lg [&_p]:text-ui-md [&_p]:leading-6">
+        <MarkdownRenderer>{children}</MarkdownRenderer>
       </div>
-
-      {shouldClipContent && (
-        <div
-          aria-hidden="true"
-          className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-b from-transparent via-surface3/90 to-surface3"
-        />
-      )}
     </div>
   );
 }
@@ -342,17 +285,12 @@ export function PlanFile({ children, className, ...props }: PlanFileProps) {
 export type PlanControlsProps = ComponentProps<'div'>;
 
 export function PlanControls({ children, className, ...props }: PlanControlsProps) {
-  const { canExpand, isExpanded } = usePlanContext();
-  const shouldClipContent = canExpand && !isExpanded;
   const hasActions = Boolean(children);
-  const shouldRender = canExpand || hasActions;
-
-  if (!shouldRender) return null;
 
   return (
     <div
       data-slot="plan-controls"
-      className={cn('relative z-10 flex justify-center', shouldClipContent ? '-mt-14 pb-1' : 'mt-4', className)}
+      className={cn('relative z-10 mt-4 flex justify-center', className)}
       onClick={event => event.stopPropagation()}
       {...props}
     >
@@ -381,9 +319,7 @@ export interface PlanExpandButtonProps extends Omit<
 > {}
 
 export function PlanExpandButton(props: PlanExpandButtonProps) {
-  const { canExpand, isExpanded, toggleExpanded } = usePlanContext();
-
-  if (!canExpand) return <span aria-hidden="true" />;
+  const { isExpanded, toggleExpanded } = usePlanContext();
 
   return (
     <Button

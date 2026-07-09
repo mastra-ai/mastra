@@ -152,9 +152,7 @@ describe('Plan', () => {
     expect(screen.getByRole('button', { name: /approve plan/i })).toBeTruthy();
   });
 
-  it('expands from the clipped content click target', async () => {
-    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(260);
-
+  it('expands from the composed expand button', () => {
     renderPlan(
       <Plan>
         <PlanBody>
@@ -166,15 +164,14 @@ describe('Plan', () => {
       </Plan>,
     );
 
-    await waitFor(() => {
-      const content = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
-      expect(content?.getAttribute('aria-label')).toBe('Expand plan');
-    });
-
     const content = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
     if (!content) throw new Error('Expected plan content to render.');
-    fireEvent.click(content);
+
+    expect(content.style.maxHeight).toBe('220px');
+
+    fireEvent.click(screen.getByRole('button', { name: /expand plan/i }));
 
     expect(screen.getByRole('button', { name: /collapse plan/i })).toBeTruthy();
+    expect(content.style.maxHeight).toBe('');
   });
 });
