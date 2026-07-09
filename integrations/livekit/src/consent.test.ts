@@ -44,6 +44,18 @@ describe('createConsentTool', () => {
     expect(createConsentTool({ onGrant: vi.fn(), id: 'grantConsent' }).id).toBe('grantConsent');
   });
 
+  it('enforces the items restriction at the schema level, not just in execute', () => {
+    const tool = createConsentTool({ onGrant: vi.fn(), items: ['summaryStorage'] });
+    expect(tool.inputSchema!.safeParse({ item: 'summaryStorage', granted: true }).success).toBe(true);
+    // An item outside the enum must be rejected by the schema before execute ever runs.
+    expect(tool.inputSchema!.safeParse({ item: 'marketingEmails', granted: true }).success).toBe(false);
+  });
+
+  it('accepts any item string when no items restriction is configured', () => {
+    const tool = createConsentTool({ onGrant: vi.fn() });
+    expect(tool.inputSchema!.safeParse({ item: 'anything', granted: false }).success).toBe(true);
+  });
+
   it('does not throw when onGrant is async', async () => {
     const onGrant = vi.fn(async () => {});
     const tool = createConsentTool({ onGrant, items: ['summaryStorage'] });

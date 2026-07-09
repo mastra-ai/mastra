@@ -46,9 +46,11 @@ const DEFAULT_DESCRIPTION =
  * Builds a Mastra tool that captures the caller's consent decisions at runtime — the companion to
  * the worker's `configuration.requireConsent`, which only DECLARES which consents a call needs. Add
  * it to the agent that answers the call; on each call the tool reads the caller's `resourceId` /
- * `threadId` from its execution context and hands the decision to your `onGrant` store. Enforce it
- * by reading those grants back at `onCallEnd` (via `VoiceCallEndArgs.configuration`) or before any
- * consent-gated action.
+ * `threadId` from its execution context and hands the decision to your `onGrant` store. The runtime
+ * grants live only where `onGrant` put them: enforce consent by reading them back from your own
+ * store — at `onCallEnd` or before any consent-gated action — cross-checking against the declared
+ * requirements in `VoiceCallEndArgs.configuration.requireConsent` (the configuration carries the
+ * policy, never the grants).
  *
  * ```ts
  * // agent tools
