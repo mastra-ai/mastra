@@ -1,5 +1,5 @@
 ---
-title: "Storage | Filesystem"
+title: "Storage | File-based Agents"
 description: Set the default Mastra store by file convention with storage.ts.
 packages:
   - "@mastra/core"
@@ -38,11 +38,3 @@ Mastra registers the store before file-based agents and workflows, so storage-de
 ## Precedence with code
 
 Code-registered storage wins over `storage.ts`. Use `storage.ts` when one project-wide store is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.
-
-## Related
-
-- [Filesystem overview](/docs/filesystem/overview)
-- [Storage](/docs/storage/overview)
-- [Observability storage](/docs/observability/storage)
-- [Storage reference](/reference/storage/overview)
-- [`Mastra` reference](/reference/core/mastra-class)

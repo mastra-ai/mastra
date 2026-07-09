@@ -1,5 +1,5 @@
 ---
-title: "Server | Filesystem"
+title: "Server | File-based Agents"
 description: Configure the Mastra HTTP server by file convention with server.ts.
 packages:
   - "@mastra/core"
@@ -44,11 +44,3 @@ See [Mastra server](/docs/server/mastra-server), [middleware](/docs/server/middl
 ## Precedence with code
 
 Code-registered server config wins over `server.ts`. Routes added during startup, such as channel webhooks, are preserved when file-based server config is applied.
-
-## Related
-
-- [Filesystem overview](/docs/filesystem/overview)
-- [Mastra server](/docs/server/mastra-server)
-- [Middleware](/docs/server/middleware)
-- [Custom API routes](/docs/server/custom-api-routes)
-- [`Mastra` reference](/reference/core/mastra-class)

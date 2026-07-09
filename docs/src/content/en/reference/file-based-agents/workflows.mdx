@@ -1,5 +1,5 @@
 ---
-title: "Workflows | Filesystem"
+title: "Workflows | File-based Agents"
 description: Register workflows by file convention under src/mastra/workflows.
 packages:
   - "@mastra/core"
@@ -59,9 +59,3 @@ Mastra registers this workflow under the `daily-report` key.
 ## Precedence with code
 
 File-based workflows merge with workflows registered in [`new Mastra()`](/reference/core/mastra-class). On a key collision, the code-registered workflow wins.
-
-## Related
-
-- [Filesystem overview](/docs/filesystem/overview)
-- [Workflows overview](/docs/workflows/overview)
-- [`createWorkflow()` reference](/reference/workflows/workflow)

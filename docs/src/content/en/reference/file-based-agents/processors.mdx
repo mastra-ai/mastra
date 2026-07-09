@@ -1,5 +1,5 @@
 ---
-title: "Processors | Filesystem"
+title: "Processors | File-based Agents"
 description: Add input and output processors to a file-based agent under processors/input/ and processors/output/.
 packages:
   - "@mastra/core"
@@ -43,7 +43,7 @@ export default new PIIDetector({
 
 ## Ordering
 
-Discovered processors are added after any processors defined in [`config.ts`](/docs/filesystem/config). That means config processors run first.
+Discovered processors are added after any processors defined in [`config.ts`](/reference/file-based-agents/config). That means config processors run first.
 
 ```text title="Ordering"
 config.inputProcessors → processors/input/* → model
@@ -63,10 +63,3 @@ Precedence is:
 1. Discovered files under `processors/input/` or `processors/output/`
 
 Visit the [`Processor` reference](/reference/processors/processor-interface) for the full interface.
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Filesystem overview](/docs/filesystem/overview)
-- [Processors](/docs/agents/processors)
-- [`Processor` reference](/reference/processors/processor-interface)

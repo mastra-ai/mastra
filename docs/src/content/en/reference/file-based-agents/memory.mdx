@@ -1,5 +1,5 @@
 ---
-title: "Memory | Filesystem"
+title: "Memory | File-based Agents"
 description: Give a file-based agent persistent memory with a memory.ts module.
 packages:
   - "@mastra/core"
@@ -68,13 +68,4 @@ Visit the [`Memory` reference](/reference/memory/memory-class) for constructor o
 
 ## Precedence with config
 
-`config.memory` wins over `memory.ts`. If neither is present, the assembled file-based agent has no memory. See [`config.ts` precedence](/docs/filesystem/config#precedence) for the full merge table.
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Filesystem overview](/docs/filesystem/overview)
-- [Memory overview](/docs/memory/overview)
-- [Storage](/docs/storage/overview)
-- [Semantic recall](/docs/memory/semantic-recall)
-- [`Memory` reference](/reference/memory/memory-class)
+`config.memory` wins over `memory.ts`. If neither is present, the assembled file-based agent has no memory. See [`config.ts` precedence](/reference/file-based-agents/config#precedence) for the full merge table.

@@ -1,5 +1,5 @@
 ---
-title: "config.ts | Filesystem"
+title: "config.ts | File-based Agents"
 description: Set a file-based agent's model and runtime options in config.ts with agentConfig.
 packages:
   - "@mastra/core"
@@ -67,7 +67,7 @@ export default agentConfig({
 
 `agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the filesystem convention. Use the Agent reference for the full option list.
 
-Filesystem-specific notes:
+Please note:
 
 - File-based subagents require a non-empty `description` because the parent model uses it for delegation routing.
 - `defaultOptions`, `maxRetries`, `scorers`, and other Agent options can live in `config.ts` when they don't need their own file.
@@ -78,13 +78,13 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 
 | Setting | File or folder | Why it lives there |
 | - | - | - |
-| Instructions | [`instructions.md`](/docs/filesystem/instructions) | Keeps the always-on prompt readable as markdown |
-| Tools | [`tools/`](/docs/filesystem/tools) | Gives each callable action its own typed module |
-| Skills | [`skills/`](/docs/filesystem/skills) | Keeps load-on-demand procedures separate from always-on instructions |
-| Memory | [`memory.ts`](/docs/filesystem/memory) | Configures persistent memory without crowding runtime options |
-| Workspace | [`workspace.ts`](/docs/filesystem/workspace) | Configures files and sandbox behavior separately from model settings |
-| Processors | [`processors/`](/docs/filesystem/processors) | Separates input and output processing pipelines |
-| Subagents | [`subagents/`](/docs/filesystem/subagents) | Gives each specialist child agent its own directory |
+| Instructions | [`instructions.md`](/reference/file-based-agents/instructions) | Keeps the always-on prompt readable as markdown |
+| Tools | [`tools/`](/reference/file-based-agents/tools) | Gives each callable action its own typed module |
+| Skills | [`skills/`](/reference/file-based-agents/skills) | Keeps load-on-demand procedures separate from always-on instructions |
+| Memory | [`memory.ts`](/reference/file-based-agents/memory) | Configures persistent memory without crowding runtime options |
+| Workspace | [`workspace.ts`](/reference/file-based-agents/workspace) | Configures files and sandbox behavior separately from model settings |
+| Processors | [`processors/`](/reference/file-based-agents/processors) | Separates input and output processing pipelines |
+| Subagents | [`subagents/`](/reference/file-based-agents/subagents) | Gives each specialist child agent its own directory |
 
 ## When to use a coded agent instead
 
@@ -96,21 +96,13 @@ Use `agentConfig()` when you want Mastra to merge sibling files into the agent. 
 
 | Domain | Source A | Source B | Winner |
 | - | - | - | - |
-| Instructions | Dynamic `config.instructions` | [`instructions.md`](/docs/filesystem/instructions) | Dynamic `config.instructions` |
-| Instructions | Static `config.instructions` | [`instructions.md`](/docs/filesystem/instructions) | `instructions.md` |
-| Tools | `config.tools` | [`tools/`](/docs/filesystem/tools) | Both merge; `config.tools` wins on key collisions |
-| Tools | Function `config.tools` | [`tools/`](/docs/filesystem/tools) | Function `config.tools`; discovered tools are ignored |
-| Skills | `config.skills` | [`skills/`](/docs/filesystem/skills) | Both merge; `config.skills` wins on name collisions |
-| Skills | Function `config.skills` | [`skills/`](/docs/filesystem/skills) | Function `config.skills`; discovered skills are ignored |
-| Memory | `config.memory` | [`memory.ts`](/docs/filesystem/memory) | `config.memory` |
-| Workspace | `config.workspace` | [`workspace.ts`](/docs/filesystem/workspace) | `config.workspace` |
+| Instructions | Dynamic `config.instructions` | [`instructions.md`](/reference/file-based-agents/instructions) | Dynamic `config.instructions` |
+| Instructions | Static `config.instructions` | [`instructions.md`](/reference/file-based-agents/instructions) | `instructions.md` |
+| Tools | `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Both merge; `config.tools` wins on key collisions |
+| Tools | Function `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Function `config.tools`; discovered tools are ignored |
+| Skills | `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Both merge; `config.skills` wins on name collisions |
+| Skills | Function `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Function `config.skills`; discovered skills are ignored |
+| Memory | `config.memory` | [`memory.ts`](/reference/file-based-agents/memory) | `config.memory` |
+| Workspace | `config.workspace` | [`workspace.ts`](/reference/file-based-agents/workspace) | `config.workspace` |
 
 Missing both `instructions.md` and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.
-
-## Related
-
-- [Filesystem overview](/docs/filesystem/overview)
-- [Instructions](/docs/filesystem/instructions)
-- [Tools](/docs/filesystem/tools)
-- [Skills](/docs/filesystem/skills)
-- [`Agent` reference](/reference/agents/agent)

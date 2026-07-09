@@ -1,5 +1,5 @@
 ---
-title: "Workspace | Filesystem"
+title: "Workspace | File-based Agents"
 description: Give a file-based agent a workspace with workspace.ts and seed files under workspace/.
 packages:
   - "@mastra/core"
@@ -57,7 +57,7 @@ For provider patterns and runtime behavior, see the [workspace overview](/docs/w
 
 ## Runtime boundary
 
-The workspace filesystem controls what file tools can read and write. The sandbox controls where shell commands run. Application runtime code, including code in [`tools/`](/docs/filesystem/tools), still runs in your app/server process unless it explicitly calls workspace or sandbox APIs.
+The workspace filesystem controls what file tools can read and write. The sandbox controls where shell commands run. Application runtime code, including code in [`tools/`](/reference/file-based-agents/tools), still runs in your app/server process unless it explicitly calls workspace or sandbox APIs.
 
 ## Seed files
 
@@ -76,13 +76,4 @@ The files are copied into the bundled workspace path, where workspace file tools
 
 ## Precedence with config
 
-`config.workspace` wins over `workspace.ts`; otherwise the default file-based workspace is used. See [`config.ts` precedence](/docs/filesystem/config#precedence) for the full merge table.
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Filesystem overview](/docs/filesystem/overview)
-- [Tools](/docs/filesystem/tools)
-- [Workspace overview](/docs/workspace/overview)
-- [Workspace search](/docs/workspace/search)
-- [`Workspace` reference](/reference/workspace/workspace-class)
+`config.workspace` wins over `workspace.ts`; otherwise the default file-based workspace is used. See [`config.ts` precedence](/reference/file-based-agents/config#precedence) for the full merge table.

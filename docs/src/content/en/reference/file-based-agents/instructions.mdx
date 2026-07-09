@@ -1,5 +1,5 @@
 ---
-title: "Instructions | Filesystem"
+title: "Instructions | File-based Agents"
 description: Write a file-based agent's always-on system prompt with instructions.md, and learn when to reach for tools or skills instead.
 packages:
   - "@mastra/core"
@@ -9,7 +9,7 @@ packages:
 
 An agent's `instructions.md` holds its always-on system prompt: the model reads it on every turn. Use it to define the agent's identity, tone, role, and standing rules.
 
-Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into [`tools/`](/docs/filesystem/tools) or [`skills/`](/docs/filesystem/skills), which the model uses only when relevant.
+Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented out of `instructions.md` and into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
 
 ## Quickstart
 
@@ -28,11 +28,11 @@ Effective instructions cover the parts of an agent's behavior that don't change 
 - Standing rules
 - Output format
 
-Move conditional, large, or action-oriented guidance into [`tools/`](/docs/filesystem/tools) or [`skills/`](/docs/filesystem/skills), which the model uses only when relevant.
+Move conditional, large, or action-oriented guidance into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
 
 ## Dynamic instructions
 
-When the prompt needs to change per request, for example based on the current user or runtime context, set a dynamic `instructions` function in [`config.ts`](/docs/filesystem/config) instead of using `instructions.md`. A function `instructions` wins over `instructions.md`, so the static file is ignored when both are present.
+When the prompt needs to change per request, for example based on the current user or runtime context, set a dynamic `instructions` function in [`config.ts`](/reference/file-based-agents/config) instead of using `instructions.md`. A function `instructions` wins over `instructions.md`, so the static file is ignored when both are present.
 
 ```typescript title="src/mastra/agents/support/config.ts"
 import { agentConfig } from '@mastra/core/agent'
@@ -52,16 +52,8 @@ Mastra reads `instructions.md` and inlines its contents into the generated code 
 
 ## Precedence with config
 
-Instructions can come from `instructions.md` or from the `instructions` field in [`config.ts`](/docs/filesystem/config):
+Instructions can come from `instructions.md` or from the `instructions` field in [`config.ts`](/reference/file-based-agents/config):
 
 - A dynamic (function) `instructions` in `config.ts` wins over `instructions.md`.
 - Otherwise `instructions.md` wins over a static `instructions` string.
 - If neither is present, the build fails and names the agent directory.
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Tools](/docs/filesystem/tools)
-- [Skills](/docs/filesystem/skills)
-- [Filesystem overview](/docs/filesystem/overview)
-- [`Agent` reference](/reference/agents/agent)

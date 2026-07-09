@@ -1,5 +1,5 @@
 ---
-title: "Skills | Filesystem"
+title: "Skills | File-based Agents"
 description: Add skills to a file-based agent under skills/ using modules, packaged SKILL.md, or flat markdown.
 packages:
   - "@mastra/core"
@@ -31,8 +31,8 @@ Always report temperatures in Celsius and Fahrenheit. Include the user's preferr
 
 | Need | Use | Why |
 | - | - | - |
-| Always-on identity, tone, or rules | [`instructions.md`](/docs/filesystem/instructions) | The model should see the guidance every turn. |
-| Callable action with inputs and outputs | [`tools/`](/docs/filesystem/tools) | The model needs to execute code, call APIs, or perform side effects. |
+| Always-on identity, tone, or rules | [`instructions.md`](/reference/file-based-agents/instructions) | The model should see the guidance every turn. |
+| Callable action with inputs and outputs | [`tools/`](/reference/file-based-agents/tools) | The model needs to execute code, call APIs, or perform side effects. |
 | Detailed reference or procedure loaded when relevant | `skills/` | The model only needs the full guidance for specific tasks. |
 
 ## Skill formats
@@ -49,7 +49,7 @@ For packaged skills, `description` is required in `SKILL.md` frontmatter. Flat m
 
 ## What gets loaded
 
-Filesystem skills are read at build time and added to the generated bundle. The deployed agent doesn't need to read those skill files from disk at runtime.
+File-based Agents skills are read at build time and added to the generated bundle. The deployed agent doesn't need to read those skill files from disk at runtime.
 
 For packaged skills, Mastra reads:
 
@@ -60,15 +60,6 @@ Reference files are keyed by filename. Symlinked files and directories under `re
 
 ## Precedence with config
 
-Discovered skills merge with any `skills` in [`config.ts`](/docs/filesystem/config). On a name collision, `config.skills` wins and a warning is logged.
+Discovered skills merge with any `skills` in [`config.ts`](/reference/file-based-agents/config). On a name collision, `config.skills` wins and a warning is logged.
 
 If `config.skills` is a function, discovered skills are ignored with a warning because function-valued skills can't be statically merged.
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Instructions](/docs/filesystem/instructions)
-- [Tools](/docs/filesystem/tools)
-- [Agent skills](/docs/agents/skills)
-- [Workspace skills](/docs/workspace/skills)
-- [`createSkill()` reference](/reference/agents/createSkill)

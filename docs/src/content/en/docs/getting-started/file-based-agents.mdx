@@ -1,11 +1,11 @@
 ---
-title: "Filesystem overview | Filesystem"
+title: "File-based Agents overview | File-based Agents"
 description: Define agents and project primitives by file convention under src/mastra, discovered by the Mastra bundler.
 packages:
   - "@mastra/core"
 ---
 
-# Filesystem overview
+# File-based Agents overview
 
 :::experimental
 
@@ -23,25 +23,25 @@ File-based agents use a default-first model. Start with the files required to ru
 
 | File or folder | What it adds |
 | - | - |
-| [`config.ts`](/docs/filesystem/config) | Model selection and runtime options |
-| [`instructions.md`](/docs/filesystem/instructions) | The always-on system prompt |
-| [`tools/`](/docs/filesystem/tools) | Typed functions the model can call |
-| [`skills/`](/docs/filesystem/skills) | Procedures loaded on demand |
-| [`memory.ts`](/docs/filesystem/memory) | Persistent conversation memory |
-| [`workspace.ts`](/docs/filesystem/workspace) | A filesystem and sandbox |
-| [`workspace/`](/docs/filesystem/workspace#seed-files) | Seed files shipped with the agent |
-| [`processors/`](/docs/filesystem/processors) | Input/output processing pipeline |
-| [`subagents/`](/docs/filesystem/subagents) | Specialist child agents for delegation |
+| [`config.ts`](/reference/file-based-agents/config) | Model selection and runtime options |
+| [`instructions.md`](/reference/file-based-agents/instructions) | The always-on system prompt |
+| [`tools/`](/reference/file-based-agents/tools) | Typed functions the model can call |
+| [`skills/`](/reference/file-based-agents/skills) | Procedures loaded on demand |
+| [`memory.ts`](/reference/file-based-agents/memory) | Persistent conversation memory |
+| [`workspace.ts`](/reference/file-based-agents/workspace) | A filesystem and sandbox |
+| [`workspace/`](/reference/file-based-agents/workspace#seed-files) | Seed files shipped with the agent |
+| [`processors/`](/reference/file-based-agents/processors) | Input/output processing pipeline |
+| [`subagents/`](/reference/file-based-agents/subagents) | Specialist child agents for delegation |
 
 ## Project files
 
 Other conventions configure the project as a whole.
 
-- [Workflows](/docs/filesystem/workflows): register workflows from `workflows/*.ts`
-- [Storage](/docs/filesystem/storage): set the default store from `storage.ts`
-- [Observability](/docs/filesystem/observability): configure traces, logs, and metrics from `observability.ts`
-- [Server](/docs/filesystem/server): configure the HTTP server from `server.ts`
-- [Studio](/docs/filesystem/studio): configure Mastra Studio from `studio.ts`
+- [Workflows](/reference/file-based-agents/workflows): register workflows from `workflows/*.ts`
+- [Storage](/reference/file-based-agents/storage): set the default store from `storage.ts`
+- [Observability](/reference/file-based-agents/observability): configure traces, logs, and metrics from `observability.ts`
+- [Server](/reference/file-based-agents/server): configure the HTTP server from `server.ts`
+- [Studio](/reference/file-based-agents/studio): configure Mastra Studio from `studio.ts`
 
 ## Project layout
 
@@ -125,11 +125,11 @@ Mastra uses the `weather` directory name as the default agent `id` and `name`. T
 
 ## Next steps
 
-- [Agent config](/docs/filesystem/config): Choose the model and define runtime options
-- [Instructions](/docs/filesystem/instructions): Write the agent's always-on prompt
-- [Tools](/docs/filesystem/tools): Add typed actions the model can call
-- [Skills](/docs/filesystem/skills): Add detailed procedures loaded on demand
-- [Workspace](/docs/filesystem/workspace): Give the agent files, shell access, and seed content
-- [Subagents](/docs/filesystem/subagents): Split work across specialist child agents
-- [Workflows](/docs/filesystem/workflows): Register project-level workflows by file convention
+- [Agent config](/reference/file-based-agents/config): Choose the model and define runtime options
+- [Instructions](/reference/file-based-agents/instructions): Write the agent's always-on prompt
+- [Tools](/reference/file-based-agents/tools): Add typed actions the model can call
+- [Skills](/reference/file-based-agents/skills): Add detailed procedures loaded on demand
+- [Workspace](/reference/file-based-agents/workspace): Give the agent files, shell access, and seed content
+- [Subagents](/reference/file-based-agents/subagents): Split work across specialist child agents
+- [Workflows](/reference/file-based-agents/workflows): Register project-level workflows by file convention
 - [`Agent` reference](/reference/agents/agent): Review the runtime API used after assembly

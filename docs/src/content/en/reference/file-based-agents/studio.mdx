@@ -1,5 +1,5 @@
 ---
-title: "Studio | Filesystem"
+title: "Studio | File-based Agents"
 description: Configure Mastra Studio by file convention with studio.ts.
 packages:
   - "@mastra/core"
@@ -44,10 +44,3 @@ The auth provider handles who the user is. For what the user can do after sign-i
 ## Precedence with code
 
 Code-registered Studio config wins over `studio.ts`. Use `studio.ts` when one project-wide Studio config is enough; use code registration when auth depends on runtime wiring in `src/mastra/index.ts`.
-
-## Related
-
-- [Filesystem overview](/docs/filesystem/overview)
-- [Studio overview](/docs/studio/overview)
-- [Studio auth](/docs/studio/auth)
-- [`Mastra` reference](/reference/core/mastra-class)

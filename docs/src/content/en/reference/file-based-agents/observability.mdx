@@ -1,5 +1,5 @@
 ---
-title: "Observability | Filesystem"
+title: "Observability | File-based Agents"
 description: Configure observability by file convention with observability.ts.
 packages:
   - "@mastra/core"
@@ -35,16 +35,8 @@ export default new Observability({
 
 ## Observability and storage
 
-`observability.ts` configures which signals are collected and where they're exported. [`storage.ts`](/docs/filesystem/storage) configures the project store that can persist observability records. For storage support by signal, see [Observability storage](/docs/observability/storage).
+`observability.ts` configures which signals are collected and where they're exported. [`storage.ts`](/reference/file-based-agents/storage) configures the project store that can persist observability records. For storage support by signal, see [Observability storage](/docs/observability/storage).
 
 ## Precedence with code
 
 Code-registered observability wins over `observability.ts`. Use `observability.ts` when one project-wide configuration is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.
-
-## Related
-
-- [Filesystem overview](/docs/filesystem/overview)
-- [Observability overview](/docs/observability/overview)
-- [Observability configuration](/docs/observability/config)
-- [Observability storage](/docs/observability/storage)
-- [`Mastra` reference](/reference/core/mastra-class)

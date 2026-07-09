@@ -1,5 +1,5 @@
 ---
-title: "Tools | Filesystem"
+title: "Tools | File-based Agents"
 description: Add tools to a file-based agent by placing createTool modules under tools/.
 packages:
   - "@mastra/core"
@@ -13,7 +13,7 @@ Use this page for the filesystem convention. For tool schemas, execution options
 
 ## When to use tools
 
-Add a tool when the agent needs a callable capability with structured inputs and runtime logic. Use [`instructions.md`](/docs/filesystem/instructions) for always-on behavior guidance and [`skills/`](/docs/filesystem/skills) for on-demand procedures or reference material.
+Add a tool when the agent needs a callable capability with structured inputs and runtime logic. Use [`instructions.md`](/reference/file-based-agents/instructions) for always-on behavior guidance and [`skills/`](/reference/file-based-agents/skills) for on-demand procedures or reference material.
 
 ## Quickstart
 
@@ -63,18 +63,10 @@ See the [`createTool()` reference](/reference/tools/create-tool) for all options
 
 ## Runtime boundary
 
-Tool code runs in your app/server runtime when the agent calls the tool. If a tool needs filesystem or shell isolation, call [workspace](/docs/filesystem/workspace) or sandbox APIs explicitly.
+Tool code runs in your app/server runtime when the agent calls the tool. If a tool needs filesystem or shell isolation, call [workspace](/reference/file-based-agents/workspace) or sandbox APIs explicitly.
 
 ## Precedence with config
 
-Discovered tools merge with any `tools` in [`config.ts`](/docs/filesystem/config). On a key collision, `config.tools` wins and a warning is logged.
+Discovered tools merge with any `tools` in [`config.ts`](/reference/file-based-agents/config). On a key collision, `config.tools` wins and a warning is logged.
 
 If `config.tools` is a function, discovered tools are ignored with a warning because function-valued tools can't be statically merged.
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Skills](/docs/filesystem/skills)
-- [Processors](/docs/filesystem/processors)
-- [Filesystem overview](/docs/filesystem/overview)
-- [`createTool()` reference](/reference/tools/create-tool)

@@ -1,5 +1,5 @@
 ---
-title: "Subagents | Filesystem"
+title: "Subagents | File-based Agents"
 description: Declare specialist child agents for a file-based agent under subagents/.
 packages:
   - "@mastra/core"
@@ -47,7 +47,7 @@ export default agentConfig({
 
 ## How the model delegates
 
-A subagent's `description` is routing text for the parent model. Write it like a [tool description](/docs/filesystem/tools#tool-options): explain what the subagent does and when to delegate to it.
+A subagent's `description` is routing text for the parent model. Write it like a [tool description](/reference/file-based-agents/tools#tool-options): explain what the subagent does and when to delegate to it.
 
 The build fails when a discovered subagent doesn't provide a non-empty description.
 
@@ -130,10 +130,3 @@ export default agentConfig({
   description: 'Use to turn research notes into a structured draft.',
 })
 ```
-
-## Related
-
-- [config.ts](/docs/filesystem/config)
-- [Filesystem overview](/docs/filesystem/overview)
-- [Supervisor agents](/docs/agents/supervisor-agents)
-- [`Agent` reference](/reference/agents/agent)
