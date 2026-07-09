@@ -1,1 +1,1 @@
-export * from './plan-compound';
+export * from './plan';

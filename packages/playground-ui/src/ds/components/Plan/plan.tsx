@@ -36,11 +36,11 @@ const usePlanContext = () => {
   return context;
 };
 
-export interface PlanRootProps extends ComponentProps<'div'> {
+export interface PlanProps extends ComponentProps<'div'> {
   collapsedHeight?: number;
 }
 
-export function PlanRoot({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanRootProps) {
+export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanProps) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [canExpand, setCanExpand] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);

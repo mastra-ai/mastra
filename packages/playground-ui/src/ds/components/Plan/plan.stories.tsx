@@ -3,7 +3,24 @@ import { CheckIcon, MessageSquareText, XIcon } from 'lucide-react';
 
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
-import { Plan } from './plan-compound';
+import {
+  Plan,
+  PlanActionGroup,
+  PlanBody,
+  PlanContent,
+  PlanControls,
+  PlanCopyButton,
+  PlanExpandButton,
+  PlanFile,
+  PlanHeader,
+  PlanHeaderActions,
+  PlanIntro,
+  PlanLabel,
+  PlanMain,
+  PlanPath,
+  PlanStatus,
+  PlanTitle,
+} from './plan';
 
 const planMarkdown = `## Implementation
 
@@ -21,9 +38,9 @@ const planMarkdown = `## Implementation
 export function renderPlan(markdown: string) {
   return (
     <Plan>
-      <Plan.Body>
-        <Plan.Content>{markdown}</Plan.Content>
-      </Plan.Body>
+      <PlanBody>
+        <PlanContent>{markdown}</PlanContent>
+      </PlanBody>
     </Plan>
   );
 }
@@ -54,24 +71,24 @@ type Story = StoryObj<typeof Plan>;
 export const Default: Story = {
   render: () => (
     <Plan>
-      <Plan.Header>
-        <Plan.Label />
-        <Plan.HeaderActions>
-          <Plan.CopyButton
+      <PlanHeader>
+        <PlanLabel />
+        <PlanHeaderActions>
+          <PlanCopyButton
             content={`Review migration plan\n\nFile: /workspace/.mastracode/plans/migration.md\n\n${planMarkdown}`}
           />
-        </Plan.HeaderActions>
-      </Plan.Header>
-      <Plan.Body>
-        <Plan.Intro>
-          <Plan.Title>Review migration plan</Plan.Title>
-          <Plan.Path>/workspace/.mastracode/plans/migration.md</Plan.Path>
-        </Plan.Intro>
-        <Plan.Main>
-          <Plan.Content>{planMarkdown}</Plan.Content>
-          <Plan.Controls />
-        </Plan.Main>
-      </Plan.Body>
+        </PlanHeaderActions>
+      </PlanHeader>
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>Review migration plan</PlanTitle>
+          <PlanPath>/workspace/.mastracode/plans/migration.md</PlanPath>
+        </PlanIntro>
+        <PlanMain>
+          <PlanContent>{planMarkdown}</PlanContent>
+          <PlanControls />
+        </PlanMain>
+      </PlanBody>
     </Plan>
   ),
 };
@@ -79,19 +96,19 @@ export const Default: Story = {
 export const Collapsed: Story = {
   render: () => (
     <Plan collapsedHeight={160}>
-      <Plan.Header>
-        <Plan.Label />
-      </Plan.Header>
-      <Plan.Body>
-        <Plan.Intro>
-          <Plan.Title>Review generated plan</Plan.Title>
-          <Plan.Path>/workspace/.mastracode/plans/generated-plan.md</Plan.Path>
-        </Plan.Intro>
-        <Plan.Main>
-          <Plan.Content>{`## Checklist\n\n${longPlanMarkdown}`}</Plan.Content>
-          <Plan.Controls />
-        </Plan.Main>
-      </Plan.Body>
+      <PlanHeader>
+        <PlanLabel />
+      </PlanHeader>
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>Review generated plan</PlanTitle>
+          <PlanPath>/workspace/.mastracode/plans/generated-plan.md</PlanPath>
+        </PlanIntro>
+        <PlanMain>
+          <PlanContent>{`## Checklist\n\n${longPlanMarkdown}`}</PlanContent>
+          <PlanControls />
+        </PlanMain>
+      </PlanBody>
     </Plan>
   ),
 };
@@ -99,21 +116,21 @@ export const Collapsed: Story = {
 export const FileUnavailable: Story = {
   render: () => (
     <Plan>
-      <Plan.Header>
-        <Plan.Label />
-        <Plan.HeaderActions>
-          <Plan.Status variant="warning">Missing</Plan.Status>
-        </Plan.HeaderActions>
-      </Plan.Header>
-      <Plan.Body>
-        <Plan.Intro>
-          <Plan.Title>Plan file unavailable</Plan.Title>
-          <Plan.Path>/workspace/.mastracode/plans/missing.md</Plan.Path>
-        </Plan.Intro>
-        <Plan.Main>
-          <Plan.File>/workspace/.mastracode/plans/missing.md</Plan.File>
-        </Plan.Main>
-      </Plan.Body>
+      <PlanHeader>
+        <PlanLabel />
+        <PlanHeaderActions>
+          <PlanStatus variant="warning">Missing</PlanStatus>
+        </PlanHeaderActions>
+      </PlanHeader>
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>Plan file unavailable</PlanTitle>
+          <PlanPath>/workspace/.mastracode/plans/missing.md</PlanPath>
+        </PlanIntro>
+        <PlanMain>
+          <PlanFile>/workspace/.mastracode/plans/missing.md</PlanFile>
+        </PlanMain>
+      </PlanBody>
     </Plan>
   ),
 };
@@ -121,28 +138,28 @@ export const FileUnavailable: Story = {
 export const WithStatusAndActions: Story = {
   render: () => (
     <Plan>
-      <Plan.Header>
-        <Plan.Label />
-        <Plan.HeaderActions>
-          <Plan.Status variant="info">Pending</Plan.Status>
-          <Plan.CopyButton content={planMarkdown} />
-        </Plan.HeaderActions>
-      </Plan.Header>
-      <Plan.Body>
-        <Plan.Intro>
-          <Plan.Title>Approve `submit_plan` output</Plan.Title>
-          <Plan.Path>/workspace/.mastracode/plans/submit-plan.md</Plan.Path>
-        </Plan.Intro>
-        <Plan.Main>
-          <Plan.Content>{planMarkdown}</Plan.Content>
-          <Plan.Controls>
-            <Plan.ActionGroup className="justify-end">
+      <PlanHeader>
+        <PlanLabel />
+        <PlanHeaderActions>
+          <PlanStatus variant="info">Pending</PlanStatus>
+          <PlanCopyButton content={planMarkdown} />
+        </PlanHeaderActions>
+      </PlanHeader>
+      <PlanBody>
+        <PlanIntro>
+          <PlanTitle>Approve `submit_plan` output</PlanTitle>
+          <PlanPath>/workspace/.mastracode/plans/submit-plan.md</PlanPath>
+        </PlanIntro>
+        <PlanMain>
+          <PlanContent>{planMarkdown}</PlanContent>
+          <PlanControls>
+            <PlanActionGroup className="justify-end">
               <Button type="button" variant="primary" size="icon-sm" tooltip="Reject plan" aria-label="Reject plan">
                 <XIcon />
               </Button>
-            </Plan.ActionGroup>
-            <Plan.ExpandButton />
-            <Plan.ActionGroup>
+            </PlanActionGroup>
+            <PlanExpandButton />
+            <PlanActionGroup>
               <Button
                 type="button"
                 variant="primary"
@@ -155,10 +172,10 @@ export const WithStatusAndActions: Story = {
               <Button type="button" variant="primary" size="icon-sm" tooltip="Approve plan" aria-label="Approve plan">
                 <CheckIcon />
               </Button>
-            </Plan.ActionGroup>
-          </Plan.Controls>
-        </Plan.Main>
-      </Plan.Body>
+            </PlanActionGroup>
+          </PlanControls>
+        </PlanMain>
+      </PlanBody>
     </Plan>
   ),
 };

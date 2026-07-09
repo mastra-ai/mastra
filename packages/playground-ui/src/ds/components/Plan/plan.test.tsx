@@ -5,7 +5,24 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Button } from '../Button';
 import { TooltipProvider } from '../Tooltip';
-import { Plan } from './plan-compound';
+import {
+  Plan,
+  PlanActionGroup,
+  PlanBody,
+  PlanContent,
+  PlanControls,
+  PlanCopyButton,
+  PlanExpandButton,
+  PlanFile,
+  PlanHeader,
+  PlanHeaderActions,
+  PlanIntro,
+  PlanLabel,
+  PlanMain,
+  PlanPath,
+  PlanStatus,
+  PlanTitle,
+} from './plan';
 
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
 
@@ -26,18 +43,18 @@ describe('Plan', () => {
   it('renders a composed title, filename, and markdown body', () => {
     renderPlan(
       <Plan>
-        <Plan.Header>
-          <Plan.Label />
-        </Plan.Header>
-        <Plan.Body>
-          <Plan.Intro>
-            <Plan.Title>Review migration plan</Plan.Title>
-            <Plan.Path>/workspace/plans/migration.md</Plan.Path>
-          </Plan.Intro>
-          <Plan.Main>
-            <Plan.Content>{'## Steps\n\n- Move data\n- Verify output'}</Plan.Content>
-          </Plan.Main>
-        </Plan.Body>
+        <PlanHeader>
+          <PlanLabel />
+        </PlanHeader>
+        <PlanBody>
+          <PlanIntro>
+            <PlanTitle>Review migration plan</PlanTitle>
+            <PlanPath>/workspace/plans/migration.md</PlanPath>
+          </PlanIntro>
+          <PlanMain>
+            <PlanContent>{'## Steps\n\n- Move data\n- Verify output'}</PlanContent>
+          </PlanMain>
+        </PlanBody>
       </Plan>,
     );
 
@@ -51,9 +68,9 @@ describe('Plan', () => {
   it('renders code spans in string titles', () => {
     renderPlan(
       <Plan>
-        <Plan.Body>
-          <Plan.Title>Approve `submit_plan` output</Plan.Title>
-        </Plan.Body>
+        <PlanBody>
+          <PlanTitle>Approve `submit_plan` output</PlanTitle>
+        </PlanBody>
       </Plan>,
     );
 
@@ -68,15 +85,15 @@ describe('Plan', () => {
 
     renderPlan(
       <Plan>
-        <Plan.Header>
-          <Plan.Label />
-          <Plan.HeaderActions>
-            <Plan.CopyButton content={'Review migration plan\n\nFile: /workspace/plans/migration.md\n\n## Steps'} />
-          </Plan.HeaderActions>
-        </Plan.Header>
-        <Plan.Body>
-          <Plan.Content>{'## Steps'}</Plan.Content>
-        </Plan.Body>
+        <PlanHeader>
+          <PlanLabel />
+          <PlanHeaderActions>
+            <PlanCopyButton content={'Review migration plan\n\nFile: /workspace/plans/migration.md\n\n## Steps'} />
+          </PlanHeaderActions>
+        </PlanHeader>
+        <PlanBody>
+          <PlanContent>{'## Steps'}</PlanContent>
+        </PlanBody>
       </Plan>,
     );
 
@@ -92,10 +109,10 @@ describe('Plan', () => {
   it('renders the path fallback when markdown content is unavailable', () => {
     renderPlan(
       <Plan>
-        <Plan.Body>
-          <Plan.Title>Submitted plan</Plan.Title>
-          <Plan.File>/workspace/.mastra/plans/review.md</Plan.File>
-        </Plan.Body>
+        <PlanBody>
+          <PlanTitle>Submitted plan</PlanTitle>
+          <PlanFile>/workspace/.mastra/plans/review.md</PlanFile>
+        </PlanBody>
       </Plan>,
     );
 
@@ -107,26 +124,26 @@ describe('Plan', () => {
   it('renders composed status and action slots', () => {
     renderPlan(
       <Plan>
-        <Plan.Header>
-          <Plan.Label />
-          <Plan.HeaderActions>
-            <Plan.Status variant="success">Approved</Plan.Status>
-          </Plan.HeaderActions>
-        </Plan.Header>
-        <Plan.Body>
-          <Plan.Main>
-            <Plan.Content>{'Plan'}</Plan.Content>
-            <Plan.Controls>
-              <Plan.ActionGroup className="justify-end">
+        <PlanHeader>
+          <PlanLabel />
+          <PlanHeaderActions>
+            <PlanStatus variant="success">Approved</PlanStatus>
+          </PlanHeaderActions>
+        </PlanHeader>
+        <PlanBody>
+          <PlanMain>
+            <PlanContent>{'Plan'}</PlanContent>
+            <PlanControls>
+              <PlanActionGroup className="justify-end">
                 <Button aria-label="Reject plan">Reject</Button>
-              </Plan.ActionGroup>
-              <Plan.ExpandButton />
-              <Plan.ActionGroup>
+              </PlanActionGroup>
+              <PlanExpandButton />
+              <PlanActionGroup>
                 <Button aria-label="Approve plan">Approve</Button>
-              </Plan.ActionGroup>
-            </Plan.Controls>
-          </Plan.Main>
-        </Plan.Body>
+              </PlanActionGroup>
+            </PlanControls>
+          </PlanMain>
+        </PlanBody>
       </Plan>,
     );
 
@@ -140,12 +157,12 @@ describe('Plan', () => {
 
     renderPlan(
       <Plan>
-        <Plan.Body>
-          <Plan.Main>
-            <Plan.Content>{'## Steps\n\n- Move data'}</Plan.Content>
-            <Plan.Controls />
-          </Plan.Main>
-        </Plan.Body>
+        <PlanBody>
+          <PlanMain>
+            <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+            <PlanControls />
+          </PlanMain>
+        </PlanBody>
       </Plan>,
     );
 
