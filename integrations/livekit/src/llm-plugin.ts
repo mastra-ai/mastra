@@ -39,6 +39,13 @@ export interface MastraLLMOptions {
    * NOTE: incompatible with the session's `preemptiveGeneration` option — a speculative turn that
    * completes before being discarded pollutes the thread. Leave preemptive generation off when
    * using `memory`.
+   *
+   * The plugin cannot detect the combination at runtime, so this stays a documented constraint
+   * rather than a warning: the LLM interface never receives the session (so the option can't be
+   * read), a preemptive `chat()` is shape-identical to a real turn (LiveKit drives the same
+   * `generateReply` with a draft transcript and no marker), and the observable signature — a
+   * cancelled stream followed by a `chat()` whose trailing user message changed — is exactly what
+   * an ordinary barge-in correction looks like, so a heuristic would warn on every barge-in.
    */
   memory?: MastraVoiceAgentMemory | false;
   /** Request context forwarded to generation (tenant, dialed number, ...). */
