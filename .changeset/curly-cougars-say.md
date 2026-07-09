@@ -12,7 +12,7 @@ export default createLiveKitWorker({
   tts: 'cartesia/sonic-3', // fallback voice
   configuration: {
     // Give each tenant its own voice, resolved per call from the dispatch metadata.
-    tts: ({ metadata }) => tenantVoices[metadata.requestContext?.tenant as string],
+    tts: ({ requestContext }) => tenantVoices[requestContext?.tenant as string],
   },
 });
 ```

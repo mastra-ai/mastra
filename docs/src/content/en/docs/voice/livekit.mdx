@@ -167,8 +167,8 @@ export default createLiveKitWorker({
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   configuration: {
-    tts: ({ metadata }) => {
-      const voice = tenantVoices[metadata.requestContext?.tenant as string]
+    tts: ({ requestContext }) => {
+      const voice = tenantVoices[requestContext?.tenant as string]
       if (!voice) return undefined // fall back to the top-level `tts`
       let tts = ttsByVoice.get(voice)
       if (!tts) {
