@@ -1,5 +1,11 @@
 # @mastra/schema-compat
 
+## 1.3.4-alpha.1
+
+### Patch Changes
+
+- test(schema-compat): fix 'successful' typo in provider e2e test descriptions ([#19167](https://github.com/mastra-ai/mastra/pull/19167))
+
 ## 1.3.4-alpha.0
 
 ### Patch Changes
