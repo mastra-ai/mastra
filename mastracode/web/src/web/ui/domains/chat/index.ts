@@ -14,7 +14,9 @@ export { ChatSessionProvider, useChatConnection, useChatSession, useChatTranscri
 export { useChatModels } from './context/useChatModels';
 export { useChatModes } from './context/useChatModes';
 export { useChatSessionContext } from './context/useChatSessionContext';
-export type { ChatConnectionApi, ChatSessionApi, ChatTranscriptApi } from './context/ChatSessionProvider';
+export type { ChatSessionApi } from './context/ChatSessionProvider';
+export type { ChatConnectionApi } from './context/ChatConnectionContext';
+export type { ChatTranscriptApi } from './context/ChatTranscriptContext';
 export type { ChatModelsApi } from './context/ChatModelsContext';
 export type { ChatModesApi } from './context/ChatModesContext';
 export { ChatCommandsProvider, useChatCommands } from './context/ChatCommandsProvider';

@@ -2,32 +2,35 @@ import type { ReactNode } from 'react';
 
 import { useAgentControllerModes } from '../hooks/useAgentControllerModes';
 import { useSwitchAgentControllerModeMutation } from '../hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModesContext } from './ChatModesContext';
 import type { ChatModesApi } from './ChatModesContext';
+import { useChatConnection } from './useChatConnection';
+import { useChatSessionContext } from './useChatSessionContext';
+import { useChatTranscript } from './useChatTranscript';
 
 interface ChatModesProviderProps {
   children: ReactNode;
-  agentControllerId: string;
-  resourceId: string;
-  baseUrl?: string;
-  enabled?: boolean;
-  sessionModeId?: string;
-  transcriptModeId?: string;
 }
 
-export function ChatModesProvider({
-  children,
-  agentControllerId,
-  resourceId,
-  baseUrl,
-  enabled = true,
-  sessionModeId,
-  transcriptModeId,
-}: ChatModesProviderProps) {
-  const modesQuery = useAgentControllerModes({ agentControllerId, resourceId, baseUrl, enabled });
-  const switchModeMutation = useSwitchAgentControllerModeMutation({ agentControllerId, resourceId, baseUrl, enabled });
+export function ChatModesProvider({ children }: ChatModesProviderProps) {
+  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { state } = useChatConnection();
+  const { transcript } = useChatTranscript();
+  const modesQuery = useAgentControllerModes({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
+  const switchModeMutation = useSwitchAgentControllerModeMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
   const modes = modesQuery.data ?? [];
-  const activeModeId = sessionModeId ?? transcriptModeId;
+  const activeModeId = state?.modeId ?? transcript.modeId;
   const value: ChatModesApi = {
     modes,
     activeModeId,

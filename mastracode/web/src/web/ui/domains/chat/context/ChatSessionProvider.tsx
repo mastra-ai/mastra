@@ -1,6 +1,5 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { createContext, useContext } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
@@ -10,44 +9,26 @@ import { SkeletonRows } from '../../../ui';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useAgentControllerConnection } from '../hooks/useAgentControllerConnection';
-import type { ConnectionStatus } from '../hooks/useAgentControllerConnection';
 import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import type { TranscriptState } from '../services/transcript';
+import { ChatConnectionContext } from './ChatConnectionContext';
+import type { ChatConnectionApi } from './ChatConnectionContext';
 import { ChatModelsProvider } from './ChatModelsProvider';
 import { ChatModesProvider } from './ChatModesProvider';
 import { ChatSessionContext } from './ChatSessionContext';
+import { ChatTranscriptContext } from './ChatTranscriptContext';
+import type { ChatTranscriptApi } from './ChatTranscriptContext';
 import type { ChatModesApi } from './ChatModesContext';
+import { useChatConnection } from './useChatConnection';
 import { useChatModes } from './useChatModes';
 import { useChatSessionContext } from './useChatSessionContext';
-
-export interface ChatConnectionApi {
-  status: ConnectionStatus;
-}
-
-export interface ChatTranscriptApi {
-  transcript: TranscriptState;
-  busy: boolean;
-  showWorkingIndicator: boolean;
-  localUser: (text: string, steer?: boolean) => void;
-  syncState: (state: {
-    modeId?: string;
-    modelId?: string;
-    omProgress?: TranscriptState['omProgress'];
-    tokenUsage?: TranscriptState['usage'];
-  }) => void;
-  reset: (threadId?: string, state?: Parameters<ReturnType<typeof useAgentControllerTranscript>['reset']>[1]) => void;
-  resolvePrompt: (id: string) => void;
-  pushNotice: (text: string, level?: 'info' | 'error') => void;
-}
+import { useChatTranscript } from './useChatTranscript';
 
 export interface ChatSessionApi extends ChatConnectionApi, ChatTranscriptApi {
   modes: ChatModesApi['modes'];
 }
-
-const ChatConnectionContext = createContext<ChatConnectionApi | null>(null);
-const ChatTranscriptContext = createContext<ChatTranscriptApi | null>(null);
 
 export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
@@ -133,25 +114,11 @@ function ChatSessionBoundaryContent({
   };
 
   const busy = effectiveTranscript.running || effectiveTranscript.pending;
-  const lastEntry = effectiveTranscript.entries[effectiveTranscript.entries.length - 1];
-  const lastEntryHasText =
-    lastEntry?.kind === 'message' &&
-    lastEntry.message.role === 'assistant' &&
-    lastEntry.message.content.parts.some(part => part.type === 'text' && part.text.trim().length > 0);
-  const showWorkingIndicator =
-    busy &&
-    !(
-      lastEntry?.kind === 'message' &&
-      lastEntry.message.role === 'assistant' &&
-      lastEntry.streaming &&
-      lastEntryHasText
-    );
 
-  const connectionValue: ChatConnectionApi = { status: connection.status };
+  const connectionValue: ChatConnectionApi = { status: connection.status, state: connection.state };
   const transcriptValue: ChatTranscriptApi = {
     transcript: effectiveTranscript,
     busy,
-    showWorkingIndicator,
     localUser,
     syncState,
     reset,
@@ -161,46 +128,20 @@ function ChatSessionBoundaryContent({
   return (
     <ChatConnectionContext.Provider value={connectionValue}>
       <ChatTranscriptContext.Provider value={transcriptValue}>
-        <ChatModesProvider
-          agentControllerId={AGENT_CONTROLLER_ID}
-          resourceId={resourceId}
-          baseUrl={baseUrl}
-          enabled={sessionEnabled}
-          sessionModeId={connection.state?.modeId}
-          transcriptModeId={transcript.modeId}
-        >
-          <ChatModelsProvider
-            agentControllerId={AGENT_CONTROLLER_ID}
-            resourceId={resourceId}
-            baseUrl={baseUrl}
-            enabled={sessionEnabled}
-            sessionModelId={connection.state?.modelId}
-            transcriptModelId={transcript.modelId}
-          >
-            {children}
-          </ChatModelsProvider>
+        <ChatModesProvider>
+          <ChatModelsProvider>{children}</ChatModelsProvider>
         </ChatModesProvider>
       </ChatTranscriptContext.Provider>
     </ChatConnectionContext.Provider>
   );
 }
 
-export function useChatConnection(): ChatConnectionApi {
-  const ctx = useContext(ChatConnectionContext);
-  if (!ctx) throw new Error('useChatConnection must be used within a ChatSessionProvider');
-  return ctx;
-}
-
-export function useChatTranscript(): ChatTranscriptApi {
-  const ctx = useContext(ChatTranscriptContext);
-  if (!ctx) throw new Error('useChatTranscript must be used within a ChatSessionProvider');
-  return ctx;
-}
-
 export function useChatSession(): ChatSessionApi {
-  const connection = useContext(ChatConnectionContext);
-  const transcript = useContext(ChatTranscriptContext);
+  const connection = useChatConnection();
+  const transcript = useChatTranscript();
   const modes = useChatModes();
-  if (!connection || !transcript) throw new Error('useChatSession must be used within a ChatSessionProvider');
+  if (!connection) throw new Error('useChatSession must be used within a ChatSessionProvider');
   return { ...connection, ...transcript, modes: modes.modes };
 }
+
+export { useChatConnection, useChatTranscript };

@@ -1,31 +1,29 @@
 import type { ReactNode } from 'react';
 
 import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatModelsContext } from './ChatModelsContext';
 import type { ChatModelsApi } from './ChatModelsContext';
+import { useChatConnection } from './useChatConnection';
+import { useChatSessionContext } from './useChatSessionContext';
+import { useChatTranscript } from './useChatTranscript';
 
 interface ChatModelsProviderProps {
   children: ReactNode;
-  agentControllerId: string;
-  resourceId: string;
-  baseUrl?: string;
-  enabled?: boolean;
-  sessionModelId?: string;
-  transcriptModelId?: string;
 }
 
-export function ChatModelsProvider({
-  children,
-  agentControllerId,
-  resourceId,
-  baseUrl,
-  enabled = true,
-  sessionModelId,
-  transcriptModelId,
-}: ChatModelsProviderProps) {
-  const switchModelMutation = useSwitchAgentControllerModelMutation({ agentControllerId, resourceId, baseUrl, enabled });
+export function ChatModelsProvider({ children }: ChatModelsProviderProps) {
+  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { state } = useChatConnection();
+  const { transcript } = useChatTranscript();
+  const switchModelMutation = useSwitchAgentControllerModelMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
   const value: ChatModelsApi = {
-    activeModelId: sessionModelId ?? transcriptModelId,
+    activeModelId: state?.modelId ?? transcript.modelId,
     setModel: modelId => switchModelMutation.mutateAsync(modelId),
   };
 

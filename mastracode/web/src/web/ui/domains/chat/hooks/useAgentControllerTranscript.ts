@@ -4,7 +4,7 @@ import { useReducer, useRef } from 'react';
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
 import type { TranscriptState, UsageSnapshot } from '../services/transcript';
 
-interface SessionStateSnapshot {
+export interface SessionStateSnapshot {
   modeId?: string;
   modelId?: string;
   omProgress?: AgentControllerOMProgress;

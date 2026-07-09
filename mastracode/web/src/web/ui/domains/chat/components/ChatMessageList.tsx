@@ -9,7 +9,8 @@ import type { RefObject } from 'react';
 import { Wordmark } from '../../../ui';
 import type { Project } from '../../workspaces';
 import { useActiveProjectContext } from '../../workspaces';
-import type { ChatConnectionApi, ChatTranscriptApi } from '../context/ChatSessionProvider';
+import type { ChatConnectionApi } from '../context/ChatConnectionContext';
+import type { ChatTranscriptApi } from '../context/ChatTranscriptContext';
 import { useChatConnection, useChatTranscript } from '../context/ChatSessionProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import {
