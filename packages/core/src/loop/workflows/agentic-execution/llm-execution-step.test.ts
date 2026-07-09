@@ -1742,6 +1742,109 @@ describe('createLLMExecutionStep gateway provider tools', () => {
     expect(firstModelStream).toHaveBeenCalledTimes(1);
   });
 
+  it('records model failure and processor span when processAPIError requests a retry', async () => {
+    const apiError = new APICallError({
+      message: 'transient upstream failure',
+      url: 'https://model.example.com/v1/messages',
+      requestBodyValues: {},
+      statusCode: 503,
+      isRetryable: true,
+    });
+    const doStream = vi.fn(async () => {
+      throw apiError;
+    });
+    const processorSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+    const agentRunSpan = {
+      type: SpanType.AGENT_RUN,
+      createChildSpan: vi.fn(() => processorSpan),
+      findParent: vi.fn(),
+    };
+    const modelSpan = {
+      findParent: vi.fn(() => agentRunSpan),
+    };
+    const modelSpanTracker = {
+      getTracingContext: vi.fn(() => ({ currentSpan: modelSpan })),
+      reportGenerationError: vi.fn(),
+      startStep: vi.fn(),
+      startInference: vi.fn(),
+      setInferenceContext: vi.fn(),
+    };
+    const processAPIError = vi.fn(async () => ({ retry: true }));
+
+    const llmExecutionStep = createLLMExecutionStep({
+      agentId: 'test-agent',
+      messageId: 'msg-0',
+      runId: 'test-run',
+      startTimestamp: Date.now(),
+      methodType: 'stream',
+      controller,
+      outputWriter: vi.fn(),
+      messageList,
+      modelSpanTracker: modelSpanTracker as any,
+      maxProcessorRetries: 1,
+      errorProcessors: [
+        {
+          id: 'stream-error-retry-processor',
+          name: 'Stream Error Retry Processor',
+          processAPIError,
+        },
+      ],
+      models: [
+        {
+          id: 'test-model',
+          maxRetries: 0,
+          model: {
+            specificationVersion: 'v2' as const,
+            provider: 'mock-provider',
+            modelId: 'mock-model-id',
+            supportedUrls: {},
+            doGenerate: vi.fn(),
+            doStream,
+          } as any,
+        },
+      ],
+      tools: {},
+      streamState: {
+        serialize: vi.fn(),
+        deserialize: vi.fn(),
+      },
+      _internal: {
+        generateId: () => 'generated-id',
+        threadId: 'thread-123',
+        resourceId: 'resource-456',
+      },
+      logger: {
+        error: vi.fn(),
+        warn: vi.fn(),
+        debug: vi.fn(),
+      } as any,
+    } as unknown as OuterLLMRun<{}>);
+
+    const result = await llmExecutionStep.execute(createExecuteParams(createIterationInput()));
+
+    expect(result.stepResult.reason).toBe('retry');
+    expect(modelSpanTracker.reportGenerationError).toHaveBeenCalledWith({ error: apiError });
+    expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.PROCESSOR_RUN,
+        name: 'request error processor: stream-error-retry-processor',
+        input: expect.objectContaining({
+          error: 'transient upstream failure',
+          retryCount: 0,
+        }),
+      }),
+    );
+    expect(processorSpan.end).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: expect.objectContaining({ retry: true }),
+      }),
+    );
+    expect(processAPIError).toHaveBeenCalledOnce();
+  });
+
   it('re-stamps MODEL_GENERATION span attributes when a fallback model takes over', async () => {
     const primaryStream = vi.fn(async () => {
       throw new APICallError({
