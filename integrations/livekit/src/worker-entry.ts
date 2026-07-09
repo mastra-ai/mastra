@@ -43,9 +43,8 @@ export type {
   VoiceTurnResult,
   VoiceTurnUsage,
 } from './bridge';
-// The MastraLLM plugin, re-exported here for discoverability (both entries load the LiveKit
-// runtime anyway). Its canonical home is `@mastra/livekit/plugin`.
-export { MastraLLM } from './llm-plugin';
-export type { MastraLLMOptions } from './llm-plugin';
+// The remote transport lives on the worker surface because it has a worker-mode use of its own:
+// it produces a `VoiceReplyGenerator` for the worker's `generate:` option (point a worker at a
+// remote Mastra server). The `MastraLLM` plugin does not — import it from `@mastra/livekit/plugin`.
 export { createRemoteAgentReplyGenerator } from './remote';
 export type { RemoteMastraAgentOptions, RemoteAgentReplyGeneratorOptions } from './remote';

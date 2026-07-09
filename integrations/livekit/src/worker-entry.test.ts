@@ -7,7 +7,6 @@ describe('worker entry (@mastra/livekit/worker)', () => {
       'DEFAULT_END_CALL_MAX_WAIT_MS',
       'DEFAULT_END_CALL_REASON',
       'DEFAULT_END_CALL_TOOL',
-      'MastraLLM',
       'chatContextToMessages',
       'createLiveKitWorker',
       'createRemoteAgentReplyGenerator',
