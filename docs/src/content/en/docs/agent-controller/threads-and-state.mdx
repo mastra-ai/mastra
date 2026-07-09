@@ -91,6 +91,7 @@ import { AgentController } from '@mastra/core/agent-controller'
 import { z } from 'zod'
 
 const agent = new Agent({
+  id: 'assistant',
   name: 'assistant',
   instructions: 'Help the user manage a stateful session.',
   model: '__GATEWAY_OPENAI_MODEL__',

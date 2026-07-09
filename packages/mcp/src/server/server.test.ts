@@ -2678,9 +2678,16 @@ describe('MCPServer with Tool Output Schema', () => {
     const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     expect(tool).toBeDefined();
-    // outputSchema is not passed to createTool (MCP SDK validates via AJV internally),
-    // so it won't be on the Mastra tool wrapper
-    expect(tool.outputSchema).toBeUndefined();
+    const documentedSchema = tool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-07' });
+    expect(documentedSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        processedInput: { type: 'string' },
+        timestamp: { type: 'string' },
+      },
+    });
+    // MCP SDK validates output; Mastra schema is documentation-only (always passes).
+    expect(tool.outputSchema?.['~standard'].validate({ not: 'valid' })).toEqual({ value: { not: 'valid' } });
   });
 
   it('should call tool and receive structuredContent', async () => {
@@ -2777,7 +2784,10 @@ describe('MCPServer - Tool Input Validation', () => {
 
     validationClient = new InternalMastraMCPClient({
       name: 'validation-test-client',
-      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`) },
+      // These tests assert the shape of the server's isError validation envelope
+      // (result.isError / result.content), so opt out of the default throw-on-error
+      // behavior and resolve with the raw result instead.
+      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`), onToolError: 'return' },
     });
 
     await validationClient.connect();

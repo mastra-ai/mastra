@@ -256,7 +256,7 @@ describe('DurableAgent RequestContext reserved keys', () => {
   });
 
   describe('RequestContext serialization', () => {
-    it('should not include requestContext in serialized workflow input', async () => {
+    it('snapshots JSON-safe requestContext entries for parity with the non-durable agent', async () => {
       const mockModel = createTextModel('Hello!');
 
       const baseAgent = new Agent({
@@ -268,18 +268,26 @@ describe('DurableAgent RequestContext reserved keys', () => {
       const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
 
       const requestContext = new RequestContext();
-      requestContext.set('sensitiveData', 'should-not-serialize');
+      requestContext.set('userId', 'user-123');
+      // Non-JSON values are dropped from the snapshot.
+      requestContext.set('liveHandle', () => 'not-serializable');
 
       const result = await durableAgent.prepare('Hello', {
         requestContext,
       });
 
-      // Workflow input should be JSON-serializable
-      // RequestContext is not serialized (it's stored in registry or passed separately)
-      const serialized = JSON.stringify(result.workflowInput);
-      expect(serialized).toBeDefined();
-      expect(serialized).not.toContain('sensitiveData');
-      expect(serialized).not.toContain('should-not-serialize');
+      // The serializable subset of requestContext is snapshotted on workflow
+      // input so durable scorers can see customContext, mirroring the
+      // non-durable agent which forwards Object.fromEntries(requestContext.entries())
+      // to scorers. The full RequestContext (which can hold live handles) is
+      // not serialized — it stays on the run registry.
+      //
+      // The snapshot is taken *before* preparation mutates the request context
+      // (e.g. adding MASTRA_VERSIONS_KEY / MastraMemory), so persisted
+      // customContext must reflect only caller-provided entries.
+      const entries = (result.workflowInput as { requestContextEntries?: Record<string, unknown> })
+        .requestContextEntries;
+      expect(entries).toEqual({ userId: 'user-123' });
     });
   });
 });

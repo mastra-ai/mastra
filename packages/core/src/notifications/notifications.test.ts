@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
 import { InMemoryNotificationsStorage } from './storage';
-import { createNotificationDispatchWorkflow, parseNotificationDispatchNow } from './workflow';
+import {
+  buildNotificationDispatchSchedule,
+  createNotificationDispatchWorkflow,
+  NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+  parseNotificationDispatchNow,
+} from './workflow';
 import {
   createNotificationInboxTool,
   createNotificationSignal,
@@ -700,14 +705,10 @@ describe('notification inbox', () => {
       const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
       expect(workflow.id).toBe('__mastra_notification_dispatcher');
       expect(mastra.listWorkflows()).not.toHaveProperty('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/1 * * * *',
-          inputData: { limit: 100 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
+      // The dispatcher must not declare a schedule — its schedule row is
+      // created lazily on the first deferred notification so idle apps never
+      // start the scheduler (see #18864).
+      expect(workflow.getScheduleConfigs()).toEqual([]);
     } finally {
       await mastra.stopWorkers();
     }
@@ -734,188 +735,33 @@ describe('notification inbox', () => {
     }
   });
 
-  it('uses notification dispatch workflow config when provided', async () => {
-    const notifications = new InMemoryNotificationsStorage();
-    const storage = new MastraCompositeStore({
-      id: 'notification-workflow-config-storage',
-      domains: { notifications },
-    });
-    const mastra = new Mastra({
-      storage,
-      logger: false,
-      notifications: { dispatch: { cron: '*/5 * * * *', batchSize: 25 } },
-    });
+  it('builds the dispatcher schedule row from the dispatch config', () => {
+    const schedule = buildNotificationDispatchSchedule({ cron: '*/5 * * * *', batchSize: 25 });
 
-    try {
-      const workflow = (mastra as any).getWorkflow('__mastra_notification_dispatcher');
-      expect(workflow.getScheduleConfigs()).toMatchObject([
-        {
-          id: 'dispatch',
-          cron: '*/5 * * * *',
-          inputData: { limit: 25 },
-          metadata: { internal: true, feature: 'notifications' },
-        },
-      ]);
-    } finally {
-      await mastra.stopWorkers();
-    }
+    expect(schedule).toMatchObject({
+      id: NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+      cron: '*/5 * * * *',
+      status: 'active',
+      target: {
+        type: 'workflow',
+        workflowId: '__mastra_notification_dispatcher',
+        inputData: { limit: 25 },
+      },
+      metadata: { internal: true, feature: 'notifications' },
+    });
+    expect(schedule.nextFireAt).toBeGreaterThan(Date.now());
+    // Not `wf_`-prefixed: declarative orphan-cleanup must leave it alone.
+    expect(schedule.id.startsWith('wf_')).toBe(false);
   });
 
   it('rejects invalid notification dispatch workflow times', () => {
     expect(() => parseNotificationDispatchNow('not-a-date')).toThrow('Invalid notification dispatch time: not-a-date');
   });
 
-  it('creates a scheduled notification dispatch workflow', () => {
-    const workflow = createNotificationDispatchWorkflow({ cron: '*/5 * * * *', batchSize: 25 });
+  it('creates an unscheduled notification dispatch workflow', () => {
+    const workflow = createNotificationDispatchWorkflow({ batchSize: 25 });
 
     expect(workflow.id).toBe('__mastra_notification_dispatcher');
-    expect((workflow as any).getScheduleConfigs()).toMatchObject([
-      {
-        id: 'dispatch',
-        cron: '*/5 * * * *',
-        inputData: { limit: 25 },
-      },
-    ]);
-  });
-
-  it('passes getNotificationStreamOptions into ifIdle for individual dispatch', async () => {
-    const storage = new InMemoryNotificationsStorage();
-    const now = new Date('2026-05-30T12:00:00Z');
-    const sent: any[] = [];
-    const sendSignal = vi.fn((signal, target) => {
-      sent.push({ signal, target });
-      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
-    });
-    const getNotificationStreamOptions = vi.fn(async () => ({
-      requestContext: { controller: { session: { modelId: 'gpt-4o' } } },
-    }));
-    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal, getNotificationStreamOptions })) } as any;
-    await storage.createNotification({
-      id: 'n1',
-      agentId: 'agent-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      source: 'github',
-      kind: 'ci-status',
-      priority: 'high',
-      summary: 'CI failed',
-      deliverAt: now,
-    });
-
-    const result = await dispatchDueNotifications({ mastra, storage, now });
-
-    expect(result.failed).toEqual([]);
-    expect(result.delivered).toMatchObject([{ id: 'n1', status: 'delivered' }]);
-    expect(getNotificationStreamOptions).toHaveBeenCalledWith({ resourceId: 'resource-1', threadId: 'thread-1' });
-    expect(sent[0]?.target).toEqual({
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      ifIdle: { streamOptions: { requestContext: { controller: { session: { modelId: 'gpt-4o' } } } } },
-    });
-  });
-
-  it('passes getNotificationStreamOptions into ifIdle for summary dispatch', async () => {
-    const storage = new InMemoryNotificationsStorage();
-    const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({
-      accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }),
-      signal,
-      persisted: Promise.resolve(),
-    }));
-    const getNotificationStreamOptions = vi.fn(async () => ({
-      requestContext: { controller: { session: { modelId: 'gpt-4o' } } },
-    }));
-    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal, getNotificationStreamOptions })) } as any;
-    await storage.createNotification({
-      id: 'n1',
-      agentId: 'agent-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      source: 'github',
-      kind: 'mention',
-      summary: 'Someone mentioned you',
-      summaryAt: now,
-    });
-
-    const result = await dispatchDueNotifications({ mastra, storage, now });
-
-    expect(result.failed).toEqual([]);
-    expect(getNotificationStreamOptions).toHaveBeenCalledWith({ resourceId: 'resource-1', threadId: 'thread-1' });
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'notification', tagName: 'notification-summary' }),
-      {
-        resourceId: 'resource-1',
-        threadId: 'thread-1',
-        ifIdle: { streamOptions: { requestContext: { controller: { session: { modelId: 'gpt-4o' } } } } },
-      },
-    );
-  });
-
-  it('includes both behavior and streamOptions for low-priority summary with getNotificationStreamOptions', async () => {
-    const storage = new InMemoryNotificationsStorage();
-    const now = new Date('2026-05-30T12:00:00Z');
-    const sendSignal = vi.fn((signal, _target) => ({
-      accepted: Promise.resolve({ action: 'persist' }),
-      signal,
-      persisted: Promise.resolve(),
-    }));
-    const getNotificationStreamOptions = vi.fn(async () => ({
-      requestContext: { controller: { session: { modelId: 'gpt-4o' } } },
-    }));
-    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal, getNotificationStreamOptions })) } as any;
-    await storage.createNotification({
-      id: 'n1',
-      agentId: 'agent-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      source: 'github',
-      kind: 'ci-status',
-      priority: 'low',
-      summary: 'Low priority update',
-      summaryAt: now,
-    });
-
-    const result = await dispatchDueNotifications({ mastra, storage, now });
-
-    expect(result.failed).toEqual([]);
-    expect(sendSignal).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'notification', tagName: 'notification-summary' }),
-      {
-        resourceId: 'resource-1',
-        threadId: 'thread-1',
-        ifIdle: {
-          behavior: 'persist',
-          streamOptions: { requestContext: { controller: { session: { modelId: 'gpt-4o' } } } },
-        },
-      },
-    );
-  });
-
-  it('omits ifIdle when getNotificationStreamOptions is not defined on agent', async () => {
-    const storage = new InMemoryNotificationsStorage();
-    const now = new Date('2026-05-30T12:00:00Z');
-    const sent: any[] = [];
-    const sendSignal = vi.fn((signal, target) => {
-      sent.push({ signal, target });
-      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-1' }), signal };
-    });
-    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
-    await storage.createNotification({
-      id: 'n1',
-      agentId: 'agent-1',
-      resourceId: 'resource-1',
-      threadId: 'thread-1',
-      source: 'github',
-      kind: 'ci-status',
-      priority: 'high',
-      summary: 'CI failed',
-      deliverAt: now,
-    });
-
-    const result = await dispatchDueNotifications({ mastra, storage, now });
-
-    expect(result.failed).toEqual([]);
-    expect(result.delivered).toMatchObject([{ id: 'n1', status: 'delivered' }]);
-    expect(sent[0]?.target).toEqual({ resourceId: 'resource-1', threadId: 'thread-1' });
+    expect((workflow as any).getScheduleConfigs()).toEqual([]);
   });
 });

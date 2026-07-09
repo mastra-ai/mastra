@@ -328,7 +328,9 @@ export class SpannerStore extends MastraCompositeStore {
     // root throw below propagates to the current call. Attach a no-op catch
     // here so a rejected `pending` without other awaiters is not flagged as
     // an unhandled rejection.
-    pending.catch(() => {});
+    pending.catch(e => {
+      this.logger?.warn?.('Initialization failed', e);
+    });
 
     try {
       // Initialize domains sequentially to avoid concurrent DDL errors in Spanner.

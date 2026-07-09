@@ -263,5 +263,15 @@
     "zai-org/glm-4.6v",
     "zai-org/glm-4.6v-flash-original",
     "zai-org/glm-4.6v-original"
+  ],
+  "temperature": [
+    "nvidia/Llama-3.1-Nemotron-70B-Instruct-HF",
+    "nvidia/Llama-3.3-Nemotron-Super-49B-v1",
+    "nvidia/Llama-3_3-Nemotron-Super-49B-v1_5",
+    "nvidia/nemotron-3-nano-30b-a3b",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "nvidia/nemotron-3-super-120b-a12b",
+    "nvidia/nemotron-3-super-120b-a12b:thinking",
+    "nvidia/nvidia-nemotron-nano-9b-v2"
   ]
 }

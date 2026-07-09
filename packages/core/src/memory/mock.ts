@@ -237,7 +237,7 @@ export class MockMemory extends MastraMemory {
 
   public listTools(_config?: MemoryConfigInternal): Record<string, ToolAction<any, any, any>> {
     const mergedConfig = this.getMergedThreadConfig(_config);
-    if (!mergedConfig.workingMemory?.enabled) {
+    if (!mergedConfig.workingMemory?.enabled || mergedConfig.workingMemory.agentManaged === false) {
       return {};
     }
 

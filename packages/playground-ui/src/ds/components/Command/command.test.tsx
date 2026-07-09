@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, assert, describe, expect, it, vi } from 'vitest';
 
 import { Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './command';
 
@@ -185,6 +186,10 @@ describe('Command', () => {
       expect(screen.queryByText('Weather Workflow')).toBeNull();
     });
 
-    expect(Boolean(beta?.compareDocumentPosition(alpha!) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
+    assert(beta, 'Expected filtered command items');
+    assert(alpha, 'Expected filtered command items');
+    const betaItem = beta;
+    const alphaItem = alpha;
+    expect(Boolean(betaItem.compareDocumentPosition(alphaItem) & Node.DOCUMENT_POSITION_FOLLOWING)).toBe(true);
   });
 });

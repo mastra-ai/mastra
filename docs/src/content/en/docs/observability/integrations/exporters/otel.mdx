@@ -8,7 +8,7 @@ packages:
 
 # OpenTelemetry exporter
 
-The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Dash0, Traceloop, Laminar, and more.
+The OpenTelemetry (OTEL) exporter sends your traces and logs to any OTEL-compatible observability platform using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, and more.
 
 :::info Looking for bidirectional OTEL integration?
 
@@ -20,7 +20,7 @@ If you have existing OpenTelemetry instrumentation and want Mastra traces to inh
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow)
+### For HTTP/Protobuf Providers (SigNoz, New Relic, Laminar, MLflow, Latitude)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
@@ -69,6 +69,27 @@ new OtelExporter({
   },
 })
 ```
+
+### Latitude
+
+[Latitude](https://latitude.so) is an open-source LLM observability and evaluation platform that ingests OTLP traces. Use the `custom` provider with HTTP/Protobuf, pointing at Latitude's ingestion endpoint and authenticating with your API key and project slug:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: 'https://ingest.latitude.so/v1/traces',
+      protocol: 'http/protobuf',
+      headers: {
+        Authorization: `Bearer ${process.env.LATITUDE_API_KEY}`,
+        'X-Latitude-Project': process.env.LATITUDE_PROJECT,
+      },
+    },
+  },
+})
+```
+
+Sign up at [console.latitude.so](https://console.latitude.so/login), or self-host and point the endpoint at your own ingestion host.
 
 ### Dash0
 

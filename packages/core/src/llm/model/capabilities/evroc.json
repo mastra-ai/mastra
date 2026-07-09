@@ -6,5 +6,13 @@
     "mistralai/Mistral-Medium-3.5-128B",
     "moonshotai/Kimi-K2.6",
     "nvidia/Llama-3.3-70B-Instruct-FP8"
+  ],
+  "temperature": [
+    "Qwen/Qwen3.6-35B-A3B-FP8",
+    "evroc/roc",
+    "google/gemma-4-26B-A4B-it",
+    "mistralai/Mistral-Medium-3.5-128B",
+    "moonshotai/Kimi-K2.6",
+    "nvidia/Llama-3.3-70B-Instruct-FP8"
   ]
 }
