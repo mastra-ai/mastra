@@ -116,12 +116,73 @@ export class AgentControllerChannels extends AgentChannels {
   }
 
   /**
+   * Resolve an approval-card "approve" action against the controller session's
+   * parked tool-approval gate. The run engine — awaiting the gate inside its
+   * stream-consumer loop — performs the actual resume itself and keeps
+   * consuming, so the continuation renders through the output processor.
+   */
+  protected override async dispatchApproval(args: {
+    runId: string;
+    toolCallId: string;
+    requestContext: RequestContext;
+    memory: { thread: string; resource: string };
+  }): Promise<void> {
+    await this.respondToSessionApproval({ decision: 'approve', ...args });
+  }
+
+  /**
+   * Resolve an approval-card "deny" action against the controller session's
+   * parked tool-approval gate (see {@link dispatchApproval}).
+   */
+  protected override async dispatchDecline(args: {
+    runId: string;
+    toolCallId: string;
+    requestContext: RequestContext;
+    memory: { thread: string; resource: string };
+  }): Promise<void> {
+    await this.respondToSessionApproval({ decision: 'decline', ...args });
+  }
+
+  /**
+   * Shared approve/decline path. Never calls the session's internal
+   * `approveToolCall`/`declineToolCall` executors directly — the engine parked
+   * at the gate owns the resume. `respondToToolApproval` is a silent no-op
+   * when nothing is armed or the toolCallId mismatches, so staleness is
+   * pre-checked explicitly (an armed gate does not survive process restarts,
+   * so restart-recovered approvals are always stale — consistent with the
+   * v1 long-lived-server scope).
+   */
+  private async respondToSessionApproval({
+    decision,
+    toolCallId,
+    requestContext,
+    memory,
+  }: {
+    decision: 'approve' | 'decline';
+    toolCallId: string;
+    requestContext: RequestContext;
+    memory: { thread: string; resource: string };
+  }): Promise<void> {
+    const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource });
+    if (!session.approval.isArmed() || session.approval.getToolCallId() !== toolCallId) {
+      this.log(
+        'info',
+        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval for toolCallId=${toolCallId})`,
+      );
+      return;
+    }
+    // The requestContext carries the channel render context, so the resumed
+    // stream renders back to the platform through the output processor.
+    session.respondToToolApproval({ decision, toolCallId, requestContext });
+  }
+
+  /**
    * Get-or-create the durable controller session for a mapped channel thread
    * and bind it to that thread. Keyed off the thread's own `resourceId` so
    * pre-existing threads (custom resolveResourceId, or created before this
    * feature) always pass the session's thread-ownership check.
    */
-  protected async getSessionForThread(thread: StorageThreadType): Promise<Session<any>> {
+  protected async getSessionForThread(thread: Pick<StorageThreadType, 'id' | 'resourceId'>): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
     const session = await controller.createSession({

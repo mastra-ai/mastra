@@ -1,10 +1,13 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import z from 'zod';
 
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
+import { createTool } from '../../tools';
 import type { AgentControllerChannels } from '../agent-controller-channels';
 
 // Minimal mock adapter satisfying the Chat SDK Adapter interface
@@ -21,7 +24,10 @@ function createMockAdapter(name: string) {
     fetchMessages: vi.fn().mockResolvedValue([]),
     encodeThreadId: vi.fn((...parts: string[]) => parts.join(':')),
     decodeThreadId: vi.fn((id: string) => id.split(':')),
-    channelIdFromThreadId: vi.fn((id: string) => id.split(':').slice(0, 2).join(':')),
+    // Must agree with createChatThread's channelId derivation: the SDK builds
+    // threads for action events via this hook, and the mapped-thread lookup
+    // filters on channel_externalChannelId.
+    channelIdFromThreadId: vi.fn((id: string) => id.split(':')[0]),
     renderFormatted: vi.fn((text: string) => text),
     fetchThread: vi.fn().mockResolvedValue(null),
     startTyping: vi.fn().mockResolvedValue(undefined),
@@ -47,13 +53,89 @@ function createTextStreamModel(responseText: string) {
   });
 }
 
-async function createSetup({ responseText = 'Hello from the controller!' } = {}) {
+/**
+ * Two-phase model for approval flows: the first stream emits a tool call
+ * (which parks controller runs at the approval gate), every later stream
+ * emits `finalText`.
+ */
+function createApprovalFlowModel({ toolName = 'deployTool', finalText = 'Deployed successfully.' } = {}) {
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async () => {
+      call += 1;
+      const chunks: any[] =
+        call === 1
+          ? [
+              { type: 'stream-start' as const, warnings: [] },
+              { type: 'response-metadata' as const, id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call' as const,
+                toolCallId: 'call-1',
+                toolName,
+                input: '{"action":"prod"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish' as const,
+                finishReason: 'tool-calls' as const,
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]
+          : [
+              { type: 'stream-start' as const, warnings: [] },
+              {
+                type: 'response-metadata' as const,
+                id: `id-${call}`,
+                modelId: 'mock-model-id',
+                timestamp: new Date(0),
+              },
+              { type: 'text-start' as const, id: 'text-1' },
+              { type: 'text-delta' as const, id: 'text-1', delta: finalText },
+              { type: 'text-end' as const, id: 'text-1' },
+              {
+                type: 'finish' as const,
+                finishReason: 'stop' as const,
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ];
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream(chunks),
+      };
+    },
+  });
+}
+
+function createDeployTool() {
+  const executeSpy = vi.fn(async (input: { action: string }) => ({ deployed: input.action }));
+  const tool = createTool({
+    id: 'deployTool',
+    description: 'Deploys the given target',
+    inputSchema: z.object({ action: z.string() }),
+    execute: executeSpy as any,
+  });
+  return { tool, executeSpy };
+}
+
+async function createSetup({
+  responseText = 'Hello from the controller!',
+  model,
+  tools,
+  toolDisplay,
+}: {
+  responseText?: string;
+  model?: MockLanguageModelV2;
+  tools?: Record<string, any>;
+  toolDisplay?: 'text';
+} = {}) {
   const adapter = createMockAdapter('discord');
   const agent = new Agent({
     id: 'mode-agent',
     name: 'mode-agent',
-    model: createTextStreamModel(responseText),
+    model: model ?? createTextStreamModel(responseText),
     instructions: 'You are a test agent.',
+    ...(tools ? { tools } : {}),
   });
   const controller = new AgentController({
     workspace: createMockWorkspace(),
@@ -62,7 +144,7 @@ async function createSetup({ responseText = 'Hello from the controller!' } = {})
     resourceId: 'ctrl-resource',
     modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
     defaultModeId: 'build',
-    channels: { adapters: { discord: adapter } },
+    channels: { adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter } },
   });
   await controller.init();
   const mastra = controller.getMastra()!;
@@ -106,6 +188,27 @@ async function waitFor(cond: () => boolean, { timeoutMs = 15_000, what = 'condit
 
 function postedText(chatThread: any): string {
   return JSON.stringify(chatThread.post.mock.calls);
+}
+
+/**
+ * Simulate a platform button click through the real Chat SDK action pipeline
+ * (`processAction` → `handleActionEvent` → the base class's onAction handler
+ * → the controller dispatch seams).
+ */
+async function simulateAction(channels: AgentControllerChannels, adapter: any, threadId: string, actionId: string) {
+  await (channels.sdk as any).processAction({
+    actionId,
+    adapter,
+    messageId: 'posted-1',
+    threadId,
+    user: { userId: 'user-1', userName: 'caleb', fullName: 'Caleb Barnes' },
+    raw: {},
+  });
+}
+
+/** Text posted anywhere: the inbound mock thread or SDK-built action threads. */
+function allPostedText(adapter: any, chatThread: any): string {
+  return JSON.stringify([...chatThread.post.mock.calls, ...adapter.postMessage.mock.calls]);
 }
 
 async function getChannelThreads(mastra: any, externalThreadId: string) {
@@ -240,4 +343,138 @@ describe('AgentControllerChannels', () => {
     expect(routes[0]!.path).toBe('/api/agent-controllers/ctrl-1/channels/discord/webhook');
     expect(routes[0]!.method).toBe('POST');
   }, 30_000);
+
+  describe('approvals through sessions', () => {
+    it('parks at the approval gate, posts a card, and the approve action drives the engine continuation', async () => {
+      const { tool, executeSpy } = createDeployTool();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel(),
+        tools: { deployTool: tool },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-appr');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+
+      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-appr'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+      // Approval card was posted to the platform while the run stays parked
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'approval card posted' });
+      expect(executeSpy).not.toHaveBeenCalled();
+
+      const toolCallId = session.approval.getToolCallId()!;
+      await simulateAction(channels, adapter, 'chan-1:t-appr', `tool_approve:${toolCallId}`);
+
+      // The engine (parked at the gate) drives the resume: tool executes,
+      // the continuation renders back to the platform.
+      await waitFor(() => executeSpy.mock.calls.length >= 1, { what: 'tool executed after approval' });
+      await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed successfully.'), {
+        what: 'post-approval continuation rendered',
+      });
+      expect(session.approval.isArmed()).toBe(false);
+      // Card edited to its approved state
+      expect(adapter.editMessage).toHaveBeenCalled();
+    }, 30_000);
+
+    it('resolves the gate as a decline without executing the tool', async () => {
+      const { tool, executeSpy } = createDeployTool();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel({ finalText: 'Understood, not deploying.' }),
+        tools: { deployTool: tool },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-deny');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+
+      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-deny'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+
+      const toolCallId = session.approval.getToolCallId()!;
+      await simulateAction(channels, adapter, 'chan-1:t-deny', `tool_deny:${toolCallId}`);
+
+      await waitFor(() => !session.approval.isArmed(), { what: 'gate resolved as decline' });
+      // The declined run continues (agent acknowledges) without running the tool
+      await waitFor(() => allPostedText(adapter, chatThread).includes('Understood, not deploying.'), {
+        what: 'post-decline continuation rendered',
+      });
+      expect(executeSpy).not.toHaveBeenCalled();
+    }, 30_000);
+
+    it('treats an approval with no matching parked gate as stale without throwing', async () => {
+      const { adapter, controller, mastra, channels } = await createSetup();
+      const chatThread = createChatThread(adapter, 'chan-1:t-stale');
+
+      // Full roundtrip completes — nothing is armed afterwards
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra);
+      await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
+      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-stale'))!;
+      expect(session.approval.isArmed()).toBe(false);
+
+      const threads = await getChannelThreads(mastra, 'chan-1:t-stale');
+      const respondSpy = vi.spyOn(session, 'respondToToolApproval');
+
+      // Stale approve and decline actions resolve silently: no throw, gate untouched
+      await expect(
+        (channels as any).dispatchApproval({
+          runId: 'run-gone',
+          toolCallId: 'no-such-tool-call',
+          requestContext: new RequestContext(),
+          memory: { thread: threads[0]!.id, resource: threads[0]!.resourceId },
+        }),
+      ).resolves.toBeUndefined();
+      await expect(
+        (channels as any).dispatchDecline({
+          runId: 'run-gone',
+          toolCallId: 'no-such-tool-call',
+          requestContext: new RequestContext(),
+          memory: { thread: threads[0]!.id, resource: threads[0]!.resourceId },
+        }),
+      ).resolves.toBeUndefined();
+      expect(respondSpy).not.toHaveBeenCalled();
+    }, 30_000);
+
+    it('auto-declines a pending approval when a new message arrives (session semantics)', async () => {
+      const { tool, executeSpy } = createDeployTool();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel({ finalText: 'Okay, moving on.' }),
+        tools: { deployTool: tool },
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-interrupt');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+
+      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-interrupt'))!;
+      await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
+
+      // New inbound message while the approval is pending
+      await (channels as any).processChatMessage(chatThread, createMessage('m-2', 'actually, never mind'), mastra);
+
+      await waitFor(() => !session.approval.isArmed(), { what: 'pending approval auto-declined' });
+      await waitFor(() => allPostedText(adapter, chatThread).includes('Okay, moving on.'), {
+        what: 'response after interrupt',
+      });
+      expect(executeSpy).not.toHaveBeenCalled();
+    }, 30_000);
+
+    it('auto-executes tools on buttonless adapters via seeded yolo session state', async () => {
+      const { tool, executeSpy } = createDeployTool();
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel({ finalText: 'Deployed without asking.' }),
+        tools: { deployTool: tool },
+        toolDisplay: 'text',
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-yolo');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+
+      // The run never parks: the tool executes and the final text renders
+      await waitFor(() => executeSpy.mock.calls.length >= 1, { what: 'tool auto-executed' });
+      await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed without asking.'), {
+        what: 'final text rendered',
+      });
+
+      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-yolo'))!;
+      expect((session.state.get() as Record<string, unknown>).yolo).toBe(true);
+      expect(session.approval.isArmed()).toBe(false);
+    }, 30_000);
+  });
 });
