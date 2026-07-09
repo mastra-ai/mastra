@@ -1,5 +1,7 @@
 import http from 'node:http';
+import { Mastra } from '@mastra/core';
 import type { ToolsInput } from '@mastra/core/agent';
+import { createTool } from '@mastra/core/tools';
 import getPort from 'get-port';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { z } from 'zod/v3';
@@ -158,6 +160,40 @@ describe('MCPServer dynamic tools + tools/list_changed', () => {
     await standaloneServer.toolActions.remove(['dynamicTool']);
     standaloneServer.__registerMastra({} as any);
     expect(Object.keys(standaloneServer.tools())).not.toContain('dynamicTool');
+
+    await standaloneServer.close();
+  });
+
+  it('keeps the Mastra tool registry in sync with dynamic add/remove', async () => {
+    // Tool with an intrinsic ID that differs from its record key, to prove the
+    // Mastra registry is keyed by tool.id (mirroring __registerMastra).
+    const syncTool = createTool({
+      id: 'sync-tool-id',
+      description: 'A tool used to verify Mastra registry sync',
+      inputSchema: z.object({}),
+      execute: async () => ({ result: 'sync' }),
+    });
+
+    const standaloneServer = new MCPServer({
+      name: 'RegistrySyncTestServer',
+      version: '1.0.0',
+      tools: {},
+    });
+    const mastra = new Mastra({
+      logger: false,
+      mcpServers: { registrySyncServer: standaloneServer },
+    });
+
+    expect(mastra.listTools()?.['sync-tool-id']).toBeUndefined();
+
+    await standaloneServer.toolActions.add({ syncToolKey: syncTool });
+    expect(mastra.listTools()?.['sync-tool-id']).toBeDefined();
+
+    // MCP-side removal is by record key; Mastra registry entry (keyed by
+    // tool.id) must be removed too.
+    await standaloneServer.toolActions.remove(['syncToolKey']);
+    expect(Object.keys(standaloneServer.tools())).not.toContain('syncToolKey');
+    expect(mastra.listTools()?.['sync-tool-id']).toBeUndefined();
 
     await standaloneServer.close();
   });

@@ -1036,6 +1036,10 @@ Sends a `notifications/tools/list_changed` message to connected clients without 
 async server.toolActions.notifyListChanged(): Promise<void>
 ```
 
+### Mastra registry synchronization
+
+When the server is registered with a Mastra instance, `toolActions.add()` and `toolActions.remove()` also update the Mastra instance's tool registry, matching the automatic tool registration that happens at startup. Added tools become available through `mastra.listTools()` (keyed by the tool's intrinsic `id` when present), and removed tools are deleted from the registry.
+
 ## Logging
 
 MCP servers can send structured log messages to clients using `notifications/message`. Clients control verbosity by sending a `logging/setLevel` request; the server drops messages below the requested minimum level (following RFC 5424 severity ordering). The level is tracked per session, so different clients can request different verbosity.

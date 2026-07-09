@@ -17,7 +17,11 @@ Servers can now add and remove tools at runtime and notify clients via `notifica
 await server.toolActions.add({ myNewTool });
 await server.toolActions.remove(['myNewTool']);
 await server.toolActions.notifyListChanged();
+```
 
+When the server is registered with a Mastra instance, dynamic add/remove also keeps the Mastra instance's tool registry in sync.
+
+```typescript
 // Client: react to tool list changes
 await mcp.tools.onListChanged('myServer', async () => {
   const tools = await mcp.listTools();

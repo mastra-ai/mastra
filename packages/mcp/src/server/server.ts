@@ -511,6 +511,15 @@ export class MCPServer extends MCPServerBase {
     }
     this.convertedTools = { ...this.convertedTools, ...converted };
     this.originalTools = { ...this.originalTools, ...tools };
+    // Keep the Mastra instance's tool registry in sync, mirroring the
+    // auto-registration done in __registerMastra.
+    if (this.mastra) {
+      for (const [key, tool] of Object.entries(tools)) {
+        if (tool && typeof tool === 'object' && 'id' in tool) {
+          this.mastra.addTool(tool as any, this.mastraToolKey(key, tool));
+        }
+      }
+    }
   }
 
   /**
@@ -524,9 +533,14 @@ export class MCPServer extends MCPServerBase {
     const originalTools = { ...this.originalTools };
     for (const toolId of toolIds) {
       if (convertedTools[toolId]) {
+        const originalTool = originalTools[toolId];
         delete convertedTools[toolId];
         delete originalTools[toolId];
         removed.push(toolId);
+        // Keep the Mastra instance's tool registry in sync.
+        if (this.mastra && originalTool && typeof originalTool === 'object' && 'id' in originalTool) {
+          this.mastra.removeTool(this.mastraToolKey(toolId, originalTool));
+        }
       } else {
         this.logger.warn(`Cannot remove tool '${toolId}': tool not found.`);
       }
@@ -534,6 +548,15 @@ export class MCPServer extends MCPServerBase {
     this.convertedTools = convertedTools;
     this.originalTools = originalTools;
     return removed;
+  }
+
+  /**
+   * The key a tool is registered under in the Mastra instance's tool
+   * registry: the tool's intrinsic ID when present (avoids collisions across
+   * MCP servers), falling back to its record key. Mirrors __registerMastra.
+   */
+  private mastraToolKey(key: string, tool: NonNullable<ToolsInput[string]>): string {
+    return 'id' in tool && typeof (tool as any).id === 'string' ? (tool as any).id : key;
   }
 
   /**
