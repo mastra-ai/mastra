@@ -49,7 +49,7 @@ export function renderPlan(markdown: string) {
 const longPlanMarkdown = Array.from({ length: 12 }, (_, index) => `${index + 1}. Verify step ${index + 1}.`).join('\n');
 
 const meta: Meta<typeof Plan> = {
-  title: 'Composite/Plan',
+  title: 'AI/Plan',
   component: Plan,
   decorators: [
     Story => (

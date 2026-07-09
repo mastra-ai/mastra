@@ -18,7 +18,7 @@ import {
   PlanMain,
   PlanPath,
   PlanTitle,
-} from '@mastra/playground-ui/components/Plan';
+} from '@mastra/playground-ui/components/ai/plan';
 
 <Plan>
   <PlanHeader>

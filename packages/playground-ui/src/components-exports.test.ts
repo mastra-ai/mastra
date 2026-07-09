@@ -10,6 +10,7 @@ import { describe, expect, it } from 'vitest';
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
 const componentsDir = resolve(pkgRoot, 'src/ds/components');
+const componentNamespaceDirs = new Set(['ai']);
 
 describe('components/* subpath exports', () => {
   it('exposes the wildcard export pointing into dist/components', () => {
@@ -25,8 +26,10 @@ describe('components/* subpath exports', () => {
     expect(pkg.sideEffects).toEqual(['**/*.css']);
   });
 
-  it('has an index.ts in every component folder (the entry enumeration invariant)', () => {
-    const folders = readdirSync(componentsDir, { withFileTypes: true }).filter(d => d.isDirectory());
+  it('has an index.ts in every component folder outside namespace folders', () => {
+    const folders = readdirSync(componentsDir, { withFileTypes: true }).filter(
+      d => d.isDirectory() && !componentNamespaceDirs.has(d.name),
+    );
     expect(folders.length).toBeGreaterThan(0);
     const missing = folders.filter(d => !existsSync(resolve(componentsDir, d.name, 'index.ts'))).map(d => d.name);
     expect(missing).toEqual([]);
@@ -48,5 +51,10 @@ describe('components/* subpath exports', () => {
   it('DataPanel entry exports DataPanel', async () => {
     const mod = await import('./ds/components/DataPanel');
     expect(mod.DataPanel).toBeDefined();
+  });
+
+  it('AI plan entry exports Plan', async () => {
+    const mod = await import('./ds/components/ai/plan');
+    expect(mod.Plan).toBeDefined();
   });
 });
