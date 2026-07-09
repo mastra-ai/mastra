@@ -6,13 +6,16 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
+import { RequestContext } from '../../request-context';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
 import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
+import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { SaveQueueManager } from '../save-queue';
 import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC, DurableStepIds } from './constants';
@@ -367,6 +370,35 @@ export interface DurableAgentRecoverActiveRunsResult {
   succeeded: number;
   /** Number of runs whose restart threw. */
   failed: number;
+}
+
+/**
+ * Options for {@link DurableAgent.recover}, a single-run streamable recovery
+ * counterpart to {@link DurableAgent.resume}.
+ *
+ * `recover()` rebuilds the run's non-serializable state from the persisted
+ * workflow snapshot (message list, model, tools, memory, saveQueueManager,
+ * request context, agent span) and returns a fresh {@link DurableAgentStreamResult}
+ * whose `fullStream` observes the recovered run through pubsub. Callbacks
+ * mirror `stream()` / `resume()`.
+ */
+export interface DurableAgentRecoverOptions<OUTPUT = undefined> {
+  /** Callback when chunk is received */
+  onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
+  /** Callback when a step finishes */
+  onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
+  /** Callback when the recovered run finishes */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  /** Callback when the recovered run errors */
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
+  /** Callback when the recovered run suspends again */
+  onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
+  /**
+   * Optional abort signal for the recovered segment. Forwarded onto a fresh
+   * internal `AbortController` installed on the run's registry entry, so
+   * `result.abort()` and the external signal can both cancel the recovered run.
+   */
+  abortSignal?: AbortSignal;
 }
 
 export class DurableAgent<
@@ -1197,6 +1229,335 @@ export class DurableAgent<
   }
 
   /**
+   * Recover a single durable run whose in-process agentic loop was orphaned by
+   * a process restart. Streamable counterpart to
+   * {@link DurableAgent.recoverActiveRuns} — where the bulk API only re-drives
+   * the workflow and returns counts, `recover()` rebuilds the run's
+   * non-serializable state (message list, model, tools, memory,
+   * saveQueueManager, request context, agent span) from the persisted workflow
+   * snapshot and returns a fresh {@link DurableAgentStreamResult} whose
+   * `fullStream` observes the recovered run through pubsub.
+   *
+   * Because the rebuilt registry entry carries `memory` + `saveQueueManager`,
+   * the durable agentic workflow's terminal step will flush new messages to
+   * memory just like a fresh `stream()` call would. The single-run form is
+   * useful when operators want to attach listeners to a specific recovered
+   * run; for boot-time bulk recovery of every orphaned run, use
+   * `recoverActiveRuns()`.
+   *
+   * @example
+   * ```typescript
+   * const { fullStream, output, cleanup } = await durableAgent.recover(runId, {
+   *   onChunk: chunk => process.stdout.write(chunk.payload?.text ?? ''),
+   * });
+   * for await (const chunk of fullStream) {
+   *   // ...
+   * }
+   * cleanup();
+   * ```
+   */
+  async recover(
+    runId: string,
+    options?: DurableAgentRecoverOptions<TOutput>,
+  ): Promise<DurableAgentStreamResult<TOutput>> {
+    if (!this.#mastra) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_MASTRA',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" recover() requires the agent to be registered on a Mastra instance.`,
+        details: { agentName: this.name, runId },
+      });
+    }
+
+    const workflowsStore = await this.#mastra.getStorage()?.getStore('workflows');
+    if (!workflowsStore) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_NO_STORAGE',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${this.name}" recover() requires persistent storage to load the run snapshot. ` +
+          `Register the agent on a Mastra instance with persistent storage (e.g. PostgreSQL, LibSQL).`,
+        details: { agentName: this.name, runId },
+      });
+    }
+
+    // 1. Load the persisted snapshot for the durable agentic loop workflow.
+    const persisted = await workflowsStore.getWorkflowRunById({
+      runId,
+      workflowName: DurableStepIds.AGENTIC_LOOP,
+    });
+    if (!persisted) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${this.name}" recover(${runId}): no persisted workflow snapshot found. ` +
+          `The run may have already completed or been cleaned up.`,
+        details: { agentName: this.name, runId },
+      });
+    }
+
+    const snapshot =
+      typeof persisted.snapshot === 'string'
+        ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+        : persisted.snapshot;
+
+    const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+    if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_INVALID_SNAPSHOT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.SYSTEM,
+        text: `DurableAgent "${this.name}" recover(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
+        details: { agentName: this.name, runId },
+      });
+    }
+
+    // 2. Rebuild the RequestContext from the persisted JSON-safe snapshot.
+    const requestContext: RequestContext = workflowInput.requestContextEntries
+      ? new RequestContext(Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>)
+      : new RequestContext();
+
+    // 3. Rebuild MessageList from the persisted state. threadId/resourceId
+    //    come from the workflow input's `state` block when present; older
+    //    snapshots may only have them under `messageListState.memoryInfo`.
+    const messageListMemoryInfo = (
+      workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+    )?.memoryInfo;
+    const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
+    const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+    const messageList = new MessageList({ threadId, resourceId });
+    try {
+      messageList.deserialize(workflowInput.messageListState);
+    } catch (err) {
+      // Fresh (never-executed) snapshots may have a minimal `messageListState`;
+      // fall back to an empty MessageList so recovery still proceeds. The
+      // workflow steps rebuild the real MessageList from serialized input.
+      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) messageList deserialize skipped: ${err}`);
+    }
+
+    // 4. Resolve model/memory from the live agent. Tools are rebuilt by the
+    //    durable step from `toolsMetadata`, so we only need the live agent's
+    //    memory here to enable message persistence at the terminal step.
+    const wrapped = this.#wrappedAgent as Agent<string, any, TOutput>;
+    let model;
+    try {
+      model = await wrapped.getModel({ requestContext });
+    } catch (err) {
+      const logger = this.#mastra?.getLogger?.();
+      logger?.warn?.(`[DurableAgent] Failed to resolve model during recover(${runId}): ${err}`);
+    }
+    let memory;
+    try {
+      memory = await wrapped.getMemory({ requestContext });
+    } catch (err) {
+      const logger = this.#mastra?.getLogger?.();
+      logger?.warn?.(`[DurableAgent] Failed to resolve memory during recover(${runId}): ${err}`);
+    }
+    const saveQueueManager = memory
+      ? new SaveQueueManager({ logger: this.#mastra?.getLogger?.() as any, memory })
+      : undefined;
+
+    // 5. Re-open an AGENT_RUN span for the recovered segment. Follow the same
+    //    pattern as resume(): reuse the original traceId when possible so the
+    //    recovered run stays linked to the original agent trace.
+    const abortController = new AbortController();
+    if (options?.abortSignal) {
+      if (options.abortSignal.aborted) {
+        abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason);
+      } else {
+        options.abortSignal.addEventListener(
+          'abort',
+          () => abortController.abort((options.abortSignal as AbortSignal & { reason?: unknown }).reason),
+          { once: true },
+        );
+      }
+    }
+
+    const origAgentSpanData = workflowInput.agentSpanData as { traceId?: string; id?: string } | undefined;
+    let recoverAgentSpan: any;
+    if (this.#mastra?.observability) {
+      try {
+        const rawConfig =
+          typeof (wrapped as any).toRawConfig === 'function' ? (wrapped as any).toRawConfig() : undefined;
+        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
+        const agentTracingPolicy =
+          typeof wrapped.getTracingPolicy === 'function' ? wrapped.getTracingPolicy() : undefined;
+        recoverAgentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
+          name: `agent run: '${wrapped.id}' (recovered)`,
+          entityType: EntityType.AGENT,
+          entityId: wrapped.id,
+          entityName: wrapped.name,
+          metadata: {
+            runId,
+            recovered: true,
+            ...(origAgentSpanData?.id ? { recoveredFromSpanId: origAgentSpanData.id } : {}),
+            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
+          },
+          tracingPolicy: agentTracingPolicy,
+          tracingOptions: origAgentSpanData?.traceId ? { traceId: origAgentSpanData.traceId } : undefined,
+          requestContext,
+          mastra: this.#mastra,
+        });
+      } catch (err) {
+        // Span bookkeeping must never block recovery.
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${err}`);
+      }
+    }
+
+    // 6. Assemble a minimal RunRegistryEntry. Fields that the durable steps
+    //    would normally populate on the fly (tools, workspace, processor
+    //    states, etc.) are left undefined — the workflow's own
+    //    `resolveRuntimeDependencies` will fall back to the persisted step
+    //    input to reconstruct them, so we only need the fields that the
+    //    terminal `.map(...)` step and stream adapter read from the registry:
+    //    saveQueueManager + memory + agentSpan + abortController.
+    const registryEntry: any = {
+      model,
+      memory,
+      saveQueueManager,
+      requestContext,
+      agentSpan: recoverAgentSpan,
+      abortController,
+      abortSignal: abortController.signal,
+      cleanup: () => {},
+    };
+
+    // 7. Register the reconstructed state in both the per-instance and global
+    //    registries so the workflow steps + terminal memory flush can find it.
+    this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
+    globalRunRegistry.set(runId, { ...registryEntry, messageList });
+
+    // 8. Cleanup plumbing (mirrors stream()/resume()).
+    let cleanedUp = false;
+    let autoCleanupTimer: ReturnType<typeof setTimeout> | null = null;
+    const scheduleAutoCleanup = () => {
+      if (autoCleanupTimer || cleanedUp || this.#cleanupTimeoutMs === 0) return;
+      autoCleanupTimer = setTimeout(() => {
+        if (!cleanedUp) {
+          this.#runRegistry.cleanup(runId);
+          globalRunRegistry.delete(runId);
+          this.#clearPubsubTopic(runId);
+          cleanedUp = true;
+        }
+      }, this.#cleanupTimeoutMs);
+    };
+
+    // 9. Skip any pubsub events broadcast before recovery started. Persistent
+    //    pubsub backends may retain chunks from the pre-crash segment; the
+    //    caller only wants events from the recovered segment forward.
+    const recoverOffset = await this.#getPubsubOffset(runId);
+
+    const {
+      output,
+      cleanup: streamCleanup,
+      ready,
+    } = createDurableAgentStream<TOutput>({
+      pubsub: this.pubsub,
+      runId,
+      messageId: workflowInput.messageId ?? crypto.randomUUID(),
+      model: {
+        modelId: workflowInput.modelConfig?.modelId,
+        provider: workflowInput.modelConfig?.provider,
+        version: 'v3',
+      },
+      threadId,
+      resourceId,
+      offset: recoverOffset,
+      onChunk: options?.onChunk,
+      onStepFinish: options?.onStepFinish,
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
+      onError: async error => {
+        await options?.onError?.(error);
+        scheduleAutoCleanup();
+      },
+      onSuspended: options?.onSuspended,
+      // Recovered runs use the default `closeOnSuspend: false` — a run that
+      // suspends again should stay observable so a later resume/recover can
+      // pick it up. Callers wanting to close on suspend can call `cleanup()`
+      // from `onSuspended`.
+      messageList,
+    });
+
+    // 10. Re-drive the workflow from the persisted snapshot in the background
+    //     and delete snapshot rows on non-suspended terminals (same contract
+    //     as start()/resume()). Errors are also broadcast via `emitError` so
+    //     observers on the pubsub topic see the failure. Callers who await
+    //     the returned `workflowExecution` (e.g. `recoverActiveRuns()`) see
+    //     the raw rejection so they can classify the run as failed.
+    const workflow = this.getWorkflow();
+    const workflowExecution = ready.then(async () => {
+      try {
+        const run = await workflow.createRun({ runId, pubsub: this.pubsub });
+        const result = await run.restart({
+          requestContext,
+          ...createObservabilityContext({ currentSpan: recoverAgentSpan }),
+        } as any);
+        // Snapshot cleanup runs for every non-suspended terminal (success or
+        // failed) so storage stays bounded — mirrors the start()/resume()
+        // contract.
+        if (result?.status && result.status !== 'suspended') {
+          await this.deleteRunSnapshots(runId);
+        }
+        if (result?.status === 'failed') {
+          const error = new Error((result as any).error?.message || 'Workflow recover failed');
+          void this.emitError(runId, error);
+          throw error;
+        }
+      } catch (error) {
+        void this.emitError(runId, error as Error);
+        throw error;
+      }
+    });
+    const trackedRecoverEntry = globalRunRegistry.get(runId);
+    if (trackedRecoverEntry) {
+      trackedRecoverEntry.workflowExecution = workflowExecution;
+    }
+    // Guard against unhandled rejection warnings for callers who don't await
+    // `workflowExecution` (single-run `recover()` returns a stream, not the
+    // workflow promise). Errors are already surfaced through `emitError` /
+    // the stream's `onError` callback.
+    workflowExecution.catch(() => {});
+
+    const cleanup = () => {
+      if (autoCleanupTimer) {
+        clearTimeout(autoCleanupTimer);
+        autoCleanupTimer = null;
+      }
+      if (!cleanedUp) {
+        streamCleanup();
+        this.#runRegistry.cleanup(runId);
+        globalRunRegistry.delete(runId);
+        this.#clearPubsubTopic(runId);
+        cleanedUp = true;
+      }
+    };
+
+    const abort = (reason?: unknown) => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(reason);
+      }
+    };
+
+    return {
+      output,
+      get fullStream() {
+        return output.fullStream as ReadableStream<any>;
+      },
+      runId,
+      threadId,
+      resourceId,
+      cleanup,
+      abort,
+    };
+  }
+
+  /**
    * Override the inherited `resumeStream()` so that callers using the base
    * `Agent` API (including `approveToolCall` / `declineToolCall`) are routed
    * through the durable `resume()` path instead of the regular Agent's
@@ -1570,7 +1931,7 @@ export class DurableAgent<
         | { agentId?: string; messageListState?: { memoryInfo?: { threadId?: string; resourceId?: string } } }
         | undefined;
       const runAgentId = input?.agentId;
-      if (runAgentId !== this.id) continue;
+      if (runAgentId !== this.agent.id) continue;
 
       const memoryInfo = input?.messageListState?.memoryInfo;
       const runThreadId = memoryInfo?.threadId;
@@ -1597,22 +1958,27 @@ export class DurableAgent<
   }
 
   /**
-   * Re-drive durable agent runs whose in-process agentic loop was orphaned by
-   * a process restart. This is the recovery half of the discovery API paired
-   * with {@link DurableAgent.listActiveRuns}.
+   * Bulk recover durable agent runs whose in-process agentic loop was orphaned
+   * by a process restart. This is the recovery half of the discovery API
+   * paired with {@link DurableAgent.listActiveRuns} and is the typical
+   * boot-time hook.
    *
-   * For each discovered (or explicitly targeted) run this method calls
-   * `workflow.createRun({ runId }).restart()`, which the workflow engine
-   * replays from the last persisted snapshot. The durable agentic workflow's
-   * steps are self-contained on serialized input, so no in-memory `runScope`
-   * needs to be pre-populated — the steps rehydrate everything they need from
-   * the persisted `DurableAgenticWorkflowInput`.
+   * Each targeted run is delegated to {@link DurableAgent.recover}, which
+   * rebuilds the run's non-serializable state (message list, model, memory,
+   * save-queue manager, request context, agent span), re-subscribes to the
+   * run's pubsub topic, and restarts the workflow in the background. Because
+   * `recover()` registers `memory` + `saveQueueManager` on the run entry, the
+   * durable agentic workflow's terminal step flushes new messages to memory
+   * just like a fresh `stream()` call would.
+   *
+   * The per-run stream returned by `recover()` is discarded — this method
+   * awaits each run's workflow settlement and reports summary counts instead
+   * of surfacing live event streams. Callers who want to observe a specific
+   * recovered run's events should use {@link DurableAgent.recover} directly
+   * (or {@link DurableAgent.observe} with the returned `runId`).
    *
    * Failures are captured per-run so a single bad run does not block
    * recovery of the rest.
-   *
-   * Callers who want to see events from a recovered run should attach with
-   * {@link DurableAgent.observe} using the returned `runId`.
    *
    * @example
    * ```typescript
@@ -1637,26 +2003,40 @@ export class DurableAgent<
       targetRunIds = runs.map(r => r.runId);
     }
 
-    const workflow = this.getWorkflow();
     const recovered: DurableAgentRecoveredRun[] = [];
     let succeeded = 0;
     let failed = 0;
 
     for (const targetRunId of targetRunIds) {
+      let runError: Error | undefined;
       try {
-        const run = await workflow.createRun({ runId: targetRunId, pubsub: this.pubsub });
-        const result = await run.restart();
-        // Recovered runs follow the same snapshot-cleanup contract as start()
-        // and resume(): only suspended terminals keep their persisted rows so
-        // a later resume/recover can find them. Every other terminal drops
-        // the rows to keep snapshot storage bounded across process restarts.
-        if (result?.status && result.status !== 'suspended') {
-          await this.deleteRunSnapshots(targetRunId);
+        // Delegate to the single-run streamable recover path so each run
+        // benefits from the rebuilt registry entry (message list, memory,
+        // saveQueueManager, request context, agent span) and the pubsub
+        // stream / terminal snapshot-cleanup contract stays identical to
+        // `recover()`. We don't surface the per-run stream here — bulk
+        // callers only care about counts — so we just await the workflow
+        // execution promise that `recover()` parks on the registry entry,
+        // capture any failure it surfaces via `onError`, and drop the
+        // stream.
+        const { cleanup } = await this.recover(targetRunId, {
+          onError: ({ error }) => {
+            runError = error instanceof Error ? error : new Error(String(error));
+          },
+        });
+        try {
+          const workflowExecution = globalRunRegistry.get(targetRunId)?.workflowExecution;
+          if (workflowExecution) {
+            await workflowExecution;
+          }
+        } finally {
+          cleanup();
         }
+        if (runError) throw runError;
         recovered.push({ runId: targetRunId, status: 'success' });
         succeeded++;
       } catch (error) {
-        const err = error instanceof Error ? error : new Error(String(error));
+        const err = runError ?? (error instanceof Error ? error : new Error(String(error)));
         recovered.push({ runId: targetRunId, status: 'failed', error: err });
         failed++;
         this.#mastra

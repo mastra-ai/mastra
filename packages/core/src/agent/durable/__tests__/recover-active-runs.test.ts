@@ -268,9 +268,21 @@ describe('DurableAgent.recoverActiveRuns', () => {
   });
 
   it('restarts a specific run when `runId` is given and skips discovery', async () => {
+    // Both snapshots are seeded so `recover()` can load the input for either
+    // run, but the explicit runId option must prevent `discovered` from being
+    // picked up.
     await seed(
       store,
       makeSnapshot('discovered', 'running', {
+        agentId: 'agent-A',
+        threadId: 't',
+        resourceId: 'r',
+      }),
+      'r',
+    );
+    await seed(
+      store,
+      makeSnapshot('explicit-run', 'running', {
         agentId: 'agent-A',
         threadId: 't',
         resourceId: 'r',

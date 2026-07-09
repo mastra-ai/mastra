@@ -566,6 +566,39 @@ export interface Config<
    * - `MastraWorker[]`: Use exactly these workers
    */
   workers?: MastraWorker[] | false;
+
+  /**
+   * Boot-time recovery behavior for orphaned agent/workflow runs.
+   *
+   * `durableAgents` controls whether the deployer will automatically call
+   * {@link Mastra.recoverAllDurableAgents} for every registered `DurableAgent`
+   * when the server starts (right after `restartAllActiveWorkflowRuns`).
+   *
+   * - `'off'` (default): the deployer never auto-recovers durable agent runs.
+   *   Operators can still call `mastra.recoverAllDurableAgents()` or
+   *   `agent.recoverActiveRuns()` by hand.
+   * - `'auto'`: the deployer will invoke `recoverAllDurableAgents()` on boot,
+   *   re-driving every RUNNING durable agent run discovered in storage.
+   *
+   * Opt-in only. Auto-recovery re-runs the agentic loop from the last persisted
+   * snapshot, so it re-issues LLM calls (real cost) and re-executes tool calls
+   * (must be idempotent). In multi-instance deploys every replica will race to
+   * recover the same runs, since there is no lease/lock yet.
+   *
+   * @default { durableAgents: 'off' }
+   */
+  recovery?: MastraRecoveryConfig;
+}
+
+/**
+ * Boot-time recovery configuration. See {@link Mastra['recoveryConfig']}.
+ */
+export interface MastraRecoveryConfig {
+  /**
+   * Auto-recover orphaned RUNNING durable agent runs on server boot.
+   * @default 'off'
+   */
+  durableAgents?: 'auto' | 'off';
 }
 
 /**
@@ -635,6 +668,7 @@ export class Mastra<
 
   #storage?: MastraCompositeStore;
   #storageExplicit = false;
+  #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #scorers?: TScorers;
   #tools?: TTools;
   #processors?: TProcessors;
@@ -1203,6 +1237,14 @@ export class Mastra<
 
     // Server cache for temporary persistence and durable agent resumable streams
     this.#serverCache = config?.cache ?? new InMemoryServerCache();
+
+    // Boot-time recovery policy for durable agent runs. Default is 'off' so
+    // that an install can't silently re-run tools/LLM calls on restart; opt-in
+    // via `recovery: { durableAgents: 'auto' }` matches the existing
+    // `restartAllActiveWorkflowRuns` boot hook.
+    this.#recoveryConfig = {
+      durableAgents: config?.recovery?.durableAgents ?? 'off',
+    };
 
     this.#editor = config?.editor;
 
@@ -3271,6 +3313,94 @@ export class Mastra<
         });
       }
     }
+  }
+
+  /**
+   * The resolved boot-time recovery configuration for this Mastra instance.
+   * See {@link Config.recovery}.
+   */
+  get recoveryConfig(): MastraRecoveryConfig {
+    return this.#recoveryConfig;
+  }
+
+  /**
+   * Re-drive every orphaned RUNNING durable-agent run across every registered
+   * `DurableAgent`. Delegates to `DurableAgent.recoverActiveRuns()` on each
+   * agent that supports it (default-engine durable agents only — Inngest and
+   * other externally-executed durable wrappers run their own recovery).
+   *
+   * Intended to be called once on server boot, after
+   * `restartAllActiveWorkflowRuns()`. The deployer wires this up automatically
+   * when `recovery.durableAgents` is set to `'auto'` in the Mastra config; you
+   * can also call it directly if you need finer control (e.g. running it in a
+   * cron, or gating it behind a leader election).
+   *
+   * Requires persistent storage — with an in-memory store there is nothing to
+   * recover after a process restart, so this is a no-op and returns zeroed
+   * counts.
+   */
+  public async recoverAllDurableAgents(): Promise<{
+    agents: number;
+    recovered: number;
+    succeeded: number;
+    failed: number;
+  }> {
+    if (!this.#storage) {
+      this.#logger.debug('Cannot recover durable agents. Mastra storage is not initialized');
+      return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
+    }
+
+    // Duck-type on the presence of `recoverActiveRuns()` rather than
+    // `instanceof DurableAgent` — importing the concrete class here would
+    // pull the entire durable-agent module into `mastra/index.ts` and
+    // introduce a runtime import cycle (`Mastra` <-> `DurableAgent`).
+    // The recovery API is only surfaced by default-engine `DurableAgent`
+    // instances; Inngest-style wrappers legitimately lack it and are
+    // skipped automatically.
+    type RecoverableDurableAgent = {
+      id: string;
+      recoverActiveRuns(): Promise<{
+        recovered: Array<{ runId: string }>;
+        succeeded: number;
+        failed: number;
+      }>;
+    };
+    const durableAgents: RecoverableDurableAgent[] = [];
+    for (const agent of Object.values(this.#agents ?? {})) {
+      if (agent && typeof (agent as any).recoverActiveRuns === 'function') {
+        durableAgents.push(agent as unknown as RecoverableDurableAgent);
+      }
+    }
+
+    if (durableAgents.length === 0) {
+      return { agents: 0, recovered: 0, succeeded: 0, failed: 0 };
+    }
+
+    this.#logger.debug(
+      `Recovering active durable-agent runs across ${durableAgents.length} agent${durableAgents.length > 1 ? 's' : ''}`,
+    );
+
+    let recovered = 0;
+    let succeeded = 0;
+    let failed = 0;
+
+    for (const agent of durableAgents) {
+      try {
+        const result = await agent.recoverActiveRuns();
+        recovered += result.recovered.length;
+        succeeded += result.succeeded;
+        failed += result.failed;
+      } catch (error) {
+        this.#logger.error('Failed to recover active runs for durable agent', {
+          agentId: agent.id,
+          error,
+        });
+      }
+    }
+
+    console.dir({ agents: durableAgents.length, recovered, succeeded, failed }, { depth: null });
+
+    return { agents: durableAgents.length, recovered, succeeded, failed };
   }
 
   /**
