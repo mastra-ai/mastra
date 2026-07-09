@@ -72,10 +72,8 @@ export type AppAction =
   | 'cycleMode'
   | 'toggleYolo';
 
-// Pre-compiled constants (avoid re-creation per render)
+// Pre-compiled constant (avoid re-creation per render)
 const ANSI_STRIP_RE = /\x1b\[[0-9;]*m/g;
-const SLASH_CURSOR_RE = /\x1b\[7m\/\x1b\[0m/;
-const AT_CURSOR_RE = /\x1b\[7m@\x1b\[0m/;
 function parseHex(hex: string): [number, number, number] {
   const h = hex.replace('#', '');
   return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
@@ -307,8 +305,34 @@ export class CustomEditor extends Editor {
     // Left: "│ > " (4) or "│   " (4), Right: " │" (2) = 6 chars total
     const promptWidth = 4; // "│ > " or "│   "
     const contentWidth = width - 6;
-    // Editor renders at content width (prompt char space is separate)
-    const editorLines = super.render(contentWidth);
+    // Slash and mention markers are rendered in the prompt chrome, so remove them
+    // from the editor's layout state before wrapping and restore the state after.
+    const editorState = (
+      this as unknown as {
+        state: { lines: string[]; cursorLine: number; cursorCol: number };
+      }
+    ).state;
+    const decorativePrompt = isSlash ? '/' : isAt ? '@' : undefined;
+    const firstLine = editorState.lines[0];
+    const markerIndex = firstLine?.search(/\S/) ?? -1;
+    const shouldHideDecorativePrompt =
+      decorativePrompt !== undefined && firstLine !== undefined && firstLine[markerIndex] === decorativePrompt;
+    const cursorCol = editorState.cursorCol;
+    let editorLines: string[];
+    if (shouldHideDecorativePrompt) {
+      editorState.lines[0] = firstLine.slice(0, markerIndex) + firstLine.slice(markerIndex + 1);
+      if (editorState.cursorLine === 0 && cursorCol > markerIndex) {
+        editorState.cursorCol = cursorCol - 1;
+      }
+      try {
+        editorLines = super.render(contentWidth);
+      } finally {
+        editorState.lines[0] = firstLine;
+        editorState.cursorCol = cursorCol;
+      }
+    } else {
+      editorLines = super.render(contentWidth);
+    }
 
     // Extract content lines (skip editor's invisible borders)
     const contentLines: string[] = [];
@@ -328,20 +352,6 @@ export class CustomEditor extends Editor {
         continue;
       }
       contentLines.push(line);
-    }
-
-    // Strip leading "/" or "@" from first content line when shown in prompt
-    if ((isSlash || isAt) && contentLines.length > 0) {
-      let l = contentLines[0]!;
-      const char = isSlash ? '/' : '@';
-      // Handle cursor-highlighted char (reverse video)
-      l = l.replace(isSlash ? SLASH_CURSOR_RE : AT_CURSOR_RE, '');
-      // Remove the first plain occurrence
-      const idx = l.indexOf(char);
-      if (idx !== -1) {
-        l = l.slice(0, idx) + l.slice(idx + 1);
-      }
-      contentLines[0] = l;
     }
 
     // Build rounded box

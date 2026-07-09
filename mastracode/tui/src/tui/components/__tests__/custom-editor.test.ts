@@ -1,8 +1,9 @@
+import stripAnsi from 'strip-ansi';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   superHandleInput: vi.fn(),
-  superRender: vi.fn(() => ['────', 'hello', '────']),
+  superRender: vi.fn((_width?: number, _text?: string, _cursorCol?: number) => ['────', 'hello', '────']),
   editorSetText: vi.fn(),
   getClipboardImage: vi.fn(),
   getClipboardText: vi.fn(),
@@ -22,6 +23,7 @@ vi.mock('node:fs', () => ({
 vi.mock('@earendil-works/pi-tui', () => {
   class MockEditor {
     protected tui: unknown;
+    private state = { lines: [''], cursorLine: 0, cursorCol: 0 };
     constructor(_tui: unknown, _theme: unknown) {
       this.tui = _tui;
     }
@@ -30,15 +32,18 @@ vi.mock('@earendil-works/pi-tui', () => {
       mocks.superHandleInput(data);
     }
 
-    render(_width: number): string[] {
-      return mocks.superRender();
+    render(width: number): string[] {
+      return mocks.superRender(width, this.state.lines.join('\n'), this.state.cursorCol);
     }
 
     getText(): string {
-      return '';
+      return this.state.lines.join('\n');
     }
 
     setText(text: string): void {
+      this.state.lines = text.split('\n');
+      this.state.cursorLine = this.state.lines.length - 1;
+      this.state.cursorCol = this.state.lines.at(-1)?.length ?? 0;
       mocks.editorSetText(text);
     }
 
@@ -193,6 +198,82 @@ describe('CustomEditor image paste handling', () => {
 
     expect(undo).toHaveBeenCalledTimes(1);
     expect(mocks.superHandleInput).not.toHaveBeenCalled();
+  });
+
+  describe('decorative prompt width accounting', () => {
+    const renderWrappedEditor = (receivedWidth?: number, text = '', _cursorCol = 0): string[] => {
+      const width = receivedWidth ?? 1;
+      const layoutWidth = Math.max(1, width - 1);
+      const lines = text
+        .split('\n')
+        .flatMap(sourceLine => sourceLine.match(new RegExp(`.{1,${layoutWidth}}`, 'g')) ?? ['']);
+      return ['─'.repeat(width), ...lines.map(line => line.padEnd(width)), '─'.repeat(width)];
+    };
+
+    beforeEach(() => {
+      mocks.chalkBoldRgb.mockImplementation((_r: number, _g: number, _b: number) => (value: string) => value);
+      mocks.superRender.mockImplementation(renderWrappedEditor);
+    });
+
+    it.each([
+      { marker: '/', text: '/1234567890123' },
+      { marker: '@', text: '@1234567890123' },
+    ])('removes $marker before wrapping and restores editor state', ({ marker, text }) => {
+      const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
+      editor.getModeColor = vi.fn(() => '#16c858');
+      editor.setText(text);
+
+      const output = editor.render(20);
+
+      expect(mocks.superRender).toHaveBeenCalledWith(14, text.slice(1), text.length - 1);
+      expect(editor.getText()).toBe(text);
+      expect(output).toHaveLength(3);
+      expect(stripAnsi(output[1]!)).toHaveLength(20);
+      expect(stripAnsi(output[1]!)).toBe(`│ ${marker} 1234567890123  │`);
+    });
+
+    it.each(['/', '@'])('accounts for a cursor-highlighted %s across explicit multiline input', marker => {
+      const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
+      editor.getModeColor = vi.fn(() => '#16c858');
+      editor.setText(`${marker}1234567\n7654321`);
+      const state = (editor as any).state as { cursorLine: number; cursorCol: number };
+      state.cursorLine = 0;
+      state.cursorCol = 0;
+
+      const output = editor.render(14);
+      const contentRows = output.slice(1, -1).map(line => stripAnsi(line));
+
+      expect(mocks.superRender).toHaveBeenCalledWith(8, '1234567\n7654321', 0);
+      expect(editor.getText()).toBe(`${marker}1234567\n7654321`);
+      expect(contentRows).toHaveLength(2);
+      expect(contentRows.every(line => line.length === 14 && line.endsWith('│'))).toBe(true);
+    });
+
+    it('does not remove a content column from the ordinary prompt', () => {
+      const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
+      editor.getModeColor = vi.fn(() => '#16c858');
+      editor.setText('1234567890123');
+
+      const output = editor.render(20);
+
+      expect(mocks.superRender).toHaveBeenCalledWith(14, '1234567890123', 13);
+      expect(stripAnsi(output[1]!)).toBe('│ › 1234567890123  │');
+      expect(stripAnsi(output[1]!)).toHaveLength(20);
+    });
+
+    it.each(['/', '@'])('keeps multiline narrow rows and right borders aligned for %s', marker => {
+      const editor = new CustomEditor({ terminal: { rows: 24 } } as any, {} as any);
+      editor.getModeColor = vi.fn(() => '#16c858');
+      editor.setText(`${marker}12345678901234567890`);
+
+      const output = editor.render(14);
+      const contentRows = output.slice(1, -1);
+
+      expect(mocks.superRender).toHaveBeenCalledWith(8, '12345678901234567890', 20);
+      expect(contentRows).toHaveLength(3);
+      expect(contentRows.every(line => stripAnsi(line).length === 14 && stripAnsi(line).endsWith('│'))).toBe(true);
+      expect(stripAnsi(contentRows[0]!)).toBe(`│ ${marker} 1234567  │`);
+    });
   });
 
   it('renders a chevron prompt when no animator is active', () => {
