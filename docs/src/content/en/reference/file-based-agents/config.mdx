@@ -7,7 +7,7 @@ packages:
 
 # config.ts
 
-An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, memory, and workspace configuration.
+An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, et cetera.
 
 ## What belongs in `config.ts`
 
@@ -35,9 +35,7 @@ Mastra uses the `weather` directory name as the default agent `id` and `name`. T
 
 ## Set the model
 
-The `model` field is the only required field in `agentConfig()`. The build fails when an agent directory doesn't provide a model.
-
-Other capabilities either come from sibling files or have defaults. For example, `instructions.md` supplies instructions, `tools/` supplies tools, `skills/` supplies skills, and a default workspace is created when neither `config.workspace` nor `workspace.ts` provides one.
+The `model` field is the only required field in `agentConfig()`. The build fails when an agent directory doesn't provide a model. Other capabilities either come from sibling files or have defaults.
 
 ```typescript title="src/mastra/agents/weather/config.ts"
 import { agentConfig } from '@mastra/core/agent'
@@ -85,10 +83,6 @@ Keep `config.ts` focused on runtime options. Use sibling files for concerns that
 | Workspace | [`workspace.ts`](/reference/file-based-agents/workspace) | Configures files and sandbox behavior separately from model settings |
 | Processors | [`processors/`](/reference/file-based-agents/processors) | Separates input and output processing pipelines |
 | Subagents | [`subagents/`](/reference/file-based-agents/subagents) | Gives each specialist child agent its own directory |
-
-## When to use a coded agent instead
-
-Use `agentConfig()` when you want Mastra to merge sibling files into the agent. Use a fully coded [`new Agent()`](/reference/agents/agent) when you need complete programmatic control and don't want sibling files merged. When `config.ts` exports an `Agent` instance, Mastra uses that instance as-is and ignores sibling files with warnings.
 
 ## Precedence
 
