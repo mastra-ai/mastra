@@ -50,6 +50,27 @@ export const mastra = new Mastra({
 
 Each durable-agent topic maps to one S2 stream: an event is appended per chunk. Replay reads the stream back from a sequence number.
 
+## Cleanup and retention
+
+Mastra deletes a run's stream shortly after the run completes. For streams that never get that may not be deleted explictly for example in case of a crashed process or orphaned runs: configure the basin's default stream config so they garbage-collect themselves as age-based retention trims old records, and delete-on-empty then removes the emptied stream.
+
+```typescript
+await s2.basins.create({
+  basin: process.env.S2_BASIN!,
+  config: {
+    createStreamOnAppend: true,
+    createStreamOnRead: true,
+    defaultStreamConfig: {
+      // Trim records older than 7 days, then delete the empty stream.
+      retentionPolicy: { ageSecs: 7 * 24 * 60 * 60 },
+      deleteOnEmpty: { minAgeSecs: 60 },
+    },
+  },
+});
+```
+
+Keep retention comfortably longer than a run's lifetime plus its replay window as trimmed records are no longer on the stream.
+
 ## Testing
 
 Set `S2_ACCESS_TOKEN` and run (the suite provisions and deletes its own throwaway basin, so `S2_BASIN` isn't needed):
