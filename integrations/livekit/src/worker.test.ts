@@ -4,6 +4,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createLiveKitWorker,
+  DEFAULT_END_CALL_DRAIN_MS,
   DEFAULT_END_CALL_REASON,
   resolveGreetingConfig,
   resolveGreetingText,
@@ -483,7 +484,7 @@ describe('runEndCall', () => {
   it('waits for the agent to finish, then deletes the room and shuts down with the default reason', async () => {
     const { session, say } = fakeSpeakingSession('listening'); // already idle
     const ctx = fakeEndCallCtx();
-    await runEndCall(session, ctx, {}, fakeLogger());
+    await runEndCall(session, ctx, { drainMs: 0 }, fakeLogger());
     expect(say).not.toHaveBeenCalled(); // no closing message configured
     expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
     expect(ctx.shutdown).toHaveBeenCalledWith(DEFAULT_END_CALL_REASON);
@@ -494,7 +495,7 @@ describe('runEndCall', () => {
   it('speaks a non-interruptible closing message before hanging up', async () => {
     const { session, say } = fakeSpeakingSession('listening');
     const ctx = fakeEndCallCtx();
-    await runEndCall(session, ctx, { message: 'Thanks for calling, goodbye.' }, fakeLogger());
+    await runEndCall(session, ctx, { message: 'Thanks for calling, goodbye.', drainMs: 0 }, fakeLogger());
     expect(say).toHaveBeenCalledWith('Thanks for calling, goodbye.', { allowInterruptions: false });
     expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
     expect(ctx.shutdown).toHaveBeenCalledTimes(1);
@@ -503,7 +504,7 @@ describe('runEndCall', () => {
   it('uses the configured shutdown reason', async () => {
     const { session } = fakeSpeakingSession('listening');
     const ctx = fakeEndCallCtx();
-    await runEndCall(session, ctx, { reason: 'resolved' }, fakeLogger());
+    await runEndCall(session, ctx, { reason: 'resolved', drainMs: 0 }, fakeLogger());
     expect(ctx.shutdown).toHaveBeenCalledWith('resolved');
   });
 
@@ -512,7 +513,7 @@ describe('runEndCall', () => {
     const ctx = fakeEndCallCtx();
     ctx.deleteRoom.mockRejectedValueOnce(new Error('no room'));
     const logger = fakeLogger();
-    await runEndCall(session, ctx, {}, logger);
+    await runEndCall(session, ctx, { drainMs: 0 }, logger);
     expect(ctx.shutdown).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalled();
   });
@@ -520,9 +521,34 @@ describe('runEndCall', () => {
   it('still hangs up when the closing message playout rejects', async () => {
     const { session } = fakeSpeakingSession('listening', Promise.reject(new Error('interrupted')));
     const ctx = fakeEndCallCtx();
-    await runEndCall(session, ctx, { message: 'bye' }, fakeLogger());
+    await runEndCall(session, ctx, { message: 'bye', drainMs: 0 }, fakeLogger());
     expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
     expect(ctx.shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it('holds the drain grace after playout before deleting the room (audio buffered at the caller)', async () => {
+    vi.useFakeTimers();
+    try {
+      const { session } = fakeSpeakingSession('listening');
+      const ctx = fakeEndCallCtx();
+      const done = runEndCall(session, ctx, {}, fakeLogger()); // default drain
+      await vi.advanceTimersByTimeAsync(DEFAULT_END_CALL_DRAIN_MS - 1);
+      // The goodbye finished playing worker-side, but the caller's buffer is still draining.
+      expect(ctx.deleteRoom).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await done;
+      expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
+      expect(ctx.shutdown).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('hangs up immediately when drainMs is 0', async () => {
+    const { session } = fakeSpeakingSession('listening');
+    const ctx = fakeEndCallCtx();
+    await runEndCall(session, ctx, { drainMs: 0 }, fakeLogger());
+    expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
   });
 
   it('logs and does not throw when ctx.shutdown() throws synchronously', async () => {
@@ -532,7 +558,7 @@ describe('runEndCall', () => {
       throw new Error('already shutting down');
     });
     const logger = fakeLogger();
-    await expect(runEndCall(session, ctx, {}, logger)).resolves.toBeUndefined();
+    await expect(runEndCall(session, ctx, { drainMs: 0 }, logger)).resolves.toBeUndefined();
     expect(ctx.deleteRoom).toHaveBeenCalledTimes(1);
     expect(logger.warn).toHaveBeenCalledWith(
       '@mastra/livekit: shutdown while ending the call failed',

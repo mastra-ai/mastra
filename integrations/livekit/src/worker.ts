@@ -493,6 +493,14 @@ export interface EndCallConfiguration {
   /** Reason recorded on the shutdown (shows up in LiveKit logs). Defaults to `'agent ended call'`. */
   reason?: string;
   /**
+   * Extra drain time in milliseconds between the closing words finishing and the room being
+   * deleted. LiveKit's playout accounting is worker-local — when it reports the goodbye complete,
+   * the caller's client still holds a few hundred milliseconds of buffered audio (network +
+   * jitter buffer), and deleting the room immediately clips the tail of the goodbye mid-air.
+   * Defaults to {@link DEFAULT_END_CALL_DRAIN_MS}; set `0` to hang up the instant playout ends.
+   */
+  drainMs?: number;
+  /**
    * Safety cap in milliseconds on how long to wait for the agent's closing words to finish playing
    * before hanging up, in case the speaking state never clears. Defaults to `30000`.
    */
@@ -613,6 +621,12 @@ export const DEFAULT_END_CALL_TOOL = 'endCall';
 export const DEFAULT_END_CALL_REASON = 'agent ended call';
 /** Default safety cap on waiting for the agent's closing words to finish before hanging up. */
 export const DEFAULT_END_CALL_MAX_WAIT_MS = 30_000;
+/**
+ * Default post-playout drain before the room is deleted. LiveKit's "playout completed" is
+ * worker-local; the caller's client still holds network + jitter-buffer audio, so hanging up the
+ * instant the state clears clips the tail of the goodbye.
+ */
+export const DEFAULT_END_CALL_DRAIN_MS = 800;
 
 /** Agent states where the agent is still busy producing / playing a reply (not done speaking). */
 const AGENT_BUSY_STATES = new Set<voice.AgentState>(['thinking', 'speaking']);
@@ -656,7 +670,8 @@ export function waitForAgentDoneSpeaking(
 
 /**
  * Ends the call after the agent asked to (via its end-call tool): wait for the agent's closing words
- * to finish, speak an optional final `message`, then disconnect. The teardown's session close
+ * to finish, speak an optional final `message`, hold a short drain (`drainMs`) so audio buffered at
+ * the caller finishes playing, then disconnect. The teardown's session close
  * force-interrupts any playing speech, so the waits here MUST complete before we disconnect — that's
  * the whole point of the sequence. `ctx.deleteRoom()` hangs up the caller (SIP-safe); `ctx.shutdown()`
  * ends the job and runs the registered shutdown callbacks (`onCallEnd`), so end-of-call work happens
@@ -680,6 +695,11 @@ export async function runEndCall(
         .waitForPlayout()
         .catch(() => {});
     }
+    // Playout completion above is worker-local accounting: the caller's client still holds a few
+    // hundred milliseconds of buffered audio, and deleting the room now clips the goodbye mid-air.
+    // Let the buffer drain before tearing the room down.
+    const drainMs = config.drainMs ?? DEFAULT_END_CALL_DRAIN_MS;
+    if (drainMs > 0) await new Promise<void>(resolve => setTimeout(resolve, drainMs));
   } catch (error) {
     logger.warn('@mastra/livekit: waiting for the agent to finish before ending the call failed', error);
   } finally {

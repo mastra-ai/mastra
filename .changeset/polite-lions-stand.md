@@ -52,7 +52,7 @@ recordConsent: createConsentTool({
 
 **Agent-initiated hang-up**
 
-`configuration.endCall` lets the agent end the call itself. Add the new `createEndCallTool` to your agent and instruct it to say goodbye and then call the tool; the worker waits for the closing words to finish playing (so the goodbye is never cut off), then hangs up — running `onCallEnd` on the way out, exactly as a caller hang-up does. It works on both the agent and workflow reply paths.
+`configuration.endCall` lets the agent end the call itself. Add the new `createEndCallTool` to your agent and instruct it to say goodbye and then call the tool; the worker waits for the closing words to finish playing, holds a short audio drain (`drainMs`, default 800ms) so the tail of the goodbye isn't clipped while it's still buffered at the caller, then hangs up — running `onCallEnd` on the way out, exactly as a caller hang-up does. It works on both the agent and workflow reply paths.
 
 ```ts
 import { createEndCallTool } from '@mastra/livekit';

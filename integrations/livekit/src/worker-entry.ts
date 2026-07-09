@@ -12,6 +12,7 @@ export {
   DEFAULT_END_CALL_TOOL,
   DEFAULT_END_CALL_REASON,
   DEFAULT_END_CALL_MAX_WAIT_MS,
+  DEFAULT_END_CALL_DRAIN_MS,
 } from './worker';
 export type {
   ConsentConfiguration,

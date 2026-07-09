@@ -254,8 +254,9 @@ controls (recording notice, data retention, human handoff) are planned to land h
 Enable it under `configuration`, and add a matching tool to the agent with **`createEndCallTool`**
 (both default to the tool name `'endCall'`). The tool only _signals_ intent — from inside
 `agent.stream()` it can't reach the room — so the worker owns the hang-up: on each turn it watches for
-the tool, waits for the agent's closing words to finish playing (so the goodbye is never cut off),
-then disconnects, running `onCallEnd` on the way out exactly as a caller hang-up does. It works on the
+the tool, waits for the agent's closing words to finish playing, holds a short drain (`drainMs`,
+default 800ms) so audio still buffered at the caller isn't clipped, then disconnects, running
+`onCallEnd` on the way out exactly as a caller hang-up does. It works on the
 agent and workflow reply paths.
 
 ```typescript

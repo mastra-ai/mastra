@@ -663,9 +663,9 @@ The exported constants `DEFAULT_END_CALL_TOOL` (`'endCall'`), `DEFAULT_END_CALL_
   },
   {
     name: 'config',
-    type: '{ message?: string; reason?: string; maxWaitMs?: number }',
+    type: '{ message?: string; reason?: string; maxWaitMs?: number; drainMs?: number }',
     description:
-      'Optional final message spoken before hang-up, the shutdown reason to record, and the safety cap on waiting for closing words.',
+      "Optional final message spoken before hang-up, the shutdown reason to record, the safety cap on waiting for closing words, and the post-playout drain (default 800ms) that lets audio buffered at the caller finish playing before the room is deleted — LiveKit's playout accounting is worker-local, so hanging up the instant it clears clips the goodbye.",
   },
   {
     name: 'logger',
