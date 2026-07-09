@@ -59,7 +59,7 @@ The agent will pick up new skills on the next request.
 
 | Variable                 | Purpose                                                               |
 | ------------------------ | --------------------------------------------------------------------- |
-| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Gateway.      |
+| `MASTRA_GATEWAY_API_KEY` | Routes the chat model and web search through the Gateway.             |
 | `TURSO_DATABASE_URL`     | libSQL/Turso URL. Defaults to `file:./mastra.db`.                     |
 | `TURSO_AUTH_TOKEN`       | Turso auth token (omit for local file DB).                            |
 | `CLAW_WORKSPACE_DIR`     | Override the workspace root directory.                                |

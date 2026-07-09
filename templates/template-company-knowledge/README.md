@@ -45,12 +45,12 @@ Sources (URLs) are always cited in the response.
 
 ## Environment variables
 
-| Variable                 | Purpose                                                                           |
-| ------------------------ | --------------------------------------------------------------------------------- |
+| Variable                 | Purpose                                                                    |
+| ------------------------ | -------------------------------------------------------------------------- |
 | `MASTRA_GATEWAY_API_KEY` | Routes the chat model, embeddings, and provider tools through the Gateway. |
-| `DATABASE_URL`           | Neon (or other) Postgres connection string with `?sslmode=require`.               |
-| `LINEAR_API_KEY`         | Linear personal API key (for Linear MCP server).                                  |
-| `NOTION_API_KEY`         | Notion internal integration token (for Notion MCP server).                        |
+| `DATABASE_URL`           | Neon (or other) Postgres connection string with `?sslmode=require`.        |
+| `LINEAR_API_KEY`         | Linear personal API key (for Linear MCP server).                           |
+| `NOTION_API_KEY`         | Notion internal integration token (for Notion MCP server).                 |
 
 ## Agent Editor
 
