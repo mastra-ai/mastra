@@ -23,6 +23,13 @@ packages:
     unpublish: $all
     # No proxy - will 404 if not published locally
 
+  # Same for the unscoped 'create-mastra' package
+  'create-mastra':
+    access: $all
+    publish: $all
+    unpublish: $all
+    # No proxy - will 404 if not published locally
+
   # All other packages can fall back to npm
   '**':
     access: $all
