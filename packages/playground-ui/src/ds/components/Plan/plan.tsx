@@ -346,7 +346,6 @@ export type PlanControlsProps = ComponentProps<'div'>;
 export function PlanControls({ children, className, ...props }: PlanControlsProps) {
   const { canExpand, isExpanded } = usePlanContext();
   const shouldClipContent = canExpand && !isExpanded;
-  const controls = children ?? <PlanExpandButton />;
   const hasActions = Boolean(children);
   const shouldRender = canExpand || hasActions;
 
@@ -359,15 +358,11 @@ export function PlanControls({ children, className, ...props }: PlanControlsProp
       onClick={event => event.stopPropagation()}
       {...props}
     >
-      <div
-        className={cn(
-          'grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2',
-          !hasActions && 'max-w-max',
-          hasActions && 'px-10',
-        )}
-      >
-        {controls}
-      </div>
+      {hasActions ? (
+        <div className="grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2 px-10">{children}</div>
+      ) : (
+        <PlanExpandButton />
+      )}
     </div>
   );
 }
