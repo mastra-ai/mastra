@@ -9,7 +9,7 @@ packages:
 
 A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time, the file must default-export a [`createTool()`](/reference/tools/create-tool) result, and the filename without its extension becomes the tool key the model can call.
 
-Use this page for the filesystem convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).
+Use this page for the file-based convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).
 
 ## When to use tools
 
@@ -52,7 +52,7 @@ Because nested directories aren't discovered as tools, group related tools with 
 
 ## Tool options
 
-The filesystem convention only controls where the tool lives and how it's registered. The tool API still comes from `createTool()`:
+The file-based convention only controls where the tool lives and how it's registered. The tool API still comes from `createTool()`:
 
 - Use `description` to tell the model when to call the tool.
 - Use `inputSchema` and `outputSchema` for structured inputs and outputs.

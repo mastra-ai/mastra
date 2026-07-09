@@ -9,7 +9,7 @@ packages:
 
 # Memory
 
-A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` file that default-exports a [`Memory`](/reference/memory/memory-class) instance. Use this page for the filesystem convention; use the memory docs for message history, semantic recall, storage, and processors.
+A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` file that default-exports a [`Memory`](/reference/memory/memory-class) instance. Use this page for the file-based convention; use the memory docs for message history, semantic recall, storage, and processors.
 
 Without `memory.ts` or `config.memory`, the agent has no memory by default. Each `generate()` or `stream()` call starts without remembered conversation state unless you pass the prior context yourself.
 

@@ -7,7 +7,7 @@ packages:
 
 # Processors
 
-A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Use this page for the filesystem convention; use the processors guide for built-in processors, custom processors, streaming behavior, and advanced patterns.
+A file-based agent discovers [processors](/docs/agents/processors) from its `processors/` directory. Use this page for the file-based convention; use the processors guide for built-in processors, custom processors, streaming behavior, and advanced patterns.
 
 Files under `processors/input/` run before messages reach the model. Files under `processors/output/` run after the model responds. Each file default-exports one [`Processor`](/reference/processors/processor-interface), and the filename becomes its discovery key.
 
@@ -54,7 +54,7 @@ If `config.inputProcessors` or `config.outputProcessors` is a function, discover
 
 ## Precedence with config
 
-Use `config.ts` for processors that need to be created dynamically or shared across agents. Use filesystem processors for static, per-agent processors that should be reviewed alongside the agent.
+Use `config.ts` for processors that need to be created dynamically or shared across agents. Use file-based processors for static, per-agent processors that should be reviewed alongside the agent.
 
 Precedence is:
 

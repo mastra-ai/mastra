@@ -13,7 +13,7 @@ An agent's `config.ts` sets its model and runtime options. Use it for options th
 
 `config.ts` is the required entry point for a file-based agent's model and runtime options. Put agent-level settings here when they don't need their own file, such as the model, description, default execution options, retry behavior, scorers, and display identity.
 
-Keep adjacent concerns in sibling files when you want filesystem routing to merge them into the agent. For example, use `instructions.md` for the always-on prompt and `tools/` for model-callable actions.
+Keep adjacent concerns in sibling files when you want file-based routing to merge them into the agent. For example, use `instructions.md` for the always-on prompt and `tools/` for model-callable actions.
 
 ## Quickstart
 
@@ -65,7 +65,7 @@ export default agentConfig({
 
 ## Set runtime options
 
-`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the filesystem convention. Use the Agent reference for the full option list.
+`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the file-based convention. Use the Agent reference for the full option list.
 
 Please note:
 

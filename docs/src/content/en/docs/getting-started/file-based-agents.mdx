@@ -13,7 +13,7 @@ This feature is in beta. Breaking changes may occur without a major version bump
 
 :::
 
-With filesystem routing, the directory is the agent. Each folder under `src/mastra/agents/` becomes an [`Agent`](/reference/agents/agent) instance, its directory name becomes the default `id` and `name`, and each file inside the folder adds one capability.
+With file-based routing, the directory is the agent. Each folder under `src/mastra/agents/` becomes an [`Agent`](/reference/agents/agent) instance, its directory name becomes the default `id` and `name`, and each file inside the folder adds one capability.
 
 A file-based project starts with `config.ts` and `instructions.md`. Add more files only when the agent needs more capabilities.
 
@@ -83,7 +83,7 @@ src/mastra/
   index.ts
 ```
 
-## When to use the filesystem
+## When to use file-based agents
 
 Use file convention when you want one place per concern, with an agent's configuration, instructions, tools, and skills grouped in a single directory. It works well when capabilities grow over time because each file or folder adds one focused behavior.
 
@@ -103,7 +103,7 @@ If you import your `mastra` instance directly, `agents/<name>/` directories and 
 
 Discovery is source-based and conservative. It skips symlinks, ignores test files, treats workflow and singleton files as file-routed only when they have a default export, and ignores directories that aren't agent directories.
 
-After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). The filesystem layout is an authoring convention; the assembled agent uses the same runtime as a code-defined agent.
+After discovery, a file-based agent runs as a normal [`Agent`](/reference/agents/agent). The file-based layout is an authoring convention; the assembled agent uses the same runtime as a code-defined agent.
 
 ## Get started
 
