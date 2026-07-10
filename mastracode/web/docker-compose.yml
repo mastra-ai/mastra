@@ -21,7 +21,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
       POSTGRES_DB: ${POSTGRES_DB:-mastracode_web}
     volumes:
-      - mastracode-web-pgdata:/var/lib/postgresql/data
+      - mastracode-web-pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mastracode_web}']
       interval: 5s
