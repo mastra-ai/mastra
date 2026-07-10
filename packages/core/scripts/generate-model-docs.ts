@@ -38,6 +38,7 @@ function formatProviderName(name: string): string {
     zhipuai: 'Zhipu AI',
     opencode: 'OpenCode',
     'azure-openai': 'Azure OpenAI',
+    'cloudflare-ai-gateway': 'Cloudflare AI Gateway',
   };
 
   const lower = name.toLowerCase();
@@ -113,7 +114,7 @@ const __dirname = path.dirname(__filename);
 const POPULAR_PROVIDERS = ['openai', 'anthropic', 'google', 'deepseek', 'groq', 'mistral', 'xai'];
 
 // Providers that are actually gateways (aggregate multiple model providers)
-const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai'];
+const GATEWAY_PROVIDERS = ['netlify', 'openrouter', 'vercel', 'azure-openai', 'cloudflare-ai-gateway'];
 
 const MANUALLY_DOCUMENTED_PROVIDERS = ['azure-openai'];
 const MANUALLY_DOCUMENTED_GATEWAYS = ['azure-openai', 'mastra'];
@@ -516,7 +517,9 @@ function generateGatewayPage(
   const gatewayDescription =
     gatewayName === 'netlify'
       ? 'Netlify AI Gateway provides unified access to multiple providers with built-in caching and observability.'
-      : `${displayName} aggregates models from multiple providers with enhanced features like rate limiting and failover.`;
+      : gatewayName === 'cloudflare-ai-gateway'
+        ? 'Cloudflare AI Gateway provides unified access to multiple providers with built-in caching, rate limiting, and observability. Provider API keys are stored in your Cloudflare dashboard (BYOK) or covered by Unified Billing.'
+        : `${displayName} aggregates models from multiple providers with enhanced features like rate limiting and failover.`;
 
   const introText = docUrl
     ? `${gatewayDescription} Access ${totalModels} models through Mastra's model router.
@@ -583,16 +586,20 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 \`\`\`bash
 # Use gateway API key
 ${(() => {
-  const envVar = providers[0]?.apiKeyEnvVar;
-  if (Array.isArray(envVar)) {
-    return envVar.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
-  }
-  return `${envVar || `${gatewayName.toUpperCase()}_API_KEY`}=your-gateway-key`;
+  const provider = providers[0];
+  const envVars = provider ? getRequiredEnvVars(provider) : [`${gatewayName.toUpperCase()}_API_KEY`];
+  return envVars.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
 })()}
-
+${
+  gatewayName === 'cloudflare-ai-gateway'
+    ? `
+# Provider API keys are managed in your Cloudflare dashboard
+# (AI Gateway > Provider Keys) or via Unified Billing`
+    : `
 # Or use provider API keys directly
 OPENAI_API_KEY=sk-...
-ANTHROPIC_API_KEY=ant-...
+ANTHROPIC_API_KEY=ant-...`
+}
 \`\`\`
 
 ${modelTable}

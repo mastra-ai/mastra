@@ -111,6 +111,14 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
     url: 'https://api.moonshot.cn/anthropic/v1',
     npm: '@ai-sdk/anthropic',
   },
+  // Cloudflare AI Gateway's models.dev entry has no `api` URL because the
+  // endpoint is account-scoped. Route through its OpenAI-compatible endpoint,
+  // interpolating the account and gateway from env vars. Auth must be the API
+  // token; the other env vars are consumed by the URL template.
+  'cloudflare-ai-gateway': {
+    url: 'https://gateway.ai.cloudflare.com/v1/${CLOUDFLARE_ACCOUNT_ID}/${CLOUDFLARE_GATEWAY_ID}/compat',
+    apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN',
+  },
 };
 
 export class ModelsDevGateway extends MastraModelGateway {

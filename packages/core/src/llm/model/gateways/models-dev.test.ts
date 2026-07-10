@@ -148,6 +148,17 @@ describe('ModelsDevGateway', () => {
         api: 'https://generativelanguage.googleapis.com/v1beta',
         npm: '@ai-sdk/google',
       },
+      'cloudflare-ai-gateway': {
+        id: 'cloudflare-ai-gateway',
+        name: 'Cloudflare AI Gateway',
+        models: {
+          'anthropic/claude-3-5-haiku': { name: 'Claude 3.5 Haiku' },
+          'openai/gpt-4o': { name: 'GPT-4o' },
+        },
+        env: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_GATEWAY_ID'],
+        // No api URL on models.dev - the URL comes from PROVIDER_OVERRIDES
+        npm: 'ai-gateway-provider',
+      },
       'unknown-provider': {
         id: 'unknown-provider',
         name: 'Unknown',
@@ -197,6 +208,23 @@ describe('ModelsDevGateway', () => {
       // OpenAI should be included even though it uses @ai-sdk/openai
       expect(providers.openai).toBeDefined();
       expect(providers.openai.url).toBe('https://api.openai.com/v1');
+    });
+
+    it('should include cloudflare-ai-gateway via PROVIDER_OVERRIDES despite the missing api URL', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockApiResponse,
+      });
+
+      const providers = await gateway.fetchProviders();
+
+      expect(providers['cloudflare-ai-gateway']).toBeDefined();
+      expect(providers['cloudflare-ai-gateway'].url).toBe(
+        'https://gateway.ai.cloudflare.com/v1/${CLOUDFLARE_ACCOUNT_ID}/${CLOUDFLARE_GATEWAY_ID}/compat',
+      );
+      // The account and gateway IDs are URL template inputs, not auth
+      expect(providers['cloudflare-ai-gateway'].apiKeyEnvVar).toBe('CLOUDFLARE_API_TOKEN');
+      expect(providers['cloudflare-ai-gateway'].models).toEqual(['anthropic/claude-3-5-haiku', 'openai/gpt-4o']);
     });
 
     it('should preserve Google legacy API key fallback when generating providers', async () => {
