@@ -1761,6 +1761,90 @@ describe('record management', () => {
     expect(first.id).toBe(second.id);
   });
 
+  it('getOrCreateRecord should deduplicate concurrent initialization', async () => {
+    const [first, second] = await Promise.all([om.getOrCreateRecord(threadId), om.getOrCreateRecord(threadId)]);
+
+    expect(first.id).toBe(second.id);
+    await expect(storage.getObservationalMemoryHistory(threadId, threadId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should include the storage read in concurrent initialization', async () => {
+    const getRecord = storage.getObservationalMemory.bind(storage);
+    let readCount = 0;
+    let releaseSecondRead!: () => void;
+    const secondReadBarrier = new Promise<void>(resolve => {
+      releaseSecondRead = resolve;
+    });
+    const getRecordSpy = vi
+      .spyOn(storage, 'getObservationalMemory')
+      .mockImplementation((requestedThreadId, requestedResourceId) => {
+        // Capture the value at read start. Before the fix, both callers started
+        // a read before either registered its initialization. Holding the second
+        // null until the first insert completed reproduced the stale-read race.
+        const snapshot = getRecord(requestedThreadId, requestedResourceId);
+        readCount += 1;
+        return readCount === 2 ? secondReadBarrier.then(() => snapshot) : snapshot;
+      });
+    const initializeSpy = vi.spyOn(storage, 'initializeObservationalMemory');
+
+    const firstPromise = om.getOrCreateRecord(threadId);
+    const secondPromise = om.getOrCreateRecord(threadId);
+    const first = await firstPromise;
+    releaseSecondRead();
+    const second = await secondPromise;
+
+    expect(first.id).toBe(second.id);
+    expect(getRecordSpy).toHaveBeenCalledTimes(1);
+    expect(initializeSpy).toHaveBeenCalledTimes(1);
+    await expect(storage.getObservationalMemoryHistory(threadId, threadId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should use one thread identity when a caller omits resourceId', async () => {
+    const resourceId = 'record-resource';
+    const initializeSpy = vi.spyOn(storage, 'initializeObservationalMemory');
+    const [withResource, withoutResource] = await Promise.all([
+      om.getOrCreateRecord(threadId, resourceId),
+      om.getOrCreateRecord(threadId),
+    ]);
+
+    expect(withResource.id).toBe(withoutResource.id);
+    expect(withResource.resourceId).toBe(resourceId);
+    expect(initializeSpy).toHaveBeenCalledTimes(1);
+    await expect(storage.getObservationalMemoryHistory(threadId, resourceId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should deduplicate resource initialization across threads', async () => {
+    const resourceId = 'shared-resource';
+    const resourceOm = createOM(storage, { scope: 'resource' });
+    const [first, second] = await Promise.all([
+      resourceOm.getOrCreateRecord('thread-a', resourceId),
+      resourceOm.getOrCreateRecord('thread-b', resourceId),
+    ]);
+
+    expect(first.id).toBe(second.id);
+    await expect(storage.getObservationalMemoryHistory(null, resourceId)).resolves.toHaveLength(1);
+  });
+
+  it('getOrCreateRecord should clear failed concurrent initialization before retrying', async () => {
+    const initializeRecord = storage.initializeObservationalMemory.bind(storage);
+    const initializeSpy = vi
+      .spyOn(storage, 'initializeObservationalMemory')
+      .mockRejectedValueOnce(new Error('transient initialization failure'))
+      .mockImplementation(initializeRecord);
+
+    const attempts = await Promise.allSettled([om.getOrCreateRecord(threadId), om.getOrCreateRecord(threadId)]);
+
+    expect(attempts).toEqual([
+      expect.objectContaining({ status: 'rejected', reason: expect.any(Error) }),
+      expect.objectContaining({ status: 'rejected', reason: expect.any(Error) }),
+    ]);
+    expect(initializeSpy).toHaveBeenCalledTimes(1);
+
+    await expect(om.getOrCreateRecord(threadId)).resolves.toBeDefined();
+    expect(initializeSpy).toHaveBeenCalledTimes(2);
+    await expect(storage.getObservationalMemoryHistory(threadId, threadId)).resolves.toHaveLength(1);
+  });
+
   it('getObservations should return undefined for fresh thread', async () => {
     const obs = await om.getObservations(threadId);
     expect(obs).toBeUndefined();
