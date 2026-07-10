@@ -1556,7 +1556,7 @@ export class DurableAgent<
     // so a caller with runId in hand could otherwise recover another agent's
     // run. Refuse to rehydrate a snapshot whose agentId doesn't match this
     // instance — the caller must reach the owning agent to recover the run.
-    if (workflowInput.agentId && workflowInput.agentId !== this.id) {
+    if (workflowInput.agentId !== this.id) {
       throw new MastraError({
         id: 'DURABLE_AGENT_RECOVER_AGENT_MISMATCH',
         domain: ErrorDomain.AGENT,
