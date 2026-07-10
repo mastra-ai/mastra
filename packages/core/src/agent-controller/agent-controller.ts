@@ -212,9 +212,7 @@ export class AgentController<TState = {}> {
   #gatewayManager: GatewayManager | undefined = undefined;
   #legacyAgentMode: Record<string, Agent<any, any, any, any>> = {};
   /** Chat channels running this controller inside messaging threads (from `config.channels`). */
-  readonly #channels: AgentControllerChannels | null = null;
-  /** Mode agents already warned about keeping their own pre-existing channels. */
-  readonly #warnedAgentOwnChannels = new Set<string>();
+  #channels: AgentControllerChannels | null = null;
 
   constructor(config: AgentControllerConfig<TState>) {
     validateModes(config.modes);
@@ -1077,26 +1075,19 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Attach the controller's channels instance to a resolved mode agent so
-   * the agent picks up the channel input/output processors — this is what
-   * makes controller runs render back to the originating chat platform.
-   * Agents that already carry their own channels are left alone (warn once).
+   * Sets the AgentControllerChannels instance for this controller.
+   * Used by ChannelProvider implementations (e.g. SlackProvider) to inject
+   * channels they create for dynamic installations. Runs pick up the new
+   * instance immediately — it is carried per-run on the request context
+   * (`controller.channels`), never attached to mode agents.
+   * @internal
    */
-  #attachChannelsToAgent(agent: Agent<any, any, any, any>): Agent<any, any, any, any> {
-    if (!this.#channels) return agent;
-    const existing = agent.getChannels();
-    if (existing === this.#channels) return agent;
-    if (existing) {
-      if (!this.#warnedAgentOwnChannels.has(agent.id)) {
-        this.#warnedAgentOwnChannels.add(agent.id);
-        console.warn(
-          `[AgentController:${this.id}] Mode agent "${agent.id}" already has its own channels; leaving them in place. Controller channel messages will still route into controller sessions, but this agent renders through its own channels config.`,
-        );
-      }
-      return agent;
+  setChannels(channels: AgentControllerChannels): void {
+    if (this.#channels && this.#channels !== channels) {
+      console.warn(`[AgentController:${this.id}] Replacing existing AgentControllerChannels`);
     }
-    agent.setChannels(this.#channels);
-    return agent;
+    this.#channels = channels;
+    channels.__setController(this);
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -1105,7 +1096,7 @@ export class AgentController<TState = {}> {
       if (!this.#legacyAgentMode[mode.id]) {
         this.#legacyAgentMode[mode.id] = mode.agent;
       }
-      return this.#attachChannelsToAgent(this.#legacyAgentMode[mode.id]!);
+      return this.#legacyAgentMode[mode.id]!;
     }
 
     // Shared backing agent — reuse the single instance.
@@ -1113,7 +1104,7 @@ export class AgentController<TState = {}> {
     // Mode instructions are passed at call time via buildAgentMessageStreamOptions;
     // mode tools are resolved at execution time via buildToolsets.
     if (this.config.agent) {
-      return this.#attachChannelsToAgent(this.config.agent);
+      return this.config.agent;
     }
 
     // No backing agent — construct one per mode (cached).
@@ -1141,7 +1132,7 @@ export class AgentController<TState = {}> {
         tools: modeTools,
       });
     }
-    return this.#attachChannelsToAgent(this.#legacyAgentMode[mode.id]!);
+    return this.#legacyAgentMode[mode.id]!;
   }
 
   /**
@@ -2179,6 +2170,7 @@ export class AgentController<TState = {}> {
       abortSignal: session.run.getAbortSignal(),
       emitEvent: event => session.emit(event),
       getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+      channels: this.#channels ?? undefined,
     };
 
     requestContext.set('controller', controllerContext);

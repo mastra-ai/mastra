@@ -188,6 +188,36 @@ export class SlackManifestClient {
   }
 
   /**
+   * Check whether a Slack app still exists.
+   *
+   * Uses the read-only `apps.manifest.export` endpoint as an existence probe.
+   * Returns `false` when Slack reports the app is missing/inaccessible
+   * (e.g. it was deleted from the Slack admin UI), `true` when it exports
+   * successfully. Network/transport errors are re-thrown so callers can
+   * distinguish "app is gone" from "couldn't reach Slack".
+   */
+  async appExists(appId: string): Promise<boolean> {
+    await this.rotateToken();
+
+    const response = await fetch(`${SLACK_API_BASE}/apps.manifest.export`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${this.#token}`,
+      },
+      body: JSON.stringify({ app_id: appId }),
+      signal: AbortSignal.timeout(SLACK_API_TIMEOUT_MS),
+    });
+
+    const data = (await response.json()) as {
+      ok: boolean;
+      error?: string;
+    };
+
+    return data.ok;
+  }
+
+  /**
    * Update an existing Slack app's manifest.
    */
   async updateApp(appId: string, manifest: SlackAppManifest): Promise<void> {

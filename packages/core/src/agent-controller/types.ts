@@ -1,6 +1,7 @@
 import type { Agent } from '../agent';
 import type { AgentInstructions, ToolsInput } from '../agent/types';
 import type { MastraBrowser } from '../browser/browser';
+import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { PubSub } from '../events/pubsub';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
@@ -1122,4 +1123,14 @@ export interface AgentControllerRequestContext<TState = unknown> {
 
   /** Get the configured subagent model ID for a specific agent type */
   getSubagentModelId?: (params?: { agentType?: string }) => string | null;
+
+  /**
+   * Channels instance owned by the controller (from `config.channels` or
+   * injected by a ChannelProvider). Carried per-run so the executing mode
+   * agent picks up the channel input/output processors without being mutated.
+   * Stripped from subagent request contexts so subagent streams never render
+   * to the chat platform.
+   * @internal
+   */
+  channels?: AgentChannels;
 }

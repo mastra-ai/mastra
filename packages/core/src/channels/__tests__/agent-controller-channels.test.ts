@@ -231,13 +231,13 @@ describe('AgentControllerChannels', () => {
     await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello controller'), mastra);
 
     // One durable session keyed `channel:{platform}:{externalThreadId}`
-    const session = await controller.getSessionByResource('channel:discord:chan-1:t-1');
+    const session = await controller.getSessionByResource('channel:chan-1:t-1');
     expect(session).toBeDefined();
 
     // The mapped Mastra thread carries channel metadata and the derived owner
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
     expect(threads).toHaveLength(1);
-    expect(threads[0]!.resourceId).toBe('channel:discord:chan-1:t-1');
+    expect(threads[0]!.resourceId).toBe('channel:chan-1:t-1');
     expect(threads[0]!.metadata).toMatchObject({
       channel_platform: 'discord',
       channel_externalThreadId: 'chan-1:t-1',
@@ -260,7 +260,7 @@ describe('AgentControllerChannels', () => {
     const chatThread = createChatThread(adapter, 'chan-1:t-1');
 
     await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'first'), mastra);
-    const session = await controller.getSessionByResource('channel:discord:chan-1:t-1');
+    const session = await controller.getSessionByResource('channel:chan-1:t-1');
     expect(session).toBeDefined();
     await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'first reply' });
     const boundThreadId = session!.thread.getId();
@@ -269,7 +269,7 @@ describe('AgentControllerChannels', () => {
     await waitFor(() => chatThread.post.mock.calls.length >= 2, { what: 'second reply' });
 
     // Same session instance, same bound thread, still exactly one mapped thread
-    const sessionAgain = await controller.getSessionByResource('channel:discord:chan-1:t-1');
+    const sessionAgain = await controller.getSessionByResource('channel:chan-1:t-1');
     expect(sessionAgain).toBe(session);
     expect(sessionAgain!.thread.getId()).toBe(boundThreadId);
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
@@ -284,8 +284,8 @@ describe('AgentControllerChannels', () => {
     await (channels as any).processChatMessage(threadA, createMessage('m-a', 'hello a'), mastra);
     await (channels as any).processChatMessage(threadB, createMessage('m-b', 'hello b'), mastra);
 
-    const sessionA = await controller.getSessionByResource('channel:discord:chan-1:t-a');
-    const sessionB = await controller.getSessionByResource('channel:discord:chan-1:t-b');
+    const sessionA = await controller.getSessionByResource('channel:chan-1:t-a');
+    const sessionB = await controller.getSessionByResource('channel:chan-1:t-b');
     expect(sessionA).toBeDefined();
     expect(sessionB).toBeDefined();
     expect(sessionA).not.toBe(sessionB);
@@ -358,7 +358,7 @@ describe('AgentControllerChannels', () => {
 
       await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
 
-      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-appr'))!;
+      const session = (await controller.getSessionByResource('channel:chan-1:t-appr'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
       // Approval card was posted to the platform while the run stays parked
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'approval card posted' });
@@ -388,7 +388,7 @@ describe('AgentControllerChannels', () => {
 
       await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
 
-      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-deny'))!;
+      const session = (await controller.getSessionByResource('channel:chan-1:t-deny'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
       const toolCallId = session.approval.getToolCallId()!;
@@ -409,7 +409,7 @@ describe('AgentControllerChannels', () => {
       // Full roundtrip completes — nothing is armed afterwards
       await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'hello'), mastra);
       await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
-      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-stale'))!;
+      const session = (await controller.getSessionByResource('channel:chan-1:t-stale'))!;
       expect(session.approval.isArmed()).toBe(false);
 
       const threads = await getChannelThreads(mastra, 'chan-1:t-stale');
@@ -445,7 +445,7 @@ describe('AgentControllerChannels', () => {
 
       await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
 
-      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-interrupt'))!;
+      const session = (await controller.getSessionByResource('channel:chan-1:t-interrupt'))!;
       await waitFor(() => session.approval.isArmed(), { what: 'approval gate armed' });
 
       // New inbound message while the approval is pending
@@ -475,11 +475,11 @@ describe('AgentControllerChannels', () => {
         what: 'final text rendered',
       });
 
-      const session = (await controller.getSessionByResource('channel:discord:chan-1:t-yolo'))!;
+      const session = (await controller.getSessionByResource('channel:chan-1:t-yolo'))!;
       // The auto-approve marker lives on the channels instance, not in
       // user-owned session state (which is schema-validated).
       expect((session.state.get() as Record<string, unknown>).yolo).toBeUndefined();
-      expect(channels.__isAutoApproveResource('channel:discord:chan-1:t-yolo')).toBe(true);
+      expect(channels.__isAutoApproveResource('channel:chan-1:t-yolo')).toBe(true);
       expect(session.approval.isArmed()).toBe(false);
     }, 30_000);
 

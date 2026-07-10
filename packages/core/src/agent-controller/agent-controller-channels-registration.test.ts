@@ -54,16 +54,15 @@ describe('AgentController channels ↔ Mastra registration', () => {
     const mastra = new Mastra({ logger: false, agentControllers: { code: controller } });
 
     await controller.init();
-    // Force mode-agent resolution so the controller attaches its channels
-    // instance to the mode agent (the output-rendering hookup).
+    // Mode agents are never mutated with the controller's channels — the
+    // instance is carried per-run on the request context instead.
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const modeAgent = controller.getCurrentAgent(session);
-    expect(modeAgent.getChannels()).toBe(controller.getChannels());
+    expect(modeAgent.getChannels()).toBeNull();
 
     const channels = mastra.getChannels();
     expect(channels.code).toBe(controller.getChannels());
-    // The controller's channels — attached to the mode agent above — must be
-    // reported once, under the controller key only.
+    // The controller's channels must be reported once, under the controller key only.
     const duplicateKeys = Object.entries(channels)
       .filter(([key, value]) => key !== 'code' && value === controller.getChannels())
       .map(([key]) => key);

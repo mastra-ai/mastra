@@ -48,44 +48,57 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * Hosting the SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
-export default defineConfig(({ mode }) => ({
-  root: resolve(here, 'ui'),
-  plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
-  resolve: {
-    // Monorepo packages arrive via `link:` and would otherwise resolve their
-    // own react copy from the monorepo store — force a single copy from here.
-    dedupe: ['react', 'react-dom', '@tanstack/react-query'],
-  },
-  build: {
-    outDir: resolve(here, '../mastra/public/ui'),
-    emptyOutDir: true,
-  },
-  server: {
-    port: 5173,
-    proxy: {
-      '/api': {
-        target: 'http://localhost:4111',
-        changeOrigin: true,
-      },
-      // Web surface routes (fs/config/github) live under `/web/*` on the API
-      // server after the `/api/web` → `/web` path migration. Proxy them so the
-      // dev UI (:5173) can reach them on :4111.
-      '/web': {
-        target: 'http://localhost:4111',
-        changeOrigin: true,
-      },
-      // Optional WorkOS auth routes live on the API server too; proxy them so
-      // the dev UI (:5173) can reach login/callback/logout/me on :4111.
-      //
-      // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
-      // A plain `'/auth'` key prefix-matches Vite module requests like
-      // `/auth.ts` (the client auth module) and wrongly proxies them to the
-      // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
-      // module imports on Vite while still forwarding real auth routes.
-      '^/auth/': {
-        target: 'http://localhost:4111',
-        changeOrigin: true,
-      },
+export default defineConfig(({ mode }) => {
+  // `web:dev` only wraps the API server in `varlock run`, so the package-root
+  // `.env` never reaches this Vite process's `process.env` — load it here.
+  const env = { ...loadEnv(mode, resolve(here, '../..'), ''), ...process.env };
+  const publicUrl = env.MASTRACODE_PUBLIC_URL;
+
+  return {
+    root: resolve(here, 'ui'),
+    plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
+    resolve: {
+      // Monorepo packages arrive via `link:` and would otherwise resolve their
+      // own react copy from the monorepo store — force a single copy from here.
+      dedupe: ['react', 'react-dom', '@tanstack/react-query'],
     },
-  },
-}));
+    build: {
+      outDir: resolve(here, '../mastra/public/ui'),
+      emptyOutDir: true,
+    },
+    server: {
+      port: 5173,
+      proxy: {
+        // needed for SlackProvider event endpoints
+        '/slack': {
+          target: 'http://localhost:4111',
+          changeOrigin: true,
+        },
+        '/api': {
+          target: 'http://localhost:4111',
+          changeOrigin: true,
+        },
+        // Web surface routes (fs/config/github) live under `/web/*` on the API
+        // server after the `/api/web` → `/web` path migration. Proxy them so the
+        // dev UI (:5173) can reach them on :4111.
+        '/web': {
+          target: 'http://localhost:4111',
+          changeOrigin: true,
+        },
+        // Optional WorkOS auth routes live on the API server too; proxy them so
+        // the dev UI (:5173) can reach login/callback/logout/me on :4111.
+        //
+        // Match only the `/auth/<route>` paths — NOT a bare `/auth` prefix.
+        // A plain `'/auth'` key prefix-matches Vite module requests like
+        // `/auth.ts` (the client auth module) and wrongly proxies them to the
+        // API server, which 401s / ECONNREFUSEs. The trailing-slash regex keeps
+        // module imports on Vite while still forwarding real auth routes.
+        '^/auth/': {
+          target: 'http://localhost:4111',
+          changeOrigin: true,
+        },
+      },
+      ...(publicUrl ? { allowedHosts: [new URL(publicUrl).host] } : {}),
+    },
+  };
+});

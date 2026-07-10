@@ -92,9 +92,11 @@ export class AgentControllerChannels extends AgentChannels {
   }): string | (() => string | Promise<string>) {
     const base = super.resolveChannelResourceId(args);
     // The base returns a thunk only when a custom resolveResourceId was
-    // configured — honor it. Otherwise derive the channel-thread key.
+    // configured — honor it. Otherwise derive the channel-thread key. The
+    // adapter's thread id is already platform-prefixed (e.g. `slack:C123:ts`),
+    // so don't prepend the platform again or the key double-prefixes.
     if (typeof base === 'function') return base;
-    return `channel:${args.platform}:${args.chatThread.id}`;
+    return `channel:${args.chatThread.id}`;
   }
 
   /**

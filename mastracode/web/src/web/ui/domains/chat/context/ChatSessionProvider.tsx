@@ -1,5 +1,6 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui';
@@ -17,9 +18,18 @@ import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
 
 export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const { activeProject, resourceId: projectResourceId, sessionEnabled } = useActiveProjectContext();
   const { baseUrl } = useApiConfig();
-  const projectPath = deriveProjectPath(activeProject);
+  const [searchParams] = useSearchParams();
+
+  // A `?resourceId=` query param overrides the active project's resource so the
+  // whole chat session (transcript, messages, connection, thread switch) binds
+  // to a thread that lives under a different resource — e.g. a Slack channel
+  // session keyed `channel:slack:...`. Channel threads are not partitioned by
+  // worktree, so drop `projectPath` when the override is present.
+  const resourceOverride = searchParams.get('resourceId');
+  const resourceId = resourceOverride ?? projectResourceId;
+  const projectPath = resourceOverride ? undefined : deriveProjectPath(activeProject);
   const sessionContextValue = { resourceId, sessionEnabled, projectPath, baseUrl };
 
   return (

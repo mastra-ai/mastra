@@ -27,6 +27,8 @@
  * proxies API paths here instead.
  */
 
+import { Card, CardText, Actions, LinkButton } from 'chat';
+
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
@@ -38,6 +40,8 @@ import {
   resolveIntakeReady,
   resolveLinearReady,
 } from '../web/web-surface.js';
+import { SlackProvider } from '@mastra/slack';
+import { ConsoleLogger } from '@mastra/core/logger';
 
 const CONTROLLER_ID = 'code';
 
@@ -134,7 +138,92 @@ const prepared = await prepareAgentControllerMount({
 // `export { x as mastra }` where `x = new Mastra(...)`) in the entry source AST.
 // `prepared.mastraArgs` already carries the controller (via `agentControllers`),
 // storage, and the assembled `server` config (middleware + apiRoutes + cors).
-export const mastra = new Mastra(prepared.mastraArgs);
+export const mastra = new Mastra({
+  ...prepared.mastraArgs,
+  channels: {
+    slack: new SlackProvider({
+      refreshToken: process.env.SLACK_APP_REFRESH_TOKEN,
+      baseUrl: process.env.MASTRACODE_PUBLIC_URL,
+      handlers: {
+        onMention: async (thread, message, defaultHandler) => {
+          // A mention on a not-yet-subscribed thread is a NEW session. The
+          // default handler auto-subscribes, so once subscribed this is a
+          // follow-up mention — don't re-announce.
+          const isNewSession = !(await thread.isSubscribed());
+
+          // Run the framework handler first so the internal Mastra thread and
+          // controller session are created before we build the deep link.
+          await defaultHandler(thread, message);
+
+          if (!isNewSession) return;
+
+          // The handler's `thread` is the Slack chat thread — its `.id` is the
+          // platform thread id (e.g. `slack:C0BG...`), NOT the internal Mastra
+          // thread UUID the web UI routes on. Look up the internal thread that
+          // the framework created for this channel conversation via the stored
+          // channel metadata, then build the link from its real id + resourceId.
+          const store = await mastra.getStorage()?.getStore('memory');
+          const { threads } = (await store?.listThreads({
+            filter: {
+              metadata: {
+                channel_platform: thread.adapter.name,
+                channel_externalThreadId: thread.id,
+                channel_externalChannelId: thread.channelId,
+              },
+            },
+            perPage: 1,
+          })) ?? { threads: [] };
+
+          const internalThread = threads[0];
+          if (!internalThread) {
+            console.warn('[onMention] no internal thread found for', thread.id);
+            return;
+          }
+
+          await thread.post(
+            Card({
+              title: 'New Mastra Code session started.',
+              children: [
+                CardText('A new session has been created.'),
+                Actions([
+                  LinkButton({
+                    url: `${publicOrigin}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
+                      internalThread.resourceId,
+                    )}`,
+                    label: 'View Session',
+                  }),
+                ]),
+              ],
+            }),
+          );
+        },
+      },
+    }),
+  },
+  logger: new ConsoleLogger({ level: 'debug' }),
+});
+
+// const disconnectResult = await mastra.channels.slack.disconnect(CONTROLLER_ID);
+// console.log('Slack disconnect result: ', disconnectResult);
+
+// try {
+//   const connectionArgs = {
+//     id: CONTROLLER_ID,
+//     name: 'MC Web (Caleb)',
+//     // ownerType: 'agentController',
+//   };
+//   console.log('connecting to slack: ', connectionArgs);
+//   const result = await mastra.channels.slack.connect(connectionArgs);
+
+//   if (result?.type === 'oauth') {
+//     const authUrl = result?.authorizationUrl;
+//     console.log('Slack OAuth flow initiated. Please visit the following URL to authorize the app:\n');
+//     console.log(authUrl);
+//     console.log('\n');
+//   }
+// } catch (error) {
+//   console.error('Error connecting to slack: ', error);
+// }
 
 // Post-construct boot: initialize the controller (which now inherits this
 // instance's storage) and start its workers. Runs at module load via top-level

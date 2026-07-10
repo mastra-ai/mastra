@@ -252,10 +252,12 @@ Use this tool when:
           if (controllerCtx) {
             // Point at the fork so inherited tools (recall, browser, OM, memory writes, etc.)
             // operate on the cloned thread instead of the active parent thread.
+            // Strip channels so the subagent's stream never renders to the chat platform.
             subagentRequestContext.set('controller', {
               ...controllerCtx,
               threadId: forkedThread.id,
               resourceId: forkedThread.resourceId,
+              channels: undefined,
             });
           }
         }
@@ -348,11 +350,17 @@ Use this tool when:
 
         // Build a request context for the subagent that inherits sandbox paths
         // and controller state but strips threadId/resourceId so the subagent
-        // doesn't trigger OM enrichment on the parent's memory thread.
+        // doesn't trigger OM enrichment on the parent's memory thread, and
+        // channels so its stream never renders to the chat platform.
         if (context?.requestContext) {
           subagentRequestContext = new RequestContext(context.requestContext.entries());
           if (controllerCtx) {
-            subagentRequestContext.set('controller', { ...controllerCtx, threadId: null, resourceId: '' });
+            subagentRequestContext.set('controller', {
+              ...controllerCtx,
+              threadId: null,
+              resourceId: '',
+              channels: undefined,
+            });
           }
         }
       }
