@@ -10,7 +10,6 @@ export const platformSandboxProvider: SandboxProvider<PlatformSandboxOptions> = 
   description: 'Environment-scoped sandbox execution through Mastra Platform workspace proxy',
   configSchema: {
     type: 'object',
-    required: ['projectId', 'environmentId'],
     properties: {
       accessToken: {
         type: 'string',
@@ -39,7 +38,6 @@ export const platformFilesystemProvider: FilesystemProvider<PlatformFilesystemOp
   description: 'Bucket-backed filesystem access through Mastra Platform workspace proxy',
   configSchema: {
     type: 'object',
-    required: ['projectId', 'bucketName'],
     properties: {
       accessToken: {
         type: 'string',
