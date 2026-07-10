@@ -226,7 +226,7 @@ export function PlanContent({ children, className, style, ...props }: PlanConten
   return (
     <div
       data-slot="plan-content"
-      className={cn('relative outline-none', !isExpanded && 'overflow-hidden', className)}
+      className={cn('relative', !isExpanded && 'overflow-hidden', className)}
       style={!isExpanded ? { ...style, maxHeight: collapsedHeight } : style}
       {...props}
     >
@@ -260,12 +260,7 @@ export function PlanControls({ children, className, ...props }: PlanControlsProp
   const hasActions = Boolean(children);
 
   return (
-    <div
-      data-slot="plan-controls"
-      className={cn('relative z-10 mt-4 flex justify-center', className)}
-      onClick={event => event.stopPropagation()}
-      {...props}
-    >
+    <div data-slot="plan-controls" className={cn('relative z-10 mt-4 flex justify-center', className)} {...props}>
       {hasActions ? (
         <div className="grid w-full max-w-sm grid-cols-[1fr_auto_1fr] items-center gap-2 px-10">{children}</div>
       ) : (

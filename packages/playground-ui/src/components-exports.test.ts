@@ -1,26 +1,34 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-// Guards the @mastra/playground-ui/components/* contract: every folder under
-// src/ds/components is published as its own entrypoint (wired up dynamically
-// in vite.config.ts), so consumers can deep-import a single component without
-// a root package entry. The entry enumeration assumes one index.ts per folder —
-// if that invariant breaks, the component silently disappears from dist.
+// Guards the @mastra/playground-ui/components/* contract: component folders are
+// published as their own entrypoints (wired up dynamically in vite.config.ts),
+// including components nested below namespace-only folders. Every published
+// component folder needs an index.ts or it silently disappears from dist.
 const pkgRoot = resolve(__dirname, '..');
 const pkg = JSON.parse(readFileSync(resolve(pkgRoot, 'package.json'), 'utf8'));
 const componentsDir = resolve(pkgRoot, 'src/ds/components');
 
 const hasIndex = (directory: string) => existsSync(resolve(directory, 'index.ts'));
 
-const hasNestedComponentEntry = (directory: string): boolean =>
-  readdirSync(directory, { withFileTypes: true }).some(dirent => {
-    if (!dirent.isDirectory()) return false;
-    if (dirent.name === '__tests__') return false;
+const findMissingComponentEntries = (directory: string): string[] =>
+  readdirSync(directory, { withFileTypes: true })
+    .filter(dirent => dirent.isDirectory() && dirent.name !== '__tests__')
+    .flatMap(dirent => {
+      const childDirectory = resolve(directory, dirent.name);
+      if (hasIndex(childDirectory)) return [];
 
-    const childDirectory = resolve(directory, dirent.name);
-    return hasIndex(childDirectory) || hasNestedComponentEntry(childDirectory);
-  });
+      const nestedDirectories = readdirSync(childDirectory, { withFileTypes: true }).filter(
+        child => child.isDirectory() && child.name !== '__tests__',
+      );
+
+      if (nestedDirectories.length === 0) {
+        return [relative(componentsDir, childDirectory).replace(/\\/g, '/')];
+      }
+
+      return findMissingComponentEntries(childDirectory);
+    });
 
 describe('components/* subpath exports', () => {
   it('exposes the wildcard export pointing into dist/components', () => {
@@ -39,13 +47,7 @@ describe('components/* subpath exports', () => {
   it('has an index.ts entry in every component folder or nested namespace child', () => {
     const folders = readdirSync(componentsDir, { withFileTypes: true }).filter(d => d.isDirectory());
     expect(folders.length).toBeGreaterThan(0);
-    const missing = folders
-      .filter(d => {
-        const directory = resolve(componentsDir, d.name);
-        return !hasIndex(directory) && !hasNestedComponentEntry(directory);
-      })
-      .map(d => d.name);
-    expect(missing).toEqual([]);
+    expect(findMissingComponentEntries(componentsDir)).toEqual([]);
   });
 
   // Representative entry modules: a plain primitive, a component with its own
