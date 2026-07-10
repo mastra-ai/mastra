@@ -225,18 +225,59 @@ describe('updateStatusLine', () => {
     expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s ×');
   });
 
-  it('keeps the center thread-title-only when the thread has an active GitHub PR subscription', () => {
+  it('shows the active GitHub PR subscription beside the thread title', () => {
     const state = createState();
     state.currentThreadTitle = 'Simplify the OM status indicator';
     state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
-    state.githubPrPollingActive = true;
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('Simplify the OM status indicator');
+    expect(rendered).toContain('PR#17439 Simplify the OM status indicator');
     expect(rendered).not.toContain('feat/mc-queueing-ux');
-    expect(rendered).not.toContain('PR#17439');
+  });
+
+  it('shows the active GitHub PR subscription without status noise', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [
+      {
+        owner: 'mastra-ai',
+        repo: 'mastra',
+        prNumber: 17439,
+        lastNotificationKind: 'pull-request-activity',
+        lastNotificationPriority: 'medium',
+      },
+    ];
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('PR#17439');
+    expect(rendered).not.toContain('polling');
+    expect(rendered).not.toContain('updated');
+  });
+
+  it('animates the GitHub PR subscription only while GitHub polling is running', () => {
+    const state = createState();
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+    state.githubPrPollingActive = true;
+    state.githubPrGradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('PR#17439', 0.5, '#0ea5e9', 0);
+  });
+
+  it('does not show GitHub PR status for unsubscribed threads', () => {
+    const state = createState();
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).not.toContain('PR#');
   });
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {

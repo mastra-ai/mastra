@@ -6,13 +6,33 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
-import type { TUIState } from './state.js';
+import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
-import { theme, mastra, mastraBrand, tintHex, getTermWidth } from './theme.js';
+import { theme, mastra, mastraBrand, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
+
+function formatGithubPrLabel(
+  state: TUIState,
+  subscription: GithubPrSubscriptionBadge,
+): { plain: string; styled: string } {
+  const label = `PR#${subscription.prNumber}`;
+  const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
+  if (state.githubPrPollingActive && state.githubPrGradientAnimator?.isRunning()) {
+    return {
+      plain: label,
+      styled: applyGradientSweep(
+        label,
+        state.githubPrGradientAnimator.getOffset(),
+        color,
+        state.githubPrGradientAnimator.getFadeProgress(),
+      ),
+    };
+  }
+  return { plain: label, styled: chalk.hex(color)(label) };
+}
 
 function isGenericTitle(title: string): boolean {
   const lower = title.toLowerCase().trim();
@@ -166,6 +186,8 @@ export function updateStatusLine(state: TUIState): void {
   const centerText = threadTitle || branch || null;
   const centerTextShort =
     centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;
+  const activeGithubPr = state.activeGithubPrSubscriptions[0];
+  const githubPrLabel = activeGithubPr ? formatGithubPrLabel(state, activeGithubPr) : null;
   const now = Date.now();
   const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
@@ -177,7 +199,12 @@ export function updateStatusLine(state: TUIState): void {
     state.agentRunStartedAt !== undefined &&
     Math.floor(getGoalDurationMs(goalState, now) / 60_000) === Math.floor((now - state.agentRunStartedAt) / 60_000);
   const goalLabel = goalDuration ? (goalMatchesActiveRun ? 'goal' : `goal ${goalDuration}`) : null;
-  const formatDirPart = (value: string) => ({ plain: value, styled: theme.fg('thinkingText', value) });
+  const formatDirPart = (value: string) => ({
+    plain: githubPrLabel ? `${githubPrLabel.plain} ${value}` : value,
+    styled: githubPrLabel
+      ? `${githubPrLabel.styled} ${theme.fg('thinkingText', value)}`
+      : theme.fg('thinkingText', value),
+  });
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
