@@ -1,4 +1,4 @@
-import type { StepResult, StepTripwireInfo } from '@mastra/core/workflows';
+import type { WorkflowResult } from '@mastra/core/workflows';
 
 export const NESTED_WORKFLOW_OUTPUT_MODE = {
   DEFAULT: 'default',
@@ -7,12 +7,18 @@ export const NESTED_WORKFLOW_OUTPUT_MODE = {
 
 export type NestedWorkflowOutputMode = (typeof NESTED_WORKFLOW_OUTPUT_MODE)[keyof typeof NESTED_WORKFLOW_OUTPUT_MODE];
 
-export type CompactNestedWorkflowResult =
-  | { status: 'success'; state?: unknown; result: unknown }
-  | { status: 'failed'; state?: unknown; error: unknown }
-  | { status: 'tripwire'; state?: unknown; tripwire: StepTripwireInfo }
-  | { status: 'suspended'; state?: unknown; steps: Record<string, StepResult<any, any, any, any>> }
-  | { status: 'paused'; state?: unknown };
+type AnyWorkflowResult = WorkflowResult<any, any, any, any>;
+type WorkflowResultWithStatus<TStatus extends AnyWorkflowResult['status']> = Extract<
+  AnyWorkflowResult,
+  { status: TStatus }
+>;
+
+export type NestedWorkflowResult =
+  | Pick<WorkflowResultWithStatus<'success'>, 'status' | 'state' | 'result'>
+  | Pick<WorkflowResultWithStatus<'failed'>, 'status' | 'state' | 'error'>
+  | Pick<WorkflowResultWithStatus<'tripwire'>, 'status' | 'state' | 'tripwire'>
+  | Pick<WorkflowResultWithStatus<'suspended'>, 'status' | 'state' | 'steps'>
+  | Pick<WorkflowResultWithStatus<'paused'>, 'status' | 'state'>;
 
 export function resolveNestedWorkflowOutputMode(
   mode: NestedWorkflowOutputMode | undefined = NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT,
@@ -28,7 +34,7 @@ export function resolveNestedWorkflowOutputMode(
  * the nested resume path; completed results do not carry the child input or
  * internal step history into the parent's memoized run state.
  */
-export function compactNestedWorkflowResult(result: CompactNestedWorkflowResult): CompactNestedWorkflowResult {
+export function compactNestedWorkflowResult(result: AnyWorkflowResult): NestedWorkflowResult {
   switch (result.status) {
     case 'success':
       return { status: result.status, result: result.result, state: result.state };

@@ -16,7 +16,7 @@ import type {
   TimeTravelExecutionParams,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
-import type { CompactNestedWorkflowResult } from './nested-workflow-output';
+import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
 import { InngestWorkflow } from './workflow';
 
@@ -457,7 +457,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       : undefined;
 
     const isResume = !!resume?.steps?.length;
-    let result: CompactNestedWorkflowResult;
+    // New invocations return compact output; legacy memoized WorkflowResult
+    // envelopes are structural supersets of this parent-facing contract.
+    let result: NestedWorkflowResult;
     let runId: string;
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
@@ -549,7 +551,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object') {
-        result = errorCause as CompactNestedWorkflowResult;
+        result = errorCause as NestedWorkflowResult;
         runId = errorCause.runId || randomUUID();
       } else {
         // Fallback: if we can't get the result from error, construct a basic failed result
