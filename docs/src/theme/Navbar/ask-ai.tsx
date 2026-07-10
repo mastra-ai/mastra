@@ -1,9 +1,19 @@
+import type { KapaPluginOptions } from '@mastra/docusaurus-plugin-kapa'
 import { Button } from '@site/src/components/ui/button'
+import { usePluginData } from '@docusaurus/useGlobalData'
 import { useDocsChat } from '@mastra/docusaurus-plugin-kapa/client'
 import type { Ref } from 'react'
 
 export function AskAI() {
+  const pluginData = usePluginData('docusaurus-plugin-kapa', 'default', { failfast: false }) as
+    | KapaPluginOptions
+    | undefined
   const { toggle, triggerRef } = useDocsChat()
+
+  // Kapa theme is not registered (e.g. CI without credentials) — no chat to open.
+  if (!pluginData?.integrationId) {
+    return null
+  }
 
   return (
     <Button
