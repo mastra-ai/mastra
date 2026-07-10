@@ -1,5 +1,5 @@
 import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide-react';
-import { createContext, use, useCallback, useMemo, useState } from 'react';
+import { createContext, useContext, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
 import { Badge } from '@/ds/components/Badge';
@@ -12,8 +12,6 @@ import { cn } from '@/lib/utils';
 
 const DEFAULT_COLLAPSED_HEIGHT = 220;
 
-type BadgeVariant = ComponentProps<typeof Badge>['variant'];
-
 interface PlanContextValue {
   collapsedHeight: number;
   isExpanded: boolean;
@@ -23,7 +21,7 @@ interface PlanContextValue {
 const PlanContext = createContext<PlanContextValue | null>(null);
 
 const usePlanContext = () => {
-  const context = use(PlanContext);
+  const context = useContext(PlanContext);
 
   if (!context) {
     throw new Error('Plan compound components must be rendered inside <Plan>.');
@@ -39,18 +37,15 @@ export interface PlanProps extends ComponentProps<'div'> {
 export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, className, ...props }: PlanProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
-  const toggleExpanded = useCallback(() => {
+  const toggleExpanded = () => {
     setIsExpanded(current => !current);
-  }, []);
+  };
 
-  const contextValue = useMemo(
-    () => ({
-      collapsedHeight,
-      isExpanded,
-      toggleExpanded,
-    }),
-    [collapsedHeight, isExpanded, toggleExpanded],
-  );
+  const contextValue = {
+    collapsedHeight,
+    isExpanded,
+    toggleExpanded,
+  };
 
   return (
     <PlanContext.Provider value={contextValue}>
@@ -79,9 +74,7 @@ export function PlanHeader({ children, className, ...props }: PlanHeaderProps) {
   );
 }
 
-export interface PlanLabelProps extends Omit<ComponentProps<'div'>, 'children'> {
-  children?: ReactNode;
-}
+export type PlanLabelProps = ComponentProps<'div'>;
 
 export function PlanLabel({ children = 'Plan', className, ...props }: PlanLabelProps) {
   return (
@@ -106,13 +99,11 @@ export function PlanHeaderActions({ children, className, ...props }: PlanHeaderA
   );
 }
 
-export interface PlanStatusProps extends Omit<ComponentProps<typeof Badge>, 'icon' | 'size'> {
-  variant?: BadgeVariant;
-}
+export type PlanStatusProps = Omit<ComponentProps<typeof Badge>, 'icon' | 'size'>;
 
 export function PlanStatus({ children, variant = 'default', ...props }: PlanStatusProps) {
   return (
-    <Badge variant={variant} size="xs" icon={<span className="size-1 rounded-full bg-current" />} {...props}>
+    <Badge {...props} variant={variant} size="xs" icon={<span className="size-1 rounded-full bg-current" />}>
       {children}
     </Badge>
   );
@@ -120,27 +111,27 @@ export function PlanStatus({ children, variant = 'default', ...props }: PlanStat
 
 export interface PlanCopyButtonProps extends Omit<
   ComponentProps<typeof Button>,
-  'children' | 'onClick' | 'size' | 'tooltip' | 'variant'
+  'aria-label' | 'children' | 'onClick' | 'size' | 'tooltip' | 'type' | 'variant'
 > {
   content: string;
 }
 
 export function PlanCopyButton({ content, ...props }: PlanCopyButtonProps) {
-  const { isCopied, copyToClipboard } = useCopyToClipboard({ copiedDuration: 1500, showToast: false });
-
-  const handleCopy = useCallback(() => {
-    copyToClipboard(content);
-  }, [content, copyToClipboard]);
+  const { isCopied, handleCopy } = useCopyToClipboard({
+    text: content,
+    copiedDuration: 1500,
+    showToast: false,
+  });
 
   return (
     <Button
+      {...props}
       type="button"
       variant="ghost"
       size="icon-sm"
       tooltip="Copy plan"
       aria-label="Copy plan"
       onClick={handleCopy}
-      {...props}
     >
       {isCopied ? <CheckIcon /> : <CopyIcon />}
     </Button>
@@ -173,7 +164,7 @@ export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 
 
 export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   return (
-    <Txt as="h3" variant="header-sm" className={cn('font-semibold text-neutral7', className)} {...props}>
+    <Txt {...props} as="h3" variant="header-sm" className={cn('font-semibold text-neutral7', className)}>
       {children}
     </Txt>
   );
@@ -194,12 +185,12 @@ const getFileName = (path: string) => {
 export function PlanPath({ children, className, ...props }: PlanPathProps) {
   return (
     <Txt
+      {...props}
       as="p"
       variant="ui-xs"
       font="mono"
       title={children}
       className={cn('max-w-full overflow-hidden truncate text-neutral3', className)}
-      {...props}
     >
       {getFileName(children)}
     </Txt>
@@ -280,10 +271,10 @@ export function PlanActionGroup({ children, className, ...props }: PlanActionGro
   );
 }
 
-export interface PlanExpandButtonProps extends Omit<
+export type PlanExpandButtonProps = Omit<
   ComponentProps<typeof Button>,
-  'aria-label' | 'children' | 'onClick' | 'size' | 'variant'
-> {}
+  'aria-label' | 'children' | 'onClick' | 'size' | 'type' | 'variant'
+>;
 
 export function PlanExpandButton(props: PlanExpandButtonProps) {
   const { isExpanded, toggleExpanded } = usePlanContext();

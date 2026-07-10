@@ -92,6 +92,26 @@ describe('Plan', () => {
     );
   });
 
+  it('preserves fixed copy behavior when unsupported button props are provided at runtime', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    const overrideClick = vi.fn();
+    mockClipboard(writeText);
+
+    renderPlan(
+      <Plan>
+        <PlanCopyButton content="Review migration plan" {...{ onClick: overrideClick, type: 'submit' as const }} />
+      </Plan>,
+    );
+
+    const copyButton = screen.getByRole('button', { name: /copy plan/i });
+    expect(copyButton.getAttribute('type')).toBe('button');
+
+    fireEvent.click(copyButton);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('Review migration plan'));
+    expect(overrideClick).not.toHaveBeenCalled();
+  });
+
   it('renders the path fallback when markdown content is unavailable', () => {
     renderPlan(
       <Plan>
@@ -159,5 +179,28 @@ describe('Plan', () => {
 
     expect(screen.getByRole('button', { name: /collapse plan/i })).toBeTruthy();
     expect(content.style.maxHeight).toBe('');
+  });
+
+  it('preserves fixed expand behavior when unsupported button props are provided at runtime', () => {
+    const overrideClick = vi.fn();
+
+    renderPlan(
+      <Plan>
+        <PlanContent>{'## Steps\n\n- Move data'}</PlanContent>
+        <PlanExpandButton {...{ onClick: overrideClick, type: 'submit' as const }} />
+      </Plan>,
+    );
+
+    const content = document.querySelector<HTMLElement>('[data-slot="plan-content"]');
+    if (!content) throw new Error('Expected plan content to render.');
+
+    const expandButton = screen.getByRole('button', { name: /expand plan/i });
+    expect(expandButton.getAttribute('type')).toBe('button');
+
+    fireEvent.click(expandButton);
+
+    expect(screen.getByRole('button', { name: /collapse plan/i })).toBeTruthy();
+    expect(content.style.maxHeight).toBe('');
+    expect(overrideClick).not.toHaveBeenCalled();
   });
 });
