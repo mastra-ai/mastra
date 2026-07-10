@@ -188,6 +188,13 @@ export class PlatformSandbox extends MastraSandbox {
     // "no timeout" by the proxy) instead of being dropped by a truthy check.
     const effectiveTimeout = options?.timeout ?? this._timeout;
     const timeoutSec = effectiveTimeout != null ? Math.ceil(effectiveTimeout / 1000) : undefined;
+    // Pass our own signal for exec so the client's default per-request
+    // timeout (60s) doesn't cut off commands that expect to run longer.
+    // Give the proxy a generous buffer over the requested command timeout.
+    const clientSignal =
+      effectiveTimeout != null && effectiveTimeout > 0
+        ? AbortSignal.timeout(effectiveTimeout + 30_000)
+        : undefined;
     const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -197,6 +204,7 @@ export class PlatformSandbox extends MastraSandbox {
         cwd: options?.cwd,
         env: options?.env,
       }),
+      signal: clientSignal,
     });
     const json = (await response.json()) as ExecResponse;
     const exitCode = json.exitCode ?? (json.timedOut ? 124 : 1);

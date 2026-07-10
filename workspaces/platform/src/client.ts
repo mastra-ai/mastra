@@ -10,6 +10,13 @@ export interface PlatformRequestOptions extends RequestInit {
 
 const DEFAULT_PROXY_URL = 'https://workspaces.mastra.ai';
 
+/**
+ * Default per-request timeout for calls to the workspace proxy. Applied only
+ * when the caller doesn't already pass an `AbortSignal`. Long-running routes
+ * (e.g. `POST /sandbox/:id/exec`) pass their own longer signal.
+ */
+const DEFAULT_REQUEST_TIMEOUT_MS = 60_000;
+
 export function requireOption(value: string | undefined, name: string): string {
   if (!value) throw new Error(`${name} is required`);
   return value;
@@ -97,7 +104,10 @@ export class PlatformClient {
 
     // Strip our helper-only field so the underlying fetch sees a valid RequestInit.
     const { query: _query, ...fetchOptions } = options;
-    const response = await this.fetch(url, { ...fetchOptions, headers });
+    // Apply a default timeout only when the caller didn't already supply an
+    // AbortSignal — long-running routes (exec) provide their own longer signal.
+    const signal = fetchOptions.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
+    const response = await this.fetch(url, { ...fetchOptions, headers, signal });
     if (!response.ok) {
       throw new PlatformApiError(response.status, await response.text());
     }
