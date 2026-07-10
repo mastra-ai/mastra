@@ -68,6 +68,34 @@ interface MongoDBDocument extends Document {
   document?: string;
   [key: string]: any; // Index signature for additional properties
 }
+
+function validateMetadataValue(value: unknown, path: string, seen: WeakSet<object>): void {
+  if (typeof value === 'function' || typeof value === 'symbol') {
+    throw new TypeError(`MongoDB metadata property "${path}" cannot be a ${typeof value}`);
+  }
+  if (value === null || typeof value !== 'object' || value instanceof Date) {
+    return;
+  }
+
+  const prototype = Object.getPrototypeOf(value);
+  if (!Array.isArray(value) && prototype !== Object.prototype && prototype !== null) {
+    return;
+  }
+  if (seen.has(value)) {
+    throw new TypeError(`MongoDB metadata property "${path}" contains a circular reference`);
+  }
+
+  seen.add(value);
+  if (Array.isArray(value)) {
+    value.forEach((nestedValue, index) => validateMetadataValue(nestedValue, `${path}[${index}]`, seen));
+  } else {
+    for (const [key, nestedValue] of Object.entries(value)) {
+      validateMetadataValue(nestedValue, `${path}.${key}`, seen);
+    }
+  }
+  seen.delete(value);
+}
+
 // The MongoDBVector class
 export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   private client: MongoClient;
@@ -289,6 +317,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     validateVectorValues('MONGODB', vectors);
 
     try {
+      metadata?.forEach((meta, index) => validateMetadataValue(meta, `metadata[${index}]`, new WeakSet()));
       const collection = await this.getCollection(indexName);
 
       // Get index stats to check dimension
@@ -308,7 +337,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         // Normalize metadata - convert Date objects to ISO strings
         const normalizedMeta = Object.keys(meta).reduce(
           (acc, key) => {
-            acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
+            const value = meta[key];
+            acc[key] = value instanceof Date ? value.toISOString() : value;
             return acc;
           },
           {} as Record<string, any>,
