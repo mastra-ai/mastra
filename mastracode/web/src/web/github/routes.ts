@@ -208,7 +208,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
 
   const redirectUri = options.redirectUri ?? `${(options.baseUrl ?? '').replace(/\/$/, '')}/auth/github/callback`;
 
-  // ── Connect: redirect to the GitHub App install URL ─────────────────────
+  // ── Connect: bounce through the OAuth identify flow ─────────────────────
+  // Identify-first (rather than install-first) so an app that is *already*
+  // installed on the org re-syncs into our DB: GitHub's install page dead-ends
+  // on the installation settings screen for existing installs and never
+  // redirects back to us. The callback persists whatever installations the
+  // verified user token can see, and only redirects to the install URL when
+  // there are none.
   routes.push(
     registerApiRoute('/auth/github/connect', {
       method: 'GET',
@@ -217,7 +223,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
-        return c.redirect(buildInstallUrl(state));
+        return c.redirect(buildOAuthIdentifyUrl(state, redirectUri));
       },
     }),
   );
@@ -233,6 +239,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const { orgId, userId } = resolved.tenant;
 
         const state = c.req.query('state');
+        if (!state) {
+          // GitHub's "Save"/update redirect from the installation settings page
+          // arrives with `installation_id` + `setup_action` but no state. We
+          // never trust the raw installation_id; start a fresh identify bounce
+          // bound to the current session so the update re-syncs installations.
+          return c.redirect(buildOAuthIdentifyUrl(signState(orgId, userId), redirectUri));
+        }
         const stateTenant = verifyState(state);
         if (!stateTenant || stateTenant.userId !== userId || stateTenant.orgId !== orgId) {
           // CSRF / cross-user/org linking protection: the signed state must belong
@@ -263,6 +276,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         try {
           const userToken = await exchangeOAuthCode(code, redirectUri);
           const installations = await listUserInstallations(userToken);
+          if (installations.length === 0) {
+            // Verified user has no installations yet — send them to the actual
+            // install page. After installing, GitHub redirects back here with
+            // the same state (and no code), which bounces through identify
+            // again and lands in the persist path below.
+            return c.redirect(buildInstallUrl(signState(orgId, userId)));
+          }
           const db = getAppDb();
           for (const inst of installations) {
             // The installation is org-owned; `userId` records who connected it.

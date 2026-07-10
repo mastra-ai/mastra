@@ -292,7 +292,7 @@ function deleteRows(table: any, cond?: any): void {
 }
 
 // Resolve schema refs after import.
-import { listInstallationRepos } from './client';
+import { listInstallationRepos, listUserInstallations } from './client';
 import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
@@ -462,9 +462,13 @@ describe('auth scoping', () => {
 });
 
 describe('connect + callback', () => {
-  it('redirects connect to the install URL with a signed state', async () => {
+  it('redirects connect to the OAuth identify URL with a signed state', async () => {
+    // Identify-first: the install page dead-ends for already-installed apps,
+    // so connect verifies the user via OAuth and lets the callback decide
+    // whether an install is actually needed.
     const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
     expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
   });
 
@@ -519,6 +523,27 @@ describe('connect + callback', () => {
     // No code → bounce through OAuth identify, persist nothing.
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it("bounces a GitHub settings 'Save' redirect (no state) through OAuth identify", async () => {
+    // Updating an existing installation redirects here with installation_id +
+    // setup_action but no signed state. Re-sync via a fresh identify bounce
+    // instead of erroring out.
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/auth/github/callback?installation_id=7&setup_action=update',
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it('redirects a verified user with no installations to the install URL', async () => {
+    vi.mocked(listUserInstallations).mockResolvedValueOnce([]);
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/installations/new');
     expect(tables.installations).toHaveLength(0);
   });
 });
