@@ -28,6 +28,7 @@ import { ChatSessionProvider } from '../ChatSessionProvider';
 import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
 import { useChatPermissions } from '../useChatPermissions';
+import { useChatRuntime } from '../useChatRuntime';
 import { useChatTranscript } from '../useChatTranscript';
 import { useChatModes } from '../useChatModes';
 import { useChatSessionContext } from '../useChatSessionContext';
@@ -132,6 +133,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
 function Probe() {
   const { status, threadId } = useChatConnection();
   const { transcript, busy, showWorkingIndicator } = useChatTranscript();
+  const { usage, followUpCount, omPhase, goal } = useChatRuntime();
   const { selectProject } = useActiveProjectContext();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
@@ -148,6 +150,10 @@ function Probe() {
       <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
       <span data-testid="working">{showWorkingIndicator ? 'yes' : 'no'}</span>
+      <span data-testid="usage-total">{usage?.totalTokens ?? 0}</span>
+      <span data-testid="follow-up-count">{followUpCount}</span>
+      <span data-testid="om-phase">{omPhase}</span>
+      <span data-testid="goal-objective">{goal?.objective ?? '(none)'}</span>
       <button onClick={() => void selectProject(nextProject)}>switch project</button>
     </div>
   );
@@ -584,6 +590,55 @@ describe('ChatSessionProvider', () => {
     await userEvent.click(screen.getByRole('button', { name: 'switch project' }));
 
     await waitFor(() => expect(requests).toContain('setState:next:{"state":{"projectPath":"/tmp/mastracode-next"}}'));
+  });
+
+  it('given live state in one project, when selecting another project, then the next project starts with its own empty transcript and runtime', async () => {
+    const requests: string[] = [];
+    seedProject([project, nextProject]);
+    useAgentControllerHandlers(
+      [
+        { type: 'agent_start' },
+        {
+          type: 'message_update',
+          message: { id: 'first-project-message', role: 'assistant', content: [{ type: 'text', text: 'First project response' }] },
+        },
+        { type: 'usage_update', usage: { completionTokens: 12, totalTokens: 12 } },
+        { type: 'om_observation_start' },
+        { type: 'follow_up_queued', count: 2 },
+        {
+          type: 'goal_evaluation',
+          payload: { objective: 'First project goal', status: 'active', iteration: 1, maxRuns: 3, passed: false },
+        },
+      ],
+      requests,
+    );
+    server.use(
+      http.get(`${NEXT_SESSION}/stream`, () => {
+        requests.push('stream:next');
+        return sse();
+      }),
+    );
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('message-text')).toHaveTextContent('First project response'));
+    await waitFor(() => expect(screen.getByTestId('usage-total')).toHaveTextContent('12'));
+    expect(screen.getByTestId('busy')).toHaveTextContent('yes');
+    expect(screen.getByTestId('follow-up-count')).toHaveTextContent('2');
+    expect(screen.getByTestId('om-phase')).toHaveTextContent('observing');
+    expect(screen.getByTestId('goal-objective')).toHaveTextContent('First project goal');
+
+    await userEvent.click(screen.getByRole('button', { name: 'switch project' }));
+
+    await waitFor(() => expect(requests).toContain('stream:next'));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    expect(screen.getByTestId('message-text')).toBeEmptyDOMElement();
+    expect(screen.getByTestId('entries-count')).toHaveTextContent('0');
+    expect(screen.getByTestId('busy')).toHaveTextContent('no');
+    expect(screen.getByTestId('working')).toHaveTextContent('no');
+    expect(screen.getByTestId('usage-total')).toHaveTextContent('0');
+    expect(screen.getByTestId('follow-up-count')).toHaveTextContent('0');
+    expect(screen.getByTestId('om-phase')).toHaveTextContent('idle');
+    expect(screen.getByTestId('goal-objective')).toHaveTextContent('(none)');
   });
 
   it('given an idle transcript, then busy and the working indicator are off', async () => {
