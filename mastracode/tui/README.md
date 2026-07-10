@@ -116,6 +116,88 @@ Select a suggestion with arrow keys and press Tab to insert it.
 
 Use `/plugins` to install and manage trusted local or GitHub plugins. Plugins can add tools, commands, skills, and system instructions. Because plugins execute code inside Mastra Code and their instructions are appended to the agent prompt, only install plugins from sources you trust.
 
+#### Serve a plugin as an MCP server
+
+Run a plugin's tools as a Model Context Protocol (MCP) server for an external client:
+
+```bash
+mastracode plugin mcp <local-directory-or-github-url> \
+  [--ref <git-ref>] \
+  [--config key=value ...]
+```
+
+The source can be a local plugin directory or an `https://github.com/...` URL. A GitHub source requires the GitHub CLI (`gh`) and an authenticated session. Use `--ref` to select a Git branch, tag, or commit. Pin a commit or tag when you need reproducible behavior.
+
+Repeat `--config key=value` for non-secret plugin settings. Put secrets in the `MASTRACODE_PLUGIN_CONFIG` environment variable as a JSON object instead of command-line arguments:
+
+```bash
+MASTRACODE_PLUGIN_CONFIG='{"apiKey":"...","region":"us-east"}' \
+  mastracode plugin mcp /absolute/path/to/plugin --config region=us-west
+```
+
+Explicit `--config` values take precedence over `MASTRACODE_PLUGIN_CONFIG`, which takes precedence over defaults declared by the plugin. Mastra Code validates unknown, missing, and invalid settings before starting MCP.
+
+The command serves MCP over standard input/output (stdio) only. It acquires the supplied source directly and doesn't add it to the installed-plugin registry. Plugin code runs on your computer, and plugin dependencies may be installed locally. Review and trust the source before running it, and pin GitHub refs when possible.
+
+##### Configure Claude Desktop on macOS
+
+Claude Desktop launches this command as a child process. Add it to Claude Desktop's configuration file; don't type the command into Claude chat.
+
+1. Run `command -v mastracode` in a terminal and copy the absolute path. A graphical app might not inherit your shell `PATH`.
+2. In Claude Desktop, open **Claude > Settings > Developer > Edit Config**. The configuration file is `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS.
+3. Add an entry under the top-level `mcpServers` object.
+
+The following example serves a GitHub plugin at a pinned commit:
+
+```json
+{
+  "mcpServers": {
+    "mastracode-github-plugin": {
+      "command": "/absolute/path/from-command-v/mastracode",
+      "args": [
+        "plugin",
+        "mcp",
+        "https://github.com/OWNER/REPOSITORY",
+        "--ref",
+        "0123456789abcdef0123456789abcdef01234567",
+        "--config",
+        "region=us-west"
+      ],
+      "env": {
+        "MASTRACODE_PLUGIN_CONFIG": "{\"apiKey\":\"YOUR_SECRET\"}"
+      }
+    }
+  }
+}
+```
+
+The following example serves a local plugin directory:
+
+```json
+{
+  "mcpServers": {
+    "mastracode-local-plugin": {
+      "command": "/absolute/path/from-command-v/mastracode",
+      "args": ["plugin", "mcp", "/Users/your-name/code/my-plugin"]
+    }
+  }
+}
+```
+
+4. Save the file, completely quit Claude Desktop, and restart it.
+5. Open the MCP server indicator near the conversation input, or open **Connectors**, and confirm the server and its tools are listed.
+6. Ask Claude to use a specific plugin tool. For a plugin with a `greet` tool, ask: `Use the greet tool to greet Mastra.`
+
+If the server doesn't connect:
+
+- Open **Settings > Developer** to inspect the connection status and server logs.
+- On macOS, inspect `~/Library/Logs/Claude/mcp.log` for connection failures and `~/Library/Logs/Claude/mcp-server-mastracode-local-plugin.log` (or the matching server name) for stderr from this command.
+- Confirm that `command` is the absolute result from `command -v mastracode` and that local plugin paths are absolute.
+- Run the same command in a terminal to see startup diagnostics on stderr. For GitHub sources, also run `gh auth status`.
+- Correct malformed JSON or missing/invalid plugin configuration, then completely restart Claude Desktop.
+
+The Claude Desktop paths, `mcpServers` format, restart requirement, tool verification, and log locations follow the [official MCP guide for connecting local servers](https://modelcontextprotocol.io/docs/develop/connect-local-servers). Claude's [local MCP server guide](https://support.claude.com/en/articles/10949351-getting-started-with-local-mcp-servers-on-claude-desktop) also describes checking connected tools and logs from Claude Desktop.
+
 ### Goals
 
 Use `/goal <objective>` to have Mastra Code keep working toward an objective across turns. Goals use a judge model to decide whether the goal is complete, should continue, or should wait for an explicit user checkpoint. Configure defaults with `/judge`.
