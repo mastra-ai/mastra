@@ -3,6 +3,7 @@ import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { createCodingAgent } from '../../../../coding-agent';
+import type { ErrorProcessor } from '../../../../processors';
 
 const UNMATCHED_ERROR = {
   error: {
@@ -31,7 +32,7 @@ describe('AIMock coding-agent scenario: retry unmatched stream errors', () => {
     await llm.stop();
   });
 
-  function createAgent(errorProcessors?: []) {
+  function createAgent(errorProcessors?: ErrorProcessor[]) {
     const openai = createOpenAI({
       apiKey: 'aimock-test-key',
       baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
@@ -61,12 +62,24 @@ describe('AIMock coding-agent scenario: retry unmatched stream errors', () => {
     expect(llm.getRequests()).toHaveLength(3);
   }, 15_000);
 
-  it('does not apply factory retries when caller supplies errorProcessors', async () => {
+  it('delivers the non-retryable provider error to caller processors without provider-level retries', async () => {
     llm.onMessage(/.*/, UNMATCHED_ERROR);
+    let processedError: unknown;
+    const observer: ErrorProcessor = {
+      id: 'observe-unmatched-error',
+      processAPIError: async ({ error }) => {
+        processedError = error;
+      },
+    };
 
-    const output = await createAgent([]).stream('Surface the scripted failure.');
+    const output = await createAgent([observer]).stream('Surface the scripted failure.');
 
     await expect(output.finishReason).rejects.toThrow('AIMOCK_UNMATCHED_STREAM_ERROR');
+    expect(processedError).toMatchObject({
+      message: 'AIMOCK_UNMATCHED_STREAM_ERROR',
+      statusCode: 422,
+      isRetryable: false,
+    });
     expect(llm.getRequests()).toHaveLength(1);
   });
 });
