@@ -4,11 +4,12 @@
  * Hidden when no tasks exist OR when all tasks are completed.
  * Renders between status and editor.
  */
-import { Container, Text, Spacer, visibleWidth } from '@earendil-works/pi-tui';
+import { Text, Spacer, visibleWidth } from '@earendil-works/pi-tui';
 import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
-import { getTermWidth, theme } from '../theme.js';
+import { theme } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 export function formatTaskProgressLine(task: TaskItemInput, indent = '    '): string {
   switch (task.status) {
@@ -30,13 +31,13 @@ export function formatTaskProgressLine(task: TaskItemInput, indent = '    '): st
   }
 }
 
-export class TaskProgressComponent extends Container {
+export class TaskProgressComponent extends WidthAwareContainer {
   private tasks: TaskItemInput[] = [];
   private quietMode = false;
 
   constructor() {
     super();
-    this.rebuildDisplay();
+    this.rebuild();
   }
 
   /**
@@ -44,12 +45,12 @@ export class TaskProgressComponent extends Container {
    */
   updateTasks(tasks: TaskItemInput[]): void {
     this.tasks = tasks;
-    this.rebuildDisplay();
+    this.rebuild();
   }
 
   setQuietMode(enabled: boolean): void {
     this.quietMode = enabled;
-    this.rebuildDisplay();
+    this.rebuild();
   }
 
   /**
@@ -59,7 +60,7 @@ export class TaskProgressComponent extends Container {
     return [...this.tasks];
   }
 
-  private rebuildDisplay(): void {
+  protected rebuildForWidth(width: number): void {
     this.clear();
 
     const completed = this.tasks.filter(t => t.status === 'completed').length;
@@ -74,7 +75,7 @@ export class TaskProgressComponent extends Container {
     this.addChild(new Spacer(1));
 
     if (this.quietMode) {
-      for (const line of this.formatQuietTaskLines(completed, total)) {
+      for (const line of this.formatQuietTaskLines(completed, total, width)) {
         this.addChild(new Text(line, 0, 0));
       }
       return;
@@ -92,11 +93,11 @@ export class TaskProgressComponent extends Container {
     }
   }
 
-  private formatQuietTaskLines(completed: number, total: number): string[] {
+  private formatQuietTaskLines(completed: number, total: number, width: number): string[] {
     const prefix = '  ' + theme.fg('muted', `${completed}/${total}`);
     const prefixWidth = visibleWidth(prefix);
     const continuationPrefix = ' '.repeat(prefixWidth);
-    const maxWidth = Math.max(20, getTermWidth());
+    const maxWidth = Math.max(20, width);
     const itemSeparator = '  ';
     const separatorWidth = itemSeparator.length;
     const lines: string[] = [prefix];

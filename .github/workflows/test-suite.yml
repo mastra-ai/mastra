@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
@@ -106,7 +106,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
@@ -167,7 +167,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 2
           ref: ${{ inputs.head_sha }}
@@ -239,7 +239,7 @@ jobs:
 
       - name: Checkout repo
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           ref: ${{ inputs.head_sha }}

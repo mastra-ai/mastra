@@ -6,13 +6,13 @@ import { Circle, LogOut, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList, useChatSession } from './domains/chat';
+import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
 import { ProjectSwitcher, WorkspacesSection } from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
 
 /**
  * Composition shell: each section owns its data through the domain contexts
- * (`useActiveProjectContext`, `useChatSession`, `useOverlays`), so nothing is
+ * (`useActiveProjectContext`, focused chat hooks, `useOverlays`), so nothing is
  * wired through props here.
  */
 export function Sidebar() {
@@ -45,7 +45,8 @@ function statusDotClass(status: string): string {
 }
 
 function SidebarFooter() {
-  const { status, busy } = useChatSession();
+  const { status } = useChatConnection();
+  const { busy } = useChatTranscript();
   const overlays = useOverlays();
 
   return (

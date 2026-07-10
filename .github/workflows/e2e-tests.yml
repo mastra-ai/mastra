@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -74,7 +74,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -118,7 +118,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -162,7 +162,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -206,7 +206,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -249,7 +249,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -293,7 +293,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -339,7 +339,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -381,7 +381,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 

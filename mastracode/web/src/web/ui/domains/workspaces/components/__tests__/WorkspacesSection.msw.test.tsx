@@ -2,7 +2,7 @@
  * BDD coverage for the propless `WorkspacesSection`.
  *
  * The section reads the active project from `useActiveProjectContext` and the
- * agent session from `useChatSession`, so the spec renders it inside the real
+ * agent session from focused chat hooks, so the spec renders it inside the real
  * provider stack and asserts worktree selection through the MSW-captured
  * session-state requests instead of a session spy.
  */

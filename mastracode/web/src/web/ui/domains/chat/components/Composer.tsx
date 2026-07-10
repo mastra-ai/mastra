@@ -1,30 +1,33 @@
-import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
+import type { AgentControllerMessage } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useApiConfig } from '../../../../../shared/api/config';
+import { queryKeys } from '../../../../../shared/api/keys';
 import { useActiveProjectContext } from '../../workspaces';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
-import { useChatSession } from '../context/ChatSessionProvider';
+import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatConnection } from '../context/useChatConnection';
+import { useChatTranscript } from '../context/useChatTranscript';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatModels } from '../context/useChatModels';
+import { useChatModes } from '../context/useChatModes';
+import { useChatPermissions } from '../context/useChatPermissions';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
   useSetAgentControllerGoalMutation,
 } from '../hooks/useAgentControllerGoalMutations';
-import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
-import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
 import {
   useAbortAgentControllerMutation,
   useFollowUpAgentControllerMutation,
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../hooks/useAgentControllerRunMutations';
-import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
 import { useTextareaAutoResize } from '../hooks/useTextareaAutoResize';
 import { matchCommands, SLASH_COMMANDS } from '../services/commands';
@@ -44,17 +47,19 @@ const composerVariantRows: Record<ComposerVariant, number> = {
 
 type ComposerProps = {
   variant?: ComposerVariant;
-  commandNameToApply: string | null;
-  onCommandApplied: () => void;
 };
 
-export function Composer({ variant = 'inline', commandNameToApply, onCommandApplied }: ComposerProps) {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const projectPath = deriveProjectPath(activeProject);
+export function Composer({ variant = 'inline' }: ComposerProps) {
+  const { activeProject } = useActiveProjectContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
   const navigate = useNavigate();
-  const { transcript, status, busy, localUser, resetCurrentThread, resetHydration, pushNotice } = useChatSession();
+  const queryClient = useQueryClient();
+  const { status } = useChatConnection();
+  const { transcript, busy, localUser, reset, pushNotice } = useChatTranscript();
+  const { composerCommandName, clearComposerCommand } = useChatCommands();
+  const { activeModelId, setModel } = useChatModels();
+  const { activeModeId } = useChatModes();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
@@ -62,13 +67,11 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
-  const switchModelMutation = useSwitchAgentControllerModelMutation(hookArgs);
   const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
-  const { data: permissionRules, isLoading: permissionsLoading } = useAgentControllerPermissions(hookArgs);
-  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
+  const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
 
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -82,34 +85,43 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
     setActiveSuggestion(0);
   };
 
-  const applyCommandDraft = (name: string) => {
+  const applyCommandDraft = useCallback((name: string) => {
     updateDraft(`/${name} `);
     inputRef.current?.focus();
-  };
+  }, []);
 
   const applyCommand = (name: string) => {
     applyCommandDraft(name);
-    onCommandApplied();
   };
 
   useEffect(() => {
-    if (!commandNameToApply) {
+    if (!composerCommandName) {
       appliedCommandNameRef.current = null;
       return;
     }
-    if (appliedCommandNameRef.current === commandNameToApply) return;
-    appliedCommandNameRef.current = commandNameToApply;
-    applyCommandDraft(commandNameToApply);
-    onCommandApplied();
-  }, [commandNameToApply, applyCommandDraft, onCommandApplied]);
+    if (appliedCommandNameRef.current === composerCommandName) return;
+    appliedCommandNameRef.current = composerCommandName;
+    applyCommandDraft(composerCommandName);
+    clearComposerCommand();
+  }, [composerCommandName, applyCommandDraft, clearComposerCommand]);
 
   useTextareaAutoResize(inputRef, draft);
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
-    resetHydration();
-    resetCurrentThread(thread.id);
+    reset(thread.id);
     return thread.id;
+  };
+
+  const seedThreadMessageCache = (threadId: string, text: string) => {
+    const message: AgentControllerMessage = {
+      id: `local-${Date.now()}`,
+      role: 'user',
+      content: [{ type: 'text', text }],
+    };
+    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
+      message,
+    ]);
   };
 
   const send = async (text: string) => {
@@ -118,6 +130,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
       const threadId = await createThread();
       localUser(text);
       await sendMutation.mutateAsync(text);
+      seedThreadMessageCache(threadId, text);
       void navigate(`/threads/${threadId}`, { replace: true });
       return;
     }
@@ -136,9 +149,6 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
     localUser(text);
     await followUpMutation.mutateAsync(text);
   };
-
-  const setPermissionForCategory = (category: ToolCategory, policy: PermissionPolicy) =>
-    setPermissionForCategoryMutation.mutateAsync({ category, policy });
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
@@ -192,7 +202,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
       const arg = rest.join(' ');
       switch (cmd) {
         case 'model':
-          if (arg) await switchModelMutation.mutateAsync(arg);
+          if (arg) await setModel(arg);
           return;
         case 'goal':
           if (arg) await setGoalMutation.mutateAsync(arg);
@@ -208,7 +218,7 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
           return;
         case 'permissions': {
           if (permissionsLoading) return;
-          const rules = permissionRules ?? { categories: {}, tools: {} };
+          const rules = permissions ?? { categories: {}, tools: {} };
           const cats =
             Object.entries(rules.categories ?? {})
               .map(([k, v]) => `  ${k}: ${v}`)
@@ -248,8 +258,8 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
           const lines = [
             `Project: ${activeProject?.name ?? '(none)'}`,
             `Path: ${activeProject?.path ?? '(default workspace)'}`,
-            `Mode: ${transcript.modeId ?? '—'}`,
-            `Model: ${transcript.modelId ?? '—'}`,
+            `Mode: ${activeModeId ?? '—'}`,
+            `Model: ${activeModelId ?? '—'}`,
             `Thread: ${transcript.threadId ?? '—'}`,
             `Running: ${transcript.running}`,
           ];

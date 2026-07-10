@@ -128,6 +128,7 @@ export type ScenarioName =
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'
+  | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
   | 'thread-history'
   | 'tool-history-reload'
@@ -151,6 +152,7 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
   submit: (text: string) => void;
   write: (text: string) => void;

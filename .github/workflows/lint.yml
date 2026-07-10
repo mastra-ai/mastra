@@ -22,7 +22,7 @@ jobs:
       has_examples: ${{ steps.filter.outputs.has_examples }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 0
 
@@ -61,7 +61,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -84,7 +84,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -115,7 +115,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -141,7 +141,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -163,7 +163,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           # Fetch entire git history so Changesets can generate changelogs
           # with the correct commits
@@ -213,10 +213,10 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
 
       - name: Setup Node.js 22.x
-        uses: actions/setup-node@7c2c68d20d402ed6a201ada70a81341941093140
+        uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
           node-version: 22.23.1
           package-manager-cache: false
