@@ -16,4 +16,12 @@ describe('planModePrompt', () => {
     expect(prompt).toMatch(/submit_plan\(\{\s*\n?\s*path:/);
     expect(prompt).toContain('Reuse the same file');
   });
+
+  it('tells the agent to resolve open questions with ask_user before submitting', () => {
+    const prompt = planModePrompt({ state: {} });
+
+    expect(prompt).toContain('Resolve Open Questions BEFORE Submitting');
+    expect(prompt).toContain('ask_user');
+    expect(prompt).toMatch(/before .*submit_plan/i);
+  });
 });

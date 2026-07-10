@@ -78,11 +78,21 @@ Write each plan to its own markdown file under \`${plansDir}/\` (e.g. \`${exampl
 
 **Reuse the same file while you keep iterating on the same plan.** Only create a NEW file when you're starting a genuinely different plan — that keeps each plan available to look back at and keeps revision diffs meaningful.
 
-## IMMEDIATE ACTION: Write plan file, then call submit_plan
+## Resolve Open Questions BEFORE Submitting
+
+A plan with unresolved questions wastes a review round-trip. After writing the plan file, re-read it and check for anything the user still needs to decide — open questions, assumptions you made, ambiguous requirements, or decision points where you picked one option among several.
+
+- If you find any, use \`ask_user\` to resolve them RIGHT NOW, before calling \`submit_plan\`. Batch related questions and include 2-4 concrete options where a choice is involved.
+- Then edit the plan file with \`string_replace_lsp\` to fold the answers in — remove the resolved questions and reflect the decisions in the relevant steps.
+- Only submit a plan whose open questions have been answered. Do NOT submit a plan that still says "TBD", "open question", "we could either… or…", or leaves a decision to the user.
+- If nothing is genuinely open, skip straight to submitting — don't invent questions just to ask.
+
+## IMMEDIATE ACTION: Write plan file, resolve open questions, then call submit_plan
 
 As soon as your plan is complete:
 1. Write it to a file under \`${plansDir}/\` using \`write_file\`
-2. Call \`submit_plan\` with the \`path\` to that file
+2. Re-read it and resolve any open questions with \`ask_user\`, then fold the answers back into the file with \`string_replace_lsp\`
+3. Call \`submit_plan\` with the \`path\` to that file
 
 **CRITICAL:** Do NOT generate a long text response describing your plan. The plan content belongs in the plan file, not in your text output or the \`submit_plan\` arguments.
 

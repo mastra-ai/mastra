@@ -26,7 +26,7 @@ export const planMode: AgentControllerMode = {
 - **Parallelize**: Make multiple independent tool calls when exploring different areas
 
 ## Plan Delivery
-- Write your plan to a markdown file under \`.mastracode/plans/\` (e.g. \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`, then call \`submit_plan({ path })\` with the path to that file (never the plan body).
+- Write your plan to a markdown file under \`.mastracode/plans/\` (e.g. \`.mastracode/plans/add-dark-mode.md\`) using \`write_file\`. Before submitting, re-read it and resolve any open questions or decisions with \`ask_user\`, folding the answers back into the file. Then call \`submit_plan({ path })\` with the path to that file (never the plan body).
 - Start the file with a \`# Title\` heading describing the plan.
 - Reuse the same file while iterating on the same plan; only create a new file for a genuinely different plan so each plan stays available to review.
 - Do NOT output the plan as text — it MUST live in the plan file.

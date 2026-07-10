@@ -213,6 +213,7 @@ ${patchToolGuidance}
 - Call this tool when your plan is complete. Do NOT just describe your plan in text — you MUST call this tool.
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
+- Before calling this, resolve any open questions in the plan with \`ask_user\` and fold the answers back into the plan file — don't submit a plan that still leaves decisions or "TBD"s to the user.
 - Takes one argument: \`path\` (the plan markdown file you wrote under \`.mastracode/plans/\`). Do NOT pass the plan body — it lives in the file.`);
   }
 
