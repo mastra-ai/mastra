@@ -74,6 +74,11 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     skipBgTaskWait: _internal?.skipBgTaskWait,
     drainPendingSignals: _internal?.drainPendingSignals,
     initialSignalEchoes: _internal?.initialSignalEchoes ? [..._internal.initialSignalEchoes] : undefined,
+    // Forward the tool payload transform policy. Every other consumed field is
+    // rebuilt here and this bag is what hydrates the run scope, so omitting it
+    // silently drops the policy for the whole run (the scope slot stays unset
+    // and `readScoped` falls back to this same bag). See `hydrate-run-scope.ts`.
+    toolPayloadTransform: _internal?.toolPayloadTransform,
   };
 
   let startTimestamp = internalToUse.now?.();

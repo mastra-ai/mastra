@@ -187,13 +187,7 @@ With this configuration:
 - A user pastes a YouTube link and the agent watches and discusses the video.
 - A user pastes an imgur link and the agent sees the image directly.
 
-By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without failing on models that reject them.
-
-:::note
-
-See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced MIME types.
-
-:::
+By default, only images are sent inline (`inlineMedia: ['image/*']`). Unsupported types are described as text summaries so the agent knows about the file without failing on models that reject them. See [Channels reference](/reference/agents/channels#inline-media) for all `inlineMedia` patterns and [inlineLinks reference](/reference/agents/channels#inline-links) for domain matching, HEAD detection, and forced MIME types.
 
 ## Serverless deployment
 
@@ -251,3 +245,4 @@ Vercel's managed Redis integration and Upstash Redis both work well. For more on
 ## Related
 
 - [Channels reference](/reference/agents/channels)
+- 📹 [Mastra channels workshop](https://www.youtube.com/watch?v=E9KFsZEnQO8\&t=5s)

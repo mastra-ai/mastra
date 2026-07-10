@@ -5,39 +5,23 @@ import { Folder, Plus, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { useKeyDown } from '../../../lib/hooks';
+import { useOverlays } from '../../../lib/overlays';
 import { useAddProjectMutation, useRemoveProjectMutation } from '../hooks/useProjects';
-import type { Project } from '../services/projects';
+import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import { DirectoryBrowser } from './DirectoryPicker';
 
-interface ProjectsModalProps {
-  projects: Project[];
-  activeProjectId: string | null;
-  onSelectProject: (project: Project) => void;
-  onClose: () => void;
-}
-
-/**
- * App-level modal for managing projects — the primary entry point into a coding
- * session. A project binds a name to a filesystem path; its threads, memory,
- * and workspace are scoped to that directory (and shared with the terminal).
- *
- * Two views: the project list, and an "add" view that embeds the server-driven
- * directory browser. On first run (no projects) it opens straight into "add".
- */
-export function ProjectsModal({ projects, activeProjectId, onSelectProject, onClose }: ProjectsModalProps) {
+/** App-level project manager backed by the active-project and overlay providers. */
+export function ProjectsModal() {
+  const { close } = useOverlays();
+  const { projects, activeProject, selectProject } = useActiveProjectContext();
   const empty = projects.length === 0;
   const [adding, setAdding] = useState(empty);
   const addProject = useAddProjectMutation();
   const removeProject = useRemoveProjectMutation();
   const busy = addProject.isPending;
-  const error = addProject.error
-    ? addProject.error instanceof Error
-      ? addProject.error.message
-      : String(addProject.error)
-    : null;
+  const error =
+    addProject.error instanceof Error ? addProject.error.message : addProject.error ? String(addProject.error) : null;
 
-  // Escape backs out of the add view to the list first (when projects exist);
-  // the DS Dialog otherwise owns close-on-Escape for the list view.
   useKeyDown(
     {
       escape: e => {
@@ -51,8 +35,8 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
   const handlePick = async (path: string, name: string) => {
     try {
       const project = await addProject.mutateAsync({ name: name || path, path });
-      onSelectProject(project);
-      onClose();
+      await selectProject(project);
+      close('projects');
     } catch {
       // Mutation state owns the rendered error.
     }
@@ -64,12 +48,11 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && close('projects')}>
       <DialogContent className="w-full max-w-lg" aria-label="Projects">
         <DialogHeader className="px-5 pt-4 pb-2">
           <DialogTitle>{adding ? 'Open a project' : 'Projects'}</DialogTitle>
         </DialogHeader>
-
         <div className="flex flex-col gap-3 px-5 pb-5">
           {adding ? (
             <>
@@ -79,7 +62,7 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
               </Txt>
               <DirectoryBrowser
                 onPick={(p, n) => void handlePick(p, n)}
-                onCancel={() => (empty ? onClose() : setAdding(false))}
+                onCancel={() => (empty ? close('projects') : setAdding(false))}
                 busy={busy}
                 error={error}
               />
@@ -87,29 +70,29 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
-                {projects.map(p => {
-                  const active = p.id === activeProjectId;
+                {projects.map(project => {
+                  const active = project.id === activeProject?.id;
                   return (
                     <div
-                      key={p.id}
+                      key={project.id}
                       className="group relative flex items-center gap-3 rounded-lg border border-border1 bg-surface-overlay-soft p-3 transition-colors hover:border-neutral5/50"
                     >
                       <button
                         type="button"
                         className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-hidden"
                         onClick={() => {
-                          onSelectProject(p);
-                          onClose();
+                          void selectProject(project);
+                          close('projects');
                         }}
-                        title={p.path}
+                        title={project.path}
                       >
                         <Folder size={18} className="shrink-0 text-accent1" />
                         <span className="flex min-w-0 flex-col">
                           <Txt as="span" variant="ui-md" className="truncate text-icon6">
-                            {p.name}
+                            {project.name}
                           </Txt>
                           <Txt as="span" variant="ui-xs" className="truncate text-icon3">
-                            {p.path}
+                            {project.path}
                           </Txt>
                         </span>
                       </button>
@@ -126,8 +109,8 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
                         variant="ghost"
                         size="icon-sm"
                         className="shrink-0"
-                        onClick={e => handleRemove(e, p.id)}
-                        aria-label={`Remove ${p.name}`}
+                        onClick={e => handleRemove(e, project.id)}
+                        aria-label={`Remove ${project.name}`}
                       >
                         <X size={14} />
                       </Button>
@@ -135,7 +118,6 @@ export function ProjectsModal({ projects, activeProjectId, onSelectProject, onCl
                   );
                 })}
               </div>
-
               <Button variant="outline" size="sm" className="self-start" onClick={() => setAdding(true)}>
                 <Plus size={16} />
                 <span>Add a project</span>

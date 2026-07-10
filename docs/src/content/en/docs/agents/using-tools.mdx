@@ -46,13 +46,7 @@ export const weatherTool = createTool({
 })
 ```
 
-When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
-
-:::note
-
-Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
-
-:::
+When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool. Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
 
 To make a tool available to an agent, add it to the `tools` property on the `Agent` class. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
 
@@ -377,11 +371,7 @@ await agent.generate('Check the forecast', {
 })
 ```
 
-:::note
-
 See the [`Agent.generate()` reference](/reference/agents/generate) for all runtime options including `toolsets`, `clientTools`, and `prepareStep`.
-
-:::
 
 ## Control `toolName` in stream responses
 

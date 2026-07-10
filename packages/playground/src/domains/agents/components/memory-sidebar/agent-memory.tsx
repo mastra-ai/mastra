@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
@@ -20,6 +20,15 @@ interface AgentMemoryProps {
   agentId: string;
   threadId: string;
   memoryType?: 'local' | 'gateway';
+}
+
+function getRecentMessagesDescription(lastMessages: number | false | undefined): string {
+  if (typeof lastMessages !== 'number') {
+    return 'Recent message history is not included in context.';
+  }
+
+  const messageLabel = lastMessages === 1 ? 'message' : 'messages';
+  return `Includes the last ${lastMessages} ${messageLabel} in context.`;
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
@@ -113,12 +122,17 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning}>
-              <Copy className="w-4 h-4 mr-2" />
+              <GitFork className="w-4 h-4 mr-2" />
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
         </div>
       )}
+
+      <div className="p-4 border-b border-border1">
+        <h3 className="text-sm font-medium text-neutral5">Recent Messages</h3>
+        <p className="text-xs text-neutral3 mt-1">{getRecentMessagesDescription(config?.lastMessages)}</p>
+      </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (

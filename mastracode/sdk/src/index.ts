@@ -34,6 +34,7 @@ import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
+import { LibSQLVector } from '@mastra/libsql';
 import {
   Observability,
   MastraStorageExporter,
@@ -93,6 +94,8 @@ import {
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
+import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
+import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -401,7 +404,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     id: 'mastra-code-storage',
     default: storageResult.storage,
     domains: {
-      ...(observabilityDomain ? { observability: observabilityDomain } : {}),
+      // When local tracing is off, disable the observability domain entirely so
+      // trace/score/feedback writes never fall through to the default libsql store.
+      observability: observabilityDomain ?? false,
       harness: harnessStorage,
     },
   });
@@ -464,6 +469,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+
+  // Maintenance handle for /prune: prunes via the inner store (whose retention
+  // config covers every domain, including legacy libsql observability spans)
+  // and can compact local libsql files to reclaim disk. The vector store's
+  // connection must close alongside storage — the compaction's file swap
+  // refuses to run while any connection is open.
+  const storageMaintenance: StorageMaintenance = createStorageMaintenance({
+    storage: storageResult.storage,
+    backend: storageResult.backend,
+    retention: DEFAULT_RETENTION,
+    localDbFiles: resolveLocalDbFiles(storageConfig, storageResult.backend),
+    closeVector: vectorStore instanceof LibSQLVector ? () => vectorStore.close() : undefined,
+  });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
 
@@ -842,6 +860,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   return {
     controller: controller,
     storage,
+    storageMaintenance,
     observability,
     memory,
     mcpManager,

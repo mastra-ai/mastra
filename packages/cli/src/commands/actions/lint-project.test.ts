@@ -125,19 +125,20 @@ describe('lintProject', () => {
     expect(parsed.issues[0]).toMatchObject({ code: 'MISSING_ENV_VAR', scope: 'bundle' });
   });
 
-  it('exits 1 when no env file is resolvable for preflight', async () => {
-    writeBundle(`export default {};`);
+  it('runs preflight without an env file, reporting warnings instead of failing', async () => {
+    // Env vars may live on the platform (e.g. CI without a checked-in .env),
+    // so a missing env file must not hard-fail — issues soften to warnings.
+    writeBundle(`const x = process.env.MY_MISSING_VAR; export default x;`);
 
-    await expect(lintProject({ root: tmpDir, preflight: true, skipBuild: true, json: true })).rejects.toThrow(
-      'process.exit(1)',
-    );
+    await expect(lintProject({ root: tmpDir, preflight: true, skipBuild: true, json: true })).resolves.toBeUndefined();
 
     const calls = stdoutSpy.mock.calls.map((c: unknown[]) => String(c[0]));
     const jsonOutput = calls.find((c: string) => c.trim().startsWith('{'));
     expect(jsonOutput).toBeDefined();
     const parsed = JSON.parse(jsonOutput!);
-    expect(parsed.ok).toBe(false);
-    expect(parsed.error).toContain('No env file found');
+    expect(parsed.ok).toBe(true);
+    expect(parsed.warningCount).toBeGreaterThan(0);
+    expect(parsed.issues[0]).toMatchObject({ code: 'MISSING_ENV_VAR', scope: 'bundle' });
   });
 
   it('emits project-phase issues as structured JSON', async () => {

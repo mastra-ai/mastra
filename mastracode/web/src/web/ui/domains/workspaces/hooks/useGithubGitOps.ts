@@ -1,7 +1,7 @@
 import { useMutation } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { commitChanges, createWorktree, openPullRequest, pushBranch } from '../services/github';
+import { createWorktree, pushBranch } from '../services/github';
 
 /**
  * Mutation hooks for the per-project git write operations
@@ -28,21 +28,6 @@ export function useCreateWorktreeMutation() {
   });
 }
 
-export interface CommitChangesVariables {
-  githubProjectId: string;
-  message: string;
-  worktreePath?: string;
-}
-
-/** Stage and commit all changes in a worktree; resolves `committed: false` on no-op. */
-export function useCommitChangesMutation() {
-  const { baseUrl } = useApiConfig();
-  return useMutation({
-    mutationFn: ({ githubProjectId, message, worktreePath }: CommitChangesVariables) =>
-      commitChanges(baseUrl, githubProjectId, message, worktreePath),
-  });
-}
-
 export interface PushBranchVariables {
   githubProjectId: string;
   branch: string;
@@ -55,23 +40,5 @@ export function usePushBranchMutation() {
   return useMutation({
     mutationFn: ({ githubProjectId, branch, worktreePath }: PushBranchVariables) =>
       pushBranch(baseUrl, githubProjectId, branch, worktreePath),
-  });
-}
-
-export interface OpenPullRequestVariables {
-  githubProjectId: string;
-  branch: string;
-  title: string;
-  body?: string;
-  base?: string;
-  worktreePath?: string;
-}
-
-/** Open a pull request via the sandbox `gh` CLI; resolves with the PR url. */
-export function useOpenPullRequestMutation() {
-  const { baseUrl } = useApiConfig();
-  return useMutation({
-    mutationFn: ({ githubProjectId, ...args }: OpenPullRequestVariables) =>
-      openPullRequest(baseUrl, githubProjectId, args),
   });
 }

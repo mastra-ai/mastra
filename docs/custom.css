@@ -32,6 +32,10 @@
 @import 'tailwindcss' source('./src/');
 @import 'tw-animate-css';
 
+/* Scan the Algolia search plugin's compiled output so its Tailwind utility classes are generated.
+   The plugin's index.css contains `@source "./dist/"` resolved relative to the package. */
+@import '@mastra/docusaurus-plugin-algolia';
+
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 @theme {
@@ -1948,4 +1952,89 @@ a.learn-sidebar-item.is-active {
 [data-theme='dark'] .learn-tab-badge {
   background-color: color-mix(in srgb, var(--mastra-green-accent) 15%, transparent);
   color: var(--mastra-green-accent);
+}
+
+/* ==================== ALGOLIA SEARCH PLUGIN ==================== */
+/*
+ * Helper classes consumed by @mastra/docusaurus-plugin-algolia. The plugin's
+ * UI references the `.mastra-card`, `.mastra-search-button`, `.dialog-panel`
+ * classes, which are normally provided by @mastra/docusaurus-theme. This site
+ * does not use that theme, so they are mapped here onto the docs' own design
+ * tokens. The `--algolia-*` / `--mastra-*` variables the plugin reads are
+ * defined alongside the rest of the site's design tokens above.
+ */
+
+/* Search trigger button in the navbar (button.clean-btn.mastra-search-button). */
+.mastra-search-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--mastra-surface-4);
+  color: var(--mastra-icons-2);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.mastra-search-button:hover {
+  background: var(--mastra-color-surface-hover);
+}
+
+.mastra-search-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Collapse to an icon-only trigger below the large breakpoint. */
+.mastra-search-button > span {
+  display: none;
+}
+
+@media (width >= 62.25rem) {
+  .mastra-search-button {
+    width: auto;
+  }
+
+  .mastra-search-button > span {
+    display: inline;
+  }
+}
+
+/* Card shell wrapping the search dialog contents. */
+.mastra-card {
+  color: var(--mastra-text-tertiary);
+}
+
+.mastra-card :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--ifm-heading-color);
+}
+
+/* Matched-term highlight inside results: weight + primary color, no yellow. */
+.mastra-card mark {
+  background: transparent;
+  color: var(--algolia-highlight);
+  font-weight: 600;
+  padding: 0;
+}
+
+/* Reset the search input rendered inside the dialog. */
+.dialog-panel input[type='search'] {
+  border: none;
+  background: transparent;
+}
+
+/*
+ * Child result rows (in-page heading hits) render their title with Tailwind's
+ * `truncate` (overflow: hidden), which sets the flex item's automatic minimum
+ * size to 0. As a direct child of the flex-column row — sibling to the excerpt —
+ * the flex algorithm then collapses the title to height: 0, hiding the heading
+ * so every sub-result looks like a duplicate of its excerpt. Pin the title so it
+ * keeps its line box and can't be shrunk away.
+ */
+#docs-search-results .group > span.truncate {
+  flex-shrink: 0;
 }

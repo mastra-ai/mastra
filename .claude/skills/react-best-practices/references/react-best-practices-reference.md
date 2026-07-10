@@ -4,7 +4,7 @@
 Mastra Engineering
 January 2026
 
-This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 22 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
+This catalog is an index for React performance and quality guidance used by agents and LLMs. It contains 25 rules across 9 categories, prioritized by impact. The canonical guidance — detailed explanations, incorrect vs. correct examples, review smells, and impact metrics — lives in `references/rules/*.md`.
 
 ## How to Use This Catalog
 
@@ -19,12 +19,12 @@ This catalog is an index for React performance and quality guidance used by agen
 | 1        | Eliminating Waterfalls    | CRITICAL                      | 1          |
 | 2        | Bundle Size Optimization  | CRITICAL                      | 2          |
 | 3        | Client-Side Data Fetching | MEDIUM-HIGH                   | 1          |
-| 4        | Re-render Optimization    | MEDIUM                        | 4          |
+| 4        | Re-render Optimization    | MEDIUM                        | 6          |
 | 5        | Rendering Performance     | MEDIUM                        | 2          |
 | 6        | JavaScript Performance    | LOW-MEDIUM                    | 3          |
 | 7        | Component Structure       | MEDIUM-HIGH (maintainability) | 6          |
 | 8        | Testing                   | MEDIUM-HIGH (correctness)     | 2          |
-| 9        | Type Safety               | HIGH                          | 1          |
+| 9        | Type Safety               | HIGH                          | 2          |
 
 ## Category Focus
 
@@ -63,12 +63,14 @@ This catalog is an index for React performance and quality guidance used by agen
 
 ### 4. Re-render Optimization
 
-| Rule                                | Title                                                              | Impact      | Summary                                                                                             | Canonical file                                          |
-| ----------------------------------- | ------------------------------------------------------------------ | ----------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `rerender-lazy-state-init`          | Use Lazy State Initialization                                      | MEDIUM      | Pass expensive initial values to `useState` as a lazy initializer function.                         | `references/rules/rerender-lazy-state-init.md`          |
-| `rerender-transitions`              | Use Transitions for Non-Urgent Updates                             | MEDIUM      | Mark frequent, non-urgent updates as transitions to keep the UI responsive.                         | `references/rules/rerender-transitions.md`              |
-| `rerender-useeffect-function-calls` | useEffectEvent when using functions in useEffect                   | MEDIUM      | Use `useEffectEvent` for functions called from effects instead of overusing `useCallback`.          | `references/rules/rerender-useeffect-function-calls.md` |
-| `rerender-no-useeffect-state-reset` | Never Reset State with useEffect — Remount via Component Hierarchy | MEDIUM-HIGH | Remount stateful branches when upstream identity changes instead of resetting state in `useEffect`. | `references/rules/rerender-no-useeffect-state-reset.md` |
+| Rule                                       | Title                                                              | Impact      | Summary                                                                                                           | Canonical file                                                 |
+| ------------------------------------------ | ------------------------------------------------------------------ | ----------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `rerender-lazy-state-init`                 | Use Lazy State Initialization                                      | MEDIUM      | Pass expensive initial values to `useState` as a lazy initializer function.                                       | `references/rules/rerender-lazy-state-init.md`                 |
+| `rerender-transitions`                     | Use Transitions for Non-Urgent Updates                             | MEDIUM      | Mark frequent, non-urgent updates as transitions to keep the UI responsive.                                       | `references/rules/rerender-transitions.md`                     |
+| `rerender-useeffect-function-calls`        | useEffectEvent when using functions in useEffect                   | MEDIUM      | Use `useEffectEvent` for functions called from effects instead of overusing `useCallback`.                        | `references/rules/rerender-useeffect-function-calls.md`        |
+| `rerender-no-useeffect-state-reset`        | Never Reset State with useEffect — Remount via Component Hierarchy | MEDIUM-HIGH | Remount stateful branches when upstream identity changes instead of resetting state in `useEffect`.               | `references/rules/rerender-no-useeffect-state-reset.md`        |
+| `rerender-no-usememo-usecallback`          | Do Not Add useMemo or useCallback                                  | MEDIUM      | Never introduce `useMemo` or `useCallback`; leave memoization decisions to developers with profiler evidence.     | `references/rules/rerender-no-usememo-usecallback.md`          |
+| `rerender-no-setstate-in-render-or-effect` | Do Not setState During Render or Effects                           | MEDIUM-HIGH | Derive values during render or move state ownership to an intermediate component instead of syncing with setters. | `references/rules/rerender-no-setstate-in-render-or-effect.md` |
 
 ### 5. Rendering Performance
 
@@ -108,6 +110,7 @@ This catalog is an index for React performance and quality guidance used by agen
 | Rule                       | Title                                     | Impact | Summary                                                                                                                | Canonical file                                 |
 | -------------------------- | ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with real guards, query generics, typed factories, or `implements`. | `references/rules/types-no-type-assertions.md` |
+| `types-no-null`            | Use undefined for Absence, Not null       | HIGH   | Model absence with optional `?`/`undefined`; convert external `null` at boundaries and keep internal types null-free.  | `references/rules/types-no-null.md`            |
 
 ## External References
 

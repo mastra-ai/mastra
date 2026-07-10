@@ -45,8 +45,8 @@
     "lucide-react": "^0.474.0",
     "marked": "^15.0.0",
     "pg": "^8.21.0",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-router": "^7.13.1",
     "shiki": "^1.29.2",
     "zod": "^4.3.6"

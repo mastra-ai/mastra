@@ -1,0 +1,42 @@
+---
+title: "Server | File-based Agents"
+description: Configure the Mastra HTTP server by file convention with server.ts.
+packages:
+  - "@mastra/core"
+---
+
+# Server
+
+Mastra configures its HTTP [server](/docs/server/mastra-server) from a `server.ts` file directly under `src/mastra/`. The server exposes agents, workflows, and other registered primitives as REST endpoints, and the file default-exports the same `ServerConfig` shape you'd pass to [`new Mastra()`](/reference/core/mastra-class).
+
+Use this page for the file-based convention. For server features, middleware, custom routes, generated API docs, and deployment behavior, see [Server overview](/docs/server/mastra-server).
+
+## Quickstart
+
+Create `src/mastra/server.ts` and default-export a `ServerConfig` object:
+
+```typescript title="src/mastra/server.ts"
+import type { ServerConfig } from '@mastra/core/server'
+
+export default {
+  port: 4111,
+  host: '0.0.0.0',
+} satisfies ServerConfig
+```
+
+## Common configurations
+
+`server.ts` can configure the same server options as code registration:
+
+| Need | Use |
+| - | - |
+| Bind to a deployment platform address | `host` and `port` |
+| Restrict browser access | `cors` |
+| Add webhooks or health checks | `apiRoutes` |
+| Enable generated API docs | `build.openAPIDocs` and `build.swaggerUI` |
+
+See [Mastra server](/docs/server/mastra-server), [middleware](/docs/server/middleware), and [custom API routes](/docs/server/custom-api-routes) for examples.
+
+## Precedence with code
+
+Code-registered server config wins over `server.ts`. Routes added during startup, such as channel webhooks, are preserved when file-based server config is applied.

@@ -22,6 +22,15 @@ describe('TokenTransformer', () => {
   });
 
   describe('fromTikToken', () => {
+    it('rejects an overlap equal to the token chunk size', () => {
+      expect(() =>
+        TokenTransformer.fromTikToken({
+          encodingName: 'cl100k_base',
+          options: { maxSize: 100, overlap: 100 },
+        }),
+      ).toThrow(/chunk overlap \(100\) must be smaller than chunk size \(100\)/i);
+    });
+
     it('should create only one encoder when using encodingName', () => {
       TokenTransformer.fromTikToken({
         encodingName: 'cl100k_base',

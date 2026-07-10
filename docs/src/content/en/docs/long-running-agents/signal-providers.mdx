@@ -170,11 +170,7 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 }
 ```
 
-`handleWebhook()` is a provider method, not an auto-mounted HTTP route. Invoke it from your own endpoint, passing the request body, headers, and any route params.
-
-:::note
-Visit [`SignalProvider` reference](/reference/signals/signal-provider) for subscription, polling, lifecycle, and `notify()` details. For the complete notification payload shape, including deduplication and coalescing fields, visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options).
-:::
+`handleWebhook()` is a provider method, not an auto-mounted HTTP route. Invoke it from your own endpoint, passing the request body, headers, and any route params. Visit [`SignalProvider` reference](/reference/signals/signal-provider) for subscription, polling, lifecycle, and `notify()` details. For the complete notification payload shape, including deduplication and coalescing fields, visit [`Agent.sendNotificationSignal()` reference](/reference/agents/agent#sendnotificationsignalnotification-options).
 
 ## Built-in webhook provider
 

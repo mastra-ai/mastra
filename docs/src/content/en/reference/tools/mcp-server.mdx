@@ -538,12 +538,31 @@ Use the default session-based mode (without `serverless: true`) for:
 
 The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
 
-**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode:
+By default, serverless mode buffers each request into a single JSON response, so `notifications/progress` sent by a tool never reach the client. Set `serverlessStreaming: true` to handle the request with request-scoped SSE streaming instead, which delivers progress notifications before the final result:
+
+```typescript
+await server.startHTTP({
+  url,
+  httpPath: '/mcp',
+  req: nodeReq,
+  res: nodeRes,
+  options: {
+    serverless: true,
+    serverlessStreaming: true, // ← Stream request-scoped notifications/progress
+  },
+})
+```
+
+This is still stateless: no `mcp-session-id` is required or persisted. It only enables notifications scoped to the current request (such as progress). The session-dependent features below remain unavailable.
+
+**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
 - **Resource update notifications** - `resources.notifyUpdated()` requires active subscriptions and persistent connections to notify clients
 - **Prompt list change notifications** - `prompts.notifyListChanged()` requires persistent connections to push updates to clients
+- **Tool list change notifications** - `toolActions.notifyListChanged()` requires persistent connections to push updates to clients
+- **Server log notifications** - `sendLoggingMessage()` requires persistent connections to push log messages to clients
 
 These features work normally in long-lived server environments (Node.js servers, Docker containers, etc.).
 
@@ -591,6 +610,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
     type: 'boolean',
     description:
       'If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.',
+    optional: true,
+  },
+  {
+    name: 'serverlessStreaming',
+    type: 'boolean',
+    description:
+      'If `true`, serverless requests use request-scoped SSE streaming instead of a buffered JSON response, allowing in-request `notifications/progress` to reach the client before the final result. Only takes effect together with `serverless: true`. Defaults to `false` (buffered JSON responses), which preserves backward-compatible behavior. This enables only request-scoped notifications such as progress; elicitation, subscriptions, and out-of-request notifications still require session state.',
     optional: true,
   },
   {
@@ -981,6 +1007,144 @@ await serverWithPrompts.prompts.notifyListChanged()
 - Notify clients when prompt lists change.
 - Handle errors with informative messages.
 - Document argument expectations and available versions.
+
+## Dynamic tool management
+
+Tools are usually provided when constructing the `MCPServer`, but you can also add or remove tools while the server is running. The server exposes these operations through the `toolActions` property. When the tool list changes, connected clients receive a `notifications/tools/list_changed` message prompting them to re-fetch the tool list.
+
+The property is named `toolActions` because `tools()` is the method that returns the registered tool registry.
+
+### `toolActions.add(tools)`
+
+Registers new tools on the running server and notifies connected clients. Tools are keyed by their record key, the same as tools passed to the constructor. Adding a tool under an existing key replaces it.
+
+```typescript prettier:false
+async server.toolActions.add(tools: ToolsInput): Promise<void>
+```
+
+Example:
+
+```typescript
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+const searchTool = createTool({
+  id: 'search',
+  description: 'Searches the knowledge base.',
+  inputSchema: z.object({ query: z.string() }),
+  execute: async ({ query }) => ({ results: [] }),
+})
+
+await server.toolActions.add({ searchTool })
+```
+
+### `toolActions.remove(toolIds)`
+
+Removes tools from the running server by tool ID and notifies connected clients. Unknown tool IDs are ignored. If no tools were removed, no notification is sent.
+
+```typescript prettier:false
+async server.toolActions.remove(toolIds: string[]): Promise<void>
+```
+
+Example:
+
+```typescript
+await server.toolActions.remove(['searchTool'])
+```
+
+### `toolActions.notifyListChanged()`
+
+Sends a `notifications/tools/list_changed` message to connected clients without modifying the tool registry. Call this when tool availability changes through other means (for example, authorization changes).
+
+```typescript prettier:false
+async server.toolActions.notifyListChanged(): Promise<void>
+```
+
+### Mastra registry synchronization
+
+When the server is registered with a Mastra instance, `toolActions.add()` and `toolActions.remove()` also update the Mastra instance's tool registry, matching the automatic tool registration that happens at startup. Added tools become available through `mastra.listTools()` (keyed by the tool's intrinsic `id` when present), and removed tools are deleted from the registry.
+
+## Logging
+
+MCP servers can send structured log messages to clients using `notifications/message`. Clients control verbosity by sending a `logging/setLevel` request; the server drops messages below the requested minimum level (following RFC 5424 severity ordering). The level is tracked per session, so different clients can request different verbosity.
+
+### `sendLoggingMessage()`
+
+Sends a log notification to all connected clients, honoring each client's minimum logging level.
+
+```typescript prettier:false
+async server.sendLoggingMessage(params: {
+  level: LoggingLevel;
+  data: unknown;
+  logger?: string;
+}): Promise<void>
+```
+
+Example:
+
+```typescript
+await server.sendLoggingMessage({
+  level: 'info',
+  data: { message: 'Sync completed', itemsProcessed: 42 },
+})
+```
+
+### `context.mcp.log()`
+
+Inside a tool's `execute` function, use `context.mcp.log()` to send a log message to the client that called the tool.
+
+```typescript prettier:false
+async context.mcp.log(
+  level: LoggingLevel,
+  message: string,
+  data?: Record<string, unknown>
+): Promise<void>
+```
+
+Example:
+
+```typescript
+execute: async ({ location }, context) => {
+  await context.mcp.log('debug', 'Fetching weather', { location })
+  const weather = await fetchWeather(location)
+  await context.mcp.log('info', 'Weather fetched')
+  return weather
+}
+```
+
+## Progress notifications
+
+Long-running tools can report progress to the calling client with `notifications/progress`. Progress is only sent when the caller requested progress tracking by including a `progressToken` in the request (the Mastra `MCPClient` does this when `enableProgressTracking` is set). When no token was sent, `context.mcp.progress()` is a no-op.
+
+### `context.mcp.progress()`
+
+```typescript prettier:false
+async context.mcp.progress(params: {
+  progress: number;
+  total?: number;
+  message?: string;
+}): Promise<void>
+```
+
+Example:
+
+```typescript
+execute: async ({ items }, context) => {
+  for (const [index, item] of items.entries()) {
+    await processItem(item)
+    await context.mcp.progress({
+      progress: index + 1,
+      total: items.length,
+      message: `Processed ${item.name}`,
+    })
+  }
+  return { done: true }
+}
+```
+
+## Notification delivery
+
+Notification methods (`resources.notifyListChanged()`, `prompts.notifyListChanged()`, `toolActions.notifyListChanged()`, and `sendLoggingMessage()`) broadcast to every connected client across all transports: the stdio/SSE connection and each streamable HTTP session. `resources.notifyUpdated()` is the exception: it only notifies clients that subscribed to the resource URI via `resources/subscribe`. Subscriptions are tracked per session for streamable HTTP clients; legacy SSE clients share the main server instance and therefore share one subscription set. Clients using the stateless serverless mode can't receive notifications because each request uses a transient server instance.
 
 ## Examples
 
@@ -1671,13 +1835,7 @@ const server = new MCPServer({
 })
 ```
 
-Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools.
-
-:::note
-
-Visit [MCP Apps](/docs/mcp/mcp-apps) for the full app bridge API and usage patterns.
-
-:::
+Link a tool to its app resource by setting `_meta.ui.resourceUri` on the tool to the matching `ui://` URI. The server auto-normalizes this metadata when registering tools. Visit [MCP Apps](/docs/mcp/mcp-apps) for the full app bridge API and usage patterns.
 
 ## Related information
 
