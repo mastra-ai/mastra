@@ -269,6 +269,11 @@ export class MastraCodeGateway extends MastraModelGateway {
     return authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   }
 
+  /** @deprecated Renamed to {@link MastraCodeGateway.getMastraGatewayApiKey}. */
+  static getMemoryGatewayApiKey(): string | undefined {
+    return this.getMastraGatewayApiKey();
+  }
+
   /**
    * Claim an unprefixed model id (e.g. a bare `anthropic/...`) when this gateway
    * can authenticate it via OAuth or a stored/env credential. This lets the

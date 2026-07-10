@@ -2,7 +2,7 @@
 '@mastra/code-sdk': minor
 ---
 
-Renamed the Gateway constants exported from `@mastra/code-sdk/onboarding/settings` so they match the Gateway product name. The old names keep working as deprecated aliases and the values are unchanged, so nothing breaks today.
+Renamed the Gateway constants exported from `@mastra/code-sdk/onboarding/settings` and added `MastraCodeGateway.getMastraGatewayApiKey()` so they match the Gateway product name. The old constant and method names keep working as deprecated aliases, and the stored values are unchanged.
 
 ```ts
 // Before

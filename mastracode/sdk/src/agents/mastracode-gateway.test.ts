@@ -135,4 +135,15 @@ describe('MastraCodeGateway', () => {
       expect(auth).toBeUndefined();
     });
   });
+
+  describe('gateway API key accessors', () => {
+    it('keeps the previous accessor as a compatibility alias', () => {
+      writeAuthJson({
+        'apikey:mastra-gateway': { type: 'api_key', key: 'msk-test' },
+      });
+
+      expect(MastraCodeGateway.getMastraGatewayApiKey()).toBe('msk-test');
+      expect(MastraCodeGateway.getMemoryGatewayApiKey()).toBe('msk-test');
+    });
+  });
 });
