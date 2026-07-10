@@ -131,7 +131,7 @@ The source can be a local plugin directory or an `https://github.com/...` URL. A
 Repeat `--config key=value` for non-secret string settings. Values remain strings, including `true` and `false`. Put booleans, other typed values, and secrets in the `MASTRACODE_PLUGIN_CONFIG` environment variable as a JSON object instead of command-line arguments:
 
 ```bash
-MASTRACODE_PLUGIN_CONFIG='{"apiKey":"...","region":"us-east"}' \
+MASTRACODE_PLUGIN_CONFIG='{"apiKey":"...","region":"us-east","enabled":true}' \
   mastracode plugin mcp /absolute/path/to/plugin --config region=us-west
 ```
 
