@@ -51,13 +51,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Once registered, you can manage agents through [Studio](/docs/studio/overview) or programmatically through the server API and Client SDK.
-
-:::note
-
-See the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
-
-:::
+Once registered, you can manage agents through [Studio](/docs/studio/overview) or programmatically through the server API and Client SDK. See the [MastraEditor reference](/reference/editor/mastra-editor) for all configuration options.
 
 ## Code and database sources
 
@@ -164,13 +158,7 @@ Because stored agents are data, you can build automation loops that tune agents 
 - Re-run the experiment against the draft and compare scores to the baseline.
 - Promote the draft to the published version when the scores improve.
 
-This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested.
-
-:::note
-
-See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
-
-:::
+This turns agent tuning into a closed feedback loop. One agent owns the production configuration, another agent iterates on it, and every change is versioned so you can roll back if a round of automated edits makes things worse. Combine this with [version targeting](#version-targeting-and-experimentation) to keep production traffic on the published version while the draft is being tested. See the [MastraEditor reference](/reference/editor/mastra-editor) for the full namespace API.
 
 ## What can be overridden
 

@@ -77,6 +77,7 @@ export type ScenarioName =
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-preserves-model-pack'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'

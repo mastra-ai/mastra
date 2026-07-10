@@ -6,8 +6,12 @@ import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
 } from '../hooks/useAgentControllerGoalMutations';
-import { useAbortAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
+import {
+  useAbortAgentControllerMutation,
+  useFollowUpAgentControllerMutation,
+} from '../hooks/useAgentControllerRunMutations';
 import type { SlashCommand } from '../services/commands';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -22,15 +26,17 @@ const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'othe
 export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAction<string | undefined>>) {
   const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
-  const { transcript, pushNotice } = useChatTranscript();
+  const { transcript, localUser, pushNotice } = useChatTranscript();
   const { activeModeId } = useChatModes();
-  const { activeModelId } = useChatModels();
+  const { activeModelId, setModel } = useChatModels();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
+  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
 
   const runNoArg = async (name: string) => {
@@ -120,5 +126,36 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
     void runNoArg(command.name);
   };
 
-  return { run };
+  /**
+   * Executes a composer slash command and returns whether the input was consumed.
+   * Non-command text returns false so the composer can send or steer it normally.
+   */
+  const runComposerCommand = async (text: string) => {
+    if (!text.startsWith('/')) return false;
+
+    const [name, ...rest] = text.slice(1).split(/\s+/);
+    const arg = rest.join(' ');
+
+    switch (name) {
+      case 'model':
+        if (arg) await setModel(arg);
+        return true;
+      case 'goal':
+        if (arg) await setGoalMutation.mutateAsync(arg);
+        return true;
+      case 'follow-up':
+      case 'followup':
+        if (arg) {
+          localUser(arg);
+          await followUpMutation.mutateAsync(arg);
+        }
+        return true;
+      default:
+        if (name === 'permissions' && permissionsLoading) return true;
+        await runNoArg(name);
+        return true;
+    }
+  };
+
+  return { run, runComposerCommand };
 }

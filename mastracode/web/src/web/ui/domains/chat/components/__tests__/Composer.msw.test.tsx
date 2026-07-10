@@ -214,4 +214,31 @@ describe('Composer', () => {
       await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
     });
   });
+
+  describe('when composing a multi-line draft', () => {
+    it('grows with content via CSS instead of inline styles', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
+
+      expect(input).toHaveValue('first line\nsecond line\nthird line');
+      expect(input).toHaveClass('field-sizing-content');
+      expect((input as HTMLTextAreaElement).style.height).toBe('');
+    });
+
+    it('sizes the textarea variant with CSS classes only', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer({ variant: 'textarea' });
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      expect(input).toHaveClass('field-sizing-content', 'min-h-28');
+      expect((input as HTMLTextAreaElement).style.height).toBe('');
+    });
+  });
 });
