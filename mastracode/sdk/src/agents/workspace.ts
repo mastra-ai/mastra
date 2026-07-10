@@ -93,6 +93,7 @@ function collectSkillPaths(skillsDirs: string[], allowedRoot?: string): string[]
             const stat = fs.statSync(realPath);
             if (stat.isDirectory()) {
               const realParent = path.dirname(realPath);
+              if (realAllowedRoot && !isPathWithinRoot(realParent, realAllowedRoot)) continue;
               if (!seen.has(realParent)) {
                 seen.add(realParent);
                 paths.push(realParent);

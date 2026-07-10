@@ -217,6 +217,31 @@ describe('buildSkillPaths', () => {
       expect(result).not.toContain('/outside/skills');
     });
 
+    it('rejects skill symlinks whose resolved parent escapes the project root', () => {
+      const skillsDir = path.join(projectPath, '.mastracode', 'skills');
+      const symlinkEntry = {
+        name: 'project-root',
+        isSymbolicLink: () => true,
+        isDirectory: () => false,
+        isFile: () => false,
+      } as fs.Dirent;
+
+      mockedFs.existsSync.mockImplementation((p: fs.PathLike) => String(p) === skillsDir);
+      mockedFs.readdirSync.mockImplementation((p: fs.PathLike, _opts?: any) => {
+        if (String(p) === skillsDir) return [symlinkEntry] as any;
+        return [] as any;
+      });
+      mockedFs.realpathSync.mockImplementation((p: fs.PathLike) => {
+        if (String(p) === path.join(skillsDir, 'project-root')) return projectPath;
+        return String(p);
+      });
+      mockedFs.statSync.mockReturnValue({ isDirectory: () => true } as fs.Stats);
+
+      const result = buildSkillPaths(projectPath, DEFAULT_CONFIG_DIR);
+
+      expect(result).not.toContain(path.dirname(projectPath));
+    });
+
     it('rejects plugin skill symlinks that escape the plugin skill root', () => {
       const pluginSkillsDir = '/plugins/example/skills';
       const symlinkEntry = {
