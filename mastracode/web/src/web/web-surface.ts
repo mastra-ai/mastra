@@ -16,6 +16,7 @@ import { buildFsRoutes } from './fs-routes.js';
 import {
   assertReplicaStableStateSecret,
   getGithubFeatureDiagnostics,
+  hasExplicitStateSecret,
   isGithubFeatureEnabled,
 } from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
@@ -77,8 +78,9 @@ export async function resolveIntakeReady(anySourceReady: boolean): Promise<boole
 
 /**
  * Resolve whether the Linear intake feature is ready to serve. Fails soft like
- * {@link resolveGithubReady}: when the feature is enabled but the app DB can't
- * be reached we log and return `false` so the server still boots.
+ * {@link resolveGithubReady} when the app DB can't be reached (log and return
+ * `false` so the server still boots), but fails loud when the shared
+ * state-signing secret would not be replica-stable.
  */
 export async function resolveLinearReady(): Promise<boolean> {
   if (!isLinearFeatureEnabled()) {
@@ -94,6 +96,20 @@ export async function resolveLinearReady(): Promise<boolean> {
     );
     return false;
   }
+
+  // Fail loud if state signing wouldn't be stable across replicas. Linear's
+  // OAuth `state` is signed with the shared secret from `./github/config`, and
+  // the GitHub-side assertion is a no-op when the GitHub feature is off — so a
+  // Linear-only deployment must run its own check.
+  if (!hasExplicitStateSecret()) {
+    throw new Error(
+      'Linear intake is enabled but no replica-stable state secret is set. ' +
+        'Set GITHUB_APP_WEBHOOK_SECRET (or WORKOS_COOKIE_PASSWORD) so the OAuth ' +
+        '`state` can be verified across replicas. Without it, the connect callback ' +
+        'fails whenever it lands on a different replica than the one that signed it.',
+    );
+  }
+
   try {
     await ensureLinearDbReady();
     process.stderr.write('MastraCode Web: Linear routes enabled\n');
