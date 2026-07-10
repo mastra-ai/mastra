@@ -49,11 +49,7 @@ export function Plan({ children, collapsedHeight = DEFAULT_COLLAPSED_HEIGHT, cla
 
   return (
     <PlanContext.Provider value={contextValue}>
-      <div
-        data-slot="plan"
-        className={cn('w-full max-w-full overflow-hidden rounded-xl bg-surface3', className)}
-        {...props}
-      >
+      <div data-slot="plan" className={cn('w-full overflow-hidden rounded-xl bg-surface3', className)} {...props}>
         {children}
       </div>
     </PlanContext.Provider>
