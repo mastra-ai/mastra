@@ -256,7 +256,12 @@ describe('projects route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/projects');
     expect(await res.json()).toEqual({
       projects: [
-        { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
+        {
+          id: 'proj-1',
+          name: 'Q3 Roadmap',
+          state: 'started',
+          teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }],
+        },
       ],
     });
   });

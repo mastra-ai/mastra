@@ -383,7 +383,9 @@ describe('Factory Intake page — Linear source', () => {
       linearStatus: linearConnectedStatus,
     });
 
-    expect(await screen.findByText('No Linear projects selected. Pick them in Settings › General.')).toBeInTheDocument();
+    expect(
+      await screen.findByText('No Linear projects selected. Pick them in Settings › General.'),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('list', { name: 'Linear issues' })).not.toBeInTheDocument();
   });
 

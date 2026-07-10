@@ -32,7 +32,12 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
-import { assembleWebApiRoutes, resolveGithubReady, resolveIntakeReady, resolveLinearReady } from '../web/web-surface.js';
+import {
+  assembleWebApiRoutes,
+  resolveGithubReady,
+  resolveIntakeReady,
+  resolveLinearReady,
+} from '../web/web-surface.js';
 
 const CONTROLLER_ID = 'code';
 

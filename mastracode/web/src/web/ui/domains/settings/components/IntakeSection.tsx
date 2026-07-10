@@ -163,7 +163,10 @@ export function IntakeSection() {
                   onChange={() =>
                     update({
                       ...config,
-                      github: { ...config.github, projectIds: toggleId(config.github.projectIds, project.githubProjectId!) },
+                      github: {
+                        ...config.github,
+                        projectIds: toggleId(config.github.projectIds, project.githubProjectId!),
+                      },
                     })
                   }
                 />

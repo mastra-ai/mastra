@@ -114,9 +114,7 @@ describe('useLinearIssuesQuery', () => {
 
   it('given the server fails, when the hook resolves, then it surfaces the server message', async () => {
     server.use(
-      http.get(ISSUES_URL, () =>
-        HttpResponse.json({ error: 'linear_fetch_failed', message: 'boom' }, { status: 502 }),
-      ),
+      http.get(ISSUES_URL, () => HttpResponse.json({ error: 'linear_fetch_failed', message: 'boom' }, { status: 502 })),
     );
 
     const { result } = renderHookWithProviders(() => useLinearIssuesQuery(true));

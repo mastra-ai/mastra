@@ -132,9 +132,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         return c.json({
           enabled: true,
           connected: Boolean(connection),
-          workspace: connection
-            ? { name: connection.workspaceName, urlKey: connection.workspaceUrlKey }
-            : null,
+          workspace: connection ? { name: connection.workspaceName, urlKey: connection.workspaceUrlKey } : null,
           reason: connection ? 'ready' : 'not_connected',
           diagnostics: getLinearFeatureDiagnostics(),
         });
