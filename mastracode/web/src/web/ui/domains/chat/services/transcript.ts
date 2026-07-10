@@ -497,15 +497,24 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error':
-      return pushNotice(
-        state,
-        'error',
-        typeof event.error === 'string' ? event.error : (event.error?.message ?? 'Error'),
-      );
+      return pushNotice(state, 'error', describeErrorEvent(event));
 
     default:
       return state;
   }
+}
+
+/**
+ * Extracts a human-useful message from an `error` event. The error payload can
+ * arrive as a string or an object; when the message is missing (e.g. an Error
+ * that lost its non-enumerable fields crossing an older server's SSE boundary),
+ * fall back to the machine-readable `errorType` rather than a bare "Error".
+ */
+function describeErrorEvent(event: { error: { message?: string } | string; errorType?: string }): string {
+  const message = typeof event.error === 'string' ? event.error : event.error?.message;
+  if (message) return message;
+  if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
+  return 'Run failed with an unknown error. Check the server logs for details.';
 }
 
 /**

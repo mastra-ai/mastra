@@ -463,6 +463,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/model-oracle-ai',
+          label: 'Model Oracle AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/modelscope',
           label: 'ModelScope',
         },
