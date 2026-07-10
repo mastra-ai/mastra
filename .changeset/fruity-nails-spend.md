@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-Fixed discovery of individually symlinked custom commands.
+Fixed secure discovery of symlinked custom commands and skills.

@@ -11,6 +11,7 @@ import type { LSPConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
+import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
 import { SandboxFilesystem } from './sandbox-filesystem.js';
 import { reattachProjectSandbox } from './sandbox-reattach.js';
@@ -49,18 +50,37 @@ function buildSandboxEnv(): NodeJS.ProcessEnv {
 // returns false for symlinks. Tools like `npx skills add` install skills as
 // symlinks, so we need to resolve them. For each symlinked skill directory,
 // we add the real (resolved) parent path as an additional skill scan path.
-function collectSkillPaths(skillsDirs: string[]): string[] {
+function collectSkillPaths(skillsDirs: string[], allowedRoot?: string): string[] {
   const paths: string[] = [];
   const seen = new Set<string>();
+  let realAllowedRoot: string | undefined;
+
+  if (allowedRoot) {
+    try {
+      realAllowedRoot = fs.realpathSync(allowedRoot);
+    } catch {
+      return skillsDirs;
+    }
+  }
 
   for (const skillsDir of skillsDirs) {
+    const skillsDirExists = fs.existsSync(skillsDir);
+    if (skillsDirExists && realAllowedRoot) {
+      try {
+        const realSkillsDir = fs.realpathSync(skillsDir);
+        if (!isPathWithinRoot(realSkillsDir, realAllowedRoot)) continue;
+      } catch {
+        continue;
+      }
+    }
+
     const resolved = path.resolve(skillsDir);
     if (!seen.has(resolved)) {
       seen.add(resolved);
       paths.push(skillsDir);
     }
 
-    if (!fs.existsSync(skillsDir)) continue;
+    if (!skillsDirExists) continue;
 
     try {
       const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
@@ -68,6 +88,7 @@ function collectSkillPaths(skillsDirs: string[]): string[] {
         if (entry.isSymbolicLink()) {
           const linkPath = path.join(skillsDir, entry.name);
           const realPath = fs.realpathSync(linkPath);
+          if (realAllowedRoot && !isPathWithinRoot(realPath, realAllowedRoot)) continue;
           const stat = fs.statSync(realPath);
           if (stat.isDirectory()) {
             const realParent = path.dirname(realPath);
@@ -100,15 +121,16 @@ export function buildSkillPaths(
   const claudeGlobalSkillsPath = path.join(homeDir, '.claude', 'skills');
   const agentSkillsGlobalPath = path.join(homeDir, '.agents', 'skills');
 
-  return collectSkillPaths([
-    mastraCodeLocalSkillsPath,
-    claudeLocalSkillsPath,
-    agentSkillsLocalPath,
-    mastraCodeGlobalSkillsPath,
-    claudeGlobalSkillsPath,
-    agentSkillsGlobalPath,
-    ...pluginSkillPaths,
-  ]);
+  const paths = [
+    ...collectSkillPaths([mastraCodeLocalSkillsPath, claudeLocalSkillsPath, agentSkillsLocalPath], projectPath),
+    ...collectSkillPaths([mastraCodeGlobalSkillsPath, claudeGlobalSkillsPath, agentSkillsGlobalPath]),
+    ...pluginSkillPaths.flatMap(pluginSkillPath => collectSkillPaths([pluginSkillPath], pluginSkillPath)),
+  ];
+
+  return paths.filter((skillPath, index) => {
+    const resolved = path.resolve(skillPath);
+    return paths.findIndex(candidate => path.resolve(candidate) === resolved) === index;
+  });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -43,6 +43,60 @@ describe('slash command loader', () => {
 
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({ name: 'review', sourcePath: join(dir, 'review.md') });
+  });
+
+  it('loads project command symlinks that stay within the project root', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const commandsDir = join(projectDir, '.mastracode', 'commands');
+    const sourcesDir = join(projectDir, '.mastracode', 'command-sources');
+    await mkdir(commandsDir, { recursive: true });
+    await mkdir(sourcesDir, { recursive: true });
+    await writeFile(join(sourcesDir, 'review.md'), 'Review the code\n');
+    await symlink(join(sourcesDir, 'review.md'), join(commandsDir, 'review.md'));
+
+    const commands = await loadCustomCommands(projectDir);
+
+    expect(commands.find(command => command.name === 'review')).toMatchObject({
+      sourcePath: join(commandsDir, 'review.md'),
+    });
+  });
+
+  it('rejects project command symlinks that escape the project root', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const commandsDir = join(projectDir, '.mastracode', 'commands');
+    const externalDir = await mkdtemp(join(tmpdir(), 'mastracode-command-secret-'));
+    await mkdir(commandsDir, { recursive: true });
+    await writeFile(join(externalDir, '.env'), 'SECRET=value\n');
+    await symlink(join(externalDir, '.env'), join(commandsDir, 'leaked.md'));
+
+    const commands = await loadCustomCommands(projectDir);
+
+    expect(commands.find(command => command.name === 'leaked')).toBeUndefined();
+  });
+
+  it('rejects project command directories symlinked outside the project root', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const claudeDir = join(projectDir, '.claude');
+    const externalCommandsDir = await mkdtemp(join(tmpdir(), 'mastracode-external-commands-'));
+    await mkdir(claudeDir, { recursive: true });
+    await writeFile(join(externalCommandsDir, 'leaked.md'), 'External command\n');
+    await symlink(externalCommandsDir, join(claudeDir, 'commands'));
+
+    const commands = await loadCustomCommands(projectDir);
+
+    expect(commands.find(command => command.name === 'leaked')).toBeUndefined();
+  });
+
+  it('rejects plugin command symlinks that escape the plugin command root', async () => {
+    const projectDir = await mkdtemp(join(tmpdir(), 'mastracode-project-'));
+    const pluginCommandsDir = await mkdtemp(join(tmpdir(), 'mastracode-plugin-commands-'));
+    const externalDir = await mkdtemp(join(tmpdir(), 'mastracode-command-secret-'));
+    await writeFile(join(externalDir, 'secret.txt'), 'plugin secret\n');
+    await symlink(join(externalDir, 'secret.txt'), join(pluginCommandsDir, 'leaked.md'));
+
+    const commands = await loadCustomCommands(projectDir, '.mastracode', [pluginCommandsDir]);
+
+    expect(commands.find(command => command.name === 'leaked')).toBeUndefined();
   });
 
   it('ignores broken command symlinks', async () => {
