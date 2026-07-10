@@ -4,8 +4,8 @@ import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useRef, useState } from 'react';
 
-import { SLASH_COMMANDS } from '../index';
-import type { SlashCommand } from '../index';
+import { SLASH_COMMANDS } from '../services/commands';
+import type { SlashCommand } from '../services/commands';
 
 interface CommandPaletteProps {
   /** Run a command. Commands with args pre-fill the composer; no-arg commands execute. */

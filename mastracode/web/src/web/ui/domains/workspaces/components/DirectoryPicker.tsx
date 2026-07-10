@@ -1,7 +1,7 @@
 import { Breadcrumb, Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Folder } from 'lucide-react';
+import { Folder, FolderOpen } from 'lucide-react';
 import { useState } from 'react';
 
 import { useDirectoryListing } from '../../../../../shared/hooks/use-fs';
@@ -52,13 +52,52 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
   // `undefined` lists the server root; explicit paths drill into subfolders.
   // React Query owns the fetch + per-path cache, so navigation is just state.
   const [path, setPath] = useState<string | undefined>(undefined);
-  const listingQuery = useDirectoryListing(path);
-
+  const [nativePicking, setNativePicking] = useState(false);
+  const [nativeError, setNativeError] = useState<string | null>(null);
+  const desktopApi = window.mastracodeDesktop;
+  const listingQuery = useDirectoryListing(path, !desktopApi);
   const listing = listingQuery.data ?? null;
   const loading = listingQuery.isPending;
   const error = listingQuery.error instanceof Error ? listingQuery.error.message : null;
+  const resolvedBusy = busy || nativePicking;
 
   const browse = (next?: string) => setPath(next);
+  const pickNativeDirectory = async () => {
+    if (!desktopApi) return;
+    setNativeError(null);
+    setNativePicking(true);
+    try {
+      const selection = await desktopApi.selectProjectDirectory();
+      if (!selection.canceled && selection.path) {
+        onPick(selection.path, selection.name ?? basename(selection.path));
+      }
+    } catch (error) {
+      setNativeError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setNativePicking(false);
+    }
+  };
+
+  if (desktopApi) {
+    return (
+      <div className="flex flex-col gap-3">
+        {(pickError || nativeError) && (
+          <Txt as="div" variant="ui-sm" className="text-notice-destructive-fg">
+            {pickError ?? nativeError}
+          </Txt>
+        )}
+        <div className="flex items-center justify-end gap-2">
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={resolvedBusy}>
+            Cancel
+          </Button>
+          <Button variant="primary" size="sm" disabled={resolvedBusy} onClick={() => void pickNativeDirectory()}>
+            <FolderOpen size={16} />
+            <span>{nativePicking ? 'Choosing…' : 'Choose from Finder'}</span>
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -112,24 +151,24 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
         )}
       </div>
 
-      {pickError && (
+      {(pickError || nativeError) && (
         <Txt as="div" variant="ui-sm" className="text-notice-destructive-fg">
-          {pickError}
+          {pickError ?? nativeError}
         </Txt>
       )}
 
       <div className="flex items-center justify-end gap-3">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={busy}>
+          <Button variant="ghost" size="sm" onClick={onCancel} disabled={resolvedBusy}>
             Cancel
           </Button>
           <Button
             variant="primary"
             size="sm"
-            disabled={!listing || busy}
+            disabled={!listing || resolvedBusy}
             onClick={() => listing && onPick(listing.path, basename(listing.path))}
           >
-            {busy ? 'Adding…' : 'Use this folder'}
+            {resolvedBusy ? 'Adding…' : 'Use this folder'}
           </Button>
         </div>
       </div>

@@ -31,6 +31,10 @@ export interface WebApiRoutesDeps {
   authStorage: MountedMastraCode['authStorage'];
   /** Root directory the project picker may browse. Defaults to the user's home. */
   fsRoot?: string;
+  /** Additional project roots approved by a native host. These are resolvable but not browsable. */
+  additionalProjectRoots?: () => readonly string[];
+  /** Whether this single-user host may mutate its process-local provider credential store. */
+  allowPersonalProviderCredentials?: boolean;
   /** Public origin used to build GitHub OAuth/install callback URLs. */
   publicOrigin: string;
   /**
@@ -112,8 +116,12 @@ export async function resolveGithubReady(): Promise<boolean> {
  */
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
-    ...buildFsRoutes({ root: deps.fsRoot }),
-    ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
+    ...buildFsRoutes({ root: deps.fsRoot, additionalRoots: deps.additionalProjectRoots }),
+    ...buildConfigRoutes({
+      controller: deps.controller,
+      authStorage: deps.authStorage,
+      credentialManagementEnabled: deps.allowPersonalProviderCredentials !== false,
+    }),
     ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin }) : []),
   ];
 }

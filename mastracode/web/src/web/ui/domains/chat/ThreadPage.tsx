@@ -49,7 +49,7 @@ function ThreadComposer() {
 function ThreadPageContent() {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const { status, transcript, resetCurrentThread, resetHydration, syncState, pushNotice } = useChatSession();
+  const { status, transcript, resetCurrentThread, resetHydration, syncState } = useChatSession();
   const projectPath = deriveProjectPath(activeProject);
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -76,7 +76,6 @@ function ThreadPageContent() {
     if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
       const message = `Failed to switch thread: thread ${threadId} was not found`;
       resetCurrentThread();
-      pushNotice(message, 'error');
       void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       return;
     }
@@ -93,7 +92,6 @@ function ThreadPageContent() {
         if (!isLatestRequest()) return;
         const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
         resetCurrentThread();
-        pushNotice(message, 'error');
         void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       });
   });

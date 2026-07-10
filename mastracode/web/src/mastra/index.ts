@@ -94,7 +94,13 @@ const prepared = await prepareAgentControllerMount({
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.
     ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
     // Custom `/web/*` routes (fs / config / github).
-    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady }),
+    ...assembleWebApiRoutes({
+      controller,
+      authStorage,
+      publicOrigin,
+      githubReady,
+      allowPersonalProviderCredentials: !webAuthEnabled,
+    }),
   ],
   buildServerConfig: () => {
     const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};

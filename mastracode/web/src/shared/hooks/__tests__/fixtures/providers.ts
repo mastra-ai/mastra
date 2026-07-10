@@ -11,5 +11,6 @@ export const anthropicProviderNoKey: ProviderInfo = {
 };
 
 export const providersResponse: ProvidersResponse = {
+  credentialManagementEnabled: true,
   providers: [openaiProvider, anthropicProviderNoKey],
 };

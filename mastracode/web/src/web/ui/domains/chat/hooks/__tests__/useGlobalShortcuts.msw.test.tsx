@@ -27,7 +27,15 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'palette', 'settings', 'shortcuts', 'projects'];
+const OVERLAYS: OverlayName[] = [
+  'sidebar',
+  'palette',
+  'settings',
+  'model-settings',
+  'provider-settings',
+  'shortcuts',
+  'projects',
+];
 
 afterEach(() => {
   localStorage.clear();

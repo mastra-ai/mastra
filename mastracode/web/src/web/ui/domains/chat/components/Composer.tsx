@@ -2,12 +2,13 @@ import type { PermissionPolicy, ToolCategory } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useActiveProjectContext } from '../../workspaces';
+import { useOverlays } from '../../../lib/overlays';
+import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useChatSession } from '../context/ChatSessionProvider';
 import {
@@ -27,7 +28,7 @@ import {
 import { useSwitchAgentControllerModelMutation } from '../hooks/useAgentControllerStateMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
 import { useTextareaAutoResize } from '../hooks/useTextareaAutoResize';
-import { matchCommands, SLASH_COMMANDS } from '../services/commands';
+import { LOGIN_COMMAND_NOTICE, matchCommands, SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 type ComposerVariant = 'inline' | 'textarea';
@@ -51,6 +52,7 @@ type ComposerProps = {
 export function Composer({ variant = 'inline', commandNameToApply, onCommandApplied }: ComposerProps) {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
+  const overlays = useOverlays();
   const projectPath = deriveProjectPath(activeProject);
   const location = useLocation();
   const navigate = useNavigate();
@@ -77,20 +79,20 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
-  const updateDraft = (next: string) => {
+  const updateDraft = useCallback((next: string) => {
     setDraft(next);
     setActiveSuggestion(0);
-  };
+  }, []);
 
-  const applyCommandDraft = (name: string) => {
+  const applyCommandDraft = useCallback((name: string) => {
     updateDraft(`/${name} `);
     inputRef.current?.focus();
-  };
+  }, [updateDraft]);
 
-  const applyCommand = (name: string) => {
+  const applyCommand = useCallback((name: string) => {
     applyCommandDraft(name);
     onCommandApplied();
-  };
+  }, [applyCommandDraft, onCommandApplied]);
 
   useEffect(() => {
     if (!commandNameToApply) {
@@ -256,6 +258,10 @@ export function Composer({ variant = 'inline', commandNameToApply, onCommandAppl
           pushNotice(lines.join('\n'));
           return;
         }
+        case 'login':
+          overlays.open('provider-settings');
+          pushNotice(LOGIN_COMMAND_NOTICE);
+          return;
         case 'follow-up':
         case 'followup':
           if (arg) await followUp(arg);

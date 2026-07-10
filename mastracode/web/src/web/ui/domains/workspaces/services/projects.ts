@@ -129,6 +129,12 @@ export function saveProjects(projects: Project[]): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(projects));
 }
 
+function normalizedProjectPath(path: string): string {
+  const trimmed = path.trim();
+  if (trimmed === '/' || trimmed === '\\' || /^[A-Za-z]:[/\\]$/.test(trimmed)) return trimmed;
+  return trimmed.replace(/[/\\]+$/, '');
+}
+
 export async function loadProjectsWithResolvedIds(baseUrl: string): Promise<Project[]> {
   const projects = loadProjects();
   const resolvedProjects = await Promise.all(
@@ -156,12 +162,27 @@ export async function loadProjectsWithResolvedIds(baseUrl: string): Promise<Proj
  * the server's canonical project name is used.
  */
 export async function addProject(baseUrl: string, name: string, path: string): Promise<Project> {
-  const resolved = await resolveProjectPath(baseUrl, path);
+  const normalizedPath = normalizedProjectPath(path);
+  const resolved = await resolveProjectPath(baseUrl, normalizedPath);
   const projects = loadProjects();
+  const existing = projects.find(
+    project => project.source !== 'github' && project.path && normalizedProjectPath(project.path) === normalizedPath,
+  );
+  if (existing) {
+    const refreshed: Project = {
+      ...existing,
+      name: name.trim() || existing.name || resolved.name,
+      path: normalizedPath,
+      resourceId: resolved.resourceId,
+      gitBranch: resolved.gitBranch,
+    };
+    saveProjects(projects.map(project => (project.id === existing.id ? refreshed : project)));
+    return refreshed;
+  }
   const project: Project = {
     id: crypto.randomUUID(),
     name: name.trim() || resolved.name,
-    path: path.trim(),
+    path: normalizedPath,
     resourceId: resolved.resourceId,
     gitBranch: resolved.gitBranch,
     createdAt: Date.now(),

@@ -8,7 +8,6 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can render the draft composer.
  */
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 
@@ -16,25 +15,14 @@ import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
+import { AppBootScreen } from './ui/AppBootScreen';
 
 /**
- * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
- * of a blank screen on deep links / refreshes.
+ * Branded full-page status while `/auth/me` resolves. The desktop host uses a
+ * matching launch HUD while its local server starts, keeping the handoff calm.
  */
-function AuthPendingSkeleton() {
-  return (
-    <div
-      role="status"
-      aria-label="Checking sign-in"
-      className="flex h-dvh w-full items-center justify-center bg-surface1"
-    >
-      <div className="flex w-64 flex-col gap-3">
-        <Skeleton className="h-8 w-full" />
-        <Skeleton className="h-4 w-3/4" />
-        <Skeleton className="h-4 w-1/2" />
-      </div>
-    </div>
-  );
+function AuthPendingScreen() {
+  return <AppBootScreen accessibleLabel="Checking sign-in" />;
 }
 
 /**
@@ -44,7 +32,7 @@ function AuthPendingSkeleton() {
  */
 function RequireAuth() {
   const auth = useWebAuth();
-  if (auth.isPending) return <AuthPendingSkeleton />;
+  if (auth.isPending) return <AuthPendingScreen />;
   const state = auth.data;
   if (state?.authEnabled && !state.authenticated) return <Navigate to="/signin" replace />;
   return <Outlet />;
@@ -53,7 +41,7 @@ function RequireAuth() {
 /** Inverse guard for /signin: only unauthenticated (auth-enabled) users stay. */
 function SignInGate() {
   const auth = useWebAuth();
-  if (auth.isPending) return <AuthPendingSkeleton />;
+  if (auth.isPending) return <AuthPendingScreen />;
   const state = auth.data;
   if (!state?.authEnabled || state.authenticated) return <Navigate to="/" replace />;
   return <SignInPage />;

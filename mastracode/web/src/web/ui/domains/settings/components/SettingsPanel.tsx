@@ -8,7 +8,7 @@ import type {
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
-import { Brain, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
+import { Brain, Layers, LogIn, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
@@ -19,13 +19,14 @@ import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
 import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
 
-type Tab = 'general' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
+export type SettingsTab = 'general' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
 
 interface SettingsPanelProps {
   theme: Theme;
   density: Density;
   models: AgentControllerAvailableModel[];
   currentModelId: string | null;
+  modelError?: string | null;
   settings: AgentControllerSessionSettings | null;
   /** Active project's resourceId — required to activate a model pack on its session. */
   resourceId?: string;
@@ -38,16 +39,17 @@ interface SettingsPanelProps {
   pendingPermissionCategory: ToolCategory | null;
   /** Set a tool category's approval policy on the session. */
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
+  initialTab?: SettingsTab;
   onClose: () => void;
 }
 
-const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
+const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
   { id: 'general', label: 'General', icon: Palette },
   { id: 'model', label: 'Model', icon: Search },
   { id: 'packs', label: 'Packs', icon: Layers },
   { id: 'memory', label: 'Memory', icon: Brain },
   { id: 'behavior', label: 'Behavior', icon: SlidersHorizontal },
-  { id: 'providers', label: 'API Keys', icon: Key },
+  { id: 'providers', label: 'Providers', icon: LogIn },
   { id: 'custom-providers', label: 'Custom', icon: Server },
 ];
 
@@ -62,6 +64,7 @@ export function SettingsPanel({
   theme,
   models,
   currentModelId,
+  modelError,
   settings,
   resourceId,
   onThemeChange,
@@ -70,9 +73,10 @@ export function SettingsPanel({
   permissions,
   pendingPermissionCategory,
   setPermissionForCategory,
+  initialTab = 'general',
   onClose,
 }: SettingsPanelProps) {
-  const [tab, setTab] = useState<Tab>('general');
+  const [tab, setTab] = useState<SettingsTab>(initialTab);
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
@@ -81,7 +85,12 @@ export function SettingsPanel({
           <DialogTitle>Settings</DialogTitle>
         </DialogHeader>
 
-        <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0 h-full">
+        <Tabs<SettingsTab>
+          defaultTab={initialTab}
+          value={tab}
+          onValueChange={setTab}
+          className="flex flex-col min-h-0 h-full"
+        >
           <TabList className="px-5 shrink-0">
             {TABS.map(({ id, label, icon: Icon }) => (
               <Tab key={id} value={id}>
@@ -99,6 +108,7 @@ export function SettingsPanel({
               <ModelTab
                 models={models}
                 currentModelId={currentModelId}
+                error={modelError}
                 settings={settings}
                 onModelChange={onModelChange}
                 onBehaviorChange={onBehaviorChange}

@@ -18,6 +18,7 @@ import type { TranscriptState } from '../services/transcript';
 export interface ChatSessionApi {
   transcript: TranscriptState;
   status: ConnectionStatus;
+  error: ReturnType<typeof useAgentControllerConnection>['error'];
   modes: ReturnType<typeof useAgentControllerConnection>['modes'];
   messagesPending: boolean;
   busy: boolean;
@@ -34,6 +35,7 @@ export interface ChatSessionApi {
   reset: (state?: Parameters<ReturnType<typeof useAgentControllerTranscript>['reset']>[0], threadId?: string) => void;
   resolvePrompt: (id: string) => void;
   pushNotice: (text: string, level?: 'info' | 'error') => void;
+  retryConnection: () => Promise<void>;
 }
 
 const ChatSessionContext = createContext<ChatSessionApi | null>(null);
@@ -152,6 +154,7 @@ function ChatSessionBoundary({
   const value: ChatSessionApi = {
     transcript,
     status: connection.status,
+    error: connection.error,
     modes: connection.modes,
     messagesPending: Boolean(transcript.threadId) && messagesQuery.isPending,
     busy,
@@ -163,6 +166,7 @@ function ChatSessionBoundary({
     reset,
     resolvePrompt,
     pushNotice,
+    retryConnection: connection.retry,
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;

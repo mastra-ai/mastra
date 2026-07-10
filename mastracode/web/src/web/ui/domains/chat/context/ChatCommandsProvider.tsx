@@ -2,6 +2,7 @@ import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../../workspaces';
 import {
   useClearAgentControllerGoalMutation,
@@ -28,6 +29,7 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const { transcript, pushNotice } = useChatSession();
+  const overlays = useOverlays();
   const [composerCommandName, setComposerCommandName] = useState<string | null>(null);
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
@@ -57,6 +59,7 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
         getPermissions: () => Promise.resolve(permissionRules ?? { categories: {}, tools: {} }),
         setPermissionForCategory: (category, policy) =>
           setPermissionForCategoryMutation.mutateAsync({ category, policy }),
+        openProviderSettings: () => overlays.open('provider-settings'),
         pushNotice,
       },
       transcript,

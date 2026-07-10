@@ -43,6 +43,7 @@ import type {
   TimelineEntry,
   ToolCall,
 } from '../services/transcript';
+import { ErrorNotice } from './ErrorNotice';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -742,12 +743,15 @@ function messageText(entry: MessageEntry): string {
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {
-  return <Notice variant={status.level === 'error' ? 'destructive' : 'info'}>{status.text}</Notice>;
+  if (status.level === 'error') return <ErrorNotice message={status.text} />;
+  return <Notice variant="info">{status.text}</Notice>;
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  if (entry.level === 'error') return <ErrorNotice message={entry.text} />;
+
   return (
-    <Notice variant={entry.level === 'error' ? 'destructive' : 'info'}>
+    <Notice variant="info">
       <div className="prose">
         <Markdown>{entry.text}</Markdown>
       </div>

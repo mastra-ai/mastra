@@ -15,6 +15,34 @@ const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessio
 const hookArgs = { agentControllerId: controllerId, resourceId, baseUrl: TEST_BASE_URL, enabled: true };
 
 describe('useAgentControllerConnection', () => {
+  it('exposes the structured server error when session creation is rejected', async () => {
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () =>
+        HttpResponse.json(
+          {
+            code: 'desktop_project_access_required',
+            error: 'Project path has not been approved by the desktop app',
+          },
+          { status: 403 },
+        ),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/modes`, () =>
+        HttpResponse.json({ modes: [] }),
+      ),
+    );
+
+    const { result } = renderHookWithProviders(() =>
+      useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }),
+    );
+
+    await waitFor(() => expect(result.current.status).toBe('error'));
+    expect(result.current.error).toEqual({
+      code: 'desktop_project_access_required',
+      message: 'Project path has not been approved by the desktop app',
+      status: 403,
+    });
+  });
+
   it('given a session, when the connection is established, then status is ready with modes and session state exposed', async () => {
     const onCreate = vi.fn();
     const onReadModes = vi.fn();

@@ -18,6 +18,7 @@ export type { DirectoryEntry, DirectoryListing };
 // ── GET response envelopes ─────────────────────────────────────────────────
 
 export interface ProvidersResponse {
+  credentialManagementEnabled: boolean;
   providers: ProviderInfo[];
 }
 
@@ -39,6 +40,18 @@ export interface OMResponse {
 export interface SaveProviderKeyBody {
   key: string;
   envVar?: string;
+}
+
+export interface StartProviderOAuthResponse {
+  ok: true;
+  loginId: string;
+  authUrl: string;
+  expiresInMs: number;
+}
+
+export interface CompleteProviderOAuthBody {
+  loginId: string;
+  code: string;
 }
 
 export interface SaveCustomProviderBody {
@@ -82,6 +95,11 @@ export interface OkResponse {
 }
 
 export interface SaveProviderKeyResponse {
+  ok: true;
+  provider?: ProviderInfo;
+}
+
+export interface CompleteProviderOAuthResponse {
   ok: true;
   provider?: ProviderInfo;
 }

@@ -35,9 +35,12 @@ const modePrompts: Record<string, string | ((ctx: PromptContext) => string)> = {
  * Combines the base prompt with mode-specific instructions.
  */
 export function buildFullPrompt(ctx: PromptContext): string {
-  // Determine whether web search tools are available
+  // Keep guidance aligned with the provider tools registered in agents/tools.ts.
   const modelId = ctx.modelId;
-  const hasWebSearch = hasTavilyKey() || (!!modelId && modelId.startsWith('anthropic/'));
+  const hasTavily = hasTavilyKey();
+  const isAnthropicModel = modelId?.startsWith('anthropic/') ?? false;
+  const isOpenAIModel = modelId?.startsWith('openai/') ?? false;
+  const hasBuildTools = ctx.modeId === 'build';
 
   // Collect per-tool deny rules so guidance omits denied tools
   const deniedTools = new Set<string>();
@@ -49,7 +52,12 @@ export function buildFullPrompt(ctx: PromptContext): string {
   }
 
   // Build mode-aware tool guidance
-  const toolGuidance = buildToolGuidance(ctx.modeId, { hasWebSearch, deniedTools });
+  const toolGuidance = buildToolGuidance(ctx.modeId, {
+    hasWebSearch: hasBuildTools && (hasTavily || isAnthropicModel || isOpenAIModel),
+    hasWebExtract: hasBuildTools && hasTavily,
+    hasWebFetch: hasBuildTools,
+    deniedTools,
+  });
 
   // Map new context to base context
   const baseCtx: BasePromptContext = {

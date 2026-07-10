@@ -1,66 +1,79 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, Search } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Search } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
-import type { ProviderInfo } from '../../../../../shared/api/types';
-import { useProvidersQuery, useRemoveProviderKey, useSaveProviderKey } from '../../../../../shared/hooks/use-providers';
+import type { ProviderInfo, StartProviderOAuthResponse } from '../../../../../shared/api/types';
+import {
+  useCompleteProviderOAuth,
+  useProvidersQuery,
+  useRemoveProviderKey,
+  useRemoveProviderOAuth,
+  useSaveProviderKey,
+  useStartProviderOAuth,
+} from '../../../../../shared/hooks/use-providers';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { ProviderRow } from './ProviderRow';
 
-const SOURCE_LABEL: Record<ProviderInfo['source'], string> = {
-  oauth: 'Signed in',
-  stored: 'Key saved',
-  env: 'From env',
-  none: 'Not set',
-};
-
-const SOURCE_VARIANT: Record<ProviderInfo['source'], 'success' | 'info' | 'default'> = {
-  oauth: 'success',
-  stored: 'success',
-  env: 'info',
-  none: 'default',
-};
+const EMPTY_PROVIDERS: ProviderInfo[] = [];
 
 /**
- * Provider + API-key management. Mirrors the TUI's `/api-keys` command.
+ * Provider account and API-key management. Mirrors the TUI's auth commands.
  *
  * The search box is the primary affordance and stays pinned at the top of the
- * pane: an empty query shows the configured providers (key saved / from env);
- * typing filters the full catalog so any provider is reachable. Keys are
- * written to the server credential store and never read back to the client.
+ * pane. An empty query shows subscription sign-in options and configured
+ * providers; typing filters the full catalog so any provider is reachable.
+ * Keys are written to the server credential store and never read back.
  */
 export function ProvidersSection() {
   const providersQuery = useProvidersQuery();
   const saveKeyMutation = useSaveProviderKey();
   const removeKeyMutation = useRemoveProviderKey();
+  const startOAuthMutation = useStartProviderOAuth();
+  const completeOAuthMutation = useCompleteProviderOAuth();
+  const removeOAuthMutation = useRemoveProviderOAuth();
 
   const [search, setSearch] = useState('');
-  const [editing, setEditing] = useState<string | null>(null);
-  const [keyDraft, setKeyDraft] = useState('');
-  const keyInputRef = useRef<HTMLInputElement>(null);
 
-  const providers = providersQuery.data ?? [];
+  const providers = providersQuery.data?.providers ?? EMPTY_PROVIDERS;
+  const credentialManagementEnabled = providersQuery.data?.credentialManagementEnabled ?? false;
   const loading = providersQuery.isPending;
-  const busy = saveKeyMutation.isPending || removeKeyMutation.isPending;
-  const error =
-    (providersQuery.error ?? saveKeyMutation.error ?? removeKeyMutation.error) instanceof Error
-      ? (providersQuery.error ?? saveKeyMutation.error ?? removeKeyMutation.error)!.message
-      : null;
+  const busy =
+    saveKeyMutation.isPending ||
+    removeKeyMutation.isPending ||
+    startOAuthMutation.isPending ||
+    completeOAuthMutation.isPending ||
+    removeOAuthMutation.isPending;
+  const mutationError = [
+    providersQuery.error,
+    saveKeyMutation.error,
+    removeKeyMutation.error,
+    startOAuthMutation.error,
+    completeOAuthMutation.error,
+    removeOAuthMutation.error,
+  ].find((error): error is Error => error instanceof Error);
 
-  useEffect(() => {
-    if (editing) keyInputRef.current?.focus();
-  }, [editing]);
-
-  const configured = providers.filter(p => p.source !== 'none').sort((a, b) => a.provider.localeCompare(b.provider));
+  const defaultProviders = useMemo(
+    () =>
+      providers
+        .filter(provider => provider.source !== 'none' || provider.oauthSupported)
+        .sort((a, b) => {
+          if (Boolean(a.oauthSupported) !== Boolean(b.oauthSupported)) return a.oauthSupported ? -1 : 1;
+          return a.provider.localeCompare(b.provider);
+        }),
+    [providers],
+  );
+  const configuredCount = providers.filter(provider => provider.source !== 'none').length;
+  const hasSubscriptionLogin = defaultProviders.some(
+    provider => provider.oauthSupported && provider.source !== 'oauth',
+  );
 
   // When searching, surface ALL matches (any source) so configured + new
   // providers are reachable; configured ones float to the top.
   const q = search.trim().toLowerCase();
   const results = q
     ? providers
-        .filter(p => p.provider.toLowerCase().includes(q))
+        .filter(p => `${p.provider} ${p.displayName ?? ''}`.toLowerCase().includes(q))
         .sort((a, b) => {
           if ((a.source !== 'none') !== (b.source !== 'none')) return a.source !== 'none' ? -1 : 1;
           return a.provider.localeCompare(b.provider);
@@ -68,15 +81,12 @@ export function ProvidersSection() {
         .slice(0, 50)
     : [];
 
-  const saveKey = async (provider: string, envVar?: string) => {
-    const key = keyDraft.trim();
-    if (!key) return;
+  const saveKey = async (provider: string, key: string, envVar?: string): Promise<boolean> => {
     try {
       await saveKeyMutation.mutateAsync({ provider, key, envVar });
-      setEditing(null);
-      setKeyDraft('');
+      return true;
     } catch {
-      // Error surfaced via the mutation state above.
+      return false;
     }
   };
 
@@ -88,80 +98,33 @@ export function ProvidersSection() {
     }
   };
 
-  const renderRow = (p: ProviderInfo) => {
-    const isEditing = editing === p.provider;
-    return (
-      <li key={p.provider} role="listitem" className="flex items-center justify-between gap-3 py-2">
-        <div className="flex min-w-0 items-center gap-2">
-          {p.source !== 'none' && <Check size={13} className="text-accent1 shrink-0" />}
-          <Txt as="span" variant="ui-md" className="truncate text-icon6">
-            {p.provider}
-          </Txt>
-          <Badge size="sm" variant={SOURCE_VARIANT[p.source]}>
-            {SOURCE_LABEL[p.source]}
-          </Badge>
-        </div>
-        {isEditing ? (
-          <div className="flex items-center gap-2">
-            <Input
-              ref={keyInputRef}
-              type="password"
-              size="sm"
-              placeholder="Paste API key"
-              value={keyDraft}
-              onChange={e => setKeyDraft(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') void saveKey(p.provider, p.envVar);
-                if (e.key === 'Escape') {
-                  setEditing(null);
-                  setKeyDraft('');
-                }
-              }}
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={busy || !keyDraft.trim()}
-              onClick={() => void saveKey(p.provider, p.envVar)}
-            >
-              Save
-            </Button>
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setEditing(null);
-                setKeyDraft('');
-              }}
-            >
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setEditing(p.provider);
-                setKeyDraft('');
-              }}
-            >
-              {p.source === 'stored' ? 'Update' : 'Add key'}
-            </Button>
-            {p.source === 'stored' && (
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => void removeKey(p.provider)}>
-                Remove
-              </Button>
-            )}
-          </div>
-        )}
-      </li>
-    );
+  const startOAuth = async (provider: string): Promise<StartProviderOAuthResponse | undefined> => {
+    try {
+      return await startOAuthMutation.mutateAsync({ provider });
+    } catch {
+      return undefined;
+    }
+  };
+
+  const completeOAuth = async (provider: string, loginId: string, code: string): Promise<boolean> => {
+    try {
+      await completeOAuthMutation.mutateAsync({ provider, loginId, code });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const removeOAuth = async (provider: string) => {
+    try {
+      await removeOAuthMutation.mutateAsync({ provider });
+    } catch {
+      // Error surfaced via the mutation state above.
+    }
   };
 
   const searching = search.trim().length > 0;
-  const list = searching ? results : configured;
+  const list = searching ? results : defaultProviders;
 
   return (
     <div className="flex flex-col gap-3">
@@ -169,7 +132,7 @@ export function ProvidersSection() {
         <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-icon3" />
         <Input
           type="text"
-          placeholder="Search providers to add a key…"
+          placeholder="Search providers…"
           value={search}
           onChange={e => setSearch(e.target.value)}
           aria-label="Search providers"
@@ -177,9 +140,15 @@ export function ProvidersSection() {
         />
       </div>
 
-      {error && (
+      {mutationError && (
         <Txt as="p" variant="ui-sm" className="text-notice-destructive-fg">
-          {error}
+          {mutationError.message}
+        </Txt>
+      )}
+
+      {!loading && !credentialManagementEnabled && (
+        <Txt as="p" variant="ui-sm" className="text-icon3">
+          Provider credentials are managed by this deployment.
         </Txt>
       )}
 
@@ -189,9 +158,15 @@ export function ProvidersSection() {
         <>
           {!searching && (
             <Txt as="p" variant="ui-sm" className="text-icon3">
-              {configured.length > 0
-                ? `${configured.length} configured. Search above to add more.`
-                : 'No providers configured yet. Search above to add a key.'}
+              {hasSubscriptionLogin
+                ? 'Sign in with a subscription, or search for another provider.'
+                : configuredCount > 0
+                  ? credentialManagementEnabled
+                    ? `${configuredCount} configured. Search above to add more.`
+                    : `${configuredCount} configured.`
+                  : credentialManagementEnabled
+                    ? 'No providers configured yet. Search above to add one.'
+                    : 'No providers configured.'}
             </Txt>
           )}
           {list.length === 0 ? (
@@ -199,8 +174,20 @@ export function ProvidersSection() {
               {searching ? `No providers match “${search.trim()}”.` : 'No providers configured.'}
             </Txt>
           ) : (
-            <ul role="list" className="flex flex-col divide-y divide-border1">
-              {list.map(renderRow)}
+            <ul className="flex flex-col divide-y divide-border1">
+              {list.map(provider => (
+                <ProviderRow
+                  key={provider.provider}
+                  provider={provider}
+                  credentialManagementEnabled={credentialManagementEnabled}
+                  busy={busy}
+                  onSaveKey={(key, envVar) => saveKey(provider.provider, key, envVar)}
+                  onRemoveKey={() => removeKey(provider.provider)}
+                  onStartOAuth={() => startOAuth(provider.provider)}
+                  onCompleteOAuth={(loginId, code) => completeOAuth(provider.provider, loginId, code)}
+                  onRemoveOAuth={() => removeOAuth(provider.provider)}
+                />
+              ))}
             </ul>
           )}
         </>

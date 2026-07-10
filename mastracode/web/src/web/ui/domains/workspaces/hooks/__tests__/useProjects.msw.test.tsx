@@ -79,6 +79,31 @@ describe('projects query hooks', () => {
     );
   });
 
+  it('refreshes an existing project instead of duplicating it when the same folder is reopened', async () => {
+    saveProjects([localProject]);
+    server.use(
+      http.get(`${ORIGIN}/web/project/resolve`, () =>
+        HttpResponse.json({
+          resourceId: 'resource-refreshed',
+          name: 'Mastra',
+          rootPath: '/repo/mastra',
+          gitBranch: 'release',
+        }),
+      ),
+    );
+
+    const { result, client } = renderHookWithProviders(() => useAddProjectMutation());
+    let reopened: Project | undefined;
+    await act(async () => {
+      reopened = await result.current.mutateAsync({ name: 'Mastra', path: '/repo/mastra/' });
+    });
+    await waitForMutationsIdle(client);
+
+    expect(reopened).toMatchObject({ id: localProject.id, resourceId: 'resource-refreshed', gitBranch: 'release' });
+    expect(loadProjects()).toHaveLength(1);
+    expect(loadProjects()[0]).toMatchObject({ id: localProject.id, path: '/repo/mastra' });
+  });
+
   it('removes the active project, clears active id, and refreshes project query consumers', async () => {
     saveProjects([localProject, { ...legacyProject, resourceId: 'resource-legacy' }]);
     saveActiveProjectId(localProject.id);

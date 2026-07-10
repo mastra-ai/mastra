@@ -45,7 +45,7 @@ function statusDotClass(status: string): string {
 }
 
 function SidebarFooter() {
-  const { status, busy } = useChatSession();
+  const { status, busy, error } = useChatSession();
   const overlays = useOverlays();
 
   return (
@@ -54,6 +54,7 @@ function SidebarFooter() {
         className="grid h-10 grid-cols-[2.75rem_1fr_auto] items-center text-ui-sm text-icon3"
         role="status"
         aria-live="polite"
+        title={error?.message}
       >
         <span className="flex items-center justify-center">
           <Circle size={10} className={statusDotClass(status)} />

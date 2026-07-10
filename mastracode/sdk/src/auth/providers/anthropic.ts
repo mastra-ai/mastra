@@ -15,16 +15,35 @@ const TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token';
 const REDIRECT_URI = 'https://console.anthropic.com/oauth/code/callback';
 const SCOPES = 'org:create_api_key user:profile user:inference';
 
-/**
- * Login with Anthropic OAuth (device code flow)
- */
-export async function loginAnthropic(
-  onAuthUrl: (url: string) => void,
-  onPromptCode: () => Promise<string>,
-): Promise<OAuthCredentials> {
+interface AnthropicTokenResponse {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+export interface AnthropicOAuthSession {
+  authUrl: string;
+  verifier: string;
+}
+
+export interface AnthropicOAuthExchangeInput {
+  authCode: string;
+  verifier: string;
+}
+
+function isAnthropicTokenResponse(value: unknown): value is AnthropicTokenResponse {
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.access_token === 'string' &&
+    typeof record.refresh_token === 'string' &&
+    typeof record.expires_in === 'number'
+  );
+}
+
+export async function createAnthropicOAuthSession(): Promise<AnthropicOAuthSession> {
   const { verifier, challenge } = await generatePKCE();
 
-  // Build authorization URL
   const authParams = new URLSearchParams({
     code: 'true',
     client_id: CLIENT_ID,
@@ -37,17 +56,23 @@ export async function loginAnthropic(
   });
 
   const authUrl = `${AUTHORIZE_URL}?${authParams.toString()}`;
+  return { authUrl, verifier };
+}
 
-  // Notify caller with URL to open
-  onAuthUrl(authUrl);
-
-  // Wait for user to paste authorization code (format: code#state)
-  const authCode = await onPromptCode();
+export async function exchangeAnthropicOAuthCode({
+  authCode,
+  verifier,
+}: AnthropicOAuthExchangeInput): Promise<OAuthCredentials> {
   const splits = authCode.split('#');
   const code = splits[0];
   const state = splits[1];
+  if (!code || !state) {
+    throw new Error('Authorization code must include the code and state separated by #');
+  }
+  if (state !== verifier) {
+    throw new Error('Authorization state did not match the active login session');
+  }
 
-  // Exchange code for tokens
   const tokenResponse = await fetch(TOKEN_URL, {
     method: 'POST',
     headers: {
@@ -68,13 +93,11 @@ export async function loginAnthropic(
     throw new Error(`Token exchange failed: ${error}`);
   }
 
-  const tokenData = (await tokenResponse.json()) as {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
+  const tokenData: unknown = await tokenResponse.json();
+  if (!isAnthropicTokenResponse(tokenData)) {
+    throw new Error('Token exchange failed: invalid token response');
+  }
 
-  // Calculate expiry time (current time + expires_in seconds - 5 min buffer)
   const expiresAt = Date.now() + tokenData.expires_in * 1000 - 5 * 60 * 1000;
 
   return {
@@ -82,6 +105,18 @@ export async function loginAnthropic(
     access: tokenData.access_token,
     expires: expiresAt,
   };
+}
+
+/**
+ * Login with Anthropic OAuth (manual code flow).
+ */
+export async function loginAnthropic(
+  onAuthUrl: (url: string) => void,
+  onPromptCode: () => Promise<string>,
+): Promise<OAuthCredentials> {
+  const session = await createAnthropicOAuthSession();
+  onAuthUrl(session.authUrl);
+  return exchangeAnthropicOAuthCode({ authCode: await onPromptCode(), verifier: session.verifier });
 }
 
 /**
@@ -103,11 +138,10 @@ export async function refreshAnthropicToken(refreshToken: string): Promise<OAuth
     throw new Error(`Anthropic token refresh failed: ${error}`);
   }
 
-  const data = (await response.json()) as {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
+  const data: unknown = await response.json();
+  if (!isAnthropicTokenResponse(data)) {
+    throw new Error('Anthropic token refresh failed: invalid token response');
+  }
 
   return {
     refresh: data.refresh_token,

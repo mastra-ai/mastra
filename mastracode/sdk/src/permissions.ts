@@ -47,6 +47,8 @@ const TOOL_CATEGORY_MAP: Record<string, ToolCategory> = {
   'web-search': 'read',
   web_extract: 'read',
   'web-extract': 'read',
+  web_fetch: 'read',
+  'web-fetch': 'read',
   // Edit tools — mutate local project or session state
   [MC_TOOLS.NOTIFICATION_INBOX]: 'edit',
   // Edit tools — modify files

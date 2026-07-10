@@ -1,6 +1,5 @@
 import type { PlanResume } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
@@ -24,6 +23,7 @@ import {
 } from '../hooks/useAgentControllerRunMutations';
 import { useTranscriptScroll } from '../hooks/useTranscriptScroll';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { ConnectionNotice } from './ConnectionNotice';
 import { GoalPanel } from './GoalPanel';
 import { Transcript } from './Transcript';
 
@@ -69,7 +69,7 @@ export function ChatMessageList() {
         />
       )}
 
-      <ConnectionNotice status={status} />
+      <ConnectionNotice />
 
       <TranscriptPanel
         activeProject={activeProject}
@@ -82,20 +82,6 @@ export function ChatMessageList() {
       />
 
       {showScrollDown && <ScrollToLatestButton onClick={() => scrollToBottom('smooth')} />}
-    </div>
-  );
-}
-
-function ConnectionNotice({ status }: { status: ChatSessionApi['status'] }) {
-  if (status !== 'reconnecting' && status !== 'error') return null;
-
-  return (
-    <div role="status" aria-live="polite" className="px-3 pt-2">
-      <Notice variant={status === 'reconnecting' ? 'warning' : 'destructive'}>
-        {status === 'reconnecting'
-          ? 'Connection lost — reconnecting…'
-          : 'Disconnected. Check the server and reload to reconnect.'}
-      </Notice>
     </div>
   );
 }

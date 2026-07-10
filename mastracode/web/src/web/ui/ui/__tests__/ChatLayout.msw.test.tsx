@@ -1,8 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatLayout } from '../ChatLayout';
+
+afterEach(() => {
+  delete window.mastracodeDesktop;
+});
 
 function getBackdrop(container: HTMLElement) {
   const backdrop = container.querySelector('div[aria-hidden="true"]');
@@ -61,6 +65,25 @@ describe('ChatLayout', () => {
       const backdrop = getBackdrop(container);
       expect(backdrop.className).toContain('opacity-0');
       expect(backdrop.className).toContain('pointer-events-none');
+    });
+  });
+
+  describe('given the UI is hosted by the desktop app', () => {
+    it('reserves the macOS window controls and exposes a native drag region', () => {
+      window.mastracodeDesktop = {
+        getAppInfo: vi.fn(async () => ({
+          name: 'MastraCode Desktop Alpha',
+          version: 'test',
+          platform: 'darwin' as const,
+        })),
+        selectProjectDirectory: vi.fn(async () => ({ canceled: true })),
+      };
+
+      const { container } = render(<ChatLayout sidebar={<div />} content={<div />} />);
+      const layout = container.firstElementChild;
+
+      expect(layout).toHaveClass('pt-10');
+      expect(container.querySelector('.mastracode-desktop-drag-region')).toBeInTheDocument();
     });
   });
 });

@@ -8,6 +8,8 @@ import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  hasWebExtract?: boolean;
+  hasWebFetch?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
 }
@@ -123,14 +125,17 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
 
   // --- Web tools (all modes, conditionally available) ---
 
-  if (options.hasWebSearch) {
+  if (options.hasWebSearch || options.hasWebExtract || options.hasWebFetch) {
     const webTools: string[] = [];
     if (!denied.has('web_search')) webTools.push('**web_search**');
-    if (!denied.has('web_extract')) webTools.push('**web_extract**');
+    if (options.hasWebExtract && !denied.has('web_extract')) webTools.push('**web_extract**');
+    if (options.hasWebFetch && !denied.has('web_fetch')) webTools.push('**web_fetch**');
     if (webTools.length > 0) {
       sections.push(`
-${webTools.join(' / ')} — Search the web / extract page content
-- Use for looking up documentation, error messages, package APIs.`);
+${webTools.join(' / ')} — Search the web and retrieve source content
+- Use \`web_search\` to discover relevant sources.
+- Use \`web_extract\` or \`web_fetch\` to read a specific URL directly.
+- For exact or current values, fetch an authoritative source instead of relying on cached search snippets.`);
     }
   }
 

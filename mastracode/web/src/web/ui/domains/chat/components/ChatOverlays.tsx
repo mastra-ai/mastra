@@ -1,6 +1,7 @@
 import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { getErrorMessage } from '../../../../../shared/api/errors';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
 import { SettingsPanel, useDensityPreference } from '../../settings';
@@ -37,6 +38,10 @@ export function ChatOverlays() {
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
   const projectsOpen = overlays.isOpen('projects') || projects.length === 0;
+  const providerSettingsOpen = overlays.isOpen('provider-settings');
+  const modelSettingsOpen = overlays.isOpen('model-settings');
+  const settingsOpen = overlays.isOpen('settings') || modelSettingsOpen || providerSettingsOpen;
+  const modelError = modelsQuery.error ?? switchModelMutation.error;
 
   return (
     <>
@@ -44,18 +49,22 @@ export function ChatOverlays() {
         <CommandPalette onRun={runPaletteCommand} onClose={() => overlays.close('palette')} />
       )}
 
-      {overlays.isOpen('settings') && (
+      {settingsOpen && (
         <SettingsPanel
           theme={theme}
           density={density}
           models={modelsQuery.data ?? []}
           currentModelId={transcript.modelId ?? null}
+          modelError={modelError ? getErrorMessage(modelError, 'The model catalog could not be loaded') : null}
           settings={settingsQuery.data ?? null}
           resourceId={sessionEnabled ? resourceId : undefined}
           onThemeChange={setTheme}
           onDensityChange={changeDensity}
           onModelChange={modelId => {
-            void switchModelMutation.mutateAsync(modelId).then(() => toast('Model updated', 'success'));
+            void switchModelMutation
+              .mutateAsync(modelId)
+              .then(() => toast('Model updated', 'success'))
+              .catch(error => toast(getErrorMessage(error, 'The model could not be updated'), 'error'));
           }}
           onBehaviorChange={updates => {
             void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
@@ -65,7 +74,12 @@ export function ChatOverlays() {
           setPermissionForCategory={(category, policy) =>
             setPermissionForCategoryMutation.mutateAsync({ category, policy })
           }
-          onClose={() => overlays.close('settings')}
+          initialTab={providerSettingsOpen ? 'providers' : modelSettingsOpen ? 'model' : 'general'}
+          onClose={() => {
+            overlays.close('settings');
+            overlays.close('model-settings');
+            overlays.close('provider-settings');
+          }}
         />
       )}
 

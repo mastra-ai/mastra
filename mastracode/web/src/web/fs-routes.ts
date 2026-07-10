@@ -64,6 +64,21 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
   }
 }
 
+export async function resolveAllowedProjectPath(
+  requestedPath: string,
+  root: string,
+  additionalRoots: readonly string[] = [],
+): Promise<string | null> {
+  const candidate = isAbsolute(requestedPath) ? resolve(requestedPath) : resolve(root, requestedPath);
+  for (const configuredRoot of [root, ...additionalRoots]) {
+    const allowedRoot = await realpath(resolveFsRoot(configuredRoot)).catch(() => null);
+    if (!allowedRoot) continue;
+    const confined = await realPathWithinRoot(candidate, allowedRoot);
+    if (confined) return confined;
+  }
+  return null;
+}
+
 /**
  * List the directories inside `requestedPath`, confined to `root`. An absent or
  * out-of-root path is clamped to the root, so the worst a malicious client can
@@ -147,7 +162,7 @@ export function resolveProject(projectPath: string): ResolvedProject {
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
  *   - `GET /web/project/resolve?path=...` — TUI-compatible project resourceId
  */
-export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
+export function buildFsRoutes(options: { root?: string; additionalRoots?: () => readonly string[] } = {}): ApiRoute[] {
   const root = resolveFsRoot(options.root);
 
   return [
@@ -171,11 +186,7 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
       handler: async c => {
         const path = c.req.query('path');
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
-        // Confine resolution to the browsable root (following symlinks), so this
-        // endpoint can't be used to probe arbitrary filesystem paths. The web UI
-        // only ever resolves directories the user picked via the root-confined
-        // browser, so legitimate requests are always within the root.
-        const confined = await realPathWithinRoot(isAbsolute(path) ? resolve(path) : resolve(root, path), root);
+        const confined = await resolveAllowedProjectPath(path, root, options.additionalRoots?.());
         if (!confined) return c.json({ error: 'Path is outside the browsable root' }, 403);
         try {
           return c.json(resolveProject(confined));

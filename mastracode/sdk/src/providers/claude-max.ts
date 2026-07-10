@@ -159,7 +159,9 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: AuthStorage } = {
 
     const accessToken = await storage.getApiKey('anthropic');
     if (!accessToken) {
-      throw new Error('Not logged in to Anthropic. Run /login first.');
+      throw new Error(
+        'Not logged in to Anthropic. In the web or desktop app, open Settings > API Keys to connect Anthropic, or switch to a local Claude CLI model.',
+      );
     }
 
     // Preserve existing headers, strip auth-related ones

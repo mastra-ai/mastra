@@ -1,7 +1,7 @@
 import type { AgentControllerModeInfo, AgentControllerOMProgress } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { Brain, Target } from 'lucide-react';
+import { Brain, ChevronsUpDown, Target } from 'lucide-react';
 
 import type { GoalSnapshot, OMPhase } from '../services/transcript';
 
@@ -42,6 +42,8 @@ export function StatusLine({
   modes,
   activeModeId,
   onModeChange,
+  onModelSelect,
+  modelError,
 }: {
   modelId?: string;
   followUpCount?: number;
@@ -52,6 +54,8 @@ export function StatusLine({
   modes?: AgentControllerModeInfo[];
   activeModeId?: string;
   onModeChange?: (modeId: string) => void;
+  onModelSelect?: () => void;
+  modelError?: string;
 }) {
   const om = omProgress;
   const showMsg = om && om.threshold > 0;
@@ -80,7 +84,20 @@ export function StatusLine({
         </div>
       )}
 
-      <span className="text-icon3 tabular-nums">{modelId ? lastSegment(modelId) : 'no model'}</span>
+      {onModelSelect ? (
+        <button
+          type="button"
+          className="inline-flex items-center gap-1 rounded px-1 py-0.5 text-icon3 tabular-nums hover:bg-surface4 hover:text-icon5 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-border1"
+          onClick={onModelSelect}
+          aria-label={modelId ? `Change model from ${lastSegment(modelId)}` : 'Select a model'}
+          title={modelError ?? 'Choose a model'}
+        >
+          <span>{modelId ? lastSegment(modelId) : 'select model'}</span>
+          <ChevronsUpDown size={12} aria-hidden />
+        </button>
+      ) : (
+        <span className="text-icon3 tabular-nums">{modelId ? lastSegment(modelId) : 'no model'}</span>
+      )}
 
       {showMsg && (
         <span

@@ -168,6 +168,15 @@ vi.mock('./sandbox', () => {
 
 let featureEnabled = true;
 vi.mock('./config', () => ({
+  getGithubFeatureDiagnostics: () => ({
+    webAuthEnabled: true,
+    githubAppConfigured: true,
+    appDbConfigured: true,
+    stateSecretConfigured: true,
+    sandboxProvider: 'railway',
+    sandboxEnabled: true,
+    missingGithubAppEnvVars: [],
+  }),
   isGithubFeatureEnabled: () => featureEnabled,
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {

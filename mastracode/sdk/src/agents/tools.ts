@@ -15,7 +15,13 @@ import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
 import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
-import { createWebSearchTool, createWebExtractTool, hasTavilyKey, requestSandboxAccessTool } from '../tools/index.js';
+import {
+  createWebExtractTool,
+  createWebFetchTool,
+  createWebSearchTool,
+  hasTavilyKey,
+  requestSandboxAccessTool,
+} from '../tools/index.js';
 
 /** Minimal shape for tools passed to createDynamicTools. */
 export type ToolLike = {
@@ -112,6 +118,7 @@ export function createDynamicTools(
     // Only tools without a workspace equivalent remain here.
     const tools: Record<string, ToolLike> = {
       request_access: requestSandboxAccessTool,
+      web_fetch: createWebFetchTool(),
     };
 
     if (storage) {

@@ -80,7 +80,10 @@ export function resolveModel(
     ? modelId.slice(MASTRACODE_GATEWAY_ID.length + 1)
     : modelId;
   const isMastraGatewayModel = normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX);
-  const normalizedModelId = stripMastraGatewayPrefix(normalizedInput);
+  const mastraCodeGatewayPrefix = `${MASTRACODE_GATEWAY_ID}/`;
+  const normalizedModelId = normalizedInput.startsWith(mastraCodeGatewayPrefix)
+    ? normalizedInput.slice(mastraCodeGatewayPrefix.length)
+    : stripMastraGatewayPrefix(normalizedInput);
   const [providerId, ...modelParts] = normalizedModelId.split('/');
   const bareModelId = modelParts.join('/');
   if (!providerId || !bareModelId) {

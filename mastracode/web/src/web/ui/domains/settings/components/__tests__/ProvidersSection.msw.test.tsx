@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
@@ -10,16 +10,22 @@ import { ProvidersSection } from '../ProvidersSection';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const keyUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/key`;
+const oauthStartUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/oauth/start`;
+const oauthCompleteUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/oauth/complete`;
 
-function providersResponse(providers: ProviderInfo[]) {
-  return HttpResponse.json({ providers });
+function providersResponse(providers: ProviderInfo[], credentialManagementEnabled = true) {
+  return HttpResponse.json({ credentialManagementEnabled, providers });
 }
 
 function rowFor(name: string): HTMLElement {
-  return screen.getByText(name).closest('[role="listitem"]') as HTMLElement;
+  return screen.getByText(name).closest('li') as HTMLElement;
 }
 
 describe('ProvidersSection', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   describe('while providers are loading', () => {
     it('renders a skeleton placeholder instead of loading text', async () => {
       server.use(
@@ -55,6 +61,41 @@ describe('ProvidersSection', () => {
       expect(await screen.findByText('openai')).toBeInTheDocument();
       // `none`-source providers are hidden until searched.
       expect(screen.queryByText('anthropic')).not.toBeInTheDocument();
+    });
+
+    it('shows Claude subscription sign-in without requiring a provider search', async () => {
+      server.use(
+        http.get(PROVIDERS_URL, () =>
+          providersResponse([
+            {
+              provider: 'anthropic',
+              displayName: 'Claude Pro/Max',
+              source: 'none',
+              oauthSupported: true,
+            },
+          ]),
+        ),
+      );
+
+      renderWithProviders(<ProvidersSection />);
+
+      expect(await screen.findByText('Claude Pro/Max')).toBeInTheDocument();
+      expect(screen.getByText('anthropic')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Search providers')).toHaveValue('');
+    });
+
+    it('keeps deployment-managed credentials read-only', async () => {
+      server.use(
+        http.get(PROVIDERS_URL, () =>
+          providersResponse([{ provider: 'anthropic', source: 'oauth', oauthSupported: false }], false),
+        ),
+      );
+
+      renderWithProviders(<ProvidersSection />);
+
+      expect(await screen.findByText('Provider credentials are managed by this deployment.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /Sign out|Add key|Update|Remove/ })).not.toBeInTheDocument();
     });
   });
 
@@ -119,6 +160,51 @@ describe('ProvidersSection', () => {
 
       await waitFor(() => expect(removed).toBe(true));
       await waitFor(() => expect(screen.queryByText('openai')).not.toBeInTheDocument());
+    });
+  });
+
+  describe('when Claude OAuth is completed', () => {
+    it('opens the provider login and refetches the signed-in provider after the code is pasted', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const providers: ProviderInfo[] = [
+        {
+          provider: 'anthropic',
+          displayName: 'Claude Pro/Max',
+          source: 'none',
+          oauthSupported: true,
+        },
+      ];
+      let completeBody: unknown;
+      server.use(
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.post(oauthStartUrl('anthropic'), () =>
+          HttpResponse.json({ loginId: 'login-1', authUrl: 'https://claude.ai/oauth' }),
+        ),
+        http.post(oauthCompleteUrl('anthropic'), async ({ request }) => {
+          completeBody = await request.json();
+          providers[0] = {
+            provider: 'anthropic',
+            displayName: 'Claude Pro/Max',
+            source: 'oauth',
+            oauthSupported: true,
+          };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProvidersSection />);
+
+      await screen.findByText('anthropic');
+      await user.click(within(rowFor('anthropic')).getByRole('button', { name: /Sign in/ }));
+
+      expect(openSpy).toHaveBeenCalledWith('https://claude.ai/oauth', '_blank', 'noopener,noreferrer');
+
+      await user.type(screen.getByPlaceholderText('Paste Claude Pro/Max code'), 'oauth-code');
+      await user.click(screen.getByRole('button', { name: 'Complete' }));
+
+      await waitFor(() => expect(completeBody).toEqual({ loginId: 'login-1', code: 'oauth-code' }));
+      await waitFor(() => expect(within(rowFor('anthropic')).getByText('Signed in')).toBeInTheDocument());
     });
   });
 });

@@ -21,6 +21,7 @@ const { appDataDir } = vi.hoisted(() => {
   return { appDataDir: dir };
 });
 
+import { LOCAL_CLAUDE_CLI_MODEL_ID } from '../providers/local-cli-provider.js';
 import { MastraCodeGateway, reloadAuthStorage } from './mastracode-gateway.js';
 
 mkdirSync(appDataDir, { recursive: true });
@@ -50,6 +51,7 @@ describe('MastraCodeGateway', () => {
   });
 
   afterEach(() => {
+    vi.unstubAllGlobals();
     if (prevAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY;
     else process.env.ANTHROPIC_API_KEY = prevAnthropicKey;
     if (prevOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
@@ -133,6 +135,67 @@ describe('MastraCodeGateway', () => {
         routerId: 'anthropic/claude-opus-4-8',
       });
       expect(auth).toBeUndefined();
+    });
+
+    it('does not return an OAuth placeholder for expired credentials', () => {
+      writeAuthJson({
+        anthropic: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() - 1_000 },
+      });
+
+      const auth = MastraCodeGateway.resolveProviderAuth({
+        gatewayId: 'mastracode',
+        providerId: 'anthropic',
+        modelId: 'claude-opus-4-8',
+        routerId: 'anthropic/claude-opus-4-8',
+      });
+      expect(auth).toBeUndefined();
+    });
+  });
+
+  describe('getApiKey', () => {
+    it('returns an empty key when expired OAuth cannot refresh', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response('expired', { status: 400 })),
+      );
+      writeAuthJson({
+        anthropic: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() - 1_000 },
+      });
+
+      expect(createGateway().handlesModel('anthropic/claude-opus-4-8')).toBe(true);
+      await expect(createGateway().getApiKey('anthropic/claude-opus-4-8')).resolves.toBe('');
+    });
+  });
+
+  describe('createModelCatalogProvider', () => {
+    it('marks provider models authenticated when OAuth is currently usable', async () => {
+      writeAuthJson({
+        anthropic: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 1_000_000 },
+      });
+
+      const models = await createGateway().createModelCatalogProvider()();
+      const anthropicModels = models.filter(
+        model => model.provider === 'anthropic' && model.modelName !== LOCAL_CLAUDE_CLI_MODEL_ID,
+      );
+
+      expect(anthropicModels.length).toBeGreaterThan(0);
+      expect(anthropicModels.every(model => model.hasApiKey)).toBe(true);
+    });
+
+    it('does not mark provider models authenticated when expired OAuth cannot refresh', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response('expired', { status: 400 })),
+      );
+      writeAuthJson({
+        anthropic: { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() - 1_000 },
+      });
+
+      const models = await createGateway().createModelCatalogProvider()();
+      const anthropicModels = models.filter(model => model.provider === 'anthropic');
+
+      expect(anthropicModels.length).toBeGreaterThan(0);
+      expect(anthropicModels.every(model => !model.hasApiKey)).toBe(true);
     });
   });
 });

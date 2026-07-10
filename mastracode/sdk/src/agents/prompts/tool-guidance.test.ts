@@ -23,4 +23,16 @@ describe('buildToolGuidance task tools', () => {
     expect(guidance).toContain('task_complete');
     expect(guidance).not.toContain('task_write');
   });
+
+  it('uses direct fetch for authoritative current values', () => {
+    const guidance = buildToolGuidance('build', {
+      hasWebSearch: true,
+      hasWebFetch: true,
+    });
+
+    expect(guidance).toContain('**web_search**');
+    expect(guidance).toContain('**web_fetch**');
+    expect(guidance).toContain('fetch an authoritative source');
+    expect(guidance).not.toContain('**web_extract**');
+  });
 });

@@ -17,6 +17,7 @@ export interface SlashCommand {
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'model', args: '<id>', description: 'Switch model' },
+  { name: 'login', description: 'Connect a subscription or provider' },
   { name: 'goal', args: '<objective>', description: 'Set a goal' },
   { name: 'goal-clear', description: 'Clear the active goal' },
   { name: 'goal-pause', description: 'Pause the active goal' },
@@ -31,6 +32,9 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: 'abort', description: 'Abort the current run' },
   { name: 'help', description: 'Show the command list' },
 ];
+
+export const LOGIN_COMMAND_NOTICE =
+  'Provider accounts opened. Sign in with Claude Pro/Max, or use a detected local Claude or Codex CLI account.';
 
 /**
  * Commands matching the current draft. Returns the full list while the user has
@@ -60,6 +64,7 @@ export interface NoArgCommandDeps {
     abort: () => Promise<void>;
     getPermissions: () => Promise<PermissionRules>;
     setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
+    openProviderSettings: () => void;
     pushNotice: (text: string, level?: 'info' | 'error') => void;
   };
   transcript: Pick<TranscriptState, 'usage' | 'omPhase' | 'modeId' | 'modelId' | 'threadId' | 'running'>;
@@ -129,6 +134,10 @@ export async function runNoArgCommand(name: string, { session, transcript, activ
           `Running: ${transcript.running}`,
         ].join('\n'),
       );
+      return;
+    case 'login':
+      session.openProviderSettings();
+      session.pushNotice(LOGIN_COMMAND_NOTICE);
       return;
     case 'abort':
       await session.abort();

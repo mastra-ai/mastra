@@ -7,14 +7,18 @@
  */
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
+import { MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE } from '../../../../../../shared/desktop-host';
+import { OverlaysProvider } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
+import { loadProjects } from '../../../workspaces/services/projects';
 import { ChatSessionProvider } from '../../context/ChatSessionProvider';
 import { ChatMessageList } from '../ChatMessageList';
 
@@ -25,6 +29,7 @@ const THREAD_ID = 'thread-test';
 
 afterEach(() => {
   localStorage.clear();
+  delete window.mastracodeDesktop;
 });
 
 function seedProject() {
@@ -89,11 +94,13 @@ function renderMessageList() {
         <Route
           path="/threads/:threadId"
           element={
-            <ActiveProjectProvider>
-              <ChatSessionProvider>
-                <ChatMessageList />
-              </ChatSessionProvider>
-            </ActiveProjectProvider>
+            <OverlaysProvider>
+              <ActiveProjectProvider>
+                <ChatSessionProvider>
+                  <ChatMessageList />
+                </ChatSessionProvider>
+              </ActiveProjectProvider>
+            </OverlaysProvider>
           }
         />
       </Routes>
@@ -142,15 +149,76 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('Thinking…')).toBeInTheDocument();
   });
 
-  it('given the session fails to connect, then it shows the disconnected notice', async () => {
+  it('given the selected model rejects its credentials, then it shows actionable recovery controls', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'error',
+        error: 'undefined: The security token included in the request is invalid.' as unknown as Error,
+      },
+    ]);
+    renderMessageList();
+
+    expect(await screen.findByText('The security token included in the request is invalid.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Choose model' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('given the session fails to connect, then it shows the actual server error', async () => {
     seedProject();
     useAgentControllerHandlers();
     server.use(http.post(`${API}/sessions`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     renderMessageList();
 
-    await waitFor(() =>
-      expect(screen.getByText('Disconnected. Check the server and reload to reconnect.')).toBeInTheDocument(),
+    await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('given a persisted desktop project needs approval, then Finder approval reconnects without duplicating it', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    let approved = false;
+    const selectProjectDirectory = vi.fn(async () => {
+      approved = true;
+      return { canceled: false, path: '/tmp/mastracode-test', name: 'mastracode-test' };
+    });
+    window.mastracodeDesktop = {
+      getAppInfo: vi.fn(async () => ({
+        name: 'MastraCode Desktop Alpha',
+        version: 'test',
+        platform: 'darwin' as const,
+      })),
+      selectProjectDirectory,
+    };
+    server.use(
+      http.post(`${API}/sessions`, () =>
+        approved
+          ? HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID })
+          : HttpResponse.json(
+              {
+                code: MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE,
+                error: 'Project path has not been approved by the desktop app',
+              },
+              { status: 403 },
+            ),
+      ),
+      http.get(`${TEST_BASE_URL}/web/project/resolve`, () =>
+        HttpResponse.json({
+          resourceId: RESOURCE_ID,
+          name: 'MastraCode Test',
+          rootPath: '/tmp/mastracode-test',
+          gitBranch: 'main',
+        }),
+      ),
     );
+    const user = userEvent.setup();
+    renderMessageList();
+
+    await user.click(await screen.findByRole('button', { name: 'Allow folder access' }));
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+
+    expect(selectProjectDirectory).toHaveBeenCalledWith({ defaultPath: '/tmp/mastracode-test' });
+    expect(loadProjects()).toHaveLength(1);
   });
 
   it('given a goal evaluation event, then it shows the goal panel with objective and progress', async () => {

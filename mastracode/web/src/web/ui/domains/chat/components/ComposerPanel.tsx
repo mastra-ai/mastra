@@ -1,4 +1,5 @@
 import { useApiConfig } from '../../../../../shared/api/config';
+import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSession } from '../context/ChatSessionProvider';
@@ -15,9 +16,10 @@ type ComposerPanelProps = {
 
 export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
   const { baseUrl } = useApiConfig();
+  const overlays = useOverlays();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const { composerCommandName, clearComposerCommand } = useChatCommands();
-  const { transcript, modes, syncState } = useChatSession();
+  const { transcript, modes, syncState, error } = useChatSession();
   const switchModeMutation = useSwitchAgentControllerModeMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -47,6 +49,8 @@ export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps
         onModeChange={modeId => {
           void switchModeMutation.mutateAsync(modeId).then(() => syncState({ modeId }));
         }}
+        onModelSelect={() => overlays.open('model-settings')}
+        modelError={error?.message}
       />
     </div>
   );

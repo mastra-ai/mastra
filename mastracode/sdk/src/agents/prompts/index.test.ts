@@ -59,4 +59,26 @@ describe('buildFullPrompt task state', () => {
     // Task updates must not change the system prompt (prompt-cache stability).
     expect(promptWithTasks).toEqual(promptNoTasks);
   });
+
+  it('guides Anthropic models to fetch authoritative live sources', () => {
+    const prompt = buildFullPrompt({
+      projectPath: '/tmp/project',
+      projectName: 'test-project',
+      gitBranch: 'main',
+      platform: 'darwin',
+      date: '2026-03-23',
+      mode: 'build',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      activePlan: null,
+      modeId: 'build',
+      currentDate: '2026-03-23',
+      workingDir: '/tmp/project',
+      state: { permissionRules: { tools: {} } },
+    });
+
+    expect(prompt).toContain('**web_search**');
+    expect(prompt).toContain('**web_fetch**');
+    expect(prompt).toContain('fetch an authoritative source');
+    expect(prompt).not.toContain('**web_extract**');
+  });
 });

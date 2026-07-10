@@ -13,10 +13,8 @@
 
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
-import { dirname, extname, join, normalize, resolve, sep } from 'node:path';
+import { basename, dirname, extname, join, normalize, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
-
-import type { Context } from 'hono';
 
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -41,6 +39,16 @@ const MIME: Record<string, string> = {
 
 /** Server-owned path prefixes the SPA middleware must never answer for. */
 const SERVER_PREFIXES = ['/api', '/web', '/auth'];
+
+interface SpaStaticContext {
+  req: {
+    method: string;
+    path: string;
+    header: (name: string) => string | undefined | null;
+  };
+  header: (name: string, value: string) => void;
+  body: (data: string | Uint8Array) => Response | Promise<Response>;
+}
 
 /**
  * Locate the built SPA (a dir containing `index.html`). Checked in order:
@@ -73,12 +81,26 @@ async function isFile(path: string): Promise<boolean> {
   }
 }
 
-async function serveFile(c: Context, filePath: string, immutable: boolean): Promise<Response> {
+export interface SpaStaticMiddlewareOptions {
+  transformIndexHtml?: (html: string) => Promise<string> | string;
+}
+
+async function serveFile(
+  c: SpaStaticContext,
+  filePath: string,
+  immutable: boolean,
+  options: SpaStaticMiddlewareOptions,
+): Promise<Response> {
   const data = await readFile(filePath);
   c.header('Content-Type', MIME[extname(filePath).toLowerCase()] ?? 'application/octet-stream');
   // Vite emits content-hashed filenames under assets/ — cache those forever;
   // index.html (and anything unhashed) must revalidate so deploys roll out.
   c.header('Cache-Control', immutable ? 'public, max-age=31536000, immutable' : 'no-cache');
+
+  if (basename(filePath) === 'index.html' && options.transformIndexHtml) {
+    return c.body(await options.transformIndexHtml(data.toString('utf-8')));
+  }
+
   return c.body(new Uint8Array(data));
 }
 
@@ -89,8 +111,8 @@ async function serveFile(c: Context, filePath: string, immutable: boolean): Prom
  *     client-side routing),
  *   - `/api`, `/web`, `/auth` and non-GET requests always pass through.
  */
-export function createSpaStaticMiddleware(uiDist: string) {
-  return async (c: Context, next: () => Promise<void>): Promise<Response | void> => {
+export function createSpaStaticMiddleware(uiDist: string, options: SpaStaticMiddlewareOptions = {}) {
+  return async (c: SpaStaticContext, next: () => Promise<void>): Promise<Response | void> => {
     if (c.req.method !== 'GET' && c.req.method !== 'HEAD') return next();
     const path = c.req.path;
     if (SERVER_PREFIXES.some(prefix => path === prefix || path.startsWith(`${prefix}/`))) return next();
@@ -102,13 +124,13 @@ export function createSpaStaticMiddleware(uiDist: string) {
     // prefix check (same pattern as fs-routes.ts isWithinRoot).
     const uiDistPrefix = uiDist.endsWith(sep) ? uiDist : uiDist + sep;
     if (filePath.startsWith(uiDistPrefix) && relative !== '' && (await isFile(filePath))) {
-      return serveFile(c, filePath, relative.startsWith('assets/'));
+      return serveFile(c, filePath, relative.startsWith('assets/'), options);
     }
 
     // SPA fallback: serve index.html for root and html navigations.
     const accept = c.req.header('Accept') ?? '';
     if (path === '/' || accept.includes('text/html')) {
-      return serveFile(c, join(uiDist, 'index.html'), false);
+      return serveFile(c, join(uiDist, 'index.html'), false, options);
     }
 
     return next();

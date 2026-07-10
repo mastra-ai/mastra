@@ -13,7 +13,15 @@ import { describe, expect, it } from 'vitest';
 import { OverlaysProvider, useOverlays } from '../overlays';
 import type { OverlayName } from '../overlays';
 
-const OVERLAY_NAMES: OverlayName[] = ['sidebar', 'palette', 'settings', 'shortcuts', 'projects'];
+const OVERLAY_NAMES: OverlayName[] = [
+  'sidebar',
+  'palette',
+  'settings',
+  'model-settings',
+  'provider-settings',
+  'shortcuts',
+  'projects',
+];
 
 function Probe() {
   const overlays = useOverlays();

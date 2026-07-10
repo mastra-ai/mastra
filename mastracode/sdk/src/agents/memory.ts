@@ -1,8 +1,7 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
-import type { MastraVector } from '@mastra/core/vector';
-import { fastembed } from '@mastra/fastembed';
+import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { Memory } from '@mastra/memory';
 import { DEFAULT_OM_MODEL_ID, DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import type { MastraCodeState } from '../schema.js';
@@ -11,6 +10,8 @@ import { resolveModel } from './model.js';
 
 let cachedMemory: Memory | null = null;
 let cachedMemoryKey: string | null = null;
+type LazyFastEmbedModel = Extract<MastraEmbeddingModel<string>, { specificationVersion: 'v3' }>;
+let lazyFastEmbedSmall: LazyFastEmbedModel | null = null;
 
 /**
  * Read controller state from requestContext.
@@ -72,6 +73,22 @@ Don't say "Agent did x", say "did x". It will be assumed the agent did what was 
 
 Drop caveman for: security warnings, irreversible action confirmations, multi-step sequences where fragment order risks misread, user asks to clarify or repeats question, and anything that requires remembering verbatim content. Resume caveman after clear part done`;
 
+function getLazyFastEmbedSmall(): LazyFastEmbedModel {
+  lazyFastEmbedSmall ??= {
+    specificationVersion: 'v3',
+    provider: 'fastembed',
+    modelId: 'bge-small-en-v1.5',
+    maxEmbeddingsPerCall: 256,
+    supportsParallelCalls: true,
+    async doEmbed(args) {
+      const { fastembed } = await import('@mastra/fastembed');
+      const result = await fastembed.small.doEmbed(args as Parameters<typeof fastembed.small.doEmbed>[0]);
+      return result as Awaited<ReturnType<LazyFastEmbedModel['doEmbed']>>;
+    },
+  };
+  return lazyFastEmbedSmall;
+}
+
 /**
  * Dynamic memory factory function.
  * Reads OM thresholds from controller state via requestContext.
@@ -104,7 +121,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
     cachedMemory = new Memory({
       storage,
       vector: vector || false,
-      embedder: vector ? fastembed.small : undefined,
+      embedder: vector ? getLazyFastEmbedSmall() : undefined,
       options: {
         observationalMemory: {
           enabled: true,

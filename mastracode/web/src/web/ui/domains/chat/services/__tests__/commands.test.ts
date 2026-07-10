@@ -25,6 +25,7 @@ function makeDeps(overrides: DepsOverrides = {}): NoArgCommandDeps {
       abort: vi.fn(async () => {}),
       getPermissions: vi.fn(async () => ({ categories: {}, tools: {} })),
       setPermissionForCategory: vi.fn(async () => {}),
+      openProviderSettings: vi.fn(),
       pushNotice: vi.fn(),
       ...overrides.session,
     },
@@ -144,6 +145,13 @@ describe('runNoArgCommand', () => {
     expect(deps.session.pushNotice).toHaveBeenCalledWith(
       'Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.',
     );
+  });
+
+  it('given /login, then it points web users to provider settings instead of the TUI login flow', async () => {
+    const deps = makeDeps();
+    await runNoArgCommand('login', deps);
+    expect(deps.session.openProviderSettings).toHaveBeenCalledOnce();
+    expect(deps.session.pushNotice).toHaveBeenCalledWith(expect.stringContaining('Provider accounts opened.'));
   });
 
   it('given an unknown command, then it pushes an error notice', async () => {

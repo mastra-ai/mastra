@@ -111,13 +111,14 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 }
 
 describe('MastraCode web routing', () => {
-  it('given the auth check is pending, when visiting /new, then a skeleton renders instead of a blank screen', async () => {
+  it('given the auth check is pending, when visiting /new, then the startup HUD renders instead of a blank screen', async () => {
     renderRoutes('/new', async () => {
       await delay(150);
       return new Response(null, { status: 404 });
     });
 
     expect(await screen.findByRole('status', { name: 'Checking sign-in' })).toBeInTheDocument();
+    expect(screen.getByText('Opening your workspace')).toBeInTheDocument();
 
     expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
     expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();

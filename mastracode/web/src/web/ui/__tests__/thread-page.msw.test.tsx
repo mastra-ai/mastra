@@ -285,6 +285,10 @@ describe('MastraCode thread pages', () => {
         /Failed to switch thread/,
       ),
     );
+    expect(screen.getByRole('button', { name: 'Continue in new thread' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Continue in new thread' }));
+    await waitFor(() => expect(router.state.location.state).toBeNull());
     expect(captured.switched).not.toContain('nope');
   });
 });

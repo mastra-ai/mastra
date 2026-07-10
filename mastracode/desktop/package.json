@@ -1,0 +1,106 @@
+{
+  "name": "mastracode-desktop",
+  "version": "0.31.0-alpha.8",
+  "private": true,
+  "author": "Mastra",
+  "description": "MastraCode Desktop Alpha: Electron host for the MastraCode web UI.",
+  "type": "module",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --config vitest.config.ts",
+    "desktop:prepare-web-ui": "pnpm --dir ../web web:ui:build && node scripts/prepare-web-ui.mjs",
+    "desktop:dev": "pnpm run desktop:prepare-web-ui && electron-vite dev --config src/electron.vite.config.ts",
+    "desktop:build": "pnpm run desktop:prepare-web-ui && electron-vite build --config src/electron.vite.config.ts",
+    "desktop:package": "pnpm run desktop:build && node scripts/desktop-package.mjs dir",
+    "desktop:release:mac": "node scripts/desktop-release-mac.mjs",
+    "desktop:install:alpha": "pnpm run desktop:package && node scripts/desktop-install-alpha.mjs",
+    "desktop:e2e": "pnpm run desktop:build && playwright test --config e2e/playwright.config.ts",
+    "desktop:e2e:installed": "node scripts/desktop-e2e-installed.mjs"
+  },
+  "build": {
+    "appId": "ai.mastra.mastracode.desktop.alpha",
+    "productName": "MastraCode Desktop Alpha",
+    "asar": true,
+    "afterPack": "scripts/after-pack.mjs",
+    "asarUnpack": [
+      "dist/main/chunks/*.node",
+      "dist/main/chunks/*.dylib"
+    ],
+    "extraMetadata": {
+      "main": "dist/main/main.js"
+    },
+    "directories": {
+      "output": "release/desktop"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json",
+      "!node_modules/**/*",
+      "node_modules/typescript/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "dist/web-ui",
+        "to": "web-ui"
+      },
+      {
+        "from": "build/icon.png",
+        "to": "launch-icon.png"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "icon": "build/icon.icns",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSAllowsLocalNetworking": true,
+          "NSExceptionDomains": {
+            "127.0.0.1": {
+              "NSIncludesSubdomains": false,
+              "NSTemporaryExceptionAllowsInsecureHTTPLoads": true
+            }
+          }
+        }
+      },
+      "notarize": true,
+      "target": [
+        "dir"
+      ]
+    }
+  },
+  "dependencies": {
+    "@hono/node-server": "^1.19.11",
+    "@mastra/code-sdk": "link:../sdk",
+    "@mastra/core": "link:../../packages/core",
+    "@mastra/hono": "link:../../server-adapters/hono",
+    "@mastra/libsql": "link:../../stores/libsql",
+    "@mastra/server": "link:../../packages/server",
+    "hono": "^4.12.8",
+    "mastracode-web": "link:../web",
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@electron/fuses": "2.1.3",
+    "@playwright/test": "1.60.0",
+    "@types/node": "22.19.21",
+    "electron": "43.0.0",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "eslint": "^10.4.1",
+    "execa": "^9.6.1",
+    "globals": "^16.5.0",
+    "typescript-eslint": "^8.57.0",
+    "vite": "7.3.6",
+    "vitest": "4.1.8"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
+import { OverlaysProvider, useOverlays } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { ChatSessionProvider, useChatSession } from '../../context/ChatSessionProvider';
@@ -94,23 +95,31 @@ function NoticeProbe() {
   );
 }
 
+function ProviderSettingsProbe() {
+  const overlays = useOverlays();
+  return <output aria-label="Provider settings state">{overlays.isOpen('provider-settings') ? 'open' : 'closed'}</output>;
+}
+
 function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return renderWithProviders(
-    <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
-      <Routes>
-        <Route
-          path="/threads/:threadId"
-          element={
-            <ActiveProjectProvider>
-              <ChatSessionProvider>
-                <Composer commandNameToApply={null} onCommandApplied={() => undefined} {...props} />
-                <NoticeProbe />
-              </ChatSessionProvider>
-            </ActiveProjectProvider>
-          }
-        />
-      </Routes>
-    </MemoryRouter>,
+    <OverlaysProvider>
+      <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
+        <Routes>
+          <Route
+            path="/threads/:threadId"
+            element={
+              <ActiveProjectProvider>
+                <ChatSessionProvider>
+                  <Composer commandNameToApply={null} onCommandApplied={() => undefined} {...props} />
+                  <NoticeProbe />
+                  <ProviderSettingsProbe />
+                </ChatSessionProvider>
+              </ActiveProjectProvider>
+            }
+          />
+        </Routes>
+      </MemoryRouter>
+    </OverlaysProvider>,
   );
 }
 
@@ -156,6 +165,20 @@ describe('Composer', () => {
       await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
       expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: allow');
       expect(screen.getByLabelText('Notices')).toHaveTextContent('edit: allow');
+      expect(onSend).not.toHaveBeenCalled();
+    });
+
+    it('opens provider settings for /login instead of sending a message', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox');
+      await waitFor(() => expect(input).toBeEnabled());
+      await userEvent.type(input, '/login{Enter}');
+
+      expect(screen.getByLabelText('Provider settings state')).toHaveTextContent('open');
+      expect(screen.getByLabelText('Notices')).toHaveTextContent('Provider accounts opened');
       expect(onSend).not.toHaveBeenCalled();
     });
   });

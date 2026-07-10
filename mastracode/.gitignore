@@ -4,3 +4,7 @@
 .tmp-mc-e2e/
 .tmp-mc-e2e-vitest/
 .mastra-project.json
+desktop/dist/
+desktop/playwright-report/
+desktop/release/
+desktop/test-results/

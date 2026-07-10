@@ -1,5 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useState } from 'react';
+import { getErrorDetails } from '../../../../../shared/api/errors';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerModes } from './useAgentControllerModes';
@@ -64,9 +65,23 @@ export function useAgentControllerConnection({
     hasEverConnected,
     syncFailureCount: syncQuery.failureCount,
   });
+  const error =
+    status === 'error'
+      ? getErrorDetails(initQuery.error ?? syncQuery.error, 'The MastraCode session could not connect')
+      : null;
+
+  const retry = async (): Promise<void> => {
+    setSseConnectionState('never');
+    const initResult = await initQuery.refetch();
+    if (initResult.error) throw initResult.error;
+    const syncResult = await syncQuery.refetch();
+    if (syncResult.error) throw syncResult.error;
+  };
 
   return {
     status,
+    error,
+    retry,
     modes: modesQuery.data ?? [],
     state: syncQuery.data,
     stateUpdatedAt: syncQuery.dataUpdatedAt,

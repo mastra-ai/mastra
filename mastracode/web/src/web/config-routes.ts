@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { createAnthropicOAuthSession, exchangeAnthropicOAuthCode } from '@mastra/code-sdk/auth/providers/anthropic';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import {
   removeCustomProviderFromSettings,
@@ -34,9 +37,19 @@ export interface ProviderInfo {
   provider: string;
   /** Env var the provider's key is read from, if any. */
   envVar?: string;
+  /** Human-readable name when the provider has a first-class auth flow. */
+  displayName?: string;
+  /** Whether the web client can start an OAuth login flow for this provider. */
+  oauthSupported?: boolean;
   /** Where the active credential comes from. */
   source: 'oauth' | 'stored' | 'env' | 'none';
 }
+
+const OAUTH_LOGIN_TTL_MS = 10 * 60 * 1000;
+const OAUTH_SUPPORTED_PROVIDERS = new Map<string, { displayName: string }>([
+  ['anthropic', { displayName: 'Claude Pro/Max' }],
+]);
+const pendingAnthropicLogins = new Map<string, { verifier: string; expiresAt: number }>();
 
 /**
  * OAuth credentials are stored under the auth provider id, which differs from
@@ -44,6 +57,38 @@ export interface ProviderInfo {
  */
 function getAuthProviderId(provider: string): string {
   return provider === 'openai' ? 'openai-codex' : provider;
+}
+
+function getOAuthProviderInfo(provider: string): Pick<ProviderInfo, 'displayName' | 'oauthSupported'> {
+  const entry = OAUTH_SUPPORTED_PROVIDERS.get(provider);
+  return entry ? { displayName: entry.displayName, oauthSupported: true } : {};
+}
+
+async function getStoredProviderSource(
+  authStorage: AuthStorage | undefined,
+  provider: string,
+): Promise<Extract<ProviderInfo['source'], 'oauth' | 'stored'> | undefined> {
+  if (!authStorage) return undefined;
+
+  const authProviderId = getAuthProviderId(provider);
+  const credential = authStorage.get(authProviderId);
+  if (credential?.type === 'oauth') {
+    if (authProviderId === 'openai-codex') return undefined;
+    return (await authStorage.getApiKey(authProviderId)) ? 'oauth' : undefined;
+  }
+  if (credential?.type === 'api_key' && credential.key.trim().length > 0) {
+    return 'stored';
+  }
+  if (authStorage.hasStoredApiKey(authProviderId)) {
+    return 'stored';
+  }
+  return undefined;
+}
+
+function sweepExpiredOAuthLogins(now = Date.now()): void {
+  for (const [loginId, session] of pendingAnthropicLogins) {
+    if (session.expiresAt <= now) pendingAnthropicLogins.delete(loginId);
+  }
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -106,18 +151,20 @@ export async function listProviders(controller: ModelCatalog, authStorage?: Auth
   for (const model of models) {
     if (seen.has(model.provider)) continue;
 
-    let source: ProviderInfo['source'] = 'none';
-    if (authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
-      source = 'oauth';
-    } else if (authStorage?.hasStoredApiKey(model.provider)) {
-      source = 'stored';
-    } else if (model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
+    const storedSource = await getStoredProviderSource(authStorage, model.provider);
+    let source: ProviderInfo['source'] = storedSource ?? 'none';
+    if (!storedSource && model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
       source = 'env';
-    } else if (model.hasApiKey) {
+    } else if (!storedSource && model.hasApiKey) {
       source = 'env';
     }
 
-    seen.set(model.provider, { provider: model.provider, envVar: model.apiKeyEnvVar, source });
+    seen.set(model.provider, {
+      provider: model.provider,
+      envVar: model.apiKeyEnvVar,
+      source,
+      ...getOAuthProviderInfo(model.provider),
+    });
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
@@ -186,19 +233,23 @@ export async function buildProviderAccess(
 ): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
   const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-  const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
+  const accessLevel = async (storageProviderId: string): Promise<ProviderAccessLevel> => {
     const cred = authStorage?.get(storageProviderId);
-    if (cred?.type === 'oauth') return 'oauth';
+    if (storageProviderId === 'openai-codex' && cred?.type === 'oauth') return false;
+    if (cred?.type === 'oauth') return (await authStorage?.getApiKey(storageProviderId)) ? 'oauth' : false;
     if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
+    if (authStorage?.hasStoredApiKey(storageProviderId)) return 'apikey';
     return false;
   };
+  const anthropicAccess = (await accessLevel('anthropic')) || (hasEnv('anthropic') ? 'apikey' : false);
+  const openaiAccess = (await accessLevel('openai-codex')) || (hasEnv('openai') ? 'apikey' : false);
   const access: ProviderAccess = {
-    anthropic: accessLevel('anthropic'),
-    openai: accessLevel('openai-codex'),
+    anthropic: anthropicAccess,
+    openai: openaiAccess,
     cerebras: hasEnv('cerebras') ? 'apikey' : false,
     google: hasEnv('google') ? 'apikey' : false,
     deepseek: hasEnv('deepseek') ? 'apikey' : false,
-    'github-copilot': accessLevel('github-copilot'),
+    'github-copilot': await accessLevel('github-copilot'),
   };
   const seen = new Set(Object.keys(access));
   for (const m of models) {
@@ -339,8 +390,12 @@ function persistOmRoleOverride(
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
  *   - `PUT    /web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
  */
-export function buildConfigRoutes(options: { controller: ModelCatalog; authStorage?: AuthStorage }): ApiRoute[] {
-  const { controller, authStorage } = options;
+export function buildConfigRoutes(options: {
+  controller: ModelCatalog;
+  authStorage?: AuthStorage;
+  credentialManagementEnabled?: boolean;
+}): ApiRoute[] {
+  const { controller, authStorage, credentialManagementEnabled = true } = options;
 
   return [
     registerApiRoute('/web/config/providers', {
@@ -348,7 +403,98 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       requiresAuth: false,
       handler: async c => {
         try {
-          return c.json({ providers: await listProviders(controller, authStorage) });
+          const providers = await listProviders(controller, authStorage);
+          return c.json({
+            credentialManagementEnabled,
+            providers: credentialManagementEnabled
+              ? providers
+              : providers.map(provider => ({ ...provider, oauthSupported: false })),
+          });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
+    registerApiRoute('/web/config/providers/:provider/oauth/start', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        if (provider !== 'anthropic') return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+
+        try {
+          sweepExpiredOAuthLogins();
+          const session = await createAnthropicOAuthSession();
+          const loginId = randomUUID();
+          pendingAnthropicLogins.set(loginId, { verifier: session.verifier, expiresAt: Date.now() + OAUTH_LOGIN_TTL_MS });
+          return c.json({ ok: true, loginId, authUrl: session.authUrl, expiresInMs: OAUTH_LOGIN_TTL_MS });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
+    registerApiRoute('/web/config/providers/:provider/oauth/complete', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        if (provider !== 'anthropic') return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+
+        let body: { loginId?: unknown; code?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+
+        const loginId = typeof body.loginId === 'string' ? body.loginId : '';
+        const code = typeof body.code === 'string' ? body.code.trim() : '';
+        if (!loginId) return c.json({ error: 'Missing required field: loginId' }, 400);
+        if (!code) return c.json({ error: 'Missing required field: code' }, 400);
+
+        try {
+          sweepExpiredOAuthLogins();
+          const session = pendingAnthropicLogins.get(loginId);
+          if (!session) return c.json({ error: 'Login session expired. Start sign-in again.' }, 410);
+          pendingAnthropicLogins.delete(loginId);
+
+          const credentials = await exchangeAnthropicOAuthCode({ authCode: code, verifier: session.verifier });
+          authStorage.set('anthropic', { type: 'oauth', ...credentials });
+          const providers = await listProviders(controller, authStorage);
+          return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
+    registerApiRoute('/web/config/providers/:provider/oauth', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        if (!OAUTH_SUPPORTED_PROVIDERS.has(provider)) {
+          return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+        }
+
+        try {
+          authStorage.remove(getAuthProviderId(provider));
+          const providers = await listProviders(controller, authStorage);
+          return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }
@@ -359,6 +505,9 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
         let body: { key?: unknown; envVar?: unknown };
@@ -371,7 +520,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         if (!key) return c.json({ error: 'Missing required field: key' }, 400);
         const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
         try {
-          authStorage.setStoredApiKey(provider, key, envVar);
+          authStorage.setStoredApiKey(getAuthProviderId(provider), key, envVar);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {
@@ -384,10 +533,13 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
         try {
-          authStorage.remove(`apikey:${provider}`);
+          authStorage.remove(`apikey:${getAuthProviderId(provider)}`);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {

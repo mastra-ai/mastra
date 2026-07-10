@@ -1,6 +1,8 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { useLocation } from 'react-router';
+import { MessageSquarePlus } from 'lucide-react';
+import { useLocation, useNavigate } from 'react-router';
 
 import { useOverlays } from '../../lib/overlays';
 import { Sidebar } from '../../Sidebar';
@@ -9,6 +11,7 @@ import type { Project } from '../workspaces';
 import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
+import { ConnectionNotice } from './components/ConnectionNotice';
 import { Transcript } from './components/Transcript';
 import { useChatSession } from './context/ChatSessionProvider';
 
@@ -39,6 +42,7 @@ export function NewPage() {
 function NewPageContent({ activeProject }: { activeProject: Project }) {
   const session = useChatSession();
   const location = useLocation();
+  const navigate = useNavigate();
   const locationState = location.state as { routeErrorNotice?: string } | null;
   const routeErrorNotice = locationState?.routeErrorNotice ?? null;
   const noticeEntries = session.transcript.entries.filter(entry => entry.kind === 'notice');
@@ -50,7 +54,22 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
         <DraftStart activeProject={activeProject} />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
-            {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
+            {routeErrorNotice && (
+              <Notice variant="destructive" title="Thread unavailable">
+                <Notice.Message>{routeErrorNotice}</Notice.Message>
+                <Notice.Message className="mt-2">Continue in a new thread to send a new request.</Notice.Message>
+                <Button
+                  type="button"
+                  variant="primary"
+                  size="sm"
+                  className="mt-3 self-start"
+                  onClick={() => void navigate('/new', { replace: true, state: null })}
+                >
+                  <MessageSquarePlus size={15} />
+                  <span>Continue in new thread</span>
+                </Button>
+              </Notice>
+            )}
             <Transcript entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
           </div>
         )}
@@ -70,6 +89,7 @@ function DraftStart({ activeProject }: { activeProject: Project }) {
         <ProjectContext activeProject={activeProject} />
       </div>
 
+      <ConnectionNotice />
       <ComposerPanel composerVariant="textarea" />
     </section>
   );

@@ -4,6 +4,16 @@
   "description": "MastraCode web surface: API routes, tenant server, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root first; `pnpm prebuild` builds the linked packages (web:build / web:ui:build run it automatically).",
   "private": true,
   "type": "module",
+  "exports": {
+    "./desktop-host": {
+      "types": "./src/shared/desktop-host.ts",
+      "default": "./src/shared/desktop-host.ts"
+    },
+    "./server-surface": {
+      "types": "./src/web/server-surface.ts",
+      "default": "./src/web/server-surface.ts"
+    }
+  },
   "scripts": {
     "check": "tsc --noEmit && pnpm check:ui",
     "check:ui": "tsc --noEmit -p src/web/ui/tsconfig.json",
@@ -18,9 +28,10 @@
     "deps:pin": "node scripts/monorepo-deps.mjs pin",
     "deps:link": "node scripts/monorepo-deps.mjs link",
     "web:start": "varlock run -- mastra start",
+    "web:unit:test": "vitest run --config e2e/web-unit/vitest.config.ts",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
-    "test": "vitest run --config e2e/web/vitest.config.ts && vitest run --config e2e/web-ui/vitest.config.ts"
+    "test": "pnpm web:unit:test && pnpm web:test && pnpm web:ui:test"
   },
   "keywords": [],
   "author": "",
@@ -45,8 +56,8 @@
     "lucide-react": "^0.474.0",
     "marked": "^15.0.0",
     "pg": "^8.21.0",
-    "react": "19.2.6",
-    "react-dom": "19.2.6",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-router": "^7.13.1",
     "shiki": "^1.29.2",
     "zod": "^4.3.6"

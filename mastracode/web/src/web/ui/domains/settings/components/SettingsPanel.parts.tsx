@@ -57,12 +57,13 @@ export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
 interface ModelTabProps {
   models: AgentControllerAvailableModel[];
   currentModelId: string | null;
+  error?: string | null;
   settings: AgentControllerSessionSettings | null;
   onModelChange: (modelId: string) => void;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
 
-export function ModelTab({ models, currentModelId, settings, onModelChange, onBehaviorChange }: ModelTabProps) {
+export function ModelTab({ models, currentModelId, error, settings, onModelChange, onBehaviorChange }: ModelTabProps) {
   return (
     <>
       <div className="flex flex-col gap-2 py-3 border-b border-border1/40">
@@ -74,6 +75,11 @@ export function ModelTab({ models, currentModelId, settings, onModelChange, onBe
             Default model for this session
           </Txt>
         </div>
+        {error && (
+          <Txt variant="ui-sm" className="text-notice-destructive-fg">
+            {error}
+          </Txt>
+        )}
         <ModelPicker models={models} currentModelId={currentModelId} onModelChange={onModelChange} />
       </div>
 
