@@ -42,11 +42,11 @@ function seedProject() {
   localStorage.setItem('mastracode-active-project', project.id);
 }
 
-function sessionState(): AgentControllerSessionState {
+function sessionState(modeId = 'build'): AgentControllerSessionState {
   return {
     controllerId: 'code',
     resourceId: RESOURCE_ID,
-    modeId: 'build',
+    modeId,
     modelId: 'openai/gpt-4o-mini',
     threadId: THREAD_ID,
     settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
@@ -77,6 +77,7 @@ function sse(first: AgentControllerEvent[] = [], delayed: AgentControllerEvent[]
 
 function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayedEvents: AgentControllerEvent[] = []) {
   const onMode = vi.fn();
+  let activeModeId = 'build';
   server.use(
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -90,13 +91,15 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], delayed
       }),
     ),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(SESSION, () => HttpResponse.json(sessionState())),
-    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+    http.get(SESSION, () => HttpResponse.json(sessionState(activeModeId))),
+    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState(activeModeId))),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.post(`${SESSION}/mode`, async ({ request }) => {
-      onMode(await request.json());
+      const body = (await request.json()) as { modeId: string };
+      onMode(body);
+      activeModeId = body.modeId;
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${SESSION}/stream`, () => sse(events, delayedEvents)),
@@ -172,7 +175,7 @@ describe('StatusLine', () => {
       useAgentControllerHandlers();
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
       expect(screen.queryByText('no model')).not.toBeInTheDocument();
     });
 
@@ -316,7 +319,7 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
       expect(screen.queryByText('pursuing goal')).not.toBeInTheDocument();
       expect(screen.queryByText('goal paused')).not.toBeInTheDocument();
     });
@@ -328,7 +331,7 @@ describe('StatusLine', () => {
       useAgentControllerHandlers();
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('openai/gpt-4o-mini')).toBeInTheDocument());
+      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
       expect(screen.queryByTitle('Message window until next observation')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Observations accumulated until next reflection')).not.toBeInTheDocument();
       expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();

@@ -1,12 +1,12 @@
 import { Brain } from 'lucide-react';
 
-import { useChatSession } from '../../context/ChatSessionProvider';
+import { useChatTranscript } from '../../context/useChatTranscript';
 
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
 
 /** Transient execution telemetry: active OM phase and decode throughput. */
 export function RuntimeActivity() {
-  const { transcript } = useChatSession();
+  const { transcript } = useChatTranscript();
   const { omPhase, tokensPerSec } = transcript;
 
   return (

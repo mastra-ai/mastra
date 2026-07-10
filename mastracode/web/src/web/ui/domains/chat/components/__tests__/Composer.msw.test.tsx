@@ -221,7 +221,7 @@ describe('Composer', () => {
       useAgentControllerHandlers();
       renderComposer();
 
-      const input = screen.getByRole('textbox');
+      const input = await screen.findByRole('textbox');
       await waitFor(() => expect(input).toBeEnabled());
       await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
 
@@ -235,7 +235,7 @@ describe('Composer', () => {
       useAgentControllerHandlers();
       renderComposer({ variant: 'textarea' });
 
-      const input = screen.getByRole('textbox');
+      const input = await screen.findByRole('textbox');
       await waitFor(() => expect(input).toBeEnabled());
       expect(input).toHaveClass('field-sizing-content', 'min-h-28');
       expect((input as HTMLTextAreaElement).style.height).toBe('');

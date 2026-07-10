@@ -1,10 +1,10 @@
 import { Target } from 'lucide-react';
 
-import { useChatSession } from '../../context/ChatSessionProvider';
+import { useChatTranscript } from '../../context/useChatTranscript';
 
 /** Goal lifecycle indicator; hidden when there is no goal or it is done. */
 export function GoalStatus() {
-  const { transcript } = useChatSession();
+  const { transcript } = useChatTranscript();
   const { goal } = transcript;
 
   if (!goal || goal.status === 'done') return null;

@@ -1,4 +1,4 @@
-import { useChatSession } from '../../context/ChatSessionProvider';
+import { useChatTranscript } from '../../context/useChatTranscript';
 
 const statusBudget = 'inline-flex items-baseline whitespace-nowrap text-icon3 tabular-nums';
 const slLabel = 'mr-1 text-icon2';
@@ -26,7 +26,7 @@ function pctClass(percent: number): string {
  * and the observations accumulated until the next reflection.
  */
 export function OperationalMemoryStatus() {
-  const { transcript } = useChatSession();
+  const { transcript } = useChatTranscript();
   const om = transcript.omProgress;
   const showMsg = om && om.threshold > 0;
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;

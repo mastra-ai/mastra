@@ -1,9 +1,9 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 
-import { useChatSession } from '../../context/ChatSessionProvider';
+import { useChatConnection } from '../../context/useChatConnection';
 
 export function ConnectionNotice() {
-  const { status } = useChatSession();
+  const { status } = useChatConnection();
   if (status !== 'reconnecting' && status !== 'error') return null;
 
   return (

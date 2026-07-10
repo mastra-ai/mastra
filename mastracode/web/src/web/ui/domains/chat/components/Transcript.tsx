@@ -13,10 +13,9 @@ import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wr
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
-import { useApiConfig } from '../../../../../shared/api/config';
 import { highlightCode, languageForPath } from '../../../ui/highlight';
-import { useActiveProjectContext } from '../../workspaces';
-import { useChatSession } from '../context/ChatSessionProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
@@ -568,9 +567,8 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // ---------------------------------------------------------------------------
 
 export function Transcript() {
-  const { baseUrl } = useApiConfig();
-  const { resourceId, sessionEnabled } = useActiveProjectContext();
-  const { transcript, resolvePrompt } = useChatSession();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { transcript, resolvePrompt } = useChatTranscript();
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
   const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
