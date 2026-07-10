@@ -608,32 +608,8 @@ describe('App mode + theme controls', () => {
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
     });
 
-    it('marks the active mode as selected', async () => {
-      seedMultiMode();
-
-      renderChat();
-
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      const planButton = screen.getByRole('button', { name: 'Plan' });
-
-      await waitFor(() => expect(buildButton).toHaveAttribute('aria-pressed', 'true'));
-      expect(planButton).toHaveAttribute('aria-pressed', 'false');
-    });
-
-    it('switches modes through the session mode endpoint', async () => {
-      const { onMode } = seedMultiMode();
-      const user = userEvent.setup();
-
-      renderChat();
-
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      const planButton = screen.getByRole('button', { name: 'Plan' });
-      await user.click(planButton);
-
-      await waitFor(() => expect(onMode).toHaveBeenCalledWith({ modeId: 'plan' }));
-      await waitFor(() => expect(planButton).toHaveAttribute('aria-pressed', 'true'));
-      expect(buildButton).toHaveAttribute('aria-pressed', 'false');
-    });
+    // Detailed mode selection/switching behavior is specified in
+    // `domains/chat/components/__tests__/StatusLine.msw.test.tsx`.
 
     it('does not render a theme toggle in the header', async () => {
       seedMultiMode();
