@@ -538,7 +538,24 @@ Use the default session-based mode (without `serverless: true`) for:
 
 The serverless mode disables session management and creates fresh server instances per request, which is necessary for stateless environments where memory doesn't persist between invocations.
 
-**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode:
+By default, serverless mode buffers each request into a single JSON response, so `notifications/progress` sent by a tool never reach the client. Set `serverlessStreaming: true` to handle the request with request-scoped SSE streaming instead, which delivers progress notifications before the final result:
+
+```typescript
+await server.startHTTP({
+  url,
+  httpPath: '/mcp',
+  req: nodeReq,
+  res: nodeRes,
+  options: {
+    serverless: true,
+    serverlessStreaming: true, // ← Stream request-scoped notifications/progress
+  },
+})
+```
+
+This is still stateless: no `mcp-session-id` is required or persisted. It only enables notifications scoped to the current request (such as progress). The session-dependent features below remain unavailable.
+
+**Note:** The following MCP features require session state or persistent connections and **won't work** in serverless mode (including with `serverlessStreaming: true`):
 
 - **Elicitation** - Interactive user input requests during tool execution require session management to route responses back to the correct client
 - **Resource subscriptions** - `resources/subscribe` and `resources/unsubscribe` need persistent connections to maintain subscription state
@@ -593,6 +610,13 @@ The `StreamableHTTPServerTransportOptions` object allows you to customize the be
     type: 'boolean',
     description:
       'If `true`, runs in stateless mode without session management. Each request is handled independently with a fresh server instance. Essential for serverless environments (Cloudflare Workers, Supabase Edge Functions, Vercel Edge, etc.) where sessions cannot persist between invocations. Defaults to `false`.',
+    optional: true,
+  },
+  {
+    name: 'serverlessStreaming',
+    type: 'boolean',
+    description:
+      'If `true`, serverless requests use request-scoped SSE streaming instead of a buffered JSON response, allowing in-request `notifications/progress` to reach the client before the final result. Only takes effect together with `serverless: true`. Defaults to `false` (buffered JSON responses), which preserves backward-compatible behavior. This enables only request-scoped notifications such as progress; elicitation, subscriptions, and out-of-request notifications still require session state.',
     optional: true,
   },
   {
