@@ -642,6 +642,29 @@ describe('Factory investigate flow', () => {
     expect(captured.messages).toHaveLength(0);
   });
 
+  it('given a typed custom prompt, when the popover is cancelled and reopened, then the prompt is cleared', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    let form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Prompt for issue #12' }), 'Discarded draft');
+    await userEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    expect(within(form).getByRole('textbox', { name: 'Prompt for issue #12' })).toHaveValue('');
+  });
+
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no thread is created', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>

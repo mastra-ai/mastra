@@ -38,11 +38,15 @@ export function FactoryItemActions({
   const [prompt, setPrompt] = useState('');
   const anchorRef = useRef<HTMLDivElement>(null);
 
+  const closePrompt = () => {
+    setPromptOpen(false);
+    setPrompt('');
+  };
+
   const runPrompt = () => {
     const trimmed = prompt.trim();
     if (!trimmed) return;
-    setPromptOpen(false);
-    setPrompt('');
+    closePrompt();
     onRunPrompt(trimmed);
   };
 
@@ -77,7 +81,7 @@ export function FactoryItemActions({
           <DropdownMenu.Item onClick={() => setPromptOpen(true)}>Custom prompt…</DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
-      <Popover open={promptOpen} onOpenChange={setPromptOpen}>
+      <Popover open={promptOpen} onOpenChange={open => (open ? setPromptOpen(true) : closePrompt())}>
         <PopoverContent anchor={anchorRef} align="end" className="w-80 p-3">
           <form
             aria-label={`Custom prompt for ${itemLabel}`}
@@ -103,7 +107,7 @@ export function FactoryItemActions({
               }}
             />
             <div className="flex justify-end gap-2">
-              <Button type="button" variant="ghost" size="xs" onClick={() => setPromptOpen(false)}>
+              <Button type="button" variant="ghost" size="xs" onClick={closePrompt}>
                 Cancel
               </Button>
               <Button type="submit" size="xs" disabled={!prompt.trim()}>
