@@ -6,13 +6,15 @@ import { useState } from 'react';
 
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
+import { GithubIcon } from '../../../ui/icons';
 import { useAddProjectMutation, useRemoveProjectMutation } from '../hooks/useProjects';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
+import { useGithubStatusQuery } from '../hooks/useGithubStatus';
 import { DirectoryBrowser } from './DirectoryPicker';
 
 /** App-level project manager backed by the active-project and overlay providers. */
 export function ProjectsModal() {
-  const { close } = useOverlays();
+  const { close, open } = useOverlays();
   const { projects, activeProject, selectProject } = useActiveProjectContext();
   const empty = projects.length === 0;
   const [adding, setAdding] = useState(empty);
@@ -21,6 +23,16 @@ export function ProjectsModal() {
   const busy = addProject.isPending;
   const error =
     addProject.error instanceof Error ? addProject.error.message : addProject.error ? String(addProject.error) : null;
+
+  // Offer the GitHub entry point whenever the feature isn't hard-disabled:
+  // `authRequired` means the status probe hit the auth gate, not that the
+  // feature is off (same gating philosophy as the modal's connect button).
+  const githubStatus = useGithubStatusQuery().data;
+  const githubEnabled = !!githubStatus && (githubStatus.enabled || !!githubStatus.authRequired);
+  const openGithub = () => {
+    close('projects');
+    open('github');
+  };
 
   useKeyDown(
     {
@@ -48,7 +60,7 @@ export function ProjectsModal() {
   };
 
   return (
-    <Dialog open onOpenChange={open => !open && close('projects')}>
+    <Dialog open onOpenChange={o => !o && close('projects')}>
       <DialogContent className="w-full max-w-lg" aria-label="Projects">
         <DialogHeader className="px-5 pt-4 pb-2">
           <DialogTitle>{adding ? 'Open a project' : 'Projects'}</DialogTitle>
@@ -66,12 +78,20 @@ export function ProjectsModal() {
                 busy={busy}
                 error={error}
               />
+              {githubEnabled && (
+                <Button variant="outline" size="sm" className="self-start" onClick={openGithub}>
+                  <GithubIcon size={15} />
+                  <span>Open from GitHub</span>
+                </Button>
+              )}
             </>
           ) : (
             <>
               <div className="flex flex-col gap-1.5">
                 {projects.map(project => {
                   const active = project.id === activeProject?.id;
+                  const github = project.source === 'github';
+                  const detail = github ? (project.sandboxWorkdir ?? 'cloud sandbox') : project.path;
                   return (
                     <div
                       key={project.id}
@@ -84,15 +104,22 @@ export function ProjectsModal() {
                           void selectProject(project);
                           close('projects');
                         }}
-                        title={project.path}
+                        title={detail}
                       >
-                        <Folder size={18} className="shrink-0 text-accent1" />
+                        {github ? (
+                          <GithubIcon size={18} className="shrink-0 text-accent1" />
+                        ) : (
+                          <Folder size={18} className="shrink-0 text-accent1" />
+                        )}
                         <span className="flex min-w-0 flex-col">
                           <Txt as="span" variant="ui-md" className="truncate text-icon6">
                             {project.name}
+                            {github && project.gitBranch && (
+                              <span className="ml-1.5 text-icon3">· {project.gitBranch}</span>
+                            )}
                           </Txt>
                           <Txt as="span" variant="ui-xs" className="truncate text-icon3">
-                            {project.path}
+                            {detail}
                           </Txt>
                         </span>
                       </button>
@@ -118,10 +145,19 @@ export function ProjectsModal() {
                   );
                 })}
               </div>
-              <Button variant="outline" size="sm" className="self-start" onClick={() => setAdding(true)}>
-                <Plus size={16} />
-                <span>Add a project</span>
-              </Button>
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => setAdding(true)}>
+                  <Plus size={16} />
+                  <span>Add a project</span>
+                </Button>
+                {githubEnabled && (
+                  <Button variant="outline" size="sm" onClick={openGithub}>
+                    <GithubIcon size={15} />
+                    <span>Open from GitHub</span>
+                  </Button>
+                )}
+              </div>
             </>
           )}
         </div>

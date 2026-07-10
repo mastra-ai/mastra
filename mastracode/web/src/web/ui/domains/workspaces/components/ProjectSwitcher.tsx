@@ -4,6 +4,7 @@ import { ChevronsUpDown, Folder, Plus } from 'lucide-react';
 
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
+import { deriveProjectPath } from '../hooks/useWorkspaces';
 
 /**
  * Propless project switcher: shows the active project and opens the projects
@@ -33,7 +34,7 @@ export function ProjectSwitcher() {
         type="button"
         className="flex w-full items-center gap-2 rounded-md border border-border1 bg-surface3 px-2.5 py-2 text-left transition-colors hover:bg-surface4"
         onClick={manageProjects}
-        title={activeProject ? activeProject.path : 'Select a project'}
+        title={activeProject ? deriveProjectPath(activeProject) : 'Select a project'}
       >
         <Folder size={16} className="shrink-0 text-icon3" />
         <span className="flex min-w-0 flex-1 flex-col">
@@ -43,7 +44,7 @@ export function ProjectSwitcher() {
                 {activeProject.name}
               </Txt>
               <Txt as="span" variant="ui-xs" className="truncate text-icon3">
-                {activeProject.path}
+                {deriveProjectPath(activeProject)}
               </Txt>
             </>
           ) : (
