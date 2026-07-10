@@ -96,7 +96,7 @@ function renderMessageList() {
           path="/threads/:threadId"
           element={
             <ActiveProjectProvider>
-              <ChatSessionProvider>
+              <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
               </ChatSessionProvider>
             </ActiveProjectProvider>
@@ -146,6 +146,28 @@ describe('ChatMessageList', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Agent is working')).toBeInTheDocument());
     expect(screen.getByText('Thinking…')).toBeInTheDocument();
+  });
+
+  it('given a persisted status part without text, then no empty notice bubble renders', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            { id: 'status-1', role: 'assistant', content: [{ type: 'om_compaction' }] },
+            { id: 'status-2', role: 'assistant', content: [{ type: 'om_summary', text: 'Memory updated' }] },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    // The status part with text renders as a notice…
+    await waitFor(() => expect(screen.getByText('Memory updated')).toBeInTheDocument());
+    // …the text-less one renders nothing instead of an empty bubble.
+    const notices = document.querySelectorAll('.bg-notice-info\\/20');
+    expect(notices).toHaveLength(1);
   });
 
   it('given the session fails to connect, then it shows the disconnected notice', async () => {
