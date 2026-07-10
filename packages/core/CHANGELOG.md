@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 1.51.0-alpha.3
+
+### Patch Changes
+
+- - Fixed DurableAgent returning stale/empty values for Studio metadata, processors, skills, workflows, voice, and other inherited Agent accessors by adding delegation overrides to the wrapped agent ([#19076](https://github.com/mastra-ai/mastra/pull/19076))
+  - Fixed missing traces in Studio: span `entityId` now uses the durable agent's ID instead of the wrapped agent's ID
+  - Fixed dropped `background-task-completed` events in `streamUntilIdle` caused by the same agent ID mismatch
+  - `\_\_setMemory`, `\_\_setPubSub`, and `\_\_setWorkspace` now propagate to both the DurableAgent base class and the wrapped agent
+
+- Extract text from DB-shaped user messages in goal judge prompts instead of stringifying them as `[object Object]`. Goal judge prompts now also skip malformed, empty, or synthetic reminder messages when selecting the latest user context. ([#19070](https://github.com/mastra-ai/mastra/pull/19070))
+
 ## 1.51.0-alpha.2
 
 ### Minor Changes
