@@ -802,7 +802,30 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           },
         });
 
-        throw new Error('Workflow aborted');
+        await this.invokeLifecycleCallbacks({
+          status: 'canceled',
+          result: undefined,
+          error: undefined,
+          steps: stepResults,
+          tripwire: undefined,
+          runId,
+          workflowId,
+          resourceId,
+          input,
+          requestContext: currentRequestContext,
+          state: lastState,
+          stepExecutionPath,
+        });
+
+        return {
+          status: 'canceled',
+          result: undefined,
+          error: undefined,
+          steps: stepResults,
+          tripwire: undefined,
+          runId,
+          ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+        } as any;
       }
 
       const entry = steps[i]!;
