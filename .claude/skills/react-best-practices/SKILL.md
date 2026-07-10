@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 22 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 25 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -61,6 +61,8 @@ Rules are prioritized by impact:
 - Apply `startTransition` for non-urgent updates (`rerender-transitions`)
 - Keep UI handlers plain; use Effect Events only for effect-fired logic (`rerender-useeffect-function-calls`)
 - Never reset state with `useEffect`; lift the discriminant and remount the branch (`rerender-no-useeffect-state-reset`)
+- Never add `useMemo` or `useCallback`; leave memoization decisions to developers with profiler evidence (`rerender-no-usememo-usecallback`)
+- Never call `setState` during render or inside `useEffect`; derive during render or move state ownership to an intermediate component (`rerender-no-setstate-in-render-or-effect`)
 
 **Component Structure:**
 
@@ -79,6 +81,7 @@ Rules are prioritized by impact:
 **Type Safety:**
 
 - No `as` type assertions anywhere — production **or tests**; narrow with real type guards, query generics (`querySelector<T>`, `getByRole<T>`), typed fixture factories, or `implements` on mocks. `as const` is the only allowed form. Do not replace a cast with a domain-type predicate that only checks `typeof value === 'object'`; call that an `isRecord` helper or validate the fields used (`types-no-type-assertions`)
+- Use `undefined` and optional `?` for absence, not `null`; convert external `null` at boundaries with `?? undefined` (`types-no-null`)
 
 ### Rendering Patterns
 
@@ -113,9 +116,9 @@ grep -l "Tanstack" references/rules/
 - `async-*` - Waterfall elimination (1 rule)
 - `bundle-*` - Bundle size optimization (2 rules)
 - `client-*` - Client-side data fetching (1 rule)
-- `rerender-*` - Re-render optimization (4 rules)
+- `rerender-*` - Re-render optimization (6 rules)
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
-- `types-*` - Type-safety / no-`as`-cast rules (1 rule)
+- `types-*` - Type-safety / no-`as`-cast and no-`null` rules (2 rules)
 - `structure-*` - Component/hook structure (6 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy + no className implementation-mirror assertions (2 rules)

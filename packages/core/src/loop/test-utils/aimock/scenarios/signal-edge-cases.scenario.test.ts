@@ -103,9 +103,7 @@ function withTimeout<T>(promise: Promise<T>, message: string, timeoutMs = 2000):
 describeForAllEngines('AIMock scenario: signal edge cases', engine => {
   const getMock = useLoopScenarioAimock();
 
-  // RC16: sendMessage-wake hangs because DurableAgent.stream() doesn't complete
-  // through the AgentThreadStreamRuntime subscribe path.
-  it.skipIf(engine === 'durable')('multiple subscribers on same thread both receive the response', async () => {
+  it('multiple subscribers on same thread both receive the response', async () => {
     const pubsub = new InMemoryPubSub();
     const mock = getMock();
     const memory = new MockMemory();

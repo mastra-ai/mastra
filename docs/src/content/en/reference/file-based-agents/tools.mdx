@@ -1,0 +1,68 @@
+---
+title: "Tools | File-based Agents"
+description: Add tools to a file-based agent by placing createTool modules under tools/.
+packages:
+  - "@mastra/core"
+---
+
+# Tools
+
+A file-based agent discovers tools from `.ts` and `.js` files directly under its `tools/` directory. Each discovered file is imported at build time, the file must default-export a [`createTool()`](/reference/tools/create-tool) result, and the filename without its extension becomes the tool key the model can call.
+
+Use this page for the file-based convention. For tool schemas, execution options, output shaping, and approval options, see the [`createTool()` reference](/reference/tools/create-tool).
+
+## Quickstart
+
+Place one tool per file under `tools/`. This file is exposed to the agent as `get_weather`.
+
+```typescript title="src/mastra/agents/weather/tools/get_weather.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
+export default createTool({
+  id: 'get_weather',
+  description: 'Get the current weather for a city.',
+  inputSchema: z.object({
+    city: z.string(),
+  }),
+  outputSchema: z.object({
+    city: z.string(),
+    tempC: z.number(),
+  }),
+  execute: async ({ context }) => {
+    return { city: context.city, tempC: 21 }
+  },
+})
+```
+
+## Organizing tools
+
+Use one file per tool. Name the file after the action the model should take:
+
+- Use `get_weather.ts`, `search_docs.ts`, or `create_ticket.ts`.
+- Avoid vague names like `helper.ts`, `api.ts`, or `utils.ts`.
+- Co-locate tests next to the tool as `*.test.ts` or `*.spec.ts`; discovery ignores those files.
+- Keep shared helper code outside `tools/` or in files that don't match the discovered extensions under `tools/`.
+
+Because nested directories aren't discovered as tools, group related tools with clear filename prefixes instead of subfolders, such as `calendar_create_event.ts` and `calendar_list_events.ts`.
+
+## Tool options
+
+The file-based convention only controls where the tool lives and how it's registered. The tool API still comes from `createTool()`:
+
+- Use `description` to tell the model when to call the tool.
+- Use `inputSchema` and `outputSchema` for structured inputs and outputs.
+- Use `toModelOutput` when the model should see a different shape than the raw value returned from `execute`.
+- Use `requireApproval` when a tool needs human confirmation before execution.
+
+See the [`createTool()` reference](/reference/tools/create-tool) for all options and [tool approval](/docs/agent-controller/tool-approvals) for the approval flow.
+
+## Runtime boundary
+
+Tool code runs in your app/server runtime when the agent calls the tool. If a tool needs filesystem or shell isolation, call [workspace](/reference/file-based-agents/workspace) or sandbox APIs explicitly.
+
+## Precedence with config
+
+Discovered tools merge with any `tools` in [`config.ts`](/reference/file-based-agents/config). On a key collision, `config.tools` wins and a warning is logged.
+
+If `config.tools` is a function, discovered tools are ignored with a warning because function-valued tools can't be statically merged.

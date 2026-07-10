@@ -1,5 +1,33 @@
 # mastra
 
+## 1.18.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7)]:
+  - @mastra/core@1.51.0-alpha.3
+  - @mastra/deployer@1.51.0-alpha.3
+
+## 1.18.3-alpha.2
+
+### Patch Changes
+
+- Fixed `mastra deploy` preflight blocking deploys that are actually fine: ([#19071](https://github.com/mastra-ai/mastra/pull/19071))
+
+  **Env-guarded storage fallbacks** — code like `process.env.TURSO_DATABASE_URL || "file:./.mastra-demo.db"` no longer hard-errors when the environment variable is provided for the deploy. If the variable is missing from your env file you still get an error, and if no env file is available you get a warning instead.
+
+  **Library env-var false positives** — the missing environment variable check now only looks at variables your own code references, so variables read by bundled Mastra packages (like `AUTO_BLOCK_EXTERNAL_PROVIDERS`) no longer show up as warnings. They are listed as info instead.
+
+  **Platform-stored env vars** — `mastra deploy` and `mastra server deploy` preflight now merge the env vars already stored on the target environment / server project under your local env file (local wins, mirroring the platform's deploy-time merge). Vars stored only on the platform no longer trigger `MISSING_ENV_VAR` or `LOCAL_STORAGE_PATH` alarms.
+
+  **Platform-injected guards** — storage fallbacks guarded by variables the platform sets automatically (like `MASTRA_STORAGE_URL` on Mastra Cloud) are trusted and never flagged.
+
+  These deploys previously required `--skip-preflight` to get through.
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2), [`19ac158`](https://github.com/mastra-ai/mastra/commit/19ac158584b34b3ff3e3e6f7ad640c8cb65e30f5), [`19ac158`](https://github.com/mastra-ai/mastra/commit/19ac158584b34b3ff3e3e6f7ad640c8cb65e30f5)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/deployer@1.51.0-alpha.2
+
 ## 1.18.3-alpha.1
 
 ### Patch Changes

@@ -5,13 +5,14 @@
  * can start and the user can fix the connection via /settings.
  */
 
-import type { MastraCompositeStore } from '@mastra/core/storage';
+import type { MastraCompositeStore, RetentionConfig } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { PostgresStore } from '@mastra/pg';
 
 import type { StorageConfig, PgStorageConfig } from './project.js';
 import { getDatabasePath, getVectorDatabasePath } from './project.js';
+import { DEFAULT_RETENTION } from './storage-maintenance.js';
 
 export const MASTRA_CODE_LOCAL_PRAGMAS = {
   cacheSize: -128000,
@@ -23,11 +24,17 @@ export const MASTRA_CODE_LOCAL_PRAGMAS = {
  * local pragmas the default factory uses. Shared so per-tenant storage
  * (see `web/tenant-storage.ts`) doesn't duplicate the construction.
  */
-export function buildLibSQLStore(opts: { id?: string; url: string; authToken?: string }): MastraCompositeStore {
+export function buildLibSQLStore(opts: {
+  id?: string;
+  url: string;
+  authToken?: string;
+  retention?: RetentionConfig;
+}): MastraCompositeStore {
   return new LibSQLStore({
     id: opts.id ?? 'mastra-code-storage',
     url: opts.url,
     ...(opts.authToken ? { authToken: opts.authToken } : {}),
+    ...(opts.retention ? { retention: opts.retention } : {}),
     localPragmas: MASTRA_CODE_LOCAL_PRAGMAS,
   });
 }
@@ -50,7 +57,7 @@ export interface StorageResult {
 }
 
 function createFallbackLibSQL(): MastraCompositeStore {
-  return buildLibSQLStore({ url: `file:${getDatabasePath()}` });
+  return buildLibSQLStore({ url: `file:${getDatabasePath()}`, retention: DEFAULT_RETENTION });
 }
 
 /**
@@ -66,7 +73,7 @@ export async function createStorage(config: StorageConfig): Promise<StorageResul
 
   // Default: LibSQL
   return {
-    storage: buildLibSQLStore({ url: config.url, authToken: config.authToken }),
+    storage: buildLibSQLStore({ url: config.url, authToken: config.authToken, retention: DEFAULT_RETENTION }),
     backend: 'libsql',
   };
 }
@@ -85,6 +92,7 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
 
   const base = {
     id: 'mastra-code-storage' as const,
+    retention: DEFAULT_RETENTION,
     ...(config.schemaName ? { schemaName: config.schemaName } : {}),
     ...(config.disableInit ? { disableInit: config.disableInit } : {}),
     ...(config.skipDefaultIndexes ? { skipDefaultIndexes: config.skipDefaultIndexes } : {}),
