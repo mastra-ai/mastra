@@ -108,7 +108,7 @@ export function syncFeatureUsageTelemetry(mastra: Mastra): void {
     const agentChannels = mastra.getChannels?.();
     const storage = mastra.getStorage?.() as StorageLike | undefined;
 
-    trackFeatureUsage('project_surfaces', {
+    trackFeatureUsage('mastra_instance_summary', {
       agent_count: countCollection(agents),
       agents_with_memory_count: agentsWithMemoryCount,
       agent_controller_count: countCollection(mastra.listAgentControllers?.()),

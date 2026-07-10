@@ -166,7 +166,7 @@ describe('feature usage telemetry', () => {
       distinctId: 'cli-distinct-id',
       event: FEATURE_USAGE_EVENT,
       properties: {
-        feature_name: 'project_surfaces',
+        feature_name: 'mastra_instance_summary',
         project_id: hashTelemetryValue('/tmp/feature-telemetry-project').slice(0, 16),
         command: 'dev',
         node_env: 'test',
@@ -213,7 +213,7 @@ describe('feature usage telemetry', () => {
 
     expect(capture).toHaveBeenCalledTimes(1);
     expect(capture.mock.calls[0]![0].properties).toMatchObject({
-      feature_name: 'project_surfaces',
+      feature_name: 'mastra_instance_summary',
       agent_count: 0,
       agents_with_memory_count: 0,
       agent_controller_count: 0,
