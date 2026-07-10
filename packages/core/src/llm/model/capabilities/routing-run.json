@@ -2,6 +2,9 @@
   "attachment": [
     "claude-opus-4-8",
     "claude-sonnet-4-6",
+    "gpt-5.6-luna",
+    "gpt-5.6-sol",
+    "gpt-5.6-terra",
     "kimi-k2.6",
     "kimi-k2.6-nitro",
     "kimi-k2.7-code",
