@@ -114,16 +114,18 @@ export function isSandboxEnabled(): boolean {
  * derived from client input.
  */
 export function computeSandboxWorkdir(repoFullName: string): string {
-  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
   const repoName = repoFullName.split('/').pop() || 'repo';
+  // The local provider runs on the host filesystem, where a cloud path like
+  // `/workspace` is not writable. `MASTRACODE_SANDBOX_WORKDIR` documents
+  // itself as cloud-only (and the schema defaults it to `/workspace`), so the
+  // local provider ignores it and checks out under the local sandbox root.
+  if (getSandboxProvider() === 'local') {
+    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
+  }
+  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
   if (base) {
     // If the configured base already ends with the repo name, use it as-is.
     return base.endsWith(`/${repoName}`) ? base : `${base.replace(/\/$/, '')}/${repoName}`;
-  }
-  // The local provider runs on the host filesystem, where `/workspace` is not
-  // writable; check out under the local sandbox root instead.
-  if (getSandboxProvider() === 'local') {
-    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
   }
   return `/workspace/${repoName}`;
 }

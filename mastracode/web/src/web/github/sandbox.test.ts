@@ -148,17 +148,29 @@ describe('computeSandboxWorkdir', () => {
   });
 
   it('appends the repo name to a configured base', () => {
+    process.env.RAILWAY_API_TOKEN = 'tok';
     process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/checkouts';
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/checkouts/hello');
   });
 
   it('does not double-append when the base already ends in the repo name', () => {
+    process.env.RAILWAY_API_TOKEN = 'tok';
     process.env.MASTRACODE_SANDBOX_WORKDIR = '/srv/hello';
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/srv/hello');
   });
 
   it('checks out under the local sandbox root for the local provider', () => {
     process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
+    process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
+    expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
+    delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
+  });
+
+  it('ignores the cloud-only workdir base for the local provider', () => {
+    // The schema defaults MASTRACODE_SANDBOX_WORKDIR to /workspace, which is
+    // not writable on a host filesystem — the local provider must ignore it.
+    process.env.MASTRACODE_SANDBOX_PROVIDER = 'local';
+    process.env.MASTRACODE_SANDBOX_WORKDIR = '/workspace';
     process.env.MASTRACODE_LOCAL_SANDBOX_ROOT = '/tmp/mc-sandboxes';
     expect(computeSandboxWorkdir('octocat/hello')).toBe('/tmp/mc-sandboxes/hello');
     delete process.env.MASTRACODE_LOCAL_SANDBOX_ROOT;
