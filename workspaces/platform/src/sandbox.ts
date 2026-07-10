@@ -230,9 +230,7 @@ export class PlatformSandbox extends MastraSandbox {
     // timeout (60s) doesn't cut off commands that expect to run longer.
     // Give the proxy a generous buffer over the requested command timeout.
     const clientSignal =
-      effectiveTimeout != null && effectiveTimeout > 0
-        ? AbortSignal.timeout(effectiveTimeout + 30_000)
-        : undefined;
+      effectiveTimeout != null && effectiveTimeout > 0 ? AbortSignal.timeout(effectiveTimeout + 30_000) : undefined;
     const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
