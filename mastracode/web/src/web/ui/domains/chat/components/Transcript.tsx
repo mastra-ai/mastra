@@ -714,7 +714,9 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   };
 
   const status = statusMetadata(entry);
-  if (status) return <StatusMetadataCard status={status} />;
+  // Some harness status parts (e.g. om_* markers) carry no text; skip them
+  // entirely instead of rendering an empty notice bubble.
+  if (status) return status.text.trim() ? <StatusMetadataCard status={status} /> : null;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;

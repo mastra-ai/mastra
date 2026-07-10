@@ -1,18 +1,30 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useQueryClient } from '@tanstack/react-query';
 import { GitBranch, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
+import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
+import { queryKeys } from '../../../../../shared/api/keys';
 import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentControllerThreads';
+import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
 import type { Worktree } from '../services/projects';
 
-export function WorkspacesSection() {
+/**
+ * Sidebar section listing a GitHub project's worktrees.
+ *
+ * Threads are scoped to the worktree they run in, so callers can pass the
+ * thread list as `children`: it renders nested under the active worktree row
+ * (or after the list when no worktree is selected yet).
+ */
+export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const [creating, setCreating] = useState(false);
@@ -28,12 +40,73 @@ export function WorkspacesSection() {
   const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
   const selectWorkspace = useSelectWorkspaceMutation(activeProject, workspaceSession, scope);
   const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, scope);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const queryClient = useQueryClient();
+  const { session } = createAgentControllerClient({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
 
   if (activeProject?.source !== 'github') return null;
 
   const worktrees = workspaces.data?.worktrees ?? [];
   const selectedPath = workspaces.data?.selected?.worktreePath;
   const pending = createWorkspace.isPending || selectWorkspace.isPending;
+
+  // Threads are scoped to a worktree, so entering a workspace lands on its
+  // most recent thread (creating one when it has none). Factory pages are
+  // worktree-independent and stay put.
+  const openWorktreeThread = async (worktreePath: string) => {
+    if (location.pathname.startsWith('/factory')) return;
+    try {
+      const chatSession = requireAgentControllerSession(session);
+      const threadsKey = queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, worktreePath);
+      const threads = await queryClient.fetchQuery({
+        queryKey: threadsKey,
+        queryFn: () =>
+          chatSession.listThreads({
+            limit: AGENT_CONTROLLER_THREAD_PAGE_SIZE,
+            tags: { projectPath: worktreePath },
+          }),
+      });
+      const latest = [...threads].sort((a, b) => {
+        const ta = a.updatedAt ?? a.createdAt ?? '';
+        const tb = b.updatedAt ?? b.createdAt ?? '';
+        return tb.localeCompare(ta);
+      })[0];
+      if (latest) {
+        // Warm the message cache first so the thread page renders content
+        // instead of a loading skeleton, then jump straight to the target
+        // thread: once the route points at a thread that exists in the new
+        // scope, the route-thread sync settles on it instead of erroring on
+        // the stale one.
+        await queryClient.prefetchQuery({
+          queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
+          queryFn: () => chatSession.listMessages(latest.id),
+        });
+        void navigate(`/threads/${latest.id}`, { replace: true });
+        return;
+      }
+      // Empty worktree: leave the stale thread route before creating, so the
+      // route-thread sync can't race the create call and error on the old
+      // thread. The workspace switch already rebound the session to this
+      // worktree, so the new thread is tagged with its projectPath.
+      if (location.pathname.startsWith('/threads/')) void navigate('/new', { replace: true });
+      const created = await chatSession.createThread();
+      // A fresh thread has no messages; seed the cache to skip the skeleton.
+      queryClient.setQueryData(
+        queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, created.id),
+        [],
+      );
+      void queryClient.invalidateQueries({ queryKey: threadsKey });
+      void navigate(`/threads/${created.id}`, { replace: true });
+    } catch {
+      void navigate('/new', { replace: true });
+    }
+  };
 
   const resetCreate = () => {
     setCreating(false);
@@ -43,7 +116,13 @@ export function WorkspacesSection() {
   const createBranch = () => {
     const trimmed = branch.trim();
     if (!trimmed) return;
-    createWorkspace.mutate(trimmed, { onSuccess: resetCreate });
+    createWorkspace.mutate(trimmed, {
+      onSuccess: updated => {
+        resetCreate();
+        const path = updated.selectedWorktreePath;
+        if (path) void openWorktreeThread(path);
+      },
+    });
   };
 
   const submitCreate = (event: FormEvent<HTMLFormElement>) => {
@@ -77,15 +156,25 @@ export function WorkspacesSection() {
       </div>
 
       <div className="flex flex-col gap-1">
-        {worktrees.map(worktree => (
-          <WorkspaceRow
-            key={worktree.worktreePath}
-            worktree={worktree}
-            active={worktree.worktreePath === selectedPath}
-            disabled={pending}
-            onSelect={() => selectWorkspace.mutate(worktree.worktreePath)}
-          />
-        ))}
+        {worktrees.map(worktree => {
+          const active = worktree.worktreePath === selectedPath;
+          const nested = active && Boolean(children);
+          return (
+            <div key={worktree.worktreePath} className="flex flex-col gap-1">
+              <WorkspaceRow
+                worktree={worktree}
+                active={active}
+                disabled={pending}
+                onSelect={() =>
+                  selectWorkspace.mutate(worktree.worktreePath, {
+                    onSuccess: () => void openWorktreeThread(worktree.worktreePath),
+                  })
+                }
+              />
+              {nested && <div className="ml-[15px] flex flex-col border-l border-border1 pl-2">{children}</div>}
+            </div>
+          );
+        })}
 
         {creating && (
           <form aria-label="Create workspace" className="flex flex-col gap-1" onSubmit={submitCreate}>
@@ -105,6 +194,10 @@ export function WorkspacesSection() {
               </Txt>
             )}
           </form>
+        )}
+
+        {Boolean(children) && !worktrees.some(worktree => worktree.worktreePath === selectedPath) && (
+          <div className="flex flex-col">{children}</div>
         )}
       </div>
     </section>

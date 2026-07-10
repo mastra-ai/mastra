@@ -1539,6 +1539,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: processorRetryCount,
                   requestContext,
+                  tracingContext,
                 });
                 if (retry) {
                   processorRetryCount++;
