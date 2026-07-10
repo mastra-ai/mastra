@@ -1,18 +1,24 @@
-import type {
-  AgentControllerAvailableModel,
-  AgentControllerSessionSettings,
-  PermissionPolicy,
-  PermissionRules,
-  ToolCategory,
-} from '@mastra/client-js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Brain, Key, Layers, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import type { Density } from '../services/density';
+import { useApiConfig } from '../../../../../shared/api/config';
+import { useOverlays } from '../../../lib/overlays';
+import { useToast } from '../../../ui';
+import { useActiveProjectContext } from '../../workspaces';
+import { useChatSession } from '../../chat/context/ChatSessionProvider';
+import { useAgentControllerModels } from '../../chat/hooks/useAgentControllerModels';
+import { useSetPermissionForCategoryMutation } from '../../chat/hooks/useAgentControllerPermissionMutations';
+import { useAgentControllerPermissions } from '../../chat/hooks/useAgentControllerPermissions';
+import { useAgentControllerSettings } from '../../chat/hooks/useAgentControllerSettings';
+import {
+  useSetAgentControllerStateMutation,
+  useSwitchAgentControllerModelMutation,
+} from '../../chat/hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { OMSection } from './OMSection';
@@ -20,26 +26,6 @@ import { ProvidersSection } from './ProvidersSection';
 import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
 
 type Tab = 'general' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
-
-interface SettingsPanelProps {
-  theme: Theme;
-  density: Density;
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
-  settings: AgentControllerSessionSettings | null;
-  /** Active project's resourceId — required to activate a model pack on its session. */
-  resourceId?: string;
-  onThemeChange: (theme: Theme) => void;
-  onDensityChange: (density: Density) => void;
-  onModelChange: (modelId: string) => void;
-  /** Merge behavior settings into the server-side session state. */
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
-  permissions: PermissionRules | null;
-  pendingPermissionCategory: ToolCategory | null;
-  /** Set a tool category's approval policy on the session. */
-  setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
-  onClose: () => void;
-}
 
 const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'general', label: 'General', icon: Palette },
@@ -51,80 +37,55 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
   { id: 'custom-providers', label: 'Custom', icon: Server },
 ];
 
-/**
- * Preferences modal. A two-pane layout (nav rail + one scrollable content pane)
- * keeps long sections — the model catalog and the provider list — reachable
- * without nested scroll fighting. Mirrors the TUI `/settings` surface: theme,
- * density, model, thinking level, auto-approve, notifications, smart editing,
- * and provider/API-key management.
- */
-export function SettingsPanel({
-  theme,
-  models,
-  currentModelId,
-  settings,
-  resourceId,
-  onThemeChange,
-  onModelChange,
-  onBehaviorChange,
-  permissions,
-  pendingPermissionCategory,
-  setPermissionForCategory,
-  onClose,
-}: SettingsPanelProps) {
+/** Preferences modal backed by the existing chat, workspace, theme, and overlay providers. */
+export function SettingsPanel() {
   const [tab, setTab] = useState<Tab>('general');
+  const { baseUrl } = useApiConfig();
+  const { close } = useOverlays();
+  const { toast } = useToast();
+  const { theme, setTheme } = useTheme();
+  const { resourceId, sessionEnabled } = useActiveProjectContext();
+  const { transcript } = useChatSession();
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const modelsQuery = useAgentControllerModels(hookArgs);
+  const settingsQuery = useAgentControllerSettings(hookArgs);
+  const permissionsQuery = useAgentControllerPermissions(hookArgs);
+  const switchModelMutation = useSwitchAgentControllerModelMutation(hookArgs);
+  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
+  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
 
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
+    <Dialog open onOpenChange={open => !open && close('settings')}>
       <DialogContent className="w-full max-w-4xl h-[80vh] grid-rows-[auto_1fr] items-stretch p-0" aria-label="Settings">
-        <DialogHeader className="px-5 pt-4 pb-2">
-          <DialogTitle>Settings</DialogTitle>
-        </DialogHeader>
-
+        <DialogHeader className="px-5 pt-4 pb-2"><DialogTitle>Settings</DialogTitle></DialogHeader>
         <Tabs<Tab> defaultTab="general" value={tab} onValueChange={setTab} className="flex flex-col min-h-0 h-full">
           <TabList className="px-5 shrink-0">
-            {TABS.map(({ id, label, icon: Icon }) => (
-              <Tab key={id} value={id}>
-                <Icon size={15} />
-                <span>{label}</span>
-              </Tab>
-            ))}
+            {TABS.map(({ id, label, icon: Icon }) => <Tab key={id} value={id}><Icon size={15} /><span>{label}</span></Tab>)}
           </TabList>
-
           <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
-            <TabContent value="general">
-              <GeneralTab theme={theme} onThemeChange={onThemeChange} />
-            </TabContent>
+            <TabContent value="general"><GeneralTab theme={theme} onThemeChange={setTheme} /></TabContent>
             <TabContent value="model">
               <ModelTab
-                models={models}
-                currentModelId={currentModelId}
-                settings={settings}
-                onModelChange={onModelChange}
-                onBehaviorChange={onBehaviorChange}
+                models={modelsQuery.data ?? []}
+                currentModelId={transcript.modelId ?? null}
+                settings={settingsQuery.data ?? null}
+                onModelChange={modelId => void switchModelMutation.mutateAsync(modelId).then(() => toast('Model updated', 'success'))}
+                onBehaviorChange={updates => void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'))}
               />
             </TabContent>
-            <TabContent value="packs">
-              <ModelPacksSection resourceId={resourceId} models={models} />
-            </TabContent>
-            <TabContent value="memory">
-              <OMSection resourceId={resourceId} models={models} />
-            </TabContent>
+            <TabContent value="packs"><ModelPacksSection resourceId={sessionEnabled ? resourceId : undefined} models={modelsQuery.data ?? []} /></TabContent>
+            <TabContent value="memory"><OMSection resourceId={sessionEnabled ? resourceId : undefined} models={modelsQuery.data ?? []} /></TabContent>
             <TabContent value="behavior">
               <BehaviorTab
-                settings={settings}
-                onBehaviorChange={onBehaviorChange}
-                permissions={permissions}
-                pendingPermissionCategory={pendingPermissionCategory}
-                setPermissionForCategory={setPermissionForCategory}
+                settings={settingsQuery.data ?? null}
+                onBehaviorChange={updates => void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'))}
+                permissions={permissionsQuery.data ?? null}
+                pendingPermissionCategory={setPermissionForCategoryMutation.variables?.category ?? null}
+                setPermissionForCategory={(category, policy) => setPermissionForCategoryMutation.mutateAsync({ category, policy })}
               />
             </TabContent>
-            <TabContent value="providers">
-              <ProvidersSection />
-            </TabContent>
-            <TabContent value="custom-providers">
-              <CustomProvidersSection />
-            </TabContent>
+            <TabContent value="providers"><ProvidersSection /></TabContent>
+            <TabContent value="custom-providers"><CustomProvidersSection /></TabContent>
           </div>
         </Tabs>
       </DialogContent>

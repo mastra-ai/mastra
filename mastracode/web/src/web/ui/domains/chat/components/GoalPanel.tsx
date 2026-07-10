@@ -3,24 +3,32 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Target } from 'lucide-react';
 import { useState } from 'react';
 
-import type { GoalSnapshot } from '../services/transcript';
+import { useApiConfig } from '../../../../../shared/api/config';
+import { useActiveProjectContext } from '../../workspaces';
+import { useChatSession } from '../context/ChatSessionProvider';
+import {
+  useClearAgentControllerGoalMutation,
+  usePauseAgentControllerGoalMutation,
+  useResumeAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
+} from '../hooks/useAgentControllerGoalMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-accent2/5 px-4 py-2 text-xs';
 
-export function GoalPanel({
-  goal,
-  onSetGoal,
-  onPauseGoal,
-  onResumeGoal,
-  onClearGoal,
-}: {
-  goal?: GoalSnapshot;
-  onSetGoal: (objective: string) => void;
-  onPauseGoal: () => void;
-  onResumeGoal: () => void;
-  onClearGoal: () => void;
-}) {
+export function GoalPanel() {
   const [draft, setDraft] = useState('');
+  const { baseUrl } = useApiConfig();
+  const { resourceId, sessionEnabled } = useActiveProjectContext();
+  const { transcript } = useChatSession();
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
+  const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
+  const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
+  const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
+  const goal = transcript.goal;
+
+  if (!sessionEnabled) return null;
 
   if (!goal) {
     return (
@@ -29,7 +37,7 @@ export function GoalPanel({
         onSubmit={e => {
           e.preventDefault();
           if (draft.trim()) {
-            onSetGoal(draft.trim());
+            void setGoalMutation.mutateAsync(draft.trim());
             setDraft('');
           }
         }}
@@ -64,16 +72,16 @@ export function GoalPanel({
         <span className="max-w-52 overflow-hidden text-ellipsis whitespace-nowrap text-icon3">{goal.reason}</span>
       )}
       {goal.status === 'active' && (
-        <Button size="sm" onClick={onPauseGoal}>
+        <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>
           Pause
         </Button>
       )}
       {goal.status === 'paused' && (
-        <Button variant="primary" size="sm" onClick={onResumeGoal}>
+        <Button variant="primary" size="sm" onClick={() => void resumeGoalMutation.mutateAsync()}>
           Resume
         </Button>
       )}
-      <Button size="sm" onClick={onClearGoal}>
+      <Button size="sm" onClick={() => void clearGoalMutation.mutateAsync()}>
         Clear
       </Button>
     </div>

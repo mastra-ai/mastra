@@ -190,9 +190,6 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
           disabled={busy}
           onChange={e => setObsDraft(e.target.value)}
           onBlur={() => commitThreshold('observation')}
-          onKeyDown={e => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
         />
       </Field>
 
@@ -206,9 +203,6 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
           disabled={busy}
           onChange={e => setRefDraft(e.target.value)}
           onBlur={() => commitThreshold('reflection')}
-          onKeyDown={e => {
-            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-          }}
         />
       </Field>
 

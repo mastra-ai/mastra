@@ -585,7 +585,7 @@ describe('App mode + theme controls', () => {
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
-      const composer = screen.getByRole('textbox');
+      const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
 
       // Switcher lives after the composer in DOM order (below it), not in the header.
       expect(composer.compareDocumentPosition(buildButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
