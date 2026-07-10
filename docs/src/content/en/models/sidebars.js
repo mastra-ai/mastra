@@ -36,6 +36,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'gateways/cloudflare-ai-gateway',
+          label: 'Cloudflare AI Gateway',
+        },
+        {
+          type: 'doc',
           id: 'gateways/mastra',
           label: 'Mastra',
         },
@@ -223,11 +228,6 @@ const sidebars = {
         },
         {
           type: 'doc',
-          id: 'providers/cloudflare-ai-gateway',
-          label: 'Cloudflare AI Gateway',
-        },
-        {
-          type: 'doc',
           id: 'providers/cloudflare-workers-ai',
           label: 'Cloudflare Workers AI',
         },
@@ -275,6 +275,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/empiriolabs',
+          label: 'EmpirioLabs AI',
         },
         {
           type: 'doc',
@@ -568,6 +573,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/pioneer',
+          label: 'Pioneer',
+        },
+        {
+          type: 'doc',
           id: 'providers/poe',
           label: 'Poe',
         },
@@ -710,6 +720,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/umans-ai-coding-plan',
           label: 'Umans AI Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/unorouter',
+          label: 'UnoRouter',
         },
         {
           type: 'doc',
