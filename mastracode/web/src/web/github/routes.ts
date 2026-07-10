@@ -215,6 +215,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   // redirects back to us. The callback persists whatever installations the
   // verified user token can see, and only redirects to the install URL when
   // there are none.
+  //
+  // `?manage=1` skips the identify bounce and sends the user straight to
+  // GitHub's installation page — used by "Manage GitHub connection" to
+  // add/remove accounts and repo access. For an already-authorized user the
+  // identify flow completes instantly and invisibly, so without this the
+  // manage button would appear to do nothing. GitHub's post-install "Save"
+  // redirect lands back on the callback, which re-syncs installations.
   routes.push(
     registerApiRoute('/auth/github/connect', {
       method: 'GET',
@@ -223,6 +230,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
+        if (c.req.query('manage')) return c.redirect(buildInstallUrl(state));
         return c.redirect(buildOAuthIdentifyUrl(state, redirectUri));
       },
     }),

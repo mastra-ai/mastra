@@ -472,6 +472,15 @@ describe('connect + callback', () => {
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
   });
 
+  it('redirects connect?manage=1 straight to the install URL', async () => {
+    // "Manage GitHub connection" must land on GitHub's installation page —
+    // the identify bounce completes invisibly for already-authorized users.
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect?manage=1');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/installations/new');
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+  });
+
   it('resolves the session cookie on a cookie-only connect navigation (gate skips /auth/*)', async () => {
     // A top-level browser navigation to /auth/github/connect carries only the
     // session cookie — no Authorization header — and the auth gate skips
