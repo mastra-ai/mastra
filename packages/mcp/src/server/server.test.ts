@@ -2611,9 +2611,8 @@ describe('MCPServer - Elicitation', () => {
       message: 'This should fail gracefully',
     });
 
-    // When no elicitation handler is provided, the server's elicitInput should fail
-    // and the tool should return a reject response
-    expect(result.content[0].text).toContain('Method not found');
+    // Without a handler, the client does not advertise form elicitation support.
+    expect(result.content[0].text).toContain('Client does not support form elicitation');
   });
 
   it('should validate elicitation request schema structure', async () => {
@@ -2699,8 +2698,10 @@ describe('MCPServer - Elicitation', () => {
     });
 
     // Each client registers its own independent handler
-    elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
-    elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
+    await Promise.all([
+      elicitationClient1.elicitation.onRequest('elicitation1', client1Handler),
+      elicitationClient2.elicitation.onRequest('elicitation2', client2Handler),
+    ]);
 
     const tools = await elicitationClient1.listTools();
     const tool = tools['elicitation1_testElicitationTool'];
