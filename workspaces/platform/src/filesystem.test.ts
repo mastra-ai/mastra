@@ -56,4 +56,37 @@ describe('PlatformFilesystem', () => {
     expect(String(fetchMock.mock.calls[1]![0])).toContain('/fs/dev-bucket/b.txt?op=rename');
     expect(String(fetchMock.mock.calls[2]![0])).toContain('/fs/dev-bucket/dir?op=mkdir');
   });
+
+  it('percent-encodes reserved URL characters in object key segments', async () => {
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(response(null, { status: 204 }))
+      .mockResolvedValueOnce(response('body', { status: 200 }))
+      .mockResolvedValueOnce(response(null, { status: 204 }));
+
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    // Reserved URL characters: `?`, `#`, `%`, `&`, ` `, `+`. `/` MUST stay unencoded
+    // so it continues to act as a key segment separator on the wire.
+    await fs.writeFile('/notes/why?.txt', 'body');
+    await fs.readFile('/notes/tag#one.md');
+    await fs.deleteFile('/dir with space/a&b.txt');
+
+    expect(String(fetchMock.mock.calls[0]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/notes/why%3F.txt',
+    );
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/notes/tag%23one.md',
+    );
+    expect(String(fetchMock.mock.calls[2]![0])).toBe(
+      'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/dir%20with%20space/a%26b.txt',
+    );
+  });
 });

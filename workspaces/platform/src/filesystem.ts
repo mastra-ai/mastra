@@ -47,6 +47,16 @@ function keyFromPath(path: string): string {
   return normalized === '/' ? '' : normalized.slice(1);
 }
 
+/**
+ * Encode each `/`-delimited segment of an object key with `encodeURIComponent`
+ * so reserved URL characters (`?`, `#`, `%`, `&`, `+`, spaces, etc.) are
+ * treated as part of the key instead of URL syntax. Kept segment-aware so
+ * `/` continues to act as a path separator on the wire.
+ */
+function encodeKeyPath(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/');
+}
+
 function nameFromPath(path: string): string {
   const normalized = normalizePath(path);
   if (normalized === '/') return '';
@@ -105,7 +115,9 @@ export class PlatformFilesystem extends MastraFilesystem {
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     await this.ensureReady();
-    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`);
+    const response = await this._client.request(
+      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`,
+    );
     const buffer = Buffer.from(await response.arrayBuffer());
     return options?.encoding ? buffer.toString(options.encoding) : buffer;
   }
@@ -117,7 +129,7 @@ export class PlatformFilesystem extends MastraFilesystem {
     if (options?.mimeType) headers['content-type'] = options.mimeType;
     if (options?.overwrite === false) headers['if-none-match'] = '*';
     try {
-      await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
+      await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`, {
         method: 'PUT',
         headers,
         body: contentToBody(content),
@@ -142,7 +154,7 @@ export class PlatformFilesystem extends MastraFilesystem {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('deleteFile');
     try {
-      await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
+      await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`, {
         method: 'DELETE',
         query: { recursive: options?.recursive },
       });
@@ -156,7 +168,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('copyFile');
-    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(src)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(src))}`, {
       method: 'POST',
       query: { op: 'copy' },
       headers: { 'content-type': 'application/json' },
@@ -167,7 +179,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async moveFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('moveFile');
-    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(src)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(src))}`, {
       method: 'POST',
       query: { op: 'rename' },
       headers: { 'content-type': 'application/json' },
@@ -178,7 +190,7 @@ export class PlatformFilesystem extends MastraFilesystem {
   async mkdir(path: string, _options?: { recursive?: boolean }): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('mkdir');
-    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
+    await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`, {
       method: 'POST',
       query: { op: 'mkdir' },
     });
@@ -191,12 +203,15 @@ export class PlatformFilesystem extends MastraFilesystem {
   async readdir(path: string, options?: ListOptions): Promise<FileEntry[]> {
     await this.ensureReady();
     const prefix = keyFromPath(path);
-    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${prefix}`, {
-      query: {
-        delimiter: options?.recursive ? undefined : '/',
-        prefix: prefix ? `${prefix.replace(/\/$/, '')}/` : undefined,
+    const response = await this._client.request(
+      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(prefix)}`,
+      {
+        query: {
+          delimiter: options?.recursive ? undefined : '/',
+          prefix: prefix ? `${prefix.replace(/\/$/, '')}/` : undefined,
+        },
       },
-    });
+    );
     const json = (await response.json()) as ProxyListResponse;
     return [
       ...(json.commonPrefixes ?? []).map(prefix => ({
@@ -231,9 +246,12 @@ export class PlatformFilesystem extends MastraFilesystem {
     if (normalized === '/') {
       return { name: '', path: '/', type: 'directory', size: 0, createdAt: new Date(0), modifiedAt: new Date(0) };
     }
-    const response = await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${keyFromPath(path)}`, {
-      method: 'HEAD',
-    });
+    const response = await this._client.request(
+      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`,
+      {
+        method: 'HEAD',
+      },
+    );
     return {
       name: nameFromPath(path),
       path: normalized,
