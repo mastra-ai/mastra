@@ -59,7 +59,7 @@ Rules are prioritized by impact:
 
 - Use lazy state initialization for expensive values (`rerender-lazy-state-init`)
 - Apply `startTransition` for non-urgent updates (`rerender-transitions`)
-- Minimize `useEffect` function calls (`rerender-useeffect-function-calls`)
+- Keep UI handlers plain; use Effect Events only for effect-fired logic (`rerender-useeffect-function-calls`)
 - Never reset state with `useEffect`; lift the discriminant and remount the branch (`rerender-no-useeffect-state-reset`)
 
 **Component Structure:**
