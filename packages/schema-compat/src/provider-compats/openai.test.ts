@@ -63,6 +63,37 @@ describe('OpenAISchemaCompatLayer', () => {
   });
 
   // =============================================================================
+  // propertyNames stripping
+  //
+  // z.record(...) emits a `propertyNames` keyword. OpenAI Structured Outputs
+  // strict mode (the mode this layer targets) rejects `propertyNames`, so it must
+  // be stripped, exactly as the Google layer already does. See google.test.ts.
+  // =============================================================================
+
+  describe('propertyNames stripping (OpenAI strict mode)', () => {
+    it('strips propertyNames emitted by z.record', () => {
+      const schema = z.object({ metadata: z.record(z.string(), z.string()) });
+
+      const json = JSON.stringify(compat.processToJSONSchema(schema));
+
+      expect(json).not.toContain('"propertyNames"');
+    });
+
+    it('strips propertyNames on the reasoning layer too', () => {
+      const reasoning = new OpenAIReasoningSchemaCompatLayer({
+        provider: 'openai',
+        modelId: 'o3-mini',
+        supportsStructuredOutputs: true,
+      });
+      const schema = z.object({ metadata: z.record(z.string(), z.string()) });
+
+      const json = JSON.stringify(reasoning.processToJSONSchema(schema));
+
+      expect(json).not.toContain('"propertyNames"');
+    });
+  });
+
+  // =============================================================================
   // Agent network structured output flow simulation
   //
   // When modelId is falsy (e.g., agent networks), the compat layer must still run.

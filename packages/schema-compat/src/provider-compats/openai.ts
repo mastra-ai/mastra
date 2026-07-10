@@ -245,6 +245,12 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     if (isObjectSchema(schema)) {
       schema.additionalProperties = false;
 
+      // Strip `propertyNames`, which z.record(...) emits. OpenAI Structured Outputs
+      // strict mode rejects it (only properties/required/additionalProperties are
+      // permitted on an object), so leaving it in makes the whole request fail.
+      // Mirrors the Google layer, which strips it for the same reason.
+      delete (schema as Record<string, unknown>)['propertyNames'];
+
       if (schema.properties) {
         for (const key of Object.keys(schema.properties)) {
           const prop = schema.properties[key] as JSONSchema7;
