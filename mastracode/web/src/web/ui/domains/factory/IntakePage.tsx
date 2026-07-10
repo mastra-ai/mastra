@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, MessageSquare, Play } from 'lucide-react';
+import { CircleDot, Play } from 'lucide-react';
 
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
@@ -109,12 +109,6 @@ function IssueRow({
             {issue.author ? ` · ${issue.author}` : ''} · opened {relativeTime(issue.createdAt)}
           </span>
         </span>
-        {issue.comments > 0 && (
-          <span className="mt-0.5 flex shrink-0 items-center gap-1 text-ui-xs text-icon3">
-            <MessageSquare size={13} aria-hidden />
-            {issue.comments}
-          </span>
-        )}
       </a>
       <Button
         variant="ghost"
