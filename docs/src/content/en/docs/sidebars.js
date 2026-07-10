@@ -597,6 +597,11 @@ const sidebars = {
               id: 'agent-controller/tool-approvals',
               label: 'Tool Approvals',
             },
+            {
+              type: 'doc',
+              id: 'agent-controller/channels',
+              label: 'Channels',
+            },
           ],
         },
       ],
