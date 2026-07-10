@@ -282,7 +282,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Clone' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Clone' }));
 
       await waitFor(() => expect(captured.cloned).toEqual([{ sourceThreadId: 'thread-two' }]));
     });
@@ -294,7 +294,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
       await waitFor(() => expect(captured.deleted).toContain('thread-two'));
     });
@@ -306,7 +306,7 @@ describe('Sidebar', () => {
       renderSidebar();
 
       await openThreadActions('Second thread');
-      await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+      await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
       const input = screen.getByRole('textbox', { name: 'Thread title' });
       await userEvent.clear(input);
       await userEvent.type(input, 'Renamed{Enter}');
