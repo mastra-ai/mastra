@@ -77,7 +77,7 @@ const info = await sandbox.getInfo();
 console.log(info.metadata.domains);
 ```
 
-Vercel supports up to 8 vCPUs and up to 4 exposed ports per sandbox. Memory is allocated at 2048 MB per vCPU.
+Vercel supports up to 32 vCPUs and up to 15 exposed ports per sandbox. Memory is allocated at 2048 MB per vCPU.
 
 ### Streaming command output
 
