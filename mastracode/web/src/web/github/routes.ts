@@ -521,7 +521,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
  * ever provisioned.
  */
 async function loadOrgProject(c: RouteContext): Promise<{ project: GithubProjectRow } | { response: Response }> {
-  const resolved = resolveOrgTenant(c);
+  const resolved = await resolveOrgTenant(c);
   if ('response' in resolved) return { response: resolved.response };
   const { orgId } = resolved.tenant;
 
