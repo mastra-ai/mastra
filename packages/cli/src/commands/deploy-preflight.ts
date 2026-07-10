@@ -122,8 +122,7 @@ export async function preflightBuildOutput(
      * Whether the CLI has the full env picture for this deploy (an explicit
      * `--env-file` or an ambient `.env*` file). When false, env vars may be
      * stored on the platform and invisible to the CLI, so env-guarded local
-     * paths are surfaced as warnings instead of errors. Defaults to true —
-     * every caller except the unified deploy always reads an env file.
+     * paths are surfaced as warnings instead of errors. Defaults to true.
      */
     hasEnvFile?: boolean;
     /**
