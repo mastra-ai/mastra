@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -612,16 +612,30 @@ export const pluginsLocalHotReloadScenario: McE2eScenario = {
   },
 };
 
-function createGithubInstallScenario(pnpmMajor: '10' | '11', pnpmVersion: string): McE2eScenario {
+function createGithubInstallScenario(
+  pnpmMajor: '10' | '11',
+  pnpmVersion: string,
+  options: { missingCorepack?: boolean } = {},
+): McE2eScenario {
+  const name: McE2eScenario['name'] = options.missingCorepack
+    ? 'plugins-github-install-missing-corepack'
+    : `plugins-github-install-gh-cli-pnpm-${pnpmMajor}`;
   return {
-    name: `plugins-github-install-gh-cli-pnpm-${pnpmMajor}`,
-    description: `Installs a GitHub plugin through /plugins with pnpm ${pnpmMajor} and no global package manager.`,
-    testName: `installs GitHub plugins through bundled pnpm ${pnpmMajor} in the TUI`,
-    useOpenAIModel: true,
-    aimockFixture: 'plugins-local-tool.json',
+    name,
+    description: options.missingCorepack
+      ? 'Shows actionable setup guidance when Corepack is unavailable.'
+      : `Installs a GitHub plugin through /plugins with pnpm ${pnpmMajor}, global Corepack, and no global pnpm.`,
+    testName: options.missingCorepack
+      ? 'shows an actionable missing Corepack error during GitHub plugin install'
+      : `installs GitHub plugins through global Corepack with pnpm ${pnpmMajor} in the TUI`,
+    useOpenAIModel: !options.missingCorepack,
+    ...(options.missingCorepack ? {} : { aimockFixture: 'plugins-local-tool.json' }),
     prepare({ projectDir }) {
       resetPluginScenarioState();
       prepareGithubInstallGhPlugin(projectDir, { pnpmVersion });
+      if (options.missingCorepack && githubInstallBinDir) {
+        rmSync(join(githubInstallBinDir, 'corepack'));
+      }
     },
     env() {
       if (!githubInstallBinDir || !githubInstallCorepackHome) {
@@ -667,6 +681,12 @@ function createGithubInstallScenario(pnpmMajor: '10' | '11', pnpmVersion: string
       terminal.write('\r');
       await runtime.waitForScreenText(/GitHub plugins also auto-update/i, terminal, 8_000);
       terminal.write('\r');
+      if (options.missingCorepack) {
+        await runtime.waitForScreenText(/Mastra Code requires Corepack/i, terminal, 30_000);
+        await runtime.waitForScreenText(/npm install --global\s+corepack/i, terminal, 8_000);
+        terminal.keyCtrlC();
+        return;
+      }
       await runtime.waitForScreenText(new RegExp(PLUGIN_ID), terminal, 30_000);
       await runtime.waitForScreenText(/active/i, terminal, 8_000);
       terminal.write('\x1b');
@@ -696,6 +716,7 @@ function createGithubInstallScenario(pnpmMajor: '10' | '11', pnpmVersion: string
       terminal.keyCtrlC();
     },
     verifyAimockRequests(requests) {
+      if (options.missingCorepack) return;
       const names = getToolNames(requests);
       if (!names.includes(TOOL_NAME)) {
         throw new Error(
@@ -708,6 +729,9 @@ function createGithubInstallScenario(pnpmMajor: '10' | '11', pnpmVersion: string
 
 export const pluginsGithubInstallPnpm10Scenario = createGithubInstallScenario('10', '10.24.0');
 export const pluginsGithubInstallPnpm11Scenario = createGithubInstallScenario('11', '11.8.0');
+export const pluginsGithubInstallMissingCorepackScenario = createGithubInstallScenario('10', '10.24.0', {
+  missingCorepack: true,
+});
 
 export const pluginsGithubInstallInvalidPackageManagerScenario: McE2eScenario = {
   name: 'plugins-github-install-invalid-package-manager',

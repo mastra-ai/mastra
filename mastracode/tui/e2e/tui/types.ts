@@ -61,6 +61,7 @@ export type ScenarioName =
   | 'plugins-local-hot-reload'
   | 'plugins-github-install-gh-cli-pnpm-10'
   | 'plugins-github-install-gh-cli-pnpm-11'
+  | 'plugins-github-install-missing-corepack'
   | 'plugins-github-install-invalid-package-manager'
   | 'plugins-github-poll-update'
   | 'plugins-blocked-config'
