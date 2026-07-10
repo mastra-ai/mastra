@@ -356,6 +356,36 @@ describe('Factory Intake page — Linear source', () => {
     expect(screen.queryByRole('heading', { name: 'Linear' })).not.toBeInTheDocument();
   });
 
+  it('given an explicit GitHub selection that excludes the active project, then a not-selected hint renders instead of issues', async () => {
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: ['some-other-project'] },
+        linear: { enabled: false, projectIds: null },
+      },
+    });
+
+    expect(await screen.findByText(/isn't selected as a GitHub intake source/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Open issues' })).not.toBeInTheDocument();
+  });
+
+  it('given an explicit GitHub selection that includes the active project, then its issues render', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: [GITHUB_PROJECT_ID, 'some-other-project'] },
+        linear: { enabled: false, projectIds: null },
+      },
+    });
+
+    const list = await screen.findByRole('list', { name: 'Open issues' });
+    expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
+    expect(screen.queryByText(/isn't selected as a GitHub intake source/)).not.toBeInTheDocument();
+  });
+
   it('given GitHub intake is disabled in settings, when visiting /factory/intake, then the GitHub section is hidden', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>

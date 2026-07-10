@@ -40,6 +40,9 @@ function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
   // On a config error, fall back to the GitHub-only view rather than a dead end.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
+  // `projectIds: null` means "the active project"; an explicit selection must
+  // include this project for its issues to appear here.
+  const githubSelected = config?.github.projectIds == null || config.github.projectIds.includes(githubProjectId);
   const linearEnabled = config?.linear.enabled ?? false;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
@@ -58,7 +61,13 @@ function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
       {githubEnabled && (
         <section className="flex flex-col gap-3" aria-label="GitHub issues">
           <SourceHeading label="GitHub" />
-          <IssueList githubProjectId={githubProjectId} />
+          {githubSelected ? (
+            <IssueList githubProjectId={githubProjectId} />
+          ) : (
+            <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+              This project isn&apos;t selected as a GitHub intake source. Pick it in Settings › General.
+            </Txt>
+          )}
         </section>
       )}
       {showLinear && (
