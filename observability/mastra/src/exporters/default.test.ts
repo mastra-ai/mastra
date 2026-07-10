@@ -585,6 +585,35 @@ describe('DefaultExporter', () => {
         expect(emitDropEvent).not.toHaveBeenCalled();
       });
 
+      it('should use the scheduled retry attempt when a failed batch contains mixed retry counts', async () => {
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 3,
+          retryDelayMs: 25,
+          maxBatchSize: 2,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra });
+
+        mockObservabilityStore.batchCreateSpans.mockRejectedValue(new Error('Storage error'));
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-1', 'span-1'));
+        await exporter.flush();
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED, 'trace-2', 'span-2'));
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
+        expect(mockLogger.warn).toHaveBeenLastCalledWith('Failed to persist observability events', {
+          signal: 'tracing',
+          eventCount: 2,
+          retryAttempt: 1,
+          maxRetries: 3,
+          nextRetryDelayMs: 25,
+          error: 'Storage error',
+        });
+        expect(timers).toHaveLength(1);
+        expect(timers[0].delay).toBe(25);
+      });
+
       it('should drop events after max retries exceeded', async () => {
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',

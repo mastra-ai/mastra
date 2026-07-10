@@ -227,11 +227,10 @@ export class DefaultExporter extends BaseExporter {
   }
 
   private retryAttempt(events: BufferedEvent[]): number | undefined {
-    const retryableAttempts = events
-      .filter(event => event.retryCount <= this.#config.maxRetries!)
-      .map(event => event.retryCount);
-
-    return retryableAttempts.length > 0 ? Math.min(...retryableAttempts) : undefined;
+    return events.reduce<number | undefined>((earliestAttempt, event) => {
+      if (event.retryCount > this.#config.maxRetries!) return earliestAttempt;
+      return earliestAttempt === undefined ? event.retryCount : Math.min(earliestAttempt, event.retryCount);
+    }, undefined);
   }
 
   private logStorageFailure(
@@ -243,7 +242,8 @@ export class DefaultExporter extends BaseExporter {
     this.logger.warn('Failed to persist observability events', {
       signal,
       eventCount: events.length,
-      retryAttempt: Math.max(...events.map(event => event.retryCount)),
+      retryAttempt:
+        retryAttempt ?? events.reduce((latestAttempt, event) => Math.max(latestAttempt, event.retryCount), 0),
       maxRetries: this.#config.maxRetries,
       ...(retryAttempt === undefined ? {} : { nextRetryDelayMs: this.retryDelay(retryAttempt) }),
       error: error instanceof Error ? error.message : String(error),
