@@ -1048,7 +1048,18 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
       requestContext,
     } as any);
 
-    expect(store.upsertConnection).toHaveBeenCalledWith(expect.objectContaining({ scope: 'shared' }));
+    // The override must also select the shared bucket, not just persist the label:
+    // authorize gets the shared bucket as its connection context, and the stored
+    // row is owned by the shared author id.
+    expect(authorize).toHaveBeenCalledWith({
+      toolkit: 'gmail',
+      connectionId: 'shared',
+      toolName: undefined,
+      config: undefined,
+    });
+    expect(store.upsertConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ authorId: 'shared', connectionId: 'ca_new', scope: 'shared' }),
+    );
   });
 
   it("defaults to 'per-author' when neither request scope nor defaultScope is set", async () => {
