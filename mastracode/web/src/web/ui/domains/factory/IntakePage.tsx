@@ -1,11 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { CircleDot, Play } from 'lucide-react';
+import { CircleDot } from 'lucide-react';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
+import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
 import { useProjectIssuesQuery } from './hooks/useFactoryData';
@@ -122,6 +123,10 @@ function issuePrompt(issue: GithubIssue): string {
   return `Use the understand-issue skill to investigate GitHub issue #${issue.number}: "${issue.title}" (${issue.url}).`;
 }
 
+function issueCustomPrompt(issue: GithubIssue, instructions: string): string {
+  return `Regarding GitHub issue #${issue.number}: "${issue.title}" (${issue.url}). ${instructions}`;
+}
+
 function IssueList({ githubProjectId }: { githubProjectId: string }) {
   const issues = useProjectIssuesQuery(githubProjectId);
   const { start, enabled } = useStartFactoryRun();
@@ -156,11 +161,11 @@ function IssueList({ githubProjectId }: { githubProjectId: string }) {
             issue={issue}
             starting={start.isPending && start.variables?.branch === issueBranch(issue)}
             disabled={!enabled || start.isPending}
-            onInvestigate={() =>
+            onRun={prompt =>
               start.mutate({
                 branch: issueBranch(issue),
                 threadTitle: `Issue #${issue.number}: ${issue.title}`,
-                prompt: issuePrompt(issue),
+                prompt: prompt === undefined ? issuePrompt(issue) : issueCustomPrompt(issue, prompt),
               })
             }
           />
@@ -180,12 +185,13 @@ function IssueRow({
   issue,
   starting,
   disabled,
-  onInvestigate,
+  onRun,
 }: {
   issue: GithubIssue;
   starting: boolean;
   disabled: boolean;
-  onInvestigate: () => void;
+  /** Start a run; `undefined` = default Investigate, string = custom prompt. */
+  onRun: (prompt?: string) => void;
 }) {
   return (
     <li className="flex items-start gap-2.5 rounded-md px-2 py-2 transition hover:bg-surface3">
@@ -204,17 +210,14 @@ function IssueRow({
           </span>
         </span>
       </a>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="shrink-0"
-        aria-label={`Investigate issue #${issue.number}`}
+      <FactoryItemActions
+        actionLabel="Investigate"
+        itemLabel={`issue #${issue.number}`}
+        starting={starting}
         disabled={disabled}
-        onClick={onInvestigate}
-      >
-        <Play size={13} aria-hidden />
-        {starting ? 'Starting…' : 'Investigate'}
-      </Button>
+        onAction={() => onRun()}
+        onRunPrompt={prompt => onRun(prompt)}
+      />
     </li>
   );
 }
@@ -227,6 +230,10 @@ function linearIssueBranch(issue: LinearIssue): string {
 
 function linearIssuePrompt(issue: LinearIssue): string {
   return `Use the understand-issue skill to investigate Linear issue ${issue.identifier}: "${issue.title}" (${issue.url}).`;
+}
+
+function linearIssueCustomPrompt(issue: LinearIssue, instructions: string): string {
+  return `Regarding Linear issue ${issue.identifier}: "${issue.title}" (${issue.url}). ${instructions}`;
 }
 
 function LinearIssueList() {
@@ -263,11 +270,11 @@ function LinearIssueList() {
             issue={issue}
             starting={start.isPending && start.variables?.branch === linearIssueBranch(issue)}
             disabled={!enabled || start.isPending}
-            onInvestigate={() =>
+            onRun={prompt =>
               start.mutate({
                 branch: linearIssueBranch(issue),
                 threadTitle: `${issue.identifier}: ${issue.title}`,
-                prompt: linearIssuePrompt(issue),
+                prompt: prompt === undefined ? linearIssuePrompt(issue) : linearIssueCustomPrompt(issue, prompt),
               })
             }
           />
@@ -287,12 +294,13 @@ function LinearIssueRow({
   issue,
   starting,
   disabled,
-  onInvestigate,
+  onRun,
 }: {
   issue: LinearIssue;
   starting: boolean;
   disabled: boolean;
-  onInvestigate: () => void;
+  /** Start a run; `undefined` = default Investigate, string = custom prompt. */
+  onRun: (prompt?: string) => void;
 }) {
   return (
     <li className="flex items-start gap-2.5 rounded-md px-2 py-2 transition hover:bg-surface3">
@@ -311,17 +319,14 @@ function LinearIssueRow({
           </span>
         </span>
       </a>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="shrink-0"
-        aria-label={`Investigate ${issue.identifier}`}
+      <FactoryItemActions
+        actionLabel="Investigate"
+        itemLabel={issue.identifier}
+        starting={starting}
         disabled={disabled}
-        onClick={onInvestigate}
-      >
-        <Play size={13} aria-hidden />
-        {starting ? 'Starting…' : 'Investigate'}
-      </Button>
+        onAction={() => onRun()}
+        onRunPrompt={prompt => onRun(prompt)}
+      />
     </li>
   );
 }
