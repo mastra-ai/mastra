@@ -20,6 +20,11 @@ import {
 } from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
+import { ensureIntakeDbReady } from './intake/db.js';
+import { buildIntakeRoutes } from './intake/routes.js';
+import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
+import { ensureLinearDbReady } from './linear/db.js';
+import { buildLinearRoutes } from './linear/routes.js';
 import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 
 // Wire the core workspace seam to this package's sandbox provisioning as soon
@@ -38,6 +43,67 @@ export interface WebApiRoutesDeps {
    * ahead of time via {@link resolveGithubReady} so this stays synchronous.
    */
   githubReady: boolean;
+  /**
+   * Whether the Linear intake routes should be included. Resolved ahead of
+   * time via {@link resolveLinearReady} so this stays synchronous.
+   */
+  linearReady: boolean;
+  /**
+   * Whether the intake-config routes should be included. Resolved ahead of
+   * time via {@link resolveIntakeReady} so this stays synchronous.
+   */
+  intakeReady: boolean;
+}
+
+/**
+ * Resolve whether the intake-config routes are ready to serve. Intake config
+ * rides on web auth + the app DB and is independent of which integrations are
+ * configured; it is only useful when at least one intake source is, so callers
+ * pass the already-resolved GitHub/Linear readiness. Fails soft like
+ * {@link resolveGithubReady}.
+ */
+export async function resolveIntakeReady(anySourceReady: boolean): Promise<boolean> {
+  if (!anySourceReady) return false;
+  try {
+    await ensureIntakeDbReady();
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `MastraCode Web: intake config routes disabled (app DB unreachable — ${err instanceof Error ? err.message : String(err)})\n`,
+    );
+    return false;
+  }
+}
+
+/**
+ * Resolve whether the Linear intake feature is ready to serve. Fails soft like
+ * {@link resolveGithubReady}: when the feature is enabled but the app DB can't
+ * be reached we log and return `false` so the server still boots.
+ */
+export async function resolveLinearReady(): Promise<boolean> {
+  if (!isLinearFeatureEnabled()) {
+    const diag = getLinearFeatureDiagnostics();
+    const missing = diag.missingLinearEnvVars;
+    process.stderr.write(
+      [
+        'MastraCode Web: Linear routes disabled',
+        `  WorkOS auth:          ${diag.webAuthEnabled ? 'enabled' : 'disabled'}`,
+        `  Linear OAuth config:  ${diag.linearAppConfigured ? 'configured' : `missing ${missing.join(', ')}`}`,
+        `  App DB:               ${diag.appDbConfigured ? 'configured' : 'not configured (APP_DATABASE_URL missing)'}`,
+      ].join('\n') + '\n',
+    );
+    return false;
+  }
+  try {
+    await ensureLinearDbReady();
+    process.stderr.write('MastraCode Web: Linear routes enabled\n');
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `MastraCode Web: Linear routes disabled (app DB unreachable — ${err instanceof Error ? err.message : String(err)})\n`,
+    );
+    return false;
+  }
 }
 
 /**
@@ -109,11 +175,14 @@ export async function resolveGithubReady(): Promise<boolean> {
  *   - fs browser routes (project picker), confined to `fsRoot`
  *   - config routes (provider/API-key/model-pack/OM management)
  *   - github routes (only when `githubReady`)
+ *   - linear routes (only when `linearReady`)
  */
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
     ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin }) : []),
+    ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
+    ...(deps.intakeReady ? buildIntakeRoutes() : []),
   ];
 }
