@@ -10,6 +10,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -100,15 +101,23 @@ function seedActiveProject(project: Project) {
   localStorage.setItem('mastracode-active-project', project.id);
 }
 
-function renderSection(children?: ReactNode) {
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}</span>;
+}
+
+function renderSection(children?: ReactNode, initialPath = '/') {
   return renderWithProviders(
-    <ToastProvider>
-      <ActiveProjectProvider>
-        <ChatSessionProvider>
-          <WorkspacesSection>{children}</WorkspacesSection>
-        </ChatSessionProvider>
-      </ActiveProjectProvider>
-    </ToastProvider>,
+    <MemoryRouter initialEntries={[initialPath]}>
+      <ToastProvider>
+        <ActiveProjectProvider>
+          <ChatSessionProvider>
+            <WorkspacesSection>{children}</WorkspacesSection>
+            <LocationProbe />
+          </ChatSessionProvider>
+        </ActiveProjectProvider>
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -157,6 +166,76 @@ describe('WorkspacesSection', () => {
       expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' } }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
+  });
+
+  it('opens the most recent thread of the new worktree when switching workspaces', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-old', title: 'Old', resourceId: 'resource-gh', updatedAt: '2026-06-01T00:00:00.000Z' },
+            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection(undefined, '/threads/thread-test');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+  });
+
+  it('opens the most recent thread of the new worktree when switching from /new', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection(undefined, '/new');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+  });
+
+  it('creates and opens a thread when the new worktree has none', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    let created = 0;
+    server.use(
+      http.post(`${API}/sessions/:resourceId/threads`, () => {
+        created += 1;
+        return HttpResponse.json({ id: 'thread-fresh', title: 'New thread', resourceId: 'resource-gh' });
+      }),
+    );
+    renderSection(undefined, '/threads/thread-test');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-fresh'));
+    expect(created).toBe(1);
+  });
+
+  it('stays on non-thread routes when switching workspaces', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    renderSection(undefined, '/factory/intake');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'feat-ui' })).toHaveAttribute('aria-current', 'true'),
+    );
+    expect(screen.getByTestId('location')).toHaveTextContent('/factory/intake');
   });
 
   it('creates a new workspace and selects it', async () => {
