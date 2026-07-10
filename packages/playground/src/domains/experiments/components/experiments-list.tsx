@@ -5,8 +5,40 @@ import {
   DataListSkeleton as EntityListSkeleton,
 } from '@mastra/playground-ui/components/DataList';
 import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
+
+/**
+ * Name cell for the experiments overview: the experiment name as the primary
+ * label with the short id beneath it (falling back to the short id when
+ * unnamed), and the description surfaced in a tooltip when present.
+ */
+function ExperimentNameCell({ experiment }: { experiment: DatasetExperiment }) {
+  const shortId = experiment.id.slice(0, 8);
+
+  if (!experiment.name) {
+    return <span className="block truncate font-mono text-neutral4">{shortId}</span>;
+  }
+
+  const label = (
+    <span className="flex min-w-0 flex-col gap-0.5 py-0.5 text-left">
+      <span className="block truncate text-neutral4">{experiment.name}</span>
+      <span className="block truncate font-mono text-ui-sm text-neutral2">{shortId}</span>
+    </span>
+  );
+
+  if (!experiment.description) {
+    return label;
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{label}</TooltipTrigger>
+      <TooltipContent>{experiment.description}</TooltipContent>
+    </Tooltip>
+  );
+}
 
 export interface ExperimentsListProps {
   experiments: DatasetExperiment[];
@@ -65,6 +97,7 @@ export function ExperimentsList({
       const matchesSearch =
         !term ||
         exp.id.toLowerCase().includes(term) ||
+        (exp.name ?? '').toLowerCase().includes(term) ||
         dsName.toLowerCase().includes(term) ||
         (exp.targetId ?? '').toLowerCase().includes(term);
       const matchesStatus = statusFilter === 'all' || exp.status === statusFilter;
@@ -101,7 +134,9 @@ export function ExperimentsList({
 
         return (
           <EntityList.RowLink key={exp.id} to={paths.experimentLink(exp.id)} LinkComponent={Link}>
-            <EntityList.NameCell className="font-mono">{exp.id.slice(0, 8)}</EntityList.NameCell>
+            <EntityList.Cell>
+              <ExperimentNameCell experiment={exp} />
+            </EntityList.Cell>
             <EntityList.TextCell>{dsName}</EntityList.TextCell>
             <EntityList.Cell>
               <span className="truncate">
