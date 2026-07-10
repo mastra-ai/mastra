@@ -30,8 +30,15 @@ function writePackageJson(pluginRoot: string, packageJson: Record<string, unknow
   fs.writeFileSync(path.join(pluginRoot, 'package.json'), JSON.stringify(packageJson));
 }
 
-function expectedPnpmArgs(frozen = false): string[] {
-  return ['install', '--ignore-workspace', ...(frozen ? ['--frozen-lockfile'] : []), '--ignore-scripts'];
+function expectedCorepackArgs(version: string, frozen = false): unknown[] {
+  return [
+    expect.stringMatching(/corepack[\\/]dist[\\/]corepack\.js$/),
+    `pnpm@${version}`,
+    'install',
+    '--ignore-workspace',
+    ...(frozen ? ['--frozen-lockfile'] : []),
+    '--ignore-scripts',
+  ];
 }
 
 describe('installPluginDependencies', () => {
@@ -49,7 +56,11 @@ describe('installPluginDependencies', () => {
 
     await expect(installPluginDependencies(pluginRoot)).resolves.toBe(true);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', expectedPnpmArgs(), expect.objectContaining({ cwd: pluginRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      process.execPath,
+      expectedCorepackArgs(packageManager.slice('pnpm@'.length)),
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
   });
 
   it.each([
@@ -78,6 +89,16 @@ describe('installPluginDependencies', () => {
     expect(execaMock).not.toHaveBeenCalled();
   });
 
+  it('does not inject an isolated Corepack cache into production execution', async () => {
+    const pluginRoot = makePluginRoot();
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
+
+    await installPluginDependencies(pluginRoot);
+
+    const executionOptions = execaMock.mock.calls[0]?.[2] as { env?: NodeJS.ProcessEnv } | undefined;
+    expect(executionOptions?.env?.COREPACK_HOME).toBe(process.env.COREPACK_HOME);
+  });
+
   it('uses a frozen install when the dependency root has pnpm-lock.yaml', async () => {
     const pluginRoot = makePluginRoot();
     writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
@@ -86,8 +107,8 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      expectedPnpmArgs(true),
+      process.execPath,
+      expectedCorepackArgs('10.24.0', true),
       expect.objectContaining({ cwd: pluginRoot }),
     );
   });
@@ -100,7 +121,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', expectedPnpmArgs(), expect.objectContaining({ cwd: pluginRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      process.execPath,
+      expectedCorepackArgs('11.8.0'),
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
   });
 
   it('streams output and forwards cancellation while preserving non-interactive execution', async () => {
@@ -122,8 +147,8 @@ describe('installPluginDependencies', () => {
 
     expect(output).toEqual(['stdout line\n', 'stderr line\n']);
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      expectedPnpmArgs(),
+      process.execPath,
+      expectedCorepackArgs('10.24.0'),
       expect.objectContaining({
         env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
         stdout: 'pipe',
@@ -148,7 +173,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', expectedPnpmArgs(), expect.objectContaining({ cwd: pluginRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      process.execPath,
+      expectedCorepackArgs('11.8.0'),
+      expect.objectContaining({ cwd: pluginRoot }),
+    );
   });
 
   it('finds dependency roots for nested entry packages', () => {
@@ -176,7 +205,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(nestedRoot, pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', expectedPnpmArgs(), expect.objectContaining({ cwd: nestedRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      process.execPath,
+      expectedCorepackArgs('11.8.0'),
+      expect.objectContaining({ cwd: nestedRoot }),
+    );
   });
 
   it('prefers the dependency-root declaration over the checkout declaration', async () => {
@@ -188,7 +221,11 @@ describe('installPluginDependencies', () => {
 
     await installPluginDependencies(nestedRoot, pluginRoot);
 
-    expect(execaMock).toHaveBeenCalledWith('pnpm', expectedPnpmArgs(), expect.objectContaining({ cwd: nestedRoot }));
+    expect(execaMock).toHaveBeenCalledWith(
+      process.execPath,
+      expectedCorepackArgs('10.24.0'),
+      expect.objectContaining({ cwd: nestedRoot }),
+    );
   });
 
   it('uses a frozen install for nested entry packages with their own lockfile', async () => {
@@ -202,8 +239,8 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(nestedRoot, pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      'pnpm',
-      expectedPnpmArgs(true),
+      process.execPath,
+      expectedCorepackArgs('11.8.0', true),
       expect.objectContaining({ cwd: nestedRoot }),
     );
   });

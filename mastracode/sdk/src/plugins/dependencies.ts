@@ -1,8 +1,12 @@
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { execa } from 'execa';
 
+const require = createRequire(import.meta.url);
+const corepackPackageJsonPath = require.resolve('corepack/package.json');
+const corepackCliPath = path.join(path.dirname(corepackPackageJsonPath), 'dist/corepack.js');
 const NON_INTERACTIVE_INSTALL_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
 
 type InstallCommand = {
@@ -27,7 +31,8 @@ export async function installPluginDependencies(
 
   const packageJson = readPackageJson(pluginRoot);
   const commandPackageJson = commandRoot === pluginRoot ? packageJson : readPackageJson(commandRoot);
-  const installCommand = getInstallCommand(pluginRoot, packageJson.packageManager ?? commandPackageJson.packageManager);
+  const pnpmVersion = getPnpmVersion(pluginRoot, packageJson.packageManager ?? commandPackageJson.packageManager);
+  const installCommand = getInstallCommand(pluginRoot, pnpmVersion);
 
   const child = execa(installCommand.command, installCommand.args, {
     cwd: pluginRoot,
@@ -40,17 +45,7 @@ export async function installPluginDependencies(
     child.stdout?.on('data', options.onOutput);
     child.stderr?.on('data', options.onOutput);
   }
-  try {
-    await child;
-  } catch (error) {
-    if (isCommandNotFoundError(error)) {
-      throw new Error(
-        `This plugin uses ${installCommand.command}, but ${installCommand.command} is not installed. Install ${installCommand.command} and try again. Plugin path: ${pluginRoot}`,
-        { cause: error },
-      );
-    }
-    throw error;
-  }
+  await child;
   return true;
 }
 
@@ -98,24 +93,31 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
-function getInstallCommand(pluginRoot: string, packageManager: unknown): InstallCommand {
-  if (typeof packageManager !== 'string' || !/^pnpm@\d+\.\d+\.\d+$/.test(packageManager)) {
+function getPnpmVersion(pluginRoot: string, packageManager: unknown): string {
+  if (typeof packageManager !== 'string') {
     throw new Error(
       `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
     );
   }
 
-  return hasFile(pluginRoot, 'pnpm-lock.yaml')
-    ? installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile'])
-    : installCommand('pnpm', ['install', '--ignore-workspace']);
+  const match = /^pnpm@(\d+\.\d+\.\d+)$/.exec(packageManager);
+  if (!match?.[1]) {
+    throw new Error(
+      `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
+    );
+  }
+  return match[1];
 }
 
-function installCommand(command: string, args: string[]): InstallCommand {
-  return { command, args: [...args, '--ignore-scripts'] };
-}
+function getInstallCommand(pluginRoot: string, pnpmVersion: string): InstallCommand {
+  const installArgs = ['install', '--ignore-workspace'];
+  if (hasFile(pluginRoot, 'pnpm-lock.yaml')) installArgs.push('--frozen-lockfile');
+  installArgs.push('--ignore-scripts');
 
-function isCommandNotFoundError(error: unknown): boolean {
-  return typeof error === 'object' && error !== null && (error as { code?: unknown }).code === 'ENOENT';
+  return {
+    command: process.execPath,
+    args: [corepackCliPath, `pnpm@${pnpmVersion}`, ...installArgs],
+  };
 }
 
 function readPackageJson(pluginRoot: string): { packageManager?: unknown } {

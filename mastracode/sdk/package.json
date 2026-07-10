@@ -67,6 +67,7 @@
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
     "ai": "^6.0.176",
+    "corepack": "0.34.0",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",
     "posthog-node": "^5.37.0",

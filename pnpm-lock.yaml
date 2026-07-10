@@ -2196,6 +2196,9 @@ importers:
       ai:
         specifier: ^6.0.176
         version: 6.0.177(zod@4.4.3)
+      corepack:
+        specifier: 0.34.0
+        version: 0.34.0
       execa:
         specifier: ^9.6.1
         version: 9.6.1
@@ -21641,6 +21644,11 @@ packages:
 
   core-util-is@1.0.3:
     resolution: {integrity: sha512-ZQBvi1DcpJ4GDqanjucZ2Hj3wEO5pZDS89BWbkcrvdxksJorwUDDZamX9ldFkp9aw2lmBDLgkObEA4DWNJ9FYQ==}
+
+  corepack@0.34.0:
+    resolution: {integrity: sha512-8D9N/k9hDjoISCDGUzH2wBF0fJD49p3G7ifoEZcc0vhB7Py6r+Mc1SpJ8dvnWY/HMP95K60WkQbN7vgbUgXgpA==}
+    engines: {node: ^20.10.0 || ^22.11.0 || >=24.0.0}
+    hasBin: true
 
   cors@2.8.6:
     resolution: {integrity: sha512-tJtZBBHA6vjIAaF6EnIaq6laBBP9aq/Y3ouVJjEfoHbRBcHBAHYcMh/w8LDrk2PvIMMq8gmopa5D4V8RmbrxGw==}
@@ -46144,6 +46152,8 @@ snapshots:
   core-util-is@1.0.2: {}
 
   core-util-is@1.0.3: {}
+
+  corepack@0.34.0: {}
 
   cors@2.8.6:
     dependencies:
