@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -30,6 +30,26 @@ describe('slash command loader', () => {
 
     expect(commands).toHaveLength(1);
     expect(commands[0]).toMatchObject({ name: 'review', goal: true });
+  });
+
+  it('loads individually symlinked command files', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastracode-commands-'));
+    const sourceDir = await mkdtemp(join(tmpdir(), 'mastracode-command-source-'));
+    const sourceFile = join(sourceDir, 'review.md');
+    await writeFile(sourceFile, 'Review the code\n');
+    await symlink(sourceFile, join(dir, 'review.md'));
+
+    const commands = await scanCommandDirectory(dir);
+
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({ name: 'review', sourcePath: join(dir, 'review.md') });
+  });
+
+  it('ignores broken command symlinks', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastracode-commands-'));
+    await symlink(join(dir, 'missing.md'), join(dir, 'broken.md'));
+
+    await expect(scanCommandDirectory(dir)).resolves.toEqual([]);
   });
 
   it('loads plugin command directories after built-in custom command locations', async () => {

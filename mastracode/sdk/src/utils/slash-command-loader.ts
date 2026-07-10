@@ -118,7 +118,11 @@ export async function scanCommandDirectory(dirPath: string, rootDir?: string): P
         // Recursively scan subdirectories, preserving the root directory for namespace derivation
         const subCommands = await scanCommandDirectory(fullPath, baseDir);
         commands.push(...subCommands);
-      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+      } else if (entry.name.endsWith('.md')) {
+        const symlinkTarget = entry.isSymbolicLink() ? await fs.stat(fullPath).catch(() => null) : null;
+        const isCommandFile = entry.isFile() || symlinkTarget?.isFile();
+        if (!isCommandFile) continue;
+
         // Parse markdown command files, passing the root commands dir as baseDir for name derivation
         const command = await parseCommandFile(fullPath, baseDir);
         if (command) {
