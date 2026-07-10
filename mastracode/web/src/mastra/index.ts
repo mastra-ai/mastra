@@ -27,7 +27,7 @@
  * proxies API paths here instead.
  */
 
-import { Card, CardText, Actions, LinkButton } from 'chat';
+import { Card, CardText, Actions, LinkButton, type Thread, Message } from 'chat';
 
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
@@ -43,6 +43,7 @@ import {
 import { SlackProvider } from '@mastra/slack';
 import { ConsoleLogger } from '@mastra/core/logger';
 import { resolveChannelSessionProjectPath } from './channel-session-workspace.js';
+import type { ChannelHandlerConfig } from '@mastra/core/channels';
 
 const CONTROLLER_ID = 'code';
 
@@ -133,6 +134,59 @@ const prepared = await prepareAgentControllerMount({
   },
 });
 
+const newSessionChatHandler: ChannelHandlerConfig = async (thread, message, defaultHandler) => {
+  // A mention on a not-yet-subscribed thread is a NEW session. The
+  // default handler auto-subscribes, so once subscribed this is a
+  // follow-up mention — don't re-announce.
+  const isNewSession = !(await thread.isSubscribed());
+
+  // Run the framework handler first so the internal Mastra thread and
+  // controller session are created before we build the deep link.
+  await defaultHandler(thread, message);
+
+  if (!isNewSession) return;
+
+  // The handler's `thread` is the Slack chat thread — its `.id` is the
+  // platform thread id (e.g. `slack:C0BG...`), NOT the internal Mastra
+  // thread UUID the web UI routes on. Look up the internal thread that
+  // the framework created for this channel conversation via the stored
+  // channel metadata, then build the link from its real id + resourceId.
+  const store = await mastra.getStorage()?.getStore('memory');
+  const { threads } = (await store?.listThreads({
+    filter: {
+      metadata: {
+        channel_platform: thread.adapter.name,
+        channel_externalThreadId: thread.id,
+        channel_externalChannelId: thread.channelId,
+      },
+    },
+    perPage: 1,
+  })) ?? { threads: [] };
+
+  const internalThread = threads[0];
+  if (!internalThread) {
+    console.warn('[onMention] no internal thread found for', thread.id);
+    return;
+  }
+
+  await thread.post(
+    Card({
+      title: 'New Mastra Code session started.',
+      children: [
+        CardText('A new session has been created.'),
+        Actions([
+          LinkButton({
+            url: `${publicOrigin}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
+              internalThread.resourceId,
+            )}`,
+            label: 'View Session',
+          }),
+        ]),
+      ],
+    }),
+  );
+};
+
 // Construct the server-owned Mastra HERE so the `new Mastra(...)` literal lives
 // in the entry file. The deployer's `checkConfigExport` Babel plugin only marks
 // the config valid when it finds `export const mastra = new Mastra(...)` (or an
@@ -150,58 +204,12 @@ export const mastra = new Mastra({
       // web-server cwd and two threads don't collide on one workspace.
       resolveSessionProjectPath: resolveChannelSessionProjectPath,
       handlers: {
-        onMention: async (thread, message, defaultHandler) => {
-          // A mention on a not-yet-subscribed thread is a NEW session. The
-          // default handler auto-subscribes, so once subscribed this is a
-          // follow-up mention — don't re-announce.
-          const isNewSession = !(await thread.isSubscribed());
-
-          // Run the framework handler first so the internal Mastra thread and
-          // controller session are created before we build the deep link.
-          await defaultHandler(thread, message);
-
-          if (!isNewSession) return;
-
-          // The handler's `thread` is the Slack chat thread — its `.id` is the
-          // platform thread id (e.g. `slack:C0BG...`), NOT the internal Mastra
-          // thread UUID the web UI routes on. Look up the internal thread that
-          // the framework created for this channel conversation via the stored
-          // channel metadata, then build the link from its real id + resourceId.
-          const store = await mastra.getStorage()?.getStore('memory');
-          const { threads } = (await store?.listThreads({
-            filter: {
-              metadata: {
-                channel_platform: thread.adapter.name,
-                channel_externalThreadId: thread.id,
-                channel_externalChannelId: thread.channelId,
-              },
-            },
-            perPage: 1,
-          })) ?? { threads: [] };
-
-          const internalThread = threads[0];
-          if (!internalThread) {
-            console.warn('[onMention] no internal thread found for', thread.id);
-            return;
-          }
-
-          await thread.post(
-            Card({
-              title: 'New Mastra Code session started.',
-              children: [
-                CardText('A new session has been created.'),
-                Actions([
-                  LinkButton({
-                    url: `${publicOrigin}/threads/${internalThread.id}?resourceId=${encodeURIComponent(
-                      internalThread.resourceId,
-                    )}`,
-                    label: 'View Session',
-                  }),
-                ]),
-              ],
-            }),
-          );
+        onSubscribedMessage: async (thread, message, defaultHandler) => {
+          if (message.text.startsWith('aside')) return;
+          return defaultHandler(thread, message);
         },
+        onMention: newSessionChatHandler,
+        onDirectMessage: newSessionChatHandler,
       },
     }),
   },
