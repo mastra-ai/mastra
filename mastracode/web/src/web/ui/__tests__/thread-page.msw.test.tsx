@@ -311,20 +311,15 @@ describe('MastraCode thread pages', () => {
     await expectPathname(router, '/new');
   });
 
-  it('given an unknown thread deep link, then the URL falls back to /new with an error notice in route state', async () => {
+  it('given an unknown thread deep link, then the URL settles on the most recent thread in scope', async () => {
     const captured = useAgentControllerHandlers({ failSwitchFor: ['nope'] });
     const { router } = renderRoutes('/threads/nope');
 
-    await expectPathname(router, '/new');
-    await waitFor(() =>
-      expect((router.state.location.state as { routeErrorNotice?: string } | null)?.routeErrorNotice).toMatch(
-        /Failed to switch thread/,
-      ),
-    );
-    expect(await screen.findByRole('button', { name: 'Continue in new thread' })).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole('button', { name: 'Continue in new thread' }));
-    await waitFor(() => expect(router.state.location.state).toBeNull());
+    // Threads are scoped per worktree, so an unknown route thread is the
+    // normal outcome of a worktree switch: settle on the scope's most recent
+    // thread instead of bouncing through /new with an error.
+    await expectPathname(router, `/threads/${threadOne.id}`);
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     expect(captured.switched).not.toContain('nope');
   });
 });

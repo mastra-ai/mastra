@@ -109,7 +109,7 @@ function renderMessageList() {
           element={
             <OverlaysProvider>
               <ActiveProjectProvider>
-                <ChatSessionProvider>
+                <ChatSessionProvider threadId={THREAD_ID}>
                   <ChatMessageList />
                 </ChatSessionProvider>
               </ActiveProjectProvider>
@@ -175,6 +175,28 @@ describe('ChatMessageList', () => {
     expect(await screen.findByText('The security token included in the request is invalid.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Choose model' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument();
+  });
+
+  it('given a persisted status part without text, then no empty notice bubble renders', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            { id: 'status-1', role: 'assistant', content: [{ type: 'om_compaction' }] },
+            { id: 'status-2', role: 'assistant', content: [{ type: 'om_summary', text: 'Memory updated' }] },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    // The status part with text renders as a notice…
+    await waitFor(() => expect(screen.getByText('Memory updated')).toBeInTheDocument());
+    // …the text-less one renders nothing instead of an empty bubble.
+    const notices = document.querySelectorAll('.bg-notice-info\\/20');
+    expect(notices).toHaveLength(1);
   });
 
   it('given the session fails to connect, then it shows the actual server error', async () => {
@@ -250,23 +272,16 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('1/5')).toBeInTheDocument();
   });
 
-  it('sets a goal through the agent controller', async () => {
+  it('hides the goal panel when no goal is set', async () => {
     seedProject();
-    useAgentControllerHandlers();
-    let body: unknown;
-    server.use(
-      http.post(`${SESSION}/goal`, async ({ request }) => {
-        body = await request.json();
-        return HttpResponse.json({});
-      }),
-    );
-    const user = userEvent.setup();
+    useAgentControllerHandlers([{ type: 'agent_start' }]);
     renderMessageList();
 
-    await user.type(await screen.findByPlaceholderText('Set a goal objective…'), 'Ship the refactor');
-    await user.click(screen.getByRole('button', { name: 'Set Goal' }));
-
-    await waitFor(() => expect(body).toEqual({ objective: 'Ship the refactor' }));
+    // Wait for the stream to be consumed, then assert no goal UI is present —
+    // goals are started via the /goal slash command, not an always-on form.
+    await waitFor(() => expect(screen.getByLabelText('Agent is working')).toBeInTheDocument());
+    expect(screen.queryByPlaceholderText('Set a goal objective…')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set Goal' })).not.toBeInTheDocument();
   });
 
   it('pauses, resumes, and clears a displayed goal through the agent controller', async () => {

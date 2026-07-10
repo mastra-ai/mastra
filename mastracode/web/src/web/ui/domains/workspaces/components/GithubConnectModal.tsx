@@ -7,7 +7,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useGithubReposQuery } from '../hooks/useGithubRepos';
 import { useCreateGithubProjectMutation } from '../hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../services/github';
-import { connectGithub } from '../services/github';
+import { connectGithub, manageGithubConnection } from '../services/github';
 import type { Project } from '../services/projects';
 
 interface GithubConnectModalProps {
@@ -143,7 +143,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
               <button
                 type="button"
                 className="shrink-0 rounded-lg border border-border1 bg-surface2 px-3 py-1.5 text-ui-xs font-medium text-icon6 hover:border-border2 hover:bg-surface4"
-                onClick={() => connectGithub(baseUrl)}
+                onClick={() => manageGithubConnection(baseUrl)}
               >
                 Manage GitHub connection
               </button>

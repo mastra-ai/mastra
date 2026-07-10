@@ -311,6 +311,25 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
+/**
+ * Session `error` events carry an `Error` instance whose `message`/`name` are
+ * non-enumerable, so JSON serialization in the SSE adapter would send
+ * `"error": {}` and clients could only render a generic "Error". Flatten the
+ * Error into a plain object so the actual failure reaches the client.
+ */
+function toWireEvent(event: unknown): unknown {
+  if (
+    typeof event === 'object' &&
+    event !== null &&
+    (event as { type?: unknown }).type === 'error' &&
+    (event as { error?: unknown }).error instanceof Error
+  ) {
+    const error = (event as { error: Error }).error;
+    return { ...event, error: { name: error.name, message: error.message } };
+  }
+  return event;
+}
+
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId/stream',
@@ -376,7 +395,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
-              controller.enqueue(event);
+              controller.enqueue(toWireEvent(event));
               scheduleHeartbeat();
             } catch {
               cleanup();

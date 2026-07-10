@@ -11,11 +11,12 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { SignInPage } from './domains/auth/components/SignInPage';
-import { useWebAuth } from './domains/auth/hooks/useWebAuth';
+import { SignInPage, useWebAuth } from './domains/auth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
+import { IntakePage } from './domains/factory/IntakePage';
+import { ReviewPage } from './domains/factory/ReviewPage';
 import { AppBootScreen } from './ui/AppBootScreen';
 
 /**
@@ -70,6 +71,8 @@ export function createAppRoutes(): RouteObject[] {
           children: [
             { path: 'new', element: <NewPage /> },
             { path: 'threads/:threadId', element: <ThreadPage /> },
+            { path: 'factory/intake', element: <IntakePage /> },
+            { path: 'factory/review', element: <ReviewPage /> },
           ],
         },
         // Legacy deep links (the app used to serve everything at any path).
