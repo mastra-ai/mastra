@@ -49,11 +49,7 @@ const existing = await datasets.get({ id: 'dataset-id' })
 const { datasets: all } = await datasets.list()
 ```
 
-:::info
-
 Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) for the full list of methods.
-
-:::
 
 ## Studio
 
@@ -208,13 +204,7 @@ Fetch the exact items that existed at a past version:
 const items = await dataset.listItems({ version: 2 })
 ```
 
-You can also pin experiments to a version, see [running experiments](/docs/evals/datasets/running-experiments).
-
-:::info
-
-Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
-
-:::
+You can also pin experiments to a version, see [running experiments](/docs/evals/datasets/running-experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
 
 ## Related
 
