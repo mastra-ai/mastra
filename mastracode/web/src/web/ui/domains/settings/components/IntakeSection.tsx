@@ -51,6 +51,11 @@ function SourceHeader({
   );
 }
 
+/**
+ * Compact pill toggle backed by a real (visually hidden) checkbox so it stays
+ * a `role="checkbox"` for assistive tech. Pills wrap horizontally, keeping
+ * large project lists short instead of one row per project.
+ */
 function SourceCheckbox({
   label,
   checked,
@@ -63,14 +68,15 @@ function SourceCheckbox({
   onChange: () => void;
 }) {
   return (
-    <label className="flex items-center gap-2 py-1 cursor-pointer text-ui-md text-neutral6 has-disabled:opacity-50 has-disabled:cursor-not-allowed">
-      <input
-        type="checkbox"
-        className="size-3.5 accent-accent1"
-        checked={checked}
-        disabled={disabled}
-        onChange={onChange}
-      />
+    <label
+      className={`inline-flex max-w-64 items-center gap-1 rounded-full border px-2.5 py-0.5 cursor-pointer text-ui-sm transition-colors has-disabled:opacity-50 has-disabled:cursor-not-allowed ${
+        checked
+          ? 'border-accent1 bg-accent1/10 text-icon6'
+          : 'border-border1 text-icon4 hover:border-border2 hover:text-icon5'
+      }`}
+    >
+      <input type="checkbox" className="sr-only" checked={checked} disabled={disabled} onChange={onChange} />
+      {checked && <span aria-hidden="true">✓</span>}
       <span className="truncate">{label}</span>
     </label>
   );
@@ -142,7 +148,7 @@ export function IntakeSection() {
           onToggle={enabled => update({ ...config, github: { ...config.github, enabled } })}
         />
         {config.github.enabled && (
-          <div className="flex flex-col pl-1">
+          <div className="flex flex-wrap gap-1.5 pl-1">
             {githubProjects.length === 0 ? (
               <Txt as="span" variant="ui-xs" className="text-icon3">
                 No GitHub projects yet — open a repo from GitHub to add one.
@@ -190,26 +196,31 @@ export function IntakeSection() {
           </div>
         ) : (
           config.linear.enabled && (
-            <div className="flex flex-col gap-3 pl-1">
+            <div className="flex flex-col gap-2.5 pl-1">
               {groupLinearProjectsByTeam(linearProjectsQuery.data ?? []).map(group => (
-                <div key={group.id} className="flex flex-col" role="group" aria-label={group.label}>
-                  <Txt as="span" variant="ui-xs" className="font-medium uppercase tracking-wide text-icon3">
-                    {group.label}
-                  </Txt>
-                  {group.projects.map(project => (
-                    <SourceCheckbox
-                      key={project.id}
-                      label={project.name}
-                      checked={config.linear.projectIds?.includes(project.id) ?? false}
-                      disabled={busy}
-                      onChange={() =>
-                        update({
-                          ...config,
-                          linear: { ...config.linear, projectIds: toggleId(config.linear.projectIds, project.id) },
-                        })
-                      }
-                    />
-                  ))}
+                <div key={group.id} className="flex flex-col gap-1" role="group" aria-label={group.label}>
+                  <div className="flex items-baseline gap-2">
+                    <Txt as="span" variant="ui-xs" className="font-medium uppercase tracking-wide text-icon3">
+                      {group.label}
+                    </Txt>
+                    <SelectedCount ids={config.linear.projectIds} projects={group.projects} />
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.projects.map(project => (
+                      <SourceCheckbox
+                        key={project.id}
+                        label={project.name}
+                        checked={config.linear.projectIds?.includes(project.id) ?? false}
+                        disabled={busy}
+                        onChange={() =>
+                          update({
+                            ...config,
+                            linear: { ...config.linear, projectIds: toggleId(config.linear.projectIds, project.id) },
+                          })
+                        }
+                      />
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
@@ -217,6 +228,17 @@ export function IntakeSection() {
         )}
       </section>
     </div>
+  );
+}
+
+/** Tiny "n selected" hint next to a team header; hidden when nothing is picked. */
+function SelectedCount({ ids, projects }: { ids: string[] | null; projects: LinearProject[] }) {
+  const count = projects.filter(p => ids?.includes(p.id)).length;
+  if (!count) return null;
+  return (
+    <Txt as="span" variant="ui-xs" className="text-accent1">
+      {count} selected
+    </Txt>
   );
 }
 
