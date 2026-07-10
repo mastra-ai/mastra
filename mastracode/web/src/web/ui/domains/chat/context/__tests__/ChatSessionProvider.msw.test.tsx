@@ -724,6 +724,34 @@ describe('ChatSessionProvider', () => {
     ]);
   });
 
+  it('given a GitHub project, when the session connects, then the sandbox identity is persisted onto controller state', async () => {
+    const requests: string[] = [];
+    const githubProject: Project = {
+      id: 'project-gh',
+      name: 'octo/hello',
+      source: 'github',
+      githubProjectId: 'ghp_1',
+      sandboxId: 'sbx_1',
+      sandboxWorkdir: '/workspace/hello',
+      resourceId: RESOURCE_ID,
+      createdAt: 3,
+    };
+    seedProject([githubProject], githubProject);
+    useAgentControllerHandlers([], requests);
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    const setStateRequest = requests.find(r => r.startsWith('setState:'));
+    expect(setStateRequest).toBeDefined();
+    expect(JSON.parse(setStateRequest!.slice('setState:'.length)).state).toEqual({
+      projectPath: '/workspace/hello',
+      githubProjectId: 'ghp_1',
+      sandboxId: 'sbx_1',
+      sandboxWorkdir: '/workspace/hello',
+      worktreePath: '/workspace/hello',
+    });
+  });
+
   it('given the workspace bind fails, then the connection still becomes ready', async () => {
     const requests: string[] = [];
     seedProject();

@@ -20,7 +20,25 @@ export function ChatSessionProvider({ children, threadId }: { children: ReactNod
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const { baseUrl } = useApiConfig();
   const projectPath = deriveProjectPath(activeProject);
-  const sessionContextValue = { resourceId, sessionEnabled, projectPath, baseUrl };
+  // GitHub projects live in a remote sandbox: carry the sandbox identity so
+  // session init can persist it onto controller state (the server needs it to
+  // build a sandbox-backed workspace instead of a host-local one).
+  const github =
+    activeProject?.source === 'github' &&
+    activeProject.githubProjectId &&
+    activeProject.sandboxId &&
+    activeProject.sandboxWorkdir
+      ? {
+          githubProjectId: activeProject.githubProjectId,
+          sandboxId: activeProject.sandboxId,
+          sandboxWorkdir: activeProject.sandboxWorkdir,
+          // Always concrete (equals sandboxWorkdir at the repo root) so
+          // switching back from a worktree overwrites the previous value —
+          // setState merges, it can't unset keys.
+          worktreePath: projectPath || activeProject.sandboxWorkdir,
+        }
+      : undefined;
+  const sessionContextValue = { resourceId, sessionEnabled, projectPath, github, baseUrl };
 
   return (
     <ChatSessionContext.Provider value={sessionContextValue}>

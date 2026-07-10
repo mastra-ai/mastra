@@ -1,5 +1,6 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useState } from 'react';
+import type { ChatSessionGithubState } from '../context/ChatSessionContext';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
 import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
@@ -12,6 +13,8 @@ interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
   resourceId: string;
   projectPath?: string;
+  /** Sandbox identity for GitHub-backed projects, persisted onto controller state. */
+  github?: ChatSessionGithubState;
   baseUrl?: string;
   enabled?: boolean;
   onEvent: (event: AgentControllerEvent) => void;
@@ -21,6 +24,7 @@ export function useAgentControllerConnection({
   agentControllerId,
   resourceId,
   projectPath,
+  github,
   baseUrl = '',
   enabled = true,
   onEvent,
@@ -29,7 +33,14 @@ export function useAgentControllerConnection({
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-  const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
+  const initQuery = useAgentControllerSessionInit({
+    agentControllerId,
+    resourceId,
+    projectPath,
+    github,
+    baseUrl,
+    enabled,
+  });
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,
     resourceId,
