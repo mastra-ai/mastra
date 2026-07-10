@@ -8,21 +8,22 @@ import {
   MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE,
   MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_MESSAGE,
 } from '../../../../../../shared/desktop-host';
-import { useActiveProjectContext, useAddProjectMutation } from '../../../workspaces';
+import { useActiveProjectContext } from '../../../workspaces/context/ActiveProjectProvider';
+import { useAddProjectMutation } from '../../../workspaces/hooks/useProjects';
 import { useChatConnection } from '../../context/useChatConnection';
 
 export function ConnectionNotice() {
   const { activeProject, selectProject } = useActiveProjectContext();
   const { status, error, retry } = useChatConnection();
   const addProject = useAddProjectMutation();
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string>();
   const [recovering, setRecovering] = useState(false);
 
   if (status !== 'reconnecting' && status !== 'error') return null;
 
   if (status === 'reconnecting') {
     return (
-      <div role="status" aria-live="polite" className="px-3 pt-2">
+      <div role="status" aria-live="polite" className="w-full px-3 pt-2">
         <Notice variant="warning">Connection lost. Retrying automatically...</Notice>
       </div>
     );
@@ -35,7 +36,7 @@ export function ConnectionNotice() {
     Boolean(desktopApi && activeProject?.path);
 
   const recover = async () => {
-    setActionError(null);
+    setActionError(undefined);
     setRecovering(true);
     try {
       if (projectAccessRequired && desktopApi && activeProject?.path) {
@@ -57,8 +58,10 @@ export function ConnectionNotice() {
     }
   };
 
+  const actionLabel = recovering ? 'Retrying...' : projectAccessRequired ? 'Allow folder access' : 'Retry';
+
   return (
-    <div role="status" aria-live="polite" className="px-3 pt-2">
+    <div role="status" aria-live="polite" className="w-full px-3 pt-2">
       <Notice variant="destructive" title={projectAccessRequired ? 'Project access required' : 'Connection error'}>
         <Notice.Message>{error?.message ?? 'The MastraCode session could not connect'}</Notice.Message>
         {projectAccessRequired && (
@@ -76,7 +79,7 @@ export function ConnectionNotice() {
           onClick={() => void recover()}
         >
           {projectAccessRequired ? <FolderOpen size={15} /> : <RefreshCw size={15} />}
-          <span>{recovering ? 'Retrying...' : projectAccessRequired ? 'Allow folder access' : 'Retry'}</span>
+          <span>{actionLabel}</span>
         </Button>
       </Notice>
     </div>

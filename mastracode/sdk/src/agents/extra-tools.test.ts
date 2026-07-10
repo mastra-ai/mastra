@@ -6,7 +6,6 @@ import z from 'zod';
 vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
-  createWebFetchTool: () => ({ id: 'web-fetch', description: 'web fetch' }),
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));

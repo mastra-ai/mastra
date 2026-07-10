@@ -3,14 +3,13 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
-  createWebFetchTool: () => ({ id: 'web-fetch', description: 'web fetch' }),
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
 }));
 
 import { createDynamicTools, createToolHooks } from './tools.js';
 
-function createRequestContext(state: Record<string, unknown>, modeId: string = 'build', modelId?: string) {
+function createRequestContext(state: Record<string, unknown>, modeId: string = 'build') {
   const getState = () => state;
   return {
     get(key: string) {
@@ -18,7 +17,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
       return {
         modeId,
         getState,
-        session: { modelId, state: { get: getState } },
+        session: { state: { get: getState } },
       };
     },
   } as any;
@@ -43,19 +42,6 @@ describe('createDynamicTools', () => {
       }),
     });
     expect(allowedTools.custom_tool).toBeDefined();
-  });
-
-  it('exposes provider-hosted search and direct live fetch to Anthropic models', () => {
-    const getDynamicTools = createDynamicTools();
-    const tools = getDynamicTools({
-      requestContext: createRequestContext({}, 'build', 'anthropic/claude-sonnet-4-6'),
-    });
-
-    expect(tools.web_search).toMatchObject({
-      type: 'provider',
-      id: 'anthropic.web_search_20250305',
-    });
-    expect(tools.web_fetch).toMatchObject({ id: 'web-fetch' });
   });
 });
 

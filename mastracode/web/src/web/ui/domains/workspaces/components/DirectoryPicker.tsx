@@ -25,7 +25,7 @@ interface DirectoryBrowserProps {
   /** True while the chosen folder is being resolved (server round-trip). */
   busy?: boolean;
   /** Error from resolving the chosen folder, if any. */
-  error?: string | null;
+  error?: string;
 }
 
 function basename(path: string): string {
@@ -48,23 +48,23 @@ function crumbs(path: string): { label: string; path: string }[] {
 const ENTRY_CLASS =
   'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-ui-md text-icon5 transition-colors hover:bg-surface4 focus-visible:outline-hidden focus-visible:bg-surface4 disabled:opacity-50';
 
-export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickError = null }: DirectoryBrowserProps) {
+export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickError }: DirectoryBrowserProps) {
   // `undefined` lists the server root; explicit paths drill into subfolders.
   // React Query owns the fetch + per-path cache, so navigation is just state.
   const [path, setPath] = useState<string | undefined>(undefined);
   const [nativePicking, setNativePicking] = useState(false);
-  const [nativeError, setNativeError] = useState<string | null>(null);
+  const [nativeError, setNativeError] = useState<string>();
   const desktopApi = window.mastracodeDesktop;
   const listingQuery = useDirectoryListing(path, !desktopApi);
-  const listing = listingQuery.data ?? null;
+  const listing = listingQuery.data;
   const loading = listingQuery.isPending;
-  const error = listingQuery.error instanceof Error ? listingQuery.error.message : null;
+  const error = listingQuery.error instanceof Error ? listingQuery.error.message : undefined;
   const resolvedBusy = busy || nativePicking;
 
   const browse = (next?: string) => setPath(next);
   const pickNativeDirectory = async () => {
     if (!desktopApi) return;
-    setNativeError(null);
+    setNativeError(undefined);
     setNativePicking(true);
     try {
       const selection = await desktopApi.selectProjectDirectory();
@@ -87,10 +87,16 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
           </Txt>
         )}
         <div className="flex items-center justify-end gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={resolvedBusy}>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={resolvedBusy}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" disabled={resolvedBusy} onClick={() => void pickNativeDirectory()}>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            disabled={resolvedBusy}
+            onClick={() => void pickNativeDirectory()}
+          >
             <FolderOpen size={16} />
             <span>{nativePicking ? 'Choosing…' : 'Choose from Finder'}</span>
           </Button>
@@ -159,10 +165,11 @@ export function DirectoryBrowser({ onPick, onCancel, busy = false, error: pickEr
 
       <div className="flex items-center justify-end gap-3">
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={onCancel} disabled={resolvedBusy}>
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel} disabled={resolvedBusy}>
             Cancel
           </Button>
           <Button
+            type="button"
             variant="primary"
             size="sm"
             disabled={!listing || resolvedBusy}

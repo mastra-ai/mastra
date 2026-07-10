@@ -17,6 +17,7 @@
  */
 
 import { createHash } from 'node:crypto';
+import { RailwaySandbox } from '@mastra/railway';
 import { eq } from 'drizzle-orm';
 import { getAppDb } from './db';
 import { getLocalSandboxRoot, LocalSandbox } from './local-sandbox';
@@ -76,7 +77,7 @@ export type SandboxFactory = (opts: {
   env?: Record<string, string>;
   /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
   idleTimeoutMinutes?: number;
-}) => MaterializationSandbox | Promise<MaterializationSandbox>;
+}) => MaterializationSandbox;
 
 /**
  * Resolve the active sandbox provider. An explicit `MASTRACODE_SANDBOX_PROVIDER`
@@ -185,14 +186,12 @@ export class SandboxBudgetError extends Error {
 }
 
 /** Railway-backed sandbox, optionally reattaching by id. */
-const railwayFactory: SandboxFactory = async ({ providerSandboxId, env, idleTimeoutMinutes }) => {
-  const { RailwaySandbox } = await import('@mastra/railway');
-  return new RailwaySandbox({
+const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
+  new RailwaySandbox({
     ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}),
     ...(env ? { env } : {}),
     ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
   });
-};
 
 /** Local host-process sandbox (single-user dev; no tenant isolation). */
 const localFactory: SandboxFactory = ({ providerSandboxId }) =>
@@ -243,7 +242,7 @@ export async function ensureProjectSandbox(
   // fresh sandbox so the next open succeeds instead of being permanently wedged.
   if (row.sandboxId) {
     reportProgress(onProgress, { phase: 'reattaching', message: 'Reconnecting to your sandbox…' });
-    const reattached = await sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
+    const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
     try {
       await reattached.start();
       return reattached;
@@ -263,7 +262,7 @@ export async function ensureProjectSandbox(
   }
 
   reportProgress(onProgress, { phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-  const sandbox = await sandboxFactory({ idleTimeoutMinutes });
+  const sandbox = sandboxFactory({ idleTimeoutMinutes });
   await sandbox.start();
   liveSandboxCount += 1;
 
@@ -314,7 +313,7 @@ export async function teardownProjectSandbox(
  * round-trip is needed.
  */
 export async function reattachProjectSandbox(providerSandboxId: string): Promise<MaterializationSandbox> {
-  const sandbox = await sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
+  const sandbox = sandboxFactory({ providerSandboxId, idleTimeoutMinutes: getSandboxIdleMinutes() });
   await sandbox.start();
   return sandbox;
 }

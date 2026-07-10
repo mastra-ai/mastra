@@ -1,9 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useEffectEvent } from 'react';
 
-import { useOverlays } from '../../../lib/overlays';
-import { useToast } from '../../../ui';
-import { SettingsPanel } from '../../settings';
-import { GithubConnectModal, ProjectsModal, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
+import { useOverlays } from '../../../lib/overlays/overlays';
+import { useToast } from '../../../ui/toast';
+import { SettingsPanel } from '../../settings/components/SettingsPanel';
+import { GithubConnectModal } from '../../workspaces/components/GithubConnectModal';
+import { ProjectsModal } from '../../workspaces/components/ProjectsModal';
+import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
+import { useGithubStatusQuery } from '../../workspaces/hooks/useGithubStatus';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
@@ -13,6 +16,7 @@ export function ChatOverlays() {
   const { activeProject, projects, selectProject, preparing, prepareError } = useActiveProjectContext();
   const { toast } = useToast();
   const githubStatus = useGithubStatusQuery().data;
+  const showPrepareError = useEffectEvent((message: string) => toast(message, 'error'));
 
   // The GitHub repo picker replaces the projects modal while open.
   const projectsOpen = (overlays.isOpen('projects') || projects.length === 0) && !overlays.isOpen('github');
@@ -20,12 +24,8 @@ export function ChatOverlays() {
   const modelSettingsOpen = overlays.isOpen('model-settings');
   const settingsOpen = overlays.isOpen('settings') || modelSettingsOpen || providerSettingsOpen;
 
-  // Materialization failures surface as a toast; selection already stays put.
-  // Keyed on the error identity only — `toast` is not referentially stable, and
-  // including it would re-fire the same toast on unrelated re-renders.
   useEffect(() => {
-    if (prepareError) toast(prepareError.message, 'error');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (prepareError) showPrepareError(prepareError.message);
   }, [prepareError]);
 
   return (

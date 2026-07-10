@@ -44,7 +44,12 @@ export function ProviderRow({
 }: ProviderRowProps) {
   const [editing, setEditing] = useState(false);
   const [keyDraft, setKeyDraft] = useState('');
-  const [oauthPrompt, setOAuthPrompt] = useState<{ loginId: string; code: string } | null>(null);
+  const [oauthPrompt, setOAuthPrompt] = useState<{
+    loginId: string;
+    code: string;
+    completionMode: StartProviderOAuthResponse['completionMode'];
+    instructions?: string;
+  }>();
 
   const cancelKeyEdit = () => {
     setEditing(false);
@@ -61,13 +66,18 @@ export function ProviderRow({
     if (!login) return;
     window.open(login.authUrl, '_blank', 'noopener,noreferrer');
     cancelKeyEdit();
-    setOAuthPrompt({ loginId: login.loginId, code: '' });
+    setOAuthPrompt({
+      loginId: login.loginId,
+      code: '',
+      completionMode: login.completionMode,
+      ...(login.instructions ? { instructions: login.instructions } : {}),
+    });
   };
 
   const completeOAuth = async () => {
     const code = oauthPrompt?.code.trim();
-    if (!oauthPrompt || !code) return;
-    if (await onCompleteOAuth(oauthPrompt.loginId, code)) setOAuthPrompt(null);
+    if (!oauthPrompt || (oauthPrompt.completionMode === 'manual-code' && !code)) return;
+    if (await onCompleteOAuth(oauthPrompt.loginId, code ?? '')) setOAuthPrompt(undefined);
   };
 
   return (
@@ -103,42 +113,49 @@ export function ProviderRow({
                   if (event.key === 'Escape') cancelKeyEdit();
                 }}
               />
-              <Button variant="primary" size="sm" disabled={busy || !keyDraft.trim()} onClick={() => void saveKey()}>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                disabled={busy || !keyDraft.trim()}
+                onClick={() => void saveKey()}
+              >
                 Save
               </Button>
-              <Button size="sm" disabled={busy} onClick={cancelKeyEdit}>
+              <Button type="button" size="sm" disabled={busy} onClick={cancelKeyEdit}>
                 Cancel
               </Button>
             </div>
           ) : (
             <div className="flex items-center gap-2">
               {provider.oauthSupported && provider.source !== 'oauth' && (
-                <Button variant="primary" size="sm" disabled={busy} onClick={() => void startOAuth()}>
+                <Button type="button" variant="primary" size="sm" disabled={busy} onClick={() => void startOAuth()}>
                   <LogIn size={14} />
                   <span>Sign in</span>
                 </Button>
               )}
               {provider.source === 'oauth' && (
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => void onRemoveOAuth()}>
+                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void onRemoveOAuth()}>
                   <LogOut size={14} />
                   <span>Sign out</span>
                 </Button>
               )}
               {provider.source !== 'oauth' && (
                 <Button
+                  type="button"
                   size="sm"
                   disabled={busy}
                   onClick={() => {
                     setEditing(true);
                     setKeyDraft('');
-                    setOAuthPrompt(null);
+                    setOAuthPrompt(undefined);
                   }}
                 >
                   {provider.source === 'stored' ? 'Update' : 'Add key'}
                 </Button>
               )}
               {provider.source === 'stored' && (
-                <Button variant="outline" size="sm" disabled={busy} onClick={() => void onRemoveKey()}>
+                <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void onRemoveKey()}>
                   Remove
                 </Button>
               )}
@@ -147,30 +164,44 @@ export function ProviderRow({
       </div>
 
       {credentialManagementEnabled && oauthPrompt && (
-        <div className="flex items-center gap-2 pl-5">
-          <Input
-            autoFocus
-            type="password"
-            size="sm"
-            placeholder={`Paste ${provider.displayName ?? provider.provider} code`}
-            value={oauthPrompt.code}
-            onChange={event => setOAuthPrompt({ ...oauthPrompt, code: event.target.value })}
-            onKeyDown={event => {
-              if (event.key === 'Enter') void completeOAuth();
-              if (event.key === 'Escape') setOAuthPrompt(null);
-            }}
-          />
-          <Button
-            variant="primary"
-            size="sm"
-            disabled={busy || !oauthPrompt.code.trim()}
-            onClick={() => void completeOAuth()}
-          >
-            Complete
-          </Button>
-          <Button size="sm" disabled={busy} onClick={() => setOAuthPrompt(null)}>
-            Cancel
-          </Button>
+        <div className="flex flex-col gap-2 pl-5">
+          {oauthPrompt.completionMode === 'browser-callback' && (
+            <Txt as="p" variant="ui-sm" className="text-icon3">
+              {oauthPrompt.instructions ?? 'Complete sign-in in your browser, then check the connection.'}
+            </Txt>
+          )}
+          <div className="flex items-center gap-2">
+            <Input
+              autoFocus
+              type="password"
+              size="sm"
+              placeholder={
+                oauthPrompt.completionMode === 'browser-callback'
+                  ? 'Paste a code only if the browser callback fails'
+                  : `Paste ${provider.displayName ?? provider.provider} code`
+              }
+              value={oauthPrompt.code}
+              onChange={event => setOAuthPrompt({ ...oauthPrompt, code: event.target.value })}
+              onKeyDown={event => {
+                if (event.key === 'Enter') void completeOAuth();
+                if (event.key === 'Escape') setOAuthPrompt(undefined);
+              }}
+            />
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              disabled={busy || (oauthPrompt.completionMode === 'manual-code' && !oauthPrompt.code.trim())}
+              onClick={() => void completeOAuth()}
+            >
+              {oauthPrompt.completionMode === 'browser-callback' && !oauthPrompt.code.trim()
+                ? 'Check sign-in'
+                : 'Complete'}
+            </Button>
+            <Button type="button" size="sm" disabled={busy} onClick={() => setOAuthPrompt(undefined)}>
+              Cancel
+            </Button>
+          </div>
         </div>
       )}
     </li>

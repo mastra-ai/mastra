@@ -52,23 +52,6 @@ vi.mock('../../providers/github-copilot.js', () => ({
   getCopilotModelCatalog: mockGetCopilotModelCatalog,
 }));
 
-const mockCreateLocalCliLanguageModel = vi.hoisted(() =>
-  vi.fn((providerId: string, modelId: string) => ({
-    __provider: 'local-cli',
-    providerId,
-    modelId,
-  })),
-);
-vi.mock('../../providers/local-cli-provider.js', () => ({
-  LOCAL_CLAUDE_CLI_MODEL_ID: 'claude-code-sonnet',
-  LOCAL_CODEX_CLI_MODEL_ID: 'codex-cli',
-  createLocalCliLanguageModel: mockCreateLocalCliLanguageModel,
-  getLocalCliAuthStatus: vi.fn(async () => ({ claude: false, codex: false })),
-  isLocalCliModel: (providerId: string, modelId: string) =>
-    (providerId === 'anthropic' && modelId === 'claude-code-sonnet') ||
-    (providerId === 'openai' && modelId === 'codex-cli'),
-}));
-
 // Mock @ai-sdk/anthropic
 vi.mock('@ai-sdk/anthropic', () => ({
   createAnthropic: vi.fn((_opts: Record<string, unknown>) => {
@@ -374,45 +357,6 @@ describe('resolveModel', () => {
       resolveModel('anthropic/claude-sonnet-4-20250514');
 
       expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-20250514', { headers: undefined });
-    });
-
-    it('keeps stale Anthropic model ids on the OAuth flow when no credentials are configured', () => {
-      mockAuthStorageInstance.get.mockReturnValue(undefined);
-
-      const result = resolveModel('anthropic/claude-sonnet-4-6', {
-        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
-      }) as Record<string, unknown>;
-
-      expect(result.__provider).toBe('claude-max-oauth');
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-6', {
-        headers: {
-          'x-thread-id': 'thread-123',
-          'x-resource-id': 'resource-456',
-        },
-      });
-      expect(mockCreateLocalCliLanguageModel).not.toHaveBeenCalled();
-    });
-
-    it('keeps expired Anthropic OAuth on the refreshable OAuth flow', () => {
-      mockAuthStorageInstance.get.mockReturnValue({
-        type: 'oauth',
-        access: 'expired-oauth-access-token',
-        refresh: 'oauth-refresh-token',
-        expires: Date.now() - 60_000,
-      });
-
-      const result = resolveModel('anthropic/claude-sonnet-4-6', {
-        requestContext: makeRequestContext({ threadId: 'thread-123', resourceId: 'resource-456' }),
-      }) as Record<string, unknown>;
-
-      expect(result.__provider).toBe('claude-max-oauth');
-      expect(opencodeClaudeMaxProvider).toHaveBeenCalledWith('claude-sonnet-4-6', {
-        headers: {
-          'x-thread-id': 'thread-123',
-          'x-resource-id': 'resource-456',
-        },
-      });
-      expect(mockCreateLocalCliLanguageModel).not.toHaveBeenCalled();
     });
 
     it('passes controller headers to the Anthropic OAuth provider', () => {

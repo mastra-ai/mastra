@@ -76,7 +76,7 @@ export function ProjectsModal() {
                 onPick={(p, n) => void handlePick(p, n)}
                 onCancel={() => (empty ? close('projects') : setAdding(false))}
                 busy={busy}
-                error={error}
+                error={error ?? undefined}
               />
               {githubEnabled && (
                 <Button variant="outline" size="sm" className="self-start" onClick={openGithub}>

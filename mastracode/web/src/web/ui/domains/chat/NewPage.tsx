@@ -4,13 +4,16 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { MessageSquarePlus } from 'lucide-react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useOverlays } from '../../lib/overlays';
+import { useOverlays } from '../../lib/overlays/overlays';
 import { Sidebar } from '../../Sidebar';
-import { ChatLayout, FolderIcon } from '../../ui';
-import type { Project } from '../workspaces';
-import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
+import { ChatLayout } from '../../ui/ChatLayout';
+import { FolderIcon } from '../../ui/icons';
+import { EmptyProjectState } from '../workspaces/components/EmptyProjectState';
+import { useActiveProjectContext } from '../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
+import type { Project } from '../workspaces/services/projects';
 import { ChatHeader } from './components/ChatHeader';
+import { ConnectionNotice } from './components/ChatMessageList/ConnectionNotice';
 import { ComposerPanel } from './components/ComposerPanel';
 import { TranscriptEntries } from './components/Transcript';
 import { useChatTranscript } from './context/useChatTranscript';
@@ -51,6 +54,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
   return (
     <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-10 md:px-6">
       <div className="flex w-full max-w-xl flex-col items-center gap-4">
+        <ConnectionNotice />
         <DraftStart activeProject={activeProject} />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">

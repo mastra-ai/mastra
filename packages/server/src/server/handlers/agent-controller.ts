@@ -589,7 +589,9 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
-      await session.thread.switch({ threadId });
+      if (session.thread.getId() !== threadId) {
+        await session.thread.switch({ threadId });
+      }
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error switching controller thread');

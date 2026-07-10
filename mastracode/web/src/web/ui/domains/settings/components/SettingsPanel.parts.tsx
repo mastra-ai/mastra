@@ -56,9 +56,9 @@ export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
 
 interface ModelTabProps {
   models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
-  error?: string | null;
-  settings: AgentControllerSessionSettings | null;
+  currentModelId?: string;
+  error?: string;
+  settings?: AgentControllerSessionSettings;
   onModelChange: (modelId: string) => void;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
 }
@@ -97,9 +97,9 @@ export function ModelTab({ models, currentModelId, error, settings, onModelChang
 }
 
 interface BehaviorTabProps {
-  settings: AgentControllerSessionSettings | null;
+  settings?: AgentControllerSessionSettings;
   onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
-  permissions: PermissionRules | null;
+  permissions?: PermissionRules;
   pendingPermissionCategory: ToolCategory | null;
   setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
 }
@@ -199,7 +199,7 @@ function ModelPicker({
   onModelChange,
 }: {
   models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
+  currentModelId?: string;
   onModelChange: (id: string) => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -220,7 +220,7 @@ function ModelPicker({
           m.id.toLowerCase().includes(q),
       )
     : models;
-  const filtered = [...matched].sort((a, b) => {
+  const filtered = matched.toSorted((a, b) => {
     if (a.hasApiKey !== b.hasApiKey) return a.hasApiKey ? -1 : 1;
     return a.id.localeCompare(b.id);
   });

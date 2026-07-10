@@ -14,7 +14,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE } from '../../../../../../shared/desktop-host';
+import {
+  MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE,
+  type DesktopAppInfo,
+} from '../../../../../../shared/desktop-host';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
@@ -61,7 +64,12 @@ function sse(events: AgentControllerEvent[] = []): Response {
   return new Response(
     new ReadableStream<Uint8Array>({
       start(controller) {
-        for (const event of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        for (const event of events) {
+          const serialized = JSON.stringify(event, (_key, value: unknown) =>
+            value instanceof Error ? { name: value.name, message: value.message, stack: value.stack } : value,
+          );
+          controller.enqueue(encoder.encode(`data: ${serialized}\n\n`));
+        }
       },
       cancel() {},
     }),
@@ -159,7 +167,7 @@ describe('ChatMessageList', () => {
     useAgentControllerHandlers([
       {
         type: 'error',
-        error: 'undefined: The security token included in the request is invalid.' as unknown as Error,
+        error: new Error('undefined: The security token included in the request is invalid.'),
       },
     ]);
     renderMessageList();
@@ -188,11 +196,13 @@ describe('ChatMessageList', () => {
       return { canceled: false, path: '/tmp/mastracode-test', name: 'mastracode-test' };
     });
     window.mastracodeDesktop = {
-      getAppInfo: vi.fn(async () => ({
-        name: 'MastraCode Desktop Alpha',
-        version: 'test',
-        platform: 'darwin' as const,
-      })),
+      getAppInfo: vi.fn(
+        async (): Promise<DesktopAppInfo> => ({
+          name: 'MastraCode Desktop Alpha',
+          version: 'test',
+          platform: 'darwin',
+        }),
+      ),
       selectProjectDirectory,
     };
     server.use(

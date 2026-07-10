@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist/main/main.js",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.e2e.json",
     "lint": "eslint .",
     "test": "vitest run --config vitest.config.ts",
     "desktop:prepare-web-ui": "pnpm --dir ../web web:ui:build && node scripts/prepare-web-ui.mjs",
@@ -17,7 +17,7 @@
     "desktop:release:mac": "node scripts/desktop-release-mac.mjs",
     "desktop:install:alpha": "pnpm run desktop:package && node scripts/desktop-install-alpha.mjs",
     "desktop:e2e": "pnpm run desktop:build && playwright test --config e2e/playwright.config.ts",
-    "desktop:e2e:installed": "node scripts/desktop-e2e-installed.mjs"
+    "desktop:e2e:installed": "playwright test --config e2e/playwright.installed.config.ts"
   },
   "build": {
     "appId": "ai.mastra.mastracode.desktop.alpha",
@@ -41,10 +41,6 @@
       "node_modules/typescript/**/*"
     ],
     "extraResources": [
-      {
-        "from": "dist/web-ui",
-        "to": "web-ui"
-      },
       {
         "from": "build/icon.png",
         "to": "launch-icon.png"
@@ -94,7 +90,6 @@
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",
     "eslint": "^10.4.1",
-    "execa": "^9.6.1",
     "globals": "^16.5.0",
     "typescript-eslint": "^8.57.0",
     "vite": "7.3.6",

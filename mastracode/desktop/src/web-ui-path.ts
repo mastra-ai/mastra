@@ -7,7 +7,7 @@ export function resolveWebUiDistPath(): string {
   if (override) throw new Error(`Configured MastraCode web UI directory does not exist: ${override}`);
 
   if (process.resourcesPath) {
-    const packagedWebUiPath = resolve(process.resourcesPath, 'web-ui');
+    const packagedWebUiPath = resolve(process.resourcesPath, 'app.asar', 'dist', 'web-ui');
     if (existsSync(packagedWebUiPath)) return packagedWebUiPath;
   }
 
@@ -15,6 +15,6 @@ export function resolveWebUiDistPath(): string {
   if (existsSync(developmentWebUiPath)) return developmentWebUiPath;
 
   throw new Error(
-    `MastraCode web UI is missing. Expected ${resolve(process.resourcesPath, 'web-ui')} or ${developmentWebUiPath}.`,
+    `MastraCode web UI is missing. Expected ${resolve(process.resourcesPath, 'app.asar', 'dist', 'web-ui')} or ${developmentWebUiPath}.`,
   );
 }

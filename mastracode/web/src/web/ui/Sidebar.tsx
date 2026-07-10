@@ -5,10 +5,14 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Circle, LogOut, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
-import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
-import { ProjectSwitcher, WorkspacesSection } from './domains/workspaces';
-import { useOverlays } from './lib/overlays';
+import { useWebAuth } from './domains/auth/hooks/useWebAuth';
+import { redirectToLogout } from './domains/auth/services/auth';
+import { ThreadList } from './domains/chat/components/ThreadList';
+import { useChatConnection } from './domains/chat/context/useChatConnection';
+import { useChatTranscript } from './domains/chat/context/useChatTranscript';
+import { ProjectSwitcher } from './domains/workspaces/components/ProjectSwitcher';
+import { WorkspacesSection } from './domains/workspaces/components/WorkspacesSection';
+import { useOverlays } from './lib/overlays/overlays';
 
 /**
  * Composition shell: each section owns its data through the domain contexts

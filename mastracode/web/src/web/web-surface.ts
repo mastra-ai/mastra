@@ -9,10 +9,8 @@
 
 import type { ApiRoute } from '@mastra/core/server';
 
-import type { MountedMastraCode } from '@mastra/code-sdk';
-
-import { buildConfigRoutes } from './config-routes.js';
-import { buildFsRoutes } from './fs-routes.js';
+import { assembleCoreWebApiRoutes } from './core-web-surface.js';
+import type { CoreWebApiRoutesDeps } from './core-web-surface.js';
 import {
   assertReplicaStableStateSecret,
   getGithubFeatureDiagnostics,
@@ -26,15 +24,7 @@ import { registerSandboxReattach } from './sandbox-reattach-registration.js';
 // as the web surface is loaded, so sandbox-backed workspaces can reattach.
 registerSandboxReattach();
 
-export interface WebApiRoutesDeps {
-  controller: MountedMastraCode['controller'];
-  authStorage: MountedMastraCode['authStorage'];
-  /** Root directory the project picker may browse. Defaults to the user's home. */
-  fsRoot?: string;
-  /** Additional project roots approved by a native host. These are resolvable but not browsable. */
-  additionalProjectRoots?: () => readonly string[];
-  /** Whether this single-user host may mutate its process-local provider credential store. */
-  allowPersonalProviderCredentials?: boolean;
+export interface WebApiRoutesDeps extends CoreWebApiRoutesDeps {
   /** Public origin used to build GitHub OAuth/install callback URLs. */
   publicOrigin: string;
   /**
@@ -116,12 +106,7 @@ export async function resolveGithubReady(): Promise<boolean> {
  */
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
-    ...buildFsRoutes({ root: deps.fsRoot, additionalRoots: deps.additionalProjectRoots }),
-    ...buildConfigRoutes({
-      controller: deps.controller,
-      authStorage: deps.authStorage,
-      credentialManagementEnabled: deps.allowPersonalProviderCredentials !== false,
-    }),
+    ...assembleCoreWebApiRoutes(deps),
     ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin }) : []),
   ];
 }

@@ -46,7 +46,9 @@ export interface StartProviderOAuthResponse {
   ok: true;
   loginId: string;
   authUrl: string;
+  completionMode: 'browser-callback' | 'manual-code';
   expiresInMs: number;
+  instructions?: string;
 }
 
 export interface CompleteProviderOAuthBody {

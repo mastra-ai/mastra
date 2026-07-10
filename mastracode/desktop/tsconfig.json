@@ -3,10 +3,10 @@
   "compilerOptions": {
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM"],
+    "lib": ["ES2022"],
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["src/**/*.ts", "e2e/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts", "vitest.config.ts"]
 }

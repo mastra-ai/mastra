@@ -92,7 +92,7 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
   it('allows host apps to transform index.html without replacing static serving', async () => {
     vi.mocked(readFile).mockResolvedValue(Buffer.from('<html><head></head><body></body></html>'));
-    vi.mocked(stat).mockResolvedValue({ isFile: () => false } as any);
+    vi.mocked(stat).mockRejectedValue(new Error('not a file'));
 
     const middleware = createSpaStaticMiddleware('/app/ui', {
       transformIndexHtml: html => html.replace('</head>', '<script>window.host=true;</script></head>'),

@@ -655,7 +655,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
 
   const roles: MessageRoleRenderers = {
     User: ({ children }) => (
-      <div className="flex w-full flex-col items-end">
+      <article className="flex w-full flex-col items-end" aria-label="User message">
         <div
           className={`max-w-[70%] break-words rounded-xl px-4 py-2 text-text1 ${
             entry.steer ? 'bg-warning1/10' : 'bg-surface3'
@@ -663,10 +663,10 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
         >
           {children}
         </div>
-      </div>
+      </article>
     ),
     Assistant: ({ children }) => (
-      <div className="max-w-full">
+      <article className="max-w-full" aria-label="Assistant message">
         {toolCount > 1 && (
           <div className="flex justify-end">
             <Button
@@ -680,7 +680,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
           </div>
         )}
         <div>{children}</div>
-      </div>
+      </article>
     ),
     System: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,
     Signal: ({ children }) => <div className="text-ui-sm text-icon3">{children}</div>,

@@ -18,7 +18,8 @@ type ErrorResolution = {
 const credentialError =
   /security token|credentials?|api[\s_-]?key|unauthori[sz]ed|forbidden|not logged in|authentication|authorization|oauth|access token|refresh token|invalid token|expired token/i;
 const limitError = /rate limit|quota|usage limit|capacity|overloaded|too many requests|credits? exhausted/i;
-const modelError = /model.*(?:invalid|missing|not found|not available|unavailable|unsupported)|no model|select a model/i;
+const modelError =
+  /model.*(?:invalid|missing|not found|not available|unavailable|unsupported)|no model|select a model/i;
 
 function cleanErrorMessage(message: string): string {
   const cleaned = message.trim().replace(/^(?:undefined|null)(?::\s*|\s+)/i, '');

@@ -4,7 +4,6 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { createAnthropicOAuthSession, exchangeAnthropicOAuthCode } from '@mastra/code-sdk/auth/providers/anthropic';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import {
   removeCustomProviderFromSettings,
@@ -20,6 +19,15 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+
+type ConfigAuthStorage = Pick<
+  AuthStorage,
+  'get' | 'getApiKey' | 'hasStoredApiKey' | 'login' | 'remove' | 'setStoredApiKey'
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 /**
  * Server-side configuration routes for the web app.
@@ -46,10 +54,56 @@ export interface ProviderInfo {
 }
 
 const OAUTH_LOGIN_TTL_MS = 10 * 60 * 1000;
-const OAUTH_SUPPORTED_PROVIDERS = new Map<string, { displayName: string }>([
-  ['anthropic', { displayName: 'Claude Pro/Max' }],
+type OAuthCompletionMode = 'browser-callback' | 'manual-code';
+
+interface OAuthProviderConfig {
+  authProviderId: string;
+  completionMode: OAuthCompletionMode;
+  displayName: string;
+}
+
+const OAUTH_SUPPORTED_PROVIDERS = new Map<string, OAuthProviderConfig>([
+  ['anthropic', { authProviderId: 'anthropic', completionMode: 'manual-code', displayName: 'Claude Pro/Max' }],
+  [
+    'openai',
+    {
+      authProviderId: 'openai-codex',
+      completionMode: 'browser-callback',
+      displayName: 'ChatGPT Plus/Pro',
+    },
+  ],
 ]);
-const pendingAnthropicLogins = new Map<string, { verifier: string; expiresAt: number }>();
+
+interface DeferredInput {
+  promise: Promise<string>;
+  resolve: (value: string) => void;
+}
+
+interface OAuthLoginResult {
+  error?: Error;
+}
+
+interface PendingOAuthLogin {
+  completion: Promise<OAuthLoginResult>;
+  completionMode: OAuthCompletionMode;
+  expiresAt: number;
+  input: DeferredInput;
+}
+
+const pendingOAuthLogins = new Map<string, PendingOAuthLogin>();
+
+function createDeferredInput(): DeferredInput {
+  let resolveInput: ((value: string) => void) | undefined;
+  const promise = new Promise<string>(resolve => {
+    resolveInput = resolve;
+  });
+  if (!resolveInput) throw new Error('Could not initialize OAuth input');
+  return { promise, resolve: resolveInput };
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
 
 /**
  * OAuth credentials are stored under the auth provider id, which differs from
@@ -65,7 +119,7 @@ function getOAuthProviderInfo(provider: string): Pick<ProviderInfo, 'displayName
 }
 
 async function getStoredProviderSource(
-  authStorage: AuthStorage | undefined,
+  authStorage: ConfigAuthStorage | undefined,
   provider: string,
 ): Promise<Extract<ProviderInfo['source'], 'oauth' | 'stored'> | undefined> {
   if (!authStorage) return undefined;
@@ -73,7 +127,6 @@ async function getStoredProviderSource(
   const authProviderId = getAuthProviderId(provider);
   const credential = authStorage.get(authProviderId);
   if (credential?.type === 'oauth') {
-    if (authProviderId === 'openai-codex') return undefined;
     return (await authStorage.getApiKey(authProviderId)) ? 'oauth' : undefined;
   }
   if (credential?.type === 'api_key' && credential.key.trim().length > 0) {
@@ -86,8 +139,8 @@ async function getStoredProviderSource(
 }
 
 function sweepExpiredOAuthLogins(now = Date.now()): void {
-  for (const [loginId, session] of pendingAnthropicLogins) {
-    if (session.expiresAt <= now) pendingAnthropicLogins.delete(loginId);
+  for (const [loginId, session] of pendingOAuthLogins) {
+    if (session.expiresAt <= now) pendingOAuthLogins.delete(loginId);
   }
 }
 
@@ -144,7 +197,10 @@ interface ModelCatalog {
  * annotated with where each provider's credential currently comes from.
  * Mirrors the TUI's `/api-keys` provider list.
  */
-export async function listProviders(controller: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderInfo[]> {
+export async function listProviders(
+  controller: ModelCatalog,
+  authStorage?: ConfigAuthStorage,
+): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
@@ -193,8 +249,8 @@ export function listCustomProviders(): CustomProviderInfo[] {
 
 /** Validate + coerce a request body into a CustomProviderSetting. */
 function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error: string } {
-  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
-  const b = body as Record<string, unknown>;
+  if (!isRecord(body)) return { error: 'Invalid JSON body' };
+  const b = body;
   const name = typeof b.name === 'string' ? b.name.trim() : '';
   if (!name) return { error: 'Missing required field: name' };
   const url = typeof b.url === 'string' ? b.url.trim() : '';
@@ -229,13 +285,12 @@ export interface ModelPackInfo extends ModePack {
  */
 export async function buildProviderAccess(
   controller: ModelCatalog,
-  authStorage?: AuthStorage,
+  authStorage?: ConfigAuthStorage,
 ): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
   const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = async (storageProviderId: string): Promise<ProviderAccessLevel> => {
     const cred = authStorage?.get(storageProviderId);
-    if (storageProviderId === 'openai-codex' && cred?.type === 'oauth') return false;
     if (cred?.type === 'oauth') return (await authStorage?.getApiKey(storageProviderId)) ? 'oauth' : false;
     if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
     if (authStorage?.hasStoredApiKey(storageProviderId)) return 'apikey';
@@ -269,7 +324,7 @@ export async function buildProviderAccess(
  */
 export async function listModelPacks(
   controller: ModelCatalog,
-  authStorage?: AuthStorage,
+  authStorage?: ConfigAuthStorage,
   activePackId?: string | null,
 ): Promise<ModelPackInfo[]> {
   const access = await buildProviderAccess(controller, authStorage);
@@ -300,24 +355,30 @@ async function resolveActivePackId(session: PackSession | undefined): Promise<st
  */
 async function applyPackToSession(controller: ModelCatalog, session: PackSession, pack: ModePack): Promise<void> {
   const modes = controller.listModes?.() ?? [];
-  const packModels = pack.models as Record<string, string>;
+
+  const getModelForMode = (modeId: string): string | undefined => {
+    if (modeId === 'build') return pack.models.build;
+    if (modeId === 'plan') return pack.models.plan;
+    if (modeId === 'fast') return pack.models.fast;
+    return undefined;
+  };
 
   for (const mode of modes) {
-    const modelId = packModels[mode.id];
+    const modelId = getModelForMode(mode.id);
     if (modelId) {
       mode.defaultModelId = modelId;
       await session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
     }
   }
 
-  const currentModeModel = packModels[session.mode.get()];
+  const currentModeModel = getModelForMode(session.mode.get());
   if (currentModeModel) {
     await session.model.switch({ modelId: currentModeModel });
   }
 
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
   for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const saModelId = packModels[modeId];
+    const saModelId = getModelForMode(modeId);
     if (saModelId) {
       await session.subagents.model.set({ modelId: saModelId, agentType });
     }
@@ -392,7 +453,7 @@ function persistOmRoleOverride(
  */
 export function buildConfigRoutes(options: {
   controller: ModelCatalog;
-  authStorage?: AuthStorage;
+  authStorage?: ConfigAuthStorage;
   credentialManagementEnabled?: boolean;
 }): ApiRoute[] {
   const { controller, authStorage, credentialManagementEnabled = true } = options;
@@ -425,14 +486,52 @@ export function buildConfigRoutes(options: {
         }
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
-        if (provider !== 'anthropic') return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+        const providerConfig = OAUTH_SUPPORTED_PROVIDERS.get(provider);
+        if (!providerConfig) return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
 
         try {
           sweepExpiredOAuthLogins();
-          const session = await createAnthropicOAuthSession();
+          const input = createDeferredInput();
+          let resolveAuthInfo: ((info: { instructions?: string; url: string }) => void) | undefined;
+          const authInfo = new Promise<{ instructions?: string; url: string }>(resolve => {
+            resolveAuthInfo = resolve;
+          });
+          if (!resolveAuthInfo) throw new Error('Could not initialize OAuth authorization');
+
+          const completion = authStorage
+            .login(providerConfig.authProviderId, {
+              authMode: providerConfig.completionMode === 'browser-callback' ? 'browser' : undefined,
+              onAuth: resolveAuthInfo,
+              onManualCodeInput: () => input.promise,
+              onPrompt: () => input.promise,
+            })
+            .then<OAuthLoginResult, OAuthLoginResult>(
+              () => ({}),
+              error => ({ error: toError(error) }),
+            );
+
+          const authorization = await Promise.race([
+            authInfo,
+            completion.then(result => {
+              if (result.error) throw result.error;
+              throw new Error('OAuth login completed without an authorization URL');
+            }),
+          ]);
           const loginId = randomUUID();
-          pendingAnthropicLogins.set(loginId, { verifier: session.verifier, expiresAt: Date.now() + OAUTH_LOGIN_TTL_MS });
-          return c.json({ ok: true, loginId, authUrl: session.authUrl, expiresInMs: OAUTH_LOGIN_TTL_MS });
+          pendingOAuthLogins.set(loginId, {
+            completion,
+            completionMode: providerConfig.completionMode,
+            expiresAt: Date.now() + OAUTH_LOGIN_TTL_MS,
+            input,
+          });
+          return c.json({
+            ok: true,
+            loginId,
+            authUrl: authorization.url,
+            completionMode: providerConfig.completionMode,
+            expiresInMs: OAUTH_LOGIN_TTL_MS,
+            ...(authorization.instructions ? { instructions: authorization.instructions } : {}),
+          });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }
@@ -448,7 +547,8 @@ export function buildConfigRoutes(options: {
         }
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
-        if (provider !== 'anthropic') return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+        const providerConfig = OAUTH_SUPPORTED_PROVIDERS.get(provider);
+        if (!providerConfig) return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
 
         let body: { loginId?: unknown; code?: unknown };
         try {
@@ -460,16 +560,19 @@ export function buildConfigRoutes(options: {
         const loginId = typeof body.loginId === 'string' ? body.loginId : '';
         const code = typeof body.code === 'string' ? body.code.trim() : '';
         if (!loginId) return c.json({ error: 'Missing required field: loginId' }, 400);
-        if (!code) return c.json({ error: 'Missing required field: code' }, 400);
 
         try {
           sweepExpiredOAuthLogins();
-          const session = pendingAnthropicLogins.get(loginId);
+          const session = pendingOAuthLogins.get(loginId);
           if (!session) return c.json({ error: 'Login session expired. Start sign-in again.' }, 410);
-          pendingAnthropicLogins.delete(loginId);
+          if (session.completionMode === 'manual-code' && !code) {
+            return c.json({ error: 'Missing required field: code' }, 400);
+          }
+          if (code) session.input.resolve(code);
 
-          const credentials = await exchangeAnthropicOAuthCode({ authCode: code, verifier: session.verifier });
-          authStorage.set('anthropic', { type: 'oauth', ...credentials });
+          const result = await session.completion;
+          pendingOAuthLogins.delete(loginId);
+          if (result.error) throw result.error;
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {
@@ -577,10 +680,7 @@ export function buildConfigRoutes(options: {
         const parsed = parseCustomProviderBody(body);
         if ('error' in parsed) return c.json({ error: parsed.error }, 400);
         // `previousId` lets a rename remove the old entry as well as any name clash.
-        const previousId =
-          body && typeof body === 'object' && typeof (body as Record<string, unknown>).previousId === 'string'
-            ? ((body as Record<string, unknown>).previousId as string)
-            : undefined;
+        const previousId = isRecord(body) && typeof body.previousId === 'string' ? body.previousId : undefined;
         try {
           const settings = loadSettings();
           upsertCustomProviderInSettings(settings, parsed, previousId);
@@ -641,7 +741,7 @@ export function buildConfigRoutes(options: {
         }
         const name = typeof body.name === 'string' ? body.name.trim() : '';
         if (!name) return c.json({ error: 'Missing required field: name' }, 400);
-        const m = (body.models ?? {}) as Record<string, unknown>;
+        const m = isRecord(body.models) ? body.models : {};
         const build = typeof m.build === 'string' ? m.build.trim() : '';
         const plan = typeof m.plan === 'string' ? m.plan.trim() : '';
         const fast = typeof m.fast === 'string' ? m.fast.trim() : '';

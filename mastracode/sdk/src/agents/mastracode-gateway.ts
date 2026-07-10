@@ -27,13 +27,6 @@ import {
 } from '../providers/claude-max.js';
 import { getCopilotModelCatalog, githubCopilotProvider } from '../providers/github-copilot.js';
 import {
-  createLocalCliLanguageModel,
-  getLocalCliAuthStatus,
-  isLocalCliModel,
-  LOCAL_CLAUDE_CLI_MODEL_ID,
-  LOCAL_CODEX_CLI_MODEL_ID,
-} from '../providers/local-cli-provider.js';
-import {
   buildOpenAICodexOAuthFetch,
   createCodexMiddleware,
   getEffectiveThinkingLevel,
@@ -158,25 +151,6 @@ function getProviderAuthKey(providerId: string): string | undefined {
     return storedCred.key.trim();
   }
   return authStorage.getStoredApiKey(authProviderId)?.trim() || undefined;
-}
-
-function hasFreshOAuthCredential(credential: ReturnType<AuthStorage['get']>): boolean {
-  return (
-    credential?.type === 'oauth' &&
-    credential.access.trim().length > 0 &&
-    Number.isFinite(credential.expires) &&
-    Date.now() < credential.expires
-  );
-}
-
-async function hasUsableProviderCredential(providerId: string): Promise<boolean> {
-  const authProviderId = getAuthProviderId(providerId);
-  const storedCred = authStorage.get(authProviderId);
-  if (storedCred?.type === 'oauth') {
-    if (authProviderId === 'openai-codex') return false;
-    return Boolean(await authStorage.getApiKey(authProviderId));
-  }
-  return Boolean(getProviderAuthKey(providerId));
 }
 
 export function resolveAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: string): GatewayAuthResult | undefined {
@@ -304,13 +278,11 @@ export class MastraCodeGateway extends MastraModelGateway {
   handlesModel(modelId: string): boolean {
     const parsed = parseGatewayRouterId(modelId, this);
     if (!parsed.providerId || !parsed.modelId) return false;
-    if (isLocalCliModel(parsed.providerId, parsed.modelId)) return true;
     if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) return true;
     const customProvider = this.#getCustomProviders().find(
       provider => parsed.providerId === getCustomProviderId(provider.name),
     );
     if (customProvider?.apiKey) return true;
-    if (authStorage.get(getAuthProviderId(parsed.providerId))?.type === 'oauth') return true;
     return hasResolvedAuth(
       MastraCodeGateway.resolveProviderAuth({
         gatewayId: this.id,
@@ -328,8 +300,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
     const storedCred = authStorage.get(getAuthProviderId(request.providerId));
     if (storedCred?.type === 'oauth') {
-      if (getAuthProviderId(request.providerId) === 'openai-codex') return undefined;
-      return Date.now() < storedCred.expires ? { bearerToken: 'oauth', source: 'gateway' } : undefined;
+      return { bearerToken: 'oauth', source: 'gateway' };
     }
 
     const apiKey = getProviderAuthKey(request.providerId);
@@ -347,12 +318,9 @@ export class MastraCodeGateway extends MastraModelGateway {
         const modelNames = providerConfig.models;
         if (!Array.isArray(modelNames)) continue;
 
-        const hasGatewayAuth =
-          gateway instanceof MastraCodeGateway
-            ? await gateway.#hasUsableProviderAuth(provider)
-            : Boolean(
-                modelNames[0] ? await resolveGatewayProviderAuth(gateway, `${provider}/${modelNames[0]}`) : undefined,
-              );
+        const gatewayAuth = modelNames[0]
+          ? await resolveGatewayProviderAuth(gateway, `${provider}/${modelNames[0]}`)
+          : undefined;
 
         for (const modelName of modelNames) {
           const id = `${provider}/${modelName}`;
@@ -360,7 +328,7 @@ export class MastraCodeGateway extends MastraModelGateway {
             id,
             provider,
             modelName,
-            hasApiKey: hasEnvKey || hasGatewayAuth,
+            hasApiKey: hasEnvKey || Boolean(gatewayAuth),
             apiKeyEnvVar: apiKeyEnvVar || undefined,
           });
         }
@@ -379,23 +347,7 @@ export class MastraCodeGateway extends MastraModelGateway {
   }
 
   async fetchProviders(): Promise<Record<string, ProviderConfig>> {
-    const providers: Record<string, ProviderConfig> = {
-      anthropic: {
-        name: 'Claude Code CLI',
-        apiKeyEnvVar: '',
-        apiKeyHeader: 'x-mastracode-local-cli',
-        gateway: this.id,
-        models: [LOCAL_CLAUDE_CLI_MODEL_ID],
-      },
-      openai: {
-        name: 'Codex CLI',
-        apiKeyEnvVar: '',
-        apiKeyHeader: 'x-mastracode-local-cli',
-        gateway: this.id,
-        models: [LOCAL_CODEX_CLI_MODEL_ID],
-      },
-    };
-
+    const providers: Record<string, ProviderConfig> = {};
     for (const provider of this.#getCustomProviders()) {
       const models = provider.models ?? [];
       if (!models.length) continue;
@@ -432,21 +384,10 @@ export class MastraCodeGateway extends MastraModelGateway {
   async getApiKey(modelId: string): Promise<string> {
     const providerId = stripMastraGatewayPrefix(modelId).split('/', 1)[0];
     if (this.#routeThroughMastraGateway) return this.#mastraGatewayApiKey ?? '';
-    if (!providerId) return '';
-    const authProviderId = getAuthProviderId(providerId);
-    const storedCred = authStorage.get(authProviderId);
-    if (storedCred?.type === 'oauth') {
-      if (authProviderId === 'openai-codex') return '';
-      return (await authStorage.getApiKey(authProviderId)) ?? '';
-    }
-    return getProviderAuthKey(providerId) ?? '';
+    return providerId ? (getProviderAuthKey(providerId) ?? '') : '';
   }
 
   resolveAuth(request: GatewayAuthRequest): GatewayAuthResult | undefined {
-    if (isLocalCliModel(request.providerId, request.modelId)) {
-      return { headers: { 'x-mastracode-local-cli': 'true' }, source: 'gateway' };
-    }
-
     if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) {
       return { apiKey: this.#mastraGatewayApiKey, source: 'gateway' };
     }
@@ -461,24 +402,6 @@ export class MastraCodeGateway extends MastraModelGateway {
     return MastraCodeGateway.resolveProviderAuth(request);
   }
 
-  async #hasUsableProviderAuth(providerId: string): Promise<boolean> {
-    const gatewayProviderPrefix = `${this.id}/`;
-    const gatewayProviderId = providerId.startsWith(gatewayProviderPrefix)
-      ? providerId.slice(gatewayProviderPrefix.length)
-      : undefined;
-    if (gatewayProviderId === 'anthropic' || gatewayProviderId === 'openai') {
-      const localCliStatus = await getLocalCliAuthStatus();
-      return gatewayProviderId === 'anthropic' ? localCliStatus.claude : localCliStatus.codex;
-    }
-    if (this.#routeThroughMastraGateway && this.#mastraGatewayApiKey) return true;
-    const authProviderId = gatewayProviderId ?? providerId;
-    const customProvider = this.#getCustomProviders().find(
-      provider => authProviderId === getCustomProviderId(provider.name),
-    );
-    if (customProvider?.apiKey) return true;
-    return hasUsableProviderCredential(authProviderId);
-  }
-
   resolveLanguageModel(args: {
     modelId: string;
     providerId: string;
@@ -487,10 +410,6 @@ export class MastraCodeGateway extends MastraModelGateway {
     transport?: any;
     responsesWebSocket?: any;
   }): GatewayLanguageModel {
-    if (isLocalCliModel(args.providerId, args.modelId)) {
-      return createLocalCliLanguageModel(args.providerId, args.modelId);
-    }
-
     const customProvider = this.#getCustomProviders().find(
       provider => args.providerId === getCustomProviderId(provider.name),
     );
@@ -549,10 +468,9 @@ export class MastraCodeGateway extends MastraModelGateway {
   }): GatewayLanguageModel {
     const bareModelId = normalizeAnthropicModelId(args.modelId);
     const storedCred = authStorage.get('anthropic');
-    const hasUsableOAuth = hasFreshOAuthCredential(storedCred);
 
     if (this.#routeThroughMastraGateway) {
-      if (hasUsableOAuth) {
+      if (storedCred?.type === 'oauth') {
         const anthropic = createAnthropic({
           apiKey: 'oauth-gateway-placeholder',
           baseURL: `${this.#mastraGatewayBaseUrl}/v1`,
@@ -572,7 +490,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return this.#mastraGateway.resolveLanguageModel({ ...args, modelId: bareModelId }) as GatewayLanguageModel;
     }
 
-    if (hasUsableOAuth) {
+    if (storedCred?.type === 'oauth') {
       return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
     }
 
@@ -589,7 +507,7 @@ export class MastraCodeGateway extends MastraModelGateway {
       return anthropicApiKeyProvider(bareModelId, apiKey, args.headers) as unknown as GatewayLanguageModel;
     }
 
-    // The OAuth-backed provider reports missing, expired, or refresh-failed credentials precisely.
+    // No stored credentials: use the OAuth-backed provider so the first request can trigger login.
     return opencodeClaudeMaxProvider(bareModelId, { headers: args.headers }) as unknown as GatewayLanguageModel;
   }
 

@@ -12,6 +12,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function hasErrorCode(value: unknown, code: string): boolean {
+  return value instanceof Error && 'code' in value && value.code === code;
+}
+
 function isWithinRoot(path: string, root: string): boolean {
   return path === root || path.startsWith(root.endsWith(sep) ? root : `${root}${sep}`);
 }
@@ -63,7 +67,7 @@ export class ProjectAccessPolicy {
         }
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' && !(error instanceof SyntaxError)) throw error;
+      if (!hasErrorCode(error, 'ENOENT') && !(error instanceof SyntaxError)) throw error;
     }
     return policy;
   }

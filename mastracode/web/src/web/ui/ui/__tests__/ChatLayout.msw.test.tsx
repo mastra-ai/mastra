@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { DesktopAppInfo } from '../../../../shared/desktop-host';
 import { ChatLayout } from '../ChatLayout';
 
 afterEach(() => {
@@ -10,8 +11,8 @@ afterEach(() => {
 
 function getBackdrop(container: HTMLElement) {
   const backdrop = container.querySelector('div[aria-hidden="true"]');
-  expect(backdrop).not.toBeNull();
-  return backdrop as HTMLDivElement;
+  if (!(backdrop instanceof HTMLDivElement)) throw new Error('Chat layout backdrop was not found');
+  return backdrop;
 }
 
 describe('ChatLayout', () => {
@@ -71,11 +72,13 @@ describe('ChatLayout', () => {
   describe('given the UI is hosted by the desktop app', () => {
     it('reserves the macOS window controls and exposes a native drag region', () => {
       window.mastracodeDesktop = {
-        getAppInfo: vi.fn(async () => ({
-          name: 'MastraCode Desktop Alpha',
-          version: 'test',
-          platform: 'darwin' as const,
-        })),
+        getAppInfo: vi.fn(
+          async (): Promise<DesktopAppInfo> => ({
+            name: 'MastraCode Desktop Alpha',
+            version: 'test',
+            platform: 'darwin',
+          }),
+        ),
         selectProjectDirectory: vi.fn(async () => ({ canceled: true })),
       };
 

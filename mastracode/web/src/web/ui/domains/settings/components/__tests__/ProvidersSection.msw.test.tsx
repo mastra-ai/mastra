@@ -18,7 +18,9 @@ function providersResponse(providers: ProviderInfo[], credentialManagementEnable
 }
 
 function rowFor(name: string): HTMLElement {
-  return screen.getByText(name).closest('li') as HTMLElement;
+  const row = screen.getByText(name).closest('li');
+  if (!(row instanceof HTMLElement)) throw new Error(`Provider row was not found: ${name}`);
+  return row;
 }
 
 describe('ProvidersSection', () => {
@@ -178,7 +180,11 @@ describe('ProvidersSection', () => {
       server.use(
         http.get(PROVIDERS_URL, () => providersResponse(providers)),
         http.post(oauthStartUrl('anthropic'), () =>
-          HttpResponse.json({ loginId: 'login-1', authUrl: 'https://claude.ai/oauth' }),
+          HttpResponse.json({
+            loginId: 'login-1',
+            authUrl: 'https://claude.ai/oauth',
+            completionMode: 'manual-code',
+          }),
         ),
         http.post(oauthCompleteUrl('anthropic'), async ({ request }) => {
           completeBody = await request.json();

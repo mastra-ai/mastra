@@ -141,6 +141,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-border1 pt-3">
               <span className="text-ui-xs text-icon3">Missing a repository or connected the wrong account?</span>
               <button
+                type="button"
                 className="shrink-0 rounded-lg border border-border1 bg-surface2 px-3 py-1.5 text-ui-xs font-medium text-icon6 hover:border-border2 hover:bg-surface4"
                 onClick={() => connectGithub(baseUrl)}
               >

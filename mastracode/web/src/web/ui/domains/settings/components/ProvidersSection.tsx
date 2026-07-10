@@ -1,7 +1,7 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Search } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 
 import type { ProviderInfo, StartProviderOAuthResponse } from '../../../../../shared/api/types';
 import {
@@ -17,14 +17,38 @@ import { ProviderRow } from './ProviderRow';
 
 const EMPTY_PROVIDERS: ProviderInfo[] = [];
 
-/**
- * Provider account and API-key management. Mirrors the TUI's auth commands.
- *
- * The search box is the primary affordance and stays pinned at the top of the
- * pane. An empty query shows subscription sign-in options and configured
- * providers; typing filters the full catalog so any provider is reachable.
- * Keys are written to the server credential store and never read back.
- */
+function compareDefaultProviders(a: ProviderInfo, b: ProviderInfo): number {
+  if (Boolean(a.oauthSupported) !== Boolean(b.oauthSupported)) return a.oauthSupported ? -1 : 1;
+  return a.provider.localeCompare(b.provider);
+}
+
+function compareSearchResults(a: ProviderInfo, b: ProviderInfo): number {
+  const aConfigured = a.source !== 'none';
+  const bConfigured = b.source !== 'none';
+  if (aConfigured !== bConfigured) return aConfigured ? -1 : 1;
+  return a.provider.localeCompare(b.provider);
+}
+
+function providerSummary({
+  hasSubscriptionLogin,
+  configuredCount,
+  credentialManagementEnabled,
+}: {
+  hasSubscriptionLogin: boolean;
+  configuredCount: number;
+  credentialManagementEnabled: boolean;
+}): string {
+  if (hasSubscriptionLogin) return 'Sign in with a subscription, or search for another provider.';
+  if (configuredCount > 0) {
+    return credentialManagementEnabled
+      ? `${configuredCount} configured. Search above to add more.`
+      : `${configuredCount} configured.`;
+  }
+  return credentialManagementEnabled
+    ? 'No providers configured yet. Search above to add one.'
+    : 'No providers configured.';
+}
+
 export function ProvidersSection() {
   const providersQuery = useProvidersQuery();
   const saveKeyMutation = useSaveProviderKey();
@@ -53,31 +77,19 @@ export function ProvidersSection() {
     removeOAuthMutation.error,
   ].find((error): error is Error => error instanceof Error);
 
-  const defaultProviders = useMemo(
-    () =>
-      providers
-        .filter(provider => provider.source !== 'none' || provider.oauthSupported)
-        .sort((a, b) => {
-          if (Boolean(a.oauthSupported) !== Boolean(b.oauthSupported)) return a.oauthSupported ? -1 : 1;
-          return a.provider.localeCompare(b.provider);
-        }),
-    [providers],
-  );
+  const defaultProviders = providers
+    .filter(provider => provider.source !== 'none' || provider.oauthSupported)
+    .toSorted(compareDefaultProviders);
   const configuredCount = providers.filter(provider => provider.source !== 'none').length;
   const hasSubscriptionLogin = defaultProviders.some(
     provider => provider.oauthSupported && provider.source !== 'oauth',
   );
 
-  // When searching, surface ALL matches (any source) so configured + new
-  // providers are reachable; configured ones float to the top.
   const q = search.trim().toLowerCase();
   const results = q
     ? providers
         .filter(p => `${p.provider} ${p.displayName ?? ''}`.toLowerCase().includes(q))
-        .sort((a, b) => {
-          if ((a.source !== 'none') !== (b.source !== 'none')) return a.source !== 'none' ? -1 : 1;
-          return a.provider.localeCompare(b.provider);
-        })
+        .toSorted(compareSearchResults)
         .slice(0, 50)
     : [];
 
@@ -158,15 +170,7 @@ export function ProvidersSection() {
         <>
           {!searching && (
             <Txt as="p" variant="ui-sm" className="text-icon3">
-              {hasSubscriptionLogin
-                ? 'Sign in with a subscription, or search for another provider.'
-                : configuredCount > 0
-                  ? credentialManagementEnabled
-                    ? `${configuredCount} configured. Search above to add more.`
-                    : `${configuredCount} configured.`
-                  : credentialManagementEnabled
-                    ? 'No providers configured yet. Search above to add one.'
-                    : 'No providers configured.'}
+              {providerSummary({ hasSubscriptionLogin, configuredCount, credentialManagementEnabled })}
             </Txt>
           )}
           {list.length === 0 ? (

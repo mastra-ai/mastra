@@ -31,7 +31,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
-import type { DuckDBStore } from '@mastra/duckdb';
+import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
 import { LibSQLVector } from '@mastra/libsql';
@@ -379,7 +379,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   let observabilityWarning: string | undefined;
   if (globalSettings.observability.localTracing) {
     try {
-      const { DuckDBStore } = await import('@mastra/duckdb');
       const observabilityDuckDB = new DuckDBStore({
         id: 'mastra-code-observability',
         path: getObservabilityDatabasePath(),
@@ -469,8 +468,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
-  const vectorStore =
-    config?.memory === false ? undefined : await createVectorStore(storageConfig, storageResult.backend);
+  const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
 
   // Maintenance handle for /prune: prunes via the inner store (whose retention
   // config covers every domain, including legacy libsql observability spans)

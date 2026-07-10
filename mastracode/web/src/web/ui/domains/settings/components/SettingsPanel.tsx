@@ -7,7 +7,7 @@ import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
 import { getErrorMessage } from '../../../../../shared/api/errors';
-import { useToast } from '../../../ui';
+import { useToast } from '../../../ui/toast';
 import { useChatModels } from '../../chat/context/useChatModels';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
@@ -57,7 +57,7 @@ export function SettingsPanel({ initialTab = 'general', onClose }: SettingsPanel
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
   const models = modelsQuery.data ?? [];
-  const settings = settingsQuery.data ?? null;
+  const settings = settingsQuery.data ?? undefined;
   const sessionResourceId = sessionEnabled ? resourceId : undefined;
 
   const onModelChange = (modelId: string) => {
@@ -98,9 +98,11 @@ export function SettingsPanel({ initialTab = 'general', onClose }: SettingsPanel
             <TabContent value="model">
               <ModelTab
                 models={models}
-                currentModelId={activeModelId ?? null}
+                currentModelId={activeModelId}
                 error={
-                  modelsQuery.error ? getErrorMessage(modelsQuery.error, 'The model catalog could not be loaded') : null
+                  modelsQuery.error
+                    ? getErrorMessage(modelsQuery.error, 'The model catalog could not be loaded')
+                    : undefined
                 }
                 settings={settings}
                 onModelChange={onModelChange}
@@ -117,7 +119,7 @@ export function SettingsPanel({ initialTab = 'general', onClose }: SettingsPanel
               <BehaviorTab
                 settings={settings}
                 onBehaviorChange={onBehaviorChange}
-                permissions={permissions ?? null}
+                permissions={permissions ?? undefined}
                 pendingPermissionCategory={pendingPermissionCategory}
                 setPermissionForCategory={setPermissionForCategory}
               />

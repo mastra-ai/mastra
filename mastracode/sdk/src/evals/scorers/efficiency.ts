@@ -66,15 +66,7 @@ const THRESHOLDS = {
   readTools: ['view'] as string[],
 
   /** Tools whose repeated identical calls are intentional (idempotent reads). */
-  redundancyWhitelist: [
-    'view',
-    'search_content',
-    'find_files',
-    'lsp_inspect',
-    'web_search',
-    'web_extract',
-    'web_fetch',
-  ] as string[],
+  redundancyWhitelist: ['view', 'search_content', 'find_files', 'lsp_inspect', 'web_search', 'web_extract'] as string[],
 
   /** Minimum tool calls required to produce a meaningful score. */
   minToolCalls: 2,
