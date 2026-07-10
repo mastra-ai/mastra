@@ -198,7 +198,12 @@ describe('InngestExecutionEngine nested workflow output', () => {
   });
 });
 
-/** Creates a minimal Inngest workflow instance for nested execution tests. */
+/**
+ * Creates a minimal Inngest workflow instance for nested execution tests.
+ *
+ * @param id - The workflow identifier exposed by the test instance.
+ * @returns An Inngest workflow with a deterministic function identifier.
+ */
 function createNestedWorkflow(id: string): InngestWorkflow {
   const workflow = Object.create(InngestWorkflow.prototype);
   Object.defineProperties(workflow, {
@@ -208,7 +213,11 @@ function createNestedWorkflow(id: string): InngestWorkflow {
   return workflow;
 }
 
-/** Creates a minimal parent execution context for nested workflow tests. */
+/**
+ * Creates a minimal parent execution context for nested workflow tests.
+ *
+ * @returns A fresh execution context with deterministic parent identifiers.
+ */
 function createExecutionContext() {
   return {
     workflowId: 'parent',
