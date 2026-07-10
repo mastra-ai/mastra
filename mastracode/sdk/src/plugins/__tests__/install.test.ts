@@ -224,15 +224,8 @@ describe('installGithubPlugin', () => {
     );
     expect(execaMock).toHaveBeenNthCalledWith(
       4,
-      process.execPath,
-      [
-        expect.stringMatching(/corepack[\\/]dist[\\/]corepack\.js$/),
-        'pnpm@10.0.0',
-        'install',
-        '--ignore-workspace',
-        '--frozen-lockfile',
-        '--ignore-scripts',
-      ],
+      'corepack',
+      ['pnpm@10.0.0', 'install', '--ignore-workspace', '--frozen-lockfile', '--ignore-scripts'],
       expect.objectContaining({ cwd: checkoutDir }),
     );
     expect(
@@ -255,7 +248,7 @@ describe('installGithubPlugin', () => {
         writePlugin(destination, 'acme.dep-fail');
         fs.writeFileSync(path.join(destination, 'package.json'), JSON.stringify({ packageManager: 'pnpm@10.0.0' }));
       }
-      if (cmd === process.execPath && args[1] === 'pnpm@10.0.0') {
+      if (cmd === 'corepack' && args[0] === 'pnpm@10.0.0') {
         throw installError;
       }
       return { stdout: '' };
@@ -329,14 +322,8 @@ describe('installGithubPlugin', () => {
       expect.objectContaining({ env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
-      [
-        expect.stringMatching(/corepack[\\/]dist[\\/]corepack\.js$/),
-        'pnpm@11.8.0',
-        'install',
-        '--ignore-workspace',
-        '--ignore-scripts',
-      ],
+      'corepack',
+      ['pnpm@11.8.0', 'install', '--ignore-workspace', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedPluginDir }),
     );
     expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(

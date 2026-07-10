@@ -211,14 +211,8 @@ describe('PluginManager', () => {
       expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
-      [
-        expect.stringMatching(/corepack[\\/]dist[\\/]corepack\.js$/),
-        'pnpm@10.0.0',
-        'install',
-        '--ignore-workspace',
-        '--ignore-scripts',
-      ],
+      'corepack',
+      ['pnpm@10.0.0', 'install', '--ignore-workspace', '--ignore-scripts'],
       expect.objectContaining({ cwd: checkoutDir, env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }) }),
     );
     expect(fs.realpathSync(path.join(checkoutDir, 'node_modules', 'mastracode'))).toBe(
@@ -252,8 +246,8 @@ describe('PluginManager', () => {
       }),
     );
     execaMock.mockImplementation(async (cmd: string, args: string[], options: { cwd?: string } = {}) => {
-      if (cmd === process.execPath) {
-        expect(args[1]).toBe('pnpm@11.8.0');
+      if (cmd === 'corepack') {
+        expect(args[0]).toBe('pnpm@11.8.0');
         expect([checkoutDir, nestedPluginDir]).toContain(options.cwd);
         return { stdout: '' };
       }
@@ -281,14 +275,8 @@ describe('PluginManager', () => {
 
     expect(manager.getPluginTools().github_tool?.description).toBe('second');
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
-      [
-        expect.stringMatching(/corepack[\\/]dist[\\/]corepack\.js$/),
-        'pnpm@11.8.0',
-        'install',
-        '--ignore-workspace',
-        '--ignore-scripts',
-      ],
+      'corepack',
+      ['pnpm@11.8.0', 'install', '--ignore-workspace', '--ignore-scripts'],
       expect.objectContaining({ cwd: nestedPluginDir }),
     );
     expect(fs.realpathSync(path.join(nestedPluginDir, 'node_modules', 'mastracode'))).toBe(
@@ -333,9 +321,7 @@ describe('PluginManager', () => {
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(false);
 
-    expect(execaMock.mock.calls.some(call => call[0] === process.execPath && call[1][1]?.startsWith('pnpm@'))).toBe(
-      false,
-    );
+    expect(execaMock.mock.calls.some(call => call[0] === 'corepack' && call[1][0]?.startsWith('pnpm@'))).toBe(false);
   });
 
   it('backs up divergent GitHub plugin checkouts before forcing them to origin', async () => {
@@ -431,7 +417,7 @@ describe('PluginManager', () => {
 
     await expect(manager.pollGithubSourcesForUpdates()).resolves.toBe(true);
 
-    expect(execaMock.mock.calls.map(call => (call[0] === process.execPath ? call[1][2] : call[1][0]))).toEqual([
+    expect(execaMock.mock.calls.map(call => (call[0] === 'corepack' ? call[1][1] : call[1][0]))).toEqual([
       'rev-parse',
       'fetch',
       'rev-parse',
@@ -488,7 +474,7 @@ describe('PluginManager', () => {
     );
     execaMock.mockImplementation(async (cmd: string, args: string[], options: { cwd?: string } = {}) => {
       expect(options.cwd).toBe(checkoutDir);
-      if (cmd === process.execPath && args[1] === 'pnpm@10.0.0') throw installError;
+      if (cmd === 'corepack' && args[0] === 'pnpm@10.0.0') throw installError;
       if (args[0] === 'rev-parse' && args[1] === 'HEAD') return { stdout: 'old' };
       if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
       if (args[0] === 'rev-list') return { stdout: '0\t1' };

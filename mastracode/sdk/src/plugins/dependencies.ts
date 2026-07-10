@@ -1,12 +1,8 @@
 import fs from 'node:fs';
-import { createRequire } from 'node:module';
 import path from 'node:path';
 
 import { execa } from 'execa';
 
-const require = createRequire(import.meta.url);
-const corepackPackageJsonPath = require.resolve('corepack/package.json');
-const corepackCliPath = path.join(path.dirname(corepackPackageJsonPath), 'dist/corepack.js');
 const NON_INTERACTIVE_INSTALL_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
 
 type InstallCommand = {
@@ -45,7 +41,17 @@ export async function installPluginDependencies(
     child.stdout?.on('data', options.onOutput);
     child.stderr?.on('data', options.onOutput);
   }
-  await child;
+  try {
+    await child;
+  } catch (error) {
+    if (isCommandNotFoundError(error)) {
+      throw new Error(
+        'Mastra Code requires Corepack to install GitHub plugin dependencies. Install it with "npm install --global corepack" and try again.',
+        { cause: error },
+      );
+    }
+    throw error;
+  }
   return true;
 }
 
@@ -115,9 +121,13 @@ function getInstallCommand(pluginRoot: string, pnpmVersion: string): InstallComm
   installArgs.push('--ignore-scripts');
 
   return {
-    command: process.execPath,
-    args: [corepackCliPath, `pnpm@${pnpmVersion}`, ...installArgs],
+    command: 'corepack',
+    args: [`pnpm@${pnpmVersion}`, ...installArgs],
   };
+}
+
+function isCommandNotFoundError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
 }
 
 function readPackageJson(pluginRoot: string): { packageManager?: unknown } {

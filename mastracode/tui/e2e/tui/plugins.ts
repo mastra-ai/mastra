@@ -358,6 +358,7 @@ function prepareGithubInstallGhPlugin(
 
   mkdirSync(fakeBinDir, { recursive: true });
   symlinkSync(execFileSync('/usr/bin/which', ['git'], { encoding: 'utf8' }).trim(), join(fakeBinDir, 'git'));
+  symlinkSync(execFileSync('/usr/bin/which', ['corepack'], { encoding: 'utf8' }).trim(), join(fakeBinDir, 'corepack'));
   symlinkSync(process.execPath, join(fakeBinDir, 'node'));
   symlinkSync('/bin/sh', join(fakeBinDir, 'sh'));
   writeFileSync(

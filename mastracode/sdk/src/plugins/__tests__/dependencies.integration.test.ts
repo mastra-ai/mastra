@@ -45,7 +45,7 @@ function makeInstallFixture(version: string): { pluginRoot: string; corepackHome
   return { pluginRoot, corepackHome, scriptSentinel };
 }
 
-describe.runIf(runIntegration)('bundled Corepack plugin installs', () => {
+describe.runIf(runIntegration)('global Corepack plugin installs', () => {
   it.each(['10.24.0', '11.8.0'])(
     'installs with pnpm %s and disables lifecycle scripts',
     async version => {
@@ -62,7 +62,7 @@ describe.runIf(runIntegration)('bundled Corepack plugin installs', () => {
         });
       } catch (error) {
         throw new Error(
-          `Bundled Corepack failed to acquire pnpm ${version} or pnpm failed to install the fixture. Output:\n${output.join('')}`,
+          `Global Corepack failed to acquire pnpm ${version} or pnpm failed to install the fixture. Output:\n${output.join('')}`,
           { cause: error },
         );
       }

@@ -32,7 +32,6 @@ function writePackageJson(pluginRoot: string, packageJson: Record<string, unknow
 
 function expectedCorepackArgs(version: string, frozen = false): unknown[] {
   return [
-    expect.stringMatching(/corepack[\\/]dist[\\/]corepack\.js$/),
     `pnpm@${version}`,
     'install',
     '--ignore-workspace',
@@ -57,7 +56,7 @@ describe('installPluginDependencies', () => {
     await expect(installPluginDependencies(pluginRoot)).resolves.toBe(true);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs(packageManager.slice('pnpm@'.length)),
       expect.objectContaining({ cwd: pluginRoot }),
     );
@@ -107,7 +106,7 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('10.24.0', true),
       expect.objectContaining({ cwd: pluginRoot }),
     );
@@ -122,7 +121,7 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('11.8.0'),
       expect.objectContaining({ cwd: pluginRoot }),
     );
@@ -147,7 +146,7 @@ describe('installPluginDependencies', () => {
 
     expect(output).toEqual(['stdout line\n', 'stderr line\n']);
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('10.24.0'),
       expect.objectContaining({
         env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
@@ -167,6 +166,17 @@ describe('installPluginDependencies', () => {
     await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(error);
   });
 
+  it('throws an actionable error when Corepack is unavailable', async () => {
+    const pluginRoot = makePluginRoot();
+    const error = Object.assign(new Error('spawn corepack ENOENT'), { code: 'ENOENT' });
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
+    execaMock.mockRejectedValueOnce(error);
+
+    await expect(installPluginDependencies(pluginRoot)).rejects.toThrow(
+      'Mastra Code requires Corepack to install GitHub plugin dependencies. Install it with "npm install --global corepack" and try again.',
+    );
+  });
+
   it('disables lifecycle scripts during install', async () => {
     const pluginRoot = makePluginRoot();
     writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
@@ -174,7 +184,7 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('11.8.0'),
       expect.objectContaining({ cwd: pluginRoot }),
     );
@@ -206,7 +216,7 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(nestedRoot, pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('11.8.0'),
       expect.objectContaining({ cwd: nestedRoot }),
     );
@@ -222,7 +232,7 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(nestedRoot, pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('10.24.0'),
       expect.objectContaining({ cwd: nestedRoot }),
     );
@@ -239,7 +249,7 @@ describe('installPluginDependencies', () => {
     await installPluginDependencies(nestedRoot, pluginRoot);
 
     expect(execaMock).toHaveBeenCalledWith(
-      process.execPath,
+      'corepack',
       expectedCorepackArgs('11.8.0', true),
       expect.objectContaining({ cwd: nestedRoot }),
     );
