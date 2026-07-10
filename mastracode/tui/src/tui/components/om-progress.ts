@@ -186,7 +186,7 @@ export function formatOMContextIndicator(
     state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens,
   );
   const hasSavings = messageSavings + reflectionSavings > 0;
-  const savingsSlot = hasSavings ? ' ↓' : '  ';
+  const savingsSlot = hasSavings ? '↓ ' : '  ';
 
   const plain = `${memorySegment}${messageSegment}${unusedSegment}  ${fraction}${savingsSlot}`;
   const styleMessages = stylers.messages ?? (segment => theme.fg('text', segment));
@@ -199,7 +199,7 @@ export function formatOMContextIndicator(
     '  ' +
     chalk.bold(theme.fg('text', usedText)) +
     theme.fg('thinkingText', `/${capacityText}`) +
-    (hasSavings ? ` ${theme.fg('success', '↓')}` : '  ');
+    (hasSavings ? `${theme.fg('success', '↓')} ` : '  ');
 
   return { plain, styled, messageCells, memoryCells, unusedCells };
 }

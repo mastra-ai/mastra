@@ -14,17 +14,6 @@ import { theme, mastra, mastraBrand, tintHex, getTermWidth, extendedColors } fro
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
 
-/** Returns true if a thread title is generic/auto-generated and should not be displayed. */
-function isGenericTitle(title: string): boolean {
-  const lower = title.toLowerCase().trim();
-  return (
-    lower === 'new thread' ||
-    lower.startsWith('new thread') ||
-    lower.startsWith('clone of') ||
-    lower.startsWith('untitled')
-  );
-}
-
 function formatGithubPrLabel(
   state: TUIState,
   subscription: GithubPrSubscriptionBadge,
@@ -46,11 +35,18 @@ function formatGithubPrLabel(
   return { plain: label, styled: chalk.hex(color)(label) };
 }
 
-function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
+function getGoalDurationMs(
+  goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number },
+  now: number,
+): number {
   const activeStartedAt = goal.activeStartedAt ?? (goal.activeDurationMs === undefined ? goal.startedAt : undefined);
   const startedMs = activeStartedAt ? Date.parse(activeStartedAt) : NaN;
-  const activeRunMs = Number.isFinite(startedMs) ? Math.max(0, Date.now() - startedMs) : 0;
-  const elapsedMinutes = Math.floor(((goal.activeDurationMs ?? 0) + activeRunMs) / 60_000);
+  const activeRunMs = Number.isFinite(startedMs) ? Math.max(0, now - startedMs) : 0;
+  return (goal.activeDurationMs ?? 0) + activeRunMs;
+}
+
+function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
+  const elapsedMinutes = Math.floor(getGoalDurationMs(goal, Date.now()) / 60_000);
   if (elapsedMinutes < 1) return '<1m';
 
   const days = Math.floor(elapsedMinutes / 1_440);
@@ -175,37 +171,31 @@ export function updateStatusLine(state: TUIState): void {
     ? shortModelId
     : shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
 
-  const homedir = process.env.HOME || process.env.USERPROFILE || '';
-  // Use thread title if available and not generic, otherwise use project root path
-  const threadTitle =
-    state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
-  let displayPath = threadTitle || state.projectInfo.rootPath;
-  if (!threadTitle && homedir && displayPath.startsWith(homedir)) {
-    displayPath = '~' + displayPath.slice(homedir.length);
-  }
   const branch = state.projectInfo.gitBranch;
+  const now = Date.now();
   const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
   const goalState = state.goalManager?.getGoal();
   const goalDuration = !isJudging && goalState?.status === 'active' ? formatGoalDuration(goalState) : null;
-  const goalLabel = goalDuration ? `pursuing goal (${goalDuration})` : null;
-  const shortGoalLabel = goalDuration ? `goal (${goalDuration})` : null;
+  const goalMatchesActiveRun =
+    goalState?.status === 'active' &&
+    goalDuration !== null &&
+    state.agentRunStartedAt !== undefined &&
+    Math.floor(getGoalDurationMs(goalState, now) / 60_000) === Math.floor((now - state.agentRunStartedAt) / 60_000);
+  const goalLabel = goalDuration ? (goalMatchesActiveRun ? 'goal' : `goal ${goalDuration}`) : null;
   const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
   const githubPrLabel = activeGithubPr ? formatGithubPrLabel(state, activeGithubPr) : null;
   const formatDirPart = (value: string) => {
-    if (!githubPrLabel) return { plain: value, styled: theme.fg('dim', value) };
+    if (!githubPrLabel) return { plain: value, styled: theme.fg('thinkingText', value) };
     return {
       plain: `${githubPrLabel.plain} ${value}`,
-      styled: `${githubPrLabel.styled} ${theme.fg('dim', value)}`,
+      styled: `${githubPrLabel.styled} ${theme.fg('thinkingText', value)}`,
     };
   };
-  // Build progressively shorter directory strings for layout fallback
-  // Only show branch when not showing thread title (thread title takes priority)
-  const dirFull = !threadTitle && branch ? `${displayPath} (${branch})` : displayPath;
-  const dirBranchOnly = !threadTitle && branch ? branch : null;
-  // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between
-  const dirBranchShort =
-    !threadTitle && branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
+  // Build progressively shorter branch strings for layout fallback.
+  const dirBranchOnly = branch || null;
+  // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between.
+  const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
@@ -277,7 +267,6 @@ export function updateStatusLine(state: TUIState): void {
     shortModeBadgeWidth = shortName.length + 2;
   }
 
-  const now = Date.now();
   const activeTimingLabel =
     state.agentRunStartedAt !== undefined
       ? formatStatusDuration(now - state.agentRunStartedAt, { includeSeconds: true })
@@ -306,7 +295,6 @@ export function updateStatusLine(state: TUIState): void {
     allowDirTruncation?: boolean;
     badge?: 'full' | 'short';
     showQueue?: boolean;
-    compactGoal?: boolean;
   }): { plain: string; styled: string } | null => {
     const parts: Array<{ plain: string; styled: string }> = [];
     // Model ID (always present) — styleModelId adds padding spaces
@@ -370,11 +358,10 @@ export function updateStatusLine(state: TUIState): void {
             unused: unusedSegmentStyler,
           })
         : null;
-    if (state.tokensPerSec > 0) {
-      const tpsLabel = `${state.tokensPerSec} tok/s`;
+    if (opts.showQueue && goalLabel) {
       parts.push({
-        plain: tpsLabel,
-        styled: theme.fg('dim', tpsLabel),
+        plain: goalLabel,
+        styled: theme.fg('success', goalLabel),
       });
     }
     if (opts.showQueue && queuedLabel) {
@@ -383,19 +370,20 @@ export function updateStatusLine(state: TUIState): void {
         styled: theme.fg('warning', queuedLabel),
       });
     }
-    const renderedGoalLabel = opts.compactGoal ? shortGoalLabel : goalLabel;
-    if (opts.showQueue && renderedGoalLabel) {
-      parts.push({
-        plain: renderedGoalLabel,
-        styled: theme.fg('accent', renderedGoalLabel),
-      });
-    }
+    const tpsLabel = state.tokensPerSec > 0 ? `${String(state.tokensPerSec).padStart(3)} t/s` : null;
+    const tpsPart = tpsLabel
+      ? {
+          plain: tpsLabel,
+          styled: theme.fg('text', tpsLabel),
+        }
+      : null;
     // Directory / branch / thread title (lowest priority on line 1)
-    let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
+    let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirBranchOnly : null;
 
     // Measure width of everything except dir to know how much space remains.
-    // The context indicator is reserved at the far right even though it is appended after dir.
-    const nonDirParts = indicatorPart ? [...parts, indicatorPart] : parts;
+    // Throughput and the context indicator are reserved at the far right even though they are appended after dir.
+    const rightParts = indicatorPart ? [tpsPart, indicatorPart].filter(part => part !== null) : [];
+    const nonDirParts = [...parts, ...rightParts];
     const nonDirWidth =
       useBadgeWidth + nonDirParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
@@ -421,7 +409,9 @@ export function updateStatusLine(state: TUIState): void {
       parts.push(formatDirPart(dirText));
     }
     if (indicatorPart) {
-      parts.push({ plain: indicatorPart.plain, styled: indicatorPart.styled });
+      parts.push(...rightParts);
+    } else if (tpsPart) {
+      parts.push(tpsPart);
     }
     const totalPlain =
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
@@ -431,14 +421,18 @@ export function updateStatusLine(state: TUIState): void {
     let styledLine: string;
     const hasDir = !!dirText;
     if (indicatorPart && parts.length >= 2) {
-      // Three groups: left (model), center (activity + dir/thread), right (context indicator)
-      const leftPart = parts[0]!;
-      const centerParts = parts.slice(1, -1);
-      const rightPart = parts[parts.length - 1]!;
+      // Three groups: left (model + timing + goal), center (queue + dir/thread), right (throughput + context)
+      const leftPartCount = opts.showQueue && goalLabel ? 2 : 1;
+      const leftParts = parts.slice(0, leftPartCount);
+      const centerParts = parts.slice(leftPartCount, -rightParts.length);
+      const leftSeparatorPlain = timingLabel ? ' · ' : ' ';
+      const leftSeparatorStyled = timingLabel ? ` ${theme.fg('success', '·')} ` : ' ';
 
-      const leftWidth = useBadgeWidth + visibleWidth(leftPart.plain);
+      const leftWidth =
+        useBadgeWidth +
+        leftParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? leftSeparatorPlain.length : 0), 0);
       const centerWidth = centerParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
-      const rightWidth = visibleWidth(rightPart.plain);
+      const rightWidth = rightParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
       const totalContent = leftWidth + centerWidth + rightWidth;
       const freeSpace = termWidth - totalContent;
       const gapLeft = Math.floor(freeSpace / 2);
@@ -446,11 +440,11 @@ export function updateStatusLine(state: TUIState): void {
 
       styledLine =
         useBadge +
-        leftPart.styled +
+        leftParts.map(p => p.styled).join(leftSeparatorStyled) +
         ' '.repeat(Math.max(gapLeft, 1)) +
         centerParts.map(p => p.styled).join(SEP) +
         ' '.repeat(Math.max(gapRight, 1)) +
-        rightPart.styled;
+        rightParts.map(p => p.styled).join(SEP);
     } else if (hasDir && parts.length === 2) {
       // Just model + dir, right-align dir
       const mainStr = useBadge + parts[0]!.styled;
@@ -468,13 +462,6 @@ export function updateStatusLine(state: TUIState): void {
     buildLine({
       modelId: fullModelId,
       showDir: false,
-      dir: dirFull,
-      allowDirTruncation: false,
-      showQueue: true,
-    }) ??
-    buildLine({
-      modelId: fullModelId,
-      showDir: false,
       dir: dirBranchOnly,
       allowDirTruncation: false,
       showQueue: true,
@@ -483,16 +470,7 @@ export function updateStatusLine(state: TUIState): void {
     buildLine({ modelId: fullModelId, showDir: false, showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showDir: false, showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true, compactGoal: true }) ??
     buildLine({ modelId: tinyModelId, showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
-    buildLine({
-      modelId: tinyModelId,
-      showOM: false,
-      showDir: false,
-      badge: 'short',
-      showQueue: true,
-      compactGoal: true,
-    }) ??
     buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showOM: false, showDir: false }) ??
     buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short' });

@@ -151,8 +151,8 @@ describe('formatOMContextIndicator', () => {
       createState({ messageSavings: 2_000, reflectionInput: 1_000, reflectionOutput: 5_000 }),
     );
 
-    expect(combined.plain.endsWith(' ↓')).toBe(true);
-    expect(positiveWithNegativeSource.plain.endsWith(' ↓')).toBe(true);
+    expect(combined.plain.endsWith('↓ ')).toBe(true);
+    expect(positiveWithNegativeSource.plain.endsWith('↓ ')).toBe(true);
   });
 
   it('suppresses the arrow for zero savings while preserving the indicator width', () => {

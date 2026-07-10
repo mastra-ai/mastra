@@ -368,8 +368,9 @@ describe('updateStatusLine', () => {
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
-  it('uses abbreviated long branch before truncating path and dropping branch context', () => {
+  it('shows only the branch in the center and abbreviates it when needed', () => {
     const state = createState();
+    state.currentThreadTitle = 'A much longer generated thread title that should never appear';
     state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
     process.stdout.columns = 80;
 
@@ -377,7 +378,8 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('feature/supe..tra-l…');
-    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux…');
+    expect(rendered).not.toContain('A much longer generated thread title');
+    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux');
   });
 
   it('shows active goal duration instead of attempt count', () => {
@@ -399,10 +401,39 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('pursuing goal (1hr10m)');
+    expect(rendered).toContain('goal 1hr10m');
+    expect(rendered).not.toContain('· goal');
     expect(rendered).not.toContain('goal attempt');
     expect(rendered).not.toContain('1/20');
     vi.useRealTimers();
+  });
+
+  it('places goal after run duration, hides a matching goal time, and puts throughput before context', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:30.000Z'));
+    const state = createState();
+    state.agentRunStartedAt = Date.parse('2026-05-15T12:00:00.000Z');
+    state.tokensPerSec = 80;
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        startedAt: '2026-05-15T12:00:00.000Z',
+      })),
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0] as string;
+    expect(rendered).toContain('30s · goal');
+    expect(rendered).not.toContain('goal <1m');
+    expect(rendered).toMatch(/ 80 t\/s\s+━━━━━━━━━━/);
+    expect(rendered).not.toContain('tok/s');
+
+    state.tokensPerSec = 120;
+    updateStatusLine(state);
+    const renderedOver100 = state.statusLine.setText.mock.calls[1]?.[0] as string;
+    expect(renderedOver100).toMatch(/120 t\/s\s+━━━━━━━━━━/);
+    expect(renderedOver100.indexOf(state.projectInfo.gitBranch)).toBe(rendered.indexOf(state.projectInfo.gitBranch));
   });
 
   it('freezes active goal duration while waiting for user input', () => {
@@ -422,12 +453,12 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('pursuing goal (10m)');
+    expect(rendered).toContain('goal 10m');
     expect(rendered).not.toContain('6hr10m');
     vi.useRealTimers();
   });
 
-  it('uses a compact active goal duration label on narrow screens', () => {
+  it('keeps the concise active goal duration label on narrow screens', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     const state = createState();
@@ -446,8 +477,9 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('goal (2days3hr)');
-    expect(rendered).not.toContain('pursuing goal');
+    expect(rendered).toContain('goal 2days3hr');
+    expect(rendered).not.toContain('pursuing');
+    expect(rendered).not.toContain('(');
     vi.useRealTimers();
   });
 
@@ -486,9 +518,9 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('━━━━━━━━━━  60/120k ↓');
+    expect(rendered).toContain('━━━━━━━━━━  60/120k↓ ');
     expect(rendered.indexOf('feat/mc-queueing-ux')).toBeLessThan(rendered.indexOf('━━━━━━━━━━'));
-    expect(rendered).toMatch(/━━━━━━━━━━  60\/120k ↓$/);
+    expect(rendered).toMatch(/━━━━━━━━━━  60\/120k↓ $/);
     expect(rendered).not.toContain('messages');
     expect(rendered).not.toContain('memory');
   });
@@ -518,7 +550,7 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('━━━━━━━━━━  60/120k ↓');
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('━━━━━━━━━━  60/120k↓ ');
   });
 
   it('animates only the message segment while keeping the middle, model, badge, and text static', () => {
@@ -541,7 +573,7 @@ describe('updateStatusLine', () => {
     expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
     expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#00ff00', 0);
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('━━<sweep>━━━</sweep>━━━━━  60/120k ↓');
+    expect(rendered).toContain('━━<sweep>━━━</sweep>━━━━━  60/120k↓ ');
   });
 
   it('animates only the memory segment', () => {
