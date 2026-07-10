@@ -304,6 +304,12 @@ export class InngestWorkflow<
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
+      /**
+       * Executes a workflow invocation from its Inngest trigger event.
+       *
+       * @param context - The Inngest event, durable step tools, and current attempt.
+       * @returns The workflow result and run identifier returned to Inngest.
+       */
       async ({ event, step, attempt }) => {
         let {
           inputData,
@@ -433,7 +439,12 @@ export class InngestWorkflow<
         let finalizeError: unknown;
         let finalizeErrored = false;
         try {
-          await step.run(`workflow.${this.id}.finalize`, async () => {
+          /**
+           * Finalizes workflow lifecycle reporting in a memoized Inngest step.
+           *
+           * @returns The workflow result, or only its status for compact nested invocations.
+           */
+          const finalizeWorkflow = async () => {
             // For durable agent workflows, emit error event on failure so the
             // client's stream can receive the error and close properly.
             if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
@@ -555,7 +566,8 @@ export class InngestWorkflow<
             }
 
             return shouldCompactNestedWorkflowOutput ? { status: result.status } : result;
-          });
+          };
+          await step.run(`workflow.${this.id}.finalize`, finalizeWorkflow);
         } catch (error) {
           finalizeErrored = true;
           finalizeError = error;
