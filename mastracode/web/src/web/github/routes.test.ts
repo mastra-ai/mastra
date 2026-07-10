@@ -60,6 +60,31 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
+const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string) => [
+  {
+    number: 12,
+    title: 'Fix flaky test',
+    url: 'https://github.com/octo/hello/issues/12',
+    author: 'ada',
+    labels: ['bug'],
+    comments: 3,
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  },
+]);
+const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string) => [
+  {
+    number: 34,
+    title: 'Add factory pages',
+    url: 'https://github.com/octo/hello/pull/34',
+    author: 'grace',
+    baseBranch: 'main',
+    headBranch: 'feat/factory',
+    createdAt: '2026-07-03T00:00:00Z',
+    updatedAt: '2026-07-04T00:00:00Z',
+  },
+]);
+
 vi.mock('./client', () => ({
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
   buildOAuthIdentifyUrl: (state: string) => `https://github.com/login/oauth/authorize?state=${state}`,
@@ -90,6 +115,10 @@ vi.mock('./client', () => ({
       : null,
   ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
+  listRepoOpenIssues: (installationId: number, repoFullName: string) =>
+    listRepoOpenIssues(installationId, repoFullName),
+  listRepoOpenPullRequests: (installationId: number, repoFullName: string) =>
+    listRepoOpenPullRequests(installationId, repoFullName),
 }));
 
 const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
@@ -293,6 +322,8 @@ beforeEach(() => {
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  listRepoOpenIssues.mockClear();
+  listRepoOpenPullRequests.mockClear();
 });
 
 afterEach(() => {
@@ -576,6 +607,81 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
     body: JSON.stringify(body),
   });
 }
+
+describe('issues route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(401);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('403s for a personal (no-org) account', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(403);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(404);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('lists open issues for the project repo', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.issues).toHaveLength(1);
+    expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello');
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
+  });
+});
+
+describe('prs route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(401);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(404);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+  });
+
+  it('lists open pull requests for the project repo', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pullRequests).toHaveLength(1);
+    expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello');
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+});
 
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {

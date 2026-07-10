@@ -7,6 +7,7 @@ import { Circle, LogOut, Settings } from 'lucide-react';
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
 import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
+import { FactorySection } from './domains/factory';
 import { ProjectSwitcher, WorkspacesSection } from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
 
@@ -25,6 +26,7 @@ export function Sidebar() {
     >
       <ProjectSwitcher />
       <WorkspacesSection />
+      <FactorySection />
       <ThreadList />
       <SidebarFooter />
     </div>

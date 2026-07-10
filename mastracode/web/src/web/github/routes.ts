@@ -38,6 +38,8 @@ import {
   exchangeOAuthCode,
   getInstallationRepo,
   listInstallationRepos,
+  listRepoOpenIssues,
+  listRepoOpenPullRequests,
   listUserInstallations,
   mintInstallationToken,
 } from './client';
@@ -433,10 +435,80 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
+  // ── List a project's open GitHub issues ──────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        try {
+          const issues = await listRepoOpenIssues(loaded.project.installationId, loaded.project.repoFullName);
+          return c.json({ issues });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
+  // ── List a project's open (non-draft) pull requests ─────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/prs', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        try {
+          const pullRequests = await listRepoOpenPullRequests(
+            loaded.project.installationId,
+            loaded.project.repoFullName,
+          );
+          return c.json({ pullRequests });
+        } catch (err) {
+          return c.json(
+            { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
+            502,
+          );
+        }
+      },
+    }),
+  );
+
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
   routes.push(...buildProjectGitRoutes());
 
   return routes;
+}
+
+/**
+ * Load the org-owned project for a read-only GitHub API route. Unlike
+ * `loadOwnedProject`, this never touches sandbox state — the issues/PR list
+ * routes only need the repo + installation, so they work before a sandbox is
+ * ever provisioned.
+ */
+async function loadOrgProject(c: RouteContext): Promise<{ project: GithubProjectRow } | { response: Response }> {
+  const resolved = resolveOrgTenant(c);
+  if ('response' in resolved) return { response: resolved.response };
+  const { orgId } = resolved.tenant;
+
+  const projectId = c.req.param('id');
+  if (!projectId) {
+    return { response: c.json({ error: 'Project not found' }, 404) };
+  }
+  const [project] = await getAppDb()
+    .select()
+    .from(githubProjects)
+    .where(and(eq(githubProjects.id, projectId), eq(githubProjects.orgId, orgId)));
+  if (!project) {
+    return { response: c.json({ error: 'Project not found' }, 404) };
+  }
+  return { project };
 }
 
 /** Derive a commit/author identity from the authenticated WorkOS user. */

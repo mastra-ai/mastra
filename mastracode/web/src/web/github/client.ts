@@ -215,6 +215,94 @@ export async function getInstallationRepo(installationId: number, repoFullName: 
   }
 }
 
+/** Split an `owner/name` full name into its parts, or `null` when malformed. */
+function splitRepoFullName(repoFullName: string): { owner: string; repo: string } | null {
+  const slash = repoFullName.indexOf('/');
+  if (slash <= 0 || slash === repoFullName.length - 1) return null;
+  return { owner: repoFullName.slice(0, slash), repo: repoFullName.slice(slash + 1) };
+}
+
+export interface IssueSummary {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  labels: string[];
+  comments: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * List a repo's open issues through an installation token (paginated). The
+ * issues API also returns pull requests, so those are filtered out.
+ */
+export async function listRepoOpenIssues(installationId: number, repoFullName: string): Promise<IssueSummary[]> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return [];
+  const octokit = getInstallationOctokit(installationId);
+  const issues = await octokit.paginate(octokit.issues.listForRepo, {
+    owner: parts.owner,
+    repo: parts.repo,
+    state: 'open',
+    per_page: 100,
+  });
+  return issues
+    .filter(issue => !issue.pull_request)
+    .map(issue => ({
+      number: issue.number,
+      title: issue.title,
+      url: issue.html_url,
+      author: issue.user?.login ?? null,
+      labels: issue.labels.map(label => (typeof label === 'string' ? label : (label.name ?? ''))).filter(Boolean),
+      comments: issue.comments,
+      createdAt: issue.created_at,
+      updatedAt: issue.updated_at,
+    }));
+}
+
+export interface PullRequestSummary {
+  number: number;
+  title: string;
+  url: string;
+  author: string | null;
+  baseBranch: string;
+  headBranch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * List a repo's open, non-draft pull requests through an installation token
+ * (paginated).
+ */
+export async function listRepoOpenPullRequests(
+  installationId: number,
+  repoFullName: string,
+): Promise<PullRequestSummary[]> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return [];
+  const octokit = getInstallationOctokit(installationId);
+  const pulls = await octokit.paginate(octokit.pulls.list, {
+    owner: parts.owner,
+    repo: parts.repo,
+    state: 'open',
+    per_page: 100,
+  });
+  return pulls
+    .filter(pr => !pr.draft)
+    .map(pr => ({
+      number: pr.number,
+      title: pr.title,
+      url: pr.html_url,
+      author: pr.user?.login ?? null,
+      baseBranch: pr.base.ref,
+      headBranch: pr.head.ref,
+      createdAt: pr.created_at,
+      updatedAt: pr.updated_at,
+    }));
+}
+
 /**
  * Build the GitHub App install URL. `state` is carried through the install flow
  * and validated on callback.
