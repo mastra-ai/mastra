@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/speech": "^6.7.1",
+    "@google-cloud/speech": "^7.5.0",
     "@google-cloud/text-to-speech": "^6.4.1"
   },
   "devDependencies": {

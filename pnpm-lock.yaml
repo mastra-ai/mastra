@@ -6976,7 +6976,7 @@ importers:
         version: 5.2.0(encoding@0.1.13)
       mongodb:
         specifier: ^7.2.0
-        version: 7.2.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.7)
+        version: 7.2.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -7839,8 +7839,8 @@ importers:
   voice/google:
     dependencies:
       '@google-cloud/speech':
-        specifier: ^6.7.1
-        version: 6.7.1(encoding@0.1.13)
+        specifier: ^7.5.0
+        version: 7.5.0
       '@google-cloud/text-to-speech':
         specifier: ^6.4.1
         version: 6.4.1
@@ -8756,7 +8756,7 @@ importers:
     dependencies:
       '@blaxel/core':
         specifier: ^0.2.87
-        version: 0.2.87(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.97.3(magicast@0.5.2)(typescript@6.0.3))(bufferutil@4.1.0)
+        version: 0.2.87(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3))(bufferutil@4.1.0)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -13411,10 +13411,6 @@ packages:
   '@gar/promisify@1.1.3':
     resolution: {integrity: sha512-k2Ty1JcVojjJFwrg/ThKi2ujJ7XNLYaFGNB/bWT9wGR+oSMJHMa5w+CUq6p/pVrKeNNgA7pCqEcjSnHVoqJQFw==}
 
-  '@google-cloud/common@5.0.2':
-    resolution: {integrity: sha512-V7bmBKYQyu0eVG2BFejuUjlBt+zrya6vtsKdY+JxMM/dNntPF41vZ9+LhOshEUH01zOHEqBSvI7Dad7ZS6aUeA==}
-    engines: {node: '>=14.0.0'}
-
   '@google-cloud/common@6.0.0':
     resolution: {integrity: sha512-IXh04DlkLMxWgYLIUYuHHKXKOUwPDzDgke1ykkkJPe48cGIS9kkL2U/o0pm4ankHLlvzLF/ma1eO86n/bkumIA==}
     engines: {node: '>=18'}
@@ -13473,9 +13469,9 @@ packages:
     resolution: {integrity: sha512-X3eXi6l6qj+Tn8eRdeSvRzLvpLrkmINTD4bzZwuwv3S/y4RDck/UlG8CzE41i+cXxrsDYoNxU/KkgVz7Xz6/KQ==}
     engines: {node: '>=18'}
 
-  '@google-cloud/speech@6.7.1':
-    resolution: {integrity: sha512-KgI2xmO8jHStYyoblj5FQ1G1Lk9JuvsR3wUpNSjxJP89yKA+Y/TBgGFvvu+mwm/f5x2ldLLY4So1VGNXZ+yzKg==}
-    engines: {node: '>=14.0.0'}
+  '@google-cloud/speech@7.5.0':
+    resolution: {integrity: sha512-Tvn9yvNNTGj+AcUVtTBgOASXuUfwqU3L2ugHAORhzPtj0G/Bxstlut9WhDl96FR/rihbJ6mvTMEijsbuOREDPA==}
+    engines: {node: '>=18'}
 
   '@google-cloud/storage@7.19.0':
     resolution: {integrity: sha512-n2FjE7NAOYyshogdc7KQOl/VZb4sneqPjWouSyia9CMDdMhRX5+RIbqalNmC7LOLzuLAN89VlF2HvG8na9G+zQ==}
@@ -25044,9 +25040,6 @@ packages:
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
-  magicast@0.5.2:
-    resolution: {integrity: sha512-E3ZJh4J3S9KfwdjZhe2afj6R9lGIN5Pher1pF39UGrXRqq/VDaGVIGN13BjHd2u8B61hArAGOnso7nBOouW3TQ==}
-
   magicast@0.5.3:
     resolution: {integrity: sha512-pVKE4UdSQ7DvHzivsCIFx2BJn1mHG6KsyrFcaxFx6tONdneEuThrDx0Cj3AMg58KyN4pzYT+LHOotxDQDjNvkw==}
 
@@ -28483,10 +28476,6 @@ packages:
   socks-proxy-agent@8.0.5:
     resolution: {integrity: sha512-HehCEsotFqbPW9sJ8WVYB6UbmIMv7kUUORIF2Nncq4VQvBfNBLibW9YZR5dlYCSUhwcD628pRllm7n+E+YTzJw==}
     engines: {node: '>= 14'}
-
-  socks@2.8.7:
-    resolution: {integrity: sha512-HLpt+uLy/pxB+bum/9DzAgiKS8CX1EvbWxI4zlmgGCExImLdiad2iCwXT5Z4c9c3Eq8rP2318mPW2c+QbtjK8A==}
-    engines: {node: '>= 10.0.0', npm: '>= 3.0.0'}
 
   socks@2.8.9:
     resolution: {integrity: sha512-LJhUYUvItdQ0LkJTmPeaEObWXAqFyfmP85x0tch/ez9cahmhlBBLbIqDFnvBnUJGagb0JbIQrkBs1wJ+yRYpEw==}
@@ -32619,7 +32608,7 @@ snapshots:
     dependencies:
       '@babel/compat-data': 7.29.7
       '@babel/helper-validator-option': 7.29.7
-      browserslist: 4.28.2
+      browserslist: 4.28.5
       lru-cache: 5.1.1
       semver: 6.3.1
 
@@ -33575,9 +33564,9 @@ snapshots:
 
   '@better-fetch/fetch@1.1.21': {}
 
-  '@blaxel/core@0.2.87(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.97.3(magicast@0.5.2)(typescript@6.0.3))(bufferutil@4.1.0)':
+  '@blaxel/core@0.2.87(@cfworker/json-schema@4.1.1)(@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3))(bufferutil@4.1.0)':
     dependencies:
-      '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.97.3(magicast@0.5.2)(typescript@6.0.3))
+      '@hey-api/client-fetch': 0.10.2(@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3))
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@3.25.76)
       archiver: 7.0.1
       axios: 1.16.0
@@ -36662,21 +36651,6 @@ snapshots:
   '@gar/promisify@1.1.3':
     optional: true
 
-  '@google-cloud/common@5.0.2(encoding@0.1.13)':
-    dependencies:
-      '@google-cloud/projectify': 4.0.0
-      '@google-cloud/promisify': 4.1.0
-      arrify: 2.0.1
-      duplexify: 4.1.3
-      extend: 3.0.2
-      google-auth-library: 9.15.1(encoding@0.1.13)
-      html-entities: 2.6.0
-      retry-request: 7.0.2(encoding@0.1.13)
-      teeny-request: 9.0.0(encoding@0.1.13)
-    transitivePeerDependencies:
-      - encoding
-      - supports-color
-
   '@google-cloud/common@6.0.0':
     dependencies:
       '@google-cloud/projectify': 4.0.0
@@ -36803,16 +36777,14 @@ snapshots:
       - encoding
       - supports-color
 
-  '@google-cloud/speech@6.7.1(encoding@0.1.13)':
+  '@google-cloud/speech@7.5.0':
     dependencies:
-      '@google-cloud/common': 5.0.2(encoding@0.1.13)
+      '@google-cloud/common': 6.0.0
       '@types/pumpify': 1.4.4
-      google-gax: 4.6.1(encoding@0.1.13)
+      google-gax: 5.0.6
       pumpify: 2.0.1
       stream-events: 1.0.5
-      uuid: 11.1.1
     transitivePeerDependencies:
-      - encoding
       - supports-color
 
   '@google-cloud/storage@7.19.0(encoding@0.1.13)':
@@ -36924,15 +36896,15 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@hey-api/client-fetch@0.10.2(@hey-api/openapi-ts@0.97.3(magicast@0.5.2)(typescript@6.0.3))':
+  '@hey-api/client-fetch@0.10.2(@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3))':
     dependencies:
-      '@hey-api/openapi-ts': 0.97.3(magicast@0.5.2)(typescript@6.0.3)
+      '@hey-api/openapi-ts': 0.97.3(magicast@0.5.3)(typescript@6.0.3)
 
-  '@hey-api/codegen-core@0.8.2(magicast@0.5.2)':
+  '@hey-api/codegen-core@0.8.2(magicast@0.5.3)':
     dependencies:
       '@hey-api/types': 0.1.4
       ansi-colors: 4.1.3
-      c12: 3.3.4(magicast@0.5.2)
+      c12: 3.3.4(magicast@0.5.3)
       color-support: 1.1.3
     transitivePeerDependencies:
       - magicast
@@ -36943,11 +36915,11 @@ snapshots:
       '@types/json-schema': 7.0.15
       js-yaml: 3.15.0
 
-  '@hey-api/openapi-ts@0.97.3(magicast@0.5.2)(typescript@6.0.3)':
+  '@hey-api/openapi-ts@0.97.3(magicast@0.5.3)(typescript@6.0.3)':
     dependencies:
-      '@hey-api/codegen-core': 0.8.2(magicast@0.5.2)
+      '@hey-api/codegen-core': 0.8.2(magicast@0.5.3)
       '@hey-api/json-schema-ref-parser': 1.4.2
-      '@hey-api/shared': 0.4.5(magicast@0.5.2)
+      '@hey-api/shared': 0.4.5(magicast@0.5.3)
       '@hey-api/spec-types': 0.2.0
       '@hey-api/types': 0.1.4
       '@lukeed/ms': 2.0.2
@@ -36959,9 +36931,9 @@ snapshots:
     transitivePeerDependencies:
       - magicast
 
-  '@hey-api/shared@0.4.5(magicast@0.5.2)':
+  '@hey-api/shared@0.4.5(magicast@0.5.3)':
     dependencies:
-      '@hey-api/codegen-core': 0.8.2(magicast@0.5.2)
+      '@hey-api/codegen-core': 0.8.2(magicast@0.5.3)
       '@hey-api/json-schema-ref-parser': 1.4.2
       '@hey-api/spec-types': 0.2.0
       '@hey-api/types': 0.1.4
@@ -38016,7 +37988,7 @@ snapshots:
       '@rushstack/rig-package': 0.7.3
       '@rushstack/terminal': 0.24.0(@types/node@22.19.15)
       '@rushstack/ts-command-line': 5.3.10(@types/node@22.19.15)
-      diff: 8.0.3
+      diff: 8.0.4
       minimatch: 10.2.3
       resolve: 1.22.12
       semver: 7.7.4
@@ -43289,7 +43261,8 @@ snapshots:
       '@types/koa-compose': 3.2.8
       '@types/node': 22.19.15
 
-  '@types/long@4.0.2': {}
+  '@types/long@4.0.2':
+    optional: true
 
   '@types/lru-cache@7.10.10':
     dependencies:
@@ -43411,7 +43384,7 @@ snapshots:
   '@types/react-router@5.1.20':
     dependencies:
       '@types/history': 4.7.11
-      '@types/react': 19.2.14
+      '@types/react': 19.2.17
 
   '@types/react-syntax-highlighter@15.5.13':
     dependencies:
@@ -44085,7 +44058,7 @@ snapshots:
       obug: 2.1.3
       std-env: 4.2.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.9)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
+      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.9)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
 
   '@vitest/eslint-plugin@1.6.19(@typescript-eslint/eslint-plugin@8.59.2(@typescript-eslint/parser@8.59.2(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3))(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3))(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3)(vitest@4.1.9)':
     dependencies:
@@ -44214,7 +44187,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.17
       tinyrainbow: 3.1.0
-      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.9)(jsdom@26.1.0(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
+      vitest: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.9)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
 
   '@vitest/utils@3.2.4':
     dependencies:
@@ -45467,7 +45440,7 @@ snapshots:
 
   bytestreamjs@2.0.1: {}
 
-  c12@3.3.4(magicast@0.5.2):
+  c12@3.3.4(magicast@0.5.3):
     dependencies:
       chokidar: 5.0.0
       confbox: 0.2.4
@@ -45482,7 +45455,7 @@ snapshots:
       pkg-types: 2.3.1
       rc9: 3.0.1
     optionalDependencies:
-      magicast: 0.5.2
+      magicast: 0.5.3
 
   cac@6.7.14: {}
 
@@ -48385,11 +48358,12 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   google-gax@5.0.6:
     dependencies:
       '@grpc/grpc-js': 1.14.4
-      '@grpc/proto-loader': 0.8.0
+      '@grpc/proto-loader': 0.8.1
       duplexify: 4.1.3
       google-auth-library: 10.6.2
       google-logging-utils: 1.1.3
@@ -50082,13 +50056,6 @@ snapshots:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
 
-  magicast@0.5.2:
-    dependencies:
-      '@babel/parser': 7.29.7
-      '@babel/types': 7.29.7
-      source-map-js: 1.2.1
-    optional: true
-
   magicast@0.5.3:
     dependencies:
       '@babel/parser': 7.29.7
@@ -51238,16 +51205,6 @@ snapshots:
       '@types/whatwg-url': 13.0.0
       whatwg-url: 14.2.0
 
-  mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.7):
-    dependencies:
-      '@mongodb-js/saslprep': 1.4.12
-      bson: 7.3.1
-      mongodb-connection-string-url: 7.0.1
-    optionalDependencies:
-      '@aws-sdk/credential-providers': 3.1006.0
-      '@mongodb-js/zstd': 7.0.0
-      socks: 2.8.7
-
   mongodb@7.2.0(@aws-sdk/credential-providers@3.1006.0)(@mongodb-js/zstd@7.0.0)(socks@2.8.9):
     dependencies:
       '@mongodb-js/saslprep': 1.4.12
@@ -51257,7 +51214,6 @@ snapshots:
       '@aws-sdk/credential-providers': 3.1006.0
       '@mongodb-js/zstd': 7.0.0
       socks: 2.8.9
-    optional: true
 
   mri@1.2.0: {}
 
@@ -53131,7 +53087,7 @@ snapshots:
     dependencies:
       duplexify: 4.1.3
       inherits: 2.0.4
-      pump: 3.0.3
+      pump: 3.0.4
 
   punycode@2.3.1: {}
 
@@ -54760,12 +54716,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  socks@2.8.7:
-    dependencies:
-      ip-address: 10.2.0
-      smart-buffer: 4.2.0
-    optional: true
-
   socks@2.8.9:
     dependencies:
       ip-address: 10.2.0
@@ -55305,7 +55255,7 @@ snapshots:
 
   tar-fs@3.1.2:
     dependencies:
-      pump: 3.0.3
+      pump: 3.0.4
       tar-stream: 3.1.7
     optionalDependencies:
       bare-fs: 4.7.1
