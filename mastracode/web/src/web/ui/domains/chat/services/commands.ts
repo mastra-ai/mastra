@@ -146,3 +146,38 @@ export async function runNoArgCommand(name: string, { session, transcript, activ
       session.pushNotice(`Command /${name} needs arguments. Type it in the composer.`, 'error');
   }
 }
+
+export interface ComposerCommandDeps extends NoArgCommandDeps {
+  session: NoArgCommandDeps['session'] & {
+    switchModel: (modelId: string) => Promise<void>;
+    setGoal: (objective: string) => Promise<void>;
+    followUp: (message: string) => Promise<void>;
+  };
+}
+
+/**
+ * Executes a composer slash command and returns whether the input was consumed.
+ * Non-command text returns false so the composer can send or steer it normally.
+ */
+export async function runComposerCommand(text: string, { session, transcript, activeProject }: ComposerCommandDeps) {
+  if (!text.startsWith('/')) return false;
+
+  const [name, ...rest] = text.slice(1).split(/\s+/);
+  const arg = rest.join(' ');
+
+  switch (name) {
+    case 'model':
+      if (arg) await session.switchModel(arg);
+      return true;
+    case 'goal':
+      if (arg) await session.setGoal(arg);
+      return true;
+    case 'follow-up':
+    case 'followup':
+      if (arg) await session.followUp(arg);
+      return true;
+    default:
+      await runNoArgCommand(name, { session, transcript, activeProject });
+      return true;
+  }
+}

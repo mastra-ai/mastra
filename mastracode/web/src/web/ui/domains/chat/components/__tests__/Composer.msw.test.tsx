@@ -9,6 +9,7 @@ import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
+import { ChatCommandsProvider, useChatCommands } from '../../context/ChatCommandsProvider';
 import { ChatSessionProvider, useChatSession } from '../../context/ChatSessionProvider';
 import { Composer } from '../Composer';
 
@@ -49,6 +50,11 @@ function seedProject() {
 
 function useAgentControllerHandlers() {
   const onSend = vi.fn();
+  const onSteer = vi.fn();
+  const onAbort = vi.fn();
+  const onModel = vi.fn();
+  const onGoal = vi.fn();
+  const onFollowUp = vi.fn();
   const onPermissions = vi.fn();
   let permissions: PermissionRules = { categories: { execute: 'ask' }, tools: { 'shell.run': 'deny' } };
   server.use(
@@ -56,12 +62,33 @@ function useAgentControllerHandlers() {
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${SESSION}/stream`, () => sse()),
     http.post(`${SESSION}/messages`, async ({ request }) => {
       onSend(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/steer`, async ({ request }) => {
+      onSteer(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/abort`, () => {
+      onAbort();
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/model`, async ({ request }) => {
+      onModel(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/goal`, async ({ request }) => {
+      onGoal(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${SESSION}/follow-up`, async ({ request }) => {
+      onFollowUp(await request.json());
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${SESSION}/permissions`, () => {
@@ -73,16 +100,13 @@ function useAgentControllerHandlers() {
       if (body && typeof body === 'object' && 'category' in body && 'policy' in body) {
         permissions = {
           ...permissions,
-          categories: {
-            ...permissions.categories,
-            [String(body.category)]: body.policy,
-          },
+          categories: { ...permissions.categories, [String(body.category)]: body.policy },
         };
       }
       return HttpResponse.json({ ok: true });
     }),
   );
-  return { onSend, onPermissions };
+  return { onAbort, onFollowUp, onGoal, onModel, onPermissions, onSend, onSteer };
 }
 
 function NoticeProbe() {
@@ -94,7 +118,12 @@ function NoticeProbe() {
   );
 }
 
-function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
+function PaletteCommandLauncher() {
+  const { runPaletteCommand } = useChatCommands();
+  return <button onClick={() => runPaletteCommand({ name: 'model', args: '<id>', description: 'Switch model' })}>Model</button>;
+}
+
+function renderComposer({ variant }: { variant?: 'inline' | 'textarea' } = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
       <Routes>
@@ -103,8 +132,11 @@ function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = 
           element={
             <ActiveProjectProvider>
               <ChatSessionProvider>
-                <Composer commandNameToApply={null} onCommandApplied={() => undefined} {...props} />
-                <NoticeProbe />
+                <ChatCommandsProvider>
+                  <PaletteCommandLauncher />
+                  <Composer variant={variant} />
+                  <NoticeProbe />
+                </ChatCommandsProvider>
               </ChatSessionProvider>
             </ActiveProjectProvider>
           }
@@ -114,79 +146,74 @@ function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = 
   );
 }
 
-afterEach(() => {
-  localStorage.clear();
-});
+afterEach(() => localStorage.clear());
 
 describe('Composer', () => {
-  describe('when entering exact no-arg slash commands', () => {
-    it('shows permissions from the client cache instead of sending a message', async () => {
+  describe('when entering slash commands', () => {
+    it('runs no-argument commands through the command context without sending a message', async () => {
       seedProject();
-      const { onSend, onPermissions } = useAgentControllerHandlers();
+      const { onSend } = useAgentControllerHandlers();
+      const user = userEvent.setup();
       renderComposer();
 
-      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
-      await waitFor(() => expect(onPermissions).toHaveBeenCalled());
-      const permissionsRequestsBeforeCommand = onPermissions.mock.calls.length;
-      await userEvent.type(screen.getByRole('textbox'), '/permissions{Enter}');
+      const input = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(input).toBeEnabled());
+      await user.type(input, '/help {Enter}');
 
-      await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
-      expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: ask');
-      expect(screen.getByLabelText('Notices')).toHaveTextContent('shell.run: deny');
+      await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('Available commands:'));
+      expect(screen.getByLabelText('Notices')).toHaveTextContent('/permissions');
       expect(onSend).not.toHaveBeenCalled();
     });
 
-    it('shows permissions refreshed by permission mutations', async () => {
+    it.each([
+      ['/model openai/gpt-4o', 'onModel', { modelId: 'openai/gpt-4o' }],
+      ['/goal Ship the composer refactor', 'onGoal', { objective: 'Ship the composer refactor' }],
+      ['/follow-up Test the release', 'onFollowUp', { message: 'Test the release' }],
+    ] as const)('sends %s to its controller endpoint', async (command, handlerName, expectedBody) => {
       seedProject();
-      const { onSend, onPermissions } = useAgentControllerHandlers();
+      const handlers = useAgentControllerHandlers();
+      const user = userEvent.setup();
       renderComposer();
 
-      const input = await screen.findByRole('textbox');
+      const input = await screen.findByRole('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
-      await waitFor(() => expect(onPermissions).toHaveBeenCalled());
-      const permissionsRequestsBeforeYolo = onPermissions.mock.calls.length;
+      await user.type(input, `${command}{Enter}`);
 
-      await userEvent.type(input, '/yolo{Enter}');
-
-      await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('YOLO mode'));
-      await waitFor(() => expect(onPermissions.mock.calls.length).toBeGreaterThan(permissionsRequestsBeforeYolo));
-      const permissionsRequestsBeforeCommand = onPermissions.mock.calls.length;
-      await userEvent.type(input, '/permissions{Enter}');
-
-      await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
-      expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: allow');
-      expect(screen.getByLabelText('Notices')).toHaveTextContent('edit: allow');
-      expect(onSend).not.toHaveBeenCalled();
+      await waitFor(() => expect(handlers[handlerName]).toHaveBeenCalledWith(expectedBody));
+      expect(handlers.onSend).not.toHaveBeenCalled();
     });
   });
 
-  describe('when entering a partial slash command', () => {
-    it('completes the highlighted suggestion on Enter', async () => {
-      seedProject();
-      const { onSend, onPermissions } = useAgentControllerHandlers();
-      renderComposer();
-
-      const input = await screen.findByRole('textbox');
-      await waitFor(() => expect(input).toBeEnabled());
-      await waitFor(() => expect(onPermissions).toHaveBeenCalled());
-      const permissionsRequestsBeforeCompletion = onPermissions.mock.calls.length;
-      await userEvent.type(input, '/he{Enter}');
-
-      expect(input).toHaveValue('/help ');
-      expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCompletion);
-      expect(onSend).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('when a palette command is applied', () => {
-    it('prefills the composer and acknowledges the handoff', async () => {
+  describe('when a palette argument command is chosen', () => {
+    it('prefills and focuses the composer through the command context', async () => {
       seedProject();
       useAgentControllerHandlers();
-      const onCommandApplied = vi.fn();
-      renderComposer({ commandNameToApply: 'model', onCommandApplied });
+      const user = userEvent.setup();
+      renderComposer();
 
-      await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
-      expect(onCommandApplied).toHaveBeenCalled();
+      await user.click(screen.getByRole('button', { name: 'Model' }));
+
+      const input = screen.getByRole('textbox', { name: 'Message' });
+      await waitFor(() => {
+        expect(input).toHaveValue('/model ');
+        expect(input).toHaveFocus();
+      });
+    });
+  });
+
+  describe('when sending messages', () => {
+    it('sends normal input and renders the textarea variant', async () => {
+      seedProject();
+      const { onSend } = useAgentControllerHandlers();
+      const user = userEvent.setup();
+      renderComposer({ variant: 'textarea' });
+
+      const input = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(input).toBeEnabled());
+      expect(input).toHaveAttribute('rows', '4');
+      await user.type(input, 'Hello{Enter}');
+
+      await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'Hello' }));
     });
   });
 });

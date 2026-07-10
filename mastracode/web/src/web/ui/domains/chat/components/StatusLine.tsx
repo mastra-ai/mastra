@@ -1,9 +1,12 @@
-import type { AgentControllerModeInfo, AgentControllerOMProgress } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Brain, Target } from 'lucide-react';
 
-import type { GoalSnapshot, OMPhase } from '../services/transcript';
+import { useApiConfig } from '../../../../../shared/api/config';
+import { useActiveProjectContext } from '../../workspaces';
+import { useChatSession } from '../context/ChatSessionProvider';
+import { useSwitchAgentControllerModeMutation } from '../hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
 const statusBudget = 'inline-flex items-baseline whitespace-nowrap text-icon3 tabular-nums';
@@ -32,28 +35,17 @@ function lastSegment(id: string): string {
   return parts[parts.length - 1] || id;
 }
 
-export function StatusLine({
-  modelId,
-  followUpCount,
-  omPhase,
-  omProgress,
-  goal,
-  tokensPerSec,
-  modes,
-  activeModeId,
-  onModeChange,
-}: {
-  modelId?: string;
-  followUpCount?: number;
-  omPhase?: OMPhase;
-  omProgress?: AgentControllerOMProgress;
-  goal?: GoalSnapshot;
-  tokensPerSec?: number;
-  modes?: AgentControllerModeInfo[];
-  activeModeId?: string;
-  onModeChange?: (modeId: string) => void;
-}) {
-  const om = omProgress;
+export function StatusLine() {
+  const { baseUrl } = useApiConfig();
+  const { resourceId, sessionEnabled } = useActiveProjectContext();
+  const { transcript, modes, syncState } = useChatSession();
+  const switchModeMutation = useSwitchAgentControllerModeMutation({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
+  const { modelId, followUpCount, omPhase, omProgress: om, goal, tokensPerSec, modeId: activeModeId } = transcript;
   const showMsg = om && om.threshold > 0;
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
 
@@ -62,7 +54,7 @@ export function StatusLine({
       aria-label="Session status line"
       className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 py-2 text-ui-sm text-icon3"
     >
-      {modes && modes.length > 0 && onModeChange && (
+      {modes && modes.length > 0 && (
         <div role="group" aria-label="Session mode" className="shrink-0">
           <ButtonsGroup spacing="close">
             {modes.map(m => (
@@ -71,7 +63,9 @@ export function StatusLine({
                 variant={activeModeId === m.id ? 'primary' : 'ghost'}
                 size="sm"
                 aria-pressed={activeModeId === m.id}
-                onClick={() => onModeChange(m.id)}
+                onClick={() => {
+                  void switchModeMutation.mutateAsync(m.id).then(() => syncState({ modeId: m.id }));
+                }}
               >
                 {m.name ?? m.id}
               </Button>

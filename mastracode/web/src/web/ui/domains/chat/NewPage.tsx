@@ -70,7 +70,7 @@ function DraftStart({ activeProject }: { activeProject: Project }) {
         <ProjectContext activeProject={activeProject} />
       </div>
 
-      <ComposerPanel composerVariant="textarea" />
+      {activeProject && <ComposerPanel composerVariant="textarea" />}
     </section>
   );
 }
