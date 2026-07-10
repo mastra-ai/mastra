@@ -57,7 +57,7 @@ export const endCall = createEndCallTool({
 export const lookupAccountStatus = createTool({
   id: 'lookupAccountStatus',
   description:
-    "Look up the caller's account status by the last four digits of their account number. Only use this after all required consents (call recording, summary storage, data sharing, marketing) have been recorded. Returns a short status summary to read back.",
+    'Look up the caller\'s account status by the last four digits of their account number. Only use this after all required consents (call recording, summary storage, data sharing, marketing) have been recorded. Returns a short status summary to read back.',
   inputSchema: z.object({
     lastFour: z.string().describe('The last four digits of the account number, e.g. "4921".'),
   }),

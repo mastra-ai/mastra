@@ -57,10 +57,7 @@ export interface ServiceAreaResult {
 }
 
 /** Service-area validation: is this zip one the tenant covers? */
-export async function checkServiceArea(
-  zip: string,
-  workspaceId: string = DEFAULT_WORKSPACE.id,
-): Promise<ServiceAreaResult> {
+export async function checkServiceArea(zip: string, workspaceId: string = DEFAULT_WORKSPACE.id): Promise<ServiceAreaResult> {
   await simulateBackendLatency();
   const workspace = WORKSPACES.find(w => w.id === workspaceId) ?? DEFAULT_WORKSPACE;
   const normalized = normalizeZip(zip);
@@ -271,7 +268,9 @@ export function hasSummaryConsent(resourceId: string): boolean {
 }
 
 /** Whether the deployment requires consent before storing a call summary. */
-export function summaryStorageRequired(consentPolicy?: { summaryStorage?: boolean | { required?: boolean } }): boolean {
+export function summaryStorageRequired(consentPolicy?: {
+  summaryStorage?: boolean | { required?: boolean };
+}): boolean {
   const req = consentPolicy?.summaryStorage;
   return req === true || (typeof req === 'object' && req?.required !== false);
 }

@@ -134,8 +134,7 @@ export async function summarizeCall(mapping: { thread: string; resource?: string
       // Same fallback the live turn path uses (see onTurnComplete in the worker entrypoints): a
       // thread-only mapping still needs a resource id, since this memory is resource-scoped.
       resourceId: mapping.resource ?? mapping.thread,
-      instructions:
-        "Summarize this call for the contractor's office: who called, what they wanted, and any follow-up promised.",
+      instructions: "Summarize this call for the contractor's office: who called, what they wanted, and any follow-up promised.",
       // Two extractors ride the one summarization pass: the business record above, and the
       // working-memory update. With `manageWorkingMemory` the main agent never writes working
       // memory in-loop, and most demo calls end below the Observer's token threshold — this
