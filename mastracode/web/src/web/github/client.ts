@@ -22,11 +22,20 @@ export interface GithubAppConfig {
 }
 
 /**
- * Normalize a PEM private key supplied via env. Supports the common
- * single-line `\n`-escaped form so the key can live in a `.env` value.
+ * Normalize a PEM private key supplied via env. Env tooling tends to mangle
+ * multi-line PEMs, so two single-line forms are supported:
+ *   - `\n`-escaped: literal `\n` sequences become real newlines
+ *   - fully flattened: newlines stripped entirely — the PEM is rebuilt by
+ *     re-wrapping the base64 body (Node's decoder rejects header/body/footer
+ *     on one line with `error:1E08010C:DECODER routines::unsupported`)
  */
-function normalizePrivateKey(raw: string): string {
-  return raw.includes('\\n') ? raw.replace(/\\n/g, '\n') : raw;
+export function normalizePrivateKey(raw: string): string {
+  const key = raw.replace(/\\n/g, '\n');
+  if (key.includes('\n')) return key;
+  const flattened = key.trim().match(/^(-----BEGIN [A-Z0-9 ]+-----)\s*(.+?)\s*(-----END [A-Z0-9 ]+-----)$/);
+  if (!flattened) return key;
+  const body = flattened[2]!.replace(/\s+/g, '');
+  return `${flattened[1]}\n${body.match(/.{1,64}/g)!.join('\n')}\n${flattened[3]}\n`;
 }
 
 /** Required GitHub App env var names (non-secret names only). */

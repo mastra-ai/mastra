@@ -62,7 +62,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: vitest-blob-unit-${{ matrix.shard }}
           path: .vitest-reports/
@@ -177,7 +177,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
           path: .vitest-reports/
@@ -250,7 +250,7 @@ jobs:
 
       - name: Download test results
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: vitest-blob-*
           path: .vitest-reports

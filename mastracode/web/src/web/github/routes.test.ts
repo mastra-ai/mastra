@@ -56,6 +56,9 @@ vi.mock('./db', () => {
     update: (table: any) => ({
       set: (vals: any) => ({ where: async () => updateRows(table, vals) }),
     }),
+    delete: (table: any) => ({
+      where: async (cond: any) => deleteRows(table, cond),
+    }),
   });
   return { getAppDb: () => makeDb() };
 });
@@ -176,6 +179,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
+  getGithubFeatureDiagnostics: () => ({}),
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
@@ -282,8 +286,13 @@ function insertIfAbsent(table: any, vals: any, opts: any): any | undefined {
 function updateRows(table: any, vals: any): void {
   for (const row of tables[tableKind(table)]) Object.assign(row, vals);
 }
+function deleteRows(table: any, cond?: any): void {
+  const kind = tableKind(table);
+  tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
+}
 
 // Resolve schema refs after import.
+import { listInstallationRepos } from './client';
 import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
@@ -354,10 +363,101 @@ describe('status route', () => {
   });
 });
 
+describe('repos route', () => {
+  const install = (installationId: number, accountLogin: string) => {
+    tables.installations.push({ orgId: 'org1', userId: 'u1', installationId, accountLogin, accountType: 'User' });
+  };
+
+  // The `./client` mock's default implementation must survive these tests
+  // (clearAllMocks does not restore implementations).
+  const defaultImpl = async (installationId: number) => [
+    {
+      id: 99,
+      fullName: 'octo/hello',
+      name: 'hello',
+      owner: 'octo',
+      defaultBranch: 'main',
+      private: false,
+      installationId,
+    },
+  ];
+  afterEach(() => {
+    vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
+  });
+
+  it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
+    install(7, 'octo');
+    install(8, 'stale');
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      if (installationId === 8) {
+        throw Object.assign(new Error('Not Found'), { status: 404 });
+      }
+      return defaultImpl(installationId);
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.repos).toHaveLength(1);
+    expect(json.repos[0].fullName).toBe('octo/hello');
+    // The stale row is gone; the live one remains.
+    expect(tables.installations.map(i => i.installationId)).toEqual([7]);
+    expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
+    errorSpy.mockRestore();
+  });
+
+  it('does not prune on non-404 errors', async () => {
+    install(7, 'octo');
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
+
+    // Hono's default onError turns the rethrown error into a 500.
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(500);
+    expect(tables.installations).toHaveLength(1);
+  });
+});
+
 describe('auth scoping', () => {
   it('401s when no user is present', async () => {
     const res = await buildApp(null).request('/web/github/repos');
     expect(res.status).toBe(401);
+  });
+
+  // Platform-adapter topology: custom apiRoutes run on an isolated sub-app
+  // context where the outer gate's stashed user is invisible. The routes must
+  // resolve the session cookie themselves (ensureWebAuthUser), not rely on the
+  // gate's c.set(...).
+  describe('without the gate (isolated custom-route context)', () => {
+    it('status resolves the session from the cookie', async () => {
+      cookieUser = { workosId: 'u1' };
+      tables.installations.push({
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        accountLogin: 'octo',
+        accountType: 'User',
+      });
+      const res = await buildApp(null).request('/web/github/status');
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.enabled).toBe(true);
+      expect(json.connected).toBe(true);
+    });
+
+    it('org-tenant routes resolve the session from the cookie', async () => {
+      cookieUser = { workosId: 'u1' };
+      const res = await buildApp(null).request('/web/github/repos');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ repos: [] });
+    });
+
+    it('status still 401s with auth_required when there is no session', async () => {
+      cookieUser = null;
+      const res = await buildApp(null).request('/web/github/status');
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'unauthorized', reason: 'auth_required' });
+    });
   });
 });
 

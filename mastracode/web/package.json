@@ -1,7 +1,7 @@
 {
   "name": "mastracode-web",
   "version": "0.1.0",
-  "description": "MastraCode web surface: API routes, tenant server, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root first; `pnpm prebuild` builds the linked packages (web:build / web:ui:build run it automatically).",
+  "description": "MastraCode web surface: API routes, deployable Mastra entry, and the SPA UI. Standalone pnpm project consuming monorepo packages via link: — run pnpm install at the monorepo root first; `pnpm prebuild` builds the linked packages (web:build / web:ui:build run it automatically).",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,7 @@
     "web:start": "varlock run -- mastra start",
     "web:test": "vitest run --config e2e/web/vitest.config.ts",
     "web:ui:test": "vitest run --config e2e/web-ui/vitest.config.ts",
-    "test": "vitest run --config e2e/web/vitest.config.ts && vitest run --config e2e/web-ui/vitest.config.ts"
+    "test": "vitest run && vitest run --config e2e/web/vitest.config.ts && vitest run --config e2e/web-ui/vitest.config.ts"
   },
   "keywords": [],
   "author": "",
@@ -38,7 +38,6 @@
     "@octokit/auth-app": "^8.0.0",
     "@octokit/rest": "^22.0.1",
     "@tanstack/react-query": "^5.90.21",
-    "@tursodatabase/api": "2.0.4",
     "date-fns": "^4.4.0",
     "drizzle-orm": "^0.45.0",
     "hono": "^4.12.8",

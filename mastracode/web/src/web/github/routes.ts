@@ -98,8 +98,17 @@ function isValidGitRef(value: unknown): value is string {
  * organization. Returns the `(orgId, userId)` tenant (with `orgId` narrowed to a
  * non-null string) or a ready-to-return error response: 401 when unauthenticated,
  * 403 when the user has no organization (personal account).
+ *
+ * Resolves the WorkOS session from the request cookie itself (via
+ * `ensureWebAuthUser`) instead of relying on the auth gate's context stash: on
+ * platform deploys custom `apiRoutes` run on an isolated sub-app context where
+ * the gate's `c.set(...)` is invisible. When the gate stash IS visible (local
+ * Hono server), `ensureWebAuthUser` returns the cached user and this is a no-op.
  */
-function resolveOrgTenant(c: RouteContext): { tenant: WebAuthTenant & { orgId: string } } | { response: Response } {
+async function resolveOrgTenant(
+  c: RouteContext,
+): Promise<{ tenant: WebAuthTenant & { orgId: string } } | { response: Response }> {
+  await ensureWebAuthUser(c);
   const tenant = webAuthTenant(c);
   if (!tenant) return { response: c.json({ error: 'unauthorized' }, 401) };
   if (!tenant.orgId) {
@@ -151,6 +160,9 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             diagnostics: getGithubFeatureDiagnostics(),
           });
         }
+        // Resolve the session from the request cookie: on platform deploys custom
+        // apiRoutes run on an isolated context where the gate's stash is invisible.
+        await ensureWebAuthUser(loose(c));
         const tenant = webAuthTenant(loose(c));
         if (!tenant) return c.json({ error: 'unauthorized', reason: 'auth_required' }, 401);
 
@@ -202,10 +214,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
-        // the session from the request cookie before scoping the tenant.
-        await ensureWebAuthUser(loose(c));
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const state = signState(resolved.tenant.orgId, resolved.tenant.userId);
         return c.redirect(buildInstallUrl(state));
@@ -219,10 +228,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        // Cookie-based browser navigation: the auth gate skips `/auth/*`, so resolve
-        // the session from the request cookie before scoping the tenant.
-        await ensureWebAuthUser(loose(c));
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
@@ -292,7 +298,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
 
         const installs = await getAppDb()
@@ -303,7 +309,29 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         const query = (c.req.query('q') ?? '').toLowerCase();
         const repos = [];
         for (const inst of installs) {
-          const list = await listInstallationRepos(inst.installationId);
+          let list;
+          try {
+            list = await listInstallationRepos(inst.installationId);
+          } catch (err) {
+            // GitHub 404s when the installation no longer exists for this app
+            // (app uninstalled/reinstalled, or the row was recorded under
+            // different app credentials). Prune the stale row so `/status`
+            // reflects reality and the UI prompts a reconnect, then keep
+            // listing the remaining installations.
+            if ((err as { status?: number }).status !== 404) throw err;
+            console.error(
+              `[MastraCode Web] pruning stale GitHub installation ${inst.installationId} (404 from GitHub)`,
+            );
+            await getAppDb()
+              .delete(githubInstallations)
+              .where(
+                and(
+                  eq(githubInstallations.orgId, resolved.tenant.orgId),
+                  eq(githubInstallations.installationId, inst.installationId),
+                ),
+              );
+            continue;
+          }
           for (const repo of list) {
             if (query && !repo.fullName.toLowerCase().includes(query)) continue;
             repos.push(repo);
@@ -320,7 +348,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
@@ -387,7 +415,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const resolved = resolveOrgTenant(loose(c));
+        const resolved = await resolveOrgTenant(loose(c));
         if ('response' in resolved) return resolved.response;
         const { orgId, userId } = resolved.tenant;
 
@@ -645,7 +673,7 @@ async function loadOwnedProject(
   | { orgId: string; userId: string; project: GithubProjectRow; sandboxRow: GithubProjectSandboxRow }
   | { response: Response }
 > {
-  const resolved = resolveOrgTenant(c);
+  const resolved = await resolveOrgTenant(c);
   if ('response' in resolved) return { response: resolved.response };
   const { orgId, userId } = resolved.tenant;
 
