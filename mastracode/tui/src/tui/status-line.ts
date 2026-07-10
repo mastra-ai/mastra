@@ -14,6 +14,16 @@ import { theme, mastra, mastraBrand, tintHex, getTermWidth } from './theme.js';
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
 
+function isGenericTitle(title: string): boolean {
+  const lower = title.toLowerCase().trim();
+  return (
+    lower === 'new thread' ||
+    lower.startsWith('new thread') ||
+    lower.startsWith('clone of') ||
+    lower.startsWith('untitled')
+  );
+}
+
 function getGoalDurationMs(
   goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number },
   now: number,
@@ -151,6 +161,11 @@ export function updateStatusLine(state: TUIState): void {
     : shortModelId.replace(/^claude-/, '').replace(/^(\w+)-(\d+)-(\d{1,2})$/, '$1 $2.$3');
 
   const branch = state.projectInfo.gitBranch;
+  const threadTitle =
+    state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
+  const centerText = threadTitle || branch || null;
+  const centerTextShort =
+    centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;
   const now = Date.now();
   const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
@@ -163,10 +178,6 @@ export function updateStatusLine(state: TUIState): void {
     Math.floor(getGoalDurationMs(goalState, now) / 60_000) === Math.floor((now - state.agentRunStartedAt) / 60_000);
   const goalLabel = goalDuration ? (goalMatchesActiveRun ? 'goal' : `goal ${goalDuration}`) : null;
   const formatDirPart = (value: string) => ({ plain: value, styled: theme.fg('thinkingText', value) });
-  // Build progressively shorter branch strings for layout fallback.
-  const dirBranchOnly = branch || null;
-  // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between.
-  const dirBranchShort = branch && branch.length > 24 ? branch.slice(0, 12) + '..' + branch.slice(-8) : dirBranchOnly;
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
@@ -349,7 +360,7 @@ export function updateStatusLine(state: TUIState): void {
         }
       : null;
     // Directory / branch / thread title (lowest priority on line 1)
-    let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirBranchOnly : null;
+    let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? centerText : null;
 
     // Measure width of everything except dir to know how much space remains.
     // Throughput and the context indicator are reserved at the far right even though they are appended after dir.
@@ -431,11 +442,11 @@ export function updateStatusLine(state: TUIState): void {
     buildLine({
       modelId: fullModelId,
       showDir: false,
-      dir: dirBranchOnly,
+      dir: centerText,
       allowDirTruncation: false,
       showQueue: true,
     }) ??
-    buildLine({ modelId: fullModelId, showDir: false, dir: dirBranchShort, showQueue: true }) ??
+    buildLine({ modelId: fullModelId, showDir: false, dir: centerTextShort, showQueue: true }) ??
     buildLine({ modelId: fullModelId, showDir: false, showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showDir: false, showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true }) ??

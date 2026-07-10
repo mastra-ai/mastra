@@ -225,15 +225,17 @@ describe('updateStatusLine', () => {
     expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s ×');
   });
 
-  it('keeps the center branch-only when the thread has an active GitHub PR subscription', () => {
+  it('keeps the center thread-title-only when the thread has an active GitHub PR subscription', () => {
     const state = createState();
+    state.currentThreadTitle = 'Simplify the OM status indicator';
     state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
     state.githubPrPollingActive = true;
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('feat/mc-queueing-ux');
+    expect(rendered).toContain('Simplify the OM status indicator');
+    expect(rendered).not.toContain('feat/mc-queueing-ux');
     expect(rendered).not.toContain('PR#17439');
   });
 
@@ -317,17 +319,17 @@ describe('updateStatusLine', () => {
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
-  it('shows only the branch in the center and abbreviates it when needed', () => {
+  it('shows the thread title in the center and abbreviates it when needed', () => {
     const state = createState();
-    state.currentThreadTitle = 'A much longer generated thread title that should never appear';
+    state.currentThreadTitle = 'A much longer generated thread title that should appear';
     state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
     process.stdout.columns = 80;
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('feature/supe..tra-l…');
-    expect(rendered).not.toContain('A much longer generated thread title');
+    expect(rendered).toContain('A much longe..d app…');
+    expect(rendered).not.toContain('feature/super-long-branch');
     expect(rendered).not.toContain('mastra--feat-mc-queueing-ux');
   });
 
