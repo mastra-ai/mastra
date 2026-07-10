@@ -20,6 +20,12 @@ export type NestedWorkflowResult =
   | Pick<WorkflowResultWithStatus<'suspended'>, 'status' | 'state' | 'steps'>
   | Pick<WorkflowResultWithStatus<'paused'>, 'status' | 'state'>;
 
+/**
+ * Normalizes an optional nested workflow output mode to an explicit mode.
+ *
+ * @param mode - The output mode requested by the invoking workflow.
+ * @returns The requested compact mode, or the default mode when compact output was not requested.
+ */
 export function resolveNestedWorkflowOutputMode(
   mode: NestedWorkflowOutputMode | undefined = NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT,
 ): NestedWorkflowOutputMode {
@@ -33,6 +39,9 @@ export function resolveNestedWorkflowOutputMode(
  * `step.invoke()`. Suspended results retain steps so the parent can construct
  * the nested resume path; completed results do not carry the child input or
  * internal step history into the parent's memoized run state.
+ *
+ * @param result - The complete result returned by the nested workflow.
+ * @returns The status-specific fields required by the invoking parent workflow.
  */
 export function compactNestedWorkflowResult(result: AnyWorkflowResult): NestedWorkflowResult {
   switch (result.status) {
