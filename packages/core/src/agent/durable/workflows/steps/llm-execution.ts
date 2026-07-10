@@ -269,6 +269,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         const maxRetries = modelEntry.maxRetries || 0;
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          let modelSpanTracker: IModelSpanTracker | undefined;
+
           try {
             // Resolve the model - for single model case (no modelList), use resolved model
             // For model list case, try registry first (works with mock models), then config resolution (for Inngest)
@@ -314,7 +316,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               : undefined;
 
             // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
-            const modelSpanTracker: IModelSpanTracker | undefined = modelSpan?.createTracker();
+            modelSpanTracker = modelSpan?.createTracker();
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
             // This ensures step numbering continues across agentic loop iterations
@@ -1137,6 +1139,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     steps: (inputData as any).accumulatedSteps ?? [],
                     retryCount: processorRetryCount,
                     requestContext,
+                    tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   });
                   if (retry) {
                     processorRetryCount++;
@@ -1539,6 +1542,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   steps: (inputData as any).accumulatedSteps ?? [],
                   retryCount: processorRetryCount,
                   requestContext,
+                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 });
                 if (retry) {
                   processorRetryCount++;

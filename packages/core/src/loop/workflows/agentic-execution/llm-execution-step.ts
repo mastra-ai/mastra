@@ -894,6 +894,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         : inputData.messageId || messageIdPassed;
       // Start the MODEL_STEP span at the beginning of LLM execution
       modelSpanTracker?.startStep();
+      let reportedModelGenerationError: unknown;
 
       let modelResult: ReturnType<typeof execute> | undefined;
       let warnings: any;
@@ -1528,6 +1529,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             }
 
             const isUpstreamError = APICallError.isInstance(error);
+            const errorObj = error instanceof Error ? error : new Error(String(error));
+            modelSpanTracker?.reportGenerationError?.({ error: errorObj });
+            reportedModelGenerationError = error;
 
             if (isUpstreamError) {
               const providerInfo = provider ? ` from ${provider}` : '';
@@ -1596,6 +1600,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 requestContext,
                 writer: apiErrorWriter,
                 abortSignal: options?.abortSignal,
+                tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                 messageId: currentMessageId,
                 rotateResponseMessageId: () => {
                   currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
@@ -1706,6 +1711,15 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let apiErrorRetryResult: { retry: boolean } | undefined = processAPIErrorRetry;
 
       if (!apiErrorRetryResult && runState.state.hasErrored && runState.state.apiError) {
+        if (reportedModelGenerationError !== runState.state.apiError) {
+          const errorObj =
+            runState.state.apiError instanceof Error
+              ? runState.state.apiError
+              : new Error(String(runState.state.apiError));
+          modelSpanTracker?.reportGenerationError?.({ error: errorObj });
+          reportedModelGenerationError = runState.state.apiError;
+        }
+
         const currentRetryCount = inputData.processorRetryCount || 0;
         const canRetryError = maxErrorProcessorRetries !== undefined && currentRetryCount < maxErrorProcessorRetries;
         const processorRunner = new ProcessorRunner({
@@ -1734,6 +1748,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           requestContext,
           writer: apiErrorWriter2,
           abortSignal: options?.abortSignal,
+          tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
           messageId: currentMessageId,
           rotateResponseMessageId: () => {
             currentMessageId = readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId')?.() ?? generateId();
