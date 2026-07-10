@@ -82,7 +82,7 @@ Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a
 
 ## Errors
 
-Failures from the proxy raise `PlatformApiError` with the HTTP status and raw response body:
+Failures from the proxy raise `PlatformApiError`. Structured `{ error: { message, type } }` payloads from the proxy are parsed into `.code` (machine kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
 
 ```typescript
 import { PlatformApiError } from '@mastra/platform';
@@ -91,9 +91,16 @@ try {
   await fs.readFile('/missing.txt');
 } catch (err) {
   if (err instanceof PlatformApiError) {
-    console.error(err.status, err.body);
+    if (err.code === 'not_found') {
+      // handle missing file
+    } else if (err.code === 'authentication_error') {
+      // refresh token
+    }
+    console.error(err.status, err.code, err.proxyMessage, err.body);
   }
 }
 ```
+
+`code` / `proxyMessage` are `undefined` when the proxy returns a non-JSON body (e.g. an HTML 502 from a load balancer).
 
 Filesystem-specific errors (`FileNotFoundError`, `FileExistsError`, `WorkspaceReadOnlyError`) are re-exported from `@mastra/core`.

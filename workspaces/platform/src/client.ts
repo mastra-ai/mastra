@@ -24,15 +24,51 @@ export function resolvePlatformOptions(options: PlatformClientOptions) {
   };
 }
 
+/**
+ * Structured error shape returned by the workspace proxy. All routes emit
+ * `{ error: { message, type } }` on failure — see servers/workspace-proxy in
+ * the Platform repo. Kept as a wire-level type so callers can switch on
+ * `error.code` without re-parsing `error.body`.
+ */
+export interface PlatformProxyError {
+  message: string;
+  /** Machine-readable error kind, e.g. `not_found`, `invalid_request`, `authentication_error`. */
+  type: string;
+}
+
+function parseProxyError(body: string): PlatformProxyError | undefined {
+  if (!body) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== 'object' || parsed === null) return undefined;
+  const err = (parsed as { error?: unknown }).error;
+  if (typeof err !== 'object' || err === null) return undefined;
+  const { message, type } = err as { message?: unknown; type?: unknown };
+  if (typeof message !== 'string' || typeof type !== 'string') return undefined;
+  return { message, type };
+}
+
 export class PlatformApiError extends Error {
   readonly status: number;
   readonly body: string;
+  /** Machine-readable proxy error kind (e.g. `not_found`), when the response body matches `{ error: { message, type } }`. */
+  readonly code: string | undefined;
+  /** Human-readable proxy error message, when the response body matches `{ error: { message, type } }`. */
+  readonly proxyMessage: string | undefined;
 
   constructor(status: number, body: string) {
-    super(`Platform proxy request failed with ${status}${body ? `: ${body}` : ''}`);
+    const parsed = parseProxyError(body);
+    const summary = parsed ? `${parsed.type}: ${parsed.message}` : body;
+    super(`Platform proxy request failed with ${status}${summary ? `: ${summary}` : ''}`);
     this.name = 'PlatformApiError';
     this.status = status;
     this.body = body;
+    this.code = parsed?.type;
+    this.proxyMessage = parsed?.message;
   }
 }
 

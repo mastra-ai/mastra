@@ -36,6 +36,44 @@ describe('PlatformClient', () => {
     await expect(client.request('/sandbox')).rejects.toMatchObject({
       status: 401,
       body: 'nope',
+      code: undefined,
+      proxyMessage: undefined,
     } satisfies Partial<PlatformApiError>);
+  });
+
+  it('parses structured proxy error bodies into code and proxyMessage', async () => {
+    const body = JSON.stringify({ error: { message: 'Bucket not found', type: 'not_found' } });
+    const fetchMock = vi.fn().mockResolvedValue(response(body, { status: 404 }));
+    const client = new PlatformClient({ accessToken: 'sk_test', projectId: 'proj_123', fetch: fetchMock });
+
+    const err = await client.request('/sandbox').catch(e => e as PlatformApiError);
+
+    expect(err.status).toBe(404);
+    expect(err.code).toBe('not_found');
+    expect(err.proxyMessage).toBe('Bucket not found');
+    expect(err.body).toBe(body);
+    expect(err.message).toContain('not_found: Bucket not found');
+  });
+
+  it('leaves code and proxyMessage undefined for non-JSON error bodies', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response('<html>502 Bad Gateway</html>', { status: 502 }));
+    const client = new PlatformClient({ accessToken: 'sk_test', projectId: 'proj_123', fetch: fetchMock });
+
+    const err = await client.request('/sandbox').catch(e => e as PlatformApiError);
+
+    expect(err.status).toBe(502);
+    expect(err.code).toBeUndefined();
+    expect(err.proxyMessage).toBeUndefined();
+    expect(err.body).toBe('<html>502 Bad Gateway</html>');
+  });
+
+  it('ignores JSON bodies that do not match the proxy error shape', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(JSON.stringify({ foo: 'bar' }), { status: 500 }));
+    const client = new PlatformClient({ accessToken: 'sk_test', projectId: 'proj_123', fetch: fetchMock });
+
+    const err = await client.request('/sandbox').catch(e => e as PlatformApiError);
+
+    expect(err.code).toBeUndefined();
+    expect(err.proxyMessage).toBeUndefined();
   });
 });
