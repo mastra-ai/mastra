@@ -206,7 +206,7 @@ describe('MastraCode thread pages', () => {
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
     expect(screen.getAllByPlaceholderText(/Ask Mastra Code/)).toHaveLength(1);
     const draftRegion = screen.getByRole('region', { name: 'What do you want to work on?' });
-    expect(within(draftRegion).getByRole('textbox')).toHaveAttribute('rows', '4');
+    expect(within(draftRegion).getByRole('textbox')).toHaveClass('field-sizing-content', 'min-h-28');
     expect(within(draftRegion).getByText('MastraCode Test')).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/new');
     expect(screen.queryByText('Reply from thread one')).not.toBeInTheDocument();

@@ -201,6 +201,23 @@ describe('Composer', () => {
     });
   });
 
+  describe('when composing a multi-line draft', () => {
+    it('grows with content via CSS instead of inline styles', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      const user = userEvent.setup();
+      renderComposer();
+
+      const input = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(input).toBeEnabled());
+      await user.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
+
+      expect(input).toHaveValue('first line\nsecond line\nthird line');
+      expect(input).toHaveClass('field-sizing-content');
+      expect((input as HTMLTextAreaElement).style.height).toBe('');
+    });
+  });
+
   describe('when sending messages', () => {
     it('sends normal input and renders the textarea variant', async () => {
       seedProject();
@@ -210,7 +227,7 @@ describe('Composer', () => {
 
       const input = await screen.findByRole('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
-      expect(input).toHaveAttribute('rows', '4');
+      expect(input).toHaveClass('field-sizing-content', 'min-h-28');
       await user.type(input, 'Hello{Enter}');
 
       await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'Hello' }));

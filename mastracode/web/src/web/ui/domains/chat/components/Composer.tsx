@@ -16,20 +16,14 @@ import {
   useSteerAgentControllerMutation,
 } from '../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
-import { useTextareaAutoResize } from '../hooks/useTextareaAutoResize';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 type ComposerVariant = 'inline' | 'textarea';
 
 const composerVariantClass: Record<ComposerVariant, string> = {
-  inline: 'max-h-52 min-h-10 resize-none',
-  textarea: 'max-h-64 min-h-28 resize-none',
-};
-
-const composerVariantRows: Record<ComposerVariant, number> = {
-  inline: 1,
-  textarea: 4,
+  inline: 'field-sizing-content max-h-52 min-h-10 resize-none',
+  textarea: 'field-sizing-content max-h-64 min-h-28 resize-none',
 };
 
 type ComposerProps = {
@@ -83,8 +77,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     applyCommandDraft(composerCommandName);
     clearComposerCommand();
   }, [composerCommandName, clearComposerCommand]);
-
-  useTextareaAutoResize(inputRef, draft);
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -175,7 +167,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         onKeyDown={onComposerKeyDown}
         placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
         disabled={disabled}
-        rows={composerVariantRows[variant]}
         className={composerVariantClass[variant]}
         aria-label="Message"
       />
