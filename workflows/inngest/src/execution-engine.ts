@@ -17,6 +17,7 @@ import type {
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
 import type { CompactNestedWorkflowResult } from './nested-workflow-output';
+import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
 import { InngestWorkflow } from './workflow';
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
@@ -484,7 +485,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
             },
             outputOptions: { includeState: true },
-            nestedWorkflowOutputMode: 'compact',
+            nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
             actor,
@@ -515,7 +516,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             runId: executionContext.runId,
             outputOptions: { includeState: true },
-            nestedWorkflowOutputMode: 'compact',
+            nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
             actor,
@@ -531,7 +532,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
-            nestedWorkflowOutputMode: 'compact',
+            nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
             actor,

@@ -1,11 +1,26 @@
 import type { StepResult, StepTripwireInfo } from '@mastra/core/workflows';
 
+export const NESTED_WORKFLOW_OUTPUT_MODE = {
+  DEFAULT: 'default',
+  COMPACT: 'compact',
+} as const;
+
+export type NestedWorkflowOutputMode = (typeof NESTED_WORKFLOW_OUTPUT_MODE)[keyof typeof NESTED_WORKFLOW_OUTPUT_MODE];
+
 export type CompactNestedWorkflowResult =
   | { status: 'success'; state?: unknown; result: unknown }
   | { status: 'failed'; state?: unknown; error: unknown }
   | { status: 'tripwire'; state?: unknown; tripwire: StepTripwireInfo }
   | { status: 'suspended'; state?: unknown; steps: Record<string, StepResult<any, any, any, any>> }
   | { status: 'paused'; state?: unknown };
+
+export function resolveNestedWorkflowOutputMode(
+  mode: NestedWorkflowOutputMode | undefined = NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT,
+): NestedWorkflowOutputMode {
+  return mode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT
+    ? NESTED_WORKFLOW_OUTPUT_MODE.COMPACT
+    : NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT;
+}
 
 /**
  * Keeps only the status-specific fields consumed by a parent workflow after

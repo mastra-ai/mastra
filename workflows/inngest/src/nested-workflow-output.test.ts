@@ -1,7 +1,26 @@
 import { describe, expect, it, vi } from 'vitest';
 import { InngestExecutionEngine } from './execution-engine';
-import { compactNestedWorkflowResult } from './nested-workflow-output';
+import {
+  compactNestedWorkflowResult,
+  NESTED_WORKFLOW_OUTPUT_MODE,
+  resolveNestedWorkflowOutputMode,
+} from './nested-workflow-output';
 import { InngestWorkflow } from './workflow';
+
+describe('nested workflow output mode', () => {
+  it('defaults missing modes to the normal output', () => {
+    expect(resolveNestedWorkflowOutputMode()).toBe(NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT);
+    expect(resolveNestedWorkflowOutputMode(NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT)).toBe(
+      NESTED_WORKFLOW_OUTPUT_MODE.DEFAULT,
+    );
+  });
+
+  it('preserves the compact output mode', () => {
+    expect(resolveNestedWorkflowOutputMode(NESTED_WORKFLOW_OUTPUT_MODE.COMPACT)).toBe(
+      NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
+    );
+  });
+});
 
 describe('nested workflow output compaction', () => {
   it('returns one copy of cumulative state after a successful invocation', () => {
@@ -94,7 +113,7 @@ describe('InngestExecutionEngine nested workflow output', () => {
       'workflow.parent.step.child',
       expect.objectContaining({
         data: expect.objectContaining({
-          nestedWorkflowOutputMode: 'compact',
+          nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
           outputOptions: { includeState: true },
         }),
       }),

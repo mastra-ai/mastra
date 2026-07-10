@@ -19,7 +19,11 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
-import { compactNestedWorkflowResult } from './nested-workflow-output';
+import {
+  compactNestedWorkflowResult,
+  NESTED_WORKFLOW_OUTPUT_MODE,
+  resolveNestedWorkflowOutputMode,
+} from './nested-workflow-output';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -308,9 +312,10 @@ export class InngestWorkflow<
           perStep,
           tracingOptions,
           actor,
-          nestedWorkflowOutputMode,
+          nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
         } = event.data;
-        const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === 'compact';
+        const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
+        const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
