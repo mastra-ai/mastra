@@ -123,11 +123,13 @@ async function createSetup({
   model,
   tools,
   toolDisplay,
+  stateSchema,
 }: {
   responseText?: string;
   model?: MockLanguageModelV2;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
+  stateSchema?: z.ZodTypeAny;
 } = {}) {
   const adapter = createMockAdapter('discord');
   const agent = new Agent({
@@ -145,6 +147,7 @@ async function createSetup({
     modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
     defaultModeId: 'build',
     channels: { adapters: { discord: toolDisplay ? { adapter, toolDisplay } : adapter } },
+    ...(stateSchema ? { stateSchema } : {}),
   });
   await controller.init();
   const mastra = controller.getMastra()!;
@@ -455,7 +458,7 @@ describe('AgentControllerChannels', () => {
       expect(executeSpy).not.toHaveBeenCalled();
     }, 30_000);
 
-    it('auto-executes tools on buttonless adapters via seeded yolo session state', async () => {
+    it('auto-executes tools on buttonless adapters without touching session state', async () => {
       const { tool, executeSpy } = createDeployTool();
       const { adapter, controller, mastra, channels } = await createSetup({
         model: createApprovalFlowModel({ finalText: 'Deployed without asking.' }),
@@ -473,8 +476,33 @@ describe('AgentControllerChannels', () => {
       });
 
       const session = (await controller.getSessionByResource('channel:discord:chan-1:t-yolo'))!;
-      expect((session.state.get() as Record<string, unknown>).yolo).toBe(true);
+      // The auto-approve marker lives on the channels instance, not in
+      // user-owned session state (which is schema-validated).
+      expect((session.state.get() as Record<string, unknown>).yolo).toBeUndefined();
+      expect(channels.__isAutoApproveResource('channel:discord:chan-1:t-yolo')).toBe(true);
       expect(session.approval.isArmed()).toBe(false);
+    }, 30_000);
+
+    it('auto-executes tools on buttonless adapters when the controller has a strict stateSchema', async () => {
+      // Regression: the flag must not route through schema-validated session
+      // state — a strict schema would reject an injected key (failing every
+      // inbound message) and a non-strict one would silently strip it
+      // (parking the run forever at an approval nobody can answer).
+      const { tool, executeSpy } = createDeployTool();
+      const { adapter, mastra, channels } = await createSetup({
+        model: createApprovalFlowModel({ finalText: 'Deployed with schema.' }),
+        tools: { deployTool: tool },
+        toolDisplay: 'text',
+        stateSchema: z.strictObject({ counter: z.number().default(0) }),
+      });
+      const chatThread = createChatThread(adapter, 'chan-1:t-schema');
+
+      await (channels as any).processChatMessage(chatThread, createMessage('m-1', 'please deploy'), mastra);
+
+      await waitFor(() => executeSpy.mock.calls.length >= 1, { what: 'tool auto-executed (strict schema)' });
+      await waitFor(() => allPostedText(adapter, chatThread).includes('Deployed with schema.'), {
+        what: 'final text rendered (strict schema)',
+      });
     }, 30_000);
   });
 });

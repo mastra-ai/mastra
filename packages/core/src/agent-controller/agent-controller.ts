@@ -1589,10 +1589,15 @@ export class AgentController<TState = {}> {
    */
   private buildSharedRunOptions(session: Session<TState>): Record<string, unknown> {
     const isYolo = (session.state.get() as Record<string, unknown>).yolo === true;
+    // Channel sessions on adapters that can't render approval buttons must
+    // auto-approve tools — a required approval would park the run forever on
+    // a card nobody can answer. Tracked on the channels instance rather than
+    // session state so the controller's `stateSchema` never sees it.
+    const channelAutoApprove = this.#channels?.__isAutoApproveResource(session.identity.getResourceId()) === true;
     const shared: Record<string, unknown> = {
       maxSteps: CONTROLLER_MAX_STEPS,
       savePerStep: false,
-      requireToolApproval: !isYolo,
+      requireToolApproval: !isYolo && !channelAutoApprove,
     };
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier

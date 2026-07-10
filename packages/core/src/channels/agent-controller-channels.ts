@@ -32,9 +32,30 @@ export type AgentControllerChannelsConfig = ChannelConfig;
 export class AgentControllerChannels extends AgentChannels {
   private controller: AgentController<any> | null = null;
 
+  /**
+   * Session resourceIds whose adapter can't render approval buttons, so their
+   * runs must auto-approve tools (`requireToolApproval: false`) instead of
+   * parking forever on an approval nobody can answer. Kept outside session
+   * state on purpose: state is validated against the controller's
+   * `stateSchema`, which would strip (or reject) an injected flag. Refreshed
+   * on every inbound message; in-memory only, matching the v1 long-lived
+   * server scope.
+   */
+  private autoApproveResourceIds = new Set<string>();
+
   /** @internal Called by AgentController's constructor to bind itself. */
   __setController(controller: AgentController<any>): void {
     this.controller = controller;
+  }
+
+  /**
+   * @internal Consulted by the controller's run-option builder: `true` when
+   * the session's channel adapter can't render approval buttons and tool
+   * calls must auto-approve (the session-side equivalent of the base agent
+   * path's `autoResumeSuspendedTools`).
+   */
+  __isAutoApproveResource(resourceId: string): boolean {
+    return this.autoApproveResourceIds.has(resourceId);
   }
 
   /**
@@ -99,11 +120,16 @@ export class AgentControllerChannels extends AgentChannels {
     const session = await this.getSessionForThread(thread);
 
     // The session equivalent of the base path's `autoResumeSuspendedTools`:
-    // controller runs set `requireToolApproval: !yolo`, so on adapters that
-    // can't render approval buttons, seed `yolo: true` to keep runs from
-    // parking forever on an approval nobody can answer.
-    if (autoResumeSuspendedTools && (session.state.get() as Record<string, unknown>).yolo !== true) {
-      await session.state.set({ yolo: true } as never);
+    // controller runs set `requireToolApproval` from this marker, so on
+    // adapters that can't render approval buttons the run auto-approves
+    // instead of parking forever on an approval nobody can answer. Tracked
+    // outside session state so the controller's `stateSchema` (which would
+    // strip or reject an injected key) never sees it.
+    const sessionResourceId = thread.resourceId;
+    if (autoResumeSuspendedTools) {
+      this.autoApproveResourceIds.add(sessionResourceId);
+    } else {
+      this.autoApproveResourceIds.delete(sessionResourceId);
     }
 
     const result = session.sendSignal({
