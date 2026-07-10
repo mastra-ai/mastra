@@ -72,6 +72,7 @@ const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, string>> = {
   [SpanType.MODEL_GENERATION]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
+  [SpanType.SERVER_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
   [SpanType.WORKFLOW_WAIT_EVENT]: 'function',
 };
@@ -298,7 +299,7 @@ export class BraintrustExporter extends TrackingExporter<
     // Handle thread data accumulation for MODEL_STEP and TOOL_CALL spans
     if (span.type === SpanType.MODEL_STEP) {
       this.accumulateModelStepData(span, traceData);
-    } else if (span.type === SpanType.TOOL_CALL) {
+    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.SERVER_TOOL_CALL) {
       this.accumulateToolCallResult(span, traceData);
     }
 

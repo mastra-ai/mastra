@@ -576,6 +576,7 @@ function mapLaminarSpanType(spanType: SpanType): LaminarSpanType {
       return 'LLM';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.SERVER_TOOL_CALL:
       return 'TOOL';
     default:
       return 'DEFAULT';

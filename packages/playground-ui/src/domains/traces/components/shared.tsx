@@ -7,7 +7,18 @@ import { MemoryIcon } from '@/ds/icons/MemoryIcon';
 import { ToolsIcon } from '@/ds/icons/ToolsIcon';
 import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
-export const spanTypePrefixes = ['agent', 'workflow', 'model', 'mcp', 'tool', 'memory', 'workspace', 'scorer', 'other'];
+export const spanTypePrefixes = [
+  'agent',
+  'workflow',
+  'model',
+  'mcp',
+  'tool',
+  'server',
+  'memory',
+  'workspace',
+  'scorer',
+  'other',
+];
 
 const spanTypeToUiElements: Record<string, UISpanStyle> = {
   agent: {
@@ -40,9 +51,15 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     label: 'Tool',
     typePrefix: 'tool',
   },
+  server: {
+    icon: <ToolsIcon />,
+    color: 'oklch(0.75 0.15 60)',
+    label: 'Server Tool',
+    typePrefix: 'server',
+  },
   memory: {
     icon: <MemoryIcon />,
-    color: 'oklch(0.75 0.15 60)',
+    color: 'oklch(0.75 0.12 50)',
     label: 'Memory',
     typePrefix: 'memory',
   },

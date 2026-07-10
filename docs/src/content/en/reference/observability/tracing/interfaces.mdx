@@ -53,6 +53,7 @@ interface SpanTypeMap {
   MODEL_CHUNK: ModelChunkAttributes
   TOOL_CALL: ToolCallAttributes
   CLIENT_TOOL_CALL: ClientToolCallAttributes
+  SERVER_TOOL_CALL: ServerToolCallAttributes
   MCP_TOOL_CALL: MCPToolCallAttributes
   PROCESSOR_RUN: ProcessorRunAttributes
   WORKFLOW_STEP: WorkflowStepAttributes
@@ -450,6 +451,14 @@ enum SpanType {
    * for the full flow.
    */
   CLIENT_TOOL_CALL = 'client_tool_call',
+
+  /**
+   * Provider-executed (server-side) tool span. Reconstructed from
+   * tool-call and tool-result stream chunks for tools the model
+   * provider executes (e.g. Anthropic code execution, server-side
+   * web search). Opened on tool-call chunk, closed on tool-result.
+   */
+  SERVER_TOOL_CALL = 'server_tool_call',
 
   /** Workflow run - root span for workflow processes */
   WORKFLOW_RUN = 'workflow_run',

@@ -166,6 +166,7 @@ function getDurationMetricName(span: AnySpan): string | null {
       return 'mastra_agent_duration_ms';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.SERVER_TOOL_CALL:
       return 'mastra_tool_duration_ms';
     case SpanType.CLIENT_TOOL_CALL:
       // The CLIENT_TOOL_CALL server span measures only carrier emission

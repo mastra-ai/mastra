@@ -136,6 +136,7 @@ function getOperationName(span: AnyExportedSpan): string {
       return 'embeddings';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
+    case SpanType.SERVER_TOOL_CALL:
       return 'execute_tool';
     case SpanType.AGENT_RUN:
       return 'invoke_agent';
@@ -204,7 +205,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     // Add specific attributes based on span type
     if (span.type === SpanType.MODEL_GENERATION) {
       attributes[ATTR_GEN_AI_INPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(inputStr);
-    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
+    } else if (
+      span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.SERVER_TOOL_CALL
+    ) {
       attributes['gen_ai.tool.call.arguments'] = inputStr;
     } else {
       attributes[`mastra.${spanType}.input`] = inputStr;
@@ -218,7 +223,11 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
       attributes[ATTR_GEN_AI_OUTPUT_MESSAGES] = convertMastraMessagesToGenAIMessages(outputStr);
       // TODO
       // attributes['gen_ai.output.type'] = image/json/speech/text/<other>
-    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
+    } else if (
+      span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.SERVER_TOOL_CALL
+    ) {
       attributes['gen_ai.tool.call.result'] = outputStr;
     } else {
       attributes[`mastra.${spanType}.output`] = outputStr;
@@ -311,7 +320,12 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   }
 
   // Add tool-specific attributes using OTEL conventions
-  if ((span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) && span.attributes) {
+  if (
+    (span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.SERVER_TOOL_CALL) &&
+    span.attributes
+  ) {
     // Tool identification
     attributes[ATTR_GEN_AI_TOOL_NAME] = span.entityName ?? span.entityId;
 
