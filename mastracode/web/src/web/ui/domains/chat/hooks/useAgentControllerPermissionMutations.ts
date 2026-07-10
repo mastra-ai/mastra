@@ -29,22 +29,3 @@ export function useSetPermissionForCategoryMutation({
       }),
   });
 }
-
-export function useSetPermissionForToolMutation({
-  agentControllerId,
-  resourceId,
-  baseUrl = '',
-  enabled = true,
-}: AgentControllerPermissionMutationArgs) {
-  const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-
-  return useMutation({
-    mutationFn: ({ toolName, policy }: { toolName: string; policy: PermissionPolicy }) =>
-      requireAgentControllerSession(session).setPermissionForTool(toolName, policy),
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId),
-      }),
-  });
-}

@@ -1,9 +1,10 @@
-import type { AgentControllerModeInfo, AgentControllerOMProgress } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Brain, Target } from 'lucide-react';
 
-import type { GoalSnapshot, OMPhase } from '../services/transcript';
+import { useChatModels } from '../context/useChatModels';
+import { useChatModes } from '../context/useChatModes';
+import { useChatTranscript } from '../context/useChatTranscript';
 
 const statusItem = 'inline-flex items-center gap-1 text-icon3 [&_svg]:text-icon2';
 const statusBudget = 'inline-flex items-baseline whitespace-nowrap text-icon3 tabular-nums';
@@ -32,46 +33,32 @@ function lastSegment(id: string): string {
   return parts[parts.length - 1] || id;
 }
 
-export function StatusLine({
-  modelId,
-  followUpCount,
-  omPhase,
-  omProgress,
-  goal,
-  tokensPerSec,
-  modes,
-  activeModeId,
-  onModeChange,
-}: {
-  modelId?: string;
-  followUpCount?: number;
-  omPhase?: OMPhase;
-  omProgress?: AgentControllerOMProgress;
-  goal?: GoalSnapshot;
-  tokensPerSec?: number;
-  modes?: AgentControllerModeInfo[];
-  activeModeId?: string;
-  onModeChange?: (modeId: string) => void;
-}) {
-  const om = omProgress;
+export function StatusLine() {
+  const { transcript } = useChatTranscript();
+  const { activeModelId } = useChatModels();
+  const { modes, activeModeId, setMode } = useChatModes();
+  const om = transcript.omProgress;
   const showMsg = om && om.threshold > 0;
   const showMem = om && om.reflectionThreshold > 0 && om.observationTokens > 0;
+  const selectedModeId = activeModeId ?? modes[0]?.id;
 
   return (
     <div
       aria-label="Session status line"
       className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1 py-2 text-ui-sm text-icon3"
     >
-      {modes && modes.length > 0 && onModeChange && (
+      {modes.length > 0 && (
         <div role="group" aria-label="Session mode" className="shrink-0">
           <ButtonsGroup spacing="close">
             {modes.map(m => (
               <Button
                 key={m.id}
-                variant={activeModeId === m.id ? 'primary' : 'ghost'}
+                variant={selectedModeId === m.id ? 'primary' : 'ghost'}
                 size="sm"
-                aria-pressed={activeModeId === m.id}
-                onClick={() => onModeChange(m.id)}
+                aria-pressed={selectedModeId === m.id}
+                onClick={() => {
+                  void setMode(m.id);
+                }}
               >
                 {m.name ?? m.id}
               </Button>
@@ -80,7 +67,7 @@ export function StatusLine({
         </div>
       )}
 
-      <span className="text-icon3 tabular-nums">{modelId ? lastSegment(modelId) : 'no model'}</span>
+      <span className="text-icon3 tabular-nums">{activeModelId ? lastSegment(activeModelId) : 'no model'}</span>
 
       {showMsg && (
         <span
@@ -106,16 +93,16 @@ export function StatusLine({
         </span>
       )}
 
-      {omPhase && omPhase !== 'idle' && (
+      {transcript.omPhase && transcript.omPhase !== 'idle' && (
         <span className={statusItem}>
-          <Brain size={13} /> {omPhase}
+          <Brain size={13} /> {transcript.omPhase}
         </span>
       )}
-      {(tokensPerSec ?? 0) > 0 && <span className={statusItem}>{tokensPerSec} tok/s</span>}
-      {(followUpCount ?? 0) > 0 && <span className={statusItem}>{followUpCount} queued</span>}
-      {goal && goal.status !== 'done' && (
+      {(transcript.tokensPerSec ?? 0) > 0 && <span className={statusItem}>{transcript.tokensPerSec} tok/s</span>}
+      {(transcript.followUpCount ?? 0) > 0 && <span className={statusItem}>{transcript.followUpCount} queued</span>}
+      {transcript.goal && transcript.goal.status !== 'done' && (
         <span className="inline-flex items-center gap-1 text-accent2 [&_svg]:text-accent2">
-          <Target size={13} /> {goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
+          <Target size={13} /> {transcript.goal.status === 'paused' ? 'goal paused' : 'pursuing goal'}
         </span>
       )}
 

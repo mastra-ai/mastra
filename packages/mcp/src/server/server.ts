@@ -58,9 +58,25 @@ import { streamSSE } from 'hono/streaming';
 import { SSETransport } from 'hono-mcp-server-sse-transport';
 
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
+import { broadcastNotification } from './notificationBroadcast';
 import { ServerPromptActions } from './promptActions';
 import { ServerResourceActions } from './resourceActions';
+import { ServerToolActions } from './toolActions';
 import type { MCPServerPrompts, MCPServerResources, ElicitationActions, MastraPrompt, AppResources } from './types';
+
+// RFC 5424 syslog severity ordering used by the MCP logging utility.
+// Higher numbers are more severe; messages below a client's minimum level are dropped.
+const LOG_LEVEL_SEVERITY: Record<LoggingLevel, number> = {
+  debug: 0,
+  info: 1,
+  notice: 2,
+  warning: 3,
+  error: 4,
+  critical: 5,
+  alert: 6,
+  emergency: 7,
+};
+
 /**
  * MCPServer exposes Mastra tools, agents, and workflows as a Model Context Protocol (MCP) server.
  *
@@ -108,8 +124,12 @@ export class MCPServer extends MCPServerBase {
   private jsonSchemaValidator?: jsonSchemaValidator;
   private mapAuthInfoToUser?: MCPAuthInfoToUserMapper;
   private fga?: MCPServerFGAConfig;
-  private subscriptions: Set<string> = new Set();
-  private currentLoggingLevel: LoggingLevel | undefined;
+  // Resource subscriptions per server instance (main + per HTTP session), set via
+  // resources/subscribe. Note: legacy SSE sessions share the main instance, so they
+  // share one subscription set; streamable HTTP sessions are isolated per session.
+  private subscriptionsByInstance: WeakMap<Server, Set<string>> = new WeakMap();
+  // Minimum logging level per server instance (main + per HTTP session), set via logging/setLevel
+  private loggingLevels: WeakMap<Server, LoggingLevel> = new WeakMap();
 
   /**
    * Provides methods to notify clients about resource changes.
@@ -135,6 +155,25 @@ export class MCPServer extends MCPServerBase {
    * ```
    */
   public readonly prompts: ServerPromptActions;
+
+  /**
+   * Provides methods to dynamically manage tools and notify clients about
+   * tool list changes. Named `toolActions` because `tools()` is the tool
+   * registry getter inherited from `MCPServerBase`.
+   *
+   * @example
+   * ```typescript
+   * // Register a new tool at runtime and notify clients
+   * await server.toolActions.add({ myNewTool });
+   *
+   * // Remove a tool and notify clients
+   * await server.toolActions.remove(['myNewTool']);
+   *
+   * // Notify that the tool list changed (e.g. authorization changes)
+   * await server.toolActions.notifyListChanged();
+   * ```
+   */
+  public readonly toolActions: ServerToolActions;
 
   /**
    * Provides methods for interactive user input collection during tool execution.
@@ -319,7 +358,7 @@ export class MCPServer extends MCPServerBase {
     this.fga = opts.fga;
 
     const capabilities: ServerCapabilities = {
-      tools: {},
+      tools: { listChanged: true },
       logging: { enabled: true },
     };
 
@@ -368,17 +407,25 @@ export class MCPServer extends MCPServerBase {
     this.registerHandlersOnServer(this.server);
 
     this.resources = new ServerResourceActions({
-      getSubscriptions: () => this.subscriptions,
+      getSubscribedServers: (uri: string) =>
+        this.getAllSdkServers().filter(server => this.subscriptionsByInstance.get(server)?.has(uri)),
       getLogger: () => this.logger,
-      getSdkServer: () => this.server,
+      getSdkServers: () => this.getAllSdkServers(),
     });
 
     this.prompts = new ServerPromptActions({
       getLogger: () => this.logger,
-      getSdkServer: () => this.server,
+      getSdkServers: () => this.getAllSdkServers(),
       clearDefinedPrompts: () => {
         this.definedPrompts = undefined;
       },
+    });
+
+    this.toolActions = new ServerToolActions({
+      getLogger: () => this.logger,
+      getSdkServers: () => this.getAllSdkServers(),
+      addTools: tools => this.addTools(tools),
+      removeTools: toolIds => this.removeTools(toolIds),
     });
 
     this.elicitation = {
@@ -386,6 +433,130 @@ export class MCPServer extends MCPServerBase {
         return this.handleElicitationRequest(request, undefined, options);
       },
     };
+  }
+
+  /**
+   * Returns every connected SDK server instance: the main instance (stdio/SSE
+   * transports) plus one instance per streamable HTTP session. Used to
+   * broadcast notifications to all connected clients. Instances without a
+   * connected transport are skipped.
+   *
+   * Note: stateless/serverless requests use transient server instances and
+   * cannot receive notifications.
+   */
+  private getAllSdkServers(): Server[] {
+    return [this.server, ...this.httpServerInstances.values()].filter(server => server.transport !== undefined);
+  }
+
+  /**
+   * Determines whether a log message at the given level should be sent to the
+   * client connected to the given server instance, honoring the minimum level
+   * the client set via `logging/setLevel` (RFC 5424 severity ordering).
+   * When the client never set a level, all messages are sent.
+   */
+  private shouldSendLog(serverInstance: Server, level: LoggingLevel): boolean {
+    const minimumLevel = this.loggingLevels.get(serverInstance);
+    if (minimumLevel === undefined) return true;
+    return LOG_LEVEL_SEVERITY[level] >= LOG_LEVEL_SEVERITY[minimumLevel];
+  }
+
+  /**
+   * Sends a `notifications/message` log notification to connected clients.
+   *
+   * The notification is broadcast to every active server instance, honoring
+   * the minimum logging level each client set via `logging/setLevel`.
+   *
+   * @param params - Log message parameters
+   * @param params.level - Log severity level
+   * @param params.data - Arbitrary JSON-serializable data to log
+   * @param params.logger - Optional logger name
+   * @throws {MastraError} If sending the notification fails on all eligible server instances
+   *
+   * @example
+   * ```typescript
+   * await server.sendLoggingMessage({
+   *   level: 'info',
+   *   data: { message: 'Sync completed', itemsProcessed: 42 },
+   * });
+   * ```
+   */
+  public async sendLoggingMessage(params: { level: LoggingLevel; data: unknown; logger?: string }): Promise<void> {
+    const eligibleServers = this.getAllSdkServers().filter(server => this.shouldSendLog(server, params.level));
+    if (eligibleServers.length === 0) {
+      this.logger.debug('No eligible clients for log message; skipping.', { level: params.level });
+      return;
+    }
+    await broadcastNotification({
+      servers: eligibleServers,
+      send: server => server.sendLoggingMessage(params),
+      logger: this.logger,
+      errorId: 'MCP_SERVER_LOGGING_MESSAGE_NOTIFICATION_FAILED',
+      errorText: 'Failed to send logging message notification',
+      errorDetails: { level: params.level },
+    });
+  }
+
+  /**
+   * Registers new tools on the running server. Tools are merged into both the
+   * converted tool registry (used by list/call handlers) and the original
+   * tools config so they survive tool re-conversion when the server is
+   * registered with a Mastra instance.
+   */
+  private addTools(tools: ToolsInput): void {
+    const converted = this.convertTools(tools);
+    for (const key of Object.keys(converted)) {
+      if (this.convertedTools[key]) {
+        this.logger.warn(`Tool '${key}' already exists and will be replaced.`);
+      }
+    }
+    this.convertedTools = { ...this.convertedTools, ...converted };
+    this.originalTools = { ...this.originalTools, ...tools };
+    // Keep the Mastra instance's tool registry in sync, mirroring the
+    // auto-registration done in __registerMastra.
+    if (this.mastra) {
+      for (const [key, tool] of Object.entries(tools)) {
+        if (tool && typeof tool === 'object' && 'id' in tool) {
+          this.mastra.addTool(tool as any, this.mastraToolKey(key, tool));
+        }
+      }
+    }
+  }
+
+  /**
+   * Removes tools from the running server by tool ID.
+   *
+   * @returns The IDs of the tools that were actually removed
+   */
+  private removeTools(toolIds: string[]): string[] {
+    const removed: string[] = [];
+    const convertedTools = { ...this.convertedTools };
+    const originalTools = { ...this.originalTools };
+    for (const toolId of toolIds) {
+      if (convertedTools[toolId]) {
+        const originalTool = originalTools[toolId];
+        delete convertedTools[toolId];
+        delete originalTools[toolId];
+        removed.push(toolId);
+        // Keep the Mastra instance's tool registry in sync.
+        if (this.mastra && originalTool && typeof originalTool === 'object' && 'id' in originalTool) {
+          this.mastra.removeTool(this.mastraToolKey(toolId, originalTool));
+        }
+      } else {
+        this.logger.warn(`Cannot remove tool '${toolId}': tool not found.`);
+      }
+    }
+    this.convertedTools = convertedTools;
+    this.originalTools = originalTools;
+    return removed;
+  }
+
+  /**
+   * The key a tool is registered under in the Mastra instance's tool
+   * registry: the tool's intrinsic ID when present (avoids collisions across
+   * MCP servers), falling back to its record key. Mirrors __registerMastra.
+   */
+  private mastraToolKey(key: string, tool: NonNullable<ToolsInput[string]>): string {
+    return 'id' in tool && typeof (tool as any).id === 'string' ? (tool as any).id : key;
   }
 
   /**
@@ -556,7 +727,7 @@ export class MCPServer extends MCPServerBase {
    */
   private createServerInstance(): Server {
     const capabilities: ServerCapabilities = {
-      tools: {},
+      tools: { listChanged: true },
       logging: { enabled: true },
     };
 
@@ -696,6 +867,47 @@ export class MCPServer extends MCPServerBase {
 
         const proxiedContext = await this.createProxiedRequestContext(extra);
 
+        // Session-aware log emission: sends notifications/message to the calling
+        // client, honoring the minimum level it set via logging/setLevel.
+        const sessionLog = async (
+          level: LoggingLevel,
+          message: string,
+          data?: Record<string, unknown>,
+        ): Promise<void> => {
+          if (!this.shouldSendLog(serverInstance, level)) return;
+          await extra.sendNotification({
+            method: 'notifications/message',
+            params: {
+              level,
+              logger: this.name,
+              data: { message, ...data },
+            },
+          });
+        };
+
+        // Session-aware progress emission: sends notifications/progress with the
+        // progressToken the caller provided. No-op when no token was sent, per spec.
+        const progressToken = extra._meta?.progressToken;
+        const sessionProgress = async (params: {
+          progress: number;
+          total?: number;
+          message?: string;
+        }): Promise<void> => {
+          if (progressToken === undefined) {
+            this.logger.debug('Tool attempted to send progress but the caller sent no progressToken; skipping.', {
+              tool: request.params.name,
+            });
+            return;
+          }
+          await extra.sendNotification({
+            method: 'notifications/progress',
+            params: {
+              progressToken,
+              ...params,
+            },
+          });
+        };
+
         const mcpOptions: MastraToolInvocationOptions = {
           messages: [],
           toolCallId: '',
@@ -704,6 +916,8 @@ export class MCPServer extends MCPServerBase {
           mcp: {
             elicitation: sessionElicitation,
             extra,
+            log: sessionLog,
+            progress: sessionProgress,
           },
           // @ts-expect-error this is to let people know that the elicitation and extra keys are now nested under mcp.elicitation and mcp.extra in tool arguments
           get elicitation() {
@@ -806,9 +1020,10 @@ export class MCPServer extends MCPServerBase {
       }
     });
 
-    // Set logging level handler
+    // Set logging level handler. The level is tracked per server instance so
+    // each HTTP session (which gets its own instance) can set its own level.
     serverInstance.setRequestHandler(SetLevelRequestSchema, async request => {
-      this.currentLoggingLevel = request.params.level;
+      this.loggingLevels.set(serverInstance, request.params.level);
       this.logger.debug('Logging level set', { level: request.params.level });
       return {};
     });
@@ -927,14 +1142,19 @@ export class MCPServer extends MCPServerBase {
     serverInstance.setRequestHandler(SubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/subscribe request', { uri });
-      this.subscriptions.add(uri);
+      let subscriptions = this.subscriptionsByInstance.get(serverInstance);
+      if (!subscriptions) {
+        subscriptions = new Set();
+        this.subscriptionsByInstance.set(serverInstance, subscriptions);
+      }
+      subscriptions.add(uri);
       return {};
     });
 
     serverInstance.setRequestHandler(UnsubscribeRequestSchema, async (request: { params: { uri: string } }) => {
       const uri = request.params.uri;
       this.logger.info('Received resources/unsubscribe request', { uri });
-      this.subscriptions.delete(uri);
+      this.subscriptionsByInstance.get(serverInstance)?.delete(uri);
       return {};
     });
   }
@@ -1632,12 +1852,20 @@ export class MCPServer extends MCPServerBase {
           if (isInitializeRequest(body)) {
             this.logger.debug('Received initialize request, creating new transport');
 
-            // Create a new transport for the new session
+            // Create a new server instance for this HTTP session
+            const sessionServerInstance = this.createServerInstance();
+
+            // Create a new transport for the new session.
+            // The session ID is only assigned while the transport handles the
+            // initialize request, so the transport and server instance must be
+            // registered in the onsessioninitialized callback.
             transport = new StreamableHTTPServerTransport({
               ...mergedOptions,
               sessionIdGenerator: mergedOptions.sessionIdGenerator,
               onsessioninitialized: id => {
                 this.streamableHTTPTransports.set(id, transport!);
+                this.httpServerInstances.set(id, sessionServerInstance);
+                this.logger.debug('Session initialized and stored', { sessionId: id });
               },
             });
 
@@ -1655,22 +1883,12 @@ export class MCPServer extends MCPServerBase {
               }
             };
 
-            // Create a new server instance for this HTTP session
-            const sessionServerInstance = this.createServerInstance();
-
             // Connect the new server instance to the new transport
             await sessionServerInstance.connect(transport);
 
-            // Store both the transport and server instance when the session is initialized
-            if (transport.sessionId) {
-              this.streamableHTTPTransports.set(transport.sessionId, transport);
-              this.httpServerInstances.set(transport.sessionId, sessionServerInstance);
-              this.logger.debug('Session initialized and stored', { sessionId: transport.sessionId });
-            } else {
-              this.logger.warn('Transport initialized without a session ID');
-            }
-
-            // Handle the initialize request
+            // Handle the initialize request. This assigns the session ID and
+            // triggers onsessioninitialized, which stores the transport and
+            // server instance for the session.
             return await transport.handleRequest(req, res, body);
           } else {
             // POST request but not initialize, and no session ID

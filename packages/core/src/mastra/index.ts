@@ -3845,6 +3845,29 @@ export class Mastra<
   }
 
   /**
+   * Removes a tool from the Mastra instance by its registration key.
+   *
+   * Also unregisters the tool's static executor from the background task
+   * manager, if one was registered.
+   *
+   * @returns `true` if a tool was removed, `false` if no tool was registered under the key
+   *
+   * @example
+   * ```typescript
+   * mastra.removeTool('calculator-tool');
+   * ```
+   */
+  public removeTool(key: string): boolean {
+    const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
+    if (!tools[key]) {
+      return false;
+    }
+    delete tools[key];
+    this.#backgroundTaskManager?.unregisterStaticExecutor(key);
+    return true;
+  }
+
+  /**
    * Retrieves a specific processor by registration key.
    *
    * @throws {MastraError} When the specified processor is not found

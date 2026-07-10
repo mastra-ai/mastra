@@ -1,10 +1,10 @@
-import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { broadcastNotification } from './notificationBroadcast';
 
 interface ServerPromptActionsDependencies {
   getLogger: () => IMastraLogger;
-  getSdkServer: () => Server;
+  getSdkServers: () => Server[];
   clearDefinedPrompts: () => void;
 }
 
@@ -13,10 +13,15 @@ interface ServerPromptActionsDependencies {
  *
  * This class provides methods for MCP servers to notify connected clients when
  * the list of available prompts changes.
+ *
+ * Notifications are broadcast to every active server instance (the main
+ * stdio/SSE instance plus each streamable HTTP session). Clients connected in
+ * stateless/serverless mode cannot receive notifications because each request
+ * uses a transient server instance.
  */
 export class ServerPromptActions {
   private readonly getLogger: () => IMastraLogger;
-  private readonly getSdkServer: () => Server;
+  private readonly getSdkServers: () => Server[];
   private readonly clearDefinedPrompts: () => void;
 
   /**
@@ -24,7 +29,7 @@ export class ServerPromptActions {
    */
   constructor(dependencies: ServerPromptActionsDependencies) {
     this.getLogger = dependencies.getLogger;
-    this.getSdkServer = dependencies.getSdkServer;
+    this.getSdkServers = dependencies.getSdkServers;
     this.clearDefinedPrompts = dependencies.clearDefinedPrompts;
   }
 
@@ -34,7 +39,7 @@ export class ServerPromptActions {
    * This clears the internal prompt cache and sends a `notifications/prompts/list_changed`
    * message to all clients, prompting them to re-fetch the prompt list.
    *
-   * @throws {MastraError} If sending the notification fails
+   * @throws {MastraError} If sending the notification fails on all server instances
    *
    * @example
    * ```typescript
@@ -45,23 +50,12 @@ export class ServerPromptActions {
   public async notifyListChanged(): Promise<void> {
     this.getLogger().info('Prompt list change externally notified. Clearing definedPrompts and sending notification.');
     this.clearDefinedPrompts();
-    try {
-      await this.getSdkServer().sendPromptListChanged();
-    } catch (error) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_SERVER_PROMPT_LIST_CHANGED_NOTIFICATION_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: 'Failed to send prompt list changed notification',
-        },
-        error,
-      );
-      this.getLogger().error('Failed to send prompt list changed notification:', {
-        error: mastraError.toString(),
-      });
-      this.getLogger().trackException(mastraError);
-      throw mastraError;
-    }
+    await broadcastNotification({
+      servers: this.getSdkServers(),
+      send: server => server.sendPromptListChanged(),
+      logger: this.getLogger(),
+      errorId: 'MCP_SERVER_PROMPT_LIST_CHANGED_NOTIFICATION_FAILED',
+      errorText: 'Failed to send prompt list changed notification',
+    });
   }
 }

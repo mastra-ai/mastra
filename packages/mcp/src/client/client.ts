@@ -33,6 +33,7 @@ import {
   ListPromptsResultSchema,
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
+  ToolListChangedNotificationSchema,
   ElicitRequestSchema,
   ProgressNotificationSchema,
   ListRootsRequestSchema,
@@ -752,6 +753,17 @@ export class InternalMastraMCPClient extends MastraBase {
   setPromptListChangedNotificationHandler(handler: () => void): void {
     this.log('debug', 'Setting prompt list changed notification handler');
     this.client.setNotificationHandler(PromptListChangedNotificationSchema, () => {
+      handler();
+    });
+  }
+
+  /**
+   * Register a handler to be called when the tool list changes on the server.
+   * Use this to re-fetch tools via `tools()` when notified.
+   */
+  setToolListChangedNotificationHandler(handler: () => void): void {
+    this.log('debug', 'Setting tool list changed notification handler');
+    this.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
       handler();
     });
   }
