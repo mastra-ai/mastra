@@ -1,3 +1,8 @@
+---
+name: testing-core-processors
+description: How to write integration tests for error processors in packages/core/src/processors/. Use when testing retry behavior, error handling, or processor pipelines with MockLanguageModelV2 from @internal/ai-sdk-v5/test.
+---
+
 # Testing Core Error Processors
 
 How to write integration tests for error processors in `packages/core/src/processors/`.

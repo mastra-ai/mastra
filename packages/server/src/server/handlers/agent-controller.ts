@@ -318,15 +318,24 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
  * Error into a plain object so the actual failure reaches the client.
  */
 function toWireEvent(event: unknown): unknown {
-  if (
-    typeof event === 'object' &&
-    event !== null &&
-    (event as { type?: unknown }).type === 'error' &&
-    (event as { error?: unknown }).error instanceof Error
-  ) {
-    const error = (event as { error: Error }).error;
+  if (typeof event !== 'object' || event === null || (event as { type?: unknown }).type !== 'error') {
+    return event;
+  }
+  const error = (event as { error?: unknown }).error;
+  if (error instanceof Error) {
     return { ...event, error: { name: error.name, message: error.message } };
   }
+  // Non-Error payloads (cross-realm Errors, thrown objects) can still carry a
+  // useful message on non-enumerable properties; flatten them the same way so
+  // the client never renders a bare `{}`.
+  if (typeof error === 'object' && error !== null) {
+    const { name, message } = error as { name?: unknown; message?: unknown };
+    if (typeof message === 'string' && message) {
+      return { ...event, error: { name: typeof name === 'string' && name ? name : 'Error', message } };
+    }
+  }
+  // Strings pass through as-is; nullish payloads stay untouched so the client
+  // can fall back to `errorType`.
   return event;
 }
 
@@ -346,6 +355,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
+      const logger = mastra.getLogger();
 
       let cleanedUp = false;
       let heartbeat: ReturnType<typeof setTimeout> | undefined;
@@ -391,6 +401,16 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
 
           unsubscribe = session.subscribe(event => {
             if (cleanedUp) return;
+            // Session error events are otherwise invisible server-side; log
+            // them so "check the server logs" in the client is actionable.
+            if (typeof event === 'object' && event !== null && (event as { type?: unknown }).type === 'error') {
+              const err = (event as { error?: unknown }).error;
+              logger?.error?.(
+                `[AgentController] session run error (controller=${controllerId} resource=${resourceId}): ${
+                  err instanceof Error ? (err.stack ?? err.message) : JSON.stringify(toWireEvent(event))
+                }`,
+              );
+            }
             try {
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed

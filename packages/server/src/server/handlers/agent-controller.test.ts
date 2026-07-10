@@ -286,6 +286,41 @@ describe('agent-controller routes', () => {
       expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
     });
+
+    it('flattens Error-like objects on error events (e.g. cross-realm Errors)', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-err-like',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-like',
+        id: 'user-err-like',
+        ownerId: 'code',
+      });
+      // Error-like object whose message is non-enumerable, mimicking an Error
+      // from another realm (fails `instanceof Error`) that would otherwise
+      // serialize to `{}` on the wire.
+      const errorLike = Object.defineProperty({}, 'message', { value: 'sandbox provider unavailable' });
+      session.emit({ type: 'error', error: errorLike } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      expect(received.error).toEqual({ name: 'Error', message: 'sandbox provider unavailable' });
+      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('sandbox provider unavailable');
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_MODES_ROUTE', () => {
