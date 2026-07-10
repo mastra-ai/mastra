@@ -28,7 +28,7 @@ export const persistentGoalCommandsScenario: McE2eScenario = {
 
     terminal.submit(`/goal ${OBJECTIVE}`);
     await runtime.waitForScreenText(/Persistent goal command e2e acknowledged\./i, terminal, 15_000);
-    await runtime.waitForScreenText(/▐[^▌]+▌.*\bgoal(?:\s+<1m)?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/▐[^\r\n▌]+▌[^\r\n]*\bgoal\b(?:[ \t]+<1m)?/i, terminal, 8_000);
 
     terminal.submit('/goal pause');
     await runtime.waitForScreenText(/Goal paused: "Persist the goal command e2e objective/i, terminal, 8_000);
