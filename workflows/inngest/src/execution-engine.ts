@@ -14,9 +14,9 @@ import type {
   StepFailure,
   ExecutionEngineOptions,
   TimeTravelExecutionParams,
-  WorkflowResult,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
+import type { CompactNestedWorkflowResult } from './nested-workflow-output';
 import { InngestWorkflow } from './workflow';
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
@@ -456,7 +456,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       : undefined;
 
     const isResume = !!resume?.steps?.length;
-    let result: WorkflowResult<any, any, any, any>;
+    let result: CompactNestedWorkflowResult;
     let runId: string;
 
     const isTimeTravel = !!(timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.id);
@@ -484,6 +484,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               resumePath: resume.steps?.[1] ? (snapshot?.suspendedPaths?.[resume.steps?.[1]] as any) : undefined,
             },
             outputOptions: { includeState: true },
+            compactNestedWorkflowResult: true,
             perStep,
             tracingOptions: nestedTracingContext,
             actor,
@@ -514,6 +515,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             initialState: executionContext.state ?? {},
             runId: executionContext.runId,
             outputOptions: { includeState: true },
+            compactNestedWorkflowResult: true,
             perStep,
             tracingOptions: nestedTracingContext,
             actor,
@@ -529,6 +531,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             initialState: executionContext.state ?? {},
             outputOptions: { includeState: true },
+            compactNestedWorkflowResult: true,
             perStep,
             tracingOptions: nestedTracingContext,
             actor,
@@ -539,14 +542,13 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         executionContext.state = invokeResp.result.state;
       }
     } catch (e) {
-      // Nested workflow threw an error (likely from finalization step)
-      // The error cause should contain the workflow result with runId
+      // Nested workflow threw an error (likely from finalization step).
+      // Compact nested failures carry the workflow result and runId in the cause.
       const errorCause = (e as any)?.cause;
 
       // Try to extract runId from error cause or generate new one
       if (errorCause && typeof errorCause === 'object') {
-        result = errorCause as WorkflowResult<any, any, any, any>;
-        // The runId might be in the result's steps metadata
+        result = errorCause as CompactNestedWorkflowResult;
         runId = errorCause.runId || randomUUID();
       } else {
         // Fallback: if we can't get the result from error, construct a basic failed result
@@ -554,9 +556,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         result = {
           status: 'failed',
           error: e instanceof Error ? e : new Error(String(e)),
-          steps: {},
-          input: inputData,
-        } as WorkflowResult<any, any, any, any>;
+        };
       }
     }
 

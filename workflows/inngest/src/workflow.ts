@@ -19,6 +19,7 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
+import { compactNestedWorkflowResult } from './nested-workflow-output';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -307,6 +308,7 @@ export class InngestWorkflow<
           perStep,
           tracingOptions,
           actor,
+          compactNestedWorkflowResult: shouldCompactNestedWorkflowResult,
         } = event.data;
 
         if (!runId) {
@@ -412,6 +414,8 @@ export class InngestWorkflow<
             error: executionError instanceof Error ? executionError : new Error(String(executionError)),
           } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
+
+        const returnedResult = shouldCompactNestedWorkflowResult ? compactNestedWorkflowResult(result) : result;
 
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
@@ -535,11 +539,11 @@ export class InngestWorkflow<
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: result,
+                cause: shouldCompactNestedWorkflowResult ? { ...returnedResult, runId } : result,
               });
             }
 
-            return result;
+            return { status: result.status };
           });
         } catch (error) {
           finalizeErrored = true;
@@ -560,7 +564,7 @@ export class InngestWorkflow<
           throw finalizeError;
         }
 
-        return { result, runId };
+        return { result: returnedResult, runId };
       },
     );
     return this.function;
