@@ -180,11 +180,11 @@ describe('goal step waiting semantics', () => {
         dbMessages: [
           {
             role: 'user',
-            content: [{ type: 'text', text: 'Please continue after answering this.' }],
+            content: { format: 2, parts: [{ type: 'text', text: 'Please continue after answering this.' }] },
           },
           {
             role: 'assistant',
-            content: [{ type: 'text', text: 'Answered the user and kept working.' }],
+            content: { format: 2, parts: [{ type: 'text', text: 'Answered the user and kept working.' }] },
           },
         ],
       });

@@ -951,6 +951,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/getting-started/file-based-agents",
+      "permanent": true
+    },
+    {
       "source": "/docs/agents/channels/llms.txt",
       "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
@@ -1618,6 +1623,11 @@
     {
       "source": "/docs/memory/storage/llms.txt",
       "destination": "/docs/storage/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/file-based-agents/llms.txt",
       "permanent": true
     }
   ]

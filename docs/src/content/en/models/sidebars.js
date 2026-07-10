@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crossmodel',
+          label: 'CrossModel',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },
@@ -420,6 +425,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
+        },
+        {
+          type: 'doc',
+          id: 'providers/meta',
+          label: 'Meta',
         },
         {
           type: 'doc',

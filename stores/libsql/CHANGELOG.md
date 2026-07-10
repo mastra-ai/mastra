@@ -1,5 +1,16 @@
 # @mastra/libsql
 
+## 1.16.0-alpha.0
+
+### Minor Changes
+
+- Added `LibSQLVector.close()` to release the underlying libsql client. For local file databases it checkpoints the WAL and switches back to `journal_mode=DELETE` before closing (mirroring `LibSQLStore.close()`), so the `-wal`/`-shm` sidecar files and OS handles are released promptly. Safe to call more than once. ([#19059](https://github.com/mastra-ai/mastra/pull/19059))
+
+### Patch Changes
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+
 ## 1.15.1
 
 ### Patch Changes

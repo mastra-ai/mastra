@@ -657,6 +657,10 @@ export function createDurableToolCallStep() {
       // so execution continues past the suspend call).
       let wasSuspended = false;
 
+      // Forward abort signal from the run registry so tools can observe
+      // cancellation (mirrors the non-durable tool-call-step).
+      const toolAbortSignal = registryEntry?.abortSignal;
+
       const toolOptions = {
         toolCallId,
         messages: [],
@@ -667,6 +671,7 @@ export function createDurableToolCallStep() {
         // see the same actor as the non-durable Agent path.
         actor: agentOptions?.actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
+        ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).
         outputWriter: pubsub
@@ -806,6 +811,10 @@ export function createDurableToolCallStep() {
                         await toolOptions.suspend?.(data, options);
                         return taskContext?.suspend?.(data, options);
                       },
+                      outputWriter: async (chunk: any) => {
+                        await taskContext?.onProgress?.(chunk);
+                        return toolOptions.outputWriter?.(chunk);
+                      },
                     });
                   },
                 },
@@ -880,6 +889,7 @@ export function createDurableToolCallStep() {
                       },
                     },
                     {
+                      mode: 'stream',
                       backgroundTasks: {
                         [params.toolCallId]: {
                           startedAt: params.startedAt,
@@ -940,6 +950,7 @@ export function createDurableToolCallStep() {
                   if (!messageList) return;
 
                   messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    mode: 'stream',
                     backgroundTasks: {
                       [params.toolCallId]: {
                         startedAt: params.startedAt,
@@ -948,6 +959,14 @@ export function createDurableToolCallStep() {
                       },
                     },
                   });
+
+                  // Flush to storage so the metadata update (especially suspendedAt)
+                  // is persisted. Unlike the regular agent which has a single long-lived
+                  // messageList, the durable agent's workflow state is serialized before
+                  // this async callback fires, so we must flush directly.
+                  if (saveQueueManager && state?.threadId) {
+                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                  }
                 },
 
                 onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,

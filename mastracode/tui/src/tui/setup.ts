@@ -396,6 +396,15 @@ export function setupAutocomplete(state: TUIState): void {
           { value: 'judge', label: 'judge', description: 'Set the goal judge model and max attempts' },
         ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
     },
+    {
+      name: 'prune',
+      description: 'Prune old storage data (closes the TUI, shows progress)',
+      getArgumentCompletions: (argumentPrefix: string) =>
+        [
+          { value: 'vacuum', label: 'vacuum', description: 'Prune, then VACUUM to reclaim disk space' },
+          { value: 'keep-memory', label: 'keep-memory', description: 'Keep chat history (messages/threads)' },
+        ].filter(command => command.value.startsWith(argumentPrefix.toLowerCase())),
+    },
     { name: 'exit', description: 'Exit the TUI' },
     { name: 'help', description: 'Show available commands' },
   ];
