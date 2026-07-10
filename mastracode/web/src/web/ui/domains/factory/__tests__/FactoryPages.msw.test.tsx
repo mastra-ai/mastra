@@ -189,7 +189,9 @@ describe('Factory sidebar section', () => {
 describe('Factory Intake page', () => {
   it('given open issues, when visiting /factory/intake, then they render as links to GitHub', async () => {
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () => HttpResponse.json({ issues, nextPage: null })),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
     );
     renderAt('/factory/intake');
 
@@ -199,27 +201,9 @@ describe('Factory Intake page', () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]).toHaveAttribute('href', 'https://github.com/mastra-ai/mastra/issues/12');
     expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
-    expect(within(list).getByText('bug')).toBeInTheDocument();
     expect(within(list).getByText('Improve docs')).toBeInTheDocument();
-  });
-
-  it('given an issue with many labels, when the row renders, then labels collapse into a "+N" badge', async () => {
-    const busyIssue = {
-      ...issues[0]!,
-      labels: ['bug', 'Agents', 'status: needs triage', 'trio-tb', 'impact:high', 'effort:medium'],
-    };
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
-        HttpResponse.json({ issues: [busyIssue], nextPage: null }),
-      ),
-    );
-    renderAt('/factory/intake');
-
-    const list = await screen.findByRole('list', { name: 'Open issues' });
-    expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
-    expect(within(list).getByText('trio-tb')).toBeInTheDocument();
-    expect(within(list).queryByText('impact:high')).not.toBeInTheDocument();
-    expect(within(list).getByText('+2')).toHaveAttribute('title', 'impact:high, effort:medium');
+    // Labels are intentionally not rendered on intake rows.
+    expect(within(list).queryByText('bug')).not.toBeInTheDocument();
   });
 
   it('given more pages, when "Load more issues" is activated, then the next page appends to the list', async () => {
@@ -309,6 +293,107 @@ describe('Factory Review page', () => {
     renderAt('/factory/review');
 
     expect(await screen.findByText('No open pull requests.')).toBeInTheDocument();
+  });
+});
+
+interface CapturedRun {
+  worktree?: Record<string, unknown>;
+  threadTitles: string[];
+  messages: Record<string, unknown>[];
+}
+
+/** Registers handlers for the investigate flow: worktree + thread + message. */
+function useFactoryRunHandlers(branchDir: string): CapturedRun {
+  const captured: CapturedRun = { threadTitles: [], messages: [] };
+  server.use(
+    http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, async ({ request }) => {
+      captured.worktree = (await request.json()) as Record<string, unknown>;
+      return HttpResponse.json({
+        worktreePath: `/sandbox/mastra/worktrees/${branchDir}`,
+        branch: captured.worktree.branch,
+        baseBranch: 'main',
+        resourceId: RESOURCE_ID,
+      });
+    }),
+    http.post(`${SESSION}/threads`, async ({ request }) => {
+      const body = (await request.json()) as { title?: string };
+      captured.threadTitles.push(body.title ?? '');
+      return HttpResponse.json({ id: 'thread-factory', resourceId: RESOURCE_ID, title: body.title });
+    }),
+    http.post(`${SESSION}/messages`, async ({ request }) => {
+      captured.messages.push((await request.json()) as Record<string, unknown>);
+      return HttpResponse.json({ ok: true });
+    }),
+    http.get(`${SESSION}/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+  );
+  return captured;
+}
+
+describe('Factory investigate flow', () => {
+  it('given an issue, when Investigate is clicked, then a worktree, thread, and understand-issue prompt are created and the app navigates to the new thread', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'Investigate issue #12' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('understand-issue skill');
+    expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/12');
+  });
+
+  it('given a pull request, when Review is clicked, then a worktree, thread, and understand-pr prompt are created and the app navigates to the new thread', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
+        HttpResponse.json({ pullRequests, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-pr-34');
+    const { router } = renderAt('/factory/review');
+
+    await screen.findByRole('list', { name: 'Open pull requests' });
+    await userEvent.click(screen.getByRole('button', { name: 'Review pull request #34' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
+    expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('understand-pr skill');
+    expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
+  });
+
+  it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no thread is created', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
+        HttpResponse.json({ error: 'git_error', message: 'worktree failed' }, { status: 502 }),
+      ),
+    );
+    let threadCreated = false;
+    server.use(
+      http.post(`${SESSION}/threads`, () => {
+        threadCreated = true;
+        return HttpResponse.json({ id: 'thread-factory', resourceId: RESOURCE_ID });
+      }),
+    );
+    const { router } = renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'Investigate issue #12' }));
+
+    expect(await screen.findByText('worktree failed')).toBeInTheDocument();
+    expect(threadCreated).toBe(false);
+    expect(router.state.location.pathname).toBe('/factory/intake');
   });
 });
 
