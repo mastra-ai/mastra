@@ -70,6 +70,7 @@ export class ComposioToolProvider extends BaseToolProvider {
     super({
       allowedToolkits: config.allowedToolkits,
       allowedTools: config.allowedTools,
+      defaultScope: config.defaultScope,
     });
     this.apiKey = config.apiKey;
   }

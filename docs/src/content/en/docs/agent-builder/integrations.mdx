@@ -88,11 +88,21 @@ The connected account is bound to the agent, and its tools are ready to use on t
 
 ## Connection scope
 
-When you select a toolkit's tools for an agent, you also pin a connection. The connection determines which account each tool call uses at runtime, and its scope controls who shares that credential. A scope maps each call to a _bucket_ — the identity partition that a connected account is stored under.
+Each connection determines which account a tool call uses at runtime, and its _scope_ controls who shares that credential. A scope maps each call to a _bucket_ — the identity partition that a connected account is stored under. Scope is a tenancy decision made by you, the app author, not by the end user connecting an account — so you set it on the provider, not in the Builder UI.
 
 - `per-author` (default): the connection belongs to the agent's author. Any invoker runs the agent with the author's account. Use this for personal agents or a single shared team account.
 - `shared`: every caller uses one shared bucket, regardless of who invokes the agent. Use this for a platform-owned account that all users should share.
 - `caller-supplied`: each call is bucketed by the caller's `resourceId`, read from the request context. Use this for multi-tenant SaaS, where the host app authenticates the end user upstream and each tenant should use their own connected account.
+
+Set `defaultScope` on the provider to apply a scope to every connection authorized against it:
+
+```typescript title="src/mastra/index.ts"
+const composio = new ComposioToolProvider({
+  apiKey: process.env.COMPOSIO_API_KEY!,
+  allowedToolkits: ['github'],
+  defaultScope: 'caller-supplied',
+})
+```
 
 With `caller-supplied`, the host app must forward a `resourceId` on every request so each tenant lands in its own bucket. Set `mapUserToResourceId` on the server's auth config to derive the `resourceId` from the authenticated user, so every request carries it automatically:
 

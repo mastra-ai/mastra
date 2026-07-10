@@ -81,6 +81,16 @@ describe('ComposioToolProvider — identity & capabilities', () => {
       supportsRevoke: true,
     });
   });
+
+  it('has no defaultScope unless configured', () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k' });
+    expect(integration.defaultScope).toBeUndefined();
+  });
+
+  it('exposes the configured defaultScope', () => {
+    const integration = new ComposioToolProvider({ apiKey: 'k', defaultScope: 'caller-supplied' });
+    expect(integration.defaultScope).toBe('caller-supplied');
+  });
 });
 
 describe('ComposioToolProvider — catalog allowlist', () => {
