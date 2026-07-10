@@ -24,6 +24,43 @@ const createMessage = (text: string, role: 'user' | 'assistant' = 'user'): Mastr
   createdAt: new Date(),
 });
 
+const createTextClearingProcessor = (): Processor => ({
+  id: 'text-clearing-processor',
+  name: 'Text Clearing Processor',
+  async processOutputResult({ messages }) {
+    return messages.map(message => ({
+      ...message,
+      content: {
+        ...message.content,
+        parts: message.content.parts.map(part => (part.type === 'text' ? { ...part, text: '' } : part)),
+      },
+    }));
+  },
+});
+
+const createSensitiveResponseModel = () =>
+  new MockLanguageModelV2({
+    doGenerate: async () => ({
+      content: [{ type: 'text', text: 'sensitive response' }],
+      finishReason: 'stop',
+      usage: { inputTokens: 2, outputTokens: 2, totalTokens: 4 },
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+    doStream: async () => ({
+      stream: convertArrayToReadableStream([
+        { type: 'stream-start', warnings: [] },
+        { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+        { type: 'text-start', id: 'text-1' },
+        { type: 'text-delta', id: 'text-1', delta: 'sensitive response' },
+        { type: 'text-end', id: 'text-1' },
+        { type: 'finish', finishReason: 'stop', usage: { inputTokens: 2, outputTokens: 2, totalTokens: 4 } },
+      ]),
+      rawCall: { rawPrompt: null, rawSettings: {} },
+      warnings: [],
+    }),
+  });
+
 describe('Input and Output Processors', () => {
   let mockModel: MockLanguageModelV2;
 
@@ -663,6 +700,22 @@ describe('Input and Output Processors', () => {
       expect((result.response.messages[0].content[0] as any).text).toBe('HELLO WORLD');
     });
 
+    it('should return empty final text when an output processor clears generated text', async () => {
+      const agent = new Agent({
+        id: 'empty-result-text-processor-test-agent',
+        name: 'Empty Result Text Processor Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: createSensitiveResponseModel(),
+        outputProcessors: [createTextClearingProcessor()],
+      });
+
+      const result = await agent.generate('Test');
+
+      expect(result.text).toBe('');
+      expect(result.steps.at(-1)?.text).toBe('');
+      expect((result.response.messages[0].content[0] as any).text).toBe('');
+    });
+
     it('should process messages through multiple output processors in sequence', async () => {
       let finalProcessedText = '';
 
@@ -866,6 +919,24 @@ describe('Input and Output Processors', () => {
   });
 
   describe('Output Processors with stream', () => {
+    it('should return empty final text when an output processor clears streamed text', async () => {
+      const agent = new Agent({
+        id: 'empty-stream-text-processor-test-agent',
+        name: 'Empty Stream Text Processor Test Agent',
+        instructions: 'You are a helpful assistant.',
+        model: createSensitiveResponseModel(),
+        outputProcessors: [createTextClearingProcessor()],
+      });
+
+      const stream = await agent.stream('Test');
+      const result = await stream.getFullOutput();
+
+      expect(await stream.text).toBe('');
+      expect(result.text).toBe('');
+      expect(result.steps.at(-1)?.text).toBe('');
+      expect((result.response.messages[0].content[0] as any).text).toBe('');
+    });
+
     it('should process text chunks through output processors in real-time', async () => {
       class TestOutputProcessor implements Processor {
         readonly id = 'test-output-processor';
