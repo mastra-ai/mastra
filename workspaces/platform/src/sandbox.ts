@@ -42,6 +42,20 @@ interface ExecResponse {
   timedOut?: boolean;
 }
 
+/**
+ * Compose a shell command line from a `command` string and optional `args`.
+ *
+ * IMPORTANT: `command` is treated as a **shell string** and passed to the
+ * remote shell verbatim so callers can use pipes, redirects, and chaining
+ * (`ls -la | grep foo`). This matches the contract of {@link MastraSandbox}
+ * and the local sandbox implementation. `args` are always shell-quoted so
+ * they cannot inject syntax.
+ *
+ * Callers MUST NOT pass untrusted input as `command`. Untrusted values must
+ * be passed via `args`, where they are safely quoted. Passing untrusted
+ * input as `command` allows arbitrary shell syntax execution on the remote
+ * sandbox.
+ */
 function buildCommand(command: string, args?: string[]): string {
   return args?.length ? `${command} ${args.map(shellQuote).join(' ')}` : command;
 }
@@ -91,6 +105,13 @@ class PlatformProcessHandle extends ProcessHandle {
 class PlatformProcessManager extends SandboxProcessManager<PlatformSandbox> {
   private spawnCounter = 0;
 
+  /**
+   * Spawn a process on the remote sandbox.
+   *
+   * `command` is interpreted as a shell string by the remote shell, matching
+   * the {@link MastraSandbox} contract. See {@link PlatformSandbox.executeCommand}
+   * for the untrusted-input caveat: never pass untrusted values as `command`.
+   */
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const pid = `platform-proc-${Date.now().toString(36)}-${(this.spawnCounter++).toString(36)}`;
     const resultPromise = this.sandbox.executeCommand(command, undefined, options);
@@ -178,6 +199,23 @@ export class PlatformSandbox extends MastraSandbox {
     this._createdAt = null;
   }
 
+  /**
+   * Execute a command on the remote sandbox.
+   *
+   * `command` is a **shell string**: it is concatenated verbatim into the
+   * command line sent to the remote shell, which lets callers use pipes,
+   * redirects, and chaining (`ls -la | grep foo`). This matches the contract
+   * of {@link MastraSandbox} and the local sandbox implementation.
+   *
+   * `args`, when provided, are always shell-quoted so they cannot inject
+   * additional shell syntax.
+   *
+   * Security: callers MUST NOT pass untrusted input as `command`. If any part
+   * of the invocation is derived from an untrusted source, pass it through
+   * `args` (which is safely quoted) or shell-quote it yourself before
+   * inclusion. Untrusted `command` values allow arbitrary shell syntax
+   * execution on the remote sandbox.
+   */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     await this.ensureRunning();
     if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
