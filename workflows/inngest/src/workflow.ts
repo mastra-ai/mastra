@@ -308,8 +308,9 @@ export class InngestWorkflow<
           perStep,
           tracingOptions,
           actor,
-          compactNestedWorkflowResult: shouldCompactNestedWorkflowResult,
+          nestedWorkflowOutputMode,
         } = event.data;
+        const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === 'compact';
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -415,7 +416,7 @@ export class InngestWorkflow<
           } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
-        const returnedResult = shouldCompactNestedWorkflowResult ? compactNestedWorkflowResult(result) : result;
+        const returnedResult = shouldCompactNestedWorkflowOutput ? compactNestedWorkflowResult(result) : result;
 
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
@@ -539,11 +540,11 @@ export class InngestWorkflow<
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: shouldCompactNestedWorkflowResult ? { ...returnedResult, runId } : result,
+                cause: shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result,
               });
             }
 
-            return { status: result.status };
+            return shouldCompactNestedWorkflowOutput ? { status: result.status } : result;
           });
         } catch (error) {
           finalizeErrored = true;

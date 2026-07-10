@@ -94,7 +94,7 @@ describe('InngestExecutionEngine nested workflow output', () => {
       'workflow.parent.step.child',
       expect.objectContaining({
         data: expect.objectContaining({
-          compactNestedWorkflowResult: true,
+          nestedWorkflowOutputMode: 'compact',
           outputOptions: { includeState: true },
         }),
       }),
