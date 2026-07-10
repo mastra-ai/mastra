@@ -3,8 +3,8 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Target } from 'lucide-react';
 import { useState } from 'react';
 
+import { useChatRuntime } from '../context/useChatRuntime';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
@@ -18,13 +18,12 @@ const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-a
 export function GoalPanel() {
   const [draft, setDraft] = useState('');
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
-  const { transcript } = useChatTranscript();
+  const { goal } = useChatRuntime();
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
-  const goal = transcript.goal;
 
   if (!sessionEnabled) return null;
 

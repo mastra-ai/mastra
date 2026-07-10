@@ -4,7 +4,6 @@ import { Outlet, useLocation } from 'react-router';
 import { OverlaysProvider } from '../../lib/overlays';
 import { ActiveProjectProvider } from '../workspaces';
 import { ChatOverlays } from './components/ChatOverlays';
-import { ChatCommandsProvider } from './context/ChatCommandsProvider';
 import { ChatSessionProvider } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
 
@@ -17,9 +16,7 @@ export default function Chat() {
     <ActiveProjectProvider>
       <ChatSessionRouteProvider>
         <OverlaysProvider>
-          <ChatCommandsProvider>
-            <ChatShell />
-          </ChatCommandsProvider>
+          <ChatShell />
         </OverlaysProvider>
       </ChatSessionRouteProvider>
     </ActiveProjectProvider>

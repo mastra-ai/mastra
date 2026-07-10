@@ -3,17 +3,20 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
+import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import { useRunChatCommand } from '../context/useRunChatCommand';
+import { useSetAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
 import {
   useAbortAgentControllerMutation,
+  useFollowUpAgentControllerMutation,
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../hooks/useAgentControllerRunMutations';
@@ -38,18 +41,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { busy, localUser, reset } = useChatTranscript();
-  const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
+  const { busy, localUser } = useChatTranscript();
+  const { setModel } = useChatModels();
+  const { run: runChatCommand } = useRunChatCommand();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
+  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
+  const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
 
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const appliedCommandNameRef = useRef<string | null>(null);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
@@ -64,25 +69,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  const applyCommand = (name: string) => {
-    applyCommandDraft(name);
-    clearComposerCommand();
-  };
-
-  useEffect(() => {
-    if (!composerCommandName) {
-      appliedCommandNameRef.current = null;
-      return;
-    }
-    if (appliedCommandNameRef.current === composerCommandName) return;
-    appliedCommandNameRef.current = composerCommandName;
-    applyCommandDraft(composerCommandName);
-    clearComposerCommand();
-  }, [composerCommandName, clearComposerCommand]);
-
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
-    reset(thread.id);
     return thread.id;
   };
 
@@ -92,9 +80,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       role: 'user',
       content: [{ type: 'text', text }],
     };
-    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
-      message,
-    ]);
+    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [message]);
   };
 
   const send = async (text: string) => {
@@ -117,54 +103,84 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     await steerMutation.mutateAsync(text);
   };
 
-  const onSubmit = (e: { preventDefault: () => void }) => {
-    e.preventDefault();
+  async function runOnComposer(text: string) {
+    if (!text.startsWith('/')) return false;
+
+    const [name, ...rest] = text.slice(1).split(/\s+/);
+    const argument = rest.join(' ');
+
+    switch (name) {
+      case 'model':
+        if (argument) await setModel(argument);
+        return true;
+      case 'goal':
+        if (argument) await setGoalMutation.mutateAsync(argument);
+        return true;
+      case 'follow-up':
+      case 'followup':
+        if (argument) {
+          localUser(argument);
+          await followUpMutation.mutateAsync(argument);
+        }
+        return true;
+      default:
+        await runChatCommand(name);
+        return true;
+    }
+  }
+
+  const onSubmit = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
     const text = draft.trim();
     if (!text) return;
     updateDraft('');
     void handleInput(text);
   };
 
-  const onComposerKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+  const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (showSuggestions) {
       const safeIndex = Math.min(activeSuggestion, suggestions.length - 1);
       const current = suggestions[safeIndex];
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setActiveSuggestion(i => (i + 1) % suggestions.length);
+      if (event.key === 'ArrowDown') {
+        event.preventDefault();
+        setActiveSuggestion(index => (index + 1) % suggestions.length);
         return;
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setActiveSuggestion(i => (i - 1 + suggestions.length) % suggestions.length);
+      }
+      if (event.key === 'ArrowUp') {
+        event.preventDefault();
+        setActiveSuggestion(index => (index - 1 + suggestions.length) % suggestions.length);
         return;
-      } else if (e.key === 'Tab') {
-        e.preventDefault();
-        if (current) applyCommand(current.name);
+      }
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        if (current) applyCommandDraft(current.name);
         return;
-      } else if (e.key === 'Enter' && !e.shiftKey) {
+      }
+      if (event.key === 'Enter' && !event.shiftKey) {
         const exact = !!current && draft.slice(1) === current.name && suggestions.length === 1;
         if (exact) {
-          e.preventDefault();
-          onSubmit(e);
+          event.preventDefault();
+          onSubmit(event);
           return;
         }
-        e.preventDefault();
-        if (current) applyCommand(current.name);
+        event.preventDefault();
+        if (current) applyCommandDraft(current.name);
         return;
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
         updateDraft('');
         return;
       }
     }
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSubmit(e);
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      onSubmit(event);
     }
   };
 
   async function handleInput(text: string) {
-    if (await runComposerCommand(text)) return;
+    if (await runOnComposer(text)) return;
     if (busy) await steer(text);
     else await send(text);
   }
@@ -173,50 +189,50 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <form onSubmit={onSubmit} className="relative flex w-full flex-col gap-2">
-      <Textarea
-        ref={inputRef}
-        value={draft}
-        onChange={e => updateDraft(e.target.value)}
-        onKeyDown={onComposerKeyDown}
-        placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
-        disabled={disabled}
-        className={composerVariantClass[variant]}
-        aria-label="Message"
-      />
-      {showSuggestions && (
-        <div className="absolute bottom-full mb-2 w-full rounded-md border border-border1 bg-surface3 p-1 shadow-lg">
-          {suggestions.map((cmd, index) => (
-            <button
-              key={cmd.name}
-              type="button"
-              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm ${index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3'}`}
-              onMouseDown={e => {
-                e.preventDefault();
-                applyCommand(cmd.name);
-              }}
-            >
-              <span>/{cmd.name}</span>
-              <span>{cmd.description}</span>
-            </button>
-          ))}
-        </div>
-      )}
-      <div className="absolute bottom-2 right-2 flex items-center gap-1">
-        {busy && (
-          <Button
-            type="button"
-            variant="outline"
-            size="icon-sm"
-            onClick={() => void abortMutation.mutateAsync()}
-            aria-label="Abort"
-          >
-            <Square size={14} />
-          </Button>
+        <Textarea
+          ref={inputRef}
+          value={draft}
+          onChange={event => updateDraft(event.target.value)}
+          onKeyDown={onComposerKeyDown}
+          placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
+          disabled={disabled}
+          className={composerVariantClass[variant]}
+          aria-label="Message"
+        />
+        {showSuggestions && (
+          <div className="absolute bottom-full mb-2 w-full rounded-md border border-border1 bg-surface3 p-1 shadow-lg">
+            {suggestions.map((command, index) => (
+              <button
+                key={command.name}
+                type="button"
+                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm ${index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3'}`}
+                onMouseDown={event => {
+                  event.preventDefault();
+                  applyCommandDraft(command.name);
+                }}
+              >
+                <span>/{command.name}</span>
+                <span>{command.description}</span>
+              </button>
+            ))}
+          </div>
         )}
-        <Button type="submit" size="icon-sm" disabled={disabled || !draft.trim()} aria-label="Send message">
-          <ArrowUp size={16} />
-        </Button>
-      </div>
+        <div className="absolute bottom-2 right-2 flex items-center gap-1">
+          {busy && (
+            <Button
+              type="button"
+              variant="outline"
+              size="icon-sm"
+              onClick={() => void abortMutation.mutateAsync()}
+              aria-label="Abort"
+            >
+              <Square size={14} />
+            </Button>
+          )}
+          <Button type="submit" size="icon-sm" disabled={disabled || !draft.trim()} aria-label="Send message">
+            <ArrowUp size={16} />
+          </Button>
+        </div>
     </form>
   );
 }

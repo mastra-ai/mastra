@@ -4,8 +4,7 @@
  * The hook is now zero-args: it observes `useOverlays()`,
  * `useChatTranscript()` (busy + abort), and `useActiveProjectContext()` (zero
  * projects force the projects modal open) directly. Specs preserve the
- * pre-refactor behavior: mod+k palette toggle, `?` shortcuts toggle unless
- * typing, and the Escape priority cascade.
+ * `?` shortcuts toggle unless typing, and the Escape priority cascade.
  */
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
@@ -29,7 +28,7 @@ const RESOURCE_ID = 'resource-test';
 const SESSION = `${API}/sessions/${RESOURCE_ID}`;
 const THREAD_ID = 'thread-test';
 
-const OVERLAYS: OverlayName[] = ['sidebar', 'palette', 'settings', 'shortcuts', 'projects'];
+const OVERLAYS: OverlayName[] = ['sidebar', 'settings', 'shortcuts', 'projects'];
 
 afterEach(() => {
   localStorage.clear();
@@ -129,18 +128,6 @@ async function ready() {
 }
 
 describe('useGlobalShortcuts', () => {
-  it('given the app is idle, when mod+k is pressed twice, then the palette toggles open and closed', async () => {
-    seedProject();
-    useAgentControllerHandlers();
-    renderProbe(THREAD_ID);
-    await ready();
-
-    await userEvent.keyboard('{Meta>}k{/Meta}');
-    expectOverlay('palette', 'open');
-    await userEvent.keyboard('{Meta>}k{/Meta}');
-    expectOverlay('palette', 'closed');
-  });
-
   it('given focus is not in a text field, when ? is pressed, then the shortcuts overlay toggles', async () => {
     seedProject();
     useAgentControllerHandlers();
@@ -163,13 +150,13 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('shortcuts', 'closed');
   });
 
-  it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → palette → sidebar', async () => {
+  it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → sidebar', async () => {
     seedProject();
     useAgentControllerHandlers();
     renderProbe(THREAD_ID);
     await ready();
 
-    for (const name of ['sidebar', 'palette', 'settings', 'shortcuts'] as const) {
+    for (const name of ['sidebar', 'settings', 'shortcuts'] as const) {
       await userEvent.click(screen.getByRole('button', { name: `open ${name}` }));
     }
 
@@ -179,10 +166,6 @@ describe('useGlobalShortcuts', () => {
 
     await userEvent.keyboard('{Escape}');
     expectOverlay('settings', 'closed');
-    expectOverlay('palette', 'open');
-
-    await userEvent.keyboard('{Escape}');
-    expectOverlay('palette', 'closed');
     expectOverlay('sidebar', 'open');
 
     await userEvent.keyboard('{Escape}');

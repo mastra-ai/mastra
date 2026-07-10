@@ -1,10 +1,4 @@
-import type {
-  AgentControllerEvent,
-  KnownAgentControllerEvent,
-  AgentControllerMessage,
-  AgentControllerTaskSnapshot,
-  AgentControllerOMProgress,
-} from '@mastra/client-js';
+import type { AgentControllerEvent, KnownAgentControllerEvent, AgentControllerMessage } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 
 import { toMastraDBMessage } from './agent-controller-message-accumulator';
@@ -120,28 +114,6 @@ export type TimelineEntry =
   | NotificationSummaryEntry
   | SubagentEntry;
 
-/** Token usage snapshot from usage_update events. */
-export interface UsageSnapshot {
-  promptTokens?: number;
-  completionTokens?: number;
-  totalTokens?: number;
-  reasoningTokens?: number;
-  [key: string]: unknown;
-}
-
-/** OM (observational memory) status. */
-export type OMPhase = 'idle' | 'observing' | 'reflecting' | 'buffering';
-
-/** Goal evaluation snapshot from goal_evaluation events. */
-export interface GoalSnapshot {
-  objective: string;
-  status: 'active' | 'paused' | 'done';
-  iteration: number;
-  maxRuns: number;
-  passed: boolean;
-  reason?: string;
-}
-
 export interface TranscriptState {
   entries: TimelineEntry[];
   /** Whether the agent is mid-run (driven by agent_start/agent_end events). */
@@ -154,41 +126,12 @@ export interface TranscriptState {
    * when the run's start/end events arrive in a single batched flush.
    */
   pending: boolean;
-  threadId?: string;
-  /** Current task list from task_updated events. */
-  tasks: AgentControllerTaskSnapshot[];
-  /** Accumulated token usage. */
-  usage?: UsageSnapshot;
-  /** Number of queued follow-up messages. */
-  followUpCount: number;
-  /** OM progress for the status line (msg/mem budgets), from display_state_changed. */
-  omProgress?: AgentControllerOMProgress;
-  /** Observational memory phase. */
-  omPhase: OMPhase;
-  /** Whether the workspace is ready. */
-  workspaceReady?: boolean;
-  /** Latest goal evaluation. */
-  goal?: GoalSnapshot;
-  /** Current tokens/sec throughput (0 when idle). */
-  tokensPerSec: number;
-  /**
-   * @internal Timestamp (ms) of the first streamed content delta of the current
-   * step — i.e. when decoding actually began. Used to measure tokens/sec over
-   * decode time only, excluding TTFT and tool-execution gaps between steps.
-   * 0 means decoding has not started for the current step.
-   */
-  _decodeStartedAt: number;
 }
 
 export const initialTranscript: TranscriptState = {
   entries: [],
   running: false,
   pending: false,
-  tasks: [],
-  followUpCount: 0,
-  omPhase: 'idle',
-  tokensPerSec: 0,
-  _decodeStartedAt: 0,
 };
 
 let noticeSeq = 0;
@@ -197,40 +140,10 @@ type Action =
   | { type: 'event'; event: AgentControllerEvent }
   | { type: 'localUser'; text: string; steer?: boolean }
   | { type: 'localNotice'; text: string; level: 'info' | 'error' }
-  | { type: 'resolvePrompt'; id: string }
-  | {
-      type: 'reset';
-      threadId?: string;
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
-    }
-  | {
-      /**
-       * Patch transcript-owned metadata (OM/usage) from an authoritative
-       * `session.state()` fetch without touching the timeline or thread binding.
-       * Used after thread switches, where the state fetch can resolve *after*
-       * history hydration — it must never wipe already-rendered entries.
-       */
-      type: 'syncState';
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
-    };
+  | { type: 'resolvePrompt'; id: string };
 
 export function transcriptReducer(state: TranscriptState, action: Action): TranscriptState {
   switch (action.type) {
-    case 'reset':
-      return {
-        ...initialTranscript,
-        threadId: action.threadId,
-        omProgress: action.omProgress,
-        usage: action.usage,
-      };
-    case 'syncState':
-      return {
-        ...state,
-        omProgress: action.omProgress,
-        usage: action.usage,
-      };
     case 'localUser':
       return {
         ...state,
@@ -262,31 +175,13 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
   const event = raw as KnownAgentControllerEvent;
   switch (event.type) {
     case 'agent_start':
-      // Reset the rate at the start of a new turn (not at the end) so the last
-      // turn's tokens/sec stays visible while idle — short single-step turns
-      // would otherwise zero it before it could be read.
-      return { ...state, running: true, tokensPerSec: 0, _decodeStartedAt: 0 };
+      return { ...state, running: true };
     case 'agent_end':
-      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
-      // decode window so a stale start can't bleed into the next turn.
-      return { ...state, running: false, pending: false, _decodeStartedAt: 0 };
+      return { ...state, running: false, pending: false };
 
     case 'message_start':
-    case 'message_update': {
-      const next = upsertAssistant(state, event.message, true);
-      // Only streamed assistant content opens the decode window — empty or
-      // tool-only updates must not count toward tokens/sec.
-      if (!hasAssistantText(next)) {
-        return next;
-      }
-      // Mark the start of decoding for the current step on the first streamed
-      // content delta, so tokens/sec is measured over decode time only (it
-      // excludes TTFT before this point and tool gaps between steps). usage_update
-      // at step-finish closes this window and re-arms it for the next step.
-      const decoded = next._decodeStartedAt > 0 ? next : { ...next, _decodeStartedAt: Date.now() };
-      // First streamed assistant content clears the "thinking" pending state.
-      return { ...decoded, pending: false };
-    }
+    case 'message_update':
+      return { ...upsertAssistant(state, event.message, true), pending: false };
     case 'message_end':
       return { ...upsertAssistant(state, event.message, false), pending: false };
 
@@ -335,15 +230,6 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         suspendPayload: event.suspendPayload,
       });
 
-    case 'mode_changed':
-    case 'model_changed':
-      return state;
-    case 'thread_changed':
-      return { ...state, threadId: event.threadId };
-
-    case 'task_updated':
-      return { ...state, tasks: event.tasks };
-
     case 'notification':
       return {
         ...state,
@@ -377,20 +263,6 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         ],
       };
 
-    // Goals.
-    case 'goal_evaluation':
-      return {
-        ...state,
-        goal: {
-          objective: event.payload.objective,
-          status: event.payload.status,
-          iteration: event.payload.iteration,
-          maxRuns: event.payload.maxRuns,
-          passed: event.payload.passed,
-          reason: event.payload.reason,
-        },
-      };
-
     // Subagents.
     case 'subagent_start':
       return {
@@ -421,78 +293,6 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
     case 'thread_deleted':
       return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
 
-    // Usage tracking.
-    case 'usage_update': {
-      const usageSnap = event.usage as UsageSnapshot;
-      const now = Date.now();
-      // usage_update fires at step-finish and carries the completion (and any
-      // reasoning) tokens generated during this step. Measure tokens/sec over the
-      // decode window only — from the step's first content delta (_decodeStartedAt)
-      // to now — which excludes TTFT and inter-step tool/scheduling time. Smooth
-      // with an exponential moving average (α=0.3) for a stable readout.
-      const stepTokens = (usageSnap.completionTokens ?? 0) + (usageSnap.reasoningTokens ?? 0);
-      let tps = state.tokensPerSec;
-      if (state._decodeStartedAt > 0 && stepTokens > 0) {
-        const decodeSec = (now - state._decodeStartedAt) / 1000;
-        if (decodeSec > 0) {
-          const instantaneous = stepTokens / decodeSec;
-          const alpha = 0.3;
-          tps =
-            state.tokensPerSec > 0
-              ? Math.round(alpha * instantaneous + (1 - alpha) * state.tokensPerSec)
-              : Math.round(instantaneous);
-        }
-      }
-      return {
-        ...state,
-        usage: usageSnap,
-        tokensPerSec: tps,
-        // Re-arm: the next step's decode window opens on its first content delta.
-        _decodeStartedAt: 0,
-      };
-    }
-
-    // Canonical display-state snapshot — carries the status-line figures
-    // (OM msg/mem budgets and cumulative token usage).
-    case 'display_state_changed': {
-      const ds = event.displayState;
-      return {
-        ...state,
-        omProgress: ds.omProgress ?? state.omProgress,
-        usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
-      };
-    }
-
-    // Follow-up queue.
-    case 'follow_up_queued':
-      return { ...state, followUpCount: event.count };
-
-    // Observational memory lifecycle.
-    case 'om_observation_start':
-      return { ...state, omPhase: 'observing' };
-    case 'om_observation_end':
-    case 'om_observation_failed':
-      return { ...state, omPhase: 'idle' };
-    case 'om_reflection_start':
-      return { ...state, omPhase: 'reflecting' };
-    case 'om_reflection_end':
-    case 'om_reflection_failed':
-      return { ...state, omPhase: 'idle' };
-    case 'om_buffering_start':
-      return { ...state, omPhase: 'buffering' };
-    case 'om_buffering_end':
-    case 'om_buffering_failed':
-      return { ...state, omPhase: 'idle' };
-    case 'om_activation':
-      if (!event.enabled) return { ...state, omPhase: 'idle' };
-      return state;
-
-    // Workspace lifecycle.
-    case 'workspace_ready':
-      return { ...state, workspaceReady: true };
-    case 'workspace_error':
-      return { ...state, workspaceReady: false };
-
     // Notices.
     case 'info':
       return pushNotice(state, 'info', event.message);
@@ -517,18 +317,8 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
  * and tool calls in content order, so we emit the running text and each tool
  * call (matched to its result) as part of the same assistant entry.
  */
-export function createInitialTranscript({
-  messages = [],
-  threadId,
-  omProgress,
-  usage,
-}: {
-  messages?: AgentControllerMessage[];
-  threadId?: string;
-  omProgress?: AgentControllerOMProgress;
-  usage?: UsageSnapshot;
-} = {}): TranscriptState {
-  return { ...initialTranscript, entries: messagesToEntries(messages), threadId, omProgress, usage };
+export function createInitialTranscript({ messages = [] }: { messages?: AgentControllerMessage[] } = {}): TranscriptState {
+  return { ...initialTranscript, entries: messagesToEntries(messages) };
 }
 
 function messagesToEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
@@ -585,17 +375,6 @@ function preserveRuntimeToolParts(message: MastraDBMessage, previous?: MastraDBM
   }
 
   return { ...message, content: { ...message.content, parts } };
-}
-
-/** True when the most recent assistant entry has any visible text. */
-function hasAssistantText(state: TranscriptState): boolean {
-  const idx = latestAssistantIndex(state.entries);
-  if (idx === -1) return false;
-  const entry = state.entries[idx];
-  if (entry.kind !== 'message') return false;
-  return entry.message.content.parts.some(
-    part => part.type === 'text' && 'text' in part && part.text.trim().length > 0,
-  );
 }
 
 /** Find the latest assistant entry, creating one if none exists. */

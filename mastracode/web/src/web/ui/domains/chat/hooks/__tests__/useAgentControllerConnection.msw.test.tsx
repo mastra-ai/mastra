@@ -21,14 +21,19 @@ describe('useAgentControllerConnection', () => {
     const onStream = vi.fn();
     const onEvent = vi.fn();
     const observedStatuses: string[] = [];
+    let releaseState: (() => void) | undefined;
+    const stateGate = new Promise<void>(resolve => {
+      releaseState = resolve;
+    });
 
     server.use(
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () => {
         onCreate();
         return HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' });
       }),
-      http.get(sessionUrl, () => {
+      http.get(sessionUrl, async () => {
         onReadState();
+        await stateGate;
         return HttpResponse.json({
           controllerId,
           resourceId,
@@ -60,13 +65,16 @@ describe('useAgentControllerConnection', () => {
       () => {
         expect(onCreate).toHaveBeenCalled();
         expect(onReadState).toHaveBeenCalled();
-        expect(result.current.status).toBe('ready');
+        expect(result.current.threadId).toBe('created-thread');
       },
       { timeout: 2000 },
     );
 
-    expect(result.current.state?.threadId).toBe('state-thread');
-    expect(result.current.createdThreadId).toBe('created-thread');
+    releaseState?.();
+
+    await waitFor(() => expect(result.current.status).toBe('ready'), { timeout: 2000 });
+
+    expect(result.current.threadId).toBe('state-thread');
     expect(observedStatuses).toContain('connecting');
     expect(observedStatuses).not.toContain('reconnecting');
     expect(onCreate).toHaveBeenCalledTimes(1);

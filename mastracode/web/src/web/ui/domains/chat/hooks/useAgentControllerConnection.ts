@@ -67,7 +67,7 @@ export function useAgentControllerConnection({
     status,
     state: syncQuery.data,
     stateUpdatedAt: syncQuery.dataUpdatedAt,
-    createdThreadId: initQuery.data?.threadId ?? undefined,
+    threadId: syncQuery.data?.threadId ?? initQuery.data?.threadId ?? undefined,
   };
 }
 

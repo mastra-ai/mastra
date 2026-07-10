@@ -7,7 +7,7 @@ export type ChatConnectionState = ReturnType<typeof useAgentControllerConnection
 export interface ChatConnectionApi {
   status: ConnectionStatus;
   state?: ChatConnectionState;
-  createdThreadId?: string;
+  threadId?: string;
 }
 
 export const ChatConnectionContext = createContext<ChatConnectionApi | null>(null);

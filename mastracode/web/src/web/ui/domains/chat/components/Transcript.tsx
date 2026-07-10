@@ -11,7 +11,7 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
 import { useChatSessionContext } from '../context/useChatSessionContext';
@@ -209,11 +209,9 @@ function ToolCard({
   forceExpanded?: boolean;
   groupPosition?: ToolGroupPosition;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  // When the parent toggles "expand/collapse all", follow that signal.
-  useEffect(() => {
-    if (forceExpanded !== undefined) setExpanded(forceExpanded);
-  }, [forceExpanded]);
+  const [exp, setExpanded] = useState(false);
+  const expanded = forceExpanded || exp;
+
   const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
   const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
   const resultText = tool.status !== 'running' && tool.result !== undefined ? stringify(tool.result) : undefined;

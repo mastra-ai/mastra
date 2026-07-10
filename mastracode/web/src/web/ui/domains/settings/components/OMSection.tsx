@@ -81,10 +81,6 @@ export function OMSection({ resourceId, models }: { resourceId?: string; models:
   const [localError, setLocalError] = useState<string | null>(null);
   const error = localError ?? mutationError ?? (omQuery.error instanceof Error ? omQuery.error.message : null);
 
-  // Local threshold drafts so typing doesn't fire a request per keystroke. They
-  // re-seed from the query's config during render whenever that config changes —
-  // no effect needed (react-best-practices: derive-from-props, no useEffect
-  // state reset).
   const [obsDraft, setObsDraft] = useState('');
   const [refDraft, setRefDraft] = useState('');
   const [seededFrom, setSeededFrom] = useState<OMConfig | null>(null);

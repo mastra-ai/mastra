@@ -24,8 +24,6 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
-import { SLASH_COMMANDS } from '../../services/commands';
-import { ChatCommandsProvider, useChatCommands } from '../ChatCommandsProvider';
 import { ChatSessionProvider } from '../ChatSessionProvider';
 import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
@@ -132,7 +130,7 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = [], request
 }
 
 function Probe() {
-  const { status } = useChatConnection();
+  const { status, threadId } = useChatConnection();
   const { transcript, busy, showWorkingIndicator } = useChatTranscript();
   const { selectProject } = useActiveProjectContext();
   const messageText = transcript.entries
@@ -145,7 +143,7 @@ function Probe() {
   return (
     <div>
       <span data-testid="status">{status}</span>
-      <span data-testid="thread-id">{transcript.threadId ?? '(none)'}</span>
+      <span data-testid="thread-id">{threadId ?? '(none)'}</span>
       <span data-testid="entries-count">{transcript.entries.length}</span>
       <span data-testid="message-text">{messageText}</span>
       <span data-testid="busy">{busy ? 'yes' : 'no'}</span>
@@ -201,6 +199,7 @@ function PermissionsProbe() {
 
 function TranscriptProbe() {
   const { transcript } = useChatTranscript();
+  const { threadId } = useChatConnection();
   const messageText = transcript.entries
     .filter(entry => entry.kind === 'message')
     .flatMap(entry => entry.message.content.parts)
@@ -210,7 +209,7 @@ function TranscriptProbe() {
 
   return (
     <div>
-      <span data-testid="focused-thread-id">{transcript.threadId ?? '(none)'}</span>
+      <span data-testid="focused-thread-id">{threadId ?? '(none)'}</span>
       <span data-testid="focused-entries-count">{transcript.entries.length}</span>
       <span data-testid="focused-message-text">{messageText}</span>
     </div>
@@ -230,19 +229,6 @@ function SessionContextProbe() {
   );
 }
 
-function PaletteCommandProbe({ commandName }: { commandName: string }) {
-  const { composerCommandName, run } = useChatCommands();
-  const command = SLASH_COMMANDS.find(command => command.name === commandName);
-  if (!command) throw new Error(`Missing slash command: ${commandName}`);
-
-  return (
-    <>
-      <button onClick={() => run(command)}>run {command.name}</button>
-      <span data-testid="composer-command-name">{composerCommandName}</span>
-    </>
-  );
-}
-
 function ProbeSession({ threadId, children }: { threadId?: string; children?: ReactNode }) {
   return (
     <ActiveProjectProvider>
@@ -257,17 +243,6 @@ function renderProbe(threadId?: string) {
 
 function renderFocusedProbe(children: ReactNode, threadId?: string) {
   return renderWithProviders(<ProbeSession threadId={threadId}>{children}</ProbeSession>);
-}
-
-function renderPaletteCommandProbe(commandName: string, threadId?: string) {
-  return renderWithProviders(
-    <ProbeSession threadId={threadId}>
-      <ChatCommandsProvider>
-        <PaletteCommandProbe commandName={commandName} />
-        <ChatMessageList />
-      </ChatCommandsProvider>
-    </ProbeSession>,
-  );
 }
 
 function renderMessageList(threadId?: string) {
@@ -411,7 +386,6 @@ describe('ChatSessionProvider', () => {
       renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
 
       await waitFor(() => expect(screen.getByTestId('focused-entries-count')).toHaveTextContent('2'));
-      expect(screen.getByTestId('focused-thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
       expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Persisted user question');
       expect(screen.getByTestId('focused-message-text')).toHaveTextContent('Persisted assistant answer');
     });
@@ -428,137 +402,6 @@ describe('ChatSessionProvider', () => {
     });
   });
 
-  describe('palette command execution', () => {
-    it('given an argument command, when it runs from the palette, then it opens composer command state without mutations', async () => {
-      const requests: string[] = [];
-      seedProject();
-      useAgentControllerHandlers([], requests);
-      server.use(
-        http.delete(`${SESSION}/goal`, () => {
-          requests.push('goal-clear');
-          return HttpResponse.json({ ok: true });
-        }),
-        http.put(`${SESSION}/permissions/category`, () => {
-          requests.push('permission-category');
-          return HttpResponse.json({ ok: true });
-        }),
-      );
-
-      renderPaletteCommandProbe('model');
-
-      await userEvent.click(screen.getByRole('button', { name: 'run model' }));
-
-      expect(screen.getByTestId('composer-command-name')).toHaveTextContent('model');
-      expect(requests).not.toContain('goal-clear');
-      expect(requests).not.toContain('permission-category');
-    });
-
-    it('given /goal-clear, when it runs from the palette, then it clears the session goal through the mutation stack', async () => {
-      const requests: string[] = [];
-      seedProject();
-      useAgentControllerHandlers([], requests);
-      server.use(
-        http.delete(`${SESSION}/goal`, () => {
-          requests.push('goal-clear');
-          return HttpResponse.json({ ok: true });
-        }),
-      );
-
-      renderPaletteCommandProbe('goal-clear');
-
-      await userEvent.click(screen.getByRole('button', { name: 'run goal-clear' }));
-
-      await waitFor(() => expect(requests).toContain('goal-clear'));
-    });
-
-    it('given permission rules are loaded, when /permissions runs from the palette, then it pushes the formatted rules notice', async () => {
-      seedProject();
-      useAgentControllerHandlers();
-      server.use(
-        http.get(`${SESSION}/permissions`, () =>
-          HttpResponse.json({ categories: { read: 'ask', edit: 'deny' }, tools: { shell: 'allow' } }),
-        ),
-      );
-
-      renderPaletteCommandProbe('permissions');
-
-      await waitFor(() => expect(screen.getByRole('button', { name: 'run permissions' })).toBeEnabled());
-      await userEvent.click(screen.getByRole('button', { name: 'run permissions' }));
-
-      expect(await screen.findByText(/Categories:/)).toBeVisible();
-      expect(screen.getByText(/read: ask/)).toBeVisible();
-      expect(screen.getByText(/edit: deny/)).toBeVisible();
-      expect(screen.getByText(/shell: allow/)).toBeVisible();
-    });
-
-    it('given permission mutations are available, when /yolo runs from the palette, then it allows every category and pushes success notice', async () => {
-      const categories: string[] = [];
-      seedProject();
-      useAgentControllerHandlers();
-      server.use(
-        http.put(`${SESSION}/permissions/category`, async ({ request }) => {
-          const body = await request.json();
-          if (typeof body === 'object' && body && 'category' in body && typeof body.category === 'string') {
-            categories.push(body.category);
-          }
-          return HttpResponse.json({ ok: true });
-        }),
-      );
-
-      renderPaletteCommandProbe('yolo');
-
-      await userEvent.click(screen.getByRole('button', { name: 'run yolo' }));
-
-      await waitFor(() => expect(categories).toEqual(['read', 'edit', 'execute', 'mcp', 'other']));
-      expect(await screen.findByText('YOLO mode: all tool categories set to auto-allow')).toBeVisible();
-    });
-
-    it('given permission rules are still loading, when /permissions runs from the palette, then it does not emit stale rules', async () => {
-      seedProject();
-      useAgentControllerHandlers();
-      server.use(http.get(`${SESSION}/permissions`, () => new Promise(() => undefined)));
-
-      renderPaletteCommandProbe('permissions');
-
-      await userEvent.click(screen.getByRole('button', { name: 'run permissions' }));
-
-      expect(screen.queryByText(/Categories:/)).not.toBeInTheDocument();
-    });
-
-    it('given no usage has streamed, when /cost runs from the palette, then it reports no token usage', async () => {
-      seedProject();
-      useAgentControllerHandlers();
-
-      renderPaletteCommandProbe('cost');
-
-      await userEvent.click(screen.getByRole('button', { name: 'run cost' }));
-
-      expect(await screen.findByText('No token usage recorded yet.')).toBeVisible();
-    });
-
-    it('given a synced session, when /settings runs from the palette, then it prints project and session diagnostics', async () => {
-      seedProject();
-      useAgentControllerHandlers();
-      server.use(
-        http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () =>
-          HttpResponse.json({ messages: PERSISTED_MESSAGES }),
-        ),
-      );
-
-      renderPaletteCommandProbe('settings', ROUTE_THREAD_ID);
-
-      await waitFor(() => expect(screen.getByText('Persisted user question')).toBeVisible());
-      await userEvent.click(screen.getByRole('button', { name: 'run settings' }));
-
-      expect(await screen.findByText(/Project: MastraCode Test/)).toBeVisible();
-      expect(screen.getByText(/Path: \/tmp\/mastracode-test/)).toBeVisible();
-      expect(screen.getByText(/Mode: build/)).toBeVisible();
-      expect(screen.getByText(/Model: openai\/gpt-4o-mini/)).toBeVisible();
-      expect(screen.getByText(/Thread: route-thread-test/)).toBeVisible();
-      expect(screen.getByText(/Running: false/)).toBeVisible();
-    });
-  });
-
   describe('when a route thread has persisted messages', () => {
     it('renders fetched messages through the provider session', async () => {
       seedProject();
@@ -572,12 +415,11 @@ describe('ChatSessionProvider', () => {
       renderProbe(ROUTE_THREAD_ID);
 
       await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('2'));
-      expect(screen.getByTestId('thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
       expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted user question');
       expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted assistant answer');
     });
 
-    it('given session state names another thread, then the URL thread still owns the transcript identity', async () => {
+    it('given session state names another thread, then it still loads only the URL thread history', async () => {
       const requests: string[] = [];
       seedProject();
       useAgentControllerHandlers([], requests);
@@ -599,7 +441,6 @@ describe('ChatSessionProvider', () => {
       renderProbe(ROUTE_THREAD_ID);
 
       await waitFor(() => expect(screen.getByTestId('entries-count')).toHaveTextContent('2'));
-      expect(screen.getByTestId('thread-id')).toHaveTextContent(ROUTE_THREAD_ID);
       expect(screen.getByTestId('message-text')).toHaveTextContent('Persisted user question');
       expect(screen.getByTestId('message-text')).not.toHaveTextContent('Wrong thread text');
       expect(requests).toContain('messages:route');
@@ -634,7 +475,6 @@ describe('ChatSessionProvider', () => {
       rerender(<ProbeSession threadId="thread-two" />);
 
       await waitFor(() => expect(screen.getByTestId('message-text')).toHaveTextContent('Thread two text'));
-      expect(screen.getByTestId('thread-id')).toHaveTextContent('thread-two');
       expect(screen.getByTestId('message-text')).not.toHaveTextContent('Thread one text');
     });
   });

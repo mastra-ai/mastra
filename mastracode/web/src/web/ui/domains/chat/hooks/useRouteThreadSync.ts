@@ -10,8 +10,8 @@ import { useAgentControllerThreads } from './useAgentControllerThreads';
 
 export function useRouteThreadSync() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
-  const { status, state } = useChatConnection();
-  const { transcript, reset, syncState, pushNotice } = useChatTranscript();
+  const { status, threadId } = useChatConnection();
+  const { pushNotice } = useChatTranscript();
   const threadsQuery = useAgentControllerThreads({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
@@ -36,23 +36,14 @@ export function useRouteThreadSync() {
 
     if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
       const message = `Failed to switch thread: thread ${threadId} was not found`;
-      reset();
       pushNotice(message, 'error');
       void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       return;
     }
 
-    if (transcript.threadId !== threadId) reset(threadId);
-    void switchThreadMutation
-      .mutateAsync(threadId)
-      .then(state => {
-        if (!isLatestRequest()) return;
-        syncState(state);
-      })
-      .catch(err => {
+    void switchThreadMutation.mutateAsync(threadId).catch(err => {
         if (!isLatestRequest()) return;
         const message = `Failed to switch thread: ${err instanceof Error ? err.message : String(err)}`;
-        reset();
         pushNotice(message, 'error');
         void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
       });
@@ -66,7 +57,7 @@ export function useRouteThreadSync() {
       switchToRouteThread(routeThreadId);
       return;
     }
-    if (state?.threadId === routeThreadId && transcript.threadId === routeThreadId) return;
+    if (threadId === routeThreadId) return;
     switchToRouteThread(routeThreadId);
-  }, [routeThreadId, status, state?.threadId, transcript.threadId, threadsQuery.isSuccess, threadsQuery.data]);
+  }, [routeThreadId, status, threadId, threadsQuery.isSuccess, threadsQuery.data]);
 }

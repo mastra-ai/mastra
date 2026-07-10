@@ -8,7 +8,6 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import { ChatCommandsProvider } from '../../../chat/context/ChatCommandsProvider';
 import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
@@ -133,10 +132,8 @@ function Harness({ children }: { children: ReactNode }) {
   return (
     <ActiveProjectProvider>
       <ChatSessionProvider>
-        <ChatCommandsProvider>
-          <ThemeProbe />
-          {children}
-        </ChatCommandsProvider>
+        <ThemeProbe />
+        {children}
       </ChatSessionProvider>
     </ActiveProjectProvider>
   );

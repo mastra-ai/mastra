@@ -13,7 +13,7 @@ function getStreamingLength(transcript: TranscriptState) {
     : 0;
 }
 
-export function useTranscriptScroll(transcript: TranscriptState) {
+export function useTranscriptScroll(transcript: TranscriptState, threadId?: string) {
   const threadRef = useRef<HTMLDivElement>(null);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const streamingLen = getStreamingLength(transcript);
@@ -44,7 +44,7 @@ export function useTranscriptScroll(transcript: TranscriptState) {
     setShowScrollDown(false);
     const raf = requestAnimationFrame(() => scrollToBottomOnThreadChange('auto'));
     return () => cancelAnimationFrame(raf);
-  }, [transcript.threadId]);
+  }, [threadId]);
 
   // Streaming updates should imperatively follow the DOM scroll only while the user is already near the bottom.
   useEffect(() => {

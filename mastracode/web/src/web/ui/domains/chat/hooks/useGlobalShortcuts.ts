@@ -19,10 +19,6 @@ export function useGlobalShortcuts() {
   });
 
   useKeyDown({
-    'mod+k': e => {
-      e.preventDefault();
-      overlays.toggle('palette');
-    },
     '?': e => {
       const target = e.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
@@ -39,10 +35,6 @@ export function useGlobalShortcuts() {
       }
       if (overlays.isOpen('settings')) {
         overlays.close('settings');
-        return;
-      }
-      if (overlays.isOpen('palette')) {
-        overlays.close('palette');
         return;
       }
       if (overlays.isOpen('sidebar')) {
