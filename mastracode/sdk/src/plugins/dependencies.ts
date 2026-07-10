@@ -27,7 +27,10 @@ export async function installPluginDependencies(
 
   const packageJson = readPackageJson(pluginRoot);
   const commandPackageJson = commandRoot === pluginRoot ? packageJson : readPackageJson(commandRoot);
-  const pnpmVersion = getPnpmVersion(pluginRoot, packageJson.packageManager ?? commandPackageJson.packageManager);
+  const packageManager = Object.hasOwn(packageJson, 'packageManager')
+    ? packageJson.packageManager
+    : commandPackageJson.packageManager;
+  const pnpmVersion = getPnpmVersion(pluginRoot, packageManager);
   const installCommand = getInstallCommand(pluginRoot, pnpmVersion);
 
   const child = execa(installCommand.command, installCommand.args, {

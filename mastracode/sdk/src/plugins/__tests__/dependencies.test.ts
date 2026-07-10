@@ -222,6 +222,19 @@ describe('installPluginDependencies', () => {
     );
   });
 
+  it('rejects an explicit invalid dependency-root declaration instead of inheriting', async () => {
+    const pluginRoot = makePluginRoot();
+    const nestedRoot = path.join(pluginRoot, 'nested');
+    writePackageJson(pluginRoot, { packageManager: 'pnpm@11.8.0' });
+    fs.mkdirSync(nestedRoot);
+    writePackageJson(nestedRoot, { packageManager: null });
+
+    await expect(installPluginDependencies(nestedRoot, pluginRoot)).rejects.toThrow(
+      `Plugin at ${nestedRoot} must declare an exact pnpm version`,
+    );
+    expect(execaMock).not.toHaveBeenCalled();
+  });
+
   it('prefers the dependency-root declaration over the checkout declaration', async () => {
     const pluginRoot = makePluginRoot();
     const nestedRoot = path.join(pluginRoot, 'nested');
