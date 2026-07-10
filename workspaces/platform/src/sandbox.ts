@@ -40,7 +40,6 @@ interface ExecResponse {
   stderr: string;
   truncated?: boolean;
   timedOut?: boolean;
-  sessionName?: string;
 }
 
 function buildCommand(command: string, args?: string[]): string {
@@ -77,7 +76,11 @@ class PlatformProcessHandle extends ProcessHandle {
   }
 
   async kill(): Promise<boolean> {
-    return false;
+    // The workspace proxy has no cancel-exec endpoint; each `executeCommand`
+    // is a synchronous round-trip that has already completed (or timed out)
+    // by the time a handle exists to kill. Making this explicit avoids
+    // callers silently believing they cancelled a still-running process.
+    throw new Error('Platform sandbox command execution does not support killing individual processes');
   }
 
   async sendStdin(): Promise<void> {
@@ -169,6 +172,10 @@ export class PlatformSandbox extends MastraSandbox {
   async destroy(): Promise<void> {
     if (!this._sandboxId) return;
     await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}`, { method: 'DELETE' });
+    // Clear local state so a subsequent start() creates a fresh remote sandbox
+    // instead of taking the reattach branch and pointing exec at a deleted resource.
+    this._sandboxId = undefined;
+    this._createdAt = null;
   }
 
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
@@ -177,13 +184,16 @@ export class PlatformSandbox extends MastraSandbox {
 
     const started = Date.now();
     const fullCommand = buildCommand(command, args);
+    // Nullish check so an explicit `timeout: 0` is sent as `0` (interpreted as
+    // "no timeout" by the proxy) instead of being dropped by a truthy check.
+    const effectiveTimeout = options?.timeout ?? this._timeout;
+    const timeoutSec = effectiveTimeout != null ? Math.ceil(effectiveTimeout / 1000) : undefined;
     const response = await this._client.request(`/sandbox/${encodeURIComponent(this._sandboxId)}/exec`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         command: fullCommand,
-        timeoutSec:
-          (options?.timeout ?? this._timeout) ? Math.ceil((options?.timeout ?? this._timeout!) / 1000) : undefined,
+        timeoutSec,
         cwd: options?.cwd,
         env: options?.env,
       }),

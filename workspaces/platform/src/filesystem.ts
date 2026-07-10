@@ -115,9 +115,15 @@ export class PlatformFilesystem extends MastraFilesystem {
 
   async readFile(path: string, options?: ReadOptions): Promise<string | Buffer> {
     await this.ensureReady();
-    const response = await this._client.request(
-      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`,
-    );
+    let response: Response;
+    try {
+      response = await this._client.request(
+        `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`,
+      );
+    } catch (error) {
+      if (isNotFound(error)) throw new FileNotFoundError(path);
+      throw error;
+    }
     const buffer = Buffer.from(await response.arrayBuffer());
     return options?.encoding ? buffer.toString(options.encoding) : buffer;
   }
@@ -142,6 +148,16 @@ export class PlatformFilesystem extends MastraFilesystem {
     }
   }
 
+  /**
+   * Append bytes to a file.
+   *
+   * **Not atomic.** Object storage behind the workspace proxy has no native
+   * append or compare-and-swap primitive, so this implementation is a
+   * read-modify-write: it reads the current contents, concatenates the new
+   * bytes, and PUTs the whole object back. Concurrent `appendFile` calls to
+   * the same path can overwrite each other's writes ("last write wins").
+   * Use `writeFile` with distinct keys for concurrent writers.
+   */
   async appendFile(path: string, content: FileContent): Promise<void> {
     const existing = (await this.exists(path)) ? await this.readFile(path) : Buffer.alloc(0);
     await this.writeFile(
@@ -165,9 +181,15 @@ export class PlatformFilesystem extends MastraFilesystem {
     }
   }
 
-  async copyFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
+  async copyFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('copyFile');
+    // The workspace proxy's `?op=copy` route always overwrites the destination;
+    // there's no conditional wire field to prevent it. Reject the option
+    // explicitly instead of silently overwriting when the caller asked us not to.
+    if (options?.overwrite === false) {
+      throw new Error('PlatformFilesystem.copyFile does not support overwrite: false — the proxy always overwrites.');
+    }
     await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(src))}`, {
       method: 'POST',
       query: { op: 'copy' },
@@ -176,9 +198,13 @@ export class PlatformFilesystem extends MastraFilesystem {
     });
   }
 
-  async moveFile(src: string, dest: string, _options?: CopyOptions): Promise<void> {
+  async moveFile(src: string, dest: string, options?: CopyOptions): Promise<void> {
     await this.ensureReady();
     if (this.readOnly) throw new WorkspaceReadOnlyError('moveFile');
+    // Same rationale as copyFile: `?op=rename` always overwrites.
+    if (options?.overwrite === false) {
+      throw new Error('PlatformFilesystem.moveFile does not support overwrite: false — the proxy always overwrites.');
+    }
     await this._client.request(`/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(src))}`, {
       method: 'POST',
       query: { op: 'rename' },
@@ -246,12 +272,18 @@ export class PlatformFilesystem extends MastraFilesystem {
     if (normalized === '/') {
       return { name: '', path: '/', type: 'directory', size: 0, createdAt: new Date(0), modifiedAt: new Date(0) };
     }
-    const response = await this._client.request(
-      `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`,
-      {
-        method: 'HEAD',
-      },
-    );
+    let response: Response;
+    try {
+      response = await this._client.request(
+        `/fs/${encodeURIComponent(this._bucketName)}/${encodeKeyPath(keyFromPath(path))}`,
+        {
+          method: 'HEAD',
+        },
+      );
+    } catch (error) {
+      if (isNotFound(error)) throw new FileNotFoundError(path);
+      throw error;
+    }
     return {
       name: nameFromPath(path),
       path: normalized,

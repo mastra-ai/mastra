@@ -1,3 +1,4 @@
+import { FileNotFoundError } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PlatformFilesystem } from './filesystem.js';
 
@@ -88,5 +89,37 @@ describe('PlatformFilesystem', () => {
     expect(String(fetchMock.mock.calls[2]![0])).toBe(
       'https://proxy.test/v1/projects/proj_123/fs/dev-bucket/dir%20with%20space/a%26b.txt',
     );
+  });
+
+  it('maps 404 to FileNotFoundError on readFile and stat', async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => response('not found', { status: 404 }));
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.readFile('/missing.txt')).rejects.toBeInstanceOf(FileNotFoundError);
+    await expect(fs.stat('/missing.txt')).rejects.toBeInstanceOf(FileNotFoundError);
+    // exists() catches the FileNotFoundError from stat() and returns false.
+    await expect(fs.exists('/missing.txt')).resolves.toBe(false);
+  });
+
+  it('rejects overwrite: false on copy and move because the proxy always overwrites', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response(null, { status: 204 }));
+    const fs = new PlatformFilesystem({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      bucketName: 'dev-bucket',
+      fetch: fetchMock,
+    });
+    await fs._init();
+
+    await expect(fs.copyFile('/a.txt', '/b.txt', { overwrite: false })).rejects.toThrow(/overwrite: false/);
+    await expect(fs.moveFile('/a.txt', '/b.txt', { overwrite: false })).rejects.toThrow(/overwrite: false/);
+    // No request should have gone to the proxy when we rejected up front.
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

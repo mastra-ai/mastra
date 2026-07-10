@@ -95,7 +95,9 @@ export class PlatformClient {
     const headers = new Headers(options.headers);
     headers.set('authorization', `Bearer ${this.accessToken}`);
 
-    const response = await this.fetch(url, { ...options, headers });
+    // Strip our helper-only field so the underlying fetch sees a valid RequestInit.
+    const { query: _query, ...fetchOptions } = options;
+    const response = await this.fetch(url, { ...fetchOptions, headers });
     if (!response.ok) {
       throw new PlatformApiError(response.status, await response.text());
     }
