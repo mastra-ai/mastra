@@ -46,6 +46,7 @@
     "@docusaurus/theme-common": "^3.10.1",
     "@headlessui/react": "^2.2.9",
     "@hookform/resolvers": "^5.2.2",
+    "@kapaai/react-sdk": "^0.9.10",
     "@mastra/docusaurus-plugin-algolia": "^1.1.2",
     "@mastra/docusaurus-plugin-kapa": "^1.1.2",
     "@mdx-js/react": "^3.1.1",

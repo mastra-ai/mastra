@@ -15,6 +15,27 @@ const ADMONITIONS_CONFIG = {
   keywords: ['note', 'tip', 'info', 'warning', 'danger', 'experimental'],
 }
 
+// The Kapa "Ask AI" chat requires an integrationId at build time. Only
+// register the theme when both credentials are available — e.g. locally and
+// in production — so CI and preview builds without the secrets still succeed.
+// Without the Kapa theme, a local fallback theme provides a stub `@theme/Chat`
+// so the swizzled DocRoot/Layout/Main (which imports it) still compiles; the
+// chat UI itself is hidden at runtime when the plugin data is absent.
+const KAPA_INTEGRATION_ID = process.env.KAPA_INTEGRATION_ID
+const KAPA_GROUP_ID = process.env.KAPA_GROUP_ID
+const kapaThemes: Config['themes'] =
+  KAPA_INTEGRATION_ID && KAPA_GROUP_ID
+    ? [
+        [
+          '@mastra/docusaurus-plugin-kapa',
+          {
+            integrationId: KAPA_INTEGRATION_ID,
+            groupId: KAPA_GROUP_ID,
+          },
+        ],
+      ]
+    : [require.resolve('./src/plugins/kapa-fallback')]
+
 const config: Config = {
   title: 'Mastra Docs',
   tagline: 'The TypeScript Agent Framework',
@@ -149,15 +170,7 @@ const config: Config = {
       } satisfies AlgoliaPluginOptions,
     ],
   ],
-  themes: [
-    [
-      '@mastra/docusaurus-plugin-kapa',
-      {
-        integrationId: process.env.KAPA_INTEGRATION_ID,
-        groupId: process.env.KAPA_GROUP_ID,
-      },
-    ],
-  ],
+  themes: kapaThemes,
   presets: [
     [
       'classic',
