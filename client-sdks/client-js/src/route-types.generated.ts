@@ -2009,6 +2009,7 @@ export type PostAgentsAgentIdClone_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -2033,6 +2034,7 @@ export type PostAgentsAgentIdClone_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -2056,6 +2058,7 @@ export type PostAgentsAgentIdClone_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -2081,6 +2084,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -2176,6 +2180,7 @@ export type PostAgentsAgentIdClone_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -2199,6 +2204,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -2224,6 +2230,7 @@ export type PostAgentsAgentIdClone_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -2388,6 +2395,7 @@ export type PostAgentsAgentIdClone_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -2412,6 +2420,7 @@ export type PostAgentsAgentIdClone_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -2435,6 +2444,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -2460,6 +2470,7 @@ export type PostAgentsAgentIdClone_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -2555,6 +2566,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -2578,6 +2590,7 @@ export type PostAgentsAgentIdClone_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -2603,6 +2616,7 @@ export type PostAgentsAgentIdClone_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -2838,6 +2852,7 @@ export type PostAgentsAgentIdClone_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -2862,6 +2877,7 @@ export type PostAgentsAgentIdClone_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -2885,6 +2901,7 @@ export type PostAgentsAgentIdClone_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -2910,6 +2927,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -3005,6 +3023,7 @@ export type PostAgentsAgentIdClone_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -3028,6 +3047,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -3053,6 +3073,7 @@ export type PostAgentsAgentIdClone_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -3217,6 +3238,7 @@ export type PostAgentsAgentIdClone_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -3241,6 +3263,7 @@ export type PostAgentsAgentIdClone_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -3264,6 +3287,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -3289,6 +3313,7 @@ export type PostAgentsAgentIdClone_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -3384,6 +3409,7 @@ export type PostAgentsAgentIdClone_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -3407,6 +3433,7 @@ export type PostAgentsAgentIdClone_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -3432,6 +3459,7 @@ export type PostAgentsAgentIdClone_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -10887,7 +10915,7 @@ export type GetProcessors_Response = {
     id: string;
     name?: string | undefined;
     description?: string | undefined;
-    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep')[];
+    phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
     agentIds: string[];
     configurations: {
       agentId: string;
@@ -10924,7 +10952,7 @@ export type GetProcessorsProcessorId_Response = {
   id: string;
   name?: string | undefined;
   description?: string | undefined;
-  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep')[];
+  phases: ('input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult')[];
   configurations: {
     agentId: string;
     agentName: string;
@@ -10957,7 +10985,7 @@ export type PostProcessorsProcessorIdExecute_PathParams = {
 };
 
 export type PostProcessorsProcessorIdExecute_Body = {
-  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep';
+  phase: 'input' | 'inputStep' | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult';
   messages: {
     id: string;
     role: 'user' | 'assistant' | 'system' | 'tool' | 'signal';
@@ -13345,6 +13373,7 @@ export type GetObservabilityTraces_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -13369,6 +13398,7 @@ export type GetObservabilityTraces_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -13393,6 +13423,7 @@ export type GetObservabilityTraces_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -13552,6 +13583,7 @@ export type GetObservabilityTraces_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -13573,6 +13605,7 @@ export type GetObservabilityTraces_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -13594,6 +13627,7 @@ export type GetObservabilityTraces_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -13766,6 +13800,7 @@ export type GetObservabilityTracesLight_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -13790,6 +13825,7 @@ export type GetObservabilityTracesLight_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -13936,6 +13972,7 @@ export type GetObservabilityTracesLight_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14061,6 +14098,7 @@ export type GetObservabilityBranches_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -14085,6 +14123,7 @@ export type GetObservabilityBranches_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -14109,6 +14148,7 @@ export type GetObservabilityBranches_QueryParams = {
                 | 'input_step_processor'
                 | 'output_processor'
                 | 'output_step_processor'
+                | 'tool_result_processor'
                 | 'workflow_step'
                 | 'tool'
                 | 'workflow_run'
@@ -14248,6 +14288,7 @@ export type GetObservabilityBranches_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14269,6 +14310,7 @@ export type GetObservabilityBranches_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14290,6 +14332,7 @@ export type GetObservabilityBranches_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14441,6 +14484,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14462,6 +14506,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14483,6 +14528,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14627,6 +14673,7 @@ export type GetObservabilityTracesTraceId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14648,6 +14695,7 @@ export type GetObservabilityTracesTraceId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14669,6 +14717,7 @@ export type GetObservabilityTracesTraceId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14809,6 +14858,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14908,6 +14958,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14929,6 +14980,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -14950,6 +15002,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15287,6 +15340,7 @@ export type GetObservabilityMetrics_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15315,6 +15369,7 @@ export type GetObservabilityMetrics_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15335,6 +15390,7 @@ export type GetObservabilityMetrics_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15426,6 +15482,7 @@ export type GetObservabilityMetrics_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15447,6 +15504,7 @@ export type GetObservabilityMetrics_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15468,6 +15526,7 @@ export type GetObservabilityMetrics_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15583,6 +15642,7 @@ export type GetObservabilityLogs_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15611,6 +15671,7 @@ export type GetObservabilityLogs_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15631,6 +15692,7 @@ export type GetObservabilityLogs_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15719,6 +15781,7 @@ export type GetObservabilityLogs_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15740,6 +15803,7 @@ export type GetObservabilityLogs_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15761,6 +15825,7 @@ export type GetObservabilityLogs_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -15857,6 +15922,7 @@ export type GetObservabilityScores_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15885,6 +15951,7 @@ export type GetObservabilityScores_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15905,6 +15972,7 @@ export type GetObservabilityScores_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -15992,6 +16060,7 @@ export type GetObservabilityScores_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16013,6 +16082,7 @@ export type GetObservabilityScores_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16034,6 +16104,7 @@ export type GetObservabilityScores_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16125,6 +16196,7 @@ export type PostObservabilityScores_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16146,6 +16218,7 @@ export type PostObservabilityScores_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16167,6 +16240,7 @@ export type PostObservabilityScores_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16269,6 +16343,7 @@ export type GetObservabilityScoresScoreId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16290,6 +16365,7 @@ export type GetObservabilityScoresScoreId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16311,6 +16387,7 @@ export type GetObservabilityScoresScoreId_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16408,6 +16485,7 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16443,6 +16521,7 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16462,6 +16541,7 @@ export type PostObservabilityScoresAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16567,6 +16647,7 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16602,6 +16683,7 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16621,6 +16703,7 @@ export type PostObservabilityScoresBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16726,6 +16809,7 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16761,6 +16845,7 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16780,6 +16865,7 @@ export type PostObservabilityScoresTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16889,6 +16975,7 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16924,6 +17011,7 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -16943,6 +17031,7 @@ export type PostObservabilityScoresPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17044,6 +17133,7 @@ export type GetObservabilityFeedback_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -17072,6 +17162,7 @@ export type GetObservabilityFeedback_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -17092,6 +17183,7 @@ export type GetObservabilityFeedback_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -17177,6 +17269,7 @@ export type GetObservabilityFeedback_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17198,6 +17291,7 @@ export type GetObservabilityFeedback_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17219,6 +17313,7 @@ export type GetObservabilityFeedback_Response = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17309,6 +17404,7 @@ export type PostObservabilityFeedback_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17330,6 +17426,7 @@ export type PostObservabilityFeedback_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17351,6 +17448,7 @@ export type PostObservabilityFeedback_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17456,6 +17554,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17491,6 +17590,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17510,6 +17610,7 @@ export type PostObservabilityFeedbackAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17617,6 +17718,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17652,6 +17754,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17671,6 +17774,7 @@ export type PostObservabilityFeedbackBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17778,6 +17882,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17813,6 +17918,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17832,6 +17938,7 @@ export type PostObservabilityFeedbackTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17943,6 +18050,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17978,6 +18086,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -17997,6 +18106,7 @@ export type PostObservabilityFeedbackPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18121,6 +18231,7 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18156,6 +18267,7 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18175,6 +18287,7 @@ export type PostObservabilityMetricsAggregate_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18315,6 +18428,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18350,6 +18464,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18369,6 +18484,7 @@ export type PostObservabilityMetricsBreakdown_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18509,6 +18625,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18544,6 +18661,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18563,6 +18681,7 @@ export type PostObservabilityMetricsTimeseries_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18684,6 +18803,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18719,6 +18839,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18738,6 +18859,7 @@ export type PostObservabilityMetricsPercentiles_Body = {
               | 'input_step_processor'
               | 'output_processor'
               | 'output_step_processor'
+              | 'tool_result_processor'
               | 'workflow_step'
               | 'tool'
               | 'workflow_run'
@@ -18930,6 +19052,7 @@ export type GetObservabilityDiscoveryEntityTypes_Response = {
     | 'input_step_processor'
     | 'output_processor'
     | 'output_step_processor'
+    | 'tool_result_processor'
     | 'workflow_step'
     | 'tool'
     | 'workflow_run'
@@ -18968,6 +19091,7 @@ export type GetObservabilityDiscoveryEntityNames_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -19064,6 +19188,7 @@ export type GetObservabilityDiscoveryTags_QueryParams = {
             | 'input_step_processor'
             | 'output_processor'
             | 'output_step_processor'
+            | 'tool_result_processor'
             | 'workflow_step'
             | 'tool'
             | 'workflow_run'
@@ -23461,6 +23586,7 @@ export type GetStoredAgents_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -23485,6 +23611,7 @@ export type GetStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -23508,6 +23635,7 @@ export type GetStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -23533,6 +23661,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -23628,6 +23757,7 @@ export type GetStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -23651,6 +23781,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -23676,6 +23807,7 @@ export type GetStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -23840,6 +23972,7 @@ export type GetStoredAgents_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -23864,6 +23997,7 @@ export type GetStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -23887,6 +24021,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -23912,6 +24047,7 @@ export type GetStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -24007,6 +24143,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -24030,6 +24167,7 @@ export type GetStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -24055,6 +24193,7 @@ export type GetStoredAgents_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -24290,6 +24429,7 @@ export type GetStoredAgents_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -24314,6 +24454,7 @@ export type GetStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -24337,6 +24478,7 @@ export type GetStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -24362,6 +24504,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -24457,6 +24600,7 @@ export type GetStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -24480,6 +24624,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -24505,6 +24650,7 @@ export type GetStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -24669,6 +24815,7 @@ export type GetStoredAgents_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -24693,6 +24840,7 @@ export type GetStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -24716,6 +24864,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -24741,6 +24890,7 @@ export type GetStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -24836,6 +24986,7 @@ export type GetStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -24859,6 +25010,7 @@ export type GetStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -24884,6 +25036,7 @@ export type GetStoredAgents_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -28009,6 +28162,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -28033,6 +28187,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -28056,6 +28211,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -28081,6 +28237,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -28176,6 +28333,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -28199,6 +28357,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -28224,6 +28383,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -28388,6 +28548,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -28412,6 +28573,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -28435,6 +28597,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -28460,6 +28623,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -28555,6 +28719,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -28578,6 +28743,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -28603,6 +28769,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -28841,6 +29008,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -28865,6 +29033,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -28888,6 +29057,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -28913,6 +29083,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -29008,6 +29179,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -29031,6 +29203,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -29056,6 +29229,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -29220,6 +29394,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -29244,6 +29419,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -29267,6 +29443,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -29292,6 +29469,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -29387,6 +29565,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -29410,6 +29589,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -29435,6 +29615,7 @@ export type PostStoredAgentsStoredAgentIdExport_Body = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -32443,6 +32624,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -32467,6 +32649,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -32490,6 +32673,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -32515,6 +32699,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -32610,6 +32795,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -32633,6 +32819,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -32658,6 +32845,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -32822,6 +33010,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -32846,6 +33035,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -32869,6 +33059,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -32894,6 +33085,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -32989,6 +33181,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -33012,6 +33205,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -33037,6 +33231,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -33275,6 +33470,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -33299,6 +33495,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -33322,6 +33519,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -33347,6 +33545,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -33442,6 +33641,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -33465,6 +33665,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -33490,6 +33691,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -33654,6 +33856,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -33678,6 +33881,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -33701,6 +33905,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -33726,6 +33931,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -33821,6 +34027,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -33844,6 +34051,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -33869,6 +34077,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Body = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -36880,6 +37089,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -36904,6 +37114,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -36927,6 +37138,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -36952,6 +37164,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -37047,6 +37260,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -37070,6 +37284,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -37095,6 +37310,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -37259,6 +37475,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -37283,6 +37500,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -37306,6 +37524,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -37331,6 +37550,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -37426,6 +37646,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -37449,6 +37670,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -37474,6 +37696,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -37709,6 +37932,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -37733,6 +37957,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -37756,6 +37981,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -37781,6 +38007,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -37876,6 +38103,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -37899,6 +38127,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -37924,6 +38153,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -38088,6 +38318,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -38112,6 +38343,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -38135,6 +38367,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -38160,6 +38393,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -38255,6 +38489,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -38278,6 +38513,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -38303,6 +38539,7 @@ export type GetStoredAgentsStoredAgentId_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -41259,6 +41496,7 @@ export type PostStoredAgents_Body = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -41283,6 +41521,7 @@ export type PostStoredAgents_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -41306,6 +41545,7 @@ export type PostStoredAgents_Body = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -41331,6 +41571,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -41426,6 +41667,7 @@ export type PostStoredAgents_Body = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -41449,6 +41691,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -41474,6 +41717,7 @@ export type PostStoredAgents_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -41638,6 +41882,7 @@ export type PostStoredAgents_Body = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -41662,6 +41907,7 @@ export type PostStoredAgents_Body = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -41685,6 +41931,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -41710,6 +41957,7 @@ export type PostStoredAgents_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -41805,6 +42053,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -41828,6 +42077,7 @@ export type PostStoredAgents_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -41853,6 +42103,7 @@ export type PostStoredAgents_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -42088,6 +42339,7 @@ export type PostStoredAgents_Body = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -42112,6 +42364,7 @@ export type PostStoredAgents_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -42135,6 +42388,7 @@ export type PostStoredAgents_Body = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -42160,6 +42414,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -42255,6 +42510,7 @@ export type PostStoredAgents_Body = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -42278,6 +42534,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -42303,6 +42560,7 @@ export type PostStoredAgents_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -42467,6 +42725,7 @@ export type PostStoredAgents_Body = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -42491,6 +42750,7 @@ export type PostStoredAgents_Body = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -42514,6 +42774,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -42539,6 +42800,7 @@ export type PostStoredAgents_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -42634,6 +42896,7 @@ export type PostStoredAgents_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -42657,6 +42920,7 @@ export type PostStoredAgents_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -42682,6 +42946,7 @@ export type PostStoredAgents_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -45627,6 +45892,7 @@ export type PostStoredAgents_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -45651,6 +45917,7 @@ export type PostStoredAgents_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -45674,6 +45941,7 @@ export type PostStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -45699,6 +45967,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -45794,6 +46063,7 @@ export type PostStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -45817,6 +46087,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -45842,6 +46113,7 @@ export type PostStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -46006,6 +46278,7 @@ export type PostStoredAgents_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -46030,6 +46303,7 @@ export type PostStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -46053,6 +46327,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -46078,6 +46353,7 @@ export type PostStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -46173,6 +46449,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -46196,6 +46473,7 @@ export type PostStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -46221,6 +46499,7 @@ export type PostStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -46456,6 +46735,7 @@ export type PostStoredAgents_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -46480,6 +46760,7 @@ export type PostStoredAgents_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -46503,6 +46784,7 @@ export type PostStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -46528,6 +46810,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -46623,6 +46906,7 @@ export type PostStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -46646,6 +46930,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -46671,6 +46956,7 @@ export type PostStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -46835,6 +47121,7 @@ export type PostStoredAgents_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -46859,6 +47146,7 @@ export type PostStoredAgents_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -46882,6 +47170,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -46907,6 +47196,7 @@ export type PostStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -47002,6 +47292,7 @@ export type PostStoredAgents_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -47025,6 +47316,7 @@ export type PostStoredAgents_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -47050,6 +47342,7 @@ export type PostStoredAgents_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -50037,6 +50330,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -50061,6 +50355,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -50084,6 +50379,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -50109,6 +50405,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -50204,6 +50501,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -50227,6 +50525,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -50252,6 +50551,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -50416,6 +50716,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -50440,6 +50741,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -50463,6 +50765,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -50488,6 +50791,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -50583,6 +50887,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -50606,6 +50911,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -50631,6 +50937,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -50869,6 +51176,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -50893,6 +51201,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -50916,6 +51225,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -50941,6 +51251,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -51036,6 +51347,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -51059,6 +51371,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -51084,6 +51397,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -51248,6 +51562,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -51272,6 +51587,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -51295,6 +51611,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -51320,6 +51637,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -51415,6 +51733,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -51438,6 +51757,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -51463,6 +51783,7 @@ export type PatchStoredAgentsStoredAgentId_Body = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -54448,6 +54769,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -54472,6 +54794,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -54495,6 +54818,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -54520,6 +54844,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -54615,6 +54940,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -54638,6 +54964,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -54663,6 +54990,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -54827,6 +55155,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -54851,6 +55180,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -54874,6 +55204,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -54899,6 +55230,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -54994,6 +55326,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -55017,6 +55350,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -55042,6 +55376,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -55277,6 +55612,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -55301,6 +55637,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -55324,6 +55661,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -55349,6 +55687,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -55444,6 +55783,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -55467,6 +55807,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -55492,6 +55833,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -55656,6 +55998,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -55680,6 +56023,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -55703,6 +56047,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -55728,6 +56073,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -55823,6 +56169,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -55846,6 +56193,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -55871,6 +56219,7 @@ export type PatchStoredAgentsStoredAgentId_Response =
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -58760,6 +59109,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -58784,6 +59134,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -58807,6 +59158,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -58832,6 +59184,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -58927,6 +59280,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -58950,6 +59304,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -58975,6 +59330,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -59139,6 +59495,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -59163,6 +59520,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -59186,6 +59544,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -59211,6 +59570,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -59306,6 +59666,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -59329,6 +59690,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -59354,6 +59716,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -59589,6 +59952,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -59613,6 +59977,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -59636,6 +60001,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -59661,6 +60027,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -59756,6 +60123,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -59779,6 +60147,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -59804,6 +60173,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -59968,6 +60338,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -59992,6 +60363,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -60015,6 +60387,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -60040,6 +60413,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -60135,6 +60509,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -60158,6 +60533,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -60183,6 +60559,7 @@ export type GetStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -62507,6 +62884,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -62531,6 +62909,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -62554,6 +62933,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -62579,6 +62959,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -62674,6 +63055,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -62697,6 +63079,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -62722,6 +63105,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -62886,6 +63270,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -62910,6 +63295,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -62933,6 +63319,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -62958,6 +63345,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -63053,6 +63441,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -63076,6 +63465,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -63101,6 +63491,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -63339,6 +63730,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -63363,6 +63755,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -63386,6 +63779,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -63411,6 +63805,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -63506,6 +63901,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -63529,6 +63925,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -63554,6 +63951,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -63718,6 +64116,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -63742,6 +64141,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -63765,6 +64165,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -63790,6 +64191,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -63885,6 +64287,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }
@@ -63908,6 +64311,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[][];
@@ -63933,6 +64337,7 @@ export type PostStoredAgentsAgentIdVersions_Response = {
                                         | 'processOutputStream'
                                         | 'processOutputResult'
                                         | 'processOutputStep'
+                                        | 'processToolResult'
                                       )[];
                                     };
                                   }[];
@@ -66255,6 +66660,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -66279,6 +66685,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -66302,6 +66709,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -66327,6 +66735,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -66422,6 +66831,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -66445,6 +66855,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -66470,6 +66881,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -66634,6 +67046,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -66658,6 +67071,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -66681,6 +67095,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -66706,6 +67121,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -66801,6 +67217,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -66824,6 +67241,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -66849,6 +67267,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -67084,6 +67503,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -67108,6 +67528,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -67131,6 +67552,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -67156,6 +67578,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -67251,6 +67674,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -67274,6 +67698,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -67299,6 +67724,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -67463,6 +67889,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -67487,6 +67914,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -67510,6 +67938,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -67535,6 +67964,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -67630,6 +68060,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -67653,6 +68084,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -67678,6 +68110,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -69942,6 +70375,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -69966,6 +70400,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -69989,6 +70424,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -70014,6 +70450,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -70109,6 +70546,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -70132,6 +70570,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -70157,6 +70596,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -70321,6 +70761,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -70345,6 +70786,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -70368,6 +70810,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -70393,6 +70836,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -70488,6 +70932,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -70511,6 +70956,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -70536,6 +70982,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -70771,6 +71218,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -70795,6 +71243,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -70818,6 +71267,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -70843,6 +71293,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -70938,6 +71389,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -70961,6 +71413,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -70986,6 +71439,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -71150,6 +71604,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                           | 'processOutputStream'
                           | 'processOutputResult'
                           | 'processOutputStep'
+                          | 'processToolResult'
                         )[];
                       };
                     }
@@ -71174,6 +71629,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -71197,6 +71653,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -71222,6 +71679,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -71317,6 +71775,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }
@@ -71340,6 +71799,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[][];
@@ -71365,6 +71825,7 @@ export type GetStoredAgentsAgentIdVersionsCompare_Response = {
                                       | 'processOutputStream'
                                       | 'processOutputResult'
                                       | 'processOutputStep'
+                                      | 'processToolResult'
                                     )[];
                                   };
                                 }[];
@@ -73661,6 +74122,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -73685,6 +74147,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -73708,6 +74171,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -73733,6 +74197,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -73828,6 +74293,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -73851,6 +74317,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -73876,6 +74343,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -74040,6 +74508,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -74064,6 +74533,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -74087,6 +74557,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -74112,6 +74583,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -74207,6 +74679,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -74230,6 +74703,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -74255,6 +74729,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -74490,6 +74965,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -74514,6 +74990,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -74537,6 +75014,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -74562,6 +75040,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -74657,6 +75136,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -74680,6 +75160,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -74705,6 +75186,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -74869,6 +75351,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -74893,6 +75376,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -74916,6 +75400,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -74941,6 +75426,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -75036,6 +75522,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -75059,6 +75546,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -75084,6 +75572,7 @@ export type GetStoredAgentsAgentIdVersionsVersionId_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -77408,6 +77897,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -77432,6 +77922,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -77455,6 +77946,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -77480,6 +77972,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -77575,6 +78068,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -77598,6 +78092,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -77623,6 +78118,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -77787,6 +78283,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -77811,6 +78308,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -77834,6 +78332,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -77859,6 +78358,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -77954,6 +78454,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -77977,6 +78478,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -78002,6 +78504,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -78237,6 +78740,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                       | 'processOutputStream'
                       | 'processOutputResult'
                       | 'processOutputStep'
+                      | 'processToolResult'
                     )[];
                   };
                 }
@@ -78261,6 +78765,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                             | 'processOutputStream'
                             | 'processOutputResult'
                             | 'processOutputStep'
+                            | 'processToolResult'
                           )[];
                         };
                       }
@@ -78284,6 +78789,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }[][];
@@ -78309,6 +78815,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[];
@@ -78404,6 +78911,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -78427,6 +78935,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -78452,6 +78961,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -78616,6 +79126,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                         | 'processOutputStream'
                         | 'processOutputResult'
                         | 'processOutputStep'
+                        | 'processToolResult'
                       )[];
                     };
                   }
@@ -78640,6 +79151,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                               | 'processOutputStream'
                               | 'processOutputResult'
                               | 'processOutputStep'
+                              | 'processToolResult'
                             )[];
                           };
                         }
@@ -78663,6 +79175,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }[][];
@@ -78688,6 +79201,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[];
@@ -78783,6 +79297,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                 | 'processOutputStream'
                                 | 'processOutputResult'
                                 | 'processOutputStep'
+                                | 'processToolResult'
                               )[];
                             };
                           }
@@ -78806,6 +79321,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                   | 'processOutputStream'
                                   | 'processOutputResult'
                                   | 'processOutputStep'
+                                  | 'processToolResult'
                                 )[];
                               };
                             }[][];
@@ -78831,6 +79347,7 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
                                     | 'processOutputStream'
                                     | 'processOutputResult'
                                     | 'processOutputStep'
+                                    | 'processToolResult'
                                   )[];
                                 };
                               }[];
@@ -85592,6 +86109,7 @@ export type GetProcessorProviders_Response = {
       | 'processOutputStream'
       | 'processOutputResult'
       | 'processOutputStep'
+      | 'processToolResult'
     )[];
   }[];
 };
@@ -85629,6 +86147,7 @@ export type GetProcessorProvidersProviderId_Response = {
     | 'processOutputStream'
     | 'processOutputResult'
     | 'processOutputStep'
+    | 'processToolResult'
   )[];
   configSchema: {
     [key: string]: unknown;

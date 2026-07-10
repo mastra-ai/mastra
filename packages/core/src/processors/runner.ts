@@ -2028,6 +2028,207 @@ export class ProcessorRunner {
   }
 
   /**
+   * Run processToolResult on all output processors that implement it.
+   * Called after tool.execute() returns and before the result is appended to
+   * the message list / fed to the next LLM call.
+   *
+   * Symmetric with runProcessOutputStep — same TripWire/abort/state plumbing.
+   * Processors mutate via messageList.updateToolInvocation. The caller is
+   * responsible for re-reading the post-mutation result and syncing it into
+   * the downstream stream chunk so streaming clients see the processed value.
+   */
+  async runProcessToolResult(
+    args: {
+      steps: Array<StepResult<any>>;
+      messages: MastraDBMessage[];
+      messageList: MessageList;
+      stepNumber: number;
+      toolName: string;
+      toolCallId: string;
+      toolArgs: unknown;
+      result: unknown;
+      providerExecuted?: boolean;
+      requestContext?: RequestContext;
+      retryCount?: number;
+      writer?: ProcessorStreamWriter;
+      abortSignal?: AbortSignal;
+    } & Partial<ObservabilityContext>,
+  ): Promise<MessageList> {
+    const {
+      steps,
+      messageList,
+      stepNumber,
+      toolName,
+      toolCallId,
+      toolArgs,
+      result,
+      providerExecuted,
+      requestContext,
+      retryCount = 0,
+      writer,
+      abortSignal,
+    } = args;
+    const observabilityContext = resolveObservabilityContext(args);
+
+    // Run through all output processors that have processToolResult
+    for (const [index, processorOrWorkflow] of this.outputProcessors.entries()) {
+      const processableMessages: MastraDBMessage[] = messageList.get.all.db();
+      const idsBeforeProcessing = processableMessages.map((m: MastraDBMessage) => m.id);
+      const check = messageList.makeMessageSourceChecker();
+
+      // Handle workflow as processor with toolResult phase
+      if (isProcessorWorkflow(processorOrWorkflow)) {
+        const currentSystemMessages = messageList.getAllSystemMessages();
+        await this.executeWorkflowAsProcessor(
+          processorOrWorkflow,
+          {
+            phase: 'toolResult',
+            messages: processableMessages,
+            messageList,
+            stepNumber,
+            toolName,
+            toolCallId,
+            args: toolArgs,
+            // Carry the tool return value via toolResultValue to avoid colliding
+            // with the OutputResult `result` field used by outputResult phase.
+            toolResultValue: result,
+            providerExecuted,
+            systemMessages: currentSystemMessages,
+            steps,
+            retryCount,
+          },
+          observabilityContext,
+          requestContext,
+          writer,
+          abortSignal,
+        );
+        continue;
+      }
+
+      // Handle regular processor
+      const processor = processorOrWorkflow;
+      const processMethod = processor.processToolResult?.bind(processor);
+
+      if (!processMethod) {
+        // Skip processors that don't implement processToolResult
+        continue;
+      }
+
+      const abort = <TMetadata = unknown>(reason?: string, options?: TripWireOptions<TMetadata>): never => {
+        throw new TripWire(reason || `Tripwire triggered by ${processor.id}`, options, processor.id);
+      };
+
+      const currentSystemMessages = messageList.getAllSystemMessages();
+      const currentSpan = observabilityContext.tracingContext?.currentSpan;
+      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      const processorSpan = parentSpan?.createChildSpan({
+        type: SpanType.PROCESSOR_RUN,
+        name: `tool result processor: ${processor.id}`,
+        entityType: EntityType.TOOL_RESULT_PROCESSOR,
+        entityId: processor.id,
+        entityName: processor.name,
+        attributes: {
+          processorExecutor: 'legacy',
+          processorIndex: index,
+        },
+        input: {
+          toolName,
+          toolCallId,
+          stepNumber,
+          ...(providerExecuted !== undefined ? { providerExecuted } : {}),
+        },
+      });
+
+      // Start recording MessageList mutations for this processor
+      messageList.startRecording();
+
+      // Get or create processor state (persists across calls within a request)
+      const processorState = this.getProcessorState(processor.id);
+
+      try {
+        const processorResult = await processMethod({
+          messages: processableMessages,
+          messageList,
+          stepNumber,
+          toolName,
+          toolCallId,
+          args: toolArgs,
+          result,
+          providerExecuted,
+          systemMessages: currentSystemMessages,
+          steps,
+          state: processorState.customState,
+          abort,
+          ...createObservabilityContext({ currentSpan: processorSpan }),
+          requestContext,
+          retryCount,
+          writer,
+          abortSignal,
+        });
+
+        // Stop recording and get mutations for this processor
+        const mutations = messageList.stopRecording();
+
+        // Handle the return type — MessageList or MastraDBMessage[]
+        if (processorResult instanceof MessageList) {
+          if (processorResult !== messageList) {
+            throw new MastraError({
+              category: 'USER',
+              domain: 'AGENT',
+              id: 'PROCESSOR_RETURNED_EXTERNAL_MESSAGE_LIST',
+              text: `Processor ${processor.id} returned a MessageList instance other than the one that was passed in as an argument. New external message list instances are not supported. Use the messageList argument instead.`,
+            });
+          }
+          // Processor returned the same messageList — mutations have been applied
+        } else if (processorResult) {
+          // Processor returned an array — apply changes to messageList
+          ProcessorRunner.applyMessagesToMessageList(
+            processorResult as MastraDBMessage[],
+            messageList,
+            idsBeforeProcessing,
+            check,
+            'response',
+          );
+        }
+
+        processorSpan?.end({
+          output: {
+            ...(!areProcessorMessageArraysEqual(processableMessages, messageList.get.all.db())
+              ? { messages: messageList.get.all.db() }
+              : {}),
+            ...(!areProcessorMessageArraysEqual(currentSystemMessages, messageList.getAllSystemMessages())
+              ? { systemMessages: messageList.getAllSystemMessages() }
+              : {}),
+          },
+          attributes: mutations.length > 0 ? { messageListMutations: mutations } : undefined,
+        });
+      } catch (error) {
+        // Stop recording on error
+        messageList.stopRecording();
+
+        if (error instanceof TripWire) {
+          processorSpan?.error({
+            error,
+            endSpan: true,
+            attributes: {
+              tripwireAbort: {
+                reason: error.message,
+                retry: error.options?.retry,
+                metadata: error.options?.metadata,
+              },
+            },
+          });
+          throw error;
+        }
+        processorSpan?.error({ error: error as Error, endSpan: true });
+        throw error;
+      }
+    }
+
+    return messageList;
+  }
+
+  /**
    * Run processAPIError on all processors that implement it.
    * Called when an LLM API call fails with a non-retryable error.
    * Iterates through both input and output processors.

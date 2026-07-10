@@ -1,6 +1,8 @@
-import type { ToolSet } from '@internal/ai-sdk-v5';
+import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
+import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
 import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
+import { TripWire } from '../../../agent/trip-wire';
 import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
@@ -19,6 +21,30 @@ import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } fro
 import type { OuterLLMRun } from '../../types';
 import { deserializeToolError } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
+
+/**
+ * Walk messageList backwards looking for a tool-invocation part with the given
+ * toolCallId in result state. Used to read the post-processToolResult value back
+ * from the message list so we can sync any processor mutations into the
+ * downstream tool-result stream chunk.
+ */
+function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
+  const messages: MastraDBMessage[] = messageList.get.all.db();
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
+    for (const part of msg.content.parts) {
+      if (
+        part?.type === 'tool-invocation' &&
+        part.toolInvocation?.toolCallId === toolCallId &&
+        part.toolInvocation?.state === 'result'
+      ) {
+        return part.toolInvocation.result;
+      }
+    }
+  }
+  return undefined;
+}
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
@@ -128,6 +154,76 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       rest.controller.enqueue(chunk);
       return chunk;
     }
+  }
+
+  /**
+   * Run processToolResult on all output processors that implement it.
+   *
+   * Fires after tool.execute() returns and before the tool-result chunk is enqueued
+   * to streaming clients / fed to the next LLM call. Symmetric with processOutputStep
+   * (which fires before tool execution).
+   *
+   * Returns true on success (caller proceeds with chunk emission). Returns false on
+   * tripwire (caller should emit a tripwire chunk and stop).
+   */
+  async function runToolResultProcessors(args: {
+    chunk: ChunkType<OUTPUT> & {
+      payload: { toolCallId: string; toolName: string; args?: unknown; result?: unknown; providerExecuted?: boolean };
+    };
+    stepNumber: number;
+    steps: Array<StepResult<ToolSet>>;
+  }): Promise<{ ok: true } | { ok: false; tripwire: TripWire }> {
+    if (!processorRunner || !rest.outputProcessors?.length) {
+      return { ok: true };
+    }
+    const { chunk, stepNumber, steps } = args;
+    try {
+      await processorRunner.runProcessToolResult({
+        steps,
+        messages: rest.messageList.get.all.db(),
+        messageList: rest.messageList,
+        stepNumber,
+        toolName: chunk.payload.toolName,
+        toolCallId: chunk.payload.toolCallId,
+        toolArgs: chunk.payload.args,
+        result: chunk.payload.result,
+        providerExecuted: chunk.payload.providerExecuted,
+        ...observabilityContext,
+        requestContext: rest.requestContext,
+        retryCount: 0,
+        writer: streamWriter,
+        abortSignal: rest.options?.abortSignal,
+      });
+
+      // Sync any processor mutation back into the chunk so streaming clients see
+      // the post-processor value, not the raw tool return.
+      const postProcessorResult = readToolResultFromMessageList(rest.messageList, chunk.payload.toolCallId);
+      if (postProcessorResult !== undefined && postProcessorResult !== chunk.payload.result) {
+        (chunk.payload as { result: unknown }).result = postProcessorResult;
+      }
+      return { ok: true };
+    } catch (error) {
+      if (error instanceof TripWire) {
+        return { ok: false, tripwire: error };
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Emit a tripwire chunk to the stream so MastraModelOutput captures it as the
+   * step result. Mirrors the tripwire emission in processAndEnqueueChunk.
+   */
+  function emitTripwireChunk(tripwire: TripWire): void {
+    rest.controller.enqueue({
+      type: 'tripwire',
+      payload: {
+        reason: tripwire.message || 'Tool result blocked by processor',
+        retry: tripwire.options?.retry,
+        metadata: tripwire.options?.metadata,
+        processorId: tripwire.processorId,
+      },
+    } as ChunkType<OUTPUT>);
   }
 
   return createStep({
@@ -377,6 +473,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // results need their chunks emitted and messages added to the messageList.
           const successfulResults = inputData.filter(tc => tc.result !== undefined);
           if (successfulResults.length) {
+            const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
+            const steps = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
             for (const toolCall of successfulResults) {
               // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
               // can access it on the chunk's providerMetadata.mastra.modelOutput.
@@ -405,9 +503,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 toolCall,
                 'output-available',
               );
-              const processed = await processAndEnqueueChunk(chunk);
-              if (processed) await rest.options?.onChunk?.(processed);
 
+              // Update messageList first so processToolResult sees the result inline
               if (!toolCall.providerExecuted) {
                 // Update tool invocations from state:'call' to state:'result' for successful client tools.
                 // Provider-executed tools are handled by llm-execution-step.
@@ -433,6 +530,27 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                     : {}),
                 });
               }
+
+              const trResult = await runToolResultProcessors({
+                chunk: chunk as ChunkType<OUTPUT> & {
+                  payload: {
+                    toolCallId: string;
+                    toolName: string;
+                    args?: unknown;
+                    result?: unknown;
+                    providerExecuted?: boolean;
+                  };
+                },
+                stepNumber,
+                steps,
+              });
+              if (!trResult.ok) {
+                emitTripwireChunk(trResult.tripwire);
+                continue;
+              }
+
+              const processed = await processAndEnqueueChunk(chunk);
+              if (processed) await rest.options?.onChunk?.(processed);
             }
           }
 
@@ -469,6 +587,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
       }
 
       if (inputData?.length) {
+        const stepNumberForToolResults = (initialResult?.output?.steps?.length ?? 0) as number;
+        const stepsForToolResults = (initialResult?.output?.steps ?? []) as Array<StepResult<ToolSet>>;
         for (const toolCall of inputData) {
           // A declined approval has no `result`: persist it as `output-denied` with the approval
           // decision (rather than skipping it as a deferred call) and emit no tool-result chunk.
@@ -521,11 +641,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             'output-available',
           );
 
-          const processed = await processAndEnqueueChunk(chunk);
-          if (processed) await rest.options?.onChunk?.(processed);
-
-          // Exclude provider-executed tools — these are handled by llm-execution-step
-          // (same-turn results are stored directly, deferred results are resolved via updateToolInvocation).
+          // Update messageList first so processToolResult sees the result inline.
+          // Provider-executed tools are handled by llm-execution-step; for client-executed
+          // tools we patch state:'call' -> state:'result' here before any processor runs.
           if (!toolCall.providerExecuted) {
             rest.messageList.updateToolInvocation({
               type: 'tool-invocation' as const,
@@ -549,6 +667,29 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 : {}),
             });
           }
+
+          // Run processToolResult before the chunk is enqueued downstream. On tripwire,
+          // emit a tripwire chunk and skip the rest of this tool's emission.
+          const trResult = await runToolResultProcessors({
+            chunk: chunk as ChunkType<OUTPUT> & {
+              payload: {
+                toolCallId: string;
+                toolName: string;
+                args?: unknown;
+                result?: unknown;
+                providerExecuted?: boolean;
+              };
+            },
+            stepNumber: stepNumberForToolResults,
+            steps: stepsForToolResults,
+          });
+          if (!trResult.ok) {
+            emitTripwireChunk(trResult.tripwire);
+            continue;
+          }
+
+          const processed = await processAndEnqueueChunk(chunk);
+          if (processed) await rest.options?.onChunk?.(processed);
         }
 
         // Check if any delegation hook called ctx.bail() — signal the loop to stop.
