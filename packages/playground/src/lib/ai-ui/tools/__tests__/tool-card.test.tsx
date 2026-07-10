@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { use } from 'react';
+import { useContext } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { ToolCard, ToolCardInner } from '../tool-card';
@@ -54,7 +54,7 @@ const renderToolCard = (props: ToolCardProps) => render(<ToolCard {...props} />,
 
 /** Reads the live WorkflowRunContext result so the streaming wiring is observable. */
 const WorkflowResultProbe = ({ onResult }: { onResult: (r: unknown) => void }) => {
-  const { result } = use(WorkflowRunContext);
+  const { result } = useContext(WorkflowRunContext);
   onResult(result);
   return null;
 };

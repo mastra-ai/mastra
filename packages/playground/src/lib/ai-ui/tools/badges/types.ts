@@ -20,29 +20,3 @@ export interface AskUserResult {
   content: string;
   isError: boolean;
 }
-
-export interface SubmitPlanSuspendPayload {
-  path: string;
-  title?: string;
-  plan?: string;
-}
-
-export interface SubmitPlanResult {
-  content: string;
-  isError: boolean;
-  action?: 'approved' | 'rejected';
-  feedback?: string;
-  submittedPlan?: {
-    path?: string;
-    title?: string;
-    plan?: string;
-  };
-}
-
-export interface SubmitPlanResumeData {
-  action: 'approved' | 'rejected';
-  feedback?: string;
-  path?: string;
-  title?: string;
-  plan?: string;
-}

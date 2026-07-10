@@ -1,22 +1,41 @@
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-// Relative import across examples (same pattern the preview agent uses for MODEL_TOKENS);
-// keeps a single source for the writer tool while this file only adds the Vercel behavior.
-import { createWritePlanFileTool } from '../../../../agent/src/mastra/tools/plan-file-tool';
+import { createTool } from '@mastra/core/tools';
+import { z } from 'zod';
 
-const resolveProjectRoot = () => {
-  if (!process.env.MASTRA_SUBMIT_PLAN_PROJECT_ROOT && process.env.VERCEL) {
-    process.env.MASTRA_SUBMIT_PLAN_PROJECT_ROOT = path.join(os.tmpdir(), 'mastra-studio-preview');
-  }
+const planRoot = path.join(os.tmpdir(), 'mastra-studio-preview', '.mastracode', 'plans');
 
-  return path.resolve(process.env.MASTRA_SUBMIT_PLAN_PROJECT_ROOT ?? process.env.MASTRA_PROJECT_ROOT ?? process.cwd());
+const slugify = (value: string) => {
+  const slug = value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '');
+
+  return slug || 'plan';
 };
 
-// Initialize the writable root during module load so the plan file is written to the same
-// location the built-in submit_plan tool reads from.
-resolveProjectRoot();
+export const writePlanFileTool = createTool({
+  id: 'write_plan_file',
+  description: 'Write a markdown plan before submitting it for review with submit_plan.',
+  inputSchema: z.object({
+    title: z.string().min(1).describe('Plan title.'),
+    plan: z.string().min(1).describe('Full markdown plan body.'),
+  }),
+  execute: async ({ title, plan }, context) => {
+    const threadKey = slugify(context.agent?.threadId ?? randomUUID());
+    const filename = `${threadKey}-${slugify(title)}.md`;
+    const planPath = path.join(planRoot, filename);
+    const content = plan.trimStart().startsWith('# ') ? plan.trimEnd() : `# ${title.trim()}\n\n${plan.trimEnd()}`;
 
-export const writePlanFileTool = createWritePlanFileTool({
-  resolveProjectRoot,
-  filenameExample: 'preview-plan.md',
+    await fs.mkdir(planRoot, { recursive: true });
+    await fs.writeFile(planPath, `${content}\n`, 'utf-8');
+
+    return {
+      path: planPath,
+      title: title.trim(),
+      message: `Plan file written. Call submit_plan with path "${planPath}".`,
+    };
+  },
 });

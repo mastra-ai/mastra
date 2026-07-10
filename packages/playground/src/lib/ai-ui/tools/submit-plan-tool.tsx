@@ -1,5 +1,5 @@
+import type { SubmitPlanSuspendPayload } from '@mastra/core/tools';
 import { SubmitPlanBadge } from './badges/submit-plan-badge';
-import type { SubmitPlanResult, SubmitPlanSuspendPayload } from './badges/types';
 import type { MessageMetadata } from '@/lib/ai-ui/messages/message-metadata';
 
 export interface SubmitPlanToolProps {
@@ -17,48 +17,17 @@ function isOptionalString(value: unknown): value is string | undefined {
   return value === undefined || typeof value === 'string';
 }
 
-function isOptionalNonEmptyString(value: unknown): value is string | undefined {
-  return value === undefined || (typeof value === 'string' && value.length > 0);
-}
-
 function isSubmitPlanSuspendPayload(payload: unknown): payload is SubmitPlanSuspendPayload {
   if (!isRecord(payload)) return false;
 
   const { path, title, plan } = payload;
-  const hasPath = typeof path === 'string' && path.length > 0;
-
-  return hasPath && isOptionalNonEmptyString(title) && isOptionalNonEmptyString(plan);
+  return typeof path === 'string' && path.trim().length > 0 && isOptionalString(title) && isOptionalString(plan);
 }
 
-function asSubmitPlanResult(output: unknown): SubmitPlanResult | undefined {
+function getResultContent(output: unknown): string | undefined {
   if (!isRecord(output)) return undefined;
 
-  const { content, isError, action, feedback, submittedPlan } = output;
-
-  const hasValidSubmittedPlan =
-    submittedPlan === undefined ||
-    (isRecord(submittedPlan) &&
-      isOptionalString(submittedPlan.path) &&
-      isOptionalString(submittedPlan.title) &&
-      isOptionalString(submittedPlan.plan));
-
-  if (
-    typeof content === 'string' &&
-    typeof isError === 'boolean' &&
-    (action === undefined || action === 'approved' || action === 'rejected') &&
-    isOptionalString(feedback) &&
-    hasValidSubmittedPlan
-  ) {
-    return {
-      content,
-      isError,
-      ...(action !== undefined ? { action } : {}),
-      ...(feedback !== undefined ? { feedback } : {}),
-      ...(submittedPlan !== undefined ? { submittedPlan } : {}),
-    };
-  }
-
-  return undefined;
+  return typeof output.content === 'string' ? output.content : undefined;
 }
 
 export const SubmitPlanTool = ({ toolName, toolCallId, output, metadata }: SubmitPlanToolProps) => {
@@ -70,6 +39,6 @@ export const SubmitPlanTool = ({ toolName, toolCallId, output, metadata }: Submi
   }
 
   return (
-    <SubmitPlanBadge toolCallId={toolCallId} suspendPayload={suspendPayload} result={asSubmitPlanResult(output)} />
+    <SubmitPlanBadge toolCallId={toolCallId} suspendPayload={suspendPayload} resultContent={getResultContent(output)} />
   );
 };

@@ -62,25 +62,6 @@ const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallI
     return invocation.state === 'result' || (invocation as { result?: unknown }).result != null;
   });
 
-const isJsonValue = (value: unknown): value is JSONValue => {
-  if (value === null) return true;
-
-  const valueType = typeof value;
-  if (valueType === 'string' || valueType === 'boolean') return true;
-  if (valueType === 'number') return Number.isFinite(value);
-
-  if (Array.isArray(value)) {
-    return value.every(isJsonValue);
-  }
-
-  if (typeof value !== 'object') return false;
-
-  const prototype = Object.getPrototypeOf(value);
-  if (prototype !== Object.prototype && prototype !== null) return false;
-
-  return Object.values(value).every(isJsonValue);
-};
-
 /**
  * Normalize persisted initial messages back into the stream-friendly shape the
  * UI renders from. Mirrors `main`'s `resolveInitialMessages`:
@@ -935,6 +916,15 @@ export const useChat = ({
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
+    const rollbackApproval = () => {
+      setToolCallApprovals(prev => {
+        const next = { ...prev };
+        delete next[toolCallId];
+        return next;
+      });
+      setIsRunning(false);
+    };
+
     const agent = baseClient.getAgent(agentId);
     if (_threadSubscriptionKeyRef.current && threadId) {
       try {
@@ -950,43 +940,36 @@ export const useChat = ({
         setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
         setIsRunning(false);
       } catch (error) {
-        setToolCallApprovals(prev => {
-          const next = { ...prev };
-          delete next[toolCallId];
-          return next;
-        });
-        setIsRunning(false);
+        rollbackApproval();
         throw error;
       }
       return;
     }
 
-    let response: Awaited<ReturnType<typeof agent.approveToolCall>>;
+    try {
+      const response =
+        resumeData !== undefined
+          ? await agent.resumeStream(resumeData as JSONValue, {
+              runId: currentRunId,
+              toolCallId,
+              requestContext: _requestContext.current,
+            })
+          : await agent.approveToolCall({
+              runId: currentRunId,
+              toolCallId,
+              requestContext: _requestContext.current,
+            });
 
-    if (resumeData !== undefined) {
-      if (!isJsonValue(resumeData)) {
-        throw new Error('resumeData must be JSON-serializable');
-      }
-
-      response = await agent.resumeStream(resumeData, {
-        runId: currentRunId,
-        toolCallId,
-        requestContext: _requestContext.current,
+      await response.processDataStream({
+        onChunk: async (chunk: ChunkType) => {
+          await processStreamChunk(chunk, onChunk);
+        },
       });
-    } else {
-      response = await agent.approveToolCall({
-        runId: currentRunId,
-        toolCallId,
-        requestContext: _requestContext.current,
-      });
+      setIsRunning(false);
+    } catch (error) {
+      rollbackApproval();
+      throw error;
     }
-
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        await processStreamChunk(chunk, onChunk);
-      },
-    });
-    setIsRunning(false);
   };
 
   const declineToolCall = async (toolCallId: string) => {

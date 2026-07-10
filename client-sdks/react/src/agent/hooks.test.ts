@@ -26,14 +26,9 @@ const approveToolCallMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: approveToolCallProcessDataStreamMock,
 }));
-let nextResumeStreamChunks: Array<any> = [];
-const resumeStreamProcessDataStreamMock = vi.fn(
-  async ({ onChunk }: { onChunk: (chunk: any) => Promise<void> | void }) => {
-    for (const chunk of nextResumeStreamChunks) {
-      await onChunk(chunk);
-    }
-  },
-);
+const resumeStreamProcessDataStreamMock = vi.fn(async () => {
+  /* no chunks */
+});
 const resumeStreamMock = vi.fn(async () => ({
   body: { cancel: vi.fn() },
   processDataStream: resumeStreamProcessDataStreamMock,
@@ -181,7 +176,6 @@ describe('useChat forwards clientTools', () => {
     nextApproveNetworkChunks = [];
     nextDeclineNetworkChunks = [];
     nextApproveToolCallChunks = [];
-    nextResumeStreamChunks = [];
     keepSubscriptionOpen = false;
     omitThreadSubscriptionUnsubscribe = false;
     constructedClientOptions.length = 0;
@@ -1021,7 +1015,36 @@ describe('useChat forwards clientTools', () => {
       toolCallId: 'tool-call-approval-1',
       requestContext: undefined,
     });
+    expect(resumeStreamProcessDataStreamMock).toHaveBeenCalledTimes(1);
     expect(approveToolCallMock).not.toHaveBeenCalled();
+  });
+
+  it('rolls back approval state when resumeStream fails', async () => {
+    resumeStreamMock.mockRejectedValueOnce(new Error('resume failed'));
+    const { result } = renderHook(
+      () =>
+        useChat({
+          agentId: 'test-agent',
+          resourceId: 'resource-1',
+        }),
+      { wrapper },
+    );
+
+    await act(async () => {
+      await result.current.sendMessage({
+        mode: 'stream',
+        message: 'hi',
+      });
+    });
+
+    await expect(
+      act(async () => {
+        await result.current.approveToolCall('tool-call-approval-1', { action: 'approved' });
+      }),
+    ).rejects.toThrow('resume failed');
+
+    expect(result.current.isRunning).toBe(false);
+    expect(result.current.toolCallApprovals['tool-call-approval-1']).toBeUndefined();
   });
 
   it('uses approveToolCall for legacy approval when custom resumeData is not provided', async () => {

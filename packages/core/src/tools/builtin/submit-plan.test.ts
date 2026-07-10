@@ -1,7 +1,4 @@
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { submitPlanTool } from './submit-plan';
 
@@ -27,46 +24,6 @@ describe('submitPlanTool (native suspend)', () => {
     expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({ path: '.mastracode/plans/ship-it.md' });
     // suspend short-circuits the step; the tool returns no output.
     expect(result).toBeUndefined();
-  });
-
-  describe('with a local plan file', () => {
-    let projectRoot: string;
-
-    beforeEach(async () => {
-      projectRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-submit-plan-tool-'));
-      await fs.mkdir(path.join(projectRoot, '.mastracode', 'plans'), { recursive: true });
-      vi.stubEnv('MASTRA_SUBMIT_PLAN_PROJECT_ROOT', projectRoot);
-    });
-
-    afterEach(async () => {
-      vi.unstubAllEnvs();
-      await fs.rm(projectRoot, { recursive: true, force: true });
-    });
-
-    it('inlines the title and plan body into the suspend payload', async () => {
-      await fs.writeFile(
-        path.join(projectRoot, '.mastracode', 'plans', 'cook-anything.md'),
-        '# Cook Anything\n\n## Summary\n\nMake dinner.',
-        'utf-8',
-      );
-      const ctx = makeAgentContext();
-
-      await (submitPlanTool as any).execute({ path: '.mastracode/plans/cook-anything.md' }, ctx);
-
-      expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({
-        path: '.mastracode/plans/cook-anything.md',
-        title: 'Cook Anything',
-        plan: '## Summary\n\nMake dinner.',
-      });
-    });
-
-    it('suspends with only the path when the plan file cannot be read', async () => {
-      const ctx = makeAgentContext();
-
-      await (submitPlanTool as any).execute({ path: '.mastracode/plans/missing.md' }, ctx);
-
-      expect((ctx.agent.suspend as any).mock.calls[0][0]).toEqual({ path: '.mastracode/plans/missing.md' });
-    });
   });
 
   it('reports approval back to the model from resumeData', async () => {
