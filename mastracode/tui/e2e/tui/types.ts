@@ -71,11 +71,13 @@ export type ScenarioName =
   | 'provider-history-rejection-retry'
   | 'prompt-context-instructions'
   | 'prompt-queue-interleave'
+  | 'prune-command'
   | 'visible-commands'
   | 'integration-commands'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-preserves-model-pack'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
@@ -127,6 +129,7 @@ export type ScenarioName =
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'
+  | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
   | 'thread-history'
   | 'tool-history-reload'
@@ -150,6 +153,7 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
   submit: (text: string) => void;
   write: (text: string) => void;
@@ -159,6 +163,8 @@ export type McE2eScenarioRuntime = {
   printScreen: (label: string, terminal: McE2eTerminal) => void;
   sleep: (ms: number) => Promise<void>;
   startLiveOutput: (terminal: McE2eTerminal) => void;
+  /** Match against the full terminal scrollback, including text printed after the TUI stopped. */
+  waitForOutputText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenText: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
   waitForScreenTextAbsent: (pattern: RegExp, terminal: McE2eTerminal, timeoutMs?: number) => Promise<void>;
 };

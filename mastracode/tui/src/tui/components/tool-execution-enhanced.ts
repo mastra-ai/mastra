@@ -4,7 +4,7 @@
  */
 
 import * as os from 'node:os';
-import { Box, Container, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
+import { Box, Spacer, Text, visibleWidth } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
@@ -12,7 +12,7 @@ import chalk from 'chalk';
 import { highlight } from 'cli-highlight';
 import type { Theme as HighlightTheme } from 'cli-highlight';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
-import { BOX_INDENT, getTermWidth, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
+import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast } from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { ErrorDisplayComponent } from './error-display.js';
@@ -23,6 +23,7 @@ import type {
   ToolResult,
 } from './tool-execution-interface.js';
 import { ToolValidationErrorComponent, parseValidationErrors } from './tool-validation-error.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 export type { ToolResult };
 
@@ -189,7 +190,7 @@ function extractContent(text: string): { content: string; isError: boolean } {
 /**
  * Enhanced tool execution component with collapsible sections
  */
-export class ToolExecutionComponentEnhanced extends Container implements IToolExecutionComponent {
+export class ToolExecutionComponentEnhanced extends WidthAwareContainer implements IToolExecutionComponent {
   private contentBox: Box;
   private toolName: string;
   private args: unknown;
@@ -379,7 +380,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
    * - expand/collapse on a tool with no collapsible child
    * - initial construction
    */
-  private rebuild(): void {
+  protected rebuildForWidth(_width: number): void {
     this.updateBgColor();
     this.contentBox.clear();
 
@@ -424,7 +425,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   }
 
   private renderCompactTool(): void {
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const maxLineWidth = termWidth - BOX_INDENT * 2 - 2;
     const lines = this.getCompactToolSummaryLines();
 
@@ -629,7 +630,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const toolLabel = this.getCompactToolLabel();
     const toolLabelColor = this.getCompactToolLabelColor();
     const summary = this.compactToolContinuation ? this.getCompactContinuationSummary() : this.getCompactToolSummary();
-    const detailLines = this.getQuietPreviewLines(getTermWidth() - BOX_INDENT * 2 - 2);
+    const detailLines = this.getQuietPreviewLines(this.renderWidth - BOX_INDENT * 2 - 2);
     const firstLine = this.compactToolContinuation
       ? summary
         ? `${this.getCompactContinuationIndent()}${this.formatCompactContinuationLine(summary)}${status}`
@@ -1317,7 +1318,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const status = this.getStatusIndicator();
 
     // Calculate available width for path and truncate from beginning if needed
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const fixedParts = '╰── view  ' + (rangeDisplay ? `:XXX,XXX` : '') + ' ✓'; // approximate fixed width
     const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2; // buffer
     let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
@@ -1339,7 +1340,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Syntax-highlighted content with left border, truncated to prevent soft wrap
     const output = this.getFormattedOutput();
     if (output) {
-      const termWidth = getTermWidth();
+      const termWidth = this.renderWidth;
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2; // Account for border "│ " (2) + buffer (2)
       const highlighted = highlightCode(output, fullPath, startLine);
       let lines = highlighted.split('\n');
@@ -1398,7 +1399,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const border = (char: string) => this.formatToolBorder(char);
       const footerPrompt = `${theme.bold(theme.fg('toolTitle', '$'))} `;
       const footerSuffix = `${cwdSuffix}${timeSuffix}${status}`;
-      const termWidth = getTermWidth();
+      const termWidth = this.renderWidth;
       const contentWidth = Math.max(20, termWidth - BOX_INDENT * 2 - 4); // Account for "│ " + " │"
       const horizontal = '─'.repeat(contentWidth + 2);
       const renderLine = (line: string, color: (value: string) => string = value => theme.fg('toolOutput', value)) => {
@@ -1522,7 +1523,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
       this.contentBox.addChild(new Text(border('╭──'), 0, 0));
 
-      const termWidth = getTermWidth();
+      const termWidth = this.renderWidth;
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
       const borderedLines = outputLines.map(line => {
         const truncated = truncateAnsi(line, maxLineWidth);
@@ -1578,7 +1579,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       const newStr = argsObj?.new_str ?? argsObj?.new_string;
       if (oldStr != null && newStr != null) {
         const border = (char: string) => this.formatToolBorder(char);
-        const termWidth = getTermWidth();
+        const termWidth = this.renderWidth;
         const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
         const footerText = `${theme.bold(theme.fg('toolTitle', 'edit'))} ${pathDisplay}${theme.fg('muted', startLine)}${status}`;
 
@@ -1626,7 +1627,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const status = this.getStatusIndicator();
 
     // Calculate available width for path and truncate from beginning if needed
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const fixedParts = '╰── edit  ' + startLine + ' ✓'; // approximate fixed width
     const availableForPath = termWidth - fixedParts.length - 6 - BOX_INDENT * 2; // buffer
     let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
@@ -1841,7 +1842,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
       // Content is streaming in — show bordered box with syntax-highlighted preview
       const border = (char: string) => this.formatToolBorder(char);
       const status = this.getStatusIndicator();
-      const termWidth = getTermWidth();
+      const termWidth = this.renderWidth;
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
@@ -1887,7 +1888,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Complete — show final bordered result
     const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
     let path = argsObj?.path ? shortenPath(String(argsObj.path)) : '...';
@@ -1947,7 +1948,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const patternDisplay = pattern ? ' ' + theme.fg('muted', pattern) : '';
     const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
     if (!this.result || this.isPartial) {
@@ -2003,7 +2004,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
   private renderLspInspectEnhanced(): void {
     const border = (char: string) => this.formatToolBorder(char);
     const status = this.getStatusIndicator();
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
     const argsObj = this.args as { path?: string; line?: number; match?: string } | undefined;
     const path_ = argsObj?.path;
@@ -2279,7 +2280,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     // Parse search results and format as a clean list of titles + URLs
     const output = this.formatWebSearchResults();
     if (output) {
-      const termWidth = getTermWidth();
+      const termWidth = this.renderWidth;
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
@@ -2414,7 +2415,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
 
     const output = this.getFormattedOutput();
     if (output) {
-      const termWidth = getTermWidth();
+      const termWidth = this.renderWidth;
       const maxLineWidth = termWidth - 4 - BOX_INDENT * 2;
 
       // Empty line padding above
@@ -2464,7 +2465,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const keys = Object.keys(argsObj);
     if (keys.length === 0) return [];
 
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     const maxLineWidth = termWidth - 4 - BOX_INDENT * 2 - 2; // -2 for "│ " border prefix
     const lines: string[] = [];
 
@@ -2515,7 +2516,7 @@ export class ToolExecutionComponentEnhanced extends Container implements IToolEx
     const entries = Object.entries(argsObj).filter(([, v]) => v !== undefined);
     if (entries.length === 0) return '';
 
-    const termWidth = getTermWidth();
+    const termWidth = this.renderWidth;
     // Leave room for tool name, status indicator, borders
     const maxLen = Math.max(20, termWidth - this.toolName.length - 15 - BOX_INDENT * 2);
     const parts: string[] = [];

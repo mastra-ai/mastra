@@ -47,8 +47,8 @@ class EmulatedTerminal implements Terminal {
   private outputQueue = Promise.resolve();
   private resizeHandler?: () => void;
   private stdinBuffer?: StdinBuffer;
-  private readonly terminalColumns: number;
-  private readonly terminalRows: number;
+  private terminalColumns: number;
+  private terminalRows: number;
 
   constructor(terminalColumns: number, terminalRows: number) {
     this.terminalColumns = terminalColumns;
@@ -154,6 +154,8 @@ class EmulatedTerminal implements Terminal {
   }
 
   resize(columns: number, rows: number): void {
+    this.terminalColumns = columns;
+    this.terminalRows = rows;
     this.xterm.resize(columns, rows);
     this.resizeHandler?.();
   }
@@ -213,6 +215,9 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
     },
     keyCtrlC() {
       terminal.sendInput('\x03');
+    },
+    resize(columns: number, rows: number) {
+      terminal.resize(columns, rows);
     },
     serialize() {
       return terminal.serialize();
@@ -376,6 +381,7 @@ async function startMastraCodeApp(
     version: process.env.npm_package_version ?? 'mc-e2e-terminal',
     inlineQuestions: true,
     githubSignals: result.githubSignals,
+    storageMaintenance: result.storageMaintenance,
     terminal,
     ...(options?.tui ?? {}),
   });

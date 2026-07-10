@@ -70,13 +70,7 @@ for await (const chunk of output.fullStream) {
 cleanup()
 ```
 
-The returned `runId` identifies the execution. Pass it to `observe()` to reconnect from a different client.
-
-:::note
-
-Visit the [DurableAgent reference](/reference/agents/durable-agent) for the full configuration and method API.
-
-:::
+The returned `runId` identifies the execution. Pass it to `observe()` to reconnect from a different client. Visit the [DurableAgent reference](/reference/agents/durable-agent) for the full configuration and method API.
 
 ## How it works
 
@@ -154,11 +148,7 @@ const agent = new Agent({
 export const inngestAnalyst = createInngestAgent({ agent, inngest })
 ```
 
-:::note
-
 Visit the [`createInngestAgent()` reference](/reference/agents/inngest-agent) for the full API, including Inngest-specific options like PubSub and cache configuration.
-
-:::
 
 ## Resumable streams
 
@@ -217,11 +207,7 @@ await durableAgent.stream('Research topic', {
 })
 ```
 
-:::note
-
 Visit [Background tasks](/docs/long-running-agents/background-tasks) for the full background task guide, including configuration, subagents, and suspend/resume.
-
-:::
 
 ## Cleanup
 

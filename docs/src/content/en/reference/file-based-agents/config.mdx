@@ -1,0 +1,102 @@
+---
+title: "config.ts | File-based Agents"
+description: Set a file-based agent's model and runtime options in config.ts with agentConfig.
+packages:
+  - "@mastra/core"
+---
+
+# config.ts
+
+An agent's `config.ts` sets its model and runtime options. Use it for options that belong to the [`Agent`](/reference/agents/agent) itself, while sibling files provide instructions, tools, skills, et cetera.
+
+## What belongs in `config.ts`
+
+`config.ts` is the required entry point for a file-based agent's model and runtime options. Put agent-level settings here when they don't need their own file, such as the model, description, default execution options, retry behavior, scorers, and display identity.
+
+Keep adjacent concerns in sibling files when you want file-based routing to merge them into the agent. For example, use `instructions.md` for the always-on prompt and `tools/` for model-callable actions.
+
+## Quickstart
+
+The following `config.ts` plus an `instructions.md` file creates a working file-based agent:
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+```markdown title="src/mastra/agents/weather/instructions.md"
+You are a helpful weather assistant. Answer questions about current conditions and forecasts.
+```
+
+Mastra uses the `weather` directory name as the default agent `id` and `name`. The sibling `instructions.md` supplies the required instructions.
+
+## Set the model
+
+The `model` field is the only required field in `agentConfig()`. The build fails when an agent directory doesn't provide a model. Other capabilities either come from sibling files or have defaults.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Identity from the directory
+
+A file-based agent's `id` and `name` default to the directory name. For `src/mastra/agents/weather/`, Mastra registers the agent as `weather` unless you override those fields.
+
+Override `id` or `name` when the stable routing key and the display name should differ.
+
+```typescript title="src/mastra/agents/weather/config.ts"
+import { agentConfig } from '@mastra/core/agent'
+
+export default agentConfig({
+  id: 'weather-assistant',
+  name: 'Weather Assistant',
+  model: '__GATEWAY_OPENAI_MODEL__',
+})
+```
+
+## Set runtime options
+
+`agentConfig()` accepts [`Agent` constructor options](/reference/agents/agent#constructor-parameters), except that `id`, `name`, and sibling-file fields can be supplied by the file-based convention. Use the Agent reference for the full option list.
+
+Please note:
+
+- File-based subagents require a non-empty `description` because the parent model uses it for delegation routing.
+- `defaultOptions`, `maxRetries`, `scorers`, and other Agent options can live in `config.ts` when they don't need their own file.
+
+## Where adjacent settings live
+
+Keep `config.ts` focused on runtime options. Use sibling files for concerns that benefit from their own location.
+
+| Setting | File or folder | Why it lives there |
+| - | - | - |
+| Instructions | [`instructions.md`](/reference/file-based-agents/instructions) | Keeps the always-on prompt readable as markdown |
+| Tools | [`tools/`](/reference/file-based-agents/tools) | Gives each callable action its own typed module |
+| Skills | [`skills/`](/reference/file-based-agents/skills) | Keeps load-on-demand procedures separate from always-on instructions |
+| Memory | [`memory.ts`](/reference/file-based-agents/memory) | Configures persistent memory without crowding runtime options |
+| Workspace | [`workspace.ts`](/reference/file-based-agents/workspace) | Configures files and sandbox behavior separately from model settings |
+| Processors | [`processors/`](/reference/file-based-agents/processors) | Separates input and output processing pipelines |
+| Subagents | [`subagents/`](/reference/file-based-agents/subagents) | Gives each specialist child agent its own directory |
+
+## Precedence
+
+`config.ts` merges with the agent's other files according to these rules:
+
+| Domain | Source A | Source B | Winner |
+| - | - | - | - |
+| Instructions | Dynamic `config.instructions` | [`instructions.md`](/reference/file-based-agents/instructions) | Dynamic `config.instructions` |
+| Instructions | Static `config.instructions` | [`instructions.md`](/reference/file-based-agents/instructions) | `instructions.md` |
+| Tools | `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Both merge; `config.tools` wins on key collisions |
+| Tools | Function `config.tools` | [`tools/`](/reference/file-based-agents/tools) | Function `config.tools`; discovered tools are ignored |
+| Skills | `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Both merge; `config.skills` wins on name collisions |
+| Skills | Function `config.skills` | [`skills/`](/reference/file-based-agents/skills) | Function `config.skills`; discovered skills are ignored |
+| Memory | `config.memory` | [`memory.ts`](/reference/file-based-agents/memory) | `config.memory` |
+| Workspace | `config.workspace` | [`workspace.ts`](/reference/file-based-agents/workspace) | `config.workspace` |
+
+Missing both `instructions.md` and `config.instructions` fails the build. Missing both `config.memory` and `memory.ts` leaves the agent without memory.

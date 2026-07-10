@@ -607,6 +607,9 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // Dynamic import keeps compatibility with older @mastra/core versions without the
   // `@mastra/core/telemetry` entry point.
   void import('@mastra/core/telemetry').then(({ syncUsageTelemetry }) => syncUsageTelemetry(mastra)).catch(() => {});
+  void import('@mastra/core/telemetry')
+    .then(({ syncFeatureUsageTelemetry }) => syncFeatureUsageTelemetry(mastra))
+    .catch(() => {});
 
   // Graceful shutdown so storage backends release resources (e.g. DuckDB's
   // native file lock) before the process exits. On `mastra dev` hot reloads

@@ -47,6 +47,7 @@ import { integrationCommandsScenario } from './integration-commands.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
 import { loginDialogMaskedInputScenario } from './login-dialog-masked-input.js';
+import { loginPreservesModelPackScenario } from './login-preserves-model-pack.js';
 import { mcpHttpToolCallScenario } from './mcp-http-tool-call.js';
 import { mcpLongRunningToolScenario } from './mcp-long-running-tool.js';
 import { mcpReloadConfigScenario } from './mcp-reload-config.js';
@@ -91,6 +92,7 @@ import { promptContextInstructionsScenario } from './prompt-context-instructions
 import { promptQueueInterleaveScenario } from './prompt-queue-interleave.js';
 import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
+import { pruneCommandScenario } from './prune-command.js';
 import { quietSettingsScenario } from './quiet-settings.js';
 import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
@@ -126,6 +128,7 @@ import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
 import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-turn.js';
+import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
 import { threadHistoryScenario } from './thread-history.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
@@ -197,6 +200,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'lifecycle-hooks-configured': lifecycleHooksConfiguredScenario,
   'lifecycle-hooks-events': lifecycleHooksEventsScenario,
   'login-dialog-masked-input': loginDialogMaskedInputScenario,
+  'login-preserves-model-pack': loginPreservesModelPackScenario,
   'modal-and-shell': modalAndShellScenario,
   'mcp-http-tool-call': mcpHttpToolCallScenario,
   'mcp-long-running-tool': mcpLongRunningToolScenario,
@@ -239,6 +243,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'provider-history-rejection-retry': providerHistoryRejectionRetryScenario,
   'prompt-context-instructions': promptContextInstructionsScenario,
   'prompt-queue-interleave': promptQueueInterleaveScenario,
+  'prune-command': pruneCommandScenario,
   'quiet-settings': quietSettingsScenario,
   'quiet-tool-history-parity': quietToolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
@@ -271,6 +276,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'task-patch-tools': taskPatchToolsScenario,
   'task-progress-events': taskProgressEventsScenario,
   'task-prompt-context-next-turn': taskPromptContextNextTurnScenario,
+  'terminal-resize-reflow': terminalResizeReflowScenario,
   'thread-history': threadHistoryScenario,
   'tool-history-reload': toolHistoryReloadScenario,
   'tool-schema-compat': toolSchemaCompatScenario,

@@ -7,10 +7,11 @@ import { Sidebar } from '../../Sidebar';
 import { ChatLayout, FolderIcon } from '../../ui';
 import type { Project } from '../workspaces';
 import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
+import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ComposerPanel } from './components/ComposerPanel';
-import { Transcript } from './components/Transcript';
-import { useChatSession } from './context/ChatSessionProvider';
+import { TranscriptEntries } from './components/Transcript';
+import { useChatTranscript } from './context/useChatTranscript';
 
 const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
 
@@ -37,11 +38,11 @@ export function NewPage() {
 }
 
 function NewPageContent({ activeProject }: { activeProject: Project }) {
-  const session = useChatSession();
+  const { transcript } = useChatTranscript();
   const location = useLocation();
   const locationState = location.state as { routeErrorNotice?: string } | null;
   const routeErrorNotice = locationState?.routeErrorNotice ?? null;
-  const noticeEntries = session.transcript.entries.filter(entry => entry.kind === 'notice');
+  const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
 
   return (
@@ -51,7 +52,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
             {routeErrorNotice && <Notice variant="destructive">{routeErrorNotice}</Notice>}
-            <Transcript entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
+            <TranscriptEntries entries={noticeEntries} onApprove={() => undefined} onRespond={() => undefined} />
           </div>
         )}
       </div>
@@ -70,7 +71,7 @@ function DraftStart({ activeProject }: { activeProject: Project }) {
         <ProjectContext activeProject={activeProject} />
       </div>
 
-      <ComposerPanel composerVariant="textarea" />
+      {activeProject && <ComposerPanel composerVariant="textarea" />}
     </section>
   );
 }
@@ -85,6 +86,8 @@ function BrandLockup() {
 }
 
 function ProjectContext({ activeProject }: { activeProject: Project }) {
+  // GitHub projects have no local `path`; show the sandbox worktree path instead.
+  const projectPath = deriveProjectPath(activeProject);
   return (
     <p className="m-0 flex max-w-full items-center justify-center gap-1.5 text-ui-sm text-icon3">
       <FolderIcon size={13} className="shrink-0 text-icon2" />
@@ -95,10 +98,14 @@ function ProjectContext({ activeProject }: { activeProject: Project }) {
           <span className="shrink-0">{activeProject.gitBranch}</span>
         </>
       )}
-      <span className="shrink-0 text-icon2">·</span>
-      <span className="min-w-0 truncate text-icon2" title={activeProject.path}>
-        {activeProject.path}
-      </span>
+      {projectPath && (
+        <>
+          <span className="shrink-0 text-icon2">·</span>
+          <span className="min-w-0 truncate text-icon2" title={projectPath}>
+            {projectPath}
+          </span>
+        </>
+      )}
     </p>
   );
 }

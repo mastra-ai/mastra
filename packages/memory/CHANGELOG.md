@@ -1,5 +1,67 @@
 # @mastra/memory
 
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Fixed a "Converting circular structure to JSON" crash when Observational Memory was used with an input or output processor composed as a workflow (the "run guardrails in parallel" pattern). ([#17949](https://github.com/mastra-ai/mastra/pull/17949))
+
+  The circular data reached the processor workflow's snapshot and broke storage: PostgreSQL threw, and LibSQL saved a corrupted snapshot. Observational Memory now keeps its runtime data in a serializable form, so workflow-composed processors work with it and snapshots persist correctly.
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+
+## 1.23.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/schema-compat@1.3.4-alpha.1
+
+## 1.23.0-alpha.1
+
+### Minor Changes
+
+- Added one-shot conversation summarization: a standalone `summarizeConversation()` function and a `Memory.summarizeThread()` method. Both distill a whole conversation with the same Observer plumbing that powers Observational Memory — without Observational Memory attached to an agent, and without writing anything back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go. ([#19135](https://github.com/mastra-ai/mastra/pull/19135))
+
+  ```ts
+  import { Extractor } from '@mastra/memory';
+  import { z } from 'zod';
+
+  // e.g. in an end-of-call or end-of-session hook
+  const result = await memory.summarizeThread({
+    model: 'openai/gpt-5-mini',
+    threadId,
+    resourceId,
+    instructions: 'Summarize this voicemail call for the business owner.',
+    extract: [
+      new Extractor({
+        name: 'call-summary',
+        instructions: 'Return a concise summary of the call.',
+        schema: z.object({
+          summary: z.string(),
+          sentiment: z.enum(['positive', 'neutral', 'negative']),
+        }),
+        metadataKeyPath: false,
+        onExtracted: async ({ current, threadId, resourceId }) => {
+          await callRecords.upsert({ callId: threadId, callerId: resourceId, record: current });
+        },
+      }),
+    ],
+  });
+  ```
+
+  `summarizeConversation({ model, messages, instructions, extract })` takes the same options with messages you already have in hand instead of a `threadId`.
+
+  `summarizeThread` loads the thread's messages page-by-page starting from the newest, and accepts `lastMessages` (only summarize the last N messages) and `maxInputTokens` (stop loading older messages past this estimated token count, default 1,000,000) to bound how much history is read from storage.
+
+  **Why:** session-based agents (for example voice calls) often need a summary or structured extraction of the finished conversation — sentiment, requested services, follow-ups — stored in the application's own database. Observational Memory's observer and extractors are built for exactly this distillation, but attaching OM to an agent just to summarize at session end forces the whole observe/activate lifecycle onto a use case that doesn't need it. These APIs expose the summarization/extraction logic directly.
+
+### Patch Changes
+
+- Improved memory integration coverage for AI SDK v6 models and stabilized replayed semantic recall tests. ([#19133](https://github.com/mastra-ai/mastra/pull/19133))
+
 ## 1.22.3-alpha.0
 
 ### Patch Changes

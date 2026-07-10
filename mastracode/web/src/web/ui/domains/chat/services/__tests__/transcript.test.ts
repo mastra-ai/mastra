@@ -1,7 +1,7 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../transcript';
+import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
@@ -19,7 +19,7 @@ function isMessageEntry(entry: unknown): entry is MessageEntryFixture {
 }
 
 describe('transcript reducer message entries', () => {
-  it('hydrates controller messages as ordered MastraDBMessage entries', () => {
+  it('creates initial transcript entries from ordered controller messages', () => {
     const messages: AgentControllerMessage[] = [
       { id: 'user-1', role: 'user', content: [{ type: 'text', text: 'Inspect this' }] },
       {
@@ -34,7 +34,7 @@ describe('transcript reducer message entries', () => {
       },
     ];
 
-    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages });
+    const state = createInitialTranscript({ messages });
 
     expect(state.entries).toHaveLength(2);
     expect(state.entries[0]).toMatchObject({
@@ -121,6 +121,19 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('ignores active mode and model events because focused providers own that state', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'mode_changed', modeId: 'plan' },
+    });
+    const nextState = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'model_changed', modelId: 'openai/gpt-4o' },
+    });
+
+    expect(nextState).toBe(initialTranscript);
+  });
+
   it('preserves non-message state while using message entries', () => {
     const withTask = transcriptReducer(initialTranscript, {
       type: 'event',
@@ -166,5 +179,32 @@ describe('transcript reducer message entries', () => {
       expect.objectContaining({ kind: 'notification_summary', pending: 2 }),
       expect.objectContaining({ kind: 'approval', toolCallId: 'tool-1' }),
     ]);
+  });
+});
+
+describe('transcript reducer error notices', () => {
+  function errorNoticeText(event: Record<string, unknown>): string {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
+    const notice = state.entries.find(entry => entry.kind === 'notice');
+    if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
+    return notice.text;
+  }
+
+  it('renders a string error payload verbatim', () => {
+    expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
+  });
+
+  it('renders the message from an object error payload', () => {
+    expect(errorNoticeText({ error: { message: 'model quota exhausted' } })).toBe('model quota exhausted');
+  });
+
+  it('falls back to errorType when the payload has no message', () => {
+    expect(errorNoticeText({ error: {}, errorType: 'provider' })).toBe(
+      'Run failed (provider). Check the server logs for details.',
+    );
+  });
+
+  it('falls back to a generic hint when the payload is empty', () => {
+    expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
   });
 });

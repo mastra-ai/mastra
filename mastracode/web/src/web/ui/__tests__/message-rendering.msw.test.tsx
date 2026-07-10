@@ -5,7 +5,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
@@ -116,6 +116,8 @@ function useAgentControllerHandlers({
   messages?: AgentControllerMessage[];
   events?: AgentControllerEvent[];
 } = {}) {
+  const onState = vi.fn();
+  const onMode = vi.fn();
   server.use(
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -124,22 +126,49 @@ function useAgentControllerHandlers({
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
-    http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
+    http.put(`${SESSION}/state`, async ({ request }) => {
+      onState(await request.json());
+      return HttpResponse.json(sessionState());
+    }),
+    http.post(`${SESSION}/mode`, async ({ request }) => {
+      onMode(await request.json());
+      return HttpResponse.json({ ok: true });
+    }),
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${SESSION}/threads`, () =>
+      HttpResponse.json({
+        threads: [
+          {
+            id: THREAD_ID,
+            title: 'Thread test',
+            resourceId: RESOURCE_ID,
+            createdAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z',
+          },
+        ],
+      }),
+    ),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages })),
     http.get(`${SESSION}/stream`, () => sse(events)),
   );
+  return { onState, onMode };
 }
 
-function useAuthMe(response: Response) {
-  server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => response));
+function useAuthMe(state: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      state ? HttpResponse.json(state) : HttpResponse.json({}, { status: 404 }),
+    ),
+  );
 }
 
-function renderSeededApp(authResponse: Response = new Response(null, { status: 404 })) {
+function renderSeededApp(
+  authState: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null,
+) {
   seedProject();
   useAgentControllerHandlers();
-  useAuthMe(authResponse);
+  if (authState) window.__MASTRACODE_CONFIG__ = { authEnabled: true };
+  useAuthMe(authState);
   return renderChat();
 }
 
@@ -148,11 +177,14 @@ async function findToolCard(toolName: string): Promise<HTMLElement> {
   return screen.findByRole('group', { name: `Tool: ${toolName}` });
 }
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  localStorage.clear();
+  delete window.__MASTRACODE_CONFIG__;
+});
 
 describe('MastraCode sidebar auth actions', () => {
   it('given web auth is disabled, when the app renders, then no auth action appears', async () => {
-    renderSeededApp(new Response(null, { status: 404 }));
+    renderSeededApp();
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
@@ -160,7 +192,7 @@ describe('MastraCode sidebar auth actions', () => {
   });
 
   it('given web auth is enabled and unauthenticated, when the app renders, then the sidebar shows no sign-in action', async () => {
-    renderSeededApp(HttpResponse.json({ authenticated: false, user: null }));
+    renderSeededApp({ authenticated: false, user: null });
 
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
@@ -168,10 +200,9 @@ describe('MastraCode sidebar auth actions', () => {
   });
 
   it('given web auth is enabled and authenticated, when the app renders, then the sidebar shows identity and Sign out', async () => {
-    renderSeededApp(
-      HttpResponse.json({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } }),
-    );
+    renderSeededApp({ authenticated: true, user: { name: 'Ada Lovelace', email: 'ada@example.com' } });
 
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument());
     expect(await screen.findByText('Ada Lovelace')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign out/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /sign in/i })).not.toBeInTheDocument();
@@ -228,8 +259,9 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    expect(await screen.findByText('Hello')).toBeInTheDocument();
-    expect(screen.getByText('from hydrate')).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument());
+    await waitFor(() => expect(document.body).toHaveTextContent('Hello from hydrate'));
+    expect(document.body).toHaveTextContent('from hydrate');
     expect(screen.getByText('checking files')).toBeInTheDocument();
     const card = await findToolCard('view');
     expect(within(card).getByText('Done')).toBeInTheDocument();
@@ -565,7 +597,7 @@ describe('App mode + theme controls', () => {
   describe('when a project with multiple modes is active', () => {
     function seedMultiMode() {
       seedProject();
-      useAgentControllerHandlers();
+      const handlers = useAgentControllerHandlers();
       server.use(
         http.get(`${API}/modes`, () =>
           HttpResponse.json({
@@ -576,6 +608,7 @@ describe('App mode + theme controls', () => {
           }),
         ),
       );
+      return handlers;
     }
 
     it('renders the mode switcher below the composer, not in the header', async () => {
@@ -585,7 +618,7 @@ describe('App mode + theme controls', () => {
 
       const buildButton = await screen.findByRole('button', { name: 'Build' });
       const planButton = screen.getByRole('button', { name: 'Plan' });
-      const composer = screen.getByRole('textbox');
+      const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
 
       // Switcher lives after the composer in DOM order (below it), not in the header.
       expect(composer.compareDocumentPosition(buildButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -597,17 +630,8 @@ describe('App mode + theme controls', () => {
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Plan' })).not.toBeInTheDocument();
     });
 
-    it('marks the active mode as selected', async () => {
-      seedMultiMode();
-
-      renderChat();
-
-      const buildButton = await screen.findByRole('button', { name: 'Build' });
-      const planButton = screen.getByRole('button', { name: 'Plan' });
-
-      await waitFor(() => expect(buildButton).toHaveAttribute('aria-pressed', 'true'));
-      expect(planButton).toHaveAttribute('aria-pressed', 'false');
-    });
+    // Detailed mode selection/switching behavior is specified in
+    // `domains/chat/components/__tests__/StatusLine.msw.test.tsx`.
 
     it('does not render a theme toggle in the header', async () => {
       seedMultiMode();
