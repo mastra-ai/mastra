@@ -10,6 +10,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { MockMemory } from '../../../memory/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -373,6 +374,60 @@ describe('DurableAgent tool suspension', () => {
       expect(result.resourceId).toBe('user-456');
       expect(result.workflowInput.state.threadId).toBe('thread-suspension-test');
       expect(result.workflowInput.state.resourceId).toBe('user-456');
+    });
+
+    it('does not flush messages or create a thread when suspending a readOnly run', async () => {
+      const mockModel = createToolCallModel('askForConfirmation', { question: 'Proceed?' });
+      const memory = new MockMemory();
+
+      const confirmationTool = createTool({
+        id: 'askForConfirmation',
+        description: 'Ask user for confirmation',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ prompt: z.string() }),
+        resumeSchema: z.object({ confirmed: z.boolean() }),
+        execute: async (input, context) => {
+          if (!context?.agent?.resumeData) {
+            return context?.agent?.suspend?.({ prompt: input.question });
+          }
+          return { confirmed: context.agent.resumeData.confirmed };
+        },
+      });
+
+      const baseAgent = new Agent({
+        id: 'readonly-confirmation-agent',
+        name: 'ReadOnly Confirmation Agent',
+        instructions: 'Ask for confirmation when needed',
+        model: mockModel as LanguageModelV2,
+        tools: { askForConfirmation: confirmationTool },
+        memory,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const chunks: any[] = [];
+      const result = await durableAgent.stream('Please confirm this action', {
+        onChunk: chunk => chunks.push(chunk),
+        memory: {
+          thread: 'thread-readonly-suspend',
+          resource: 'resource-readonly-suspend',
+          options: { readOnly: true },
+        },
+      });
+
+      // Suspension pauses the run rather than closing the stream, so wait for the
+      // suspend chunk instead of draining fullStream (which would hang until resume).
+      await new Promise(r => setTimeout(r, 1000));
+      expect(chunks.some(c => c.type === 'tool-call-suspended' || c.type === 'tool-call-approval')).toBe(true);
+
+      // The thread record itself is created during prepare() regardless of readOnly
+      // (needed to read existing/working memory) — only new message writes are gated.
+      const recalled = await memory.recall({
+        threadId: 'thread-readonly-suspend',
+        resourceId: 'resource-readonly-suspend',
+      });
+      expect(recalled.messages).toEqual([]);
+
+      result.cleanup();
     });
   });
 
