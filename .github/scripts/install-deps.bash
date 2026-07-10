@@ -22,14 +22,7 @@ for package_json in $changed_files; do
     dir=$(dirname "$package_json")
     echo "Installing dependencies in $dir"
     cd "$dir"
-    if [ -f "pnpm-workspace.yaml" ]; then
-      # Standalone packages with their own pnpm-workspace.yaml rely on its
-      # overrides (link:...) to resolve workspace:* deps. --ignore-workspace
-      # would ignore that file and break resolution.
-      pnpm install --no-frozen-lockfile
-    else
-      pnpm install --ignore-workspace --no-frozen-lockfile
-    fi
+    pnpm install --no-frozen-lockfile
     cd - > /dev/null
   fi
 done
