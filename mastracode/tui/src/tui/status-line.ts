@@ -6,34 +6,13 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
-import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
+import type { TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
-import { theme, mastra, mastraBrand, tintHex, getTermWidth, extendedColors } from './theme.js';
+import { theme, mastra, mastraBrand, tintHex, getTermWidth } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
 const getReflectorColor = () => mastra.pink;
-
-function formatGithubPrLabel(
-  state: TUIState,
-  subscription: GithubPrSubscriptionBadge,
-): { plain: string; styled: string } {
-  const plain = `PR#${subscription.prNumber}`;
-  const label = plain;
-  const color = subscription.lastNotificationPriority === 'high' ? mastra.orange : extendedColors.skyBlue;
-  if (state.githubPrPollingActive && state.githubPrGradientAnimator?.isRunning()) {
-    return {
-      plain: label,
-      styled: applyGradientSweep(
-        label,
-        state.githubPrGradientAnimator.getOffset(),
-        color,
-        state.githubPrGradientAnimator.getFadeProgress(),
-      ),
-    };
-  }
-  return { plain: label, styled: chalk.hex(color)(label) };
-}
 
 function getGoalDurationMs(
   goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number },
@@ -183,15 +162,7 @@ export function updateStatusLine(state: TUIState): void {
     state.agentRunStartedAt !== undefined &&
     Math.floor(getGoalDurationMs(goalState, now) / 60_000) === Math.floor((now - state.agentRunStartedAt) / 60_000);
   const goalLabel = goalDuration ? (goalMatchesActiveRun ? 'goal' : `goal ${goalDuration}`) : null;
-  const activeGithubPr = state.activeGithubPrSubscriptions?.[0];
-  const githubPrLabel = activeGithubPr ? formatGithubPrLabel(state, activeGithubPr) : null;
-  const formatDirPart = (value: string) => {
-    if (!githubPrLabel) return { plain: value, styled: theme.fg('thinkingText', value) };
-    return {
-      plain: `${githubPrLabel.plain} ${value}`,
-      styled: `${githubPrLabel.styled} ${theme.fg('thinkingText', value)}`,
-    };
-  };
+  const formatDirPart = (value: string) => ({ plain: value, styled: theme.fg('thinkingText', value) });
   // Build progressively shorter branch strings for layout fallback.
   const dirBranchOnly = branch || null;
   // Abbreviate long branches: keep first 12 + last 8 chars with ".." in between.
@@ -396,9 +367,7 @@ export function updateStatusLine(state: TUIState): void {
         return null;
       }
       if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
-        const reservedPrefix = githubPrLabel ? `${githubPrLabel.plain} ` : '';
-        const availableForText = availableForDir - visibleWidth(reservedPrefix);
-        dirText = availableForText > 1 ? dirText.slice(0, availableForText - 1) + '…' : null;
+        dirText = availableForDir > 1 ? dirText.slice(0, availableForDir - 1) + '…' : null;
       } else if (dirWidth > availableForDir) {
         // Not enough room even for a truncated version — drop it
         dirText = null;
