@@ -327,11 +327,7 @@ const result = await agent.generate([{ role: 'user', content: 'Sensitive operati
 })
 ```
 
-:::tip
-
 For more granular control over sensitive data, consider using the [Sensitive Data Filter](/docs/observability/integrations/processors/sensitive-data-filter) processor, which can redact specific fields (like passwords, tokens, and keys) while preserving the rest of the input/output.
-
-:::
 
 #### Child spans and metadata extraction
 
