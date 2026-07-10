@@ -27,12 +27,7 @@ export async function installPluginDependencies(
 
   const packageJson = readPackageJson(pluginRoot);
   const commandPackageJson = commandRoot === pluginRoot ? packageJson : readPackageJson(commandRoot);
-  const installCommand = getInstallCommand(
-    pluginRoot,
-    typeof packageJson.packageManager === 'string' ? packageJson.packageManager : undefined,
-    commandRoot,
-    typeof commandPackageJson.packageManager === 'string' ? commandPackageJson.packageManager : undefined,
-  );
+  const installCommand = getInstallCommand(pluginRoot, packageJson.packageManager ?? commandPackageJson.packageManager);
 
   const child = execa(installCommand.command, installCommand.args, {
     cwd: pluginRoot,
@@ -103,73 +98,16 @@ function isInsideDirectory(targetPath: string, root: string): boolean {
   return resolvedTarget === resolvedRoot || resolvedTarget.startsWith(resolvedRoot + path.sep);
 }
 
-function getInstallCommand(
-  pluginRoot: string,
-  packageManager?: string,
-  commandRoot = pluginRoot,
-  commandPackageManager?: string,
-): InstallCommand {
-  const manager = packageManager ?? commandPackageManager;
-
-  if (manager?.startsWith('pnpm@')) {
-    return hasFile(pluginRoot, 'pnpm-lock.yaml')
-      ? installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore'])
-      : installCommand('pnpm', ['install', '--ignore-workspace', '--pm-on-fail=ignore']);
+function getInstallCommand(pluginRoot: string, packageManager: unknown): InstallCommand {
+  if (typeof packageManager !== 'string' || !/^pnpm@\d+\.\d+\.\d+$/.test(packageManager)) {
+    throw new Error(
+      `Plugin at ${pluginRoot} must declare an exact pnpm version in package.json using "packageManager": "pnpm@x.y.z".`,
+    );
   }
 
-  if (manager?.startsWith('npm@')) {
-    return hasNpmLockfile(pluginRoot) ? installCommand('npm', ['ci']) : installCommand('npm', ['install']);
-  }
-
-  if (manager?.startsWith('yarn@')) {
-    return hasFile(pluginRoot, 'yarn.lock')
-      ? installCommand('yarn', ['install', '--frozen-lockfile'])
-      : installCommand('yarn', ['install']);
-  }
-
-  if (manager?.startsWith('bun@')) {
-    return hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')
-      ? installCommand('bun', ['install', '--frozen-lockfile'])
-      : installCommand('bun', ['install']);
-  }
-
-  if (manager) {
-    return installCommand(manager.split('@')[0] ?? manager, ['install']);
-  }
-
-  if (hasFile(pluginRoot, 'pnpm-lock.yaml')) {
-    return installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile', '--pm-on-fail=ignore']);
-  }
-
-  if (hasFile(commandRoot, 'pnpm-lock.yaml')) {
-    return installCommand('pnpm', ['install', '--ignore-workspace', '--pm-on-fail=ignore']);
-  }
-
-  if (hasNpmLockfile(pluginRoot)) {
-    return installCommand('npm', ['ci']);
-  }
-
-  if (hasNpmLockfile(commandRoot)) {
-    return installCommand('npm', ['install']);
-  }
-
-  if (hasFile(pluginRoot, 'yarn.lock')) {
-    return installCommand('yarn', ['install', '--frozen-lockfile']);
-  }
-
-  if (hasFile(commandRoot, 'yarn.lock')) {
-    return installCommand('yarn', ['install']);
-  }
-
-  if (hasFile(pluginRoot, 'bun.lock') || hasFile(pluginRoot, 'bun.lockb')) {
-    return installCommand('bun', ['install', '--frozen-lockfile']);
-  }
-
-  if (hasFile(commandRoot, 'bun.lock') || hasFile(commandRoot, 'bun.lockb')) {
-    return installCommand('bun', ['install']);
-  }
-
-  return installCommand('npm', ['install']);
+  return hasFile(pluginRoot, 'pnpm-lock.yaml')
+    ? installCommand('pnpm', ['install', '--ignore-workspace', '--frozen-lockfile'])
+    : installCommand('pnpm', ['install', '--ignore-workspace']);
 }
 
 function installCommand(command: string, args: string[]): InstallCommand {
@@ -184,10 +122,6 @@ function readPackageJson(pluginRoot: string): { packageManager?: unknown } {
   const packageJsonPath = path.join(pluginRoot, 'package.json');
   if (!fs.existsSync(packageJsonPath)) return {};
   return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as { packageManager?: unknown };
-}
-
-function hasNpmLockfile(pluginRoot: string): boolean {
-  return hasFile(pluginRoot, 'package-lock.json') || hasFile(pluginRoot, 'npm-shrinkwrap.json');
 }
 
 function hasFile(pluginRoot: string, fileName: string): boolean {
