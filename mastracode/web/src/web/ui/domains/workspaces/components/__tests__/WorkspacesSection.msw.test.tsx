@@ -24,6 +24,7 @@ import { WorkspacesSection } from '../WorkspacesSection';
 
 const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
+const RESOURCE_ID = 'resource-workspaces-section';
 const API = `${ORIGIN}/api/agent-controller/code`;
 
 const githubProject: Project = {
@@ -32,7 +33,7 @@ const githubProject: Project = {
   source: 'github',
   githubProjectId: GITHUB_PROJECT_ID,
   sandboxWorkdir: '/sandbox/mastra',
-  resourceId: 'resource-gh',
+  resourceId: RESOURCE_ID,
   gitBranch: 'main',
   worktrees: [
     { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
@@ -77,20 +78,24 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
   });
 
   server.use(
-    http.post(`${API}/sessions`, () =>
-      HttpResponse.json({ controllerId: 'code', resourceId: 'resource-gh', threadId: 'thread-test' }),
-    ),
+    http.post(`${API}/sessions`, async ({ request }) => {
+      const body: unknown = await request.clone().json();
+      if (body === null || typeof body !== 'object' || !('resourceId' in body) || body.resourceId !== RESOURCE_ID) {
+        return undefined;
+      }
+      return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: 'thread-test' });
+    }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(`${API}/sessions/:resourceId`, ({ params }) => HttpResponse.json(sessionState(String(params.resourceId)))),
-    http.put(`${API}/sessions/:resourceId/state`, async ({ params, request }) => {
+    http.get(`${API}/sessions/${RESOURCE_ID}`, () => HttpResponse.json(sessionState(RESOURCE_ID))),
+    http.put(`${API}/sessions/${RESOURCE_ID}/state`, async ({ request }) => {
       stateUpdates.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json(sessionState(String(params.resourceId)));
+      return HttpResponse.json(sessionState(RESOURCE_ID));
     }),
-    http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
+    http.get(`${API}/sessions/${RESOURCE_ID}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
+    http.get(`${API}/sessions/${RESOURCE_ID}/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${API}/sessions/${RESOURCE_ID}/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${API}/sessions/${RESOURCE_ID}/stream`, () => sse()),
   );
 
   return { stateUpdates };
@@ -175,8 +180,8 @@ describe('WorkspacesSection', () => {
       http.get(`${API}/sessions/:resourceId/threads`, () =>
         HttpResponse.json({
           threads: [
-            { id: 'thread-old', title: 'Old', resourceId: 'resource-gh', updatedAt: '2026-06-01T00:00:00.000Z' },
-            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+            { id: 'thread-old', title: 'Old', resourceId: RESOURCE_ID, updatedAt: '2026-06-01T00:00:00.000Z' },
+            { id: 'thread-latest', title: 'Latest', resourceId: RESOURCE_ID, updatedAt: '2026-06-09T00:00:00.000Z' },
           ],
         }),
       ),
@@ -195,7 +200,7 @@ describe('WorkspacesSection', () => {
       http.get(`${API}/sessions/:resourceId/threads`, () =>
         HttpResponse.json({
           threads: [
-            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+            { id: 'thread-latest', title: 'Latest', resourceId: RESOURCE_ID, updatedAt: '2026-06-09T00:00:00.000Z' },
           ],
         }),
       ),
@@ -212,9 +217,9 @@ describe('WorkspacesSection', () => {
     useAgentControllerHandlers();
     let created = 0;
     server.use(
-      http.post(`${API}/sessions/:resourceId/threads`, () => {
+      http.post(`${API}/sessions/${RESOURCE_ID}/threads`, () => {
         created += 1;
-        return HttpResponse.json({ id: 'thread-fresh', title: 'New thread', resourceId: 'resource-gh' });
+        return HttpResponse.json({ id: 'thread-fresh', title: 'New thread', resourceId: RESOURCE_ID });
       }),
     );
     renderSection(undefined, '/threads/thread-test');
@@ -249,7 +254,7 @@ describe('WorkspacesSection', () => {
           branch: 'feat-new',
           worktreePath: '/sandbox/mastra-worktrees/feat-new',
           baseBranch: 'main',
-          resourceId: 'resource-gh',
+          resourceId: RESOURCE_ID,
         });
       }),
     );

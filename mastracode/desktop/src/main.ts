@@ -7,6 +7,7 @@ import type {
   BrowserWindowConstructorOptions,
   IpcMainInvokeEvent,
   OpenDialogOptions,
+  Session,
 } from 'electron';
 import type { DesktopAppInfo, DesktopDirectorySelection, DesktopPlatform } from 'mastracode-web/desktop-host';
 
@@ -22,6 +23,7 @@ const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:']);
 const { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } = electron;
 
 let mainWindow: ElectronBrowserWindow | null = null;
+let splashWindow: ElectronBrowserWindow | null = null;
 let mainWindowCreation: Promise<void> | null = null;
 let serverHandle: DesktopServerHandle | null = null;
 let serverClosePromise: Promise<void> | undefined;
@@ -175,6 +177,75 @@ async function loadMainWindow(window: ElectronBrowserWindow, url: string): Promi
   }
 }
 
+async function createSplashWindow(url: string, appSession: Session): Promise<ElectronBrowserWindow> {
+  const window = new BrowserWindow({
+    title: APP_NAME,
+    width: 280,
+    height: 280,
+    show: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    frame: false,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    focusable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    webPreferences: {
+      allowRunningInsecureContent: false,
+      contextIsolation: true,
+      devTools: false,
+      experimentalFeatures: false,
+      navigateOnDragDrop: false,
+      nodeIntegration: false,
+      safeDialogs: true,
+      sandbox: true,
+      session: appSession,
+      webviewTag: false,
+      webSecurity: true,
+    },
+  });
+  splashWindow = window;
+  window.setIgnoreMouseEvents(true);
+  window.center();
+  registerSecurityHandlers(window);
+  window.on('closed', () => {
+    if (splashWindow === window) splashWindow = null;
+  });
+  await window.loadURL(url);
+  if (!window.isDestroyed()) window.showInactive();
+  return window;
+}
+
+async function revealMainWindow(window: ElectronBrowserWindow, splash: ElectronBrowserWindow): Promise<void> {
+  const supportsOpacity = process.platform !== 'linux';
+  if (supportsOpacity) window.setOpacity(0);
+  window.show();
+
+  if (supportsOpacity) {
+    const durationMs = 240;
+    const startedAt = performance.now();
+    let progress = 0;
+    while (progress < 1 && !window.isDestroyed()) {
+      progress = Math.min((performance.now() - startedAt) / durationMs, 1);
+      const easedProgress = 1 - (1 - progress) ** 3;
+      window.setOpacity(easedProgress);
+      if (!splash.isDestroyed()) splash.setOpacity(1 - easedProgress);
+      if (progress < 1) await delay(16);
+    }
+  }
+
+  if (!window.isDestroyed()) {
+    if (supportsOpacity) window.setOpacity(1);
+    window.focus();
+  }
+  if (!splash.isDestroyed()) splash.destroy();
+}
+
 async function createMainWindow(): Promise<void> {
   await serverClosePromise;
   const appSession = session.defaultSession;
@@ -185,6 +256,14 @@ async function createMainWindow(): Promise<void> {
 
   launchScreenUrl = getLaunchScreenUrl();
   const launchStartedAt = performance.now();
+  const splash = await createSplashWindow(launchScreenUrl, appSession);
+
+  const { startDesktopServer } = await import('./server.js');
+  const startedServer = await startDesktopServer({
+    projectAccessFile: join(app.getPath('userData'), 'approved-projects.json'),
+  });
+  serverHandle = startedServer;
+
   const platformWindowOptions: Partial<BrowserWindowConstructorOptions> =
     process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 14 } } : {};
   const window = new BrowserWindow({
@@ -215,9 +294,6 @@ async function createMainWindow(): Promise<void> {
 
   registerSecurityHandlers(window);
 
-  window.once('ready-to-show', () => {
-    window.show();
-  });
   window.on('page-title-updated', event => {
     event.preventDefault();
     window.setTitle(APP_NAME);
@@ -227,25 +303,21 @@ async function createMainWindow(): Promise<void> {
     if (!quitting) void closeServer();
   });
 
-  await window.loadURL(launchScreenUrl);
-
-  const { startDesktopServer } = await import('./server.js');
-  const startedServer = await startDesktopServer({
-    projectAccessFile: join(app.getPath('userData'), 'approved-projects.json'),
-  });
   if (window.isDestroyed()) {
     await startedServer.close();
     return;
   }
   const remainingLaunchTime = MIN_LAUNCH_SCREEN_MS - (performance.now() - launchStartedAt);
-  if (remainingLaunchTime > 0) await delay(remainingLaunchTime);
+  await Promise.all([
+    loadMainWindow(window, serverHandle.bootstrapUrl),
+    remainingLaunchTime > 0 ? delay(remainingLaunchTime) : Promise.resolve(),
+  ]);
   if (window.isDestroyed()) {
     await startedServer.close();
     return;
   }
-  serverHandle = startedServer;
 
-  await loadMainWindow(window, serverHandle.bootstrapUrl);
+  await revealMainWindow(window, splash);
   launchScreenUrl = null;
 }
 

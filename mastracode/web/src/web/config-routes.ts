@@ -76,6 +76,7 @@ const OAUTH_SUPPORTED_PROVIDERS = new Map<string, OAuthProviderConfig>([
 
 interface DeferredInput {
   promise: Promise<string>;
+  reject: (reason: Error) => void;
   resolve: (value: string) => void;
 }
 
@@ -84,21 +85,22 @@ interface OAuthLoginResult {
 }
 
 interface PendingOAuthLogin {
+  abortController: AbortController;
   completion: Promise<OAuthLoginResult>;
   completionMode: OAuthCompletionMode;
-  expiresAt: number;
+  expirationTimer: ReturnType<typeof setTimeout>;
   input: DeferredInput;
 }
 
-const pendingOAuthLogins = new Map<string, PendingOAuthLogin>();
-
 function createDeferredInput(): DeferredInput {
+  let rejectInput: ((reason: Error) => void) | undefined;
   let resolveInput: ((value: string) => void) | undefined;
-  const promise = new Promise<string>(resolve => {
+  const promise = new Promise<string>((resolve, reject) => {
+    rejectInput = reject;
     resolveInput = resolve;
   });
-  if (!resolveInput) throw new Error('Could not initialize OAuth input');
-  return { promise, resolve: resolveInput };
+  if (!rejectInput || !resolveInput) throw new Error('Could not initialize OAuth input');
+  return { promise, reject: rejectInput, resolve: resolveInput };
 }
 
 function toError(error: unknown): Error {
@@ -136,12 +138,6 @@ async function getStoredProviderSource(
     return 'stored';
   }
   return undefined;
-}
-
-function sweepExpiredOAuthLogins(now = Date.now()): void {
-  for (const [loginId, session] of pendingOAuthLogins) {
-    if (session.expiresAt <= now) pendingOAuthLogins.delete(loginId);
-  }
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -457,6 +453,7 @@ export function buildConfigRoutes(options: {
   credentialManagementEnabled?: boolean;
 }): ApiRoute[] {
   const { controller, authStorage, credentialManagementEnabled = true } = options;
+  const pendingOAuthLogins = new Map<string, PendingOAuthLogin>();
 
   return [
     registerApiRoute('/web/config/providers', {
@@ -490,7 +487,7 @@ export function buildConfigRoutes(options: {
         if (!providerConfig) return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
 
         try {
-          sweepExpiredOAuthLogins();
+          const abortController = new AbortController();
           const input = createDeferredInput();
           let resolveAuthInfo: ((info: { instructions?: string; url: string }) => void) | undefined;
           const authInfo = new Promise<{ instructions?: string; url: string }>(resolve => {
@@ -504,6 +501,7 @@ export function buildConfigRoutes(options: {
               onAuth: resolveAuthInfo,
               onManualCodeInput: () => input.promise,
               onPrompt: () => input.promise,
+              signal: abortController.signal,
             })
             .then<OAuthLoginResult, OAuthLoginResult>(
               () => ({}),
@@ -518,10 +516,19 @@ export function buildConfigRoutes(options: {
             }),
           ]);
           const loginId = randomUUID();
+          const expirationTimer = setTimeout(() => {
+            const pendingLogin = pendingOAuthLogins.get(loginId);
+            if (!pendingLogin) return;
+            pendingOAuthLogins.delete(loginId);
+            pendingLogin.abortController.abort();
+            pendingLogin.input.reject(new Error('Login session expired. Start sign-in again.'));
+          }, OAUTH_LOGIN_TTL_MS);
+          expirationTimer.unref();
           pendingOAuthLogins.set(loginId, {
+            abortController,
             completion,
             completionMode: providerConfig.completionMode,
-            expiresAt: Date.now() + OAUTH_LOGIN_TTL_MS,
+            expirationTimer,
             input,
           });
           return c.json({
@@ -562,7 +569,6 @@ export function buildConfigRoutes(options: {
         if (!loginId) return c.json({ error: 'Missing required field: loginId' }, 400);
 
         try {
-          sweepExpiredOAuthLogins();
           const session = pendingOAuthLogins.get(loginId);
           if (!session) return c.json({ error: 'Login session expired. Start sign-in again.' }, 410);
           if (session.completionMode === 'manual-code' && !code) {
@@ -570,11 +576,15 @@ export function buildConfigRoutes(options: {
           }
           if (code) session.input.resolve(code);
 
-          const result = await session.completion;
-          pendingOAuthLogins.delete(loginId);
-          if (result.error) throw result.error;
-          const providers = await listProviders(controller, authStorage);
-          return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          try {
+            const result = await session.completion;
+            if (result.error) throw result.error;
+            const providers = await listProviders(controller, authStorage);
+            return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          } finally {
+            clearTimeout(session.expirationTimer);
+            pendingOAuthLogins.delete(loginId);
+          }
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }

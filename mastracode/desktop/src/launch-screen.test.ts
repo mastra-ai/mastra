@@ -7,15 +7,17 @@ function decodeDataUrl(dataUrl: string): string {
 }
 
 describe('createLaunchScreenDataUrl', () => {
-  it('creates an accessible, self-contained launch screen with reduced-motion support', () => {
+  it('creates an accessible, transparent launch HUD with reduced-motion support', () => {
     const dataUrl = createLaunchScreenDataUrl('data:image/png;base64,AAAA');
     const html = decodeDataUrl(dataUrl);
 
     expect(dataUrl).toMatch(/^data:text\/html;charset=UTF-8,/);
     expect(html).toContain(`aria-label="${LAUNCH_SCREEN_ACCESSIBLE_NAME}"`);
     expect(html).toContain("default-src 'none'");
+    expect(html).toContain('background: transparent');
     expect(html).toContain('@media (prefers-reduced-motion: reduce)');
-    expect(html).toContain('Starting local workspace');
+    expect(html).not.toContain('Starting local workspace');
+    expect(html).not.toContain('class="brand"');
   });
 
   it('rejects a launch icon that could load external content', () => {

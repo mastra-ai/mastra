@@ -46,6 +46,24 @@ function isAppRequest(url: string): boolean {
   }
 }
 
+function isDesktopAppPage(page: Page): boolean {
+  try {
+    const url = new URL(page.url());
+    return url.protocol === 'http:' && url.hostname === '127.0.0.1';
+  } catch {
+    return false;
+  }
+}
+
+async function firstElectronAppPage(desktopApp: ElectronApplication): Promise<Page> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const page = desktopApp.windows().find(isDesktopAppPage);
+    if (page) return page;
+    await delay(250);
+  }
+  throw new Error('The desktop app did not create its MastraCode window within 30 seconds');
+}
+
 function withRendererDiagnostics(instance: DesktopInstance): DesktopInstance {
   let rendererOutput = '';
   const append = (line: string) => {
@@ -66,7 +84,9 @@ function withRendererDiagnostics(instance: DesktopInstance): DesktopInstance {
   });
   instance.page.on('requestfailed', request => {
     if (isAppRequest(request.url())) {
-      append(`[request-failed] ${request.method()} ${request.url()} ${request.failure()?.errorText ?? 'unknown error'}`);
+      append(
+        `[request-failed] ${request.method()} ${request.url()} ${request.failure()?.errorText ?? 'unknown error'}`,
+      );
     }
   });
 
@@ -125,8 +145,13 @@ async function launchDesktop(
     env,
   });
   return withRendererDiagnostics({
-    page: await desktopApp.firstWindow(),
-    getWindowTitle: () => desktopApp.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().at(0)?.getTitle()),
+    page: await firstElectronAppPage(desktopApp),
+    getWindowTitle: () =>
+      desktopApp.evaluate(({ BrowserWindow }) =>
+        BrowserWindow.getAllWindows()
+          .find(window => window.webContents.getURL().startsWith('http://127.0.0.1:'))
+          ?.getTitle(),
+      ),
     diagnostics: () => '',
     close: () => quitElectronDesktop(desktopApp),
   });
@@ -181,16 +206,16 @@ async function connectToPackagedApp(
   throw new Error('The installed app did not expose Chromium debugging within 30 seconds', { cause: lastError });
 }
 
-async function firstCdpPage(browser: Browser): Promise<Page> {
+async function firstCdpAppPage(browser: Browser): Promise<Page> {
   for (let attempt = 0; attempt < 120; attempt += 1) {
     const page = browser
       .contexts()
       .flatMap(context => context.pages())
-      .at(0);
+      .find(isDesktopAppPage);
     if (page) return page;
     await delay(250);
   }
-  throw new Error('The installed app did not create a renderer within 30 seconds');
+  throw new Error('The installed app did not create its MastraCode window within 30 seconds');
 }
 
 async function waitForProcessExit(child: ReturnType<typeof spawn>, timeoutMs: number): Promise<boolean> {
@@ -228,7 +253,7 @@ async function launchDesktopOverCdp(
   child.stdout.on('data', appendOutput);
   child.stderr.on('data', appendOutput);
   const browser = await connectToPackagedApp(port, child, () => output);
-  const page = await firstCdpPage(browser);
+  const page = await firstCdpAppPage(browser);
   return {
     page,
     getWindowTitle: () => Promise.resolve(undefined),
@@ -273,8 +298,11 @@ async function selectModel(page: Page, modelName: string): Promise<void> {
   await settings.locator('button[aria-haspopup="listbox"]').click();
   const search = settings.getByRole('textbox', { name: 'Search models' });
   await search.fill(modelName);
+  const providerLabel = modelName.split('/').at(0) ?? '';
+  const modelLabel = modelName.split('/').at(-1) ?? modelName;
   const option = settings.getByRole('option', {
-    name: new RegExp(modelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'),
+    name: `${modelLabel} ${providerLabel}`.trim(),
+    exact: true,
   });
   await expect(option).toBeVisible();
   await expect(option).toBeEnabled();
@@ -347,6 +375,9 @@ export async function runDesktopAcceptance(options: DesktopAcceptanceOptions): P
     await restoredPage.getByRole('button', { name: 'Allow folder access' }).click();
     await expect(restoredPage.getByRole('button', { name: /Change model|Select a model/ })).toBeVisible();
     await expectProjectPersisted(restoredPage, projectName, resolvedProjectDir);
+    expect(desktopInstance.diagnostics()).not.toContain(
+      'lsp: true requires vscode-jsonrpc and vscode-languageserver-protocol packages',
+    );
     reportStage('folder access restored');
 
     const unauthorizedStatus = await restoredPage.evaluate(async path => {
@@ -364,20 +395,27 @@ export async function runDesktopAcceptance(options: DesktopAcceptanceOptions): P
     const settings = restoredPage.getByRole('dialog', { name: 'Settings' });
     await expect(settings).toBeVisible();
     await expect(settings.getByRole('tab', { name: 'Model' })).toHaveAttribute('aria-selected', 'true');
-    await settings.locator('button[aria-haspopup="listbox"]').click();
-    const modelSearch = settings.getByRole('textbox', { name: 'Search models' });
-    await modelSearch.fill('anthropic/claude-sonnet-4-6');
-    const claudeModel = settings.getByRole('option', { name: /anthropic\/claude-sonnet-4-6/i });
-    await expect(claudeModel).toBeVisible();
-    if (options.requireAuthenticatedModels) await expect(claudeModel).toBeEnabled();
-    await modelSearch.fill('openai/gpt-5.5');
-    const codexModel = settings.getByRole('option', { name: /openai\/gpt-5\.5/i });
-    await expect(codexModel).toBeVisible();
-    if (options.requireAuthenticatedModels) await expect(codexModel).toBeEnabled();
-    await restoredPage.keyboard.press('Escape');
+    if (options.requireAuthenticatedModels) {
+      await settings.locator('button[aria-haspopup="listbox"]').click();
+      const modelSearch = settings.getByRole('textbox', { name: 'Search models' });
+      await modelSearch.fill('anthropic/claude-sonnet-4-6');
+      const claudeModel = settings.getByRole('option', { name: 'claude-sonnet-4-6 anthropic', exact: true });
+      await expect(claudeModel).toBeVisible();
+      await expect(claudeModel).toBeEnabled();
+      await modelSearch.fill('openai/gpt-5.5');
+      const codexModel = settings.getByRole('option', { name: 'gpt-5.5 openai', exact: true });
+      await expect(codexModel).toBeVisible();
+      await expect(codexModel).toBeEnabled();
+      await restoredPage.keyboard.press('Escape');
+      reportStage('authenticated subscription models verified');
+    } else {
+      await expect(
+        settings.getByText('No models available.').or(settings.locator('button[aria-haspopup="listbox"]')),
+      ).toBeVisible();
+      reportStage('model selector state verified');
+    }
     await restoredPage.keyboard.press('Escape');
     await expect(settings).not.toBeVisible();
-    reportStage('subscription model catalog verified');
 
     const composer = restoredPage.getByRole('textbox', { name: 'Message' });
     await composer.fill('/login');
@@ -385,24 +423,29 @@ export async function runDesktopAcceptance(options: DesktopAcceptanceOptions): P
     await expect(settings).toBeVisible();
     await expect(settings.getByRole('tab', { name: 'Providers' })).toHaveAttribute('aria-selected', 'true');
     await expect(settings.getByText('Claude Pro/Max')).toBeVisible();
-    await expect(settings.getByRole('button', { name: /Sign in|Sign out/ })).toBeVisible();
-    const oauthStart = await restoredPage.evaluate(async () => {
-      function isRecord(value: unknown): value is Record<string, unknown> {
-        return value !== null && typeof value === 'object' && !Array.isArray(value);
-      }
+    await expect(settings.getByText('ChatGPT Plus/Pro')).toBeVisible();
+    await expect(settings.getByRole('button', { name: /Sign in|Sign out/ })).toHaveCount(2);
+    if (!options.requireAuthenticatedModels) {
+      const oauthStart = await restoredPage.evaluate(async () => {
+        function isRecord(value: unknown): value is Record<string, unknown> {
+          return value !== null && typeof value === 'object' && !Array.isArray(value);
+        }
 
-      const response = await fetch('/web/config/providers/anthropic/oauth/start', { method: 'POST' });
-      const body: unknown = await response.json();
-      if (!response.ok || !isRecord(body) || typeof body.authUrl !== 'string' || typeof body.loginId !== 'string') {
-        return undefined;
-      }
-      return { authUrl: body.authUrl, loginId: body.loginId };
-    });
-    expect(oauthStart?.authUrl).toMatch(/^https:\/\/claude\.ai\/oauth\/authorize/);
-    expect(oauthStart?.loginId.length).toBeGreaterThan(10);
+        const response = await fetch('/web/config/providers/anthropic/oauth/start', { method: 'POST' });
+        const body: unknown = await response.json();
+        if (!response.ok || !isRecord(body) || typeof body.authUrl !== 'string' || typeof body.loginId !== 'string') {
+          return undefined;
+        }
+        return { authUrl: body.authUrl, loginId: body.loginId };
+      });
+      expect(oauthStart?.authUrl).toMatch(/^https:\/\/claude\.ai\/oauth\/authorize/);
+      expect(oauthStart?.loginId.length).toBeGreaterThan(10);
+    }
     await restoredPage.keyboard.press('Escape');
     await expect(settings).not.toBeVisible();
-    reportStage('login command and OAuth start verified');
+    reportStage(
+      options.requireAuthenticatedModels ? 'login command verified' : 'login command and OAuth start verified',
+    );
 
     let liveResponse: string | undefined;
     if (options.runLiveChat) {

@@ -213,4 +213,54 @@ describe('ProvidersSection', () => {
       await waitFor(() => expect(within(rowFor('anthropic')).getByText('Signed in')).toBeInTheDocument());
     });
   });
+
+  describe('when Codex OAuth uses a browser callback', () => {
+    it('checks the completed browser sign-in without requiring a pasted code', async () => {
+      const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+      const providers: ProviderInfo[] = [
+        {
+          provider: 'openai',
+          displayName: 'ChatGPT Plus/Pro',
+          source: 'none',
+          oauthSupported: true,
+        },
+      ];
+      let completeBody: unknown;
+      server.use(
+        http.get(PROVIDERS_URL, () => providersResponse(providers)),
+        http.post(oauthStartUrl('openai'), () =>
+          HttpResponse.json({
+            loginId: 'login-codex',
+            authUrl: 'https://auth.openai.com/oauth/authorize',
+            completionMode: 'browser-callback',
+            instructions: 'Complete sign-in in your browser.',
+          }),
+        ),
+        http.post(oauthCompleteUrl('openai'), async ({ request }) => {
+          completeBody = await request.json();
+          providers[0] = {
+            provider: 'openai',
+            displayName: 'ChatGPT Plus/Pro',
+            source: 'oauth',
+            oauthSupported: true,
+          };
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+
+      const user = userEvent.setup();
+      renderWithProviders(<ProvidersSection />);
+
+      await screen.findByText('openai');
+      await user.click(within(rowFor('openai')).getByRole('button', { name: /Sign in/ }));
+
+      expect(openSpy).toHaveBeenCalledWith('https://auth.openai.com/oauth/authorize', '_blank', 'noopener,noreferrer');
+      expect(screen.getByText('Complete sign-in in your browser.')).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Check sign-in' }));
+
+      await waitFor(() => expect(completeBody).toEqual({ loginId: 'login-codex', code: '' }));
+      await waitFor(() => expect(within(rowFor('openai')).getByText('Signed in')).toBeInTheDocument());
+    });
+  });
 });

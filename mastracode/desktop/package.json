@@ -38,7 +38,9 @@
       "dist/**/*",
       "package.json",
       "!node_modules/**/*",
-      "node_modules/typescript/**/*"
+      "node_modules/typescript/**/*",
+      "node_modules/vscode-jsonrpc/**/*",
+      "node_modules/vscode-languageserver-protocol/**/*"
     ],
     "extraResources": [
       {
@@ -79,7 +81,9 @@
     "@mastra/server": "link:../../packages/server",
     "hono": "^4.12.8",
     "mastracode-web": "link:../web",
-    "typescript": "6.0.3"
+    "typescript": "6.0.3",
+    "vscode-jsonrpc": "^8.2.1",
+    "vscode-languageserver-protocol": "^3.17.5"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

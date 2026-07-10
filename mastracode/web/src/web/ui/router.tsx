@@ -11,7 +11,8 @@
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import { SignInPage, useWebAuth } from './domains/auth';
+import { SignInPage } from './domains/auth/components/SignInPage';
+import { useWebAuth } from './domains/auth/hooks/useWebAuth';
 import Chat from './domains/chat/Chat';
 import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';

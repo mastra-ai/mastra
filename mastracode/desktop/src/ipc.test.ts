@@ -1,10 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseDesktopAppInfo,
-  parseDesktopDirectorySelection,
-  parseDirectorySelectionOptions,
-} from './ipc.js';
+import { parseDesktopAppInfo, parseDesktopDirectorySelection, parseDirectorySelectionOptions } from './ipc.js';
 
 describe('desktop IPC contracts', () => {
   it('parses valid app info and directory selection payloads', () => {
