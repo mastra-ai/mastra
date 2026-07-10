@@ -8,16 +8,17 @@ export interface ChatCommandsApi {
   composerCommandName: string | undefined;
   clearComposerCommand: () => void;
   run: (command: SlashCommand) => void;
+  runComposerCommand: (text: string) => Promise<boolean>;
 }
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const [composerCommandName, setComposerCommandName] = useState<string | undefined>();
-  const { run } = useRunPaletteCommand(setComposerCommandName);
+  const { run, runComposerCommand } = useRunPaletteCommand(setComposerCommandName);
 
   const clearComposerCommand = () => setComposerCommandName(undefined);
-  const value: ChatCommandsApi = { composerCommandName, clearComposerCommand, run };
+  const value: ChatCommandsApi = { composerCommandName, clearComposerCommand, run, runComposerCommand };
 
   return <ChatCommandsContext.Provider value={value}>{children}</ChatCommandsContext.Provider>;
 }

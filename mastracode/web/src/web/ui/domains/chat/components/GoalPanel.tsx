@@ -1,27 +1,57 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Input } from '@mastra/playground-ui/components/Input';
 import { Target } from 'lucide-react';
+import { useState } from 'react';
 
-import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
+  useSetAgentControllerGoalMutation,
 } from '../hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-accent2/5 px-4 py-2 text-xs';
 
 export function GoalPanel() {
+  const [draft, setDraft] = useState('');
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript } = useChatTranscript();
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
   const goal = transcript.goal;
 
-  if (!goal) return null;
+  if (!sessionEnabled) return null;
+
+  if (!goal) {
+    return (
+      <form
+        className={goalBar}
+        onSubmit={e => {
+          e.preventDefault();
+          if (draft.trim()) {
+            void setGoalMutation.mutateAsync(draft.trim());
+            setDraft('');
+          }
+        }}
+      >
+        <Input
+          className="flex-1"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          placeholder="Set a goal objective…"
+        />
+        <Button variant="primary" size="sm" type="submit">
+          Set Goal
+        </Button>
+      </form>
+    );
+  }
 
   const progress = `${goal.iteration}/${goal.maxRuns}`;
 

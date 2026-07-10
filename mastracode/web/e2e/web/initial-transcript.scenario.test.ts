@@ -1,7 +1,7 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, it, expect } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../../src/web/ui/domains/chat/services/transcript.js';
+import { createInitialTranscript } from '../../src/web/ui/domains/chat/services/transcript.js';
 import type { MessageEntry, TimelineEntry } from '../../src/web/ui/domains/chat/services/transcript.js';
 
 /** Flatten a message entry's ordered text/reasoning parts to a string. */
@@ -23,8 +23,9 @@ function toolParts(entry: MessageEntry) {
 /**
  * Switching to an existing thread must render its persisted history. The
  * thread's messages aren't replayed over the event stream, so the hook/driver
- * load them via listMessages and dispatch a `hydrate` action. This guards the
- * regression where selecting a thread showed an empty transcript.
+ * load them via listMessages and build a fresh transcript with
+ * `createInitialTranscript`. This guards the regression where selecting a
+ * thread showed an empty transcript.
  */
 function userMsg(id: string, text: string): AgentControllerMessage {
   return { id, role: 'user', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
@@ -36,20 +37,12 @@ function systemMsg(id: string, text: string): AgentControllerMessage {
   return { id, role: 'system', content: [{ type: 'text', text }] } as unknown as AgentControllerMessage;
 }
 
-describe('transcript hydrate (thread history rendering)', () => {
+describe('initial transcript (thread history rendering)', () => {
   it('builds user and assistant entries from persisted messages', () => {
     const messages = [userMsg('u1', 'hello there'), assistantMsg('a1', 'hi, how can I help?')];
-    const state = transcriptReducer(initialTranscript, {
-      type: 'hydrate',
-      messages,
-      threadId: 'thread-1',
-      modeId: 'build',
-      modelId: 'openai/gpt-5.4-mini',
-    });
+    const state = createInitialTranscript({ messages, threadId: 'thread-1' });
 
     expect(state.threadId).toBe('thread-1');
-    expect(state.modeId).toBe('build');
-    expect(state.modelId).toBe('openai/gpt-5.4-mini');
     expect(state.entries).toHaveLength(2);
     expect(state.entries[0]).toMatchObject({ kind: 'message', id: 'u1', message: { role: 'user' } });
     expect(messageText(state.entries[0])).toBe('hello there');
@@ -62,25 +55,20 @@ describe('transcript hydrate (thread history rendering)', () => {
     expect(messageText(state.entries[1])).toBe('hi, how can I help?');
   });
 
-  it('keeps system messages in the hydrated message timeline', () => {
+  it('keeps system messages in the message timeline', () => {
     const messages = [systemMsg('s1', 'you are a coding agent'), userMsg('u1', 'go')];
-    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages, threadId: 't' });
+    const state = createInitialTranscript({ messages, threadId: 't' });
     expect(state.entries.map(e => (e.kind === 'message' ? e.message.role : e.kind))).toEqual(['system', 'user']);
     expect(messageText(state.entries[0])).toBe('you are a coding agent');
   });
 
   it('replaces prior transcript contents (switching threads is a clean swap)', () => {
     // Start with one thread's content.
-    let state = transcriptReducer(initialTranscript, {
-      type: 'hydrate',
-      messages: [userMsg('u1', 'thread A message')],
-      threadId: 'A',
-    });
+    let state = createInitialTranscript({ messages: [userMsg('u1', 'thread A message')], threadId: 'A' });
     expect(state.entries).toHaveLength(1);
 
     // Switch to another thread — only B's history should remain.
-    state = transcriptReducer(state, {
-      type: 'hydrate',
+    state = createInitialTranscript({
       messages: [userMsg('u2', 'thread B message'), assistantMsg('a2', 'reply in B')],
       threadId: 'B',
     });
@@ -102,8 +90,7 @@ describe('transcript hydrate (thread history rendering)', () => {
       ],
     } as unknown as AgentControllerMessage;
 
-    const state = transcriptReducer(initialTranscript, {
-      type: 'hydrate',
+    const state = createInitialTranscript({
       messages: [userMsg('u1', 'read the readme'), assistantWithTool],
       threadId: 't',
     });
@@ -136,7 +123,7 @@ describe('transcript hydrate (thread history rendering)', () => {
         { type: 'text', text: 'Done.' },
       ],
     } as unknown as AgentControllerMessage;
-    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
+    const state = createInitialTranscript({ messages: [msg], threadId: 't' });
     const assistant = state.entries[0];
     if (assistant.kind !== 'message') throw new Error('expected assistant entry');
     // The part order must mirror content order, not bucket tools at the end.
@@ -156,7 +143,7 @@ describe('transcript hydrate (thread history rendering)', () => {
         { type: 'tool_result', id: 'tc-9', result: 'command not found', isError: true },
       ],
     } as unknown as AgentControllerMessage;
-    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [msg], threadId: 't' });
+    const state = createInitialTranscript({ messages: [msg], threadId: 't' });
     const assistant = state.entries[0];
     if (assistant.kind !== 'message') throw new Error('expected assistant entry');
     const [tool] = toolParts(assistant);
@@ -166,7 +153,7 @@ describe('transcript hydrate (thread history rendering)', () => {
   });
 
   it('produces an empty transcript for a thread with no history', () => {
-    const state = transcriptReducer(initialTranscript, { type: 'hydrate', messages: [], threadId: 'empty' });
+    const state = createInitialTranscript({ messages: [], threadId: 'empty' });
     expect(state.entries).toHaveLength(0);
     expect(state.threadId).toBe('empty');
     expect(state.running).toBe(false);

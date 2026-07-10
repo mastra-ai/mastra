@@ -1,4 +1,3 @@
-import { useActiveProjectContext } from '../../workspaces';
 import { Composer } from './Composer';
 import { StatusLine } from './StatusLine';
 
@@ -9,10 +8,6 @@ type ComposerPanelProps = {
 };
 
 export function ComposerPanel({ composerVariant = 'inline' }: ComposerPanelProps) {
-  const { activeProject } = useActiveProjectContext();
-
-  if (!activeProject) return null;
-
   return (
     <div className={composerPanelClass}>
       <Composer variant={composerVariant} />

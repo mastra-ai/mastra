@@ -3,46 +3,29 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useActiveProjectContext } from '../../workspaces';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatConnection } from '../context/useChatConnection';
-import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatModels } from '../context/useChatModels';
-import { useChatModes } from '../context/useChatModes';
-import { useChatPermissions } from '../context/useChatPermissions';
-import {
-  useClearAgentControllerGoalMutation,
-  usePauseAgentControllerGoalMutation,
-  useResumeAgentControllerGoalMutation,
-  useSetAgentControllerGoalMutation,
-} from '../hooks/useAgentControllerGoalMutations';
+import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
-  useFollowUpAgentControllerMutation,
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
 } from '../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
-import { useTextareaAutoResize } from '../hooks/useTextareaAutoResize';
-import { matchCommands, SLASH_COMMANDS } from '../services/commands';
+import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 type ComposerVariant = 'inline' | 'textarea';
 
 const composerVariantClass: Record<ComposerVariant, string> = {
-  inline: 'max-h-52 min-h-10 resize-none',
-  textarea: 'max-h-64 min-h-28 resize-none',
-};
-
-const composerVariantRows: Record<ComposerVariant, number> = {
-  inline: 1,
-  textarea: 4,
+  inline: 'field-sizing-content max-h-52 min-h-10 resize-none',
+  textarea: 'field-sizing-content max-h-64 min-h-28 resize-none',
 };
 
 type ComposerProps = {
@@ -50,28 +33,19 @@ type ComposerProps = {
 };
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { activeProject } = useActiveProjectContext();
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
-  const { transcript, busy, localUser, reset, pushNotice } = useChatTranscript();
-  const { composerCommandName, clearComposerCommand } = useChatCommands();
-  const { activeModelId, setModel } = useChatModels();
-  const { activeModeId } = useChatModes();
+  const { busy, localUser, reset } = useChatTranscript();
+  const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
   const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);
-  const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
-  const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
-  const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
-  const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
-  const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
-  const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
 
   const [draft, setDraft] = useState('');
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -85,13 +59,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     setActiveSuggestion(0);
   };
 
-  const applyCommandDraft = useCallback((name: string) => {
+  const applyCommandDraft = (name: string) => {
     updateDraft(`/${name} `);
-    inputRef.current?.focus();
-  }, []);
+    requestAnimationFrame(() => inputRef.current?.focus());
+  };
 
   const applyCommand = (name: string) => {
     applyCommandDraft(name);
+    clearComposerCommand();
   };
 
   useEffect(() => {
@@ -103,9 +78,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     appliedCommandNameRef.current = composerCommandName;
     applyCommandDraft(composerCommandName);
     clearComposerCommand();
-  }, [composerCommandName, applyCommandDraft, clearComposerCommand]);
-
-  useTextareaAutoResize(inputRef, draft);
+  }, [composerCommandName, clearComposerCommand]);
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
@@ -142,12 +115,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     if (!text.trim()) return;
     localUser(text, true);
     await steerMutation.mutateAsync(text);
-  };
-
-  const followUp = async (text: string) => {
-    if (!text.trim()) return;
-    localUser(text);
-    await followUpMutation.mutateAsync(text);
   };
 
   const onSubmit = (e: { preventDefault: () => void }) => {
@@ -197,97 +164,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string) {
-    if (text.startsWith('/')) {
-      const [cmd, ...rest] = text.slice(1).split(/\s+/);
-      const arg = rest.join(' ');
-      switch (cmd) {
-        case 'model':
-          if (arg) await setModel(arg);
-          return;
-        case 'goal':
-          if (arg) await setGoalMutation.mutateAsync(arg);
-          return;
-        case 'goal-clear':
-          await clearGoalMutation.mutateAsync();
-          return;
-        case 'goal-pause':
-          await pauseGoalMutation.mutateAsync();
-          return;
-        case 'goal-resume':
-          await resumeGoalMutation.mutateAsync();
-          return;
-        case 'permissions': {
-          if (permissionsLoading) return;
-          const rules = permissions ?? { categories: {}, tools: {} };
-          const cats =
-            Object.entries(rules.categories ?? {})
-              .map(([k, v]) => `  ${k}: ${v}`)
-              .join('\n') || '  (none)';
-          const tools =
-            Object.entries(rules.tools ?? {})
-              .map(([k, v]) => `  ${k}: ${v}`)
-              .join('\n') || '  (none)';
-          pushNotice(`Categories:\n${cats}\nTools:\n${tools}`);
-          return;
-        }
-        case 'yolo': {
-          for (const cat of ['read', 'edit', 'execute', 'mcp', 'other'] as const) {
-            await setPermissionForCategory(cat, 'allow');
-          }
-          pushNotice('YOLO mode: all tool categories set to auto-allow');
-          return;
-        }
-        case 'cost': {
-          const u = transcript.usage;
-          if (!u?.totalTokens) pushNotice('No token usage recorded yet.');
-          else
-            pushNotice(
-              `Tokens — prompt: ${u.promptTokens ?? 0}, completion: ${u.completionTokens ?? 0}, total: ${u.totalTokens}`,
-            );
-          return;
-        }
-        case 'think':
-          pushNotice(
-            'Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.',
-          );
-          return;
-        case 'om':
-          pushNotice(`Observational memory phase: ${transcript.omPhase ?? 'idle'}`);
-          return;
-        case 'settings': {
-          const lines = [
-            `Project: ${activeProject?.name ?? '(none)'}`,
-            `Path: ${activeProject?.path ?? '(default workspace)'}`,
-            `Mode: ${activeModeId ?? '—'}`,
-            `Model: ${activeModelId ?? '—'}`,
-            `Thread: ${transcript.threadId ?? '—'}`,
-            `Running: ${transcript.running}`,
-          ];
-          pushNotice(lines.join('\n'));
-          return;
-        }
-        case 'follow-up':
-        case 'followup':
-          if (arg) await followUp(arg);
-          return;
-        case 'abort':
-          await abortMutation.mutateAsync();
-          return;
-        case 'help': {
-          const width = Math.max(...SLASH_COMMANDS.map(c => `/${c.name} ${c.args ?? ''}`.length));
-          const lines = SLASH_COMMANDS.map(c => {
-            const sig = `/${c.name} ${c.args ?? ''}`.padEnd(width);
-            return `  ${sig}  — ${c.description}`;
-          });
-          pushNotice(['Available commands:', ...lines].join('\n'));
-          return;
-        }
-        default:
-          pushNotice(`Unknown command: /${cmd}. Type /help for available commands.`, 'error');
-          return;
-      }
-    }
-
+    if (await runComposerCommand(text)) return;
     if (busy) await steer(text);
     else await send(text);
   }
@@ -303,7 +180,6 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
         onKeyDown={onComposerKeyDown}
         placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
         disabled={disabled}
-        rows={composerVariantRows[variant]}
         className={composerVariantClass[variant]}
         aria-label="Message"
       />

@@ -4,27 +4,17 @@ import { ProjectsModal, useActiveProjectContext } from '../../workspaces';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
+/** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */
 export function ChatOverlays() {
   const overlays = useOverlays();
-  const { projects, activeProject, selectProject } = useActiveProjectContext();
-  const projectsOpen = overlays.isOpen('projects') || projects.length === 0;
+  const { activeProject, projects } = useActiveProjectContext();
 
   return (
     <>
-      {overlays.isOpen('palette') && activeProject && <CommandPalette onClose={() => overlays.close('palette')} />}
-
+      {overlays.isOpen('palette') && activeProject && <CommandPalette />}
       {overlays.isOpen('settings') && <SettingsPanel onClose={() => overlays.close('settings')} />}
-
-      {overlays.isOpen('shortcuts') && <ShortcutsOverlay onClose={() => overlays.close('shortcuts')} />}
-
-      {projectsOpen && (
-        <ProjectsModal
-          projects={projects}
-          activeProjectId={activeProject?.id ?? null}
-          onSelectProject={project => void selectProject(project)}
-          onClose={() => overlays.close('projects')}
-        />
-      )}
+      {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
+      {(overlays.isOpen('projects') || projects.length === 0) && <ProjectsModal />}
     </>
   );
 }

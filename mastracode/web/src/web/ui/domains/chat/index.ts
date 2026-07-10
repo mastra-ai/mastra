@@ -29,7 +29,6 @@ export type { ChatModesApi } from './context/ChatModesContext';
 export { ChatCommandsProvider, useChatCommands } from './context/ChatCommandsProvider';
 export type { ChatCommandsApi } from './context/ChatCommandsProvider';
 export { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-export { useTextareaAutoResize } from './hooks/useTextareaAutoResize';
 export { useTranscriptScroll } from './hooks/useTranscriptScroll';
 export type { SlashCommand } from './services/commands';
 export type { TranscriptState } from './services/transcript';
