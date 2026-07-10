@@ -69,7 +69,20 @@ export async function processWorkflowLoop(
     runId,
     executionPath,
     resumeSteps: [] as string[],
-    stepResults,
+    // Carry the iteration count forward on the loop body's stepResults entry. The
+    // loop-again path does not merge the body result back into stepResults[bodyStepId]
+    // (only prevResult carries it), and the evented step executor never writes
+    // iterationCount, so without this the next processWorkflowLoop re-reads 0 and the
+    // condition is always evaluated with iterationCount === 1 (an infinite loop when
+    // termination depends on the count). Mirrors the default engine, which stamps
+    // metadata.iterationCount onto the step result. See handlers/step.ts.
+    stepResults: {
+      ...stepResults,
+      [step.step.id]: {
+        ...stepResults[step.step.id],
+        metadata: { ...stepResults[step.step.id]?.metadata, iterationCount },
+      },
+    },
     prevResult: stepResult,
     resumeData: undefined,
     activeStepsPath,

@@ -1,8 +1,6 @@
 import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import { readFile } from 'fs-extra';
-import { resolveModule } from 'local-pkg';
-import type * as LocalPkgModule from 'local-pkg';
 import { rollup } from 'rollup';
 import type * as RollupModule from 'rollup';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -10,13 +8,6 @@ import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { analyzeEntry } from './analyzeEntry';
 
 vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-vi.mock('local-pkg', async () => {
-  const actual = await vi.importActual<typeof LocalPkgModule>('local-pkg');
-  return {
-    ...actual,
-    resolveModule: vi.fn(),
-  };
-});
 vi.mock('rollup', async () => {
   const actual = await vi.importActual<typeof RollupModule>('rollup');
   return {
@@ -29,7 +20,6 @@ describe('analyzeEntry', () => {
   beforeEach(() => {
     vi.mocked(rollup).mockClear();
     vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-    vi.mocked(resolveModule).mockReset();
   });
 
   it('should analyze the entry file', async () => {
@@ -228,17 +218,6 @@ describe('analyzeEntry', () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
 
-    vi.mocked(resolveModule).mockImplementation(dep => {
-      if (dep === '@internal/a') {
-        return join(root, 'packages', 'a', 'src', 'index.ts');
-      }
-      if (dep === '@internal/shared') {
-        return join(root, 'packages', 'shared', 'src', 'index.ts');
-      }
-
-      return undefined;
-    });
-
     // Create a workspace map that includes @mastra/core to test recursive transitive dependencies
     const workspaceMap = new Map<string, WorkspacePackageInfo>([
       [
@@ -273,26 +252,14 @@ describe('analyzeEntry', () => {
         sourcemapEnabled: false,
         workspaceMap,
         projectRoot: root,
-        initialDepsToOptimize: new Map([
-          [
-            '@internal/shared',
-            {
-              exports: ['shared'],
-              rootPath: `${root}/packages/shared`,
-              isWorkspace: true,
-              version: '1.0.0',
-            },
-          ],
-        ]),
       },
     );
 
-    expect(rollup).toHaveBeenCalledTimes(2);
+    expect(rollup).toHaveBeenCalledTimes(1);
     expect(result.dependencies.size).toBe(2);
     expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
-    expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+    expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', '*']);
     // Verify that the analyzer doesn't get stuck in infinite loops.
-    // The initialDepsToOptimize map tracks already-analyzed dependencies to prevent re-analysis.
     // (Test will timeout if there's an infinite loop issue)
   });
 
@@ -323,24 +290,10 @@ describe('analyzeEntry', () => {
     expect(analyzeCache.size).toBe(1);
   });
 
-  it('should avoid re-analyzing sibling workspace packages that share a transitive dependency', async () => {
+  it('should discover shared transitive workspace packages from manifests without re-analyzing packages', async () => {
     const root = join(import.meta.dirname, '__fixtures__', 'nested-workspace');
     const entryFilePath = join(root, 'apps', 'mastra', 'src', 'shared-transitive.ts');
     vi.spyOn(process, 'cwd').mockReturnValue(join(root, 'apps', 'mastra'));
-
-    vi.mocked(resolveModule).mockImplementation(dep => {
-      if (dep === '@internal/a') {
-        return join(root, 'packages', 'a', 'src', 'index.ts');
-      }
-      if (dep === '@internal/b') {
-        return join(root, 'packages', 'b', 'src', 'index.ts');
-      }
-      if (dep === '@internal/shared') {
-        return join(root, 'packages', 'shared', 'src', 'index.ts');
-      }
-
-      return undefined;
-    });
 
     const workspaceMap = new Map<string, WorkspacePackageInfo>([
       [
@@ -384,10 +337,11 @@ describe('analyzeEntry', () => {
     const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
     const uncachedCalls = vi.mocked(rollup).mock.calls.length;
 
+    expect(uncachedCalls).toBe(1);
     expect(uncachedResult.dependencies.size).toBe(3);
     expect(uncachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(uncachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
-    expect(uncachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
+    expect(uncachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['*']);
 
     vi.mocked(rollup).mockClear();
 
@@ -398,12 +352,12 @@ describe('analyzeEntry', () => {
     });
     const cachedCalls = vi.mocked(rollup).mock.calls.length;
 
-    expect(cachedCalls).toBeLessThan(uncachedCalls);
+    expect(cachedCalls).toBe(uncachedCalls);
     expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
     expect(cachedResult.dependencies.get('@internal/a')?.exports).toEqual(['a']);
     expect(cachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
-    expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
-    expect(analyzeCache.size).toBe(3);
+    expect(cachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['*']);
+    expect(analyzeCache.size).toBe(1);
   });
 
   it('should not cache virtual file entries', async () => {

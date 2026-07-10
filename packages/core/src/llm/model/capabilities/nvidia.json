@@ -13,7 +13,6 @@
     "mistralai/mistral-large-3-675b-instruct-2512",
     "mistralai/mistral-medium-3-instruct",
     "mistralai/mistral-small-4-119b-2603",
-    "moonshotai/kimi-k2.6",
     "nvidia/active-speaker-detection",
     "nvidia/bevformer",
     "nvidia/cosmos-predict1-5b",
@@ -65,8 +64,6 @@
     "mistralai/mistral-small-4-119b-2603",
     "mistralai/mixtral-8x22b-instruct",
     "mistralai/mixtral-8x7b-instruct",
-    "moonshotai/kimi-k2-instruct-0905",
-    "moonshotai/kimi-k2.6",
     "nvidia/bevformer",
     "nvidia/gliner-pii",
     "nvidia/nemotron-3-nano-30b-a3b",
@@ -94,6 +91,6 @@
     "stepfun-ai/step-3.5-flash",
     "stepfun-ai/step-3.7-flash",
     "upstage/solar-10_7b-instruct",
-    "z-ai/glm-5.1"
+    "z-ai/glm-5.2"
   ]
 }

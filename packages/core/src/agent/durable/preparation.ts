@@ -9,6 +9,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { deepMerge } from '../../utils';
@@ -150,7 +151,7 @@ export interface PreparationResult<_OUTPUT = undefined> {
  * Options for preparation phase
  */
 export interface PreparationOptions<OUTPUT = undefined> {
-  /** The agent instance */
+  /** The agent instance (wrapped agent — used for config resolution: tools, model, instructions, memory) */
   agent: Agent<string, any, OUTPUT>;
   /** User messages to process */
   messages: MessageListInput;
@@ -166,6 +167,18 @@ export interface PreparationOptions<OUTPUT = undefined> {
   mastra?: Mastra;
   /** Method type */
   methodType?: AgentMethodType;
+  /**
+   * The public-facing agent ID (the DurableAgent wrapper's ID).
+   * Used for spans, background tasks, scorers, and all identification visible to Studio.
+   * Falls back to `agent.id` if not provided.
+   */
+  durableAgentId?: string;
+  /**
+   * The public-facing agent name (the DurableAgent wrapper's name).
+   * Used for spans, background tasks, scorers, and all identification visible to Studio.
+   * Falls back to `agent.name` if not provided.
+   */
+  durableAgentName?: string;
 }
 
 /**
@@ -195,7 +208,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger,
     mastra,
     methodType = 'stream',
+    durableAgentId,
+    durableAgentName,
   } = options;
+
+  // Public-facing identity: use the durable wrapper's ID/name for all
+  // external-facing identification (spans, background tasks, scorers, Studio).
+  // Fall back to the wrapped agent's ID/name when called outside the durable wrapper.
+  const publicAgentId = durableAgentId ?? agent.id;
+  const publicAgentName = durableAgentName ?? agent.name ?? agent.id;
 
   const typedAgent = agent as unknown as DurablePreparationAgent;
 
@@ -352,7 +373,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
     // processors are skipped by ProcessorRunner.runProcessLLMRequest.
     llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
-    outputProcessors = await typedAgent.listOutputProcessors(requestContext);
+    // Call-time outputProcessors replace constructor-level ones (parity with
+    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+    outputProcessors = execOptions?.outputProcessors
+      ? execOptions.outputProcessors
+      : await typedAgent.listOutputProcessors(requestContext);
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
@@ -371,10 +396,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
-    name: `agent run: '${agent.id}'`,
+    name: `agent run: '${publicAgentId}'`,
     entityType: EntityType.AGENT,
-    entityId: agent.id,
-    entityName: agent.name,
+    entityId: publicAgentId,
+    entityName: publicAgentName,
     input: messages,
     attributes: {
       conversationId: threadId,
@@ -395,7 +420,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext,
     mastra,
   });
-
   // Run processInput (once, before execution) if we have any processors.
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working
@@ -409,7 +433,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         outputProcessors,
         errorProcessors,
         logger: logger as any,
-        agentName: agent.name,
+        agentName: publicAgentName,
         processorStates,
       });
       await runner.runInputProcessors(
@@ -427,7 +451,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           processorId: error.processorId,
         };
         logger?.warn?.('Input processor tripwire triggered', {
-          agent: agent.name,
+          agent: publicAgentName,
           reason: error.message,
           processorId: error.processorId,
           retry: error.options?.retry,
@@ -552,8 +576,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
     runId,
-    agentId: agent.id,
-    agentName: agent.name,
+    agentId: publicAgentId,
+    agentName: publicAgentName,
     messageList,
     tools,
     model,
@@ -670,6 +694,18 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // workflow input so they never reach durable storage; the durable
     // llm-execution step reads them from this registry slot instead.
     callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
+    // Call-time structured output config with the live schema. The schema is
+    // non-serializable (Zod / standard-schema instance), so it lives on the
+    // in-process registry. The durable stream adapter reads it to pipe LLM
+    // text through `createObjectStreamTransformer`, producing `object-result`
+    // chunks. Cross-process engines lose this slot and structured output
+    // degrades to raw text.
+    structuredOutput: execOptions?.structuredOutput?.schema
+      ? {
+          ...execOptions.structuredOutput,
+          schema: toStandardSchema(execOptions.structuredOutput.schema),
+        }
+      : undefined,
     cleanup: () => {},
   };
 

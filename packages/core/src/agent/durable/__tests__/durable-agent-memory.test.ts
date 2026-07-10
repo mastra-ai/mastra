@@ -237,8 +237,10 @@ describe('DurableAgent memory configuration', () => {
       result.cleanup();
     });
 
-    it('should not persist messages when memory.options.readOnly is true', async () => {
+    it('does not persist messages when memory is readOnly', async () => {
       const mockMemory = new MockMemory();
+      await mockMemory.createThread({ threadId: 'thread-readonly', resourceId: 'resource-readonly' });
+
       const baseAgent = new Agent({
         id: 'readonly-persist-agent',
         name: 'ReadOnly Persist Agent',
@@ -263,7 +265,8 @@ describe('DurableAgent memory configuration', () => {
         resourceId: 'resource-readonly',
       });
 
-      expect(messages.messages).toHaveLength(0);
+      // readOnly means "read memory but do not save new messages".
+      expect(messages.messages).toEqual([]);
       result.cleanup();
     });
   });

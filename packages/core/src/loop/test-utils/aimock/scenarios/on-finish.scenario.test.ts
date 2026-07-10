@@ -114,5 +114,5 @@ describeForAllEngines(
       expect(toolResults!.length).toBeGreaterThan(0);
     });
   },
-  { skip: ['durable'] },
+  {},
 );

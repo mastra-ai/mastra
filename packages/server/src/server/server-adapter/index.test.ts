@@ -107,6 +107,35 @@ describe('custom route forwarding', () => {
       reason: 'no longer needed',
     });
   });
+
+  it('logs handler errors with method + path before returning the fallback 500', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [
+          {
+            path: '/explode',
+            method: 'GET',
+            handler: async () => {
+              throw new Error('kaboom');
+            },
+          },
+        ],
+      },
+    });
+    const adapter = new TestMastraServer({ app: {}, mastra });
+    const errorSpy = vi.spyOn(mastra.getLogger(), 'error');
+
+    await expect(adapter.buildCustomRouteHandlerForTest()).resolves.toBe(true);
+    const response = await adapter.handleCustomRouteRequestForTest('http://localhost/explode', 'GET', {}, undefined);
+
+    expect(response!.status).toBe(500);
+    await expect(response!.json()).resolves.toEqual({ error: 'Internal Server Error' });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    expect(errorSpy.mock.calls[0]![0]).toContain('GET /explode');
+    expect(errorSpy.mock.calls[0]![1]).toMatchObject({ method: 'GET', path: '/explode' });
+    expect(String((errorSpy.mock.calls[0]![1] as { error: string }).error)).toContain('kaboom');
+  });
 });
 
 describe('FGA Middleware - checkRouteFGA', () => {

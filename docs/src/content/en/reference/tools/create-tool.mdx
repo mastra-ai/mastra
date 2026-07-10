@@ -1,5 +1,5 @@
 ---
-title: "Reference: createTool() | Tools & MCP"
+title: "Reference: createTool() | Tools and MCP"
 description: Documentation for the `createTool()` function in Mastra, used to define custom tools for agents.
 packages:
   - "@mastra/core"
@@ -304,7 +304,7 @@ export const tool = createTool({
 ]}
 />
 
-Runtime-populated fields such as `mastra` and `mcpMetadata` appear in source types but are set by Mastra or MCP adapters. You do not need to configure them for ordinary `createTool()` usage.
+Runtime-populated fields such as `mastra` and `mcpMetadata` appear in source types but are set by Mastra or MCP adapters. You don't need to configure them for ordinary `createTool()` usage.
 
 ## Returns
 
@@ -677,7 +677,7 @@ Hook callbacks receive these source-backed parameter shapes:
 - `onInputStart`: Receives `ToolCallOptions`, including fields such as `toolCallId`, `messages`, and `abortSignal`.
 - `onInputDelta`: Receives `{ inputTextDelta: string } & ToolCallOptions`.
 - `onInputAvailable`: Receives `{ input: TSchemaIn } & ToolCallOptions`, where `input` is typed from `inputSchema`.
-- `onOutput`: Receives `{ output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>`, where `output` is typed from `outputSchema`. This hook does not receive `messages`.
+- `onOutput`: Receives `{ output: TSchemaOut; toolName: string } & Omit<ToolCallOptions, 'messages'>`, where `output` is typed from `outputSchema`. This hook doesn't receive `messages`.
 
 ### Error handling
 

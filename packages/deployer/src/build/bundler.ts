@@ -153,7 +153,7 @@ export async function getInputOptions(
       // },
       // },
       json(),
-      localStorageDetector(),
+      localStorageDetector(workspaceRoot || projectRoot),
       removeDeployer(entryFile, { sourcemap }),
       // treeshake unused imports
       esbuild({

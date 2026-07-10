@@ -52,7 +52,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`notifications.dispatch.enabled` registers an internal workflow with the default cron `*/1 * * * *`. The dispatcher reads due notification records from storage, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the agent thread runtime. It isn't a user-facing entrypoint.
+`notifications.dispatch.enabled` allows an internal dispatcher workflow to run with the default cron `*/1 * * * *`. The dispatcher reads due notification records from storage, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the agent thread runtime. It isn't a user-facing entrypoint. The dispatch schedule (and the workflow scheduler backing it) activates lazily on the first deferred or summarized notification, so apps that never defer notifications don't run a scheduler at all.
 
 ## Constructor parameters
 

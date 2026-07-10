@@ -6,8 +6,8 @@ import type { RequestContext } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { createTool } from '@mastra/core/tools';
 import type { NeedsApprovalFn, Tool } from '@mastra/core/tools';
-
-import type { JSONSchema7 } from '@mastra/schema-compat';
+import { toStandardSchema } from '@mastra/schema-compat';
+import type { JSONSchema7, StandardSchemaWithJSON } from '@mastra/schema-compat';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { getDefaultEnvironment, StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
@@ -22,6 +22,7 @@ import type {
   ListResourceTemplatesResult,
   LoggingLevel,
   ReadResourceResult,
+  ClientCapabilities,
 } from '@modelcontextprotocol/sdk/types.js';
 import {
   CallToolResultSchema,
@@ -33,6 +34,7 @@ import {
   ListPromptsResultSchema,
   GetPromptResultSchema,
   PromptListChangedNotificationSchema,
+  ToolListChangedNotificationSchema,
   ElicitRequestSchema,
   ProgressNotificationSchema,
   ListRootsRequestSchema,
@@ -221,6 +223,7 @@ export class InternalMastraMCPClient extends MastraBase {
   private sigHupHandler?: () => void;
   private serverInstructions?: string;
   private _roots: Root[];
+  private hasElicitationCapability: boolean;
   private readonly requireToolApproval: RequireToolApproval | undefined;
   private readonly onToolError: 'throw' | 'return';
 
@@ -255,15 +258,15 @@ export class InternalMastraMCPClient extends MastraBase {
 
     // Initialize roots from server config
     this._roots = server.roots ?? [];
+    this.hasElicitationCapability = capabilities.elicitation !== undefined;
 
     // Build client capabilities, automatically enabling roots if configured
     const hasRoots = this._roots.length > 0 || !!capabilities.roots;
-    const clientCapabilities = {
+    const clientCapabilities: ClientCapabilities = {
       ...capabilities,
-      // Merge elicitation capabilities instead of overwriting
-      elicitation: {
-        ...(capabilities.elicitation ?? {}),
-      },
+      // Only advertise elicitation when explicitly configured or when a handler
+      // registers it before connect(). `elicitation: {}` is legacy form support.
+      ...(capabilities.elicitation !== undefined ? { elicitation: { ...capabilities.elicitation } } : {}),
       // Auto-enable roots capability if roots are provided
       ...(hasRoots ? { roots: { listChanged: true, ...(capabilities.roots ?? {}) } } : {}),
       // Advertise MCP Apps extension support so servers know we can render UI resources
@@ -756,6 +759,17 @@ export class InternalMastraMCPClient extends MastraBase {
     });
   }
 
+  /**
+   * Register a handler to be called when the tool list changes on the server.
+   * Use this to re-fetch tools via `tools()` when notified.
+   */
+  setToolListChangedNotificationHandler(handler: () => void): void {
+    this.log('debug', 'Setting tool list changed notification handler');
+    this.client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+      handler();
+    });
+  }
+
   setResourceUpdatedNotificationHandler(handler: (params: any) => void): void {
     this.log('debug', 'Setting resource updated notification handler');
     this.client.setNotificationHandler(ResourceUpdatedNotificationSchema, (notification: any) => {
@@ -772,6 +786,18 @@ export class InternalMastraMCPClient extends MastraBase {
 
   setElicitationRequestHandler(handler: ElicitationHandler): void {
     this.log('debug', 'Setting elicitation request handler');
+    if (!this.hasElicitationCapability) {
+      try {
+        this.client.registerCapabilities({ elicitation: { form: {} } });
+        this.hasElicitationCapability = true;
+      } catch (error) {
+        throw new Error(
+          'Cannot register an elicitation handler after connecting unless elicitation capability was configured before initialization.',
+          { cause: error },
+        );
+      }
+    }
+
     this.client.setRequestHandler(ElicitRequestSchema, async request => {
       this.log('debug', `Received elicitation request: ${request.params.message}`);
       return handler(request.params);
@@ -789,6 +815,24 @@ export class InternalMastraMCPClient extends MastraBase {
     inputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['inputSchema'],
   ): Promise<JSONSchema7> {
     return ('jsonSchema' in inputSchema ? inputSchema.jsonSchema : inputSchema) as JSONSchema7;
+  }
+
+  /**
+   * Wraps the output schema with a validator that always succeeds. The MCP SDK validates
+   * structuredContent via AJV; the JSON schema is surfaced here for documentation only.
+   */
+  private convertOutputSchema(
+    outputSchema: Awaited<ReturnType<Client['listTools']>>['tools'][0]['outputSchema'],
+  ): StandardSchemaWithJSON | undefined {
+    if (!outputSchema) return outputSchema;
+    const schema = ('jsonSchema' in outputSchema ? outputSchema.jsonSchema : outputSchema) as JSONSchema7;
+    const standardSchema = toStandardSchema(schema)['~standard'];
+    return {
+      '~standard': {
+        ...standardSchema,
+        validate: value => ({ value }),
+      },
+    };
   }
 
   async tools(): Promise<Record<string, Tool<any, any, any, any>>> {
@@ -845,16 +889,13 @@ export class InternalMastraMCPClient extends MastraBase {
           id: `${this.name}_${tool.name}`,
           description: tool.description || '',
           inputSchema: await this.convertInputSchema(tool.inputSchema),
+          outputSchema: this.convertOutputSchema(tool.outputSchema),
           strict: getMastraToolStrictMeta(toolMeta),
           // Preserve the full _meta from the remote MCP server (including ui.resourceUri
           // for MCP Apps) so downstream consumers (e.g. Studio) can detect app tools.
           // Also propagate MCP tool annotations so listTools() / listToolsets() consumers
           // can read them via `tool.mcp.annotations`.
           ...mcpToolProps,
-          // Don't pass outputSchema to createTool — the MCP SDK's Client.callTool()
-          // already validates structuredContent against the tool's outputSchema using AJV.
-          // Passing it here causes Zod to strip unrecognized keys from the CallToolResult
-          // envelope, returning {} for tools without structuredContent.
           requireApproval,
           mcpMetadata: {
             serverName: this.name,

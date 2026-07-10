@@ -311,6 +311,25 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   },
 });
 
+/**
+ * Session `error` events carry an `Error` instance whose `message`/`name` are
+ * non-enumerable, so JSON serialization in the SSE adapter would send
+ * `"error": {}` and clients could only render a generic "Error". Flatten the
+ * Error into a plain object so the actual failure reaches the client.
+ */
+function toWireEvent(event: unknown): unknown {
+  if (
+    typeof event === 'object' &&
+    event !== null &&
+    (event as { type?: unknown }).type === 'error' &&
+    (event as { error?: unknown }).error instanceof Error
+  ) {
+    const error = (event as { error: Error }).error;
+    return { ...event, error: { name: error.name, message: error.message } };
+  }
+  return event;
+}
+
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:resourceId/stream',
@@ -376,7 +395,7 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
               // Enqueue the raw event object. The server adapter is responsible
               // for SSE framing (`data: <json>\n\n`); enqueuing a pre-framed
               // string here would double-encode it.
-              controller.enqueue(event);
+              controller.enqueue(toWireEvent(event));
               scheduleHeartbeat();
             } catch {
               cleanup();
@@ -409,11 +428,14 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, message }) => {
+  handler: async ({ mastra, controllerId, resourceId, message, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
-      void session.sendMessage({ content: message });
+      // Forward the server middleware's requestContext so identity injected in
+      // `server.middleware` reaches dynamic instructions and tools (same as the
+      // plain agent message route).
+      void session.sendMessage({ content: message, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
@@ -456,7 +478,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, toolCallId, approved }) => {
+  handler: async ({ mastra, controllerId, resourceId, toolCallId, approved, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
@@ -465,7 +487,7 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
       // Calling approveToolCall/declineToolCall directly would bypass the gate,
       // leaving the run loop hung and duplicating the resumed stream.
       // Pass toolCallId so a stale request cannot resolve a different pending gate.
-      session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline' });
+      session.respondToToolApproval({ toolCallId, decision: approved ? 'approve' : 'decline', requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to controller tool approval');
@@ -486,11 +508,11 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, toolCallId, resumeData }) => {
+  handler: async ({ mastra, controllerId, resourceId, toolCallId, resumeData, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
-      await session.respondToToolSuspension({ toolCallId, resumeData });
+      await session.respondToToolSuspension({ toolCallId, resumeData, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error responding to controller tool suspension');
@@ -510,11 +532,11 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, message }) => {
+  handler: async ({ mastra, controllerId, resourceId, message, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
-      void session.steer({ content: message });
+      void session.steer({ content: message, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error steering controller session');
@@ -960,11 +982,11 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, message }) => {
+  handler: async ({ mastra, controllerId, resourceId, message, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId);
-      void session.followUp({ content: message });
+      void session.followUp({ content: message, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error queuing controller follow-up');

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.49.0-alpha.4",
+  "version": "1.51.0-alpha.4",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -419,6 +419,16 @@
       "require": {
         "types": "./dist/schema/index.d.ts",
         "default": "./dist/schema/index.cjs"
+      }
+    },
+    "./schedules": {
+      "import": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.js"
+      },
+      "require": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.cjs"
       }
     },
     "./skills": {

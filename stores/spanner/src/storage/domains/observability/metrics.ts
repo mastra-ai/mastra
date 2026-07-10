@@ -810,7 +810,9 @@ export async function batchCreateMetrics(database: Database, args: BatchCreateMe
           tx.insert(TABLE_AI_METRICS, rows);
           await tx.commit();
         } catch (err) {
-          await tx.rollback().catch(() => {});
+          await tx.rollback().catch(rollbackErr => {
+            throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+          });
           throw err;
         }
       });
@@ -836,10 +838,14 @@ async function runWithAbortRetry<T>(fn: () => Promise<T>): Promise<T> {
       return await fn();
     } catch (error: unknown) {
       attempt++;
+      let checkError = error;
+      if (checkError instanceof AggregateError && checkError.errors.length > 0) {
+        checkError = checkError.errors[0];
+      }
       const aborted =
-        !!error &&
-        ((error as { code?: number }).code === 10 ||
-          /ABORTED/i.test(String((error as { message?: unknown })?.message ?? '')));
+        !!checkError &&
+        ((checkError as { code?: number }).code === 10 ||
+          /ABORTED/i.test(String((checkError as { message?: unknown })?.message ?? '')));
       if (!aborted || attempt >= maxAttempts) throw error;
       await new Promise(resolve => setTimeout(resolve, delay + Math.random() * delay));
       delay *= 2;
@@ -1491,7 +1497,9 @@ export async function clearMetrics(database: Database): Promise<void> {
       });
       await tx.commit();
     } catch (err) {
-      await tx.rollback().catch(() => {});
+      await tx.rollback().catch(rollbackErr => {
+        throw new AggregateError([err, rollbackErr], 'Transaction and rollback both failed');
+      });
       throw err;
     }
   });

@@ -20,7 +20,7 @@ import { logger } from 'hono/logger';
 import { timeout } from 'hono/timeout';
 import { describeRoute } from 'hono-openapi';
 import type { DescribeRouteOptions } from 'hono-openapi';
-import { injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
+import { escapeStudioHtmlValue, injectStudioHtmlConfig, normalizeStudioBase } from '../build/utils';
 import { handleClientsRefresh, handleTriggerClientsRefresh, isHotReloadDisabled } from './handlers/client';
 import { errorHandler } from './handlers/error';
 import { healthHandler } from './handlers/health';
@@ -476,19 +476,6 @@ export async function createHonoServer(
       const platformObservabilityEndpoint = process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '';
       const requestContextPresets = process.env.MASTRA_REQUEST_CONTEXT_PRESETS || '';
 
-      // Helper function to escape JSON for embedding in HTML/JavaScript
-      const escapeForHtml = (json: string): string => {
-        return json
-          .replace(/\\/g, '\\\\')
-          .replace(/'/g, "\\'")
-          .replace(/\n/g, '\\n')
-          .replace(/\r/g, '\\r')
-          .replace(/</g, '\\u003c')
-          .replace(/>/g, '\\u003e')
-          .replace(/\u2028/g, '\\u2028')
-          .replace(/\u2029/g, '\\u2029');
-      };
-
       const autoDetectUrl = process.env.MASTRA_AUTO_DETECT_URL === 'true';
 
       indexHtml = injectStudioHtmlConfig(indexHtml, {
@@ -498,17 +485,17 @@ export async function createHonoServer(
         apiPrefix: `'${serverOptions?.apiPrefix ?? '/api'}'`,
         basePath: studioBasePath,
         hideCloudCta: `'${hideCloudCta}'`,
-        cloudApiEndpoint: `'${cloudApiEndpoint}'`,
+        cloudApiEndpoint: `'${escapeStudioHtmlValue(cloudApiEndpoint)}'`,
         experimentalFeatures: `'${experimentalFeatures}'`,
         templates: `'${templatesEnabled}'`,
-        telemetryDisabled: `'${process.env.MASTRA_TELEMETRY_DISABLED ?? ''}'`,
-        requestContextPresets: `'${escapeForHtml(requestContextPresets)}'`,
+        telemetryDisabled: `'${escapeStudioHtmlValue(process.env.MASTRA_TELEMETRY_DISABLED ?? '')}'`,
+        requestContextPresets: `'${escapeStudioHtmlValue(requestContextPresets)}'`,
         experimentalUI: `'${experimentalUI}'`,
         agentSignals: `'${agentSignals}'`,
         signalsUI: `'${signalsUI}'`,
-        organizationId: `'${escapeForHtml(organizationId)}'`,
-        platformProjectId: `'${escapeForHtml(platformProjectId)}'`,
-        platformObservabilityEndpoint: `'${escapeForHtml(platformObservabilityEndpoint)}'`,
+        organizationId: `'${escapeStudioHtmlValue(organizationId)}'`,
+        platformProjectId: `'${escapeStudioHtmlValue(platformProjectId)}'`,
+        platformObservabilityEndpoint: `'${escapeStudioHtmlValue(platformObservabilityEndpoint)}'`,
         autoDetectUrl: `'${autoDetectUrl}'`,
       });
 
@@ -620,6 +607,9 @@ export async function createNodeServer(mastra: Mastra, options: ServerBundleOpti
   // Dynamic import keeps compatibility with older @mastra/core versions without the
   // `@mastra/core/telemetry` entry point.
   void import('@mastra/core/telemetry').then(({ syncUsageTelemetry }) => syncUsageTelemetry(mastra)).catch(() => {});
+  void import('@mastra/core/telemetry')
+    .then(({ syncFeatureUsageTelemetry }) => syncFeatureUsageTelemetry(mastra))
+    .catch(() => {});
 
   // Graceful shutdown so storage backends release resources (e.g. DuckDB's
   // native file lock) before the process exits. On `mastra dev` hot reloads

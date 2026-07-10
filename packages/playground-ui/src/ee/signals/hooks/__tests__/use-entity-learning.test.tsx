@@ -6,11 +6,11 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { entitiesResponse, pointsResponse, topicsResponse } from '../../services/__tests__/fixtures/entity-learning';
-import { useEntities, useEntityPoints, useEntityTopics } from '../use-entity-learning';
+import { entitiesResponse, topicsResponse } from '../../services/__tests__/fixtures/entity-learning';
+import { useEntities, useEntityTopics } from '../use-entity-learning';
 
 const BASE_URL = 'https://observability.test';
-const ROOT = `${BASE_URL}/entity-learning`;
+const ROOT = `${BASE_URL}/api/learning`;
 
 const server = setupServer();
 
@@ -30,7 +30,9 @@ function wrapper({ children }: { children: ReactNode }) {
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
 
 beforeEach(() => {
-  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = BASE_URL;
+  // The injected endpoint is the trace-ingest URL; the client must derive
+  // the query-service origin from it and call /api/learning on that origin.
+  w.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT = `${BASE_URL}/v1/traces`;
   w.MASTRA_ORGANIZATION_ID = 'org-1';
   w.MASTRA_PLATFORM_PROJECT_ID = 'proj-1';
 });
@@ -130,27 +132,6 @@ describe('entity-learning hooks', () => {
         expect(result.current.fetchStatus).toBe('idle');
         expect(onTopics).not.toHaveBeenCalled();
       });
-    });
-  });
-
-  describe('useEntityPoints', () => {
-    it('forwards includeOutliers to the request', async () => {
-      let capturedUrl: URL | undefined;
-      server.use(
-        http.get(`${ROOT}/entities/:entityId/points`, ({ request }) => {
-          capturedUrl = new URL(request.url);
-          return HttpResponse.json(pointsResponse);
-        }),
-      );
-
-      const { result } = renderHook(
-        () => useEntityPoints('entity_support', { signalName: 'sentiment', runId: '32', includeOutliers: true }),
-        { wrapper },
-      );
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(capturedUrl?.searchParams.get('includeOutliers')).toBe('true');
-      expect(capturedUrl?.searchParams.get('organizationId')).toBe('org-1');
     });
   });
 });

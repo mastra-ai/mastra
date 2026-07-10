@@ -30,6 +30,12 @@ export interface DiscoveredFsAgent {
   workspaceSeedDir?: string;
   /** Tools discovered under `tools/`, in stable (sorted) order. */
   tools: { key: string; path: string }[];
+  /** Input processors discovered under `processors/input/`, in stable (sorted) order. */
+  inputProcessors: { key: string; path: string }[];
+  /** Output processors discovered under `processors/output/`, in stable (sorted) order. */
+  outputProcessors: { key: string; path: string }[];
+  /** Scorers discovered under `scorers/`, in stable (sorted) order. */
+  scorers: { key: string; path: string }[];
   /** Skills discovered under `skills/`, in stable (sorted) order. */
   skills: DiscoveredFsSkill[];
   /**
@@ -126,19 +132,26 @@ function toolKey(basename: string): string {
   return basename.replace(/\.(ts|js)$/, '');
 }
 
-async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools']> {
-  if (!(await exists(toolsDir))) {
+/**
+ * Discover default-exporting `.ts`/`.js` modules directly under `dir`, returning
+ * `{ key, path }` entries in stable (sorted) order. Test files, symlinks, and
+ * subdirectories are skipped: a symlinked module could point anywhere on the
+ * build machine and be embedded into generated import code. Shared by the
+ * `tools/` and `scorers/` scanners.
+ */
+async function discoverModuleDir(dir: string): Promise<{ key: string; path: string }[]> {
+  if (!(await exists(dir))) {
     return [];
   }
 
   let entries: string[];
   try {
-    entries = await readdir(toolsDir);
+    entries = await readdir(dir);
   } catch {
     return [];
   }
 
-  const tools: DiscoveredFsAgent['tools'] = [];
+  const modules: { key: string; path: string }[] = [];
   for (const basename of entries.sort()) {
     if (isTestFile(basename)) {
       continue;
@@ -146,18 +159,59 @@ async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools
     if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
       continue;
     }
-    const path = join(toolsDir, basename);
+    const path = join(dir, basename);
     // Use lstat so symlinks are detected (not followed). Skip symlinks and
-    // directories: a symlinked tool file could point anywhere on the build
+    // directories: a symlinked module file could point anywhere on the build
     // machine and be embedded into generated import code.
     const stats = await lstat(path);
     if (stats.isSymbolicLink() || stats.isDirectory()) {
       continue;
     }
-    tools.push({ key: toolKey(basename), path: slash(path) });
+    modules.push({ key: toolKey(basename), path: slash(path) });
   }
 
-  return tools;
+  return modules;
+}
+
+async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools']> {
+  return discoverModuleDir(toolsDir);
+}
+
+async function discoverProcessors(
+  processorsDir: string,
+): Promise<{ input: { key: string; path: string }[]; output: { key: string; path: string }[] }> {
+  const result = { input: [] as { key: string; path: string }[], output: [] as { key: string; path: string }[] };
+
+  for (const type of ['input', 'output'] as const) {
+    const typeDir = join(processorsDir, type);
+    if (!(await exists(typeDir))) {
+      continue;
+    }
+
+    let entries: string[];
+    try {
+      entries = await readdir(typeDir);
+    } catch {
+      continue;
+    }
+
+    for (const basename of entries.sort()) {
+      if (isTestFile(basename)) {
+        continue;
+      }
+      if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
+        continue;
+      }
+      const path = join(typeDir, basename);
+      const stats = await lstat(path);
+      if (stats.isSymbolicLink() || stats.isDirectory()) {
+        continue;
+      }
+      result[type].push({ key: toolKey(basename), path: slash(path) });
+    }
+  }
+
+  return result;
 }
 
 async function readReferences(referencesDir: string): Promise<Record<string, string>> {
@@ -194,7 +248,16 @@ async function parsePackagedSkill(
   const parsed = matter(raw);
   const frontmatter = parsed.data as { name?: string; description?: string };
   const name = frontmatter.name ?? fallbackName;
-  const description = frontmatter.description ?? '';
+  const description = frontmatter.description;
+
+  if (!description) {
+    throw new Error(
+      `Skill "${name}" in ${skillMdPath} is missing a required "description". ` +
+        `Add a YAML frontmatter block with a "description:" field. ` +
+        `See https://agentskills.io/specification for the SKILL.md format.`,
+    );
+  }
+
   const instructions = parsed.content.trim();
   return { kind: 'packaged', name, description, instructions, references };
 }
@@ -286,6 +349,8 @@ async function discoverAgentDir(
   const memoryPath = await firstExisting(dir, MEMORY_BASENAMES);
   const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
   const tools = await discoverTools(join(dir, 'tools'));
+  const processors = await discoverProcessors(join(dir, 'processors'));
+  const scorers = await discoverModuleDir(join(dir, 'scorers'));
   const skills = await discoverSkills(join(dir, 'skills'));
   const subagents = await discoverSubagents(dir, depth, onWarn);
 
@@ -298,6 +363,9 @@ async function discoverAgentDir(
     memoryPath,
     workspaceSeedDir,
     tools,
+    inputProcessors: processors.input,
+    outputProcessors: processors.output,
+    scorers,
     skills,
     subagents,
   };
@@ -385,4 +453,116 @@ export async function discoverFsAgents(
   }
 
   return discovered;
+}
+
+/**
+ * A file-system routed workflow file discovered under `<mastraDir>/workflows/`.
+ * All paths are absolute and slash-normalized so they can be embedded into
+ * generated module source on any platform.
+ */
+export interface DiscoveredFsWorkflow {
+  /** Workflow key derived from the filename (without extension). */
+  key: string;
+  /** Absolute, slash-normalized path to the workflow module. */
+  path: string;
+}
+
+/**
+ * Scan `<mastraDir>/workflows/` for file-system routed workflow modules. Only
+ * files whose source contains an `export default` are treated as fs-routed
+ * workflows — this convention distinguishes them from workflow files that are
+ * manually imported and registered programmatically. Returns descriptors with
+ * absolute, slash-normalized paths ready for codegen. Performs no module
+ * evaluation — only filesystem and source-text inspection.
+ */
+export async function discoverFsWorkflows(mastraDir: string): Promise<DiscoveredFsWorkflow[]> {
+  const workflowsDir = join(mastraDir, 'workflows');
+  if (!(await exists(workflowsDir))) {
+    return [];
+  }
+
+  let entries: string[];
+  try {
+    entries = await readdir(workflowsDir);
+  } catch {
+    return [];
+  }
+
+  const discovered: DiscoveredFsWorkflow[] = [];
+  for (const basename of entries.sort()) {
+    if (isTestFile(basename)) {
+      continue;
+    }
+    if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
+      continue;
+    }
+    const path = join(workflowsDir, basename);
+    const stats = await lstat(path);
+    if (stats.isSymbolicLink() || stats.isDirectory()) {
+      continue;
+    }
+    // Convention: only files with `export default` are fs-routed workflows.
+    // Files using named exports are assumed to be manually imported.
+    const source = await readFile(path, 'utf-8');
+    if (!/\bexport\s+default\b/.test(source)) {
+      continue;
+    }
+    discovered.push({ key: toolKey(basename), path: slash(path) });
+  }
+
+  return discovered;
+}
+
+/**
+ * A discovered singleton config file under `<mastraDir>/`. All paths are
+ * absolute and slash-normalized so they can be embedded into generated module
+ * source on any platform.
+ */
+export interface DiscoveredFsSingleton {
+  /** Absolute, slash-normalized path to the singleton module. */
+  path: string;
+}
+
+const SINGLETON_EXTENSIONS = ['.ts', '.js', '.mts', '.mjs'];
+
+/** Safe singleton identifier: no path separators, `..`, or other traversal. */
+const SINGLETON_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Check for a singleton config file (e.g. `storage.ts`, `storage.js`) directly
+ * under `<mastraDir>`. Returns the first matching file path or `undefined`.
+ * Symlinks are rejected for security.
+ *
+ * Convention: only files with `export default` are fs-routed singletons. Files
+ * using named exports are assumed to be manually imported into the user's
+ * `index.ts`, so they are ignored to remain backward-compatible with existing
+ * project structures.
+ *
+ * `name` must be a bare identifier — path separators and traversal sequences are
+ * rejected so the lookup can never escape `<mastraDir>`.
+ */
+export async function discoverFsSingleton(mastraDir: string, name: string): Promise<DiscoveredFsSingleton | undefined> {
+  if (!SINGLETON_NAME_PATTERN.test(name)) {
+    throw new Error(`Invalid fs-singleton name ${JSON.stringify(name)}: expected a bare identifier.`);
+  }
+
+  for (const ext of SINGLETON_EXTENSIONS) {
+    const candidate = join(mastraDir, `${name}${ext}`);
+    try {
+      const stats = await lstat(candidate);
+      if (!stats.isFile() || stats.isSymbolicLink()) {
+        continue;
+      }
+      const source = await readFile(candidate, 'utf-8');
+      // Only files with a default export are fs-routed. A named-export file with
+      // this name is user-managed, so skip it and keep scanning other extensions.
+      if (!/\bexport\s+default\b/.test(source)) {
+        continue;
+      }
+      return { path: slash(candidate) };
+    } catch {
+      // not present
+    }
+  }
+  return undefined;
 }

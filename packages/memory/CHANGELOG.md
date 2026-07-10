@@ -1,5 +1,100 @@
 # @mastra/memory
 
+## 1.23.0-alpha.3
+
+### Patch Changes
+
+- Fixed a "Converting circular structure to JSON" crash when Observational Memory was used with an input or output processor composed as a workflow (the "run guardrails in parallel" pattern). ([#17949](https://github.com/mastra-ai/mastra/pull/17949))
+
+  The circular data reached the processor workflow's snapshot and broke storage: PostgreSQL threw, and LibSQL saved a corrupted snapshot. Observational Memory now keeps its runtime data in a serializable form, so workflow-composed processors work with it and snapshots persist correctly.
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+
+## 1.23.0-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/schema-compat@1.3.4-alpha.1
+
+## 1.23.0-alpha.1
+
+### Minor Changes
+
+- Added one-shot conversation summarization: a standalone `summarizeConversation()` function and a `Memory.summarizeThread()` method. Both distill a whole conversation with the same Observer plumbing that powers Observational Memory — without Observational Memory attached to an agent, and without writing anything back to memory. The summary and extracted values are returned to you (and to each extractor's `onExtracted` hook), so you decide where they go. ([#19135](https://github.com/mastra-ai/mastra/pull/19135))
+
+  ```ts
+  import { Extractor } from '@mastra/memory';
+  import { z } from 'zod';
+
+  // e.g. in an end-of-call or end-of-session hook
+  const result = await memory.summarizeThread({
+    model: 'openai/gpt-5-mini',
+    threadId,
+    resourceId,
+    instructions: 'Summarize this voicemail call for the business owner.',
+    extract: [
+      new Extractor({
+        name: 'call-summary',
+        instructions: 'Return a concise summary of the call.',
+        schema: z.object({
+          summary: z.string(),
+          sentiment: z.enum(['positive', 'neutral', 'negative']),
+        }),
+        metadataKeyPath: false,
+        onExtracted: async ({ current, threadId, resourceId }) => {
+          await callRecords.upsert({ callId: threadId, callerId: resourceId, record: current });
+        },
+      }),
+    ],
+  });
+  ```
+
+  `summarizeConversation({ model, messages, instructions, extract })` takes the same options with messages you already have in hand instead of a `threadId`.
+
+  `summarizeThread` loads the thread's messages page-by-page starting from the newest, and accepts `lastMessages` (only summarize the last N messages) and `maxInputTokens` (stop loading older messages past this estimated token count, default 1,000,000) to bound how much history is read from storage.
+
+  **Why:** session-based agents (for example voice calls) often need a summary or structured extraction of the finished conversation — sentiment, requested services, follow-ups — stored in the application's own database. Observational Memory's observer and extractors are built for exactly this distillation, but attaching OM to an agent just to summarize at session end forces the whole observe/activate lifecycle onto a use case that doesn't need it. These APIs expose the summarization/extraction logic directly.
+
+### Patch Changes
+
+- Improved memory integration coverage for AI SDK v6 models and stabilized replayed semantic recall tests. ([#19133](https://github.com/mastra-ai/mastra/pull/19133))
+
+## 1.22.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+  - @mastra/core@1.50.2-alpha.1
+
+## 1.22.2
+
+### Patch Changes
+
+- Fixed the recall tool throwing "Either cursor or threadId is required" when browsing messages with thread-scoped retrieval. In thread scope, the tool now falls back to the current thread when no cursor is given, and error messages explain how to proceed when no thread context can be resolved. ([#19065](https://github.com/mastra-ai/mastra/pull/19065))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/core@1.50.1
+
+## 1.22.2-alpha.0
+
+### Patch Changes
+
+- Fixed the recall tool throwing "Either cursor or threadId is required" when browsing messages with thread-scoped retrieval. In thread scope, the tool now falls back to the current thread when no cursor is given, and error messages explain how to proceed when no thread context can be resolved. ([#19065](https://github.com/mastra-ai/mastra/pull/19065))
+
+## 1.22.1
+
+### Patch Changes
+
+- Fixed observational memory token counting when recalled messages include a declined tool approval. Memory processing no longer errors on those messages. ([#18583](https://github.com/mastra-ai/mastra/pull/18583))
+
+- Updated dependencies [[`700619b`](https://github.com/mastra-ai/mastra/commit/700619b61d572e592cbaaf758121d168844ca4d2), [`0f69865`](https://github.com/mastra-ai/mastra/commit/0f69865aced225d98eac812e22699dc445ee18cb), [`9250acd`](https://github.com/mastra-ai/mastra/commit/9250acd1357f0f1f33d0dcca16f9655084c58eca), [`0c3d4bc`](https://github.com/mastra-ai/mastra/commit/0c3d4bcae13ea3699d379403e6f350d5cf4efe9f), [`cc440a3`](https://github.com/mastra-ai/mastra/commit/cc440a39400d8ce06655462b26c1666a1b3d4320), [`6a61846`](https://github.com/mastra-ai/mastra/commit/6a61846eeda29fb714549b70f1bee2bf6b141c44), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`17369b2`](https://github.com/mastra-ai/mastra/commit/17369b25250561e9ed994ae509be1d15bfb33bcb), [`c64c2a8`](https://github.com/mastra-ai/mastra/commit/c64c2a8503a50252f9ca6b8e8c54cadee31b92a2), [`bcae929`](https://github.com/mastra-ai/mastra/commit/bcae929945cbf265bd9f327cc715ecafa072b5b9), [`ea6327b`](https://github.com/mastra-ai/mastra/commit/ea6327ba2d63ca647804bc97b347e03a58617162), [`3439fa8`](https://github.com/mastra-ai/mastra/commit/3439fa836ecfcaa257b40c20b30ac2a8be22e9ea), [`85107f2`](https://github.com/mastra-ai/mastra/commit/85107f2758b527147fccbedff962961927c2d3b8), [`b33822e`](https://github.com/mastra-ai/mastra/commit/b33822e8d470884954b02f7b0745407ee4ef74b1), [`06e2680`](https://github.com/mastra-ai/mastra/commit/06e26806b51d2cbd858afdc66daa2b86ff3ba64a), [`1042cb4`](https://github.com/mastra-ai/mastra/commit/1042cb4da227c0a1315a6362262be3058866c5f8), [`06ff9e0`](https://github.com/mastra-ai/mastra/commit/06ff9e0befd1d642ab87ff749285ee4091205c7e), [`d5c11e3`](https://github.com/mastra-ai/mastra/commit/d5c11e3ba5045969caa7272a7bd1fd141c93ab6c), [`7f5e1ff`](https://github.com/mastra-ai/mastra/commit/7f5e1ff695a92f672bb3976363925d1e9136b54a), [`ff80671`](https://github.com/mastra-ai/mastra/commit/ff8067185e208b27198b4e5b71803013175c3643), [`b8375c1`](https://github.com/mastra-ai/mastra/commit/b8375c1f8fe905df8ae2ae9a893bb365f17aec4e), [`dab1257`](https://github.com/mastra-ai/mastra/commit/dab1257b64e4ed576dc5038bb7a3f7072338bc9f), [`1240f05`](https://github.com/mastra-ai/mastra/commit/1240f051c8e5371f1c014448bf37b1a1b9a05e47), [`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed), [`e6fbd5b`](https://github.com/mastra-ai/mastra/commit/e6fbd5bfdc28e92c0c0433f29aa1bc152d3430f6), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`6f2026c`](https://github.com/mastra-ai/mastra/commit/6f2026cdf114ff1e21e49133ca774ec7d5085059), [`24c10d3`](https://github.com/mastra-ai/mastra/commit/24c10d333e6649ac06075903aeeee13a933db3b3), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`215f9b0`](https://github.com/mastra-ai/mastra/commit/215f9b0f3f3f6fc165edad360582dd4d3d7ea748), [`003f35d`](https://github.com/mastra-ai/mastra/commit/003f35d19e07b23b4bacc591c8bc0c59b42124ae), [`f890eda`](https://github.com/mastra-ai/mastra/commit/f890eda2c8a2ae83d9b30bc6d85842f93b6c266b), [`1340fb7`](https://github.com/mastra-ai/mastra/commit/1340fb76262a3ca062130aa71859f07257a0a5a4)]:
+  - @mastra/core@1.49.0
+  - @mastra/schema-compat@1.3.3
+
 ## 1.22.1-alpha.1
 
 ### Patch Changes

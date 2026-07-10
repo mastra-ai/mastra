@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/docs/agents/channels",
+      "destination": "/docs/capabilities/channels/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -86,6 +91,46 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/adding-voice",
+      "destination": "/docs/voice/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/durable-agents",
+      "destination": "/docs/long-running-agents/durable-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/goals",
+      "destination": "/docs/long-running-agents/goals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signal-providers",
+      "destination": "/docs/long-running-agents/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signals",
+      "destination": "/docs/long-running-agents/signals",
+      "permanent": true
+    },
+    {
       "source": "/examples/memory/working-memory-schema",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
       "permanent": true
@@ -107,7 +152,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -322,7 +367,7 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -507,7 +552,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -532,7 +577,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -797,7 +842,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
       "permanent": true
     },
     {
@@ -838,6 +883,61 @@
     {
       "source": "/reference/harness/session",
       "destination": "/reference/agent-controller/session",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/contributing-templates",
+      "destination": "https://mastra.ai/templates",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/discord",
+      "destination": "https://discord.gg/BTYqqHKUrf",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing",
+      "destination": "/docs/license",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel",
+      "destination": "/reference/workspace/vercel-serverless",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-microvm-sandbox",
+      "destination": "/reference/workspace/vercel-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools/overview",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/model-providers",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/getting-started/file-based-agents",
       "permanent": true
     }
   ]

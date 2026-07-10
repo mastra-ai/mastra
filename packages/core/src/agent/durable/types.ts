@@ -33,7 +33,7 @@ import type { MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
-import type { GoalConfig } from '../types';
+import type { GoalConfig, StructuredOutputOptions } from '../types';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -321,6 +321,10 @@ export interface DurableLLMStepOutput {
   stepSpanData?: unknown;
   /** Step finish payload data for closing step span later */
   stepFinishPayload?: unknown;
+  /** Deferred step-finish chunk for intermediate steps.
+   *  llm-execution defers emission so llm-mapping can emit it AFTER tool-result
+   *  chunks, matching the regular agent's chunk ordering. */
+  deferredStepFinishChunk?: unknown;
 }
 
 /**
@@ -731,6 +735,15 @@ export interface RunRegistryEntry {
    * variables.
    */
   callTimeHeaders?: Record<string, string>;
+  /**
+   * Call-time structured output configuration (with live schema). The schema
+   * is non-serializable (Zod/standard schema instance), so it lives only on
+   * the in-process registry. The durable stream adapter reads it to configure
+   * `MastraModelOutput`'s `createObjectStreamTransformer`, which parses LLM
+   * text into `object-result` chunks. Cross-process engines lose this slot
+   * and structured output degrades to raw text.
+   */
+  structuredOutput?: StructuredOutputOptions;
 }
 
 /**

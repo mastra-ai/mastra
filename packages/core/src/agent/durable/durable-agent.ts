@@ -6,11 +6,12 @@ import type { PubSub } from '../../events/pubsub';
 import type { Mastra } from '../../mastra';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
 import type { FullOutput, MastraModelOutput } from '../../stream/base/output';
-import type { ChunkType } from '../../stream/types';
+import type { ChunkType, MastraOnFinishCallback } from '../../stream/types';
 import { ChunkFrom } from '../../stream/types';
 import { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { MessageListInput } from '../message-list';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { ToolsInput } from '../types';
 
 import { AGENT_STREAM_TOPIC } from './constants';
@@ -18,12 +19,7 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import { prepareForDurableExecution } from './preparation';
 import { endRunSpansWithError, ExtendedRunRegistry, globalRunRegistry } from './run-registry';
 import { createDurableAgentStream, emitChunkEvent, emitErrorEvent } from './stream-adapter';
-import type {
-  AgentFinishEventData,
-  AgentStepFinishEventData,
-  AgentSuspendedEventData,
-  DurableAgenticWorkflowInput,
-} from './types';
+import type { AgentStepFinishEventData, AgentSuspendedEventData, DurableAgenticWorkflowInput } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 
 /**
@@ -87,10 +83,10 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   /** Callback when step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-  /** Callback when execution finishes */
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  /** Callback when execution finishes — receives rich step data (text, steps, toolResults) */
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback on error */
-  onError?: (error: Error) => void | Promise<void>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends (e.g., for tool approval) */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal */
@@ -436,29 +432,235 @@ export class DurableAgent<
     return this.#cleanupTimeoutMs;
   }
 
+  // ===========================================================================
   // Delegate Agent methods to wrapped agent
+  //
+  // DurableAgent's super() only passes id, name, instructions, and model.
+  // All other private fields (#tools, #memory, #workspace, #processors, etc.)
+  // are empty on the DurableAgent instance. Every public/protected method that
+  // reads those fields must be overridden to delegate to the wrapped agent.
+  // ===========================================================================
+
+  // --- Model & LLM ---
   override getModel(options?: any) {
     return this.#wrappedAgent.getModel(options);
   }
 
+  override getLLM(options?: any) {
+    return this.#wrappedAgent.getLLM(options);
+  }
+
+  override async getModelList(requestContext?: any) {
+    return this.#wrappedAgent.getModelList(requestContext);
+  }
+
+  // --- Instructions, description, metadata ---
   override getInstructions(options?: any) {
     return this.#wrappedAgent.getInstructions(options);
   }
 
-  override getDefaultOptions(options?: any) {
-    return this.#wrappedAgent.getDefaultOptions(options);
+  override getDescription() {
+    return this.#wrappedAgent.getDescription();
   }
 
+  override getMetadata(options?: any) {
+    return this.#wrappedAgent.getMetadata(options);
+  }
+
+  override getTracingPolicy() {
+    return this.#wrappedAgent.getTracingPolicy();
+  }
+
+  // --- Tools ---
   override listTools(options?: any) {
     return this.#wrappedAgent.listTools(options);
   }
 
-  override getMemory() {
-    return this.#wrappedAgent.getMemory();
+  override getConfiguredToolHooks() {
+    return this.#wrappedAgent.getConfiguredToolHooks();
   }
 
-  override getVoice() {
-    return this.#wrappedAgent.getVoice();
+  // --- Default options ---
+  override getDefaultOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultOptions(options);
+  }
+
+  override getDefaultGenerateOptionsLegacy(options?: any) {
+    return this.#wrappedAgent.getDefaultGenerateOptionsLegacy(options);
+  }
+
+  override getDefaultStreamOptionsLegacy(options?: any) {
+    return this.#wrappedAgent.getDefaultStreamOptionsLegacy(options);
+  }
+
+  override getDefaultNetworkOptions(options?: any) {
+    return this.#wrappedAgent.getDefaultNetworkOptions(options);
+  }
+
+  // --- Memory ---
+  override getMemory(options?: any) {
+    return this.#wrappedAgent.getMemory(options);
+  }
+
+  override hasOwnMemory(): boolean {
+    return this.#wrappedAgent.hasOwnMemory();
+  }
+
+  // --- Workspace ---
+  override getWorkspace(options?: any) {
+    return this.#wrappedAgent.getWorkspace(options);
+  }
+
+  override hasOwnWorkspace(): boolean {
+    return this.#wrappedAgent.hasOwnWorkspace?.() ?? false;
+  }
+
+  // --- Voice ---
+  override getVoice(options?: any) {
+    return this.#wrappedAgent.getVoice(options);
+  }
+
+  override get voice() {
+    return this.#wrappedAgent.voice;
+  }
+
+  // --- Request context ---
+  override get requestContextSchema() {
+    return this.#wrappedAgent.requestContextSchema;
+  }
+
+  // --- Processors ---
+  override async getConfiguredProcessorWorkflows() {
+    return this.#wrappedAgent.getConfiguredProcessorWorkflows();
+  }
+
+  override async listInputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listInputProcessors(requestContext);
+  }
+
+  override async listOutputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listOutputProcessors(requestContext);
+  }
+
+  override async listErrorProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listErrorProcessors(requestContext);
+  }
+
+  override async resolveProcessorById<TId extends string = string>(processorId: TId, requestContext?: any) {
+    return this.#wrappedAgent.resolveProcessorById(processorId, requestContext);
+  }
+
+  override async listConfiguredInputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listConfiguredInputProcessors(requestContext);
+  }
+
+  override async listConfiguredOutputProcessors(requestContext?: any) {
+    return this.#wrappedAgent.listConfiguredOutputProcessors(requestContext);
+  }
+
+  override async getConfiguredProcessorIds(requestContext?: any) {
+    return this.#wrappedAgent.getConfiguredProcessorIds(requestContext);
+  }
+
+  // --- Sub-agents ---
+  override listAgents(options?: any) {
+    return this.#wrappedAgent.listAgents(options);
+  }
+
+  override __getStaticAgents() {
+    return this.#wrappedAgent.__getStaticAgents();
+  }
+
+  override __hasSubAgentsConfigured() {
+    return this.#wrappedAgent.__hasSubAgentsConfigured();
+  }
+
+  // --- Workflows ---
+  override async listWorkflows(options?: any) {
+    return this.#wrappedAgent.listWorkflows(options);
+  }
+
+  // --- Skills ---
+  override async getSkill(skillName: string, options?: any) {
+    return this.#wrappedAgent.getSkill(skillName, options);
+  }
+
+  override async listSkills(options?: any) {
+    return this.#wrappedAgent.listSkills(options);
+  }
+
+  // --- Scorers ---
+  override async listScorers(options?: any) {
+    return this.#wrappedAgent.listScorers(options);
+  }
+
+  // --- Background tasks ---
+  override getBackgroundTasksConfig() {
+    return this.#wrappedAgent.getBackgroundTasksConfig();
+  }
+
+  override disableBackgroundTasks() {
+    this.#wrappedAgent.disableBackgroundTasks();
+  }
+
+  override enableBackgroundTasks() {
+    this.#wrappedAgent.enableBackgroundTasks();
+  }
+
+  // --- Tool payload transform & goal ---
+  override getToolPayloadTransform() {
+    return this.#wrappedAgent.getToolPayloadTransform();
+  }
+
+  override __getGoalConfig() {
+    return this.#wrappedAgent.__getGoalConfig();
+  }
+
+  // --- Browser ---
+  override get browser() {
+    return this.#wrappedAgent.browser;
+  }
+
+  override setBrowser(browser: any) {
+    this.#wrappedAgent.setBrowser(browser);
+  }
+
+  override hasOwnBrowser() {
+    return this.#wrappedAgent.hasOwnBrowser();
+  }
+
+  // --- Channels ---
+  override getChannels() {
+    return this.#wrappedAgent.getChannels();
+  }
+
+  override setChannels(agentChannels: any) {
+    this.#wrappedAgent.setChannels(agentChannels);
+  }
+
+  // --- PubSub (base Agent fields — DurableAgent has its own pubsub) ---
+  override hasOwnPubSub() {
+    return this.#wrappedAgent.hasOwnPubSub();
+  }
+
+  // --- Setters called by AgentController — forward to BOTH wrapper and wrapped ---
+  // We propagate to both so that:
+  //  - The wrapped agent sees the value for its own internal use.
+  //  - The DurableAgent's inherited getPubSub()/getMemory()/getWorkspace()
+  //    also work (they read #inheritedPubSub / #memory / #workspace set by super).
+  override __setMemory(memory: any) {
+    super.__setMemory(memory);
+    this.#wrappedAgent.__setMemory(memory);
+  }
+
+  override __setPubSub(pubsub: any) {
+    super.__setPubSub(pubsub);
+    this.#wrappedAgent.__setPubSub(pubsub);
+  }
+
+  override __setWorkspace(workspace: any) {
+    super.__setWorkspace(workspace);
+    this.#wrappedAgent.__setWorkspace(workspace);
   }
 
   // ===========================================================================
@@ -589,7 +791,6 @@ export class DurableAgent<
       requestContext,
       ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
     });
-
     if (result?.status === 'failed') {
       const error = new Error((result as any).error?.message || 'Workflow execution failed');
       await this.emitError(runId, error);
@@ -661,6 +862,8 @@ export class DurableAgent<
       runId: options?.runId,
       requestContext: options?.requestContext,
       mastra: this.#mastra,
+      durableAgentId: this.id,
+      durableAgentName: this.name,
     });
 
     const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
@@ -725,10 +928,8 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -746,6 +947,9 @@ export class DurableAgent<
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      structuredOutput: registryEntry.structuredOutput as any,
+      outputProcessors: registryEntry.outputProcessors,
+      messageList,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -769,6 +973,17 @@ export class DurableAgent<
     if (trackedEntry) {
       trackedEntry.workflowExecution = workflowExecution;
     }
+
+    // 4b. Register with the thread-stream runtime so subscribeToThread /
+    // sendMessage subscribers receive run-registered events and stream parts.
+    // Uses the Mastra-level pubsub (this.getPubSub()) — not the internal
+    // CachingPubSub (this.pubsub) which carries durable workflow chunks.
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      options as AgentExecutionOptions<TOutput>,
+      this.getPubSub(),
+    );
 
     // 5. Create cleanup function (cancels auto-cleanup timer if called)
     const cleanup = () => {
@@ -813,8 +1028,8 @@ export class DurableAgent<
     options?: {
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
       /**
        * Optional abort signal scoped to the resumed segment. Forwarded onto a
@@ -924,16 +1139,17 @@ export class DurableAgent<
       offset: resumeOffset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
       closeOnSuspend: (options as any)?.[CLOSE_ON_SUSPEND] === true,
+      structuredOutput: entry.structuredOutput as any,
+      outputProcessors: entry.outputProcessors,
+      messageList: globalEntry?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready, then resume workflow
@@ -991,8 +1207,26 @@ export class DurableAgent<
       }
     }
 
+    // Capture the prior workflow execution BEFORE creating the new promise.
+    // If we read it inside the `.then()` callback, the global registry will
+    // already point to the NEW promise (assigned synchronously below),
+    // causing a self-referential deadlock.
+    const priorExecution = globalRunRegistry.get(runId)?.workflowExecution;
+
     const workflowExecution = ready
       .then(async () => {
+        // Wait for the prior workflow execution (stream / previous resume) to
+        // fully settle so the snapshot is persisted as 'suspended' before we
+        // attempt to resume it.  Without this, the pubsub tool-call-suspended
+        // event can arrive (and the consumer can call resumeStream) before the
+        // engine has finished writing the snapshot, leading to
+        // "This workflow run was not suspended".
+        if (priorExecution) {
+          await priorExecution.catch(() => {
+            /* errors already handled by the prior segment */
+          });
+        }
+
         const run = await workflow.createRun({ runId, pubsub: this.pubsub });
         const result = await run.resume({
           resumeData,
@@ -1011,6 +1245,22 @@ export class DurableAgent<
     if (trackedResumeEntry) {
       trackedResumeEntry.workflowExecution = workflowExecution;
     }
+
+    // Register the resumed run with the thread-stream runtime so
+    // subscribeToThread subscribers are notified of the new stream.
+    const resumeStreamOptions: AgentExecutionOptions<TOutput> = {
+      ...options,
+      runId,
+      memory: memoryInfo?.threadId
+        ? { thread: memoryInfo.threadId, resource: memoryInfo.resourceId }
+        : (options as any)?.memory,
+    } as AgentExecutionOptions<TOutput>;
+    await agentThreadStreamRuntime.registerRun(
+      this as unknown as Agent<any, any, any, any>,
+      output,
+      resumeStreamOptions,
+      this.getPubSub(),
+    );
 
     const cleanup = () => {
       if (autoCleanupTimer) {
@@ -1043,6 +1293,53 @@ export class DurableAgent<
       cleanup,
       abort,
     };
+  }
+
+  /**
+   * Override the inherited `resumeStream()` so that callers using the base
+   * `Agent` API (including `approveToolCall` / `declineToolCall`) are routed
+   * through the durable `resume()` path instead of the regular Agent's
+   * snapshot-based resume.
+   *
+   * Returns just the `MastraModelOutput` (matching the base Agent's return
+   * type) while internally delegating to `this.resume()`.
+   */
+  override async resumeStream(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>> {
+    const runId = streamOptions?.runId;
+    if (!runId) {
+      throw new Error('resumeStream() on DurableAgent requires a runId in streamOptions.');
+    }
+    const result = await this.resume(runId, resumeData, {
+      onChunk: streamOptions?.onChunk,
+      onStepFinish: streamOptions?.onStepFinish,
+      onFinish: streamOptions?.onFinish,
+      onError: streamOptions?.onError,
+      // Close the stream when the workflow re-suspends so the caller's
+      // `for await` loop terminates. Without this the stream stays open
+      // indefinitely when the resumed turn hits another suspend point.
+      [CLOSE_ON_SUSPEND]: true,
+    } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
+    return result.output;
+  }
+
+  /**
+   * Override the inherited `approveToolCall()` to route through the durable
+   * `resume()` path.
+   */
+  override async approveToolCall(
+    options: { runId: string; toolCallId?: string } & Record<string, any>,
+  ): Promise<MastraModelOutput<any>> {
+    return this.resumeStream({ approved: true }, options);
+  }
+
+  /**
+   * Override the inherited `declineToolCall()` to route through the durable
+   * `resume()` path.
+   */
+  override async declineToolCall(
+    options: { runId: string; toolCallId?: string } & Record<string, any>,
+  ): Promise<MastraModelOutput<any>> {
+    return this.resumeStream({ approved: false }, options);
   }
 
   /**
@@ -1087,6 +1384,8 @@ export class DurableAgent<
       requestContext: options?.requestContext,
       mastra: this.#mastra,
       methodType: 'generate',
+      durableAgentId: this.id,
+      durableAgentName: this.name,
     });
 
     const { runId, messageId, workflowInput, registryEntry, messageList, threadId, resourceId } = preparation;
@@ -1151,10 +1450,8 @@ export class DurableAgent<
       resourceId,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
@@ -1172,6 +1469,9 @@ export class DurableAgent<
       // value ({ continue, feedback }). The pubsub ITERATION_COMPLETE event
       // still fires for external observability subscribers.
       closeOnSuspend: true,
+      structuredOutput: registryEntry.structuredOutput as any,
+      outputProcessors: registryEntry.outputProcessors,
+      messageList,
     });
 
     // 4. Wait for subscription to be ready, then execute workflow
@@ -1301,8 +1601,8 @@ export class DurableAgent<
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
@@ -1342,15 +1642,16 @@ export class DurableAgent<
       offset: options?.offset,
       onChunk: options?.onChunk,
       onStepFinish: options?.onStepFinish,
-      onFinish: async result => {
-        await options?.onFinish?.(result);
-        scheduleAutoCleanup();
-      },
+      onFinish: options?.onFinish,
+      onStreamFinished: scheduleAutoCleanup,
       onError: async error => {
         await options?.onError?.(error);
         scheduleAutoCleanup();
       },
       onSuspended: options?.onSuspended,
+      structuredOutput: this.#runRegistry.get(runId)?.structuredOutput as any,
+      outputProcessors: this.#runRegistry.get(runId)?.outputProcessors,
+      messageList: globalRunRegistry.get(runId)?.messageList ?? this.#runRegistry.getMessageList(runId),
     });
 
     // Wait for subscription to be ready
@@ -1513,16 +1814,6 @@ export class DurableAgent<
    */
   getDurableWorkflows() {
     return [this.getWorkflow()];
-  }
-
-  /**
-   * Delegate scorer listing to the wrapped agent so that callers querying the
-   * durable wrapper still see the underlying agent's scorers.
-   */
-  async listScorers(
-    opts?: Parameters<Agent<TAgentId, TTools, TOutput>['listScorers']>[0],
-  ): ReturnType<Agent<TAgentId, TTools, TOutput>['listScorers']> {
-    return this.#wrappedAgent.listScorers(opts);
   }
 
   /**

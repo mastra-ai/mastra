@@ -1,262 +1,348 @@
 ---
 name: gh-triage
-description: Triage a GitHub issue or PR into the next debugging, review, or CODEOWNER action
+description: GitHub OSS maintainer lifecycle triage, review, and approval management
 goal: true
 ---
 
-# GitHub Triage
+# GH Triage
 
-Triage one open GitHub issue or active PR into the next action. Keep the top-level path short; open branch detail only when that branch is selected.
+Manage one open GitHub issue or active PR through three explicit phases:
 
-## Hard rules
+1. **Triage** — classify, route, and always end by posting/updating either a Maintainer's Triage Note or an issue/PR comment.
+2. **Review** — create one scoped working file and activate `understand-pr` or `understand-issue` with `--working-file`.
+3. **Approve** — mark the note as waiting for final approval with a final approver, then stop.
 
-- [ ] Read-only except creating/updating exactly one lifecycle file: `.mastracode/issue-triage/GH_TRIAGE_<TYPE>_<NUMBER>.md`.
+Start with **Triage** only. In `--headless` mode, choose the next step, post the required Triage output, and exit.
 
-- [ ] Do not post comments, label, assign, close, tag, coordinate externally, implement fixes, or commit without explicit user approval.
+## Rules
 
-- [ ] When posting/updating comments from a file, pass file contents, not `@file` as the literal body.
+- [ ] Triage creates no local files. Review may create/update exactly one scoped working file:
+  - PR review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
+  - Issue review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
+- [ ] Triage must always end with one GitHub-visible output: either a Maintainer's Triage Note or an issue/PR comment.
+- [ ] After successfully posting/updating the Triage output, remove the `status: needs triage` label from the triaged issue or PR if present.
+- [ ] If posting/updating a Maintainer's Triage Note on a PR that has linked/closing issue(s), also post a short comment on each linked issue saying the issue has been triaged and routed to the PR, then remove `status: needs triage` from those linked issues if present.
+- [ ] Do not modify code, assignees, milestones, branches, reviews, PR/issue state, or merge/close anything, except the critical-path actions required by `.mastracode/resources/CRITICAL_PATHS.md`. The only label write allowed is removing `status: needs triage` after a successful Triage post.
+- [ ] The only GitHub writes are approved Maintainer's Triage Note updates, required linked-issue triage comments, approved issue/PR comments, critical-path reviewer/close actions required by `.mastracode/resources/CRITICAL_PATHS.md`, and the required `status: needs triage` label removal after posting.
+- [ ] Stop on non-open issues, non-open PRs, or draft PRs unless the user explicitly asks for a note.
+- [ ] Do not invent evidence. Say what was not checked.
+- [ ] Keep interactive responses short and end with lettered options.
 
-- [ ] Non-open issues, non-open PRs, and draft PRs stop with no triage file and no `ask_user`.
+## Maintainer's Triage Note
 
-- [ ] Successful triage ends by updating the triage file, then immediately calling branch-specific `ask_user`. Do not end with `Completed`, `Verdict`, `Key findings`, or a prose-only summary.
-
-- [ ] If the PR already has a previous maintainer-notes comment, treat it as prior lifecycle context: read it, compare it with the current PR state, and prepare an updated maintainer-notes comment that explains what changed in merge confidence.
-
-- [ ] Use shared context files for code-accurate evidence: `.mastracode/shared/pr-review-context.md` for PR context and `.mastracode/shared/issue-debug-context.md` for issue debug context.
-
-- [ ] Shared context files are read-only instructions, not output artifacts. Do not create, copy, or update any second triage/context/review/debug file.
-
-- [ ] Branch B/C/D gather context inline from the shared context files, then update the single triage file and call branch-specific `ask_user`.
-
-## Triage file
-
-Create only this lifecycle file for the whole run. Do not create any second triage, context, review, or debug artifact.
-
-Create the directory only after `<TYPE>` and `<NUMBER>` are resolved and the input is confirmed open/active:
-
-```bash
-mkdir -p .mastracode/issue-triage
-TRIAGE_FILE=.mastracode/issue-triage/GH_TRIAGE_<TYPE>_<NUMBER>.md
-```
-
-Use this compact lifecycle template and update it after each major step with concise decision context only. Do not dump raw bodies, full comments, logs, or diffs.
+Use one GitHub comment for the lifecycle. Update the same comment across phases.
 
 ```markdown
-## GitHub Triage: <issue|PR> #<number> <title>
+## <severity symbol only> Maintainer's Triage Note
 
-**Severity:** <🔴 critical|🟠 high|🟡 medium|🟢 low|pending>
-**Merge confidence:** <0-5>/5 — <ready to merge|mergeable with non-blocking follow-up|needs review changes|blocked|not applicable|pending>
-**Scope:** <affected package/API/feature or `Pending.`>
-**Assessment:** <concise assessment or `Pending.`>
-**Linked issue/PR:** <issue #|closing/fixing PR #|multiple #s|none|pending>
-**CODEOWNER:** [not available]
-**Recommended next step:** <maintainer comment|author pre-review|maintainer notes|maintainer PR fix-up|PR critique|compare PRs|gh-debug-issue|end triage|pending>
+**Current Phase:** Triaged
+**Next Step:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Critical-path owner review|Continue to Approve|Await final approval|Other>
 
-### Context gathered
+**Triage:**
 
-- Input: <short issue/PR summary>
-- Linked context: <closing/fixing PR or linked issue; mention-only PRs only if useful for debugging>
-- Repo/history: <relevant files, APIs, tests, commits, or `Not inspected.`>
+- Type: <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
+- Maintainer read: <brief user-visible problem/goal and why this route was chosen>
+- Route: <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Critical-path owner review|Other>
+- Severity: <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
 
-### Confidence basis
+**Review:**
 
-<For PR branches: 1-2 bullets supporting the score, then 1-3 explicit confidence limitations.>
+- Status: <not started|in progress|complete>
+- Findings: <brief implementation/root-cause/check-risk summary, or `Not reviewed yet.`>
+- Confidence: <Pending Review|1/5|2/5|3/5|4/5|5/5> — <use only these exact values; no text labels>
+- Follow-up: <author/maintainer follow-up needed, or `None yet.`>
 
-### Evidence
+**Approve:**
 
-- <issue/PR/comment evidence>
-- `<path>:<line>` — <repo evidence, if inspected>
-
-### Branch output
-
-<Use only selected Step 3 branch output. For Branch B/C/D include context gathered from the shared context file.>
-
-### Prepared comments
-
-- Author pre-review: <needed comment or `Not needed.`>
-- Maintainer notes: <needed comment or `Not needed.`>
-- Labels: <recommendation if inspected, otherwise `Not inspected.`>
+- Status: <not started|waiting for final approval|approved|not approved>
+- Final approver: <@person or @org/team, or `Not identified yet.`>
+- Notes: <approval/merge/close/reopen guidance, or `Pending Review.`>
 ```
 
-### Comment style, only when preparing comments
+Heading uses only the severity symbol: `🔴`, `🟠`, `🟡`, or `🟢`. The `Severity` field includes the symbol plus label/reason. Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear. Confidence belongs only to Review and must be exactly `Pending Review`, `1/5`, `2/5`, `3/5`, `4/5`, or `5/5`; never use labels like `medium-high`.
 
-- Author pre-review: tag the PR author when known, be concise/action-oriented, and request only concrete changes the author needs to make. Do not ask authors to confirm tests, verification, or maintainer review readiness.
-- Maintainer notes: start with `## 🟠 High: Maintainer notes`, then `Merge confidence - <x>/5`. Keep concise `Scope`, `Context`, `Confidence basis`, `Checks`, `Evidence checked`, and `Observations` sections. In `Confidence basis`, use short support/limit bullets; each limit should state the gap/risk, merge impact, and blocking yes/no. `Checks` must state the checked-at time, required/approved failures, and other visible pending/failing checks with their score impact. Do not count missing human approval or unapproved remote CI checks as confidence limits. If maintainer notes already exist, update that comment instead of preparing a new one.
-- For PR branches, always prepare or update maintainer notes. Do not write `Maintainer notes: Not needed.` for Branch B or Branch C.
-- Do not present maintainer notes as final approval or rejection.
+## Issue/PR Comment
 
-## Step 1: Resolve and check input
+Use this to ask the author for information or explain duplicate/non-actionable handling. Do not use a new comment for normal Review output; Review findings go in the existing Maintainer's Triage Note unless the user asks for an author-facing comment.
 
-- [ ] Ensure `$ARGUMENTS` contains one issue/PR number or URL. If missing, ask for it and stop.
+```markdown
+Thanks for opening this.
 
-- [ ] Resolve `<TYPE>` and `<NUMBER>` before naming the triage file.
-  - `/issues/<n>` → `ISSUE`; `/pull/<n>` → `PR`.
-  - `issue <n>` / `pr <n>` use the explicit prefix.
-  - Bare number / `#<n>`: call the issue API first; if the response has `pull_request`, treat it as a PR.
+<Concise maintainer-facing response: what was found, what is needed, or why this is not actionable.>
+
+<If asking for info, list exactly what is needed. If duplicate, link the duplicate/closed issue or PR. If spam/invalid, keep it brief and neutral.>
+```
+
+Post/update an issue/PR comment only after explicit approval in interactive mode. In `--headless` triage, choose the required output from the classification case and post it without asking.
+
+When a PR triage note routes linked/closing issue(s), also post this short comment on each linked issue:
+
+```markdown
+Thanks for opening this issue.
+
+This has been triaged and routed to PR #<n> for maintainer follow-up. Maintainers will continue the lifecycle tracking on that PR.
+```
+
+## Phase 1: Triage
+
+### 1. Resolve input
+
+- [ ] Require one issue/PR number or URL. Missing input: ask and stop; in headless mode, fail clearly.
+- [ ] Parse flags: `--headless` runs non-interactively: classify, post the selected Triage output(s), and exit.
+- [ ] Resolve type:
+  - `/issues/<n>` or `issue <n>` → issue.
+  - `/pull/<n>` or `pr <n>` → PR.
+  - Bare number / `#<n>`: call issue API; if it has `pull_request`, treat as PR.
 
 ```bash
-INPUT="$ARGUMENTS"
 OWNER_REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 OWNER=${OWNER_REPO%/*}
 REPO=${OWNER_REPO#*/}
-
 gh api "repos/$OWNER/$REPO/issues/<number>" --jq '{number, state, isPr: has("pull_request")}'
 ```
 
-- [ ] Fetch title, body, state, comments/activity, and linked issue/PR references.
+### 2. Gather triage context
+
+Fetch enough to classify and write the note. Do not do implementation review.
 
 ```bash
-# ISSUE input
-gh issue view "$ISSUE" --comments --json number,title,state,author,assignees,createdAt,updatedAt,body,comments,url
-
-# PR input
-gh pr view "$PR" --comments --json number,title,state,isDraft,author,assignees,createdAt,updatedAt,body,comments,url,reviewRequests,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences
+gh issue view "$ISSUE" --comments --json number,title,state,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url
+gh pr view "$PR" --comments --json number,title,state,isDraft,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
 ```
 
-- [ ] Stop immediately if issue `state != OPEN`, PR `state != OPEN`, or PR `isDraft == true`. Tell the user this command only triages open issues or active PRs.
-
-- [ ] If open/active, create the triage file and save the initial Input/Context fields.
-
-## Step 2: Gather only needed context
-
-Gather enough context to choose a branch and severity. Stop searching once the branch and assessment are clear.
-
-### Linked issue/PR discovery
-
-- [ ] For issue input, find PRs that explicitly close/fix the issue. These drive routing.
-
-- [ ] Treat mention-only/cross-referenced PRs as debugging context only; they do not route to PR critique.
-
-- [ ] For PR input, fetch linked/closing issues and changed files before any full diff.
+- [ ] Stop if issue/PR is not open or PR is draft.
+- [ ] Stop if the author is a core contributor (`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`) unless the user explicitly asks for triage.
+- [ ] For issues, find PRs that explicitly close/fix the issue.
+- [ ] Treat mention-only/cross-referenced PRs as context unless they clearly close/fix.
+- [ ] For PRs, fetch linked/closing issues and their current states; a PR linked only to already-closed/resolved issues is often duplicate or stale.
+- [ ] Record changed files, merge/conflict status, CI approval state, and existing Maintainer's Triage Note if present.
+- [ ] Ignore Vercel checks during Triage; do not cite them as blockers or failures.
+- [ ] If CI workflows are waiting for approval or have not been approved, do not report individual failing/pending checks. Recommend `Approve CI checks before Review` as the next step.
+- [ ] Only report non-Vercel failing checks when CI has already been approved and the check result is real.
+- [ ] Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Do not set confidence during Triage.
+- [ ] For PRs, read `.mastracode/resources/CRITICAL_PATHS.md` and compare changed files against it.
 
 ```bash
-# Closing/fixing refs for an issue
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
-gh api graphql -f query='query($id:ID!){ node(id:$id){ ... on Issue { closedByPullRequestsReferences(first:20){ nodes{ number title state url } } } } }' -f id="$ISSUE_NODE_ID"
-
-# Timeline cross-references, debug context only
+gh api graphql -f query='query($id:ID!){ node(id:$id){ ... on Issue { closedByPullRequestsReferences(first:20){ nodes{ number title state url isDraft } } } } }' -f id="$ISSUE_NODE_ID"
 gh api "repos/$OWNER/$REPO/issues/$ISSUE/timeline" --paginate --jq '.[] | select(.event=="cross-referenced") | {source:.source.issue | {number,title,state,pull_request,url}}'
 
-# PR context
-gh pr view "$PR" --json number,title,state,isDraft,url,author,body,comments,reviewRequests,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
+# PR linked issue states
+gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[]? | {number,title,state,url}'
+
+# Relevant-area history. For PRs, use changed files; for issues, infer the narrowest likely paths from labels/title/body/comments.
+RELEVANT_PATH="path/from/repo/root"
+git log --since="90 days ago" --oneline --decorate -- "$RELEVANT_PATH" | head -20
+git log --since="90 days ago" --format='%h %ad %an %s' --date=short -- "$RELEVANT_PATH" | head -20
 ```
 
-### PR maintainer-fix checks
+### 3. Classify and route
 
-For Branch B/C PRs, do this before branch output or `ask_user`. Do not modify branches, apply suggestions, resolve conflicts, or run broad checks without approval.
+Choose one case. Triage must finish with exactly one primary output route: Case A posts an issue/PR comment and stops; Case B follows the critical-path resource output; Cases C-E post/update the Maintainer's Triage Note. Critical-path matches stop after Triage unless the user explicitly asks to continue.
 
-- [ ] Check conflicts, approved/required `statusCheckRollup` failures, and applicable inline suggestions/review nits; ignore unrelated Vercel failures and unapproved remote CI checks for scoring.
-- [ ] Record check state at triage time: required/approved failures, other visible pending/failing checks, and whether each affects the score.
-- [ ] Run relevant local checks for the changed package(s) when practical: lint, typecheck, tests, and/or build, using the narrowest applicable package scripts.
-- [ ] If a relevant local check cannot be run, record why and how that affects merge confidence.
-- [ ] Do not reduce merge confidence for unapproved remote CI checks that did not run; rely on local checks you ran, or approved/required remote checks that actually ran.
-- [ ] If a relevant approved/required failure is unclear or stale, run the narrowest local check needed for the affected package when practical.
-- [ ] Record concise results in `Context gathered` and `Evidence`, using `None found.` when nothing applies.
-- [ ] If a small low/medium-severity fix-up is found, set `Recommended next step` to `maintainer PR fix-up` and include matching final `ask_user` option(s).
+#### Case A: Irrelevant, duplicate, resolved, unclear, suspicious, or non-actionable
 
-### Merge confidence for PR branches
+Use when no Review should start yet:
 
-For Branch B/C PRs, assign a merge confidence score after reviewing context. This is the main output maintainers use to decide whether the PR can be merged.
+- spam, unrelated, invalid, unsupported, or clearly out of scope
+- unclear or missing reproduction/details
+- duplicate of an existing issue/PR
+- input PR only links closed/resolved issues, suggesting the PR is duplicate, stale, or no longer needed
+- issue already resolved by a closed/merged PR or prior maintainer answer
+- PR code or attached snippets look suspicious, malicious, credential-seeking, exfiltration-prone, or otherwise security-risky enough that normal Review should not start
 
-- [ ] Base the score on: problem/solution fit, regression risk, test quality, changed-code correctness, integration with existing patterns, unresolved review comments, local verification, approved/required remote checks that actually ran, and release/user impact.
-- [ ] Do not include unapproved remote CI checks in the score. Treat them as neutral and list them separately only if useful.
-- [ ] Save the score, confidence basis, confidence gaps, and required-to-merge actions in the triage file before preparing comments.
-- [ ] Confidence gaps must name the gap/risk, merge impact, and blocking yes/no.
-- [ ] Avoid generic limits like "needs maintainer review" or "tests not run" unless tied to specific missing evidence and impact.
-- [ ] If author action is needed to raise confidence, prepare an author pre-review comment with concrete requested changes.
+Next Steps:
 
-### Repo/history context
+- `Close as <reason>` for spam/invalid/duplicate/resolved/suspicious.
+- `Ask author for info` when the item could become actionable with specific details.
+- `Escalate suspicious security risk` when code appears malicious or unsafe and should not enter normal Review.
+- `Approve CI checks before Review` when CI workflows have not been approved.
+- `Wait for author/checks` only when the blocker is external and Review is premature.
 
-- [ ] Inspect repo files/history only as needed for severity, scope, routing, or maintainer notes.
+Output:
 
-- [ ] Prefer narrow search and recent history over broad exploration.
+- Issue/PR comment only: explain why Review is not starting, cite the duplicate/closed issue or PR when present, ask for the exact missing details, or state that the submitted code cannot proceed through normal Review because it appears suspicious or security-risky. Keep spam/invalid/suspicious comments brief and neutral.
+- Do not create/update a Maintainer's Triage Note for Case A unless the user explicitly overrides the route.
+- Interactive ask: `Does this look non-actionable, or is there context that makes it worth Review?`
 
-- [ ] Ignore Vercel CI failures unless directly relevant to the issue, PR, or deployment behavior.
+#### Case B: Critical path
 
-- [ ] Treat unapproved remote CI checks as neutral for merge confidence; do not count them as missing verification or as failures. Prefer narrow local checks/lint/typecheck/tests for confidence evidence.
+Use when an active PR's changed files match `.mastracode/resources/CRITICAL_PATHS.md`.
+
+Output:
+
+- Follow the resource: auto-close/comment for listed external-contributor paths; otherwise request/add the listed owner(s) and post/update a concise Maintainer's Triage Note that calls out the matched path, owner(s), and reason.
+- Skip the Review step by default; do not activate `understand-pr` or create a review working file for this route unless the user explicitly asks.
+- Interactive ask: `This touches a critical path. Post the critical-path triage output and stop here?`
+
+#### Case C: One PR to review
+
+Use when the input is an active PR, or exactly one active PR clearly closes/fixes the issue, and linked issue state does not make the PR obviously duplicate/stale.
+
+Checks before selecting:
+
+- linked/closing issue is open, or the PR independently fixes a still-valid problem
+- no stronger active PR handles the same issue
+- draft/non-open state has already been ruled out
+
+Next Steps:
+
+- `Review PR #<n>` when CI has been approved or checks are not required before Review.
+- `Approve CI checks before Review` when CI workflows are waiting for approval.
+
+Output:
+
+- Maintainer's Triage Note: include linked issue state, changed area, non-Vercel blockers, CI approval recommendation when relevant, and why this PR is the Review target.
+- If CI workflows have not been approved, do not list failing checks; set top-level `Next Step` to `Approve CI checks before Review`.
+- If this is a PR with linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
+- Interactive ask: `Should this PR be the Review target?`
+
+#### Case D: Multiple candidate PRs
+
+Use when multiple active PRs clearly close/fix the issue or address the same live problem.
+
+Next Steps:
+
+- `Select one fixing PR for Review`, unless one PR is clearly the right target.
+- `Approve CI checks before Review` for any selected PR whose CI workflows are waiting for approval.
+
+Output:
+
+- Maintainer's Triage Note: list candidate PRs with one-line next-step facts, including linked issue state, CI approval state, and obvious non-Vercel blockers. Do not compare implementations deeply.
+- If CI workflows have not been approved for a candidate, recommend approving CI before Review instead of listing failing checks.
+- If one PR is selected and it has linked/closing issue(s), also prepare the linked-issue triage comment for each linked issue.
+- Interactive ask: `Which PR should move to Review?`
+
+#### Case E: Issue investigation
+
+Use for an open issue with no active PR that clearly closes/fixes it, and enough information for investigation.
+
+Next Steps:
+
+- `Investigate issue #<n>`.
+
+Output:
+
+- Maintainer's Triage Note: include likely area, known evidence, missing-but-nonblocking context, and why issue investigation comes before PR Review.
+- Do not post an author-facing comment during Triage unless the route falls back to Case A because information is required before Review.
+- Interactive ask: `Should this issue move to Review as an investigation?`
+
+### 4. Post/update note or comment, then pause
+
+- [ ] Case A: post the issue/PR comment, remove `status: needs triage` if present, and stop. Do not continue to Review.
+- [ ] Case B: follow `.mastracode/resources/CRITICAL_PATHS.md`, post/update the required GitHub-visible output, remove `status: needs triage` if present, and stop. Do not enter Review unless the user explicitly asks.
+- [ ] Cases C-E: update an existing Maintainer's Triage Note if present; otherwise create one. After the note is posted/updated, remove `status: needs triage` if present.
+- [ ] PR note route with linked/closing issue(s): after posting/updating the PR note, post the linked-issue triage comment on each linked issue, then remove `status: needs triage` from those linked issues if present.
+- [ ] `--headless`: make the classification decision, post the selected output(s), remove `status: needs triage` where applicable, and exit. Do not pause for confirmation or continue to Review.
+- [ ] Interactive mode: show the selected draft(s), recommend the route, and ask before posting unless already requested.
+
+```text
+Triage output is ready: <Case A issue/PR comment|critical-path output|Maintainer's Triage Note|Maintainer's Triage Note + linked issue comment(s)>.
+Recommended next step: <Review PR #n|Investigate issue #n|Ask author for info|Close as reason|Approve CI checks before Review|Select fixing PR|Critical-path owner review>.
+
+A) Post the selected Triage output and stop here
+B) Show/edit the draft before posting
+C) The triage read is wrong — let me explain
+D) Post the selected Triage output, then continue to Review
+E) Do not post — stop here
+```
+
+Only offer D for Cases C-E. Never offer D for Cases A-B. If output was already posted automatically, replace the posting options with a short summary of what was posted and stop.
+
+## Phase 2: Review
+
+Only enter after explicit user selection. Do not stop after writing the working file; continue into the matching skill, finish its interactive Review flow, then update the existing Maintainer's Triage Note.
+
+### 1. Prepare Review working file
+
+Create/update exactly one file using the selected route:
+
+- PR Review: `.pr-review/GH_TRIAGE_PR_<pr-number>.md`
+- Issue Review: `.issue-review/GH_TRIAGE_ISSUE_<issue-number>.md`
+
+For PR Review, build the file from the PR diff and routing context:
 
 ```bash
-git grep -n "<error text|API|symbol>" -- '<likely/pathspec>'
-git log --oneline --decorate -- '<relevant/path>' | head -20
-git log -p --max-count=5 -- '<relevant/path>'
+gh pr diff "$PR" --patch
+gh pr view "$PR" --comments --json number,title,url,author,body,comments,reviews,mergeStateStatus,statusCheckRollup,closingIssuesReferences,files
 ```
 
-### Severity
+For Issue Review, build the file from the issue body, comments, timeline, labels, candidate PRs, and routing question.
 
-Choose severity from all gathered issue/PR, repo, history, and linked context:
+The file should contain only Review context: input URL/number, selected route, Maintainer's Triage Note comment URL/id if available, relevant facts, and questions for the skill. Do not embed the Maintainer's Triage Note template or issue/PR comment template in the working file.
 
-- `🔴 critical` — security issue, data loss/corruption, production outage, or core path broken for many users.
-- `🟠 high` — major feature broken, serious regression, or high-impact workflow blocked.
-- `🟡 medium` — real issue with limited surface area, workaround, or meaningful docs/behavior confusion.
-- `🟢 low` — minor bug, typo, small docs gap, support/question, duplicate, invalid, unsupported, spam, unrelated, or low-risk test/coverage work.
+The working file is internal Review context only. It is never the final Phase 2 output.
 
-Save severity, scope, assessment, linked context, and evidence before branching.
+### 2. Activate the matching skill and continue through Review
 
-## Step 3: Choose one branch
+After writing the working file, immediately activate the matching skill with `--working-file`. Do not end with a prep summary.
 
-- Branch A — irrelevant/non-actionable input.
-- Branch B — exactly one closing/fixing PR, or input is a PR.
-- Branch C — multiple closing/fixing PRs.
-- Branch D — issue input with no closing/fixing PR.
+```text
+Activate skill: understand-pr
+Arguments: <PR number or URL> --working-file .pr-review/GH_TRIAGE_PR_<pr-number>.md
+```
 
-Follow only the selected branch.
+```text
+Activate skill: understand-issue
+Arguments: <issue number or URL> --working-file .issue-review/GH_TRIAGE_ISSUE_<issue-number>.md
+```
 
-### Branch A: Irrelevant input
+After the skill finishes, return to this command and update/ask about the existing note.
 
-Use for spam, unrelated, invalid, unsupported, or clearly non-actionable items.
+For multiple PRs, ask which PR first. No-action routes do not enter Review unless the user corrects the route.
 
-- [ ] Write Branch output: severity, assessment, draft maintainer comment, recommended `pending close` label, and label recommendations only if labels were inspected.
+### 3. Update the existing note
 
-- [ ] Do not continue to PR critique or debugging.
+Before ending Phase 2, update the existing Maintainer's Triage Note with Review findings. Do not add a separate comment or PR review as lifecycle output unless the user asks for an author-facing message.
 
-- [ ] Update the triage file, then call `ask_user` with exactly:
-  - `Draft/post maintainer comment`
-  - `End triage`
+```text
+Review output is ready: update the existing Maintainer's Triage Note.
 
-### Branch B: One linked/input PR
+A) Update the existing Maintainer's Triage Note with Review findings
+B) Show me the proposed note update first
+C) Update the note, then draft a separate author-facing comment
+D) Continue Review before updating anything
+```
 
-Use when exactly one PR clearly closes/fixes the issue, or when the input itself is a PR.
+When updating, edit the same note comment: `Current Phase: Reviewed`, top-level `Next Step: Continue to Approve`, concise `Review` findings, exact Review confidence value (`1/5`-`5/5`), `Approve` still pending. After the note update, do not stop with a completion summary; ask whether to continue to Approve.
 
-- [ ] Use `.mastracode/shared/pr-review-context.md` to gather code-accurate PR context inline.
+```text
+Maintainer's Triage Note updated with Review findings.
 
-- [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with the PR context findings before writing branch conclusions.
+A) Continue to Approve
+B) Show me the updated note
+C) Draft a separate author-facing comment
+D) Stop here
+```
 
-- [ ] Write Branch output with severity/assessment/scope, issue summary, PR relevance, evidence checked, merge confidence, review observations, optional author pre-review, optional maintainer fix-up, and required maintainer notes.
+## Phase 3: Approve
 
-- [ ] Update the triage file, then call `ask_user` with exactly the relevant Branch B options:
-  - `Post author pre-review comment`
-  - `Post maintainer notes comment`
-  - `Post both comments`
-  - `Fix up PR as maintainer, then post maintainer notes` (only if a small conflict/CI/suggestion fix was found)
-  - `End triage`
+Only enter after Review is complete enough for final maintainer routing. Do not merge, close, label, assign, or change PR/issue state.
 
-### Branch C: Multiple linked PRs
+### 1. Identify one final approver
 
-Use when multiple PRs clearly close/fix the issue.
+- [ ] Use reviewed files/area from the working file.
+- [ ] Check CODEOWNERS first: `.github/CODEOWNERS`, `CODEOWNERS`, then `docs/CODEOWNERS`.
+- [ ] Do not list docs maintainers unless the PR explicitly changes docs or introduces/changes a feature that needs docs follow-up.
+- [ ] If CODEOWNERS is clear, use one matching `@user` or `@org/team` mention.
+- [ ] Otherwise use recent history for affected paths and choose one person with recent context; only use `@` for a confirmed GitHub handle.
+- [ ] If unclear, say `No clear final approver identified` with a short reason.
 
-- [ ] Use `.mastracode/shared/pr-review-context.md` to gather concise context for each routing-relevant PR.
+```bash
+find .github . docs -name CODEOWNERS -maxdepth 2 2>/dev/null
+git log --since="6 months ago" --format='%an <%ae>' -- <path> | sort | uniq -c | sort -rn | head -10
+```
 
-- [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with each PR context finding before writing comparison conclusions.
+### 2. Present Approve options
 
-- [ ] Write Branch output with severity/assessment/scope, issue summary, PR list, evidence checked, merge confidence for each PR, comparison notes, optional maintainer fix-up, and required maintainer notes.
+```text
+Review is ready for final approval routing.
+Final approver: <@person/@org/team or no clear approver> — <short reason>.
 
-- [ ] Update the triage file, then call `ask_user` with exactly the relevant Branch C options:
-  - `Post maintainer notes comment`
-  - `Fix up PR as maintainer, then post maintainer notes` (only if a small conflict/CI/suggestion fix was found)
-  - `End triage`
+A) Update the Maintainer's Triage Note as waiting for final approval with this approver
+B) Show me the proposed note update first
+C) Pick a different final approver
+D) Do not update anything — stop here
+```
 
-### Branch D: No linked PR
-
-Use for issue input when no PR clearly closes/fixes the issue.
-
-- [ ] Use `.mastracode/shared/issue-debug-context.md` to gather code-accurate issue/debug context inline.
-
-- [ ] Immediately update the triage file's `Context gathered` and `Evidence` sections with the issue/debug context findings before writing branch conclusions.
-
-- [ ] Write Branch output with severity/assessment, issue summary, likely affected area, evidence checked, debugging theory, likely reproduction path, and prepared maintainer comment if needed.
-
-- [ ] Update the triage file, then call `ask_user` with exactly:
-  - `Draft/post maintainer comment`
-  - `Tag CODEOWNER` (unsupported until CODEOWNER mapping exists)
-  - `Pass to MastraCode` (unsupported for now)
-  - `End triage`
+If approved, update the same note: `Current Phase: Awaiting Approval`, top-level `Next Step: Await final approval`, `Approve` status `waiting for final approval`, final approver and reason. Then stop.

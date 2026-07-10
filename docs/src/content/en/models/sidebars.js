@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crossmodel',
+          label: 'CrossModel',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },
@@ -363,6 +368,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/kenari',
+          label: 'Kenari',
+        },
+        {
+          type: 'doc',
           id: 'providers/kilo',
           label: 'Kilo Gateway',
         },
@@ -403,6 +413,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/longcat',
+          label: 'LongCat',
+        },
+        {
+          type: 'doc',
           id: 'providers/lucidquery',
           label: 'LucidQuery',
         },
@@ -410,6 +425,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
+        },
+        {
+          type: 'doc',
+          id: 'providers/meta',
+          label: 'Meta',
         },
         {
           type: 'doc',
@@ -440,6 +460,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/model-oracle-ai',
+          label: 'Model Oracle AI',
         },
         {
           type: 'doc',
@@ -648,6 +673,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/tencent-token-plan',
+          label: 'Tencent Token Plan',
+        },
+        {
+          type: 'doc',
           id: 'providers/tencent-tokenhub',
           label: 'Tencent TokenHub',
         },
@@ -745,6 +775,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/zeldoc',
           label: 'Zeldoc',
+        },
+        {
+          type: 'doc',
+          id: 'providers/zenifra',
+          label: 'Zenifra',
         },
         {
           type: 'doc',

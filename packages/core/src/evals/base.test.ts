@@ -351,6 +351,86 @@ describe('createScorer', () => {
       }
     });
 
+    it('forwards scorer-level judge processors to the internal judge agent', async () => {
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ score: 1 }) } as any);
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+        const inputProcessor = { id: 'test-input-processor', processInput: ({ messages }: any) => messages };
+        const outputProcessor = { id: 'test-output-processor', processOutputResult: ({ messages }: any) => messages };
+        const errorProcessor = { id: 'test-error-retry-processor', processAPIError: () => ({ retry: true }) };
+
+        const scorer = createScorer({
+          id: 'judge-processors-scorer',
+          name: 'judge-processors-scorer',
+          description: 'Verifies scorer judge processor plumbing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            inputProcessors: [inputProcessor],
+            outputProcessors: [outputProcessor],
+            errorProcessors: [errorProcessor],
+            maxProcessorRetries: 3,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const judge = streamSpy.mock.instances[0] as Agent;
+        expect(await judge.listConfiguredInputProcessors()).toContain(inputProcessor);
+        expect(await judge.listConfiguredOutputProcessors()).toContain(outputProcessor);
+        expect(await judge.listErrorProcessors()).toContain(errorProcessor);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('lets the per-step judge override the scorer-level error processors', async () => {
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ value: 1 }) } as any);
+      try {
+        const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
+        const scorerLevelErrorProcessor = { id: 'scorer-error-processor', processAPIError: () => ({ retry: true }) };
+        const stepLevelErrorProcessor = { id: 'step-error-processor', processAPIError: () => ({ retry: true }) };
+
+        const scorer = createScorer({
+          id: 'judge-processors-override-scorer',
+          name: 'judge-processors-override-scorer',
+          description: 'Per-step override of judge error processors',
+          judge: {
+            model,
+            instructions: 'Top-level instructions',
+            errorProcessors: [scorerLevelErrorProcessor],
+          },
+        })
+          .analyze({
+            description: 'analyze',
+            outputSchema: z.object({ value: z.number() }),
+            createPrompt: () => 'analyze this',
+            judge: {
+              model,
+              instructions: 'Step instructions',
+              errorProcessors: [stepLevelErrorProcessor],
+            },
+          })
+          .generateScore(({ results }) => results.analyzeStepResult?.value ?? 0);
+
+        await scorer.run(testData.scoringInput);
+
+        const judge = streamSpy.mock.instances[0] as Agent;
+        const errorProcessors = await judge.listErrorProcessors();
+        expect(errorProcessors).toContain(stepLevelErrorProcessor);
+        expect(errorProcessors).not.toContain(scorerLevelErrorProcessor);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
     it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
       const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
