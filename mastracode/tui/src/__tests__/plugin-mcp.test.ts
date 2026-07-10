@@ -7,10 +7,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { parsePluginMCPArgs, startPluginMCPCommand } from '../plugin-mcp.js';
 
 describe('parsePluginMCPArgs', () => {
-  it('parses local and GitHub sources, refs, booleans, empty values, and values containing equals', () => {
+  it('parses local and GitHub sources, refs, literal strings, empty values, and values containing equals', () => {
     expect(parsePluginMCPArgs(['/tmp/plugin', '--config', 'label=a=b', '--config', 'enabled=false'])).toEqual({
       specifier: '/tmp/plugin',
-      config: { label: 'a=b', enabled: false },
+      config: { label: 'a=b', enabled: 'false' },
     });
     expect(parsePluginMCPArgs(['https://github.com/acme/plugin', '--ref', 'main', '--config', 'empty='])).toEqual({
       specifier: 'https://github.com/acme/plugin',

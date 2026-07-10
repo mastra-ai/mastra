@@ -128,7 +128,7 @@ mastracode plugin mcp <local-directory-or-github-url> \
 
 The source can be a local plugin directory or an `https://github.com/...` URL. A GitHub source requires the GitHub CLI (`gh`) and an authenticated session. Use `--ref` to select a Git branch, tag, or commit. Pin a commit or tag when you need reproducible behavior.
 
-Repeat `--config key=value` for non-secret plugin settings. Put secrets in the `MASTRACODE_PLUGIN_CONFIG` environment variable as a JSON object instead of command-line arguments:
+Repeat `--config key=value` for non-secret string settings. Values remain strings, including `true` and `false`. Put booleans, other typed values, and secrets in the `MASTRACODE_PLUGIN_CONFIG` environment variable as a JSON object instead of command-line arguments:
 
 ```bash
 MASTRACODE_PLUGIN_CONFIG='{"apiKey":"...","region":"us-east"}' \

@@ -10,10 +10,10 @@ import { getEntryPackageRoot, installPluginDependenciesForEntry } from './depend
 import type { PluginInstallExecutionOptions } from './dependencies.js';
 import { getSingleManifestPlugin } from './manifest.js';
 import { ensureMastraCodePackageLink } from './package-link.js';
+import type { PluginPathOptions } from './paths.js';
 
 const ENTRY_CANDIDATES = ['src/index.ts', 'index.ts'];
 export const NON_INTERACTIVE_GIT_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-import type { PluginPathOptions } from './paths.js';
 
 export type PreparedPluginSource = {
   source: 'local' | 'github';

@@ -41,7 +41,7 @@ export function parsePluginMCPArgs(args: string[]): PluginMCPCommandOptions {
       const key = pair.slice(0, separator);
       if (key in config) throw new Error(`Duplicate --config key: ${key}`);
       const value = pair.slice(separator + 1);
-      config[key] = value === 'true' ? true : value === 'false' ? false : value;
+      config[key] = value;
       continue;
     }
     throw new Error(`Unknown argument: ${flag}`);
