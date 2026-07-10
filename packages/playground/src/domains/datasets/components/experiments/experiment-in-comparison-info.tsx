@@ -40,7 +40,7 @@ export function ExperimentInComparisonInfo({ datasetId, experiment, type }: Expe
 
   const createdAt = experiment.createdAt ? new Date(experiment.createdAt) : null;
   const shortId = experiment.id.length > 8 ? experiment.id.slice(0, 8) : experiment.id;
-  const displayName = experiment.name ?? experiment.id;
+  const displayName = experiment.name ?? shortId;
 
   const experimentLink = (
     <Button as={Link} href={`/datasets/${datasetId}/experiments/${experiment.id}`}>

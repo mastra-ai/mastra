@@ -12,30 +12,44 @@ function renderList(ui: ReactElement) {
 describe('ExperimentsList', () => {
   afterEach(cleanup);
 
-  it('shows each experiment name as the primary label with the short id beneath it', () => {
-    renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
+  describe('when experiments have names', () => {
+    it('shows each experiment name as the primary label', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
 
-    expect(screen.getByText('entity-extraction / model-a')).toBeDefined();
-    expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
-    // Named rows keep the short id as secondary detail.
-    expect(screen.getByText('a1b2c3d4')).toBeDefined();
-    // The unnamed experiment falls back to its short id as the label.
-    expect(screen.getByText('c0ffee00')).toBeDefined();
+      expect(screen.getByText('entity-extraction / model-a')).toBeDefined();
+      expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
+    });
+
+    it('shows the shortened id beneath a named experiment', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
+
+      expect(screen.getByText('a1b2c3d4')).toBeDefined();
+    });
+
+    it('links each row to the experiment by its full id', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-a" />);
+
+      const link = screen.getByRole('link', { name: /entity-extraction \/ model-a/ });
+      expect(link.getAttribute('href')).toBe('/experiments/a1b2c3d4-0000-0000-0000-000000000001');
+      // The name and its short id both live inside that one row link.
+      expect(within(link).getByText('a1b2c3d4')).toBeDefined();
+    });
   });
 
-  it('filters the list by experiment name', () => {
-    renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-b" />);
+  describe('when an experiment has no name', () => {
+    it('falls back to its shortened id as the label', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} />);
 
-    expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
-    expect(screen.queryByText('entity-extraction / model-a')).toBeNull();
+      expect(screen.getByText('c0ffee00')).toBeDefined();
+    });
   });
 
-  it('links each row to the experiment by its full id', () => {
-    renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-a" />);
+  describe('when a search term matches an experiment name', () => {
+    it('shows only the matching experiment', () => {
+      renderList(<ExperimentsList experiments={experiments} isLoading={false} search="model-b" />);
 
-    const link = screen.getByRole('link', { name: /entity-extraction \/ model-a/ });
-    expect(link.getAttribute('href')).toBe('/experiments/a1b2c3d4-0000-0000-0000-000000000001');
-    // The name and its short id both live inside that one row link.
-    expect(within(link).getByText('a1b2c3d4')).toBeDefined();
+      expect(screen.getByText('entity-extraction / model-b')).toBeDefined();
+      expect(screen.queryByText('entity-extraction / model-a')).toBeNull();
+    });
   });
 });
