@@ -15,6 +15,7 @@ import { buildAgentDefaultSettings } from '../../utils/agent-default-settings';
 import { AgentChat } from '../agent-chat';
 import { BrowserViewPanel } from '../browser-view/browser-view-panel';
 import { ComposerRunOptions } from '../composer-run-options';
+import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
 import { useMergedRequestContext } from '@/domains/request-context/context/schema-request-context';
 import { DatasetSaveProvider } from '@/lib/ai-ui/context/dataset-save-context';
 
@@ -91,24 +92,26 @@ export function AgentPlaygroundTestChat({
               agentId={agentId}
               requestContext={hasRequestContext ? mergedRequestContext : undefined}
             >
-              <div className="flex flex-col h-full">
-                {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
-                <div className="flex-1 min-h-0">
-                  <AgentChat
-                    key={testThreadId}
-                    agentId={agentId}
-                    agentName={agentName}
-                    modelVersion={modelVersion}
-                    agentVersionId={agentVersionId}
-                    supportsMemory={agent?.supportsMemory}
-                    threadId={testThreadId}
-                    memory={hasMemory}
-                    modelList={agent?.modelList}
-                    isNewThread
-                    runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
-                  />
+              <ThreadInputProvider>
+                <div className="flex flex-col h-full">
+                  {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
+                  <div className="flex-1 min-h-0">
+                    <AgentChat
+                      key={testThreadId}
+                      agentId={agentId}
+                      agentName={agentName}
+                      modelVersion={modelVersion}
+                      agentVersionId={agentVersionId}
+                      supportsMemory={agent?.supportsMemory}
+                      threadId={testThreadId}
+                      memory={hasMemory}
+                      modelList={agent?.modelList}
+                      isNewThread
+                      runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+                    />
+                  </div>
                 </div>
-              </div>
+              </ThreadInputProvider>
             </DatasetSaveProvider>
           </ActivatedSkillsProvider>
           <BrowserViewPanel />

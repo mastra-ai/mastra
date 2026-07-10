@@ -1,7 +1,7 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -81,6 +81,34 @@ describe('AgentPlaygroundTestChat', () => {
 
     await waitFor(() => {
       expect(onBrowserProbe).toHaveBeenCalled();
+    });
+  });
+
+  // Regression test for #19175: the editor test-chat tree was never wrapped in
+  // ThreadInputProvider, so Composer's useThreadInput resolved the default no-op
+  // context and every keystroke reverted the controlled textarea to empty.
+  it('accepts typed input in the composer', async () => {
+    server.use(
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json({ ...v2Agent, modelList: [] })),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
+      http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryDisabled)),
+      http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
+      http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => HttpResponse.json({ ok: true })),
+      http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
+      http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
+      http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({ enabled: false })),
+      http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    );
+
+    renderEditorTestChat();
+
+    const composer = (await screen.findByPlaceholderText('Enter your message...')) as HTMLTextAreaElement;
+    expect(composer.value).toBe('');
+
+    fireEvent.change(composer, { target: { value: 'hello there' } });
+
+    await waitFor(() => {
+      expect(composer.value).toBe('hello there');
     });
   });
 });
