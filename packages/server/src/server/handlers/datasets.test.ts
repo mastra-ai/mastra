@@ -2,6 +2,12 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
+} from '../constants';
 import { LIST_DATASETS_ROUTE, TRIGGER_EXPERIMENT_ROUTE } from './datasets';
 import { createTestServerContext } from './test-utils';
 
@@ -110,9 +116,15 @@ describe('Datasets Handlers', () => {
       );
     });
 
-    it('should merge body request context over adapter-injected request context', async () => {
+    it('should allow body request context to override non-auth keys without spoofing auth-owned keys', async () => {
       const requestContext = new RequestContext();
+      requestContext.set(MASTRA_USER_KEY, { id: 'auth-user' });
       requestContext.set('user', { id: 'auth-user' });
+      requestContext.set(MASTRA_AUTH_TOKEN_KEY, 'real-token');
+      requestContext.set(MASTRA_USER_PERMISSIONS_KEY, ['*:read']);
+      requestContext.set('userPermissions', ['*:read']);
+      requestContext.set(MASTRA_USER_ROLES_KEY, ['viewer']);
+      requestContext.set('userRoles', ['viewer']);
       requestContext.set('tenantId', 'auth-tenant');
 
       const startExperimentAsync = vi.fn().mockResolvedValue({
@@ -129,6 +141,13 @@ describe('Datasets Handlers', () => {
         targetType: 'workflow',
         targetId: 'workflow-1',
         bodyRequestContext: {
+          [MASTRA_USER_KEY]: { id: 'spoofed-mastra-user' },
+          user: { id: 'spoofed-user' },
+          [MASTRA_AUTH_TOKEN_KEY]: 'spoofed-token',
+          [MASTRA_USER_PERMISSIONS_KEY]: ['*:write'],
+          userPermissions: ['*:write'],
+          [MASTRA_USER_ROLES_KEY]: ['admin'],
+          userRoles: ['admin'],
           tenantId: 'body-tenant',
           traceId: 'trace-1',
         },
@@ -137,7 +156,13 @@ describe('Datasets Handlers', () => {
       expect(startExperimentAsync).toHaveBeenCalledWith(
         expect.objectContaining({
           requestContext: {
+            [MASTRA_USER_KEY]: { id: 'auth-user' },
             user: { id: 'auth-user' },
+            [MASTRA_AUTH_TOKEN_KEY]: 'real-token',
+            [MASTRA_USER_PERMISSIONS_KEY]: ['*:read'],
+            userPermissions: ['*:read'],
+            [MASTRA_USER_ROLES_KEY]: ['viewer'],
+            userRoles: ['viewer'],
             tenantId: 'body-tenant',
             traceId: 'trace-1',
           },
