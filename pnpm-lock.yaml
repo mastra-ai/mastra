@@ -5080,7 +5080,7 @@ importers:
         specifier: ^6.5.0
         version: 6.5.0
       '@codemirror/view':
-        specifier: ^6.43.5
+        specifier: ^6.43.6
         version: 6.43.6
       '@dagrejs/dagre':
         specifier: ^1.1.8
@@ -5321,7 +5321,7 @@ importers:
         specifier: ^6.7.1
         version: 6.7.1
       '@codemirror/view':
-        specifier: ^6.43.5
+        specifier: ^6.43.6
         version: 6.43.6
       '@hello-pangea/dnd':
         specifier: ^18.0.1
