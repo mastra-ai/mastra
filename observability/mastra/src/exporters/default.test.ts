@@ -538,6 +538,53 @@ describe('DefaultExporter', () => {
         expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
       });
 
+      it('should report a failed flush and retry it after the configured delay without new traffic', async () => {
+        const emitDropEvent = vi.fn();
+        const exporter = new DefaultExporter({
+          strategy: 'batch-with-updates',
+          maxRetries: 3,
+          retryDelayMs: 25,
+          maxBatchSize: 10,
+          logger: mockLogger,
+        });
+        await exporter.init({ mastra: mockMastra, emitDropEvent });
+
+        mockObservabilityStore.batchCreateSpans
+          .mockRejectedValueOnce(new Error('Storage error'))
+          .mockRejectedValueOnce(new Error('Storage error'))
+          .mockResolvedValueOnce(undefined);
+
+        await exporter.exportTracingEvent(createMockEvent(TracingEventType.SPAN_STARTED));
+        await exporter.flush();
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(1);
+        expect(mockLogger.warn).toHaveBeenCalledWith('Failed to persist observability events', {
+          signal: 'tracing',
+          eventCount: 1,
+          retryAttempt: 1,
+          maxRetries: 3,
+          nextRetryDelayMs: 25,
+          error: 'Storage error',
+        });
+        expect(mockLogger.debug).not.toHaveBeenCalledWith('Batch flushed', expect.anything());
+        expect(emitDropEvent).not.toHaveBeenCalled();
+        expect(timers).toHaveLength(1);
+        expect(timers[0].delay).toBe(25);
+
+        timers[0].fn();
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(2);
+        expect(timers).toHaveLength(2);
+        expect(timers[1].delay).toBe(50);
+
+        timers[1].fn();
+        await new Promise(resolve => setImmediate(resolve));
+
+        expect(mockObservabilityStore.batchCreateSpans).toHaveBeenCalledTimes(3);
+        expect(emitDropEvent).not.toHaveBeenCalled();
+      });
+
       it('should drop events after max retries exceeded', async () => {
         const exporter = new DefaultExporter({
           strategy: 'batch-with-updates',
