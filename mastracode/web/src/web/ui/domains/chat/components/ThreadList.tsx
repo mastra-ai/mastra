@@ -1,11 +1,11 @@
 import type { AgentControllerThreadInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MoreHorizontal, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
@@ -37,7 +37,6 @@ export function ThreadList() {
     enabled: sessionEnabled,
   });
 
-  const [menuFor, setMenuFor] = useState<string | null>(null);
   const [renamingId, setRenamingId] = useState<string | null>(null);
 
   if (!activeProject) return null;
@@ -69,13 +68,7 @@ export function ThreadList() {
               key={thread.id}
               thread={thread}
               active={thread.id === activeThreadId}
-              menuOpen={menuFor === thread.id}
-              onToggleMenu={() => setMenuFor(prev => (prev === thread.id ? null : thread.id))}
-              onCloseMenu={() => setMenuFor(null)}
-              onStartRename={() => {
-                setMenuFor(null);
-                setRenamingId(thread.id);
-              }}
+              onStartRename={() => setRenamingId(thread.id)}
             />
           ),
         )}
@@ -165,16 +158,10 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 function ThreadRow({
   thread,
   active,
-  menuOpen,
-  onToggleMenu,
-  onCloseMenu,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
   active: boolean;
-  menuOpen: boolean;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
   onStartRename: () => void;
 }) {
   const hookArgs = useThreadHookArgs();
@@ -193,7 +180,6 @@ function ThreadRow({
   };
 
   const cloneThread = async () => {
-    onCloseMenu();
     const clonedThread = await cloneThreadMutation.mutateAsync({ sourceThreadId: thread.id });
     reset(clonedThread.id);
     toast('Thread cloned', 'success');
@@ -201,7 +187,6 @@ function ThreadRow({
   };
 
   const deleteThread = async () => {
-    onCloseMenu();
     await deleteThreadMutation.mutateAsync(thread.id);
     toast('Thread deleted');
     if (thread.id === routeThreadId) {
@@ -220,43 +205,28 @@ function ThreadRow({
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Thread actions"
-        className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[open=true]:opacity-100"
-        data-open={menuOpen}
-        onClick={e => {
-          e.stopPropagation();
-          onToggleMenu();
-        }}
-      >
-        <MoreHorizontal size={15} />
-      </Button>
-      {menuOpen && (
-        <div
-          role="menu"
-          className="absolute right-1 top-8 z-20 flex min-w-28 flex-col rounded-md border border-border1 bg-surface3 p-1 shadow-lg"
-        >
-          <MenuButton onClick={onStartRename}>Rename</MenuButton>
-          <MenuButton onClick={() => void cloneThread()}>Clone</MenuButton>
-          <MenuButton onClick={() => void deleteThread()}>Delete</MenuButton>
-        </div>
-      )}
+      <DropdownMenu>
+        <DropdownMenu.Trigger
+          render={
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Thread actions"
+              className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+            >
+              <MoreHorizontal size={15} />
+            </Button>
+          }
+        />
+        <DropdownMenu.Content align="end" className="min-w-28">
+          <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+          <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+            Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu>
     </div>
-  );
-}
-
-function MenuButton({ children, onClick }: { children: ReactNode; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      role="menuitem"
-      className="rounded px-2 py-1.5 text-left text-ui-sm text-icon5 hover:bg-surface4"
-      onClick={onClick}
-    >
-      {children}
-    </button>
   );
 }
