@@ -159,7 +159,7 @@ describe('ChatMessageList', () => {
     );
   });
 
-  it('given a goal evaluation event, then it shows the goal panel with objective and progress', async () => {
+  it('given a goal evaluation event, then it keeps goal controls out of the transcript column', async () => {
     seedProject();
     useAgentControllerHandlers([
       {
@@ -169,74 +169,10 @@ describe('ChatMessageList', () => {
     ]);
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('Ship the refactor')).toBeInTheDocument());
-    expect(screen.getByText('1/5')).toBeInTheDocument();
-  });
-
-  it('sets a goal through the agent controller', async () => {
-    seedProject();
-    useAgentControllerHandlers();
-    let body: unknown;
-    server.use(
-      http.post(`${SESSION}/goal`, async ({ request }) => {
-        body = await request.json();
-        return HttpResponse.json({});
-      }),
-    );
-    const user = userEvent.setup();
-    renderMessageList();
-
-    await user.type(await screen.findByPlaceholderText('Set a goal objective…'), 'Ship the refactor');
-    await user.click(screen.getByRole('button', { name: 'Set Goal' }));
-
-    await waitFor(() => expect(body).toEqual({ objective: 'Ship the refactor' }));
-  });
-
-  it('pauses, resumes, and clears a displayed goal through the agent controller', async () => {
-    seedProject();
-    const goal = { objective: 'Ship the refactor', iteration: 1, maxRuns: 5, passed: false };
-    useAgentControllerHandlers([{ type: 'goal_evaluation', payload: { ...goal, status: 'active' } }]);
-    const updates: unknown[] = [];
-    let clearCount = 0;
-    server.use(
-      http.put(`${SESSION}/goal`, async ({ request }) => {
-        updates.push(await request.json());
-        return HttpResponse.json({});
-      }),
-      http.delete(`${SESSION}/goal`, () => {
-        clearCount += 1;
-        return HttpResponse.json({});
-      }),
-    );
-    const user = userEvent.setup();
-    renderMessageList();
-
-    await user.click(await screen.findByRole('button', { name: 'Pause' }));
-    await waitFor(() => expect(updates).toEqual([{ status: 'paused' }]));
-    await user.click(screen.getByRole('button', { name: 'Clear' }));
-    await waitFor(() => expect(clearCount).toBe(1));
-  });
-
-  it('resumes a paused goal through the agent controller', async () => {
-    seedProject();
-    useAgentControllerHandlers([
-      {
-        type: 'goal_evaluation',
-        payload: { objective: 'Ship the refactor', status: 'paused', iteration: 1, maxRuns: 5, passed: false },
-      },
-    ]);
-    let body: unknown;
-    server.use(
-      http.put(`${SESSION}/goal`, async ({ request }) => {
-        body = await request.json();
-        return HttpResponse.json({});
-      }),
-    );
-    const user = userEvent.setup();
-    renderMessageList();
-
-    await user.click(await screen.findByRole('button', { name: 'Resume' }));
-    await waitFor(() => expect(body).toEqual({ status: 'active' }));
+    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    expect(screen.queryByText('Ship the refactor')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Set a goal objective…')).not.toBeInTheDocument();
   });
 
   it('responds to approval and plan suspension prompts, then removes them', async () => {

@@ -495,7 +495,7 @@ describe('MastraCode message rendering', () => {
   });
 
   describe('when a goal evaluation arrives', () => {
-    it('renders the goal panel with its objective and controls', async () => {
+    it('renders the goal panel with its objective and controls in the goal view', async () => {
       seedProject();
       useAgentControllerHandlers({
         events: [
@@ -506,8 +506,10 @@ describe('MastraCode message rendering', () => {
         ],
       });
 
+      const user = userEvent.setup();
       renderChat();
 
+      await user.click(await screen.findByRole('tab', { name: 'Goal' }));
       expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
     });

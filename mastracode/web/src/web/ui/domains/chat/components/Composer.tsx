@@ -1,6 +1,5 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
@@ -24,18 +23,16 @@ import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControl
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
-type ComposerVariant = 'inline' | 'textarea';
-
-const composerVariantClass: Record<ComposerVariant, string> = {
-  inline: 'field-sizing-content max-h-52 min-h-10 resize-none',
-  textarea: 'field-sizing-content max-h-64 min-h-28 resize-none',
-};
+import { ComposerInput } from './ComposerInput';
+import type { ComposerVariant } from './ComposerInput';
 
 type ComposerProps = {
   variant?: ComposerVariant;
+  draft?: string;
+  onDraftChange?: (draft: string) => void;
 };
 
-export function Composer({ variant = 'inline' }: ComposerProps) {
+export function Composer({ variant = 'inline', draft: controlledDraft, onDraftChange }: ComposerProps) {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
   const navigate = useNavigate();
@@ -53,14 +50,16 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const setGoalMutation = useSetAgentControllerGoalMutation(hookArgs);
   const followUpMutation = useFollowUpAgentControllerMutation(hookArgs);
 
-  const [draft, setDraft] = useState('');
+  const [uncontrolledDraft, setUncontrolledDraft] = useState('');
+  const draft = controlledDraft ?? uncontrolledDraft;
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const suggestions = matchCommands(draft);
   const showSuggestions = suggestions.length > 0;
   const [activeSuggestion, setActiveSuggestion] = useState(0);
 
   const updateDraft = (next: string) => {
-    setDraft(next);
+    if (onDraftChange) onDraftChange(next);
+    else setUncontrolledDraft(next);
     setActiveSuggestion(0);
   };
 
@@ -189,14 +188,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <form onSubmit={onSubmit} className="relative flex w-full flex-col gap-2">
-        <Textarea
+        <ComposerInput
           ref={inputRef}
           value={draft}
           onChange={event => updateDraft(event.target.value)}
           onKeyDown={onComposerKeyDown}
           placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
           disabled={disabled}
-          className={composerVariantClass[variant]}
+          composerVariant={variant}
           aria-label="Message"
         />
         {showSuggestions && (
