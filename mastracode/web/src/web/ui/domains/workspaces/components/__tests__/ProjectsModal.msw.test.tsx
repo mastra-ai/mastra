@@ -107,7 +107,9 @@ describe('ProjectsModal', () => {
 
     it('hides "Open from GitHub" when the feature is disabled', async () => {
       saveProjects([alpha]);
-      server.use(http.get(STATUS_URL, () => HttpResponse.json({ enabled: false, connected: false, installations: [] })));
+      server.use(
+        http.get(STATUS_URL, () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
+      );
       renderProjects();
       // Wait for the status query to settle before asserting absence.
       await waitFor(() => expect(screen.getByRole('button', { name: /Add a project/ })).toBeInTheDocument());
