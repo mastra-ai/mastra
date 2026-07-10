@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
@@ -113,7 +113,7 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning}>
-              <Copy className="w-4 h-4 mr-2" />
+              <GitFork className="w-4 h-4 mr-2" />
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
