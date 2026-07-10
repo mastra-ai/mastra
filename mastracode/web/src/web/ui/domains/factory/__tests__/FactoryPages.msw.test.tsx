@@ -566,6 +566,82 @@ describe('Factory investigate flow', () => {
     expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
   });
 
+  it('given an issue, when a custom prompt is submitted from the action menu, then the run starts with the typed prompt', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    const form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    await userEvent.type(
+      within(form).getByRole('textbox', { name: 'Prompt for issue #12' }),
+      'Write a failing test first',
+    );
+    await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('Write a failing test first');
+    expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/12');
+    expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
+  });
+
+  it('given a pull request, when a custom prompt is submitted from the action menu, then the run starts with the typed prompt and checkout context', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
+        HttpResponse.json({ pullRequests, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-pr-34');
+    const { router } = renderAt('/factory/review');
+
+    await screen.findByRole('list', { name: 'Open pull requests' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for pull request #34' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    const form = await screen.findByRole('form', { name: 'Custom prompt for pull request #34' });
+    await userEvent.type(
+      within(form).getByRole('textbox', { name: 'Prompt for pull request #34' }),
+      'Check for security issues only',
+    );
+    await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('Check for security issues only');
+    expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
+    expect(captured.messages[0]!.message).not.toContain('understand-pr skill');
+  });
+
+  it('given an empty custom prompt, when Run is clicked, then the run does not start', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    const form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    expect(within(form).getByRole('button', { name: 'Run' })).toBeDisabled();
+    expect(captured.worktree).toBeUndefined();
+    expect(captured.messages).toHaveLength(0);
+  });
+
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no thread is created', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
