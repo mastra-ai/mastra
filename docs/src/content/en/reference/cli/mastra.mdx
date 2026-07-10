@@ -1398,6 +1398,8 @@ By default, Mastra collects anonymous information about your project like your O
 
 When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
 
+At server startup, Mastra also sends an anonymous project-surface snapshot: counts of registered agents, agent controllers, workflows, tools, processors, vector stores, scorers, workspaces, MCP servers, gateways, and channels, plus booleans for memory, voice, editor, and observability usage and the coarse storage backend category. It doesn't send names or identifiers. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
+
 You can opt out of all CLI and usage analytics by setting an environment variable:
 
 ```bash
