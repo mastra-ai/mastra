@@ -73,6 +73,10 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
  * Flush messages to memory before suspending.
  * Mirrors the base Agent's flushMessagesBeforeSuspension() to ensure
  * the thread exists and all pending messages are persisted.
+ *
+ * Skips entirely when memoryConfig.readOnly is set, mirroring the readOnly
+ * guard on the durable finish path — a readOnly run shouldn't get a thread
+ * created or messages written just because it happened to suspend mid-run.
  */
 async function flushMessagesBeforeSuspension({
   saveQueueManager,
@@ -93,7 +97,7 @@ async function flushMessagesBeforeSuspension({
   threadExists?: boolean;
   onThreadCreated?: () => void;
 }) {
-  if (!saveQueueManager || !messageList || !threadId) {
+  if (!saveQueueManager || !messageList || !threadId || memoryConfig?.readOnly) {
     return;
   }
 
@@ -941,7 +945,7 @@ export function createDurableToolCallStep() {
                     );
                   }
 
-                  if (saveQueueManager && state?.threadId) {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
                     await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
                   }
                 },
@@ -964,7 +968,7 @@ export function createDurableToolCallStep() {
                   // is persisted. Unlike the regular agent which has a single long-lived
                   // messageList, the durable agent's workflow state is serialized before
                   // this async callback fires, so we must flush directly.
-                  if (saveQueueManager && state?.threadId) {
+                  if (saveQueueManager && state?.threadId && !state?.memoryConfig?.readOnly) {
                     await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
                   }
                 },
