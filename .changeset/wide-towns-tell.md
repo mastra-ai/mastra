@@ -9,7 +9,7 @@ Define a logger in `src/mastra/logger.ts` (default export) and it is auto-regist
 
 Register scorers per agent by adding an `agents/<name>/scorers/` folder. Each module's default export (a `MastraScorer`, or a `{ scorer, sampling }` entry) is wired into that agent, keyed by filename. `config.scorers` wins on collision.
 
-```
+```text
 src/mastra/
   logger.ts                 # export default new PinoLogger({ name: 'App' })
   agents/weather/

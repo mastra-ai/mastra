@@ -48,10 +48,12 @@ export default {
 
 Discovered scorers are merged with the scorers defined in [`config.ts`](/reference/file-based-agents/config). On a key collision, `config.scorers` wins with a warning. If `config.scorers` is a function, discovered scorers are ignored with a warning because function-valued scorers can't be statically merged.
 
-Precedence is:
+When keys collide, precedence is:
 
 1. Function-valued `config.scorers`
 1. Record-valued `config.scorers`
 1. Discovered files under `scorers/`
+
+Non-colliding discovered scorers are preserved.
 
 Visit [`createScorer()`](/reference/evals/create-scorer) for the full scorer interface.
