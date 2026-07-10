@@ -1,5 +1,32 @@
 # @mastra/playground-ui
 
+## 40.0.2-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7)]:
+  - @mastra/core@1.51.0-alpha.3
+  - @mastra/client-js@1.31.2-alpha.3
+  - @mastra/react@1.2.5-alpha.3
+
+## 40.0.2-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#19150](https://github.com/mastra-ai/mastra/pull/19150))
+  - Updated dependency [`@codemirror/language@^6.12.4` ↗︎](https://www.npmjs.com/package/@codemirror/language/v/6.12.4) (from `^6.12.3`, in `dependencies`)
+  - Updated dependency [`@codemirror/search@^6.7.1` ↗︎](https://www.npmjs.com/package/@codemirror/search/v/6.7.1) (from `^6.7.0`, in `dependencies`)
+  - Updated dependency [`@codemirror/state@^6.7.1` ↗︎](https://www.npmjs.com/package/@codemirror/state/v/6.7.1) (from `^6.6.0`, in `dependencies`)
+  - Updated dependency [`@codemirror/view@^6.43.5` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.43.5) (from `^6.43.1`, in `dependencies`)
+
+- Fixed scorer data table usability: Score column is now always visible without horizontal scrolling, columns can be shown or hidden via a Columns toggle, and a scrollbar now appears at both the top and bottom of the table ([#19055](https://github.com/mastra-ai/mastra/pull/19055))
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/client-js@1.31.2-alpha.2
+  - @mastra/memory@1.23.0-alpha.2
+  - @mastra/react@1.2.5-alpha.2
+
 ## 40.0.2-alpha.1
 
 ### Patch Changes

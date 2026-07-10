@@ -7,6 +7,7 @@
  */
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -165,5 +166,29 @@ describe('ChatMessageList', () => {
 
     await waitFor(() => expect(screen.getByText('Ship the refactor')).toBeInTheDocument());
     expect(screen.getByText('1/5')).toBeInTheDocument();
+  });
+
+  it('given an active goal, when the user clears it, then it calls the session goal mutation', async () => {
+    const requests: string[] = [];
+    const user = userEvent.setup();
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'goal_evaluation',
+        payload: { objective: 'Ship the refactor', status: 'active', iteration: 1, maxRuns: 5, passed: false },
+      },
+    ]);
+    server.use(
+      http.delete(`${SESSION}/goal`, () => {
+        requests.push('goal-clear');
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('Ship the refactor')).toBeInTheDocument());
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+
+    await waitFor(() => expect(requests).toEqual(['goal-clear']));
   });
 });

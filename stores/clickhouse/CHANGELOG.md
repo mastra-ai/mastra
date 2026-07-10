@@ -1,5 +1,16 @@
 # @mastra/clickhouse
 
+## 1.12.0-alpha.0
+
+### Minor Changes
+
+- Added legacy-to-VNext span migration for ClickHouse observability storage. Customers using `ObservabilityStorageClickhouse` (legacy) can now run `npx mastra migrate` to copy historical spans from `mastra_ai_spans` to the VNext `mastra_span_events` schema. The migration handles column mapping, batches by day for memory safety, deduplicates legacy rows, converts empty-string parentSpanId to NULL for correct root span detection, and supports both old (`Nullable(String)` JSON) and new (`Array(String)`) tags schemas. The legacy table is preserved as a backup after migration. ([#19050](https://github.com/mastra-ai/mastra/pull/19050))
+
+### Patch Changes
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+
 ## 1.11.1
 
 ### Patch Changes

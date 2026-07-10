@@ -23,6 +23,7 @@ import {
 } from '../tools';
 
 import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
+import { createDurableAgent } from '@mastra/core/agent/durable';
 
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({
@@ -495,6 +496,12 @@ export const supervisorAgent = new Agent({
   },
 });
 
+export const durableSupervisorAgent = createDurableAgent({
+  agent: supervisorAgent,
+  id: 'durable-supervisor-agent',
+  name: 'Durable Research Supervisor',
+});
+
 // =============================================================================
 // Subscription Management Sub-Agent Example
 // Tests sub-agent context persistence across multiple delegations
@@ -590,6 +597,12 @@ You can handle both at the same time — start a background research while answe
   defaultOptions: {
     autoResumeSuspendedTools: true,
   },
+});
+
+export const durableCryptoResearchAgent = createDurableAgent({
+  agent: cryptoResearchAgent,
+  id: 'durable-crypto-research-agent',
+  name: 'Durable Crypto Research Agent',
 });
 
 export const subscriptionOrchestratorAgent = new Agent({

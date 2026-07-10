@@ -1,5 +1,57 @@
 # @mastra/core
 
+## 1.51.0-alpha.3
+
+### Patch Changes
+
+- - Fixed DurableAgent returning stale/empty values for Studio metadata, processors, skills, workflows, voice, and other inherited Agent accessors by adding delegation overrides to the wrapped agent ([#19076](https://github.com/mastra-ai/mastra/pull/19076))
+  - Fixed missing traces in Studio: span `entityId` now uses the durable agent's ID instead of the wrapped agent's ID
+  - Fixed dropped `background-task-completed` events in `streamUntilIdle` caused by the same agent ID mismatch
+  - `\_\_setMemory`, `\_\_setPubSub`, and `\_\_setWorkspace` now propagate to both the DurableAgent base class and the wrapped agent
+
+- Extract text from DB-shaped user messages in goal judge prompts instead of stringifying them as `[object Object]`. Goal judge prompts now also skip malformed, empty, or synthetic reminder messages when selecting the latest user context. ([#19070](https://github.com/mastra-ai/mastra/pull/19070))
+
+## 1.51.0-alpha.2
+
+### Minor Changes
+
+- Added the ability to explicitly disable a storage domain on `MastraCompositeStore` by setting it to `false` in the `domains` config. A disabled domain no longer falls back to the `editor` or `default` store, so writes for that domain are dropped instead of silently landing in the fallback database. ([#19059](https://github.com/mastra-ai/mastra/pull/19059))
+
+  ```ts
+  const storage = new MastraCompositeStore({
+    id: 'my-storage',
+    default: libsqlStore,
+    domains: {
+      // don't persist traces/metrics when observability is turned off
+      observability: false,
+    },
+  });
+  ```
+
+  `prune()` also accepts a per-call `retention` option that replaces the configured retention policies for that call only — for example to skip a domain (keep chat history) or prune more aggressively without reconstructing the store:
+
+  ```ts
+  // prune everything except the memory domain, one time
+  await storage.prune({
+    retention: {
+      observability: { spans: { maxAge: '14d' } },
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fix heap OOM when a workflow uses `.map({ key: mapVariable({ initData: <workflow> }) })`. The map reducer kept the live `Workflow` instance by reference and `JSON.stringify`'d it into the map step's `mapConfig`, deep-walking the whole workflow (its logger, nested step graph, …) into a multi-hundred-MB string — and the length-guard truncation only ran after the full string was built, so `.commit()` could OOM at module load. The `initData` mapping is now serialized as a slim `{ initData: <id>, path }` reference. Runtime behavior is unchanged (the execute path only reads `initData` for truthiness). ([#19033](https://github.com/mastra-ai/mastra/pull/19033))
+
+- Durable agents now stop cleanly when cancelled via an abort signal, reporting the correct `abort` finish reason instead of crashing. The `sendMessage` and `sendSignal` wake flows also work reliably for durable agents, so thread subscribers receive streamed chunks as expected. ([#19046](https://github.com/mastra-ai/mastra/pull/19046))
+
+- Fixed typo in agent-network e2e test description ([#19162](https://github.com/mastra-ai/mastra/pull/19162))
+
+- Fixed the tool payload transform policy being dropped on non-durable agent streams. When an agent was configured with a `transform` policy, `loop()` rebuilt its internal state bag but did not carry the policy forward, so it never reached the run scope and silently no-opped for the whole run. The policy is now forwarded, so tool call, tool result, and tool input delta payloads are transformed as configured. Closes #19102. ([#19103](https://github.com/mastra-ai/mastra/pull/19103))
+
+- Updated dependencies [[`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911)]:
+  - @mastra/schema-compat@1.3.4-alpha.1
+
 ## 1.50.2-alpha.1
 
 ### Patch Changes

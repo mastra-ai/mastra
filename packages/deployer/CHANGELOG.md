@@ -1,5 +1,27 @@
 # @mastra/deployer
 
+## 1.51.0-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7)]:
+  - @mastra/core@1.51.0-alpha.3
+  - @mastra/server@1.51.0-alpha.3
+
+## 1.51.0-alpha.2
+
+### Patch Changes
+
+- Fixed a false-positive LOCAL_STORAGE_PATH preflight error that flagged storage paths like `file:./data.db` that don't exist in your project. The deploy bundler's local-storage detector now excludes everything under `.mastra/.build/` (deployer-generated intermediate chunks), not just `@mastra__*` shim files. Those chunks can carry JSDoc examples from library code (for example `LibSQLStore({ url: 'file:./data.db' })` from `@mastra/core`), which previously blocked `mastra server deploy` and forced `--skip-preflight` even though the user's code had no local storage paths. Local storage paths in your own source files are still detected. ([#19071](https://github.com/mastra-ai/mastra/pull/19071))
+
+- Fixed deploy preflight false positives for env-guarded storage fallbacks. The build now records when a local storage path like `file:./.mastra-demo.db` is only used as a fallback behind an environment variable (for example `process.env.TURSO_DATABASE_URL || "file:./.mastra-demo.db"`), and which environment variables your own code reads, so the deploy preflight can tell dead fallbacks and library-internal variables apart from real problems. ([#19071](https://github.com/mastra-ai/mastra/pull/19071))
+
+  Also fixed another source of false `LOCAL_STORAGE_PATH` errors: dependencies installed via symlinks (pnpm `link:`/`file:`) resolve to paths outside `node_modules` and are no longer treated as your code.
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/server@1.51.0-alpha.2
+
 ## 1.50.2-alpha.1
 
 ### Patch Changes
