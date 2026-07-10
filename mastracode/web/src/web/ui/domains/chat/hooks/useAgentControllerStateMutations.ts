@@ -43,9 +43,14 @@ export function useSwitchAgentControllerModeMutation(args: AgentControllerMutati
   return useMutation({
     mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['agent-controller', args.agentControllerId, 'connection', args.resourceId],
+        }),
+      ]),
   });
 }
 
@@ -56,8 +61,13 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   return useMutation({
     mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
     onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
-      }),
+      Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['agent-controller', args.agentControllerId, 'connection', args.resourceId],
+        }),
+      ]),
   });
 }

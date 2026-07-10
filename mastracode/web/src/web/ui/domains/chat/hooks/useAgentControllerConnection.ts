@@ -1,9 +1,9 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useState } from 'react';
+
 import { getErrorDetails } from '../../../../../shared/api/errors';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
-import { useAgentControllerModes } from './useAgentControllerModes';
 import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
 import { useAgentControllerSessionSync } from './useAgentControllerSessionSync';
 
@@ -31,7 +31,6 @@ export function useAgentControllerConnection({
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
-  const modesQuery = useAgentControllerModes({ agentControllerId, resourceId, baseUrl, enabled });
   const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,
@@ -82,7 +81,6 @@ export function useAgentControllerConnection({
     status,
     error,
     retry,
-    modes: modesQuery.data ?? [],
     state: syncQuery.data,
     stateUpdatedAt: syncQuery.dataUpdatedAt,
     createdThreadId: initQuery.data?.threadId ?? undefined,

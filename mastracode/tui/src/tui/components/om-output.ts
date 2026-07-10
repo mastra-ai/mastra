@@ -5,10 +5,11 @@
  * Includes marker info (emoji, compression stats) in the footer.
  */
 
-import { Container, Text } from '@earendil-works/pi-tui';
+import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, getTermWidth, mastra } from '../theme.js';
+import { BOX_INDENT, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 // Read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -102,7 +103,7 @@ export interface OMOutputData {
   compressedTokens?: number;
 }
 
-export class OMOutputComponent extends Container {
+export class OMOutputComponent extends WidthAwareContainer {
   private data: OMOutputData;
   private expanded: boolean = false;
 
@@ -120,14 +121,13 @@ export class OMOutputComponent extends Container {
   toggleExpanded(): void {
     this.setExpanded(!this.expanded);
   }
-  private rebuild(): void {
+  protected rebuildForWidth(termWidth: number): void {
     this.clear();
 
     const isReflection = this.data.type === 'reflection';
     const color = isReflection ? getReflectorColor() : getObserverColor();
     const border = (char: string) => chalk.bold.hex(color)(char);
 
-    const termWidth = getTermWidth();
     const maxLineWidth = termWidth - 6 - BOX_INDENT * 2; // "│ " prefix + buffer + indent
     // Soft-wrap all original lines to terminal width
     const originalLines = this.data.observations.split('\n');

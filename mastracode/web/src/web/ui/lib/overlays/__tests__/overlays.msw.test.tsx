@@ -21,6 +21,7 @@ const OVERLAY_NAMES: OverlayName[] = [
   'provider-settings',
   'shortcuts',
   'projects',
+  'github',
 ];
 
 function Probe() {

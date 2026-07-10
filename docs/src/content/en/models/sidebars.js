@@ -153,6 +153,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/amazon-bedrock',
+          label: 'Amazon Bedrock',
+        },
+        {
+          type: 'doc',
           id: 'providers/ambient',
           label: 'Ambient',
         },
@@ -170,6 +175,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/auriko',
           label: 'Auriko',
+        },
+        {
+          type: 'doc',
+          id: 'providers/azure',
+          label: 'Azure',
         },
         {
           type: 'doc',
@@ -305,6 +315,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/gmicloud',
           label: 'GMI Cloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/google-vertex',
+          label: 'Google Vertex AI',
         },
         {
           type: 'doc',

@@ -15,7 +15,8 @@ export type OverlayName =
   | 'model-settings'
   | 'provider-settings'
   | 'shortcuts'
-  | 'projects';
+  | 'projects'
+  | 'github';
 
 export interface OverlaysApi {
   isOpen: (name: OverlayName) => boolean;
@@ -33,6 +34,7 @@ const CLOSED: Record<OverlayName, boolean> = {
   'provider-settings': false,
   shortcuts: false,
   projects: false,
+  github: false,
 };
 
 const OverlaysContext = createContext<OverlaysApi | null>(null);

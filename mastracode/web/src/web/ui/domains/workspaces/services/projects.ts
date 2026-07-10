@@ -12,6 +12,8 @@
  * workspace factory reads it to resolve the working directory.
  */
 
+import type { MaterializeResult } from './github';
+
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';
 
@@ -215,6 +217,25 @@ export function addGithubProject(project: Project): Project {
 export function updateProject(project: Project): void {
   const projects = loadProjects().map(p => (p.id === project.id ? project : p));
   saveProjects(projects);
+}
+
+/**
+ * Merge a server `MaterializeResult` (from the `/ensure` route) into a stored
+ * GitHub project and persist it: records the session `resourceId` plus the
+ * sandbox binding, and seeds the root worktree (default branch at the sandbox
+ * workdir) when the project has none yet.
+ */
+export function applyMaterializeResult(project: Project, result: MaterializeResult): Project {
+  const merged: Project = {
+    ...project,
+    resourceId: result.resourceId,
+    sandboxId: result.sandboxId,
+    sandboxWorkdir: result.sandboxWorkdir,
+  };
+  const updated: Project =
+    merged.worktrees && merged.worktrees.length > 0 ? merged : { ...merged, worktrees: projectWorktrees(merged) };
+  updateProject(updated);
+  return updated;
 }
 
 /**

@@ -178,6 +178,7 @@ vi.mock('./config', () => ({
     missingGithubAppEnvVars: [],
   }),
   isGithubFeatureEnabled: () => featureEnabled,
+  getGithubFeatureDiagnostics: () => ({}),
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;

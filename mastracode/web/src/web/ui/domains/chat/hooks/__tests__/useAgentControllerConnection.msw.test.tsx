@@ -26,14 +26,9 @@ describe('useAgentControllerConnection', () => {
           { status: 403 },
         ),
       ),
-      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/modes`, () =>
-        HttpResponse.json({ modes: [] }),
-      ),
     );
 
-    const { result } = renderHookWithProviders(() =>
-      useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }),
-    );
+    const { result } = renderHookWithProviders(() => useAgentControllerConnection({ ...hookArgs, onEvent: vi.fn() }));
 
     await waitFor(() => expect(result.current.status).toBe('error'));
     expect(result.current.error).toEqual({
@@ -43,9 +38,8 @@ describe('useAgentControllerConnection', () => {
     });
   });
 
-  it('given a session, when the connection is established, then status is ready with modes and session state exposed', async () => {
+  it('given a session, when the connection is established, then status is ready with session state exposed', async () => {
     const onCreate = vi.fn();
-    const onReadModes = vi.fn();
     const onReadState = vi.fn();
     const onStream = vi.fn();
     const onEvent = vi.fn();
@@ -55,10 +49,6 @@ describe('useAgentControllerConnection', () => {
       http.post(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions`, () => {
         onCreate();
         return HttpResponse.json({ controllerId, resourceId, threadId: 'created-thread' });
-      }),
-      http.get(`${TEST_BASE_URL}/api/agent-controller/${controllerId}/modes`, () => {
-        onReadModes();
-        return HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] });
       }),
       http.get(sessionUrl, () => {
         onReadState();
@@ -98,13 +88,11 @@ describe('useAgentControllerConnection', () => {
       { timeout: 2000 },
     );
 
-    expect(result.current.modes.map(mode => mode.id)).toEqual(['build']);
     expect(result.current.state?.threadId).toBe('state-thread');
     expect(result.current.createdThreadId).toBe('created-thread');
     expect(observedStatuses).toContain('connecting');
     expect(observedStatuses).not.toContain('reconnecting');
     expect(onCreate).toHaveBeenCalledTimes(1);
-    expect(onReadModes).toHaveBeenCalledTimes(1);
     expect(onReadState).toHaveBeenCalledTimes(1);
     expect(onStream).toHaveBeenCalledTimes(1);
   });

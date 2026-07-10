@@ -1,18 +1,20 @@
-import type {
-  AgentControllerAvailableModel,
-  AgentControllerSessionSettings,
-  PermissionPolicy,
-  PermissionRules,
-  ToolCategory,
-} from '@mastra/client-js';
+import type { AgentControllerSessionSettings } from '@mastra/client-js';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
-import type { Theme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
 import { Brain, Layers, LogIn, Palette, Search, Server, SlidersHorizontal } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import type { Density } from '../services/density';
+import { getErrorMessage } from '../../../../../shared/api/errors';
+import { useToast } from '../../../ui';
+import { useChatModels } from '../../chat/context/useChatModels';
+import { useChatPermissions } from '../../chat/context/useChatPermissions';
+import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
+import { useAgentControllerModels } from '../../chat/hooks/useAgentControllerModels';
+import { useAgentControllerSettings } from '../../chat/hooks/useAgentControllerSettings';
+import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { OMSection } from './OMSection';
@@ -22,23 +24,6 @@ import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
 export type SettingsTab = 'general' | 'model' | 'packs' | 'memory' | 'behavior' | 'providers' | 'custom-providers';
 
 interface SettingsPanelProps {
-  theme: Theme;
-  density: Density;
-  models: AgentControllerAvailableModel[];
-  currentModelId: string | null;
-  modelError?: string | null;
-  settings: AgentControllerSessionSettings | null;
-  /** Active project's resourceId — required to activate a model pack on its session. */
-  resourceId?: string;
-  onThemeChange: (theme: Theme) => void;
-  onDensityChange: (density: Density) => void;
-  onModelChange: (modelId: string) => void;
-  /** Merge behavior settings into the server-side session state. */
-  onBehaviorChange: (updates: Partial<AgentControllerSessionSettings>) => void;
-  permissions: PermissionRules | null;
-  pendingPermissionCategory: ToolCategory | null;
-  /** Set a tool category's approval policy on the session. */
-  setPermissionForCategory: (category: ToolCategory, policy: PermissionPolicy) => Promise<void>;
   initialTab?: SettingsTab;
   onClose: () => void;
 }
@@ -60,23 +45,29 @@ const TABS: { id: SettingsTab; label: string; icon: LucideIcon }[] = [
  * density, model, thinking level, auto-approve, notifications, smart editing,
  * and provider/API-key management.
  */
-export function SettingsPanel({
-  theme,
-  models,
-  currentModelId,
-  modelError,
-  settings,
-  resourceId,
-  onThemeChange,
-  onModelChange,
-  onBehaviorChange,
-  permissions,
-  pendingPermissionCategory,
-  setPermissionForCategory,
-  initialTab = 'general',
-  onClose,
-}: SettingsPanelProps) {
+export function SettingsPanel({ initialTab = 'general', onClose }: SettingsPanelProps) {
   const [tab, setTab] = useState<SettingsTab>(initialTab);
+  const { theme, setTheme } = useTheme();
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { activeModelId, setModel } = useChatModels();
+  const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
+  const { toast } = useToast();
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const modelsQuery = useAgentControllerModels(hookArgs);
+  const settingsQuery = useAgentControllerSettings(hookArgs);
+  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
+  const models = modelsQuery.data ?? [];
+  const settings = settingsQuery.data ?? null;
+  const sessionResourceId = sessionEnabled ? resourceId : undefined;
+
+  const onModelChange = (modelId: string) => {
+    void setModel(modelId)
+      .then(() => toast('Model updated', 'success'))
+      .catch(error => toast(getErrorMessage(error, 'The model could not be updated'), 'error'));
+  };
+  const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
+    void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
+  };
 
   return (
     <Dialog open onOpenChange={open => !open && onClose()}>
@@ -102,29 +93,31 @@ export function SettingsPanel({
 
           <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
             <TabContent value="general">
-              <GeneralTab theme={theme} onThemeChange={onThemeChange} />
+              <GeneralTab theme={theme} onThemeChange={setTheme} />
             </TabContent>
             <TabContent value="model">
               <ModelTab
                 models={models}
-                currentModelId={currentModelId}
-                error={modelError}
+                currentModelId={activeModelId ?? null}
+                error={
+                  modelsQuery.error ? getErrorMessage(modelsQuery.error, 'The model catalog could not be loaded') : null
+                }
                 settings={settings}
                 onModelChange={onModelChange}
                 onBehaviorChange={onBehaviorChange}
               />
             </TabContent>
             <TabContent value="packs">
-              <ModelPacksSection resourceId={resourceId} models={models} />
+              <ModelPacksSection resourceId={sessionResourceId} models={models} />
             </TabContent>
             <TabContent value="memory">
-              <OMSection resourceId={resourceId} models={models} />
+              <OMSection resourceId={sessionResourceId} models={models} />
             </TabContent>
             <TabContent value="behavior">
               <BehaviorTab
                 settings={settings}
                 onBehaviorChange={onBehaviorChange}
-                permissions={permissions}
+                permissions={permissions ?? null}
                 pendingPermissionCategory={pendingPermissionCategory}
                 setPermissionForCategory={setPermissionForCategory}
               />

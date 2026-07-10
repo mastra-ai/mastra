@@ -26,6 +26,7 @@ type CommandDialogProps = Omit<React.ComponentPropsWithoutRef<typeof Dialog>, 'c
   description?: string;
   contentClassName?: string;
   commandClassName?: string;
+  commandLabel?: string;
   showOverlay?: boolean;
   overlayClassName?: string;
 };
@@ -36,6 +37,7 @@ const CommandDialog = ({
   description = 'Search for commands and actions',
   contentClassName,
   commandClassName,
+  commandLabel,
   showOverlay = false,
   overlayClassName,
   ...props
@@ -70,6 +72,8 @@ const CommandDialog = ({
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">{description}</DialogDescription>
         <Command
+          label={commandLabel}
+          loop
           filter={filter}
           onKeyDown={handleKeyDown}
           className={cn(

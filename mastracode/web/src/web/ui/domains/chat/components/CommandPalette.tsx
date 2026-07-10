@@ -1,124 +1,72 @@
-import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
-import { Input } from '@mastra/playground-ui/components/Input';
+import {
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@mastra/playground-ui/components/Command';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useRef, useState } from 'react';
 
+import { useOverlays } from '../../../lib/overlays';
+import { useChatCommands } from '../context/ChatCommandsProvider';
 import { SLASH_COMMANDS } from '../services/commands';
-import type { SlashCommand } from '../services/commands';
 
-interface CommandPaletteProps {
-  /** Run a command. Commands with args pre-fill the composer; no-arg commands execute. */
-  onRun: (command: SlashCommand) => void;
-  onClose: () => void;
-}
-
-/**
- * A Cmd/Ctrl+K command palette over the slash-command registry. Filters as you
- * type, navigates with arrows, runs on Enter, and dismisses on Escape (handled
- * by the DS Dialog and the global key handler in App).
- */
-export function CommandPalette({ onRun, onClose }: CommandPaletteProps) {
-  const [query, setQuery] = useState('');
-  const [active, setActive] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const q = query.trim().toLowerCase();
-  const matches: SlashCommand[] = q
-    ? SLASH_COMMANDS.filter(c => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
-    : SLASH_COMMANDS;
-
-  // Keep the active index in range as the match list shrinks/grows.
-  useEffect(() => {
-    setActive(a => Math.min(a, Math.max(0, matches.length - 1)));
-  }, [matches.length]);
-
-  const run = (command: SlashCommand | undefined) => {
-    if (!command) return;
-    onRun(command);
-    onClose();
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setActive(i => (i + 1) % Math.max(1, matches.length));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setActive(i => (i - 1 + matches.length) % Math.max(1, matches.length));
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      run(matches[active]);
-    }
-  };
+/** A Cmd/Ctrl+K command palette over the slash-command registry. */
+export function CommandPalette() {
+  const { close } = useOverlays();
+  const { run } = useChatCommands();
 
   return (
-    <Dialog open onOpenChange={open => !open && onClose()}>
-      <DialogContent
-        className="top-1/4 w-full max-w-xl translate-y-0 gap-0 p-0"
-        aria-label="Command palette"
-        initialFocus={inputRef}
-      >
-        <Input
-          ref={inputRef}
-          variant="unstyled"
-          className="h-form-default border-b border-border1 bg-transparent px-3.5 text-ui-md"
-          placeholder="Type a command…"
-          value={query}
-          onChange={e => {
-            setQuery(e.target.value);
-            setActive(0);
-          }}
-          onKeyDown={onKeyDown}
-          aria-label="Filter commands"
-        />
-        <ul className="max-h-80 overflow-y-auto p-1.5" role="listbox" aria-label="Commands">
-          {matches.length === 0 && (
-            <li>
-              <Txt as="div" variant="ui-sm" className="px-2 py-3 text-center text-icon3">
-                No matching commands
+    <CommandDialog
+      open
+      onOpenChange={open => !open && close('palette')}
+      title="Command palette"
+      commandLabel="Filter commands"
+      contentClassName="top-1/4 w-full max-w-xl translate-y-0 gap-0"
+      commandClassName="rounded-none bg-transparent"
+    >
+      <CommandInput placeholder="Type a command…" />
+      <CommandList className="max-h-80 p-1.5" aria-label="Commands">
+        <CommandEmpty>No matching commands</CommandEmpty>
+        <CommandGroup>
+          {SLASH_COMMANDS.map(command => (
+            <CommandItem
+              key={command.name}
+              value={`${command.name} ${command.args ?? ''} ${command.description}`}
+              onSelect={() => {
+                run(command);
+                close('palette');
+              }}
+              className="flex-col items-start gap-0.5 rounded-md px-2 py-1.5"
+            >
+              <Txt as="span" variant="ui-md" font="mono" className="text-icon6">
+                /{command.name}
+                {command.args && <span className="text-icon3"> {command.args}</span>}
               </Txt>
-            </li>
-          )}
-          {matches.map((c, i) => (
-            <li key={c.name}>
-              <button
-                type="button"
-                className={`flex w-full flex-col items-start gap-0.5 rounded-md px-2 py-1.5 text-left transition-colors focus-visible:outline-hidden ${
-                  i === active ? 'bg-surface4' : 'hover:bg-surface4'
-                }`}
-                role="option"
-                aria-selected={i === active}
-                onMouseEnter={() => setActive(i)}
-                onClick={() => run(c)}
-              >
-                <Txt as="span" variant="ui-md" font="mono" className="text-icon6">
-                  /{c.name}
-                  {c.args && <span className="text-icon3"> {c.args}</span>}
-                </Txt>
-                <Txt as="span" variant="ui-xs" className="text-icon3">
-                  {c.description}
-                </Txt>
-              </button>
-            </li>
+              <Txt as="span" variant="ui-xs" className="text-icon3">
+                {command.description}
+              </Txt>
+            </CommandItem>
           ))}
-        </ul>
-        <div className="flex items-center gap-1.5 border-t border-border1 px-3 py-2 text-icon3">
-          <Kbd>↑</Kbd>
-          <Kbd>↓</Kbd>
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            navigate
-          </Txt>
-          <Kbd>↵</Kbd>
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            run
-          </Txt>
-          <Kbd>esc</Kbd>
-          <Txt as="span" variant="ui-xs" className="text-icon3">
-            close
-          </Txt>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </CommandGroup>
+      </CommandList>
+      <div className="flex items-center gap-1.5 border-t border-border1 px-3 py-2 text-icon3">
+        <Kbd>↑</Kbd>
+        <Kbd>↓</Kbd>
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          navigate
+        </Txt>
+        <Kbd>↵</Kbd>
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          run
+        </Txt>
+        <Kbd>esc</Kbd>
+        <Txt as="span" variant="ui-xs" className="text-icon3">
+          close
+        </Txt>
+      </div>
+    </CommandDialog>
   );
 }

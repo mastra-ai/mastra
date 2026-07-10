@@ -1,79 +1,38 @@
-import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { useEffect } from 'react';
 
-import { useApiConfig } from '../../../../../shared/api/config';
-import { getErrorMessage } from '../../../../../shared/api/errors';
 import { useOverlays } from '../../../lib/overlays';
 import { useToast } from '../../../ui';
-import { SettingsPanel, useDensityPreference } from '../../settings';
-import { ProjectsModal, useActiveProjectContext } from '../../workspaces';
-import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatSession } from '../context/ChatSessionProvider';
-import { useAgentControllerModels } from '../hooks/useAgentControllerModels';
-import { useSetPermissionForCategoryMutation } from '../hooks/useAgentControllerPermissionMutations';
-import { useAgentControllerPermissions } from '../hooks/useAgentControllerPermissions';
-import { useAgentControllerSettings } from '../hooks/useAgentControllerSettings';
-import {
-  useSetAgentControllerStateMutation,
-  useSwitchAgentControllerModelMutation,
-} from '../hooks/useAgentControllerStateMutations';
-import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { SettingsPanel } from '../../settings';
+import { GithubConnectModal, ProjectsModal, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
 import { CommandPalette } from './CommandPalette';
 import { ShortcutsOverlay } from './ShortcutsOverlay';
 
+/** Mounts the active chat overlays. Each overlay owns its provider-backed behavior. */
 export function ChatOverlays() {
-  const { baseUrl } = useApiConfig();
   const overlays = useOverlays();
-  const { projects, activeProject, resourceId, sessionEnabled, selectProject } = useActiveProjectContext();
-  const { transcript } = useChatSession();
-  const { runPaletteCommand } = useChatCommands();
-  const { theme, setTheme } = useTheme();
-  const { density, changeDensity } = useDensityPreference();
+  const { activeProject, projects, selectProject, preparing, prepareError } = useActiveProjectContext();
   const { toast } = useToast();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
-  const modelsQuery = useAgentControllerModels(hookArgs);
-  const settingsQuery = useAgentControllerSettings(hookArgs);
-  const permissionsQuery = useAgentControllerPermissions(hookArgs);
-  const switchModelMutation = useSwitchAgentControllerModelMutation(hookArgs);
-  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
-  const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation(hookArgs);
+  const githubStatus = useGithubStatusQuery().data;
 
-  const projectsOpen = overlays.isOpen('projects') || projects.length === 0;
+  // The GitHub repo picker replaces the projects modal while open.
+  const projectsOpen = (overlays.isOpen('projects') || projects.length === 0) && !overlays.isOpen('github');
   const providerSettingsOpen = overlays.isOpen('provider-settings');
   const modelSettingsOpen = overlays.isOpen('model-settings');
   const settingsOpen = overlays.isOpen('settings') || modelSettingsOpen || providerSettingsOpen;
-  const modelError = modelsQuery.error ?? switchModelMutation.error;
+
+  // Materialization failures surface as a toast; selection already stays put.
+  // Keyed on the error identity only — `toast` is not referentially stable, and
+  // including it would re-fire the same toast on unrelated re-renders.
+  useEffect(() => {
+    if (prepareError) toast(prepareError.message, 'error');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prepareError]);
 
   return (
     <>
-      {overlays.isOpen('palette') && activeProject && (
-        <CommandPalette onRun={runPaletteCommand} onClose={() => overlays.close('palette')} />
-      )}
-
+      {overlays.isOpen('palette') && activeProject && <CommandPalette />}
       {settingsOpen && (
         <SettingsPanel
-          theme={theme}
-          density={density}
-          models={modelsQuery.data ?? []}
-          currentModelId={transcript.modelId ?? null}
-          modelError={modelError ? getErrorMessage(modelError, 'The model catalog could not be loaded') : null}
-          settings={settingsQuery.data ?? null}
-          resourceId={sessionEnabled ? resourceId : undefined}
-          onThemeChange={setTheme}
-          onDensityChange={changeDensity}
-          onModelChange={modelId => {
-            void switchModelMutation
-              .mutateAsync(modelId)
-              .then(() => toast('Model updated', 'success'))
-              .catch(error => toast(getErrorMessage(error, 'The model could not be updated'), 'error'));
-          }}
-          onBehaviorChange={updates => {
-            void setStateMutation.mutateAsync(updates).then(() => toast('Settings updated', 'success'));
-          }}
-          permissions={permissionsQuery.data ?? null}
-          pendingPermissionCategory={setPermissionForCategoryMutation.variables?.category ?? null}
-          setPermissionForCategory={(category, policy) =>
-            setPermissionForCategoryMutation.mutateAsync({ category, policy })
-          }
           initialTab={providerSettingsOpen ? 'providers' : modelSettingsOpen ? 'model' : 'general'}
           onClose={() => {
             overlays.close('settings');
@@ -82,16 +41,26 @@ export function ChatOverlays() {
           }}
         />
       )}
+      {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
+      {projectsOpen && <ProjectsModal />}
 
-      {overlays.isOpen('shortcuts') && <ShortcutsOverlay onClose={() => overlays.close('shortcuts')} />}
-
-      {projectsOpen && (
-        <ProjectsModal
-          projects={projects}
-          activeProjectId={activeProject?.id ?? null}
-          onSelectProject={project => void selectProject(project)}
-          onClose={() => overlays.close('projects')}
+      {overlays.isOpen('github') && githubStatus && (
+        <GithubConnectModal
+          status={githubStatus}
+          onProjectCreated={project => void selectProject(project)}
+          onClose={() => overlays.close('github')}
         />
+      )}
+
+      {preparing && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-full border border-border1 bg-surface3 px-4 py-2 text-ui-sm text-icon5 shadow-lg"
+        >
+          <span className="size-2 shrink-0 animate-pulse rounded-full bg-accent1" aria-hidden />
+          <span className="truncate">{preparing.message}</span>
+        </div>
       )}
     </>
   );

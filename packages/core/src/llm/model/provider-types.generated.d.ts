@@ -394,6 +394,7 @@ export type ProviderModelsMap = {
     'meta/llama-3.3-70b',
     'meta/llama-4-maverick',
     'meta/llama-4-scout',
+    'meta/muse-spark-1.1',
     'minimax/minimax-m2',
     'minimax/minimax-m2.1',
     'minimax/minimax-m2.1-lightning',
@@ -467,6 +468,9 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-pro',
     'openai/gpt-5.5',
     'openai/gpt-5.5-pro',
+    'openai/gpt-5.6-luna',
+    'openai/gpt-5.6-sol',
+    'openai/gpt-5.6-terra',
     'openai/gpt-image-1',
     'openai/gpt-image-1-mini',
     'openai/gpt-image-1.5',
@@ -1297,7 +1301,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.2',
   ];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
-  readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-xs.2'];
+  readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-xs-2.1', 'poolside/laguna-xs.2'];
   readonly zenifra: readonly ['alibaba/qwen3.6-35b-a3b'];
   readonly zenmux: readonly [
     'anthropic/claude-3.5-haiku',
@@ -1982,7 +1986,6 @@ export type ProviderModelsMap = {
     'glm-4.7-flash',
     'glm-4.7-flashx',
     'glm-5',
-    'glm-5-2',
     'glm-5.1',
     'glm-5.2',
     'gpt-3.5-turbo',
@@ -2015,6 +2018,9 @@ export type ProviderModelsMap = {
     'gpt-5.4-pro',
     'gpt-5.5',
     'gpt-5.5-pro',
+    'gpt-5.6-luna',
+    'gpt-5.6-sol',
+    'gpt-5.6-terra',
     'gpt-oss-120b',
     'gpt-oss-20b',
     'grok-4',
@@ -3352,6 +3358,7 @@ export type ProviderModelsMap = {
     'bytedance-seed/seed-2.0-lite',
     'bytedance-seed/seed-2.0-mini',
     'bytedance/ui-tars-1.5-7b',
+    'cognitivecomputations/dolphin-mistral-24b-venice-edition',
     'cognitivecomputations/dolphin-mistral-24b-venice-edition:free',
     'cohere/command-a',
     'cohere/command-r-08-2024',

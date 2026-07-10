@@ -823,8 +823,8 @@ Test plan:
     const boxLines = rendered.filter(line => /^[╭│╰]/.test(stripAnsi(line)));
 
     const visible = stripAnsi(rendered.join('\n'));
-    expect(visible).toContain('This');
-    expect(visible).toContain('follows up on the quiet-mode terminal rendering work.');
+    expect(visible).toContain('This follows up on the');
+    expect(visible).toContain('quiet-mode terminal rendering work.');
     expect(visible).not.toContain('…');
     expect(boxLines.length).toBeGreaterThan(3);
     expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
@@ -910,7 +910,8 @@ Test plan:
       .split('\n')
       .filter(line => line.startsWith('│') && line.trim() !== '│');
     expect(footerLines.length).toBeGreaterThan(1);
-    expect(stripAnsi(output)).toContain('then fi"');
+    expect(stripAnsi(output)).toContain('then');
+    expect(stripAnsi(output)).toContain('fi"');
     expect(output).not.toContain(chalk.blue('then'));
   });
 

@@ -11,9 +11,16 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { memo, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
+import {
+  useApproveAgentControllerToolMutation,
+  useRespondAgentControllerSuspensionMutation,
+} from '../hooks/useAgentControllerRunMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
   const n = name.toLowerCase();
@@ -560,7 +567,26 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // Transcript
 // ---------------------------------------------------------------------------
 
-export const Transcript = memo(function Transcript({
+export function Transcript() {
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { transcript, resolvePrompt } = useChatTranscript();
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
+  const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
+
+  const onApprove = async (toolCallId: string, approved: boolean, promptId: string) => {
+    await approveMutation.mutateAsync({ toolCallId, approved });
+    resolvePrompt(promptId);
+  };
+  const onRespond = async (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => {
+    await respondMutation.mutateAsync({ toolCallId, resumeData });
+    resolvePrompt(promptId);
+  };
+
+  return <TranscriptEntries entries={transcript.entries} onApprove={onApprove} onRespond={onRespond} />;
+}
+
+export function TranscriptEntries({
   entries,
   onApprove,
   onRespond,
@@ -593,7 +619,7 @@ export const Transcript = memo(function Transcript({
       })}
     </>
   );
-});
+}
 
 function MessageBubble({ entry }: { entry: MessageEntry }) {
   // null = no group override; true/false = expand/collapse all in this bubble.
