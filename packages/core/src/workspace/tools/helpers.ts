@@ -97,9 +97,10 @@ export async function getEditDiagnosticsText(workspace: Workspace, filePath: str
     // Use the filesystem's path resolution to get the real disk path.
     // This correctly handles contained: true (virtual paths → basePath)
     // and contained: false (absolute paths used as-is).
+    // Use posix resolve to ensure LSP paths (which are URIs/POSIX) don't get Windows drive letters appended in tests
     const absolutePath =
       workspace.filesystem?.resolveAbsolutePath?.(filePath) ??
-      path.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
+      path.posix.resolve(lspManager.root, filePath.replace(/^\/+/, ''));
 
     const DIAG_TIMEOUT_MS = 10_000;
     let diagTimer: ReturnType<typeof setTimeout>;

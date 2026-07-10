@@ -772,6 +772,39 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     let lastExecutionContext: ExecutionContext | undefined;
     let currentRequestContext = params.requestContext;
     for (let i = startIdx; i < steps.length; i++) {
+      if (params.abortController.signal.aborted) {
+        await this.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          stepResults,
+          serializedStepGraph: params.serializedStepGraph,
+          executionContext: lastExecutionContext || {
+            workflowId,
+            runId,
+            executionPath: [i],
+            stepExecutionPath,
+            activeStepsPath: {},
+            suspendedPaths: {},
+            resumeLabels: {},
+            retryConfig: { attempts, delay },
+            format: params.format,
+            state: lastState ?? initialState,
+            tracingIds: params.tracingIds,
+          },
+          workflowStatus: 'canceled',
+          requestContext: currentRequestContext,
+        });
+
+        workflowSpan?.end({
+          attributes: {
+            status: 'canceled',
+          },
+        });
+
+        throw new Error('Workflow aborted');
+      }
+
       const entry = steps[i]!;
 
       const executionContext: ExecutionContext = {
