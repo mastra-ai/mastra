@@ -257,6 +257,37 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('updated');
   });
 
+  it('keeps the PR label within the available width when truncating a long thread title', () => {
+    const state = createState();
+    state.currentThreadTitle = 'A very long thread title that must be truncated';
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+    process.stdout.columns = 70;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(70);
+    expect(rendered).toContain('PR#17439');
+  });
+
+  it('shows the PR label without a thread title or branch and uses orange for high priority', () => {
+    const state = createState();
+    state.currentThreadTitle = undefined;
+    state.projectInfo.gitBranch = undefined;
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439, lastNotificationPriority: 'high' }];
+    state.githubPrPollingActive = true;
+    state.githubPrGradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('PR#17439');
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('PR#17439', 0.5, '#f97316', 0);
+  });
+
   it('animates the GitHub PR subscription only while GitHub polling is running', () => {
     const state = createState();
     state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];

@@ -204,7 +204,7 @@ export function formatOMContextIndicator(
   return { plain, styled, messageCells, memoryCells, unusedCells };
 }
 
-/** @deprecated Retained for backward compatibility. */
+/** @deprecated Use formatOMContextIndicator for the unified context display. */
 export function formatOMStatus(state: OMProgressState): string {
   const percent = Math.round(state.thresholdPercent);
   const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;

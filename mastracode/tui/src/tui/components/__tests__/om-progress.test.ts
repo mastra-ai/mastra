@@ -165,15 +165,13 @@ describe('formatOMContextIndicator', () => {
     expect(visibleWidth(withSavings.styled)).toBe(visibleWidth(withSavings.plain));
   });
 
-  it('allows occupied segments to be styled independently', () => {
+  it('renders observations first, then messages, then unused capacity', () => {
     const indicator = formatOMContextIndicator(createState({ pendingTokens: 30_000, observationTokens: 30_000 }), {
-      messages: segment => `<orange>${segment}</orange>`,
-      memory: segment => `<pink>${segment}</pink>`,
-      unused: segment => `<gray>${segment}</gray>`,
+      messages: segment => `<messages>${segment}</messages>`,
+      memory: segment => `<observations>${segment}</observations>`,
+      unused: segment => `<unused>${segment}</unused>`,
     });
 
-    expect(indicator.styled).toContain('<orange>━━━</orange>');
-    expect(indicator.styled).toContain('<pink>━━</pink>');
-    expect(indicator.styled).toContain('<gray>━━━━━</gray>');
+    expect(indicator.styled).toContain('<observations>━━</observations><messages>━━━</messages><unused>━━━━━</unused>');
   });
 });

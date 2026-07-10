@@ -41,6 +41,10 @@ export const omStatusIndicatorScenario: McE2eScenario = {
     };
     const displayState = state.session.displayState.get();
     const originalColumns = process.stdout.columns;
+    const originalGradientAnimator = state.gradientAnimator;
+    const originalOmProgress = structuredClone(displayState.omProgress);
+    const originalBufferingMessages = displayState.bufferingMessages;
+    const originalBufferingObservations = displayState.bufferingObservations;
     const proofDir = process.env.MC_OM_STATUS_PROOF_DIR;
     if (proofDir) mkdirSync(proofDir, { recursive: true });
 
@@ -71,43 +75,48 @@ export const omStatusIndicatorScenario: McE2eScenario = {
       updateStatusLine(state);
     };
 
-    process.stdout.columns = 120;
-    setUsage(30_000, 30_000);
-    await checkpoint('balanced', /60\/120k↓/);
+    try {
+      process.stdout.columns = 120;
+      setUsage(30_000, 30_000);
+      await checkpoint('balanced', /60\/120k↓/);
 
-    setUsage(45_000, 5_000);
-    await checkpoint('asymmetric', /50\/120k↓/);
+      setUsage(45_000, 5_000);
+      await checkpoint('asymmetric', /50\/120k↓/);
 
-    process.stdout.columns = 60;
-    setUsage(30_000, 30_000);
-    await checkpoint('narrow', /60\/120k↓/);
+      process.stdout.columns = 60;
+      setUsage(30_000, 30_000);
+      await checkpoint('narrow', /60\/120k↓/);
 
-    process.stdout.columns = 120;
-    let offset = 0;
-    const originalGradientAnimator = state.gradientAnimator;
-    const gradientAnimator = new GradientAnimator(() => {});
-    state.gradientAnimator = gradientAnimator;
-    gradientAnimator.isRunning = () => true;
-    gradientAnimator.getOffset = () => offset;
-    gradientAnimator.getFadeProgress = () => 0;
-    displayState.bufferingMessages = true;
-    updateStatusLine(state);
-    await checkpoint('message-buffer-1', /60\/120k↓/);
-    offset = 0.5;
-    updateStatusLine(state);
-    await checkpoint('message-buffer-2', /60\/120k↓/);
+      process.stdout.columns = 120;
+      let offset = 0;
+      const gradientAnimator = new GradientAnimator(() => {});
+      state.gradientAnimator = gradientAnimator;
+      gradientAnimator.isRunning = () => true;
+      gradientAnimator.getOffset = () => offset;
+      gradientAnimator.getFadeProgress = () => 0;
+      displayState.bufferingMessages = true;
+      updateStatusLine(state);
+      await checkpoint('message-buffer-1', /60\/120k↓/);
+      offset = 0.5;
+      updateStatusLine(state);
+      await checkpoint('message-buffer-2', /60\/120k↓/);
 
-    displayState.bufferingMessages = false;
-    displayState.bufferingObservations = true;
-    offset = 0;
-    updateStatusLine(state);
-    await checkpoint('reflection-buffer-1', /60\/120k↓/);
-    offset = 0.5;
-    updateStatusLine(state);
-    await checkpoint('reflection-buffer-2', /60\/120k↓/);
-
-    state.gradientAnimator = originalGradientAnimator;
-    process.stdout.columns = originalColumns;
-    terminal.keyCtrlC();
+      displayState.bufferingMessages = false;
+      displayState.bufferingObservations = true;
+      offset = 0;
+      updateStatusLine(state);
+      await checkpoint('reflection-buffer-1', /60\/120k↓/);
+      offset = 0.5;
+      updateStatusLine(state);
+      await checkpoint('reflection-buffer-2', /60\/120k↓/);
+    } finally {
+      state.statusLine.setText = setText;
+      state.gradientAnimator = originalGradientAnimator;
+      Object.assign(displayState.omProgress, originalOmProgress);
+      displayState.bufferingMessages = originalBufferingMessages;
+      displayState.bufferingObservations = originalBufferingObservations;
+      process.stdout.columns = originalColumns;
+      terminal.keyCtrlC();
+    }
   },
 };

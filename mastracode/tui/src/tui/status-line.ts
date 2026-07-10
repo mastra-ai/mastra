@@ -183,11 +183,11 @@ export function updateStatusLine(state: TUIState): void {
   const branch = state.projectInfo.gitBranch;
   const threadTitle =
     state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
-  const centerText = threadTitle || branch || null;
-  const centerTextShort =
-    centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;
   const activeGithubPr = state.activeGithubPrSubscriptions[0];
   const githubPrLabel = activeGithubPr ? formatGithubPrLabel(state, activeGithubPr) : null;
+  const centerText = threadTitle || branch || (githubPrLabel ? '' : null);
+  const centerTextShort =
+    centerText && centerText.length > 24 ? centerText.slice(0, 12) + '..' + centerText.slice(-8) : centerText;
   const now = Date.now();
   const queuedCount = state.pendingQueuedActions.length + state.session.followUps.count();
   const queuedLabel = queuedCount > 0 ? `${queuedCount} queued` : null;
@@ -199,12 +199,15 @@ export function updateStatusLine(state: TUIState): void {
     state.agentRunStartedAt !== undefined &&
     Math.floor(getGoalDurationMs(goalState, now) / 60_000) === Math.floor((now - state.agentRunStartedAt) / 60_000);
   const goalLabel = goalDuration ? (goalMatchesActiveRun ? 'goal' : `goal ${goalDuration}`) : null;
-  const formatDirPart = (value: string) => ({
-    plain: githubPrLabel ? `${githubPrLabel.plain} ${value}` : value,
-    styled: githubPrLabel
-      ? `${githubPrLabel.styled} ${theme.fg('thinkingText', value)}`
-      : theme.fg('thinkingText', value),
-  });
+  const formatDirPart = (value: string) => {
+    const separator = githubPrLabel && value ? ' ' : '';
+    return {
+      plain: githubPrLabel ? `${githubPrLabel.plain}${separator}${value}` : value,
+      styled: githubPrLabel
+        ? `${githubPrLabel.styled}${separator}${theme.fg('thinkingText', value)}`
+        : theme.fg('thinkingText', value),
+    };
+  };
 
   // --- Helper to style the model ID ---
   const modelTrail = tintBg ? chalk.hex(tintBg)('▌') : '';
@@ -396,23 +399,25 @@ export function updateStatusLine(state: TUIState): void {
     const nonDirWidth =
       useBadgeWidth + nonDirParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
-    if (dirText) {
+    if (dirText !== null) {
       const dirPart = formatDirPart(dirText);
       const availableForDir = termWidth - nonDirWidth - SEP.length - 1; // -1 buffer for ambiguous-width chars
       const dirWidth = visibleWidth(dirPart.plain);
+      const prefixWidth = githubPrLabel ? visibleWidth(githubPrLabel.plain) + (dirText ? 1 : 0) : 0;
+      const availableForText = availableForDir - prefixWidth;
       const MIN_TRUNCATED_DIR = 10; // don't show a tiny sliver
       if (dirWidth > availableForDir && opts.allowDirTruncation === false) {
         return null;
       }
-      if (dirWidth > availableForDir && availableForDir >= MIN_TRUNCATED_DIR) {
-        dirText = availableForDir > 1 ? dirText.slice(0, availableForDir - 1) + '…' : null;
+      if (dirWidth > availableForDir && availableForText >= MIN_TRUNCATED_DIR) {
+        dirText = availableForText > 1 ? dirText.slice(0, availableForText - 1) + '…' : null;
       } else if (dirWidth > availableForDir) {
-        // Not enough room even for a truncated version — drop it
-        dirText = null;
+        // Preserve a standalone PR label when there is no room for the title.
+        dirText = githubPrLabel && visibleWidth(githubPrLabel.plain) <= availableForDir ? '' : null;
       }
     }
 
-    if (dirText) {
+    if (dirText !== null) {
       parts.push(formatDirPart(dirText));
     }
     if (indicatorPart) {
@@ -426,7 +431,7 @@ export function updateStatusLine(state: TUIState): void {
     if (totalPlain + 1 > termWidth) return null; // +1 buffer for ambiguous-width chars (▐▌)
 
     let styledLine: string;
-    const hasDir = !!dirText;
+    const hasDir = dirText !== null;
     if (indicatorPart && parts.length >= 2) {
       // Three groups: left (model + timing + goal), center (queue + dir/thread), right (throughput + context)
       const leftPartCount = opts.showQueue && goalLabel ? 2 : 1;
