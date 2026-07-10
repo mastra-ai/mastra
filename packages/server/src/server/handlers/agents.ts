@@ -2710,6 +2710,16 @@ export const RECOVER_ROUTE = createRoute({
         bodyRequestContext as Record<string, unknown> | undefined,
       );
 
+      // Merge body-scoped context and apply version overrides BEFORE
+      // resolving the agent, so that `getAgentFromSystem` picks the
+      // correct draft/published version and any downstream agent lookups
+      // (memory, tools) see the same stashed overrides. Mirrors the order
+      // used by other execute-style routes that predate this one but
+      // needed the same fix.
+      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
+      stashVersionOverrides(serverRequestContext, versions);
+      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
+
       const agent = await getAgentFromSystem({
         mastra,
         agentId,
@@ -2724,11 +2734,6 @@ export const RECOVER_ROUTE = createRoute({
           message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
         });
       }
-
-      mergeBodyRequestContext(serverRequestContext, bodyRequestContext);
-
-      stashVersionOverrides(serverRequestContext, versions);
-      ensureDefaultVersionStatus(serverRequestContext, versionOptions);
 
       const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const workflowRun = await workflowsStore?.getWorkflowRunById({

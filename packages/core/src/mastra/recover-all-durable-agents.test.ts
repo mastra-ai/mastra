@@ -134,9 +134,9 @@ describe('Mastra.recoverAllDurableAgents', () => {
     expect(result).toEqual({ agents: 2, recovered: 1, succeeded: 1, failed: 0 });
   });
 
-  it('exposes the recovery config via getRecoveryConfig (default off)', () => {
+  it('exposes the recovery config via recoveryConfig (default off)', () => {
     const mastra = new Mastra({ storage: store });
-    expect(mastra.getRecoveryConfig()).toEqual({ durableAgents: 'off' });
+    expect(mastra.recoveryConfig).toEqual({ durableAgents: 'off' });
   });
 
   it('reflects an explicit recovery.durableAgents = "auto" config', () => {
@@ -144,7 +144,7 @@ describe('Mastra.recoverAllDurableAgents', () => {
       storage: store,
       recovery: { durableAgents: 'auto' },
     });
-    expect(mastra.getRecoveryConfig()).toEqual({ durableAgents: 'auto' });
+    expect(mastra.recoveryConfig).toEqual({ durableAgents: 'auto' });
   });
 
   it('does not auto-invoke recoverAllDurableAgents on construction', async () => {

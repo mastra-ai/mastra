@@ -1552,6 +1552,20 @@ export class DurableAgent<
       });
     }
 
+    // All durable agents share the same workflow name (`durable-agentic-loop`),
+    // so a caller with runId in hand could otherwise recover another agent's
+    // run. Refuse to rehydrate a snapshot whose agentId doesn't match this
+    // instance — the caller must reach the owning agent to recover the run.
+    if (workflowInput.agentId && workflowInput.agentId !== this.id) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_RECOVER_AGENT_MISMATCH',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `DurableAgent "${this.name}" recover(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
+        details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
+      });
+    }
+
     // 2. Rebuild the RequestContext from the persisted JSON-safe snapshot.
     const requestContext: RequestContext = workflowInput.requestContextEntries
       ? new RequestContext(Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>)
@@ -1605,6 +1619,28 @@ export class DurableAgent<
     // `bgManager.listTasks(...)`.
     const backgroundTasksConfig = this.getBackgroundTasksConfig?.();
     const backgroundTaskManager = this.#mastra?.backgroundTaskManager;
+
+    // Re-resolve processors from the live agent config. `llm-execution` reads
+    // `inputProcessors` / `llmRequestInputProcessors` / `outputProcessors` from
+    // the global registry, and the terminal `.map(...)` reads `outputProcessors`
+    // + `errorProcessors` — without these, the recovered segment would run
+    // with no processors even if the agent has some configured.
+    let inputProcessors: any[] = [];
+    let llmRequestInputProcessors: any[] = [];
+    let outputProcessors: any[] = [];
+    let errorProcessors: any[] = [];
+    try {
+      inputProcessors = (await (wrapped as any).listInputProcessors?.(requestContext)) ?? [];
+      llmRequestInputProcessors = (await (wrapped as any).__listLLMRequestProcessors?.(requestContext)) ?? [];
+      outputProcessors = (await (wrapped as any).listOutputProcessors?.(requestContext)) ?? [];
+      errorProcessors = (await (wrapped as any).listErrorProcessors?.(requestContext)) ?? [];
+    } catch (err) {
+      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) processor resolution failed: ${err}`);
+    }
+    // Fresh empty processorStates for the recovered segment — the pre-crash
+    // segment's in-memory processor state is gone, but the terminal state
+    // (memory writes, message list) lives on the persisted snapshot.
+    const processorStates = new Map<string, any>();
 
     // 5. Re-open an AGENT_RUN span for the recovered segment. Follow the same
     //    pattern as resume(): reuse the original traceId when possible so the
@@ -1671,6 +1707,11 @@ export class DurableAgent<
       abortSignal: abortController.signal,
       backgroundTaskManager,
       backgroundTasksConfig,
+      inputProcessors,
+      llmRequestInputProcessors,
+      outputProcessors,
+      errorProcessors,
+      processorStates,
       cleanup: () => {},
     };
 

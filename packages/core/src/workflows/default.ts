@@ -933,6 +933,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         }
 
+        // Drop the last-persisted-status tracker for early terminal exits
+        // (failed, canceled, tripwire) so the map does not grow unbounded.
+        // Suspended and paused runs keep their entry so a subsequent resume
+        // in the same process still sees the correct status and refuses to
+        // overwrite it with `running` mid-resume.
+        if (lastOutput.result.status !== 'suspended' && lastOutput.result.status !== 'paused') {
+          this.clearLastPersistedStatus(runId);
+        }
+
         return {
           ...result,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels

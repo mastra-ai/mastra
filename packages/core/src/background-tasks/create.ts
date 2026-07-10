@@ -101,7 +101,7 @@ export function createBackgroundTask(
 
     async restart() {
       if (!taskId) throw new Error('Task has not been dispatched yet');
-      return manager.resume(taskId, context);
+      return manager.restart(taskId, context);
     },
 
     async cancel() {

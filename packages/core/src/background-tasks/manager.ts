@@ -432,11 +432,11 @@ export class BackgroundTaskManager {
 
     const canRun = await this.checkConcurrency(task.agentId);
     if (!canRun) {
-      // Resume sits outside the queue/fallback-sync paths — there's no
+      // Restart sits outside the queue/fallback-sync paths — there's no
       // synchronous caller to fall back to, and silently leaving the task
-      // suspended hides the failure from the caller. Throw and let the
+      // running hides the failure from the caller. Throw and let the
       // caller retry once a slot frees.
-      throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
+      throw new Error(`Concurrency limit reached, cannot restart task "${taskId}" — retry once a slot is available`);
     }
 
     await this.dispatch(task, true);
@@ -788,36 +788,20 @@ export class BackgroundTaskManager {
     if (this.#mastra) {
       if (runningTask) void this.runLocalExecutionHook(runningTask);
       const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
-      if (isRestart) {
-        const prevWorkflowRun = await workflow.getWorkflowRunById(taskId);
-        if (prevWorkflowRun?.status === 'running') {
-          const run = await workflow.createRun({ runId: taskId });
-          void run
-            .restart()
-            .then(result => {
-              if (result.status !== 'suspended') {
-                void workflow.deleteWorkflowRunById(taskId);
-              }
-            })
-            .catch(err => {
-              this.#mastra?.getLogger?.()?.error(`background-task workflow restart failed for ${taskId}:`, err);
-            })
-            .finally(() => {
-              // Free the concurrency slot once the run terminates.
-              void this.drainPending();
-            });
-        }
-      }
+      const prevWorkflowRun = isRestart ? await workflow.getWorkflowRunById(taskId) : undefined;
+      const shouldRestart = isRestart && prevWorkflowRun?.status === 'running';
       const run = await workflow.createRun({ runId: taskId });
-      void run
-        .start({ inputData: { taskId } })
+      const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
+      void runPromise
         .then(result => {
           if (result.status !== 'suspended') {
             void workflow.deleteWorkflowRunById(taskId);
           }
         })
         .catch(err => {
-          this.#mastra?.getLogger?.()?.error(`background-task workflow start failed for ${taskId}:`, err);
+          this.#mastra
+            ?.getLogger?.()
+            ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
         })
         .finally(() => {
           // Free the concurrency slot once the run terminates.

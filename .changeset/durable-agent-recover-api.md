@@ -3,23 +3,22 @@
 '@mastra/client-js': patch
 ---
 
-Added HTTP + client bindings for `DurableAgent.recover()`.
+Added HTTP and client bindings for recovering an interrupted durable agent run.
 
 **What changed**
 
-- `@mastra/server`: new `POST /agents/:agentId/recover` route (requires `agents:execute`). Body accepts `{ runId, requestContext?, versions? }` and streams the recovered run's `fullStream` as SSE. Rejects non-durable agents with 400 and cross-tenant runs with 403 — honors the reserved `resourceId` on the server request context and validates the persisted `durable-agentic-loop` snapshot's ownership before invoking `agent.recover()`.
-- `@mastra/client-js`: new `agent.recover({ runId, requestContext?, versions?, signal? })` method mirroring `agent.resumeStream()`. Returns a `ReadableStream` piped from the SSE endpoint so browser/node callers can drain a recovered durable-agent run without touching the server-side class directly.
+- `@mastra/server`: new `POST /agents/:agentId/recover` route. Given the id of a durable agent run that was interrupted by a deploy or crash, the server picks the run back up from where it left off and streams the rest of the response to the caller. Non-durable agents are rejected, and callers can only recover runs that belong to them (same permission and ownership rules as resuming a suspended run).
+- `@mastra/client-js`: new `agent.recover({ runId })` method that reads that stream from the browser or Node. It behaves the same as `agent.resumeStream()` — you get back a readable stream of the agent's remaining response.
 
 **Why**
 
-The core `DurableAgent.recover(runId)` API added in the paired `@mastra/core` changeset was only reachable from in-process code. Exposing it over the standard agents HTTP surface (and via the official client) lets operators reattach to an orphaned `RUNNING` durable run from anywhere the rest of the agents API is already reachable — dashboards, CLI tools, admin endpoints — with the same auth, ownership, and version-override semantics as `resumeStream`.
+The underlying core API for recovering an interrupted durable agent run could previously only be called from server-side code. This adds the standard HTTP + client surface so operators can reattach to an interrupted run from a dashboard, an admin tool, or any other client, using the same auth and ownership rules as the rest of the agents API.
 
 **Usage**
 
 ```ts
-// From a browser / node client via @mastra/client-js:
 const stream = await mastraClient.getAgent('support').recover({ runId: 'run-abc123' });
 for await (const chunk of stream) {
-  // handle SSE frames
+  // render or forward the remaining agent output
 }
 ```

@@ -216,4 +216,27 @@ describe('DefaultExecutionEngine — lastPersistedStatus accessors', () => {
     engine.clearLastPersistedStatus('run-1');
     expect(engine.getLastPersistedStatus('run-1')).toBeUndefined();
   });
+
+  // Regression guard for issue #19056: the execute loop must clear the
+  // last-persisted-status tracker on early terminal exits (failed, canceled,
+  // tripwire) so the process-local map does not grow unbounded across many
+  // runs. Suspended and paused runs deliberately keep their entry so a
+  // subsequent resume in the same process still refuses to overwrite them
+  // with `running` mid-resume.
+  it.each(['failed', 'canceled', 'success'] as const)(
+    'clearLastPersistedStatus removes the tracker for %s terminal exits',
+    status => {
+      const engine = makeBareEngine();
+      engine.setLastPersistedStatus('run-1', status as WorkflowRunStatus);
+      engine.clearLastPersistedStatus('run-1');
+      expect(engine.getLastPersistedStatus('run-1')).toBeUndefined();
+    },
+  );
+
+  it('keeps the tracker for suspended so resume cannot clobber it', () => {
+    const engine = makeBareEngine();
+    engine.setLastPersistedStatus('run-1', 'suspended');
+    // Execute loop deliberately does NOT clear on suspended.
+    expect(engine.getLastPersistedStatus('run-1')).toBe('suspended');
+  });
 });
