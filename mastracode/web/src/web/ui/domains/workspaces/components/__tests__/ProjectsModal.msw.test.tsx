@@ -12,11 +12,27 @@ import {
 import type { DirectoryListing } from '../../../../../../shared/api/types';
 import type { Project } from '../../index';
 import { ProjectsModal } from '../../index';
+import type { GithubStatus } from '../../services/github';
 import { loadProjects, saveProjects } from '../../services/projects';
 
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
+const STATUS_URL = `${TEST_BASE_URL}/web/github/status`;
+
 const alpha: Project = { id: 'p-alpha', name: 'Alpha', path: '/projects/alpha', resourceId: 'res-alpha', createdAt: 1 };
 const beta: Project = { id: 'p-beta', name: 'Beta', path: '/projects/beta', resourceId: 'res-beta', createdAt: 2 };
+
+const githubProject: Project = {
+  id: 'p-gh',
+  name: 'octo/hello',
+  source: 'github',
+  githubProjectId: 'ghp_1',
+  sandboxWorkdir: '/workspace/hello',
+  gitBranch: 'main',
+  createdAt: 3,
+};
+
+const enabledStatus: GithubStatus = { enabled: true, connected: true, installations: [] };
+
 const rootListing: DirectoryListing = {
   root: '/projects',
   path: '/projects',
@@ -72,5 +88,32 @@ describe('ProjectsModal', () => {
     renderProjects();
     await user.click(screen.getByRole('button', { name: /Add a project/ }));
     expect(await screen.findByText('gamma')).toBeInTheDocument();
+  });
+
+  describe('GitHub projects', () => {
+    it('renders a GitHub project row from its repo name and sandbox workdir (no local path)', () => {
+      saveProjects([githubProject]);
+      renderProjects();
+      expect(screen.getByText(/octo\/hello/)).toBeInTheDocument();
+      expect(screen.getByText('/workspace/hello')).toBeInTheDocument();
+    });
+
+    it('shows "Open from GitHub" when the feature is enabled', async () => {
+      saveProjects([alpha]);
+      server.use(http.get(STATUS_URL, () => HttpResponse.json(enabledStatus)));
+      renderProjects();
+      expect(await screen.findByRole('button', { name: /Open from GitHub/ })).toBeInTheDocument();
+    });
+
+    it('hides "Open from GitHub" when the feature is disabled', async () => {
+      saveProjects([alpha]);
+      server.use(
+        http.get(STATUS_URL, () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
+      );
+      renderProjects();
+      // Wait for the status query to settle before asserting absence.
+      await waitFor(() => expect(screen.getByRole('button', { name: /Add a project/ })).toBeInTheDocument());
+      expect(screen.queryByRole('button', { name: /Open from GitHub/ })).not.toBeInTheDocument();
+    });
   });
 });

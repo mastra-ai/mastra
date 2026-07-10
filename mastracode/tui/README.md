@@ -323,45 +323,17 @@ detects the stopped VM and re-provisions automatically.
 Without a sandbox provider, users can still connect GitHub and pick repos, but opening a repo
 project shows a clear "sandbox not configured" error.
 
-### Per-(org,user) storage isolation
+### Storage
 
-When WorkOS web auth is enabled, the tenant boundary is the **(organization, user)** pair: each
-user in each org operates against their own dedicated libSQL database for all agent state (threads,
-messages, memory, observational memory, recall vectors) — no tenant can read another tenant's data
-at the storage layer. Two users in the same org are isolated, and the same user across two orgs is
-also isolated. The database location is derived server-side from a hash of `(orgId, userId)` (no
-client-supplied paths); users without an org fall back to a user-only key.
-
-```bash
-# Local files (default): one isolated DB dir per tenant under this root
-export MASTRACODE_TENANT_DB_ROOT=~/.mastracode/web/tenants    # optional
-
-# Or remote libSQL/Turso per tenant ({id} = hashed (orgId, userId)). This mode
-# assumes each tenant DB already exists at the templated URL.
-export MASTRACODE_TENANT_DB_URL_TEMPLATE=libsql://{id}-org.turso.io        # optional
-export MASTRACODE_TENANT_VECTOR_URL_TEMPLATE=libsql://{id}-vec-org.turso.io # optional
-export MASTRACODE_TENANT_DB_AUTH_TOKEN=...                                  # optional
-export MASTRACODE_TENANT_VECTOR_AUTH_TOKEN=...                              # optional
-
-# Or auto-provision a Turso database per tenant on first access via the Turso
-# Platform API (no pre-created DBs needed). Requires APP_DATABASE_URL: the
-# stable db-name/hostname mapping is persisted there so replicas converge on
-# one DB and cold starts don't re-create it. A scoped token is minted fresh per
-# resolution, so no long-lived credential is stored.
-export MASTRACODE_TURSO_PLATFORM_TOKEN=...    # optional
-export MASTRACODE_TURSO_ORG=my-org            # optional
-export MASTRACODE_TURSO_GROUP=default         # optional (default "default")
-```
-
-Resolution priority: explicit `MASTRACODE_TENANT_DB_URL_TEMPLATE` → Turso
-auto-provisioning (when the platform token + org are set) → local libSQL files.
-
-When web auth is disabled the server uses a single shared store, exactly as before.
+All agent state (threads, messages, memory, observational memory, recall vectors) persists in the
+single application Postgres (`APP_DATABASE_URL`) alongside the GitHub project metadata — one shared
+database, with users separated by `resourceId` scoping. Without `APP_DATABASE_URL` (bare local
+dev), agent state falls back to a local libSQL file.
 
 ### Multi-replica deployment
 
-The web server keeps each tenant's Mastra stack in an in-memory cache and serializes per-user git
-write operations. For hosted, multi-replica deployments a few settings make this safe and bounded:
+The web server serializes per-user git write operations. For hosted, multi-replica deployments a
+few settings make this safe and bounded:
 
 ```bash
 # Replica-stable state signing — REQUIRED across replicas. Without an explicit
@@ -372,15 +344,6 @@ export GITHUB_APP_WEBHOOK_SECRET=...
 # Cross-replica serialization of per-(project,user) git writes via Postgres
 # advisory locks (default on, requires APP_DATABASE_URL). Set 0 for local dev.
 export MASTRACODE_DISTRIBUTED_LOCK=1
-
-# Persist/share tenant DBs across replicas — fail/warn at startup if no remote
-# tenant DB backend (URL template OR Turso auto-provisioning) is configured
-# (local-file DBs don't survive restarts or sharing).
-export MASTRACODE_REQUIRE_REMOTE_TENANT_DB=1
-
-# Bound in-memory tenant caches as the team grows.
-export MASTRACODE_TENANT_IDLE_MINUTES=30    # idle eviction window (0 disables)
-export MASTRACODE_TENANT_MAX_APPS=100       # LRU cap on cached stacks (0 disables)
 
 # Per-replica cap on concurrently live sandboxes (0 / unset = unlimited).
 export MASTRACODE_MAX_SANDBOXES=50
