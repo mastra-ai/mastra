@@ -187,7 +187,7 @@ Both callbacks are optional and can be used independently.
     name: 'ports',
     type: 'number[]',
     description:
-      'Ports to expose from the sandbox (up to 4). Public HTTPS domains are available via getInfo().metadata.domains.',
+      'Ports to expose from the sandbox (up to 15). Public HTTPS domains are available via getInfo().metadata.domains.',
     isOptional: true,
   },
   {
@@ -298,9 +298,9 @@ The Vercel Sandbox SDK doesn't expose a stdin channel for running commands, so `
 
 ## Limits
 
-- Up to 8 vCPUs, with 2048 MB of memory per vCPU.
-- Up to 4 exposed ports.
+- Up to 32 vCPUs, with 2048 MB of memory per vCPU.
+- Up to 15 exposed ports.
 - The filesystem is ephemeral — persisted only within the session and lost when the sandbox stops.
-- Maximum runtime is plan-dependent (45 minutes on Hobby, up to 5 hours on Pro/Enterprise), with a default of 5 minutes.
+- Maximum runtime is plan-dependent (45 minutes on Hobby, up to 24 hours on Pro and Enterprise), with a default of 5 minutes.
 
 See the [Vercel Sandbox documentation](https://vercel.com/docs/vercel-sandbox) for current limits and pricing.
