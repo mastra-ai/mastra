@@ -48,6 +48,38 @@ function injectJsonInstructionIntoLatestUserMessage({
   return [...prompt, { role: 'user', content: [{ type: 'text', text: instruction }] }] as LanguageModelV2Prompt;
 }
 
+function isBedrockOpenAIModel(model: MastraLanguageModel): boolean {
+  return model.provider === 'amazon-bedrock' && /(?:^|\.)openai\./.test(model.modelId);
+}
+
+function removeReasoningForBedrockOpenAIModel(
+  prompt: LanguageModelV2Prompt,
+  model: MastraLanguageModel,
+): LanguageModelV2Prompt {
+  if (!isBedrockOpenAIModel(model)) {
+    return prompt;
+  }
+
+  let changed = false;
+  const normalizedPrompt = prompt
+    .map(message => {
+      if (message.role !== 'assistant') {
+        return message;
+      }
+
+      const content = message.content.filter(part => part.type !== 'reasoning');
+      if (content.length === message.content.length) {
+        return message;
+      }
+
+      changed = true;
+      return { ...message, content };
+    })
+    .filter(message => message.role === 'system' || typeof message.content === 'string' || message.content.length > 0);
+
+  return changed ? (normalizedPrompt as LanguageModelV2Prompt) : prompt;
+}
+
 function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
   const newObj = { ...obj };
   for (const key of keys) {
@@ -189,6 +221,8 @@ export function execute<OUTPUT = undefined>({
         },
       }
     : providerOptions;
+
+  prompt = removeReasoningForBedrockOpenAIModel(prompt, model);
 
   const stream = v5.initialize({
     runId,

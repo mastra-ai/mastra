@@ -243,4 +243,108 @@ describe('execute structured output prompt handling', () => {
     expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
     expect(promptJson).toContain('suggestions');
   });
+
+  it('removes replayed assistant reasoning for OpenAI models on Bedrock', async () => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      provider: 'amazon-bedrock',
+      modelId: 'openai.gpt-oss-20b-1:0',
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-bedrock-openai', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Next answer.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const messages = [
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'First request.' }] },
+      {
+        role: 'assistant' as const,
+        content: [
+          { type: 'reasoning' as const, text: 'Internal chain.' },
+          { type: 'text' as const, text: 'Visible answer.' },
+        ],
+      },
+      { role: 'assistant' as const, content: [{ type: 'reasoning' as const, text: 'Reasoning only.' }] },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Continue.' }] },
+    ];
+
+    const stream = execute({
+      runId: 'test-run-id-bedrock-openai-reasoning',
+      model: model as any,
+      inputMessages: messages,
+      onResult: () => {},
+      methodType: 'stream',
+    });
+
+    await readStream(stream);
+
+    expect(capturedPrompt).toEqual([
+      messages[0],
+      {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Visible answer.' }],
+      },
+      messages[3],
+    ]);
+  });
+
+  it('keeps replayed assistant reasoning for Anthropic models on Bedrock', async () => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      provider: 'amazon-bedrock',
+      modelId: 'anthropic.claude-sonnet-4-20250514-v1:0',
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-bedrock-anthropic', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Next answer.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const messages = [
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'First request.' }] },
+      {
+        role: 'assistant' as const,
+        content: [
+          { type: 'reasoning' as const, text: 'Internal chain.' },
+          { type: 'text' as const, text: 'Visible answer.' },
+        ],
+      },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Continue.' }] },
+    ];
+
+    const stream = execute({
+      runId: 'test-run-id-bedrock-anthropic-reasoning',
+      model: model as any,
+      inputMessages: messages,
+      onResult: () => {},
+      methodType: 'stream',
+    });
+
+    await readStream(stream);
+
+    expect(capturedPrompt).toEqual(messages);
+  });
 });
