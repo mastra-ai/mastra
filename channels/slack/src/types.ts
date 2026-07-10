@@ -160,6 +160,13 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
   /** Additional options passed directly to the Chat SDK. */
   chatOptions?: ChannelConfig['chatOptions'];
 
+  /**
+   * Resolve a per-session workspace `projectPath` for a controller channel session.
+   * Only consulted when this provider is connected to an `AgentController`; agent
+   * connections ignore it. See `ChannelConfig.resolveSessionProjectPath`.
+   */
+  resolveSessionProjectPath?: ChannelConfig['resolveSessionProjectPath'];
+
   // ---------------------------------------------------------------------------
   // Slack-specific
   // ---------------------------------------------------------------------------
