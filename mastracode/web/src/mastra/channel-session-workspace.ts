@@ -27,6 +27,9 @@ import { getSandboxProvider } from '../web/github/sandbox.js';
  * on the host filesystem (where a cloud path like `/workspace` is not writable),
  * so it uses the local sandbox root; cloud providers use
  * `MASTRACODE_SANDBOX_WORKDIR` (default `/workspace`).
+ *
+ * `computeSandboxWorkdir` (web/github/sandbox.ts) is the canonical version of
+ * this precedence — keep the two in sync if that base selection ever changes.
  */
 function getSessionWorkspaceBase(): string {
   if (getSandboxProvider() === 'local') {
