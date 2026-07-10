@@ -269,12 +269,14 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
           return c.json({ error: 'linear_intake_disabled', message: 'Linear intake is turned off in Settings.' }, 404);
         }
 
+        // No projects selected means nothing is synced — don't fan out to Linear.
+        const projectIds = config.linear.projectIds ?? [];
+        if (projectIds.length === 0) {
+          return c.json({ issues: [], nextCursor: null });
+        }
+
         try {
-          const { issues, nextCursor } = await listActiveLinearIssues(
-            connection.accessToken,
-            after,
-            config.linear.projectIds ?? undefined,
-          );
+          const { issues, nextCursor } = await listActiveLinearIssues(connection.accessToken, after, projectIds);
           return c.json({ issues, nextCursor });
         } catch (err) {
           return c.json(

@@ -62,7 +62,7 @@ vi.mock('../github/config', () => ({
 const exchangeLinearOAuthCode = vi.fn(async () => 'linear-token');
 const fetchLinearWorkspace = vi.fn(async () => ({ name: 'Acme', urlKey: 'acme' }));
 const listLinearProjects = vi.fn(async () => [
-  { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teamKeys: ['ENG'] },
+  { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
 ]);
 const listActiveLinearIssues = vi.fn(async (_token: string, _after?: string, _projectIds?: string[]) => ({
   issues: [
@@ -155,7 +155,7 @@ beforeEach(() => {
   getIntakeConfig.mockClear();
   getIntakeConfig.mockResolvedValue({
     github: { enabled: true, projectIds: null },
-    linear: { enabled: true, projectIds: null },
+    linear: { enabled: true, projectIds: ['proj-1'] },
   });
   listActiveLinearIssues.mockClear();
   listLinearProjects.mockClear();
@@ -255,7 +255,9 @@ describe('projects route', () => {
     connect();
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/projects');
     expect(await res.json()).toEqual({
-      projects: [{ id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teamKeys: ['ENG'] }],
+      projects: [
+        { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
+      ],
     });
   });
 });
@@ -272,13 +274,13 @@ describe('issues route', () => {
     const json = await res.json();
     expect(json.issues[0]).toMatchObject({ identifier: 'ENG-42', title: 'Fix intake sync' });
     expect(json.nextCursor).toBe('cursor-2');
-    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, undefined);
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
   });
 
   it('forwards the pagination cursor', async () => {
     connect();
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues?after=cursor-2');
-    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', 'cursor-2', undefined);
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', 'cursor-2', ['proj-1']);
   });
 
   it('rejects malformed cursors', async () => {
@@ -296,6 +298,17 @@ describe('issues route', () => {
     });
     await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+  });
+
+  it('returns an empty page without calling Linear when no projects are selected', async () => {
+    connect();
+    getIntakeConfig.mockResolvedValueOnce({
+      github: { enabled: true, projectIds: null },
+      linear: { enabled: true, projectIds: null },
+    });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(await res.json()).toEqual({ issues: [], nextCursor: null });
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
   });
 
   it('404s when Linear intake is disabled in settings', async () => {

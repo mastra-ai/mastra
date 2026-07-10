@@ -122,9 +122,10 @@ const notConnectedStatus: GithubStatus = {
   reason: 'not_connected',
 };
 
+/** Both sources selected so GitHub/Linear specs see data by default. */
 const defaultIntakeConfig: IntakeConfig = {
-  github: { enabled: true, projectIds: null },
-  linear: { enabled: true, projectIds: null },
+  github: { enabled: true, projectIds: [GITHUB_PROJECT_ID] },
+  linear: { enabled: true, projectIds: ['lin-proj-1'] },
 };
 
 /** Linear stays out of the way unless a spec opts in. */
@@ -356,6 +357,36 @@ describe('Factory Intake page — Linear source', () => {
     expect(screen.queryByRole('heading', { name: 'Linear' })).not.toBeInTheDocument();
   });
 
+  it('given no GitHub selection at all, then a not-selected hint renders and no issues are fetched', async () => {
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: null },
+        linear: { enabled: false, projectIds: null },
+      },
+    });
+
+    expect(await screen.findByText(/isn't selected as a GitHub intake source/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Open issues' })).not.toBeInTheDocument();
+  });
+
+  it('given Linear is connected but no projects are selected, then a pick-projects hint renders and no issues are fetched', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues: [], nextPage: null }),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: [GITHUB_PROJECT_ID] },
+        linear: { enabled: true, projectIds: null },
+      },
+      linearStatus: linearConnectedStatus,
+    });
+
+    expect(await screen.findByText('No Linear projects selected. Pick them in Settings › General.')).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Linear issues' })).not.toBeInTheDocument();
+  });
+
   it('given an explicit GitHub selection that excludes the active project, then a not-selected hint renders instead of issues', async () => {
     renderAt('/factory/intake', githubProject, connectedStatus, {
       intakeConfig: {
@@ -393,7 +424,10 @@ describe('Factory Intake page — Linear source', () => {
       ),
     );
     renderAt('/factory/intake', githubProject, connectedStatus, {
-      intakeConfig: { github: { enabled: false, projectIds: null }, linear: { enabled: true, projectIds: null } },
+      intakeConfig: {
+        github: { enabled: false, projectIds: null },
+        linear: { enabled: true, projectIds: ['lin-proj-1'] },
+      },
       linearStatus: linearConnectedStatus,
     });
 

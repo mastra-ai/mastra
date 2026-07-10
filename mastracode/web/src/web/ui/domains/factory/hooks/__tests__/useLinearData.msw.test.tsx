@@ -36,7 +36,9 @@ const issue: LinearIssue = {
   updatedAt: '2026-07-02T00:00:00Z',
 };
 
-const projects: LinearProject[] = [{ id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teamKeys: ['ENG'] }];
+const projects: LinearProject[] = [
+  { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
+];
 
 const connectedStatus: LinearStatus = {
   enabled: true,

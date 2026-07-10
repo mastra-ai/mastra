@@ -45,13 +45,20 @@ export interface LinearIssuePage {
   nextCursor: string | null;
 }
 
+export interface LinearProjectTeam {
+  id: string;
+  /** Short team key, e.g. `ENG`. */
+  key: string;
+  name: string;
+}
+
 export interface LinearProject {
   id: string;
   name: string;
   /** Project state, e.g. `planned` / `started` / `paused` / `completed`. */
   state: string;
-  /** Keys of the teams the project belongs to, e.g. `["ENG"]`. */
-  teamKeys: string[];
+  /** Teams the project belongs to (the Settings picker groups by these). */
+  teams: LinearProjectTeam[];
 }
 
 /**

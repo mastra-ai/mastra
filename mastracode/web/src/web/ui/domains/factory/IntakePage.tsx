@@ -19,9 +19,10 @@ import { connectLinear } from './services/linear';
 /**
  * Factory › Intake: open issues from the configured intake sources.
  *
- * GitHub shows the active project's open issues; Linear shows the workspace's
- * active issues (the server narrows them to the projects picked in Settings).
- * Sources toggled off in Settings › General › Intake sources are hidden.
+ * Both sources sync only the projects explicitly picked in Settings › General
+ * › Intake sources: GitHub shows the active project's issues when it's
+ * selected, and Linear shows the selected projects' active issues (narrowed
+ * server-side). Nothing is synced until something is picked.
  */
 export function IntakePage() {
   return (
@@ -40,10 +41,11 @@ function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
   // On a config error, fall back to the GitHub-only view rather than a dead end.
   const config = configQuery.data;
   const githubEnabled = config?.github.enabled ?? true;
-  // `projectIds: null` means "the active project"; an explicit selection must
-  // include this project for its issues to appear here.
-  const githubSelected = config?.github.projectIds == null || config.github.projectIds.includes(githubProjectId);
+  // Nothing selected means nothing synced: the active project must be picked
+  // in Settings for its issues to appear here.
+  const githubSelected = config ? (config.github.projectIds?.includes(githubProjectId) ?? false) : true;
   const linearEnabled = config?.linear.enabled ?? false;
+  const linearSelectedCount = config?.linear.projectIds?.length ?? 0;
   const linearFeature = linearStatusQuery.data?.enabled ?? false;
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const showLinear = linearEnabled && linearFeature;
@@ -73,7 +75,15 @@ function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
       {showLinear && (
         <section className="flex flex-col gap-3" aria-label="Linear issues">
           <SourceHeading label="Linear" />
-          {linearConnected ? <LinearIssueList /> : <LinearConnectNotice />}
+          {!linearConnected ? (
+            <LinearConnectNotice />
+          ) : linearSelectedCount === 0 ? (
+            <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+              No Linear projects selected. Pick them in Settings › General.
+            </Txt>
+          ) : (
+            <LinearIssueList />
+          )}
         </section>
       )}
     </div>

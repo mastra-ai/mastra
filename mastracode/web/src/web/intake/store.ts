@@ -6,9 +6,9 @@
  *  - GitHub: which of the org's projects (repos) contribute issues.
  *  - Linear: which projects contribute issues.
  *
- * `projectIds` of `null` mean "no explicit selection" — the defaults apply
- * (the active GitHub project; all Linear projects). An `enabled` flag of
- * `false` hides the source entirely regardless of selection.
+ * `projectIds` of `null` mean "nothing selected" — the source syncs nothing
+ * until the user explicitly picks projects. An `enabled` flag of `false`
+ * hides the source entirely regardless of selection.
  */
 
 import { and, eq } from 'drizzle-orm';
@@ -19,17 +19,17 @@ import { getAppDb } from '../github/db';
 export interface IntakeConfig {
   github: {
     enabled: boolean;
-    /** GitHub project ids (app DB uuids) to sync; `null` = active project. */
+    /** GitHub project ids (app DB uuids) to sync; `null` = nothing selected. */
     projectIds: string[] | null;
   };
   linear: {
     enabled: boolean;
-    /** Linear project ids to sync; `null` = all projects. */
+    /** Linear project ids to sync; `null` = nothing selected. */
     projectIds: string[] | null;
   };
 }
 
-/** Defaults preserve pre-config behavior: GitHub active project + all of Linear. */
+/** Default: both sources on, but nothing synced until projects are picked. */
 export const DEFAULT_INTAKE_CONFIG: IntakeConfig = {
   github: { enabled: true, projectIds: null },
   linear: { enabled: true, projectIds: null },
@@ -62,7 +62,7 @@ CREATE TABLE IF NOT EXISTS intake_settings (
 CREATE UNIQUE INDEX IF NOT EXISTS intake_settings_org_user_unique ON intake_settings (org_id, user_id);
 `;
 
-/** Bounded list of non-empty ids, or `null` for "no explicit selection". */
+/** Bounded list of non-empty ids, or `null` for "nothing selected". */
 function sanitizeIdList(value: unknown): string[] | null | undefined {
   if (value === null) return null;
   if (!Array.isArray(value) || value.length > 200) return undefined;

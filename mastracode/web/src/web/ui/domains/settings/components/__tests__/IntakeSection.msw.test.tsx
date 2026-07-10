@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -28,9 +28,13 @@ const connectedStatus: LinearStatus = {
   reason: 'ready',
 };
 
+const engTeam = { id: 'team-eng', key: 'ENG', name: 'Engineering' };
+const designTeam = { id: 'team-des', key: 'DES', name: 'Design' };
+
 const linearProjects: LinearProject[] = [
-  { id: 'lproj-1', name: 'Q3 Roadmap', state: 'started', teamKeys: ['ENG'] },
-  { id: 'lproj-2', name: 'Design refresh', state: 'planned', teamKeys: [] },
+  { id: 'lproj-1', name: 'Q3 Roadmap', state: 'started', teams: [engTeam] },
+  { id: 'lproj-2', name: 'Design refresh', state: 'planned', teams: [] },
+  { id: 'lproj-3', name: 'Shared initiative', state: 'started', teams: [engTeam, designTeam] },
 ];
 
 function seedGithubProject() {
@@ -91,8 +95,25 @@ describe('IntakeSection', () => {
       expect(await screen.findByRole('switch', { name: 'Sync GitHub' })).toBeChecked();
       expect(await screen.findByRole('switch', { name: 'Sync Linear' })).toBeChecked();
       expect(await screen.findByRole('checkbox', { name: 'mastra' })).toBeInTheDocument();
-      expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap (ENG)' })).toBeInTheDocument();
+      expect(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
       expect(screen.getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
+    });
+
+    it('groups Linear projects by team, listing shared projects under each team', async () => {
+      seedGithubProject();
+      useIntakeHandlers();
+
+      renderIntakeSection();
+
+      const eng = await screen.findByRole('group', { name: 'ENG · Engineering' });
+      expect(within(eng).getByRole('checkbox', { name: 'Q3 Roadmap' })).toBeInTheDocument();
+      expect(within(eng).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+
+      const design = screen.getByRole('group', { name: 'DES · Design' });
+      expect(within(design).getByRole('checkbox', { name: 'Shared initiative' })).toBeInTheDocument();
+
+      const noTeam = screen.getByRole('group', { name: 'No team' });
+      expect(within(noTeam).getByRole('checkbox', { name: 'Design refresh' })).toBeInTheDocument();
     });
   });
 
@@ -118,7 +139,7 @@ describe('IntakeSection', () => {
 
       renderIntakeSection();
 
-      await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap (ENG)' }));
+      await userEvent.click(await screen.findByRole('checkbox', { name: 'Q3 Roadmap' }));
 
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0]!.linear.projectIds).toEqual(['lproj-1']);
@@ -135,7 +156,7 @@ describe('IntakeSection', () => {
 
       expect(await screen.findByText('Connect a Linear workspace to sync its issues.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
-      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap (ENG)' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('checkbox', { name: 'Q3 Roadmap' })).not.toBeInTheDocument();
       expect(screen.getByRole('switch', { name: 'Sync Linear' })).toBeDisabled();
     });
   });

@@ -150,28 +150,42 @@ export interface LinearIssuePage {
   nextCursor: string | null;
 }
 
+export interface LinearProjectTeam {
+  id: string;
+  /** Short team key, e.g. `ENG`. */
+  key: string;
+  name: string;
+}
+
 export interface LinearProject {
   id: string;
   name: string;
   /** Project state, e.g. `planned` / `started` / `paused` / `completed`. */
   state: string;
-  /** Keys of the teams the project belongs to, e.g. `["ENG"]`. */
-  teamKeys: string[];
+  /** Teams the project belongs to (the Settings picker groups by these). */
+  teams: LinearProjectTeam[];
 }
 
 /** List the workspace's projects (for the Settings intake-source picker). */
 export async function listLinearProjects(accessToken: string): Promise<LinearProject[]> {
   const data = await linearGraphql<{
-    projects: { nodes: Array<{ id: string; name: string; state: string; teams: { nodes: Array<{ key: string }> } }> };
+    projects: {
+      nodes: Array<{
+        id: string;
+        name: string;
+        state: string;
+        teams: { nodes: Array<{ id: string; key: string; name: string }> };
+      }>;
+    };
   }>(
     accessToken,
-    `query { projects(first: 100) { nodes { id name state teams(first: 10) { nodes { key } } } } }`,
+    `query { projects(first: 100) { nodes { id name state teams(first: 10) { nodes { id key name } } } } }`,
   );
   return data.projects.nodes.map(node => ({
     id: node.id,
     name: node.name,
     state: node.state,
-    teamKeys: node.teams.nodes.map(team => team.key),
+    teams: node.teams.nodes.map(team => ({ id: team.id, key: team.key, name: team.name })),
   }));
 }
 
