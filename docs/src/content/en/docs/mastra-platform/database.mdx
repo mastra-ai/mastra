@@ -131,6 +131,12 @@ export const storage = new PostgresStore({ connectionString })
 export const vector = new PgVector({ connectionString })
 ```
 
+Postgres databases attached before automatic provisioning shipped may not have `pgvector` installed. Open the database in **Project Settings → Database** to see its `pgvector` status. When the extension isn't installed, select **Enable pgvector** to install it against the managed connection. The operation is idempotent and safe to run against a database that's already set up.
+
+:::note
+Enabling `pgvector` requires the **admin** role on the project.
+:::
+
 ### Wire storage and vector into Mastra
 
 Pass the `storage` and `vector` instances to your `Mastra` configuration so agents, memory, and workflows can use them:
