@@ -1,5 +1,57 @@
 # @mastra/core
 
+## 1.51.0-alpha.4
+
+### Minor Changes
+
+- Added support for custom processors on `createScorer` judges. You can now pass `inputProcessors`, `outputProcessors`, `errorProcessors`, and `maxProcessorRetries` in a scorer's `judge` config (or per-step judge config) to apply processors to the internal judge agent — for example wiring up `StreamErrorRetryProcessor` to retry transient LLM errors while scoring. ([#19195](https://github.com/mastra-ai/mastra/pull/19195))
+
+  ```typescript
+  import { createScorer } from '@mastra/core/evals';
+  import { StreamErrorRetryProcessor } from '@mastra/core/processors';
+
+  const scorer = createScorer({
+    id: 'my-scorer',
+    description: 'Scores responses',
+    judge: {
+      model: myModel,
+      instructions: 'You are an expert evaluator...',
+      errorProcessors: [new StreamErrorRetryProcessor()],
+      maxProcessorRetries: 3,
+    },
+  });
+  ```
+
+- Added anonymous feature usage telemetry for server startup surface counts and a `trackFeatureUsage()` API. ([#19159](https://github.com/mastra-ai/mastra/pull/19159))
+
+- Added optional `log` and `progress` functions to the MCP tool execution context type so tools running in an MCP server can send log and progress notifications to the calling client. ([#19193](https://github.com/mastra-ai/mastra/pull/19193))
+
+  Added `mastra.removeTool(key)` to remove a dynamically registered tool from the Mastra instance, the counterpart to `mastra.addTool()`:
+
+  ```typescript
+  mastra.addTool(calculatorTool);
+  mastra.removeTool('calculator-tool'); // returns true if a tool was removed
+  ```
+
+### Patch Changes
+
+- Pass tracingContext through to runProcessAPIError so error-processor runs show up as processor_run spans in observability exports ([#19188](https://github.com/mastra-ai/mastra/pull/19188))
+
+- Fixed `iterationCount` always being 1 for `dountil` and `dowhile` loops on the evented workflow engine. The count was never carried forward between iterations, so any loop whose condition depended on `iterationCount` never advanced and ran forever. ([#19233](https://github.com/mastra-ai/mastra/pull/19233))
+
+  **Before**
+
+  ```ts
+  // On the evented engine this loop never terminated: iterationCount stayed 1.
+  workflow.dountil(step, async ({ iterationCount }) => iterationCount >= 3);
+  ```
+
+  **After**
+
+  The condition now receives an incrementing count (1, 2, 3, ...) exactly as it does on the default engine, so the loop stops as expected. Loops whose conditions read step output (`inputData`) were unaffected.
+
+- Fixed an infinite retry loop in evented workflows when workflow storage is unavailable (for example when the workflows table does not exist). A failing workflow.fail event no longer republishes another workflow.fail after exhausting its retry budget, which previously flooded logs with endless "error processing event" entries. ([#19194](https://github.com/mastra-ai/mastra/pull/19194))
+
 ## 1.51.0-alpha.3
 
 ### Patch Changes

@@ -1,5 +1,14 @@
 # @mastra/longmemeval
 
+## 1.1.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`031931a`](https://github.com/mastra-ai/mastra/commit/031931a715405fb90759b1903c9c25cbf05994af), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`b9000bb`](https://github.com/mastra-ai/mastra/commit/b9000bba41c2bdf6bca9e396d0d2c7d654cb4b6a), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`f30a8fb`](https://github.com/mastra-ai/mastra/commit/f30a8fb8670fe747eb131b99b27800215d39852e), [`a75dca4`](https://github.com/mastra-ai/mastra/commit/a75dca4b640d5e37f00019038f08defb6dea4ca8), [`2565972`](https://github.com/mastra-ai/mastra/commit/2565972e892632db9d5ff49cfaafa03253978bc3), [`498e10f`](https://github.com/mastra-ai/mastra/commit/498e10fed88e5c8c46cd9b90bf5e70982828e6f5), [`6169c5e`](https://github.com/mastra-ai/mastra/commit/6169c5ee76c73c75c8982fa6dd7efb8c906b0ba2), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+  - @mastra/memory@1.23.0-alpha.3
+  - @mastra/rag@2.4.1-alpha.0
+
 ## 1.1.7-alpha.4
 
 ### Patch Changes
