@@ -2,14 +2,13 @@ import { Dialog, DialogContent } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Kbd } from '@mastra/playground-ui/components/Kbd';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 
+import { useChatCommands } from '../context/ChatCommandsProvider';
 import { SLASH_COMMANDS } from '../index';
 import type { SlashCommand } from '../index';
 
 interface CommandPaletteProps {
-  /** Run a command. Commands with args pre-fill the composer; no-arg commands execute. */
-  onRun: (command: SlashCommand) => void;
   onClose: () => void;
 }
 
@@ -18,7 +17,8 @@ interface CommandPaletteProps {
  * type, navigates with arrows, runs on Enter, and dismisses on Escape (handled
  * by the DS Dialog and the global key handler in App).
  */
-export function CommandPalette({ onRun, onClose }: CommandPaletteProps) {
+export function CommandPalette({ onClose }: CommandPaletteProps) {
+  const { run: runCommand } = useChatCommands();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,14 +28,9 @@ export function CommandPalette({ onRun, onClose }: CommandPaletteProps) {
     ? SLASH_COMMANDS.filter(c => c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q))
     : SLASH_COMMANDS;
 
-  // Keep the active index in range as the match list shrinks/grows.
-  useEffect(() => {
-    setActive(a => Math.min(a, Math.max(0, matches.length - 1)));
-  }, [matches.length]);
-
   const run = (command: SlashCommand | undefined) => {
     if (!command) return;
-    onRun(command);
+    runCommand(command);
     onClose();
   };
 

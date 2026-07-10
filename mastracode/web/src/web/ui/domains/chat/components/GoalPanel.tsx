@@ -1,51 +1,27 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Target } from 'lucide-react';
-import { useState } from 'react';
 
-import type { GoalSnapshot } from '../services/transcript';
+import { useChatTranscript } from '../context/useChatTranscript';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import {
+  useClearAgentControllerGoalMutation,
+  usePauseAgentControllerGoalMutation,
+  useResumeAgentControllerGoalMutation,
+} from '../hooks/useAgentControllerGoalMutations';
+import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-accent2/5 px-4 py-2 text-xs';
 
-export function GoalPanel({
-  goal,
-  onSetGoal,
-  onPauseGoal,
-  onResumeGoal,
-  onClearGoal,
-}: {
-  goal?: GoalSnapshot;
-  onSetGoal: (objective: string) => void;
-  onPauseGoal: () => void;
-  onResumeGoal: () => void;
-  onClearGoal: () => void;
-}) {
-  const [draft, setDraft] = useState('');
+export function GoalPanel() {
+  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { transcript } = useChatTranscript();
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
+  const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
+  const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
+  const goal = transcript.goal;
 
-  if (!goal) {
-    return (
-      <form
-        className={goalBar}
-        onSubmit={e => {
-          e.preventDefault();
-          if (draft.trim()) {
-            onSetGoal(draft.trim());
-            setDraft('');
-          }
-        }}
-      >
-        <Input
-          className="flex-1"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          placeholder="Set a goal objective…"
-        />
-        <Button variant="primary" size="sm" type="submit">
-          Set Goal
-        </Button>
-      </form>
-    );
-  }
+  if (!goal) return null;
 
   const progress = `${goal.iteration}/${goal.maxRuns}`;
 
@@ -64,16 +40,16 @@ export function GoalPanel({
         <span className="max-w-52 overflow-hidden text-ellipsis whitespace-nowrap text-icon3">{goal.reason}</span>
       )}
       {goal.status === 'active' && (
-        <Button size="sm" onClick={onPauseGoal}>
+        <Button size="sm" onClick={() => void pauseGoalMutation.mutateAsync()}>
           Pause
         </Button>
       )}
       {goal.status === 'paused' && (
-        <Button variant="primary" size="sm" onClick={onResumeGoal}>
+        <Button variant="primary" size="sm" onClick={() => void resumeGoalMutation.mutateAsync()}>
           Resume
         </Button>
       )}
-      <Button size="sm" onClick={onClearGoal}>
+      <Button size="sm" onClick={() => void clearGoalMutation.mutateAsync()}>
         Clear
       </Button>
     </div>
