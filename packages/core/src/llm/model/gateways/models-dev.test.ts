@@ -153,6 +153,9 @@ describe('ModelsDevGateway', () => {
         name: 'Cloudflare AI Gateway',
         models: {
           'anthropic/claude-3-5-haiku': { name: 'Claude 3.5 Haiku' },
+          // models.dev ships a per-model npm hint here that must NOT become a
+          // modelOverride - it would route this model off the /compat endpoint
+          'anthropic/claude-opus-4-7': { name: 'Claude Opus 4.7', provider: { npm: '@ai-sdk/anthropic' } },
           'openai/gpt-4o': { name: 'GPT-4o' },
         },
         env: ['CLOUDFLARE_API_TOKEN', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_GATEWAY_ID'],
@@ -224,7 +227,14 @@ describe('ModelsDevGateway', () => {
       );
       // The account and gateway IDs are URL template inputs, not auth
       expect(providers['cloudflare-ai-gateway'].apiKeyEnvVar).toBe('CLOUDFLARE_API_TOKEN');
-      expect(providers['cloudflare-ai-gateway'].models).toEqual(['anthropic/claude-3-5-haiku', 'openai/gpt-4o']);
+      expect(providers['cloudflare-ai-gateway'].models).toEqual([
+        'anthropic/claude-3-5-haiku',
+        'anthropic/claude-opus-4-7',
+        'openai/gpt-4o',
+      ]);
+      // models.dev per-model npm hints are dropped: every model must stay on
+      // the OpenAI-compatible /compat endpoint
+      expect(providers['cloudflare-ai-gateway'].modelOverrides).toBeUndefined();
     });
 
     it('should preserve Google legacy API key fallback when generating providers', async () => {

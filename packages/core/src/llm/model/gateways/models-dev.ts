@@ -115,9 +115,13 @@ const PROVIDER_OVERRIDES: Record<string, Partial<ProviderConfig>> = {
   // endpoint is account-scoped. Route through its OpenAI-compatible endpoint,
   // interpolating the account and gateway from env vars. Auth must be the API
   // token; the other env vars are consumed by the URL template.
+  // modelOverrides is cleared because models.dev carries per-model npm
+  // installation hints (e.g. `@ai-sdk/anthropic`) that would route those
+  // models off the uniform OpenAI-compatible endpoint.
   'cloudflare-ai-gateway': {
     url: 'https://gateway.ai.cloudflare.com/v1/${CLOUDFLARE_ACCOUNT_ID}/${CLOUDFLARE_GATEWAY_ID}/compat',
     apiKeyEnvVar: 'CLOUDFLARE_API_TOKEN',
+    modelOverrides: {},
   },
 };
 
@@ -192,13 +196,16 @@ export class ModelsDevGateway extends MastraModelGateway {
         // Collect per-model endpoint/shape/SDK overrides. Some providers serve
         // individual models over a different endpoint or request shape than the
         // provider default (e.g. OpenAI Responses vs chat-completions).
-        const modelOverrides: Record<string, ModelProviderOverride> = {};
+        // PROVIDER_OVERRIDES takes priority so a provider can opt out of
+        // models.dev per-model hints entirely.
+        const collectedModelOverrides: Record<string, ModelProviderOverride> = {};
         for (const [modelId, modelInfo] of activeModels) {
           const ov = modelInfo?.provider;
           if (ov && (ov.api || ov.shape || ov.npm)) {
-            modelOverrides[modelId] = { api: ov.api, shape: ov.shape, npm: ov.npm };
+            collectedModelOverrides[modelId] = { api: ov.api, shape: ov.shape, npm: ov.npm };
           }
         }
+        const modelOverrides = PROVIDER_OVERRIDES[normalizedId]?.modelOverrides ?? collectedModelOverrides;
 
         // Get the API URL - overrides take priority over models.dev data
         const url = PROVIDER_OVERRIDES[normalizedId]?.url || providerInfo.api;

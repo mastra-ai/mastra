@@ -3151,24 +3151,7 @@
       ],
       "docUrl": "https://developers.cloudflare.com/ai-gateway/",
       "gateway": "models.dev",
-      "npm": "ai-gateway-provider",
-      "modelOverrides": {
-        "openai/gpt-5.3-codex": {
-          "npm": "ai-gateway-provider"
-        },
-        "openai/gpt-5.4": {
-          "npm": "ai-gateway-provider"
-        },
-        "openai/gpt-5.2-codex": {
-          "npm": "ai-gateway-provider"
-        },
-        "anthropic/claude-opus-4-7": {
-          "npm": "@ai-sdk/anthropic"
-        },
-        "anthropic/claude-sonnet-4-6": {
-          "npm": "ai-gateway-provider"
-        }
-      }
+      "npm": "ai-gateway-provider"
     },
     "moonshotai-cn": {
       "url": "https://api.moonshot.cn/anthropic/v1",

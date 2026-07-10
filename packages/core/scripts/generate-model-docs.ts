@@ -571,7 +571,14 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "${gatewayName}/${providers[0]?.models[0] || 'model-name'}"
+  model: "${gatewayName}/${
+    // Prefer an evergreen model token (substituted at docs build time by the
+    // remark-model-tokens plugin) over the first catalog entry when the
+    // gateway carries a model matching the token's current value.
+    gatewayName === 'cloudflare-ai-gateway'
+      ? '__GATEWAY_ANTHROPIC_MODEL_HAIKU__'
+      : providers[0]?.models[0] || 'model-name'
+  }"
 });
 \`\`\`
 
@@ -587,7 +594,9 @@ Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-
 # Use gateway API key
 ${(() => {
   const provider = providers[0];
-  const envVars = provider ? getRequiredEnvVars(provider) : [`${gatewayName.toUpperCase()}_API_KEY`];
+  const envVars = provider
+    ? getRequiredEnvVars(provider)
+    : [`${gatewayName.toUpperCase().replace(/[^A-Z0-9]+/g, '_')}_API_KEY`];
   return envVars.map(v => `${v}=your-${v.toLowerCase().replace(/_/g, '-')}`).join('\n');
 })()}
 ${
