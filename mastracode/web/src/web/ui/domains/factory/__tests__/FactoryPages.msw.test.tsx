@@ -203,6 +203,25 @@ describe('Factory Intake page', () => {
     expect(within(list).getByText('Improve docs')).toBeInTheDocument();
   });
 
+  it('given an issue with many labels, when the row renders, then labels collapse into a "+N" badge', async () => {
+    const busyIssue = {
+      ...issues[0]!,
+      labels: ['bug', 'Agents', 'status: needs triage', 'trio-tb', 'impact:high', 'effort:medium'],
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues: [busyIssue] }),
+      ),
+    );
+    renderAt('/factory/intake');
+
+    const list = await screen.findByRole('list', { name: 'Open issues' });
+    expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
+    expect(within(list).getByText('trio-tb')).toBeInTheDocument();
+    expect(within(list).queryByText('impact:high')).not.toBeInTheDocument();
+    expect(within(list).getByText('+2')).toHaveAttribute('title', 'impact:high, effort:medium');
+  });
+
   it('given no open issues, when the page resolves, then an empty message renders', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>

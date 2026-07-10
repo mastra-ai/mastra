@@ -46,7 +46,13 @@ function IssueList({ githubProjectId }: { githubProjectId: string }) {
   );
 }
 
+/** Labels shown inline per row before collapsing into a "+N" overflow badge. */
+const MAX_VISIBLE_LABELS = 4;
+
 function IssueRow({ issue }: { issue: GithubIssue }) {
+  const visibleLabels = issue.labels.slice(0, MAX_VISIBLE_LABELS);
+  const hiddenLabelCount = issue.labels.length - visibleLabels.length;
+
   return (
     <li>
       <a
@@ -56,22 +62,23 @@ function IssueRow({ issue }: { issue: GithubIssue }) {
         className="flex items-start gap-2.5 rounded-md px-2 py-2 no-underline transition hover:bg-surface3"
       >
         <CircleDot size={15} className="mt-0.5 shrink-0 text-accent1" aria-hidden />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-ui-md text-icon6">{issue.title}</span>
-            {issue.labels.map(label => (
-              <Badge key={label} className="shrink-0">
-                {label}
-              </Badge>
-            ))}
-          </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="truncate text-ui-md text-icon6">{issue.title}</span>
+          {issue.labels.length > 0 && (
+            <span className="flex flex-wrap items-center gap-1">
+              {visibleLabels.map(label => (
+                <Badge key={label}>{label}</Badge>
+              ))}
+              {hiddenLabelCount > 0 && <Badge title={issue.labels.slice(MAX_VISIBLE_LABELS).join(', ')}>+{hiddenLabelCount}</Badge>}
+            </span>
+          )}
           <span className="text-ui-xs text-icon3">
             #{issue.number}
             {issue.author ? ` · ${issue.author}` : ''} · opened {relativeTime(issue.createdAt)}
           </span>
         </span>
         {issue.comments > 0 && (
-          <span className="flex shrink-0 items-center gap-1 text-ui-xs text-icon3">
+          <span className="mt-0.5 flex shrink-0 items-center gap-1 text-ui-xs text-icon3">
             <MessageSquare size={13} aria-hidden />
             {issue.comments}
           </span>
