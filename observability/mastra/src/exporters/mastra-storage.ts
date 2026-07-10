@@ -499,13 +499,16 @@ export class MastraStorageExporter extends BaseExporter {
     flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false));
     flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true));
 
+    let deferredDropCount = 0;
     if (deferredUpdates.length > 0) {
       if (this.#unsupportedSignals.has('tracing')) {
-        this.emitDrop('tracing', 'unsupported-storage', deferredUpdates.length);
+        deferredDropCount = deferredUpdates.length;
+        this.emitDrop('tracing', 'unsupported-storage', deferredDropCount);
         deferredUpdates.length = 0;
       } else {
         const dropped = this.#eventBuffer.reAddUpdates(deferredUpdates);
-        this.emitDrop('tracing', 'retry-exhausted', dropped.length);
+        deferredDropCount = dropped.length;
+        this.emitDrop('tracing', 'retry-exhausted', deferredDropCount);
       }
     }
 
@@ -517,7 +520,7 @@ export class MastraStorageExporter extends BaseExporter {
       this.scheduleFlush(this.retryDelay(retryAttempt));
     }
 
-    if (!flushResults.some(result => result.failed)) {
+    if (!flushResults.some(result => result.failed) && deferredDropCount === 0) {
       const elapsed = Date.now() - startTime;
       this.logger.debug('Batch flushed', {
         strategy: this.#resolvedStrategy,

@@ -758,6 +758,7 @@ describe('DefaultExporter', () => {
           }),
         );
         expect(emitDropEvent.mock.calls[0][0]).not.toHaveProperty('error');
+        expect(mockLogger.debug).not.toHaveBeenCalledWith('Batch flushed', expect.anything());
       });
     });
 
