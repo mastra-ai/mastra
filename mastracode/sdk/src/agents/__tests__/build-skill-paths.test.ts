@@ -34,6 +34,7 @@ describe('buildSkillPaths', () => {
     // Default: no directories exist
     mockedFs.existsSync.mockReturnValue(false);
     mockedFs.readdirSync.mockReturnValue([]);
+    mockedFs.realpathSync.mockImplementation(p => String(p));
   });
 
   afterEach(() => {
@@ -299,41 +300,47 @@ describe('buildSkillPaths', () => {
       expect(result).not.toContain('/some');
     });
 
-    it('silently handles errors during symlink resolution', () => {
+    it('continues resolving skills after a broken symlink', () => {
       const skillsDir = path.join(projectPath, '.mastracode', 'skills');
+      const entries = ['broken-link', 'valid-skill'].map(
+        name =>
+          ({
+            name,
+            isSymbolicLink: () => true,
+            isDirectory: () => false,
+            isFile: () => false,
+          }) as fs.Dirent,
+      );
 
-      mockedFs.existsSync.mockImplementation((p: fs.PathLike) => {
-        return String(p) === skillsDir;
-      });
-
-      const symlinkEntry = {
-        name: 'broken-link',
-        isSymbolicLink: () => true,
-        isDirectory: () => false,
-        isFile: () => false,
-        isBlockDevice: () => false,
-        isCharacterDevice: () => false,
-        isFIFO: () => false,
-        isSocket: () => false,
-        path: skillsDir,
-        parentPath: skillsDir,
-      } as fs.Dirent;
-
+      mockedFs.existsSync.mockImplementation((p: fs.PathLike) => String(p) === skillsDir);
       mockedFs.readdirSync.mockImplementation((p: fs.PathLike, _opts?: any) => {
-        if (String(p) === skillsDir) return [symlinkEntry] as any;
+        if (String(p) === skillsDir) return entries as any;
         return [] as any;
       });
+      mockedFs.realpathSync.mockImplementation((p: fs.PathLike) => {
+        const value = String(p);
+        if (value.endsWith('broken-link')) throw new Error('ENOENT: broken symlink');
+        if (value.endsWith('valid-skill')) return path.join(skillsDir, 'sources', 'valid-skill');
+        return value;
+      });
+      mockedFs.statSync.mockReturnValue({ isDirectory: () => true } as fs.Stats);
 
-      mockedFs.realpathSync.mockImplementation(() => {
-        throw new Error('ENOENT: broken symlink');
+      const result = buildSkillPaths(projectPath, DEFAULT_CONFIG_DIR);
+
+      expect(result).toContain(path.join(skillsDir, 'sources'));
+    });
+
+    it('returns no project skill paths when the project root cannot be canonicalized', () => {
+      mockedFs.realpathSync.mockImplementation((p: fs.PathLike) => {
+        if (String(p) === projectPath) throw new Error('EACCES');
+        return String(p);
       });
 
-      // Should not throw — errors are silently caught
-      expect(() => buildSkillPaths(projectPath, DEFAULT_CONFIG_DIR)).not.toThrow();
+      const result = buildSkillPaths(projectPath, DEFAULT_CONFIG_DIR, home);
 
-      // Base paths should still be returned
-      const result = buildSkillPaths(projectPath, DEFAULT_CONFIG_DIR);
-      expect(result.length).toBeGreaterThanOrEqual(6);
+      expect(result).not.toContain(path.join(projectPath, '.mastracode', 'skills'));
+      expect(result).not.toContain(path.join(projectPath, '.claude', 'skills'));
+      expect(result).not.toContain(path.join(projectPath, '.agents', 'skills'));
     });
   });
 });

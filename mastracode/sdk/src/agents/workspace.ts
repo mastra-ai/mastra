@@ -59,7 +59,7 @@ function collectSkillPaths(skillsDirs: string[], allowedRoot?: string): string[]
     try {
       realAllowedRoot = fs.realpathSync(allowedRoot);
     } catch {
-      return skillsDirs;
+      return [];
     }
   }
 
@@ -86,16 +86,20 @@ function collectSkillPaths(skillsDirs: string[], allowedRoot?: string): string[]
       const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isSymbolicLink()) {
-          const linkPath = path.join(skillsDir, entry.name);
-          const realPath = fs.realpathSync(linkPath);
-          if (realAllowedRoot && !isPathWithinRoot(realPath, realAllowedRoot)) continue;
-          const stat = fs.statSync(realPath);
-          if (stat.isDirectory()) {
-            const realParent = path.dirname(realPath);
-            if (!seen.has(realParent)) {
-              seen.add(realParent);
-              paths.push(realParent);
+          try {
+            const linkPath = path.join(skillsDir, entry.name);
+            const realPath = fs.realpathSync(linkPath);
+            if (realAllowedRoot && !isPathWithinRoot(realPath, realAllowedRoot)) continue;
+            const stat = fs.statSync(realPath);
+            if (stat.isDirectory()) {
+              const realParent = path.dirname(realPath);
+              if (!seen.has(realParent)) {
+                seen.add(realParent);
+                paths.push(realParent);
+              }
             }
+          } catch {
+            continue;
           }
         }
       }
@@ -127,9 +131,17 @@ export function buildSkillPaths(
     ...pluginSkillPaths.flatMap(pluginSkillPath => collectSkillPaths([pluginSkillPath], pluginSkillPath)),
   ];
 
-  return paths.filter((skillPath, index) => {
-    const resolved = path.resolve(skillPath);
-    return paths.findIndex(candidate => path.resolve(candidate) === resolved) === index;
+  const seenPaths = new Set<string>();
+  return paths.filter(skillPath => {
+    let resolved: string;
+    try {
+      resolved = fs.realpathSync(skillPath);
+    } catch {
+      resolved = path.resolve(skillPath);
+    }
+    if (seenPaths.has(resolved)) return false;
+    seenPaths.add(resolved);
+    return true;
   });
 }
 

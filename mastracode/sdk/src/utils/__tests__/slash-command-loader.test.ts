@@ -2,11 +2,19 @@ import { mkdir, mkdtemp, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadCustomCommands, parseCommandFile, scanCommandDirectory } from '../slash-command-loader.js';
 
 describe('slash command loader', () => {
+  beforeEach(async () => {
+    vi.stubEnv('HOME', await mkdtemp(join(tmpdir(), 'mastracode-home-')));
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('parses goal metadata from frontmatter', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastracode-command-'));
     const file = join(dir, 'ship.md');
