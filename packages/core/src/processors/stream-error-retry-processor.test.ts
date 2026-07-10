@@ -229,6 +229,85 @@ describe('StreamErrorRetryProcessor', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
   });
 
+  describe('retryAllErrors', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not retry unmatched errors when omitted or false', async () => {
+      const error = new Error('unmatched stream error');
+
+      await expect(new StreamErrorRetryProcessor().processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+      await expect(
+        new StreamErrorRetryProcessor({ retryAllErrors: false }).processAPIError(makeArgs({ error })),
+      ).resolves.toBeUndefined();
+    });
+
+    it('retries unmatched errors up to the processor maxRetries', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryAllErrors: true, maxRetries: 2 });
+      const error = new Error('unmatched stream error');
+
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+    });
+
+    it('uses the processor delayMs for unmatched errors', async () => {
+      vi.useFakeTimers();
+      const processor = new StreamErrorRetryProcessor({ retryAllErrors: true, delayMs: 1000 });
+      const promise = processor.processAPIError(makeArgs({ error: new Error('unmatched stream error') }));
+
+      let resolved = false;
+      void promise.then(() => {
+        resolved = true;
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(resolved).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(promise).resolves.toEqual({ retry: true });
+    });
+
+    it('preserves specific matcher policies before the catch-all fallback', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        retryAllErrors: true,
+        maxRetries: 3,
+        matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+      });
+
+      await expect(
+        processor.processAPIError(makeArgs({ error: { statusCode: 400 }, retryCount: 1 })),
+      ).resolves.toBeUndefined();
+      await expect(
+        processor.processAPIError(makeArgs({ error: new Error('unmatched stream error'), retryCount: 1 })),
+      ).resolves.toEqual({ retry: true });
+    });
+
+    it('resolves a specific policy in the cause chain before falling back', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        retryAllErrors: true,
+        maxRetries: 3,
+        matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+      });
+      const error = new Error('wrapped', { cause: { statusCode: 400 } });
+
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+    });
+
+    it('uses the abort-aware delay path and removes its listener for catch-all retries', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      const processor = new StreamErrorRetryProcessor({ retryAllErrors: true, delayMs: 60_000 });
+      const promise = processor.processAPIError(
+        makeArgs({ error: new Error('unmatched stream error'), abortSignal: controller.signal }),
+      );
+
+      controller.abort();
+      await expect(promise).resolves.toEqual({ retry: true });
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+  });
+
   describe('per-matcher policy', () => {
     it('uses per-matcher maxRetries instead of processor-level default', async () => {
       const processor = new StreamErrorRetryProcessor({

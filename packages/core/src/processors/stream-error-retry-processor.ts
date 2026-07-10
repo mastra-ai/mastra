@@ -24,6 +24,12 @@ export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
   matchers?: StreamErrorRetryMatcherEntry[];
   /**
+   * Retry errors that are not matched by provider metadata, built-in matchers,
+   * or custom matchers. Uses the processor-level `maxRetries` and `delayMs`.
+   * Defaults to false.
+   */
+  retryAllErrors?: boolean;
+  /**
    * Optional delay (ms) to wait before signaling a retry. Accepts a number or an
    * async function evaluated with the current error args. Negative/non-finite
    * values are clamped to 0. Defaults to 0 (retry immediately), preserving the
@@ -174,19 +180,21 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
   readonly #maxRetries: number;
   readonly #entries: StreamErrorRetryMatcherConfig[];
+  readonly #retryAllErrors: boolean;
   readonly #delayMs: StreamErrorRetryDelayMs | undefined;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     const defaultEntries: StreamErrorRetryMatcherConfig[] = DEFAULT_MATCHERS.map(m => ({ match: m }));
     this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
+    this.#retryAllErrors = options.retryAllErrors ?? false;
     this.#delayMs = options.delayMs;
   }
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     const { error, retryCount, abortSignal } = args;
 
-    const policy = findMatchingPolicy(error, this.#entries);
+    const policy = findMatchingPolicy(error, this.#entries) ?? (this.#retryAllErrors ? {} : undefined);
     if (!policy) return;
 
     const effectiveMaxRetries = policy.maxRetries ?? this.#maxRetries;
