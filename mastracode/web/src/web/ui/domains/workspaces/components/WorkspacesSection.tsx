@@ -3,7 +3,7 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitBranch, Plus } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent, KeyboardEvent } from 'react';
+import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
@@ -12,7 +12,14 @@ import { useActiveProjectContext } from '../context/ActiveProjectProvider';
 import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
 import type { Worktree } from '../services/projects';
 
-export function WorkspacesSection() {
+/**
+ * Sidebar section listing a GitHub project's worktrees.
+ *
+ * Threads are scoped to the worktree they run in, so callers can pass the
+ * thread list as `children`: it renders nested under the active worktree row
+ * (or after the list when no worktree is selected yet).
+ */
+export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const { baseUrl } = useApiConfig();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const [creating, setCreating] = useState(false);
@@ -59,8 +66,10 @@ export function WorkspacesSection() {
     }
   };
 
+  const hasNestedActive = Boolean(children) && worktrees.some(worktree => worktree.worktreePath === selectedPath);
+
   return (
-    <section className="flex flex-col gap-2" aria-label="Workspaces">
+    <section className={`flex flex-col gap-2 ${children ? 'min-h-0 flex-1' : ''}`} aria-label="Workspaces">
       <div className="flex items-center justify-between px-1">
         <Txt as="span" variant="ui-xs" className="text-icon3 uppercase tracking-wide">
           Workspaces
@@ -76,16 +85,24 @@ export function WorkspacesSection() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-1">
-        {worktrees.map(worktree => (
-          <WorkspaceRow
-            key={worktree.worktreePath}
-            worktree={worktree}
-            active={worktree.worktreePath === selectedPath}
-            disabled={pending}
-            onSelect={() => selectWorkspace.mutate(worktree.worktreePath)}
-          />
-        ))}
+      <div className={`flex flex-col gap-1 ${children ? 'min-h-0 flex-1' : ''}`}>
+        {worktrees.map(worktree => {
+          const active = worktree.worktreePath === selectedPath;
+          const nested = active && Boolean(children);
+          return (
+            <div key={worktree.worktreePath} className={`flex flex-col gap-1 ${nested ? 'min-h-0 flex-1' : ''}`}>
+              <WorkspaceRow
+                worktree={worktree}
+                active={active}
+                disabled={pending}
+                onSelect={() => selectWorkspace.mutate(worktree.worktreePath)}
+              />
+              {nested && (
+                <div className="ml-[15px] flex min-h-0 flex-1 flex-col border-l border-border1 pl-2">{children}</div>
+              )}
+            </div>
+          );
+        })}
 
         {creating && (
           <form aria-label="Create workspace" className="flex flex-col gap-1" onSubmit={submitCreate}>
@@ -106,6 +123,8 @@ export function WorkspacesSection() {
             )}
           </form>
         )}
+
+        {Boolean(children) && !hasNestedActive && <div className="flex min-h-0 flex-1 flex-col">{children}</div>}
       </div>
     </section>
   );

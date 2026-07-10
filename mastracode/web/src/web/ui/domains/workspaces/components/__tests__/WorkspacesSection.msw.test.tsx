@@ -9,6 +9,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -99,12 +100,12 @@ function seedActiveProject(project: Project) {
   localStorage.setItem('mastracode-active-project', project.id);
 }
 
-function renderSection() {
+function renderSection(children?: ReactNode) {
   return renderWithProviders(
     <ToastProvider>
       <ActiveProjectProvider>
         <ChatSessionProvider>
-          <WorkspacesSection />
+          <WorkspacesSection>{children}</WorkspacesSection>
         </ChatSessionProvider>
       </ActiveProjectProvider>
     </ToastProvider>,
@@ -121,6 +122,19 @@ describe('WorkspacesSection', () => {
     expect(await screen.findByText('Workspaces')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('nests children under the active worktree row', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+
+    renderSection(<div data-testid="nested-threads">Threads</div>);
+
+    const activeRow = await screen.findByRole('button', { name: 'main' });
+    const nested = screen.getByTestId('nested-threads');
+    expect(activeRow.parentElement).toContainElement(nested);
+    const inactiveRow = screen.getByRole('button', { name: 'feat-ui' });
+    expect(inactiveRow.parentElement).not.toContainElement(nested);
   });
 
   it('does not render for local projects', async () => {

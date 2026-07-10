@@ -44,6 +44,22 @@ const project: Project = {
   createdAt: 1,
 };
 
+const githubProject: Project = {
+  id: 'p-github',
+  name: 'Mastra',
+  source: 'github',
+  githubProjectId: 'gh-project-1',
+  sandboxWorkdir: '/sandbox/mastra',
+  resourceId: RESOURCE_ID,
+  gitBranch: 'main',
+  worktrees: [
+    { branch: 'main', worktreePath: '/sandbox/mastra', baseBranch: 'main' },
+    { branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui', baseBranch: 'main' },
+  ],
+  selectedWorktreePath: '/sandbox/mastra',
+  createdAt: 1,
+};
+
 const threadOne: AgentControllerThreadInfo = {
   id: 'thread-one',
   title: 'First thread',
@@ -65,9 +81,17 @@ afterEach(() => {
   vi.mocked(redirectToLogout).mockClear();
 });
 
-function seedProject() {
-  localStorage.setItem('mastracode-projects', JSON.stringify([project]));
-  localStorage.setItem('mastracode-active-project', project.id);
+function seedProject(active: Project = project) {
+  localStorage.setItem('mastracode-projects', JSON.stringify([active]));
+  localStorage.setItem('mastracode-active-project', active.id);
+}
+
+function useGithubStatusHandler() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+    ),
+  );
 }
 
 function sessionState(): AgentControllerSessionState {
@@ -218,6 +242,35 @@ describe('Sidebar', () => {
 
       await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/new'));
       expect(captured.created).toBe(0);
+    });
+  });
+
+  describe('when a GitHub project is active', () => {
+    it('nests the thread list under the active worktree inside the Workspaces section', async () => {
+      seedProject(githubProject);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      const activeWorktree = await screen.findByRole('button', { name: 'main' });
+      const thread = await screen.findByText('First thread');
+      expect(activeWorktree.parentElement).toContainElement(thread);
+
+      const inactiveWorktree = screen.getByRole('button', { name: 'feat-ui' });
+      expect(inactiveWorktree.parentElement).not.toContainElement(thread);
+    });
+
+    it('does not render a flat thread list outside the Workspaces section', async () => {
+      seedProject(githubProject);
+      useAuthHandler();
+      useGithubStatusHandler();
+      useAgentControllerHandlers();
+      renderSidebar();
+
+      const workspaces = await screen.findByRole('region', { name: 'Workspaces' });
+      const thread = await screen.findByText('First thread');
+      expect(workspaces).toContainElement(thread);
     });
   });
 
