@@ -547,12 +547,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     } catch (e) {
       // Nested workflow threw an error (likely from finalization step).
       // Compact nested failures carry the workflow result and runId in the cause.
-      const errorCause = (e as any)?.cause;
+      const errorCause = e && typeof e === 'object' && 'cause' in e ? e.cause : undefined;
 
       // Try to extract runId from error cause or generate new one
-      if (errorCause && typeof errorCause === 'object') {
-        result = errorCause as NestedWorkflowResult;
-        runId = errorCause.runId || randomUUID();
+      if (errorCause && typeof errorCause === 'object' && 'status' in errorCause && errorCause.status === 'failed') {
+        result = errorCause as Extract<NestedWorkflowResult, { status: 'failed' }>;
+        runId = 'runId' in errorCause && typeof errorCause.runId === 'string' ? errorCause.runId : randomUUID();
       } else {
         // Fallback: if we can't get the result from error, construct a basic failed result
         runId = randomUUID();

@@ -169,6 +169,33 @@ describe('InngestExecutionEngine nested workflow output', () => {
     });
     expect(executionContext.suspendedPaths.child).toEqual([0]);
   });
+
+  it('treats unrecognized object causes as invocation failures', async () => {
+    const invocationError = new Error('Inngest invocation failed', {
+      cause: { code: 'INNGEST_UNAVAILABLE' },
+    });
+    const invoke = vi.fn().mockRejectedValue(invocationError);
+    const run = vi.fn(async (_id: string, operation: () => Promise<unknown>) => operation());
+    const engine = new InngestExecutionEngine({} as any, { invoke, run } as any, 0, {} as any);
+
+    const result = await engine.executeWorkflowStep({
+      step: createNestedWorkflow('child'),
+      stepResults: {},
+      executionContext: createExecutionContext(),
+      prevOutput: {},
+      inputData: { prompt: 'hello' },
+      pubsub: { publish: vi.fn() } as any,
+      startedAt: 100,
+    });
+
+    expect(result).toEqual({
+      status: 'failed',
+      error: invocationError,
+      startedAt: 100,
+      endedAt: expect.any(Number),
+      payload: { prompt: 'hello' },
+    });
+  });
 });
 
 function createNestedWorkflow(id: string): InngestWorkflow {
