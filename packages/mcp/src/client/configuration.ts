@@ -661,6 +661,59 @@ To fix this you have three different options:
     };
   }
 
+  /**
+   * Provides access to tool-related notification operations across all configured servers.
+   *
+   * To fetch tools, use `listTools()` or `listToolsets()`.
+   *
+   * @example
+   * ```typescript
+   * // React to tool list changes on a server
+   * await mcp.tools.onListChanged('weatherServer', async () => {
+   *   console.log('Tool list changed, re-fetching...');
+   *   const tools = await mcp.listTools();
+   * });
+   * ```
+   */
+  public get tools() {
+    this.addToInstanceCache();
+    return {
+      /**
+       * Sets a notification handler for when the tool list changes on a server.
+       *
+       * @param serverName - Name of the server to monitor
+       * @param handler - Callback function invoked when tools are added/removed/modified
+       * @returns Promise resolving when handler is registered
+       * @throws {MastraError} If setting up the handler fails
+       *
+       * @example
+       * ```typescript
+       * await mcp.tools.onListChanged('weatherServer', async () => {
+       *   const tools = await mcp.listTools();
+       * });
+       * ```
+       */
+      onListChanged: async (serverName: string, handler: () => void) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.setToolListChangedNotificationHandler(handler);
+        } catch (error) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_LIST_CHANGED_TOOLS_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            error,
+          );
+        }
+      },
+    };
+  }
+
   private addToInstanceCache() {
     if (!mcpClientInstances.has(this.id)) {
       mcpClientInstances.set(this.id, this);

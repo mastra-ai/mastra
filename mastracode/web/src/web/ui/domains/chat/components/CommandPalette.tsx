@@ -11,12 +11,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useOverlays } from '../../../lib/overlays';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { SLASH_COMMANDS } from '../index';
+import { SLASH_COMMANDS } from '../services/commands';
 
 /** A Cmd/Ctrl+K command palette over the slash-command registry. */
 export function CommandPalette() {
   const { close } = useOverlays();
-  const { runPaletteCommand } = useChatCommands();
+  const { run } = useChatCommands();
 
   return (
     <CommandDialog
@@ -36,7 +36,7 @@ export function CommandPalette() {
               key={command.name}
               value={`${command.name} ${command.args ?? ''} ${command.description}`}
               onSelect={() => {
-                runPaletteCommand(command);
+                run(command);
                 close('palette');
               }}
               className="flex-col items-start gap-0.5 rounded-md px-2 py-1.5"

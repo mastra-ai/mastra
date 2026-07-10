@@ -1,15 +1,17 @@
+import type { AgentControllerMessage } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
+import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-import { useApiConfig } from '../../../../../shared/api/config';
-import { useActiveProjectContext } from '../../workspaces';
-import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
+import { queryKeys } from '../../../../../shared/api/keys';
 import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatSession } from '../context/ChatSessionProvider';
+import { useChatConnection } from '../context/useChatConnection';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
@@ -31,12 +33,12 @@ type ComposerProps = {
 };
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { baseUrl } = useApiConfig();
-  const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
-  const projectPath = deriveProjectPath(activeProject);
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const location = useLocation();
   const navigate = useNavigate();
-  const { status, busy, localUser, resetCurrentThread, resetHydration } = useChatSession();
+  const queryClient = useQueryClient();
+  const { status } = useChatConnection();
+  const { busy, localUser, reset } = useChatTranscript();
   const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
 
   const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
@@ -80,9 +82,19 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);
-    resetHydration();
-    resetCurrentThread(thread.id);
+    reset(thread.id);
     return thread.id;
+  };
+
+  const seedThreadMessageCache = (threadId: string, text: string) => {
+    const message: AgentControllerMessage = {
+      id: `local-${Date.now()}`,
+      role: 'user',
+      content: [{ type: 'text', text }],
+    };
+    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
+      message,
+    ]);
   };
 
   const send = async (text: string) => {
@@ -91,6 +103,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       const threadId = await createThread();
       localUser(text);
       await sendMutation.mutateAsync(text);
+      seedThreadMessageCache(threadId, text);
       void navigate(`/threads/${threadId}`, { replace: true });
       return;
     }

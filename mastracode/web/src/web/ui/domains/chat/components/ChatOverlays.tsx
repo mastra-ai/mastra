@@ -12,7 +12,7 @@ export function ChatOverlays() {
   return (
     <>
       {overlays.isOpen('palette') && activeProject && <CommandPalette />}
-      {overlays.isOpen('settings') && <SettingsPanel />}
+      {overlays.isOpen('settings') && <SettingsPanel onClose={() => overlays.close('settings')} />}
       {overlays.isOpen('shortcuts') && <ShortcutsOverlay />}
       {(overlays.isOpen('projects') || projects.length === 0) && <ProjectsModal />}
     </>

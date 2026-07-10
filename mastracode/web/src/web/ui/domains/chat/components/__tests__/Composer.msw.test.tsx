@@ -10,7 +10,9 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { ChatCommandsProvider, useChatCommands } from '../../context/ChatCommandsProvider';
-import { ChatSessionProvider, useChatSession } from '../../context/ChatSessionProvider';
+import { ChatSessionProvider } from '../../context/ChatSessionProvider';
+import { useChatTranscript } from '../../context/useChatTranscript';
+import { SLASH_COMMANDS } from '../../services/commands';
 import { Composer } from '../Composer';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
@@ -50,18 +52,13 @@ function seedProject() {
 
 function useAgentControllerHandlers() {
   const onSend = vi.fn();
-  const onSteer = vi.fn();
-  const onAbort = vi.fn();
-  const onModel = vi.fn();
-  const onGoal = vi.fn();
-  const onFollowUp = vi.fn();
   const onPermissions = vi.fn();
   let permissions: PermissionRules = { categories: { execute: 'ask' }, tools: { 'shell.run': 'deny' } };
   server.use(
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
+    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, () => HttpResponse.json(sessionState())),
@@ -69,26 +66,6 @@ function useAgentControllerHandlers() {
     http.get(`${SESSION}/stream`, () => sse()),
     http.post(`${SESSION}/messages`, async ({ request }) => {
       onSend(await request.json());
-      return HttpResponse.json({ ok: true });
-    }),
-    http.post(`${SESSION}/steer`, async ({ request }) => {
-      onSteer(await request.json());
-      return HttpResponse.json({ ok: true });
-    }),
-    http.post(`${SESSION}/abort`, () => {
-      onAbort();
-      return HttpResponse.json({ ok: true });
-    }),
-    http.post(`${SESSION}/model`, async ({ request }) => {
-      onModel(await request.json());
-      return HttpResponse.json({ ok: true });
-    }),
-    http.post(`${SESSION}/goal`, async ({ request }) => {
-      onGoal(await request.json());
-      return HttpResponse.json({ ok: true });
-    }),
-    http.post(`${SESSION}/follow-up`, async ({ request }) => {
-      onFollowUp(await request.json());
       return HttpResponse.json({ ok: true });
     }),
     http.get(`${SESSION}/permissions`, () => {
@@ -100,17 +77,20 @@ function useAgentControllerHandlers() {
       if (body && typeof body === 'object' && 'category' in body && 'policy' in body) {
         permissions = {
           ...permissions,
-          categories: { ...permissions.categories, [String(body.category)]: body.policy },
+          categories: {
+            ...permissions.categories,
+            [String(body.category)]: body.policy,
+          },
         };
       }
       return HttpResponse.json({ ok: true });
     }),
   );
-  return { onAbort, onFollowUp, onGoal, onModel, onPermissions, onSend, onSteer };
+  return { onSend, onPermissions };
 }
 
 function NoticeProbe() {
-  const { transcript } = useChatSession();
+  const { transcript } = useChatTranscript();
   return (
     <output aria-label="Notices">
       {transcript.entries.map(entry => (entry.kind === 'notice' ? <div key={entry.id}>{entry.text}</div> : null))}
@@ -118,12 +98,20 @@ function NoticeProbe() {
   );
 }
 
-function PaletteCommandLauncher() {
-  const { runPaletteCommand } = useChatCommands();
-  return <button onClick={() => runPaletteCommand({ name: 'model', args: '<id>', description: 'Switch model' })}>Model</button>;
+function PaletteCommandProbe() {
+  const { composerCommandName, run } = useChatCommands();
+  const modelCommand = SLASH_COMMANDS.find(command => command.name === 'model');
+  return (
+    <>
+      <output aria-label="Composer command state">{composerCommandName ?? 'none'}</output>
+      <button type="button" onClick={() => modelCommand && run(modelCommand)}>
+        Run model command
+      </button>
+    </>
+  );
 }
 
-function renderComposer({ variant }: { variant?: 'inline' | 'textarea' } = {}) {
+function renderComposer(props: Partial<React.ComponentProps<typeof Composer>> = {}) {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/threads/${THREAD_ID}`]}>
       <Routes>
@@ -131,10 +119,10 @@ function renderComposer({ variant }: { variant?: 'inline' | 'textarea' } = {}) {
           path="/threads/:threadId"
           element={
             <ActiveProjectProvider>
-              <ChatSessionProvider>
+              <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatCommandsProvider>
-                  <PaletteCommandLauncher />
-                  <Composer variant={variant} />
+                  <Composer {...props} />
+                  <PaletteCommandProbe />
                   <NoticeProbe />
                 </ChatCommandsProvider>
               </ChatSessionProvider>
@@ -146,58 +134,84 @@ function renderComposer({ variant }: { variant?: 'inline' | 'textarea' } = {}) {
   );
 }
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  localStorage.clear();
+});
 
 describe('Composer', () => {
-  describe('when entering slash commands', () => {
-    it('runs no-argument commands through the command context without sending a message', async () => {
+  describe('when entering exact no-arg slash commands', () => {
+    it('shows permissions from the client cache instead of sending a message', async () => {
       seedProject();
-      const { onSend } = useAgentControllerHandlers();
-      const user = userEvent.setup();
+      const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      const input = await screen.findByRole('textbox', { name: 'Message' });
-      await waitFor(() => expect(input).toBeEnabled());
-      await user.type(input, '/help {Enter}');
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await waitFor(() => expect(onPermissions).toHaveBeenCalled());
+      const permissionsRequestsBeforeCommand = onPermissions.mock.calls.length;
+      await userEvent.type(screen.getByRole('textbox'), '/permissions{Enter}');
 
-      await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('Available commands:'));
-      expect(screen.getByLabelText('Notices')).toHaveTextContent('/permissions');
+      await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
+      expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: ask');
+      expect(screen.getByLabelText('Notices')).toHaveTextContent('shell.run: deny');
       expect(onSend).not.toHaveBeenCalled();
     });
 
-    it.each([
-      ['/model openai/gpt-4o', 'onModel', { modelId: 'openai/gpt-4o' }],
-      ['/goal Ship the composer refactor', 'onGoal', { objective: 'Ship the composer refactor' }],
-      ['/follow-up Test the release', 'onFollowUp', { message: 'Test the release' }],
-    ] as const)('sends %s to its controller endpoint', async (command, handlerName, expectedBody) => {
+    it('shows permissions refreshed by permission mutations', async () => {
       seedProject();
-      const handlers = useAgentControllerHandlers();
-      const user = userEvent.setup();
+      const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      const input = await screen.findByRole('textbox', { name: 'Message' });
-      await waitFor(() => expect(input).toBeEnabled());
-      await user.type(input, `${command}{Enter}`);
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await waitFor(() => expect(onPermissions).toHaveBeenCalled());
+      const permissionsRequestsBeforeYolo = onPermissions.mock.calls.length;
 
-      await waitFor(() => expect(handlers[handlerName]).toHaveBeenCalledWith(expectedBody));
-      expect(handlers.onSend).not.toHaveBeenCalled();
+      await userEvent.type(screen.getByRole('textbox'), '/yolo{Enter}');
+
+      await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('YOLO mode'));
+      await waitFor(() => expect(onPermissions.mock.calls.length).toBeGreaterThan(permissionsRequestsBeforeYolo));
+      const permissionsRequestsBeforeCommand = onPermissions.mock.calls.length;
+      await userEvent.type(screen.getByRole('textbox'), '/permissions{Enter}');
+
+      await waitFor(() => expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCommand));
+      expect(screen.getByLabelText('Notices')).toHaveTextContent('execute: allow');
+      expect(screen.getByLabelText('Notices')).toHaveTextContent('edit: allow');
+      expect(onSend).not.toHaveBeenCalled();
     });
   });
 
-  describe('when a palette argument command is chosen', () => {
-    it('prefills and focuses the composer through the command context', async () => {
+  describe('when entering a partial slash command', () => {
+    it('completes the highlighted suggestion on Enter', async () => {
       seedProject();
-      useAgentControllerHandlers();
-      const user = userEvent.setup();
+      const { onSend, onPermissions } = useAgentControllerHandlers();
       renderComposer();
 
-      await user.click(screen.getByRole('button', { name: 'Model' }));
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await waitFor(() => expect(onPermissions).toHaveBeenCalled());
+      const permissionsRequestsBeforeCompletion = onPermissions.mock.calls.length;
+      await userEvent.type(screen.getByRole('textbox'), '/he{Enter}');
 
-      const input = screen.getByRole('textbox', { name: 'Message' });
-      await waitFor(() => {
-        expect(input).toHaveValue('/model ');
-        expect(input).toHaveFocus();
-      });
+      expect(screen.getByRole('textbox')).toHaveValue('/help ');
+      expect(onPermissions).toHaveBeenCalledTimes(permissionsRequestsBeforeCompletion);
+      expect(onSend).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a palette command is applied', () => {
+    it('prefills the composer once and clears the command state', async () => {
+      seedProject();
+      useAgentControllerHandlers();
+      renderComposer();
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toBeEnabled());
+      await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
+      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Run model command' }));
+
+      await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue('/model '));
+      await waitFor(() => expect(screen.getByLabelText('Composer command state')).toHaveTextContent('none'));
     });
   });
 
@@ -205,32 +219,26 @@ describe('Composer', () => {
     it('grows with content via CSS instead of inline styles', async () => {
       seedProject();
       useAgentControllerHandlers();
-      const user = userEvent.setup();
       renderComposer();
 
-      const input = await screen.findByRole('textbox', { name: 'Message' });
+      const input = screen.getByRole('textbox');
       await waitFor(() => expect(input).toBeEnabled());
-      await user.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
+      await userEvent.type(input, 'first line{Shift>}{Enter}{/Shift}second line{Shift>}{Enter}{/Shift}third line');
 
       expect(input).toHaveValue('first line\nsecond line\nthird line');
       expect(input).toHaveClass('field-sizing-content');
       expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
-  });
 
-  describe('when sending messages', () => {
-    it('sends normal input and renders the textarea variant', async () => {
+    it('sizes the textarea variant with CSS classes only', async () => {
       seedProject();
-      const { onSend } = useAgentControllerHandlers();
-      const user = userEvent.setup();
+      useAgentControllerHandlers();
       renderComposer({ variant: 'textarea' });
 
-      const input = await screen.findByRole('textbox', { name: 'Message' });
+      const input = screen.getByRole('textbox');
       await waitFor(() => expect(input).toBeEnabled());
       expect(input).toHaveClass('field-sizing-content', 'min-h-28');
-      await user.type(input, 'Hello{Enter}');
-
-      await waitFor(() => expect(onSend).toHaveBeenCalledWith({ message: 'Hello' }));
+      expect((input as HTMLTextAreaElement).style.height).toBe('');
     });
   });
 });
