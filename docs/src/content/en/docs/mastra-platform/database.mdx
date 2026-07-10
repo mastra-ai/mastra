@@ -88,7 +88,7 @@ npm install @mastra/libsql@latest
 
 #### Use Turso as a vector store
 
-The same Turso database also works as a vector store through [LibSQLVector](/reference/vectors/libsql). LibSQL has built-in vector search, so no extra setup is required — point `LibSQLVector` at the same environment variables and it uses the same database as your agent storage.
+The same Turso database also works as a vector store through [LibSQLVector](/reference/vectors/libsql). LibSQL has built-in vector search, so there's no extension to install or separate connection to configure — point `LibSQLVector` at the same environment variables and it uses the same database as your agent storage. Before upserting vectors, call [`createIndex`](/reference/vectors/libsql#createindex) with an `indexName` and the `dimension` of your embedding model.
 
 ```ts title="src/mastra/storage.ts" caption="Add vector search to a Turso database"
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
@@ -120,7 +120,7 @@ npm install @mastra/pg@latest
 
 #### Use Postgres as a vector store
 
-Hosted Postgres databases have the [`pgvector`](https://github.com/pgvector/pgvector) extension enabled automatically when the database is provisioned. That means [PgVector](/reference/vectors/pg) works against the same `DATABASE_URL` with no extra setup.
+Hosted Postgres databases have the [`pgvector`](https://github.com/pgvector/pgvector) extension enabled automatically when the database is provisioned, so [PgVector](/reference/vectors/pg) works against the same `DATABASE_URL` without any extension setup. Before upserting vectors, call [`createIndex`](/reference/vectors/pg#createindex) with an `indexName` and the `dimension` of your embedding model.
 
 ```ts title="src/mastra/storage.ts" caption="Add vector search to a Postgres database"
 import { PostgresStore, PgVector } from '@mastra/pg'
@@ -128,7 +128,7 @@ import { PostgresStore, PgVector } from '@mastra/pg'
 const connectionString = process.env.DATABASE_URL!
 
 export const storage = new PostgresStore({ connectionString })
-export const vector = new PgVector({ connectionString })
+export const vector = new PgVector({ id: 'mastra-vector', connectionString })
 ```
 
 Postgres databases attached before automatic provisioning shipped may not have `pgvector` installed. Open the database in **Project Settings → Database** to see its `pgvector` status. When the extension isn't installed, select **Enable pgvector** to install it against the managed connection. The operation is idempotent and safe to run against a database that's already set up.
