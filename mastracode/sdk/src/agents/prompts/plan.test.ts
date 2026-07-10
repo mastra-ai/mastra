@@ -20,8 +20,7 @@ describe('planModePrompt', () => {
   it('tells the agent to resolve open questions with ask_user before submitting', () => {
     const prompt = planModePrompt({ state: {} });
 
-    expect(prompt).toContain('Resolve Open Questions BEFORE Submitting');
     expect(prompt).toContain('ask_user');
-    expect(prompt).toMatch(/before .*submit_plan/i);
+    expect(prompt).toMatch(/don't submit a plan with unanswered questions/i);
   });
 });
