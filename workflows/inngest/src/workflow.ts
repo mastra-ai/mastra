@@ -281,6 +281,11 @@ export class InngestWorkflow<
     return this.cronFunction;
   }
 
+  /**
+   * Gets the durable Inngest function that executes this workflow.
+   *
+   * @returns The memoized Inngest function for this workflow.
+   */
   getFunction(): ReturnType<Inngest['createFunction']> {
     if (this.function) {
       return this.function;

@@ -409,6 +409,9 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   /**
    * Execute nested InngestWorkflow using inngestStep.invoke() for durability.
    * This MUST be called directly (not inside step.run()) due to Inngest constraints.
+   *
+   * @param params - The nested workflow step and its current execution state.
+   * @returns The nested workflow step result, or null when the step is not an Inngest workflow.
    */
   async executeWorkflowStep(params: {
     step: Step<string, any, any>;
