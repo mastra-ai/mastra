@@ -156,6 +156,7 @@ interface OMContextIndicator {
 interface OMContextIndicatorStylers {
   messages?: (segment: string) => string;
   memory?: (segment: string) => string;
+  unused?: (segment: string) => string;
 }
 
 export function formatOMContextIndicator(
@@ -174,27 +175,31 @@ export function formatOMContextIndicator(
   const unusedCells = 10 - occupiedCells;
 
   const messageSegment = '━'.repeat(messageCells);
-  const unusedSegment = '─'.repeat(unusedCells);
+  const unusedSegment = '━'.repeat(unusedCells);
   const memorySegment = '━'.repeat(memoryCells);
-  const fraction = `${formatTokensValue(used)}/${formatTokensThreshold(capacity)}`;
+  const usedText = formatTokensValue(used);
+  const capacityText = formatTokensThreshold(capacity);
+  const fraction = `${usedText}/${capacityText}`;
   const messageSavings = Math.max(0, state.buffered.observations.projectedMessageRemoval);
   const reflectionSavings = Math.max(
     0,
     state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens,
   );
-  const savings = messageSavings + reflectionSavings;
-  const suffix = savings > 0 ? ` ↓${formatTokensThreshold(savings)}` : '';
+  const hasSavings = messageSavings + reflectionSavings > 0;
+  const savingsSlot = hasSavings ? ' ↓' : '  ';
 
-  const plain = `[${messageSegment}${unusedSegment}${memorySegment}] ${fraction}${suffix}`;
-  const styleMessages = stylers.messages ?? (segment => chalk.hex(mastra.orange)(segment));
-  const styleMemory = stylers.memory ?? (segment => chalk.hex(mastra.pink)(segment));
+  const plain = `${memorySegment}${messageSegment}${unusedSegment}  ${fraction}${savingsSlot}`;
+  const styleMessages = stylers.messages ?? (segment => theme.fg('text', segment));
+  const styleMemory = stylers.memory ?? (segment => theme.fg('dim', segment));
+  const styleUnused = stylers.unused ?? (segment => theme.fg('muted', segment));
   const styled =
-    theme.fg('muted', '[') +
-    styleMessages(messageSegment) +
-    theme.fg('muted', unusedSegment) +
     styleMemory(memorySegment) +
-    theme.fg('muted', `] ${fraction}`) +
-    (suffix ? chalk.italic(theme.fg('muted', suffix)) : '');
+    styleMessages(messageSegment) +
+    styleUnused(unusedSegment) +
+    '  ' +
+    chalk.bold(theme.fg('text', usedText)) +
+    theme.fg('thinkingText', `/${capacityText}`) +
+    (hasSavings ? ` ${theme.fg('success', '↓')}` : '  ');
 
   return { plain, styled, messageCells, memoryCells, unusedCells };
 }

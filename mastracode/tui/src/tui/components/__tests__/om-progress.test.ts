@@ -18,6 +18,10 @@ vi.mock('../../theme.js', () => ({
   theme: {
     fg: (_tone: string, value: string) => value,
   },
+  extendedColors: {
+    lightCyan: '#22d3ee',
+    indigo: '#6366f1',
+  },
   mastra: {
     red: '#ef4444',
     orange: '#f97316',
@@ -66,7 +70,7 @@ describe('formatOMContextIndicator', () => {
     const indicator = formatOMContextIndicator(createState());
 
     expect(indicator).toMatchObject({
-      plain: '[──────────] 0/120k',
+      plain: '━━━━━━━━━━  0/120k  ',
       messageCells: 0,
       memoryCells: 0,
       unusedCells: 10,
@@ -76,23 +80,23 @@ describe('formatOMContextIndicator', () => {
   it('renders an empty track when combined capacity is zero', () => {
     const indicator = formatOMContextIndicator(createState({ threshold: 0, reflectionThreshold: 0 }));
 
-    expect(indicator.plain).toBe('[──────────] 0/0k');
+    expect(indicator.plain).toBe('━━━━━━━━━━  0/0k  ');
     expect(indicator.messageCells + indicator.memoryCells).toBe(0);
   });
 
   it('fills only the left segment for messages', () => {
-    expect(formatOMContextIndicator(createState({ pendingTokens: 60_000 })).plain).toBe('[━━━━━─────] 60/120k');
+    expect(formatOMContextIndicator(createState({ pendingTokens: 60_000 })).plain).toBe('━━━━━━━━━━  60/120k  ');
   });
 
   it('fills only the right segment for memory', () => {
-    expect(formatOMContextIndicator(createState({ observationTokens: 60_000 })).plain).toBe('[─────━━━━━] 60/120k');
+    expect(formatOMContextIndicator(createState({ observationTokens: 60_000 })).plain).toBe('━━━━━━━━━━  60/120k  ');
   });
 
   it('splits balanced usage into three message cells and two memory cells', () => {
     const indicator = formatOMContextIndicator(createState({ pendingTokens: 30_000, observationTokens: 30_000 }));
 
     expect(indicator).toMatchObject({
-      plain: '[━━━─────━━] 60/120k',
+      plain: '━━━━━━━━━━  60/120k  ',
       messageCells: 3,
       memoryCells: 2,
       unusedCells: 5,
@@ -103,7 +107,7 @@ describe('formatOMContextIndicator', () => {
     const indicator = formatOMContextIndicator(createState({ pendingTokens: 45_000, observationTokens: 5_000 }));
 
     expect(indicator).toMatchObject({
-      plain: '[━━━──────━] 50/120k',
+      plain: '━━━━━━━━━━  50/120k  ',
       messageCells: 3,
       memoryCells: 1,
       unusedCells: 6,
@@ -139,37 +143,37 @@ describe('formatOMContextIndicator', () => {
     });
   });
 
-  it('sums each positive savings source independently', () => {
-    const indicator = formatOMContextIndicator(
+  it('shows one arrow when either positive savings source contributes', () => {
+    const combined = formatOMContextIndicator(
       createState({ messageSavings: 2_000, reflectionInput: 5_000, reflectionOutput: 1_000 }),
     );
-
-    expect(indicator.plain).toContain('↓6k');
-  });
-
-  it('does not let negative savings cancel a positive source', () => {
-    const indicator = formatOMContextIndicator(
+    const positiveWithNegativeSource = formatOMContextIndicator(
       createState({ messageSavings: 2_000, reflectionInput: 1_000, reflectionOutput: 5_000 }),
     );
 
-    expect(indicator.plain).toContain('↓2k');
+    expect(combined.plain.endsWith(' ↓')).toBe(true);
+    expect(positiveWithNegativeSource.plain.endsWith(' ↓')).toBe(true);
   });
 
-  it('suppresses zero savings and preserves visible width in styled output', () => {
-    const indicator = formatOMContextIndicator(createState({ reflectionInput: 300, reflectionOutput: 300 }));
+  it('suppresses the arrow for zero savings while preserving the indicator width', () => {
+    const withoutSavings = formatOMContextIndicator(createState({ reflectionInput: 300, reflectionOutput: 300 }));
+    const withSavings = formatOMContextIndicator(createState({ messageSavings: 2_000 }));
 
-    expect(indicator.plain).not.toContain('↓');
-    expect(visibleWidth(indicator.styled)).toBe(visibleWidth(indicator.plain));
+    expect(withoutSavings.plain).not.toContain('↓');
+    expect(visibleWidth(withoutSavings.plain)).toBe(visibleWidth(withSavings.plain));
+    expect(visibleWidth(withoutSavings.styled)).toBe(visibleWidth(withoutSavings.plain));
+    expect(visibleWidth(withSavings.styled)).toBe(visibleWidth(withSavings.plain));
   });
 
   it('allows occupied segments to be styled independently', () => {
     const indicator = formatOMContextIndicator(createState({ pendingTokens: 30_000, observationTokens: 30_000 }), {
       messages: segment => `<orange>${segment}</orange>`,
       memory: segment => `<pink>${segment}</pink>`,
+      unused: segment => `<gray>${segment}</gray>`,
     });
 
     expect(indicator.styled).toContain('<orange>━━━</orange>');
     expect(indicator.styled).toContain('<pink>━━</pink>');
-    expect(indicator.styled).toContain('─────');
+    expect(indicator.styled).toContain('<gray>━━━━━</gray>');
   });
 });

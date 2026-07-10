@@ -8,7 +8,7 @@ import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
 import { formatStatusDuration } from './status-duration.js';
-import { theme, mastra, tintHex, getTermWidth, extendedColors } from './theme.js';
+import { theme, mastra, mastraBrand, tintHex, getTermWidth, extendedColors } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
 const getObserverColor = () => mastra.orange;
@@ -84,11 +84,14 @@ export function updateStatusLine(state: TUIState): void {
   let modeBadge = '';
   let modeBadgeWidth = 0;
   const modes = state.controller.listModes();
-  const currentMode = modes.length > 1 ? state.session.mode.resolve() : undefined;
+  const configuredMode = state.session.mode.resolve();
+  const currentMode = modes.length > 1 ? configuredMode : undefined;
   const judgeModeColor = mastra.blue;
   // Use judge color for goal judge activity, OM color for OM activity, otherwise mode color
   const currentModeColor = currentMode?.metadata?.color;
   const mainModeColor = typeof currentModeColor === 'string' ? currentModeColor : undefined;
+  const configuredModeColor = configuredMode?.metadata?.color;
+  const contextIndicatorColor = typeof configuredModeColor === 'string' ? configuredModeColor : mastra.green;
   const modeColor = isJudging
     ? judgeModeColor
     : showOMMode
@@ -335,33 +338,38 @@ export function updateStatusLine(state: TUIState): void {
     const useBadge = opts.badge === 'short' ? shortModeBadge : modeBadge;
     const useBadgeWidth = opts.badge === 'short' ? shortModeBadgeWidth : modeBadgeWidth;
     const ds = displayState;
+    const messageColor = contextIndicatorColor;
+    const memoryColor = mastraBrand.blue;
+    const unusedColor = '#3f3f46';
     const messageSegmentStyler =
       ds.bufferingMessages && state.gradientAnimator?.isRunning()
         ? (segment: string) =>
             applyGradientSweep(
               segment,
               state.gradientAnimator!.getOffset(),
-              getObserverColor(),
+              messageColor,
               state.gradientAnimator!.getFadeProgress(),
             )
-        : undefined;
+        : (segment: string) => chalk.hex(messageColor)(segment);
     const memorySegmentStyler =
       ds.bufferingObservations && state.gradientAnimator?.isRunning()
         ? (segment: string) =>
             applyGradientSweep(
               segment,
               state.gradientAnimator!.getOffset(),
-              getReflectorColor(),
+              memoryColor,
               state.gradientAnimator!.getFadeProgress(),
             )
-        : undefined;
-    if (!isJudging && opts.showOM !== false) {
-      const indicator = formatOMContextIndicator(ds.omProgress, {
-        messages: messageSegmentStyler,
-        memory: memorySegmentStyler,
-      });
-      parts.push({ plain: indicator.plain, styled: indicator.styled });
-    }
+        : (segment: string) => chalk.hex(memoryColor)(segment);
+    const unusedSegmentStyler = (segment: string) => chalk.hex(unusedColor)(segment);
+    const indicatorPart =
+      !isJudging && opts.showOM !== false
+        ? formatOMContextIndicator(ds.omProgress, {
+            messages: messageSegmentStyler,
+            memory: memorySegmentStyler,
+            unused: unusedSegmentStyler,
+          })
+        : null;
     if (state.tokensPerSec > 0) {
       const tpsLabel = `${state.tokensPerSec} tok/s`;
       parts.push({
@@ -385,9 +393,11 @@ export function updateStatusLine(state: TUIState): void {
     // Directory / branch / thread title (lowest priority on line 1)
     let dirText = opts.dir !== undefined ? opts.dir : opts.showDir ? dirFull : null;
 
-    // Measure width of everything except dir to know how much space remains
+    // Measure width of everything except dir to know how much space remains.
+    // The context indicator is reserved at the far right even though it is appended after dir.
+    const nonDirParts = indicatorPart ? [...parts, indicatorPart] : parts;
     const nonDirWidth =
-      useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
+      useBadgeWidth + nonDirParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
     if (dirText) {
       const dirPart = formatDirPart(dirText);
@@ -410,6 +420,9 @@ export function updateStatusLine(state: TUIState): void {
     if (dirText) {
       parts.push(formatDirPart(dirText));
     }
+    if (indicatorPart) {
+      parts.push({ plain: indicatorPart.plain, styled: indicatorPart.styled });
+    }
     const totalPlain =
       useBadgeWidth + parts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
 
@@ -417,15 +430,15 @@ export function updateStatusLine(state: TUIState): void {
 
     let styledLine: string;
     const hasDir = !!dirText;
-    if (hasDir && parts.length >= 3) {
-      // Three groups: left (model), center (mem/tokens/thinking), right (dir)
-      const leftPart = parts[0]!; // model
-      const centerParts = parts.slice(1, -1); // mem, tokens, thinking
-      const dirPart = parts[parts.length - 1]!; // dir
+    if (indicatorPart && parts.length >= 2) {
+      // Three groups: left (model), center (activity + dir/thread), right (context indicator)
+      const leftPart = parts[0]!;
+      const centerParts = parts.slice(1, -1);
+      const rightPart = parts[parts.length - 1]!;
 
       const leftWidth = useBadgeWidth + visibleWidth(leftPart.plain);
       const centerWidth = centerParts.reduce((sum, p, i) => sum + visibleWidth(p.plain) + (i > 0 ? SEP.length : 0), 0);
-      const rightWidth = visibleWidth(dirPart.plain);
+      const rightWidth = visibleWidth(rightPart.plain);
       const totalContent = leftWidth + centerWidth + rightWidth;
       const freeSpace = termWidth - totalContent;
       const gapLeft = Math.floor(freeSpace / 2);
@@ -437,7 +450,7 @@ export function updateStatusLine(state: TUIState): void {
         ' '.repeat(Math.max(gapLeft, 1)) +
         centerParts.map(p => p.styled).join(SEP) +
         ' '.repeat(Math.max(gapRight, 1)) +
-        dirPart.styled;
+        rightPart.styled;
     } else if (hasDir && parts.length === 2) {
       // Just model + dir, right-align dir
       const mainStr = useBadge + parts[0]!.styled;

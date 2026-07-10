@@ -73,14 +73,14 @@ export const omStatusIndicatorScenario: McE2eScenario = {
 
     process.stdout.columns = 120;
     setUsage(30_000, 30_000);
-    await checkpoint('balanced', /60\/120k\s+↓6k/);
+    await checkpoint('balanced', /60\/120k\s+↓/);
 
     setUsage(45_000, 5_000);
-    await checkpoint('asymmetric', /50\/120k\s+↓6k/);
+    await checkpoint('asymmetric', /50\/120k\s+↓/);
 
     process.stdout.columns = 60;
     setUsage(30_000, 30_000);
-    await checkpoint('narrow', /60\/120k\s+↓6k/);
+    await checkpoint('narrow', /60\/120k\s+↓/);
 
     process.stdout.columns = 120;
     let offset = 0;
@@ -92,19 +92,19 @@ export const omStatusIndicatorScenario: McE2eScenario = {
     gradientAnimator.getFadeProgress = () => 0;
     displayState.bufferingMessages = true;
     updateStatusLine(state);
-    await checkpoint('message-buffer-1', /60\/120k\s+↓6k/);
+    await checkpoint('message-buffer-1', /60\/120k\s+↓/);
     offset = 0.5;
     updateStatusLine(state);
-    await checkpoint('message-buffer-2', /60\/120k\s+↓6k/);
+    await checkpoint('message-buffer-2', /60\/120k\s+↓/);
 
     displayState.bufferingMessages = false;
     displayState.bufferingObservations = true;
     offset = 0;
     updateStatusLine(state);
-    await checkpoint('reflection-buffer-1', /60\/120k\s+↓6k/);
+    await checkpoint('reflection-buffer-1', /60\/120k\s+↓/);
     offset = 0.5;
     updateStatusLine(state);
-    await checkpoint('reflection-buffer-2', /60\/120k\s+↓6k/);
+    await checkpoint('reflection-buffer-2', /60\/120k\s+↓/);
 
     state.gradientAnimator = originalGradientAnimator;
     process.stdout.columns = originalColumns;

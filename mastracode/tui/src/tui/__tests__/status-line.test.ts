@@ -49,10 +49,18 @@ vi.mock('../theme.js', () => ({
     blue: '#3b82f6',
     specialGray: '#6b7280',
   },
+  mastraBrand: {
+    blue: '#2563eb',
+  },
   extendedColors: {
     skyBlue: '#0ea5e9',
+    lightCyan: '#22d3ee',
+    indigo: '#6366f1',
   },
-  tintHex: (_color: string, _amount: number) => '#111111',
+  tintHex: (color: string, amount: number) => {
+    const channels = [1, 3, 5].map(offset => Math.floor(parseInt(color.slice(offset, offset + 2), 16) * amount));
+    return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+  },
   getThemeMode: () => 'dark',
   ensureContrast: (_color: string) => _color,
   TUI_MIN_CONTRAST: 5.5,
@@ -368,7 +376,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('feature/supe..tr…');
+    expect(rendered).toContain('feature/supe..tra-l…');
     expect(rendered).not.toContain('mastra--feat-mc-queueing-ux…');
   });
 
@@ -478,9 +486,30 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('[━━━─────━━] 60/120k ↓4k');
+    expect(rendered).toContain('━━━━━━━━━━  60/120k ↓');
+    expect(rendered.indexOf('feat/mc-queueing-ux')).toBeLessThan(rendered.indexOf('━━━━━━━━━━'));
+    expect(rendered).toMatch(/━━━━━━━━━━  60\/120k ↓$/);
     expect(rendered).not.toContain('messages');
     expect(rendered).not.toContain('memory');
+  });
+
+  it('keeps the indicator anchored when the savings arrow disappears', () => {
+    const state = createState();
+    updateStatusLine(state);
+    const withSavings = state.statusLine.setText.mock.calls[0]?.[0] as string;
+
+    const displayState = state.session.displayState.get();
+    displayState.omProgress.buffered.observations.projectedMessageRemoval = 0;
+    displayState.omProgress.buffered.reflection.inputObservationTokens = 3_000;
+    displayState.omProgress.buffered.reflection.observationTokens = 3_000;
+    state.session.displayState.get.mockReturnValue(displayState);
+    state.statusLine.setText.mockClear();
+    updateStatusLine(state);
+    const withoutSavings = state.statusLine.setText.mock.calls[0]?.[0] as string;
+
+    expect(withoutSavings).not.toContain('↓');
+    expect(withoutSavings.indexOf('━━━━━━━━━━')).toBe(withSavings.indexOf('━━━━━━━━━━'));
+    expect(visibleWidthMock(withoutSavings)).toBe(visibleWidthMock(withSavings));
   });
 
   it('keeps the unified indicator at 60 columns', () => {
@@ -489,7 +518,7 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('[━━━─────━━] 60/120k ↓4k');
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('━━━━━━━━━━  60/120k ↓');
   });
 
   it('animates only the message segment while keeping the middle, model, badge, and text static', () => {
@@ -510,9 +539,9 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
-    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#f97316', 0);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#00ff00', 0);
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('<sweep>━━━</sweep>─────━━] 60/120k ↓4k');
+    expect(rendered).toContain('━━<sweep>━━━</sweep>━━━━━  60/120k ↓');
   });
 
   it('animates only the memory segment', () => {
@@ -528,7 +557,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
-    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━', 0.25, '#ec4899', 0.1);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━', 0.25, '#2563eb', 0.1);
   });
 
   it('animates both occupied segments independently when both buffers are active', () => {
@@ -548,6 +577,6 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
-    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual(['━━━', '━━']);
+    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual(['━━', '━━━']);
   });
 });
