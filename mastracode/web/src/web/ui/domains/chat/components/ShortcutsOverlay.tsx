@@ -35,7 +35,9 @@ export function ShortcutsOverlay() {
                 {s.description}
               </Txt>
               <span className="flex shrink-0 items-center gap-1">
-                {s.keys.map(k => <Kbd key={k}>{k}</Kbd>)}
+                {s.keys.map(k => (
+                  <Kbd key={k}>{k}</Kbd>
+                ))}
               </span>
             </li>
           ))}

@@ -9,7 +9,13 @@ import { CommandPalette, SLASH_COMMANDS, useChatCommands } from '../../index';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const project: Project = { id: 'project-test', name: 'Test', path: '/tmp/test', resourceId: 'resource-test', createdAt: 1 };
+const project: Project = {
+  id: 'project-test',
+  name: 'Test',
+  path: '/tmp/test',
+  resourceId: 'resource-test',
+  createdAt: 1,
+};
 
 function PaletteLauncher() {
   const { open } = useOverlays();
@@ -27,13 +33,21 @@ function PaletteLauncher() {
 function renderPalette() {
   localStorage.setItem('mastracode-projects', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-project', project.id);
-  return renderWithProviders(<OverlayTestProviders><CommandPalette /></OverlayTestProviders>);
+  return renderWithProviders(
+    <OverlayTestProviders>
+      <CommandPalette />
+    </OverlayTestProviders>,
+  );
 }
 
 function renderPaletteOverlay() {
   localStorage.setItem('mastracode-projects', JSON.stringify([project]));
   localStorage.setItem('mastracode-active-project', project.id);
-  return renderWithProviders(<OverlayTestProviders><PaletteLauncher /></OverlayTestProviders>);
+  return renderWithProviders(
+    <OverlayTestProviders>
+      <PaletteLauncher />
+    </OverlayTestProviders>,
+  );
 }
 
 beforeEach(useOverlayControllerHandlers);

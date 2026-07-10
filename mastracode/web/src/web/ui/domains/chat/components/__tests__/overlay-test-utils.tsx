@@ -34,15 +34,31 @@ export function useOverlayControllerHandlers() {
     }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () =>
-      HttpResponse.json({ models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true, useCount: 1 }] }),
+      HttpResponse.json({
+        models: [
+          { id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true, useCount: 1 },
+        ],
+      }),
     ),
     http.get(`${API}/sessions/:resourceId`, ({ params }) =>
-      HttpResponse.json({ controllerId: 'code', resourceId: params.resourceId, modeId: 'build', modelId: 'openai/gpt-4o-mini', threadId: 'thread-test', settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true } }),
+      HttpResponse.json({
+        controllerId: 'code',
+        resourceId: params.resourceId,
+        modeId: 'build',
+        modelId: 'openai/gpt-4o-mini',
+        threadId: 'thread-test',
+        settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
+      }),
     ),
-    http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: { read: 'ask' }, tools: {} })),
+    http.get(`${API}/sessions/:resourceId/permissions`, () =>
+      HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
+    ),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${API}/sessions/:resourceId/stream`, () => new Response(null, { headers: { 'content-type': 'text/event-stream' } })),
+    http.get(
+      `${API}/sessions/:resourceId/stream`,
+      () => new Response(null, { headers: { 'content-type': 'text/event-stream' } }),
+    ),
     http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
   );
 }
@@ -51,7 +67,18 @@ export function OverlayTestProviders({ children }: { children: ReactNode }) {
   return (
     <MemoryRouter initialEntries={['/threads/thread-test']}>
       <Routes>
-        <Route path="/threads/:threadId" element={<ActiveProjectProvider><ChatSessionProvider><OverlaysProvider><ChatCommandsProvider>{children}</ChatCommandsProvider></OverlaysProvider></ChatSessionProvider></ActiveProjectProvider>} />
+        <Route
+          path="/threads/:threadId"
+          element={
+            <ActiveProjectProvider>
+              <ChatSessionProvider>
+                <OverlaysProvider>
+                  <ChatCommandsProvider>{children}</ChatCommandsProvider>
+                </OverlaysProvider>
+              </ChatSessionProvider>
+            </ActiveProjectProvider>
+          }
+        />
       </Routes>
     </MemoryRouter>
   );

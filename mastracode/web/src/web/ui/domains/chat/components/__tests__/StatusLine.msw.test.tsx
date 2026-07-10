@@ -150,7 +150,9 @@ describe('StatusLine', () => {
 
       const group = await screen.findByRole('group', { name: 'Session mode' });
       expect(group).toBeInTheDocument();
-      await waitFor(() => expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true'));
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Build' })).toHaveAttribute('aria-pressed', 'true'),
+      );
       expect(screen.getByRole('button', { name: 'Plan' })).toHaveAttribute('aria-pressed', 'false');
     });
 
@@ -195,7 +197,12 @@ describe('StatusLine', () => {
         {
           type: 'display_state_changed',
           displayState: {
-            omProgress: omProgress({ pendingTokens: 1500, threshold: 10000, thresholdPercent: 15, projectedMessageRemoval: 2000 }),
+            omProgress: omProgress({
+              pendingTokens: 1500,
+              threshold: 10000,
+              thresholdPercent: 15,
+              projectedMessageRemoval: 2000,
+            }),
           },
         },
       ]);
@@ -234,7 +241,12 @@ describe('StatusLine', () => {
         {
           type: 'display_state_changed',
           displayState: {
-            omProgress: omProgress({ pendingTokens: 500, threshold: 10000, thresholdPercent: 5, reflectionThreshold: 20000 }),
+            omProgress: omProgress({
+              pendingTokens: 500,
+              threshold: 10000,
+              thresholdPercent: 5,
+              reflectionThreshold: 20000,
+            }),
           },
         },
       ]);

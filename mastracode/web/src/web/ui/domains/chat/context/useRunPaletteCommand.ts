@@ -8,7 +8,10 @@ import {
   useResumeAgentControllerGoalMutation,
   useSetAgentControllerGoalMutation,
 } from '../hooks/useAgentControllerGoalMutations';
-import { useAbortAgentControllerMutation, useFollowUpAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
+import {
+  useAbortAgentControllerMutation,
+  useFollowUpAgentControllerMutation,
+} from '../hooks/useAgentControllerRunMutations';
 import type { SlashCommand } from '../services/commands';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';

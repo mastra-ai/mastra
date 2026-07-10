@@ -8,15 +8,33 @@ import type { Project } from '../../../workspaces';
 import { ChatOverlays } from '../ChatOverlays';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const project: Project = { id: 'project-test', name: 'Test', path: '/tmp/test', resourceId: 'resource-test', createdAt: 1 };
+const project: Project = {
+  id: 'project-test',
+  name: 'Test',
+  path: '/tmp/test',
+  resourceId: 'resource-test',
+  createdAt: 1,
+};
 
 function OverlayLauncher() {
   const { open } = useOverlays();
-  return <><button onClick={() => open('palette')}>Palette</button><button onClick={() => open('settings')}>Settings</button><button onClick={() => open('shortcuts')}>Shortcuts</button><button onClick={() => open('projects')}>Projects</button><ChatOverlays /></>;
+  return (
+    <>
+      <button onClick={() => open('palette')}>Palette</button>
+      <button onClick={() => open('settings')}>Settings</button>
+      <button onClick={() => open('shortcuts')}>Shortcuts</button>
+      <button onClick={() => open('projects')}>Projects</button>
+      <ChatOverlays />
+    </>
+  );
 }
 
 function renderOverlays() {
-  return renderWithProviders(<OverlayTestProviders><OverlayLauncher /></OverlayTestProviders>);
+  return renderWithProviders(
+    <OverlayTestProviders>
+      <OverlayLauncher />
+    </OverlayTestProviders>,
+  );
 }
 
 beforeEach(useOverlayControllerHandlers);

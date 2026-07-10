@@ -5,7 +5,10 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
-import { OverlayTestProviders, useOverlayControllerHandlers } from '../../../chat/components/__tests__/overlay-test-utils';
+import {
+  OverlayTestProviders,
+  useOverlayControllerHandlers,
+} from '../../../chat/components/__tests__/overlay-test-utils';
 import type { DirectoryListing } from '../../../../../../shared/api/types';
 import type { Project } from '../../index';
 import { ProjectsModal } from '../../index';
@@ -14,10 +17,19 @@ import { loadProjects, saveProjects } from '../../services/projects';
 const FS_URL = `${TEST_BASE_URL}/web/fs/list`;
 const alpha: Project = { id: 'p-alpha', name: 'Alpha', path: '/projects/alpha', resourceId: 'res-alpha', createdAt: 1 };
 const beta: Project = { id: 'p-beta', name: 'Beta', path: '/projects/beta', resourceId: 'res-beta', createdAt: 2 };
-const rootListing: DirectoryListing = { root: '/projects', path: '/projects', parent: null, entries: [{ name: 'gamma', path: '/projects/gamma' }] };
+const rootListing: DirectoryListing = {
+  root: '/projects',
+  path: '/projects',
+  parent: null,
+  entries: [{ name: 'gamma', path: '/projects/gamma' }],
+};
 
 function renderProjects() {
-  return renderWithProviders(<OverlayTestProviders><ProjectsModal /></OverlayTestProviders>);
+  return renderWithProviders(
+    <OverlayTestProviders>
+      <ProjectsModal />
+    </OverlayTestProviders>,
+  );
 }
 
 beforeEach(() => {
