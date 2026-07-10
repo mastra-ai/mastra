@@ -242,21 +242,37 @@ export interface IssueSummary {
   updatedAt: string;
 }
 
+/** Page size for issue/PR listings; one GitHub API call per page. */
+export const LIST_PAGE_SIZE = 30;
+
+export interface IssuePage {
+  issues: IssueSummary[];
+  /** Next page number to request, or `null` when this was the last page. */
+  nextPage: number | null;
+}
+
 /**
- * List a repo's open issues through an installation token (paginated). The
- * issues API also returns pull requests, so those are filtered out.
+ * List one page of a repo's open issues through an installation token. The
+ * issues API also returns pull requests, so those are filtered out (the filter
+ * can make a non-final page shorter than the page size — `nextPage` is derived
+ * from the raw response length, not the filtered one).
  */
-export async function listRepoOpenIssues(installationId: number, repoFullName: string): Promise<IssueSummary[]> {
+export async function listRepoOpenIssues(
+  installationId: number,
+  repoFullName: string,
+  page: number,
+): Promise<IssuePage> {
   const parts = splitRepoFullName(repoFullName);
-  if (!parts) return [];
+  if (!parts) return { issues: [], nextPage: null };
   const octokit = getInstallationOctokit(installationId);
-  const issues = await octokit.paginate(octokit.issues.listForRepo, {
+  const response = await octokit.issues.listForRepo({
     owner: parts.owner,
     repo: parts.repo,
     state: 'open',
-    per_page: 100,
+    per_page: LIST_PAGE_SIZE,
+    page,
   });
-  return issues
+  const issues = response.data
     .filter(issue => !issue.pull_request)
     .map(issue => ({
       number: issue.number,
@@ -268,6 +284,7 @@ export async function listRepoOpenIssues(installationId: number, repoFullName: s
       createdAt: issue.created_at,
       updatedAt: issue.updated_at,
     }));
+  return { issues, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
 }
 
 export interface PullRequestSummary {
@@ -281,24 +298,33 @@ export interface PullRequestSummary {
   updatedAt: string;
 }
 
+export interface PullRequestPage {
+  pullRequests: PullRequestSummary[];
+  /** Next page number to request, or `null` when this was the last page. */
+  nextPage: number | null;
+}
+
 /**
- * List a repo's open, non-draft pull requests through an installation token
- * (paginated).
+ * List one page of a repo's open, non-draft pull requests through an
+ * installation token. Draft filtering can make a non-final page shorter than
+ * the page size — `nextPage` is derived from the raw response length.
  */
 export async function listRepoOpenPullRequests(
   installationId: number,
   repoFullName: string,
-): Promise<PullRequestSummary[]> {
+  page: number,
+): Promise<PullRequestPage> {
   const parts = splitRepoFullName(repoFullName);
-  if (!parts) return [];
+  if (!parts) return { pullRequests: [], nextPage: null };
   const octokit = getInstallationOctokit(installationId);
-  const pulls = await octokit.paginate(octokit.pulls.list, {
+  const response = await octokit.pulls.list({
     owner: parts.owner,
     repo: parts.repo,
     state: 'open',
-    per_page: 100,
+    per_page: LIST_PAGE_SIZE,
+    page,
   });
-  return pulls
+  const pullRequests = response.data
     .filter(pr => !pr.draft)
     .map(pr => ({
       number: pr.number,
@@ -310,6 +336,7 @@ export async function listRepoOpenPullRequests(
       createdAt: pr.created_at,
       updatedAt: pr.updated_at,
     }));
+  return { pullRequests, nextPage: response.data.length === LIST_PAGE_SIZE ? page + 1 : null };
 }
 
 /**

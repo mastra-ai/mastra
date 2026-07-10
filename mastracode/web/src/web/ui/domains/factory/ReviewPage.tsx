@@ -5,6 +5,7 @@ import { GitPullRequest } from 'lucide-react';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { FactoryPageShell } from './components/FactoryPageShell';
+import { LoadMoreSentinel } from './components/LoadMoreSentinel';
 import { useProjectPullRequestsQuery } from './hooks/useFactoryData';
 import type { GithubPullRequest } from './services/factory';
 
@@ -37,11 +38,19 @@ function PullRequestList({ githubProjectId }: { githubProjectId: string }) {
   }
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Open pull requests">
-      {pulls.data.map(pr => (
-        <PullRequestRow key={pr.number} pr={pr} />
-      ))}
-    </ul>
+    <>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Open pull requests">
+        {pulls.data.map(pr => (
+          <PullRequestRow key={pr.number} pr={pr} />
+        ))}
+      </ul>
+      <LoadMoreSentinel
+        hasNextPage={pulls.hasNextPage}
+        isFetchingNextPage={pulls.isFetchingNextPage}
+        onLoadMore={pulls.fetchNextPage}
+        label="Load more pull requests"
+      />
+    </>
   );
 }
 

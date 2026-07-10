@@ -160,7 +160,7 @@ describe('Factory sidebar section', () => {
   it('given a GitHub project, when the app renders, then the Factory heading exposes Intake and Review links', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
-        HttpResponse.json({ issues: [] }),
+        HttpResponse.json({ issues: [], nextPage: null }),
       ),
     );
     renderAt('/factory/intake');
@@ -189,7 +189,7 @@ describe('Factory sidebar section', () => {
 describe('Factory Intake page', () => {
   it('given open issues, when visiting /factory/intake, then they render as links to GitHub', async () => {
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () => HttpResponse.json({ issues })),
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () => HttpResponse.json({ issues, nextPage: null })),
     );
     renderAt('/factory/intake');
 
@@ -210,7 +210,7 @@ describe('Factory Intake page', () => {
     };
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
-        HttpResponse.json({ issues: [busyIssue] }),
+        HttpResponse.json({ issues: [busyIssue], nextPage: null }),
       ),
     );
     renderAt('/factory/intake');
@@ -222,10 +222,33 @@ describe('Factory Intake page', () => {
     expect(within(list).getByText('+2')).toHaveAttribute('title', 'impact:high, effort:medium');
   });
 
+  it('given more pages, when "Load more issues" is activated, then the next page appends to the list', async () => {
+    const pageTwoIssue: GithubIssue = { ...issues[0]!, number: 99, title: 'From page two' };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
+        const page = new URL(request.url).searchParams.get('page') ?? '1';
+        return page === '1'
+          ? HttpResponse.json({ issues, nextPage: 2 })
+          : HttpResponse.json({ issues: [pageTwoIssue], nextPage: null });
+      }),
+    );
+    renderAt('/factory/intake');
+
+    const list = await screen.findByRole('list', { name: 'Open issues' });
+    expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
+    expect(within(list).queryByText('From page two')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Load more issues' }));
+
+    expect(await within(list).findByText('From page two')).toBeInTheDocument();
+    // Last page reached — the load-more control disappears.
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more issues' })).not.toBeInTheDocument());
+  });
+
   it('given no open issues, when the page resolves, then an empty message renders', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
-        HttpResponse.json({ issues: [] }),
+        HttpResponse.json({ issues: [], nextPage: null }),
       ),
     );
     renderAt('/factory/intake');
@@ -263,7 +286,7 @@ describe('Factory Review page', () => {
   it('given open pull requests, when visiting /factory/review, then they render with branch metadata', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
-        HttpResponse.json({ pullRequests }),
+        HttpResponse.json({ pullRequests, nextPage: null }),
       ),
     );
     renderAt('/factory/review');
@@ -280,7 +303,7 @@ describe('Factory Review page', () => {
   it('given no open pull requests, when the page resolves, then an empty message renders', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
-        HttpResponse.json({ pullRequests: [] }),
+        HttpResponse.json({ pullRequests: [], nextPage: null }),
       ),
     );
     renderAt('/factory/review');
@@ -293,10 +316,10 @@ describe('Factory routing', () => {
   it('given a GitHub project, when navigating between Intake and Review via the sidebar, then the router swaps pages', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
-        HttpResponse.json({ issues: [] }),
+        HttpResponse.json({ issues: [], nextPage: null }),
       ),
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
-        HttpResponse.json({ pullRequests: [] }),
+        HttpResponse.json({ pullRequests: [], nextPage: null }),
       ),
     );
     const { router } = renderAt('/factory/intake');

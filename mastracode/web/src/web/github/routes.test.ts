@@ -63,30 +63,36 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string) => [
-  {
-    number: 12,
-    title: 'Fix flaky test',
-    url: 'https://github.com/octo/hello/issues/12',
-    author: 'ada',
-    labels: ['bug'],
-    comments: 3,
-    createdAt: '2026-07-01T00:00:00Z',
-    updatedAt: '2026-07-02T00:00:00Z',
-  },
-]);
-const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string) => [
-  {
-    number: 34,
-    title: 'Add factory pages',
-    url: 'https://github.com/octo/hello/pull/34',
-    author: 'grace',
-    baseBranch: 'main',
-    headBranch: 'feat/factory',
-    createdAt: '2026-07-03T00:00:00Z',
-    updatedAt: '2026-07-04T00:00:00Z',
-  },
-]);
+const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+  issues: [
+    {
+      number: 12,
+      title: 'Fix flaky test',
+      url: 'https://github.com/octo/hello/issues/12',
+      author: 'ada',
+      labels: ['bug'],
+      comments: 3,
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    },
+  ],
+  nextPage: null as number | null,
+}));
+const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+  pullRequests: [
+    {
+      number: 34,
+      title: 'Add factory pages',
+      url: 'https://github.com/octo/hello/pull/34',
+      author: 'grace',
+      baseBranch: 'main',
+      headBranch: 'feat/factory',
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-04T00:00:00Z',
+    },
+  ],
+  nextPage: null as number | null,
+}));
 
 vi.mock('./client', () => ({
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
@@ -118,10 +124,10 @@ vi.mock('./client', () => ({
       : null,
   ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
-  listRepoOpenIssues: (installationId: number, repoFullName: string) =>
-    listRepoOpenIssues(installationId, repoFullName),
-  listRepoOpenPullRequests: (installationId: number, repoFullName: string) =>
-    listRepoOpenPullRequests(installationId, repoFullName),
+  listRepoOpenIssues: (installationId: number, repoFullName: string, page: number) =>
+    listRepoOpenIssues(installationId, repoFullName, page),
+  listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
+    listRepoOpenPullRequests(installationId, repoFullName, page),
 }));
 
 const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
@@ -771,7 +777,24 @@ describe('issues route', () => {
     const json = await res.json();
     expect(json.issues).toHaveLength(1);
     expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello');
+    expect(json.nextPage).toBeNull();
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('forwards the requested page and echoes the next page', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=2');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ issues: [], nextPage: 3 });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2);
+  });
+
+  it('400s on a malformed page param', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
+    expect(res.status).toBe(400);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('502s when GitHub is unavailable', async () => {
@@ -805,7 +828,17 @@ describe('prs route', () => {
     const json = await res.json();
     expect(json.pullRequests).toHaveLength(1);
     expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
-    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello');
+    expect(json.nextPage).toBeNull();
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('forwards the requested page and echoes the next page', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs?page=3');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ pullRequests: [], nextPage: 4 });
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 3);
   });
 
   it('502s when GitHub is unavailable', async () => {

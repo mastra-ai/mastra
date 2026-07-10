@@ -126,6 +126,17 @@ async function resolveOrgTenant(
 }
 
 /**
+ * Parse a 1-based `page` query param. Missing means page 1; anything that is
+ * not a small positive integer is rejected (`null`).
+ */
+function parseListPage(raw: string | undefined): number | null {
+  if (raw === undefined) return 1;
+  if (!/^\d{1,5}$/.test(raw)) return null;
+  const page = Number(raw);
+  return page >= 1 ? page : null;
+}
+
+/**
  * Shape returned to the SPA for a GitHub-backed project, matching the front-end
  * `Project` model (`source: 'github'`).
  */
@@ -499,9 +510,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       handler: async c => {
         const loaded = await loadOrgProject(loose(c));
         if ('response' in loaded) return loaded.response;
+        const page = parseListPage(c.req.query('page'));
+        if (page === null) return c.json({ error: 'invalid_page' }, 400);
         try {
-          const issues = await listRepoOpenIssues(loaded.project.installationId, loaded.project.repoFullName);
-          return c.json({ issues });
+          const { issues, nextPage } = await listRepoOpenIssues(
+            loaded.project.installationId,
+            loaded.project.repoFullName,
+            page,
+          );
+          return c.json({ issues, nextPage });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },
@@ -520,12 +537,15 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       handler: async c => {
         const loaded = await loadOrgProject(loose(c));
         if ('response' in loaded) return loaded.response;
+        const page = parseListPage(c.req.query('page'));
+        if (page === null) return c.json({ error: 'invalid_page' }, 400);
         try {
-          const pullRequests = await listRepoOpenPullRequests(
+          const { pullRequests, nextPage } = await listRepoOpenPullRequests(
             loaded.project.installationId,
             loaded.project.repoFullName,
+            page,
           );
-          return c.json({ pullRequests });
+          return c.json({ pullRequests, nextPage });
         } catch (err) {
           return c.json(
             { error: 'github_fetch_failed', message: err instanceof Error ? err.message : String(err) },

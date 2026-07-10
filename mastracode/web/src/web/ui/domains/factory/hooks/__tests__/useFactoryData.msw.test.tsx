@@ -46,12 +46,39 @@ const pullRequests: GithubPullRequest[] = [
 
 describe('useProjectIssuesQuery', () => {
   it('given the server returns issues, when the hook resolves, then it exposes them', async () => {
-    server.use(http.get(ISSUES_URL, () => HttpResponse.json({ issues })));
+    server.use(http.get(ISSUES_URL, () => HttpResponse.json({ issues, nextPage: null })));
 
     const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
 
     await waitFor(() => expect(result.current.data).toBeDefined());
     expect(result.current.data).toEqual(issues);
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('given more pages, when fetchNextPage is called, then pages accumulate in order', async () => {
+    const pageTwoIssue: GithubIssue = { ...issues[0]!, number: 13, title: 'Page two issue' };
+    const requestedPages: string[] = [];
+    server.use(
+      http.get(ISSUES_URL, ({ request }) => {
+        const page = new URL(request.url).searchParams.get('page') ?? '1';
+        requestedPages.push(page);
+        return page === '1'
+          ? HttpResponse.json({ issues, nextPage: 2 })
+          : HttpResponse.json({ issues: [pageTwoIssue], nextPage: null });
+      }),
+    );
+
+    const { result } = renderHookWithProviders(() => useProjectIssuesQuery(PROJECT_ID));
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(result.current.hasNextPage).toBe(true);
+
+    await result.current.fetchNextPage();
+
+    await waitFor(() => expect(result.current.data).toHaveLength(2));
+    expect(result.current.data).toEqual([...issues, pageTwoIssue]);
+    expect(result.current.hasNextPage).toBe(false);
+    expect(requestedPages).toEqual(['1', '2']);
   });
 
   it('given no github project id, when the hook mounts, then no request is made', async () => {
@@ -59,7 +86,7 @@ describe('useProjectIssuesQuery', () => {
     server.use(
       http.get(ISSUES_URL, () => {
         hit();
-        return HttpResponse.json({ issues });
+        return HttpResponse.json({ issues, nextPage: null });
       }),
     );
 
@@ -85,7 +112,7 @@ describe('useProjectIssuesQuery', () => {
 
 describe('useProjectPullRequestsQuery', () => {
   it('given the server returns pull requests, when the hook resolves, then it exposes them', async () => {
-    server.use(http.get(PRS_URL, () => HttpResponse.json({ pullRequests })));
+    server.use(http.get(PRS_URL, () => HttpResponse.json({ pullRequests, nextPage: null })));
 
     const { result } = renderHookWithProviders(() => useProjectPullRequestsQuery(PROJECT_ID));
 
@@ -98,7 +125,7 @@ describe('useProjectPullRequestsQuery', () => {
     server.use(
       http.get(PRS_URL, () => {
         hit();
-        return HttpResponse.json({ pullRequests });
+        return HttpResponse.json({ pullRequests, nextPage: null });
       }),
     );
 

@@ -29,9 +29,26 @@ export interface GithubPullRequest {
   updatedAt: string;
 }
 
+export interface GithubIssuePage {
+  issues: GithubIssue[];
+  /** Next 1-based page to request, or `null` on the last page. */
+  nextPage: number | null;
+}
+
+export interface GithubPullRequestPage {
+  pullRequests: GithubPullRequest[];
+  nextPage: number | null;
+}
+
 /** GET helper for the read-only per-project GitHub endpoints. */
-async function getProjectResource<T>(baseUrl: string, githubProjectId: string, resource: string): Promise<T> {
-  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${resource}`, {
+async function getProjectResource<T>(
+  baseUrl: string,
+  githubProjectId: string,
+  resource: string,
+  page: number,
+): Promise<T> {
+  const url = `${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${resource}?page=${page}`;
+  const res = await fetch(url, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
   });
@@ -49,14 +66,20 @@ async function getProjectResource<T>(baseUrl: string, githubProjectId: string, r
   return (await res.json()) as T;
 }
 
-/** List a project's open GitHub issues (pull requests excluded server-side). */
-export async function listProjectIssues(baseUrl: string, githubProjectId: string): Promise<GithubIssue[]> {
-  const body = await getProjectResource<{ issues: GithubIssue[] }>(baseUrl, githubProjectId, 'issues');
-  return body.issues;
+/** List one page of a project's open GitHub issues (PRs excluded server-side). */
+export async function listProjectIssues(
+  baseUrl: string,
+  githubProjectId: string,
+  page: number,
+): Promise<GithubIssuePage> {
+  return getProjectResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', page);
 }
 
-/** List a project's open pull requests (drafts excluded server-side). */
-export async function listProjectPullRequests(baseUrl: string, githubProjectId: string): Promise<GithubPullRequest[]> {
-  const body = await getProjectResource<{ pullRequests: GithubPullRequest[] }>(baseUrl, githubProjectId, 'prs');
-  return body.pullRequests;
+/** List one page of a project's open pull requests (drafts excluded server-side). */
+export async function listProjectPullRequests(
+  baseUrl: string,
+  githubProjectId: string,
+  page: number,
+): Promise<GithubPullRequestPage> {
+  return getProjectResource<GithubPullRequestPage>(baseUrl, githubProjectId, 'prs', page);
 }

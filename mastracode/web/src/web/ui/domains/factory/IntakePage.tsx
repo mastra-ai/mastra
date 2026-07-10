@@ -6,6 +6,7 @@ import { CircleDot, MessageSquare } from 'lucide-react';
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
 import { FactoryPageShell } from './components/FactoryPageShell';
+import { LoadMoreSentinel } from './components/LoadMoreSentinel';
 import { useProjectIssuesQuery } from './hooks/useFactoryData';
 import type { GithubIssue } from './services/factory';
 
@@ -38,11 +39,19 @@ function IssueList({ githubProjectId }: { githubProjectId: string }) {
   }
 
   return (
-    <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Open issues">
-      {issues.data.map(issue => (
-        <IssueRow key={issue.number} issue={issue} />
-      ))}
-    </ul>
+    <>
+      <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Open issues">
+        {issues.data.map(issue => (
+          <IssueRow key={issue.number} issue={issue} />
+        ))}
+      </ul>
+      <LoadMoreSentinel
+        hasNextPage={issues.hasNextPage}
+        isFetchingNextPage={issues.isFetchingNextPage}
+        onLoadMore={issues.fetchNextPage}
+        label="Load more issues"
+      />
+    </>
   );
 }
 
