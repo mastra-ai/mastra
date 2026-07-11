@@ -82,6 +82,118 @@ describe('plugin loader', () => {
     expect(loaded.find(plugin => plugin.id === 'acme.enabled')?.toolNames).toEqual(['enabled_tool']);
   });
 
+  it('resolves async signal provider factories with plugin context', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    fs.mkdirSync(projectRoot, { recursive: true });
+    fs.symlinkSync(path.resolve('node_modules'), path.join(projectRoot, 'node_modules'), 'dir');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'signals');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `import { SignalProvider } from '@mastra/core/signals';
+       class PluginSignals extends SignalProvider {
+         constructor(id) { super(); this.id = id; }
+       }
+       export default {
+         id: 'acme.signals',
+         config: { providerId: { type: 'string', default: 'default-signals' } },
+         signalProviders: async context => [new PluginSignals(context.config.providerId)]
+       };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.signals': {
+            enabled: true,
+            source: 'local',
+            specifier: '../signals',
+            path: pluginDir,
+            entry: 'src/index.ts',
+            config: { providerId: 'configured-signals' },
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]?.error).toBeUndefined();
+    expect(loaded[0]).toMatchObject({ id: 'acme.signals', status: 'active' });
+    expect(loaded[0]?.signalProviders?.map(provider => provider.id)).toEqual(['configured-signals']);
+  });
+
+  it('fails closed for invalid signal provider factory results', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    const pluginDir = path.join(projectRoot, '.mastracode', 'plugins', 'invalid-signals');
+    writePlugin(
+      path.join(pluginDir, 'src/index.ts'),
+      `export default { id: 'acme.invalid-signals', signalProviders: async () => [{}] };`,
+    );
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: {
+        plugins: {
+          'acme.invalid-signals': {
+            enabled: true,
+            source: 'local',
+            specifier: '../invalid-signals',
+            path: pluginDir,
+            entry: 'src/index.ts',
+          },
+        },
+      },
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded[0]).toMatchObject({
+      id: 'acme.invalid-signals',
+      status: 'load failed',
+      error: 'Plugin signalProviders function must return an array of SignalProvider instances',
+    });
+  });
+
+  it('fails every plugin that declares a duplicate signal provider id', async () => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
+    const projectRoot = path.join(tempDir, 'project');
+    fs.mkdirSync(projectRoot, { recursive: true });
+    fs.symlinkSync(path.resolve('node_modules'), path.join(projectRoot, 'node_modules'), 'dir');
+    const pluginsRoot = path.join(projectRoot, '.mastracode', 'plugins');
+    for (const id of ['acme.first', 'acme.second']) {
+      writePlugin(
+        path.join(pluginsRoot, id, 'index.ts'),
+        `import { SignalProvider } from '@mastra/core/signals';
+         class PluginSignals extends SignalProvider { id = 'shared-signals'; }
+         export default { id: '${id}', signalProviders: () => [new PluginSignals()] };`,
+      );
+    }
+    const registry: PluginRegistry = {
+      plugins: Object.fromEntries(
+        ['acme.first', 'acme.second'].map(id => [
+          id,
+          { enabled: true, source: 'local', specifier: id, path: path.join(pluginsRoot, id), entry: 'index.ts' },
+        ]),
+      ),
+    };
+
+    const loaded = await loadPlugins({
+      projectRoot,
+      homeDir: path.join(tempDir, 'home'),
+      projectRegistry: registry,
+      globalRegistry: { plugins: {} },
+    });
+
+    expect(loaded.map(plugin => plugin.status)).toEqual(['load failed', 'load failed']);
+    expect(loaded.map(plugin => plugin.error)).toEqual([
+      'Duplicate signal provider id: shared-signals',
+      'Duplicate signal provider id: shared-signals',
+    ]);
+  });
+
   it('passes configured plugin option values into tools functions', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mc-plugin-loader-'));
     const projectRoot = path.join(tempDir, 'project');

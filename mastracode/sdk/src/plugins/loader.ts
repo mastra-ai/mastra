@@ -2,11 +2,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+import { SignalProvider } from '@mastra/core/signals';
+
 import type {
   MastraCodePlugin,
   MastraCodePluginConfigSchema,
   MastraCodePluginConfigValues,
   MastraCodePluginContext,
+  MastraCodePluginSignalProvider,
   MastraCodePluginToolEntries,
   MastraCodePluginTools,
   MastraCodeToolRenderConfig,
@@ -42,7 +45,7 @@ export async function loadPlugins(options: LoadPluginsOptions): Promise<LoadedPl
     loaded.push(await loadPluginRecord(record, options));
   }
 
-  return markToolConflicts(loaded);
+  return markSignalProviderConflicts(markToolConflicts(loaded));
 }
 
 export async function loadPluginRecord(
@@ -68,6 +71,7 @@ export async function loadPluginRecord(
     };
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
+    const signalProviders = await resolvePluginSignalProviders(plugin, context);
 
     return {
       ...record,
@@ -75,6 +79,7 @@ export async function loadPluginRecord(
       version: plugin.version ?? record.version,
       description: plugin.description,
       instructions,
+      signalProviders,
       status: 'active',
       tools,
       renderConfigs,
@@ -160,6 +165,9 @@ function validatePluginExport(value: unknown): MastraCodePlugin {
   if (plugin.tools !== undefined && typeof plugin.tools !== 'object' && typeof plugin.tools !== 'function') {
     throw new Error('Plugin tools must be an object or function');
   }
+  if (plugin.signalProviders !== undefined && typeof plugin.signalProviders !== 'function') {
+    throw new Error('Plugin signalProviders must be a function');
+  }
 
   return plugin;
 }
@@ -174,6 +182,18 @@ async function resolvePluginTools(
     throw new Error('Plugin tools function must return an object');
   }
   return normalizePluginToolEntries(entries);
+}
+
+async function resolvePluginSignalProviders(
+  plugin: MastraCodePlugin,
+  context: MastraCodePluginContext,
+): Promise<MastraCodePluginSignalProvider[]> {
+  if (!plugin.signalProviders) return [];
+  const providers = await plugin.signalProviders(context);
+  if (!Array.isArray(providers) || providers.some(provider => !(provider instanceof SignalProvider))) {
+    throw new Error('Plugin signalProviders function must return an array of SignalProvider instances');
+  }
+  return providers;
 }
 
 async function resolvePluginInstructions(
@@ -257,6 +277,30 @@ export function collectActivePluginTools(plugins: LoadedPlugin[]): MastraCodePlu
     }
   }
   return tools;
+}
+
+function markSignalProviderConflicts(plugins: LoadedPlugin[]): LoadedPlugin[] {
+  const owners = new Map<string, string[]>();
+  for (const plugin of plugins) {
+    if (plugin.status !== 'active') continue;
+    for (const provider of plugin.signalProviders ?? []) {
+      const providerOwners = owners.get(provider.id) ?? [];
+      providerOwners.push(plugin.id);
+      owners.set(provider.id, providerOwners);
+    }
+  }
+  return plugins.map(plugin => {
+    if (plugin.status !== 'active') return plugin;
+    const duplicateIds = (plugin.signalProviders ?? [])
+      .map(provider => provider.id)
+      .filter(id => (owners.get(id)?.length ?? 0) > 1);
+    if (duplicateIds.length === 0) return plugin;
+    return {
+      ...plugin,
+      status: 'load failed',
+      error: `Duplicate signal provider id${duplicateIds.length === 1 ? '' : 's'}: ${duplicateIds.join(', ')}`,
+    };
+  });
 }
 
 function markToolConflicts(plugins: LoadedPlugin[]): LoadedPlugin[] {

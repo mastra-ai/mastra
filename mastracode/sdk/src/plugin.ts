@@ -1,3 +1,4 @@
+import type { SignalProvider } from '@mastra/core/signals';
 import type { Tool, ToolAction, ToolExecutionContext } from '@mastra/core/tools';
 
 export { createTool } from '@mastra/core/tools';
@@ -105,6 +106,10 @@ export type MastraCodePluginToolEntry = {
 export type MastraCodePluginTools = Record<string, MastraCodePluginTool>;
 export type MastraCodePluginToolEntries = Record<string, MastraCodePluginToolEntry>;
 export type MastraCodePluginInstructions = string | ((context: MastraCodePluginContext) => string | Promise<string>);
+export type MastraCodePluginSignalProvider = SignalProvider<string>;
+export type MastraCodePluginSignalProviders = (
+  context: MastraCodePluginContext,
+) => MastraCodePluginSignalProvider[] | Promise<MastraCodePluginSignalProvider[]>;
 
 export type MastraCodePlugin = {
   id: string;
@@ -113,6 +118,7 @@ export type MastraCodePlugin = {
   description?: string;
   config?: MastraCodePluginConfigSchema;
   instructions?: MastraCodePluginInstructions;
+  signalProviders?: MastraCodePluginSignalProviders;
   tools?:
     | MastraCodePluginToolEntries
     | ((context: MastraCodePluginContext) => MastraCodePluginToolEntries | Promise<MastraCodePluginToolEntries>);

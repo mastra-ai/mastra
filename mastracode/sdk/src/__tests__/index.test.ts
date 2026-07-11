@@ -504,6 +504,7 @@ describe('createMastraCode', () => {
         { id: 'acme.plugin', status: 'active', toolNames: ['plugin_tool'], instructions: 'Use plugin policy.' },
       ]),
       getPluginTools: vi.fn(() => ({ plugin_tool: { id: 'plugin_tool' } })),
+      getPluginSignalProviders: vi.fn(() => []),
     };
 
     await createMastraCode({ pluginManager: pluginManager as any });
@@ -514,6 +515,23 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'plan')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.modes?.find(mode => mode.id === 'fast')?.availableTools).toContain('plugin_tool');
     expect(agentControllerConfig?.initialState?.pluginInstructions).toEqual(['Use plugin policy.']);
+  });
+
+  it('registers plugin signal providers before constructing the code agent', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const provider = { id: 'plugin-signals' };
+    const pluginManager = {
+      reload: vi.fn(async () => []),
+      getPluginTools: vi.fn(() => ({})),
+      getPluginSignalProviders: vi.fn(() => [provider]),
+    };
+
+    await createMastraCode({ pluginManager: pluginManager as any });
+
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+    expect(codeAgentConfig?.signals).toContain(provider);
   });
 
   it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {

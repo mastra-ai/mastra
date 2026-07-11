@@ -81,6 +81,10 @@ export class PluginManager {
     return this.pluginTools;
   }
 
+  getPluginSignalProviders() {
+    return this.loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.signalProviders ?? []) : []));
+  }
+
   getToolRenderConfig(toolName: string) {
     return this.toolRenderConfigs.get(toolName);
   }
