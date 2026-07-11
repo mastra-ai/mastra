@@ -821,6 +821,13 @@ export class AgentChannels {
   /**
    * Returns generic channel tools (send_message, add_reaction, etc.)
    * that resolve the target adapter from the current request context.
+   *
+   * @deprecated Channel tools are no longer auto-injected into an agent's
+   * resolved toolset. If you want your agent to be able to send messages or add
+   * reactions from a channel run, pass the chat tools to your agent explicitly.
+   * This method stays functional (it still returns the channel tools) and is used
+   * internally to derive channel tool names, but consumers should not rely on
+   * core injecting these tools for them.
    */
   getTools(): Record<string, unknown> {
     if (!this.toolsEnabled) return {};

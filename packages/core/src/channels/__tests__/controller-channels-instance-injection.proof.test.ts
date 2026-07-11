@@ -205,6 +205,19 @@ describe('PROOF: controller-channels instance injection', () => {
     // context cleared CHAT_CHANNEL_RENDER_CONTEXT_KEY.
     expect(allPostedText(adapter, chatThread)).not.toContain(FORK_SECRET);
 
-    console.log('PROOF: GREEN — instance channels render, forked subagent stays silent');
+    // ---- Claim (c) NO AUTO TOOLS: a channel-bearing agent's resolved toolset
+    // does NOT include send_message/add_reaction — auto-injection is gone. ----
+    const toolAgent = new Agent({
+      id: 'tool-agent',
+      name: 'tool-agent',
+      instructions: 'tools',
+      model: createTextModel('x'),
+    });
+    toolAgent.setChannels(new AgentChannels({ adapters: { discord: adapter } }));
+    const resolvedTools = Object.keys(await toolAgent.getToolsForExecution({}));
+    expect(resolvedTools).not.toContain('send_message');
+    expect(resolvedTools).not.toContain('add_reaction');
+
+    console.log('PROOF: GREEN — instance channels render, forked subagent stays silent, no auto tools');
   }, 40_000);
 });

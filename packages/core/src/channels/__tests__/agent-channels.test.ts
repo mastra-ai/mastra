@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+import { Agent } from '../../agent';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
 import { AgentChannels } from '../agent-channels';
@@ -101,6 +102,30 @@ describe('AgentChannels', () => {
         tools: false,
       });
       expect(Object.keys(disabled.getTools())).toHaveLength(0);
+    });
+  });
+
+  describe('channel tools are not auto-injected into an agent toolset', () => {
+    it('resolves an agent toolset without send_message/add_reaction even when the agent has channels', async () => {
+      // getTools() still returns channel tools (deprecated but functional)...
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      expect(Object.keys(channels.getTools())).toContain('add_reaction');
+
+      // ...but attaching channels to an agent no longer injects those tools into
+      // the agent's resolved toolset. Channel tools are explicit opt-in now.
+      const agent = new Agent({
+        id: 'no-auto-tools',
+        name: 'no-auto-tools',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+      });
+      agent.setChannels(channels);
+
+      const resolved = await agent.getToolsForExecution({});
+      const toolNames = Object.keys(resolved);
+      expect(toolNames).not.toContain('send_message');
+      expect(toolNames).not.toContain('add_reaction');
+      expect(toolNames).not.toContain('remove_reaction');
     });
   });
 
