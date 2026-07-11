@@ -84,6 +84,18 @@ describe('BehaviorSignalProvider integration', () => {
     const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
     await tools.behavior_select!.execute({}, { requestContext });
     expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('understand');
+    const signal = await stateProcessor.computeStateSignal({
+      threadId: 'studio-thread',
+      requestContext,
+      contextWindow: { hasSnapshot: false },
+      activeStateSignals: [],
+      deltasSinceSnapshot: [],
+    } as never) as { tagName?: string; contents?: string; attributes?: Record<string, string> };
+    expect(signal).toMatchObject({
+      tagName: 'current-behavior',
+      attributes: { id: 'coding', state: 'understand', status: 'active' },
+    });
+    expect(signal.contents).toContain('State: understand');
   });
 
   it('exposes stable selection, intent, transition, and exit tools', async () => {
