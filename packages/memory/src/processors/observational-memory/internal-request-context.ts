@@ -14,14 +14,9 @@ export function withOmInternalThreadId(
   if (!requestContext) return undefined;
 
   const parentThreadId = requestContext.get(MASTRA_THREAD_ID_KEY);
-  const needsThreadId = typeof parentThreadId === 'string' && !!parentThreadId;
-
-  // Nothing to change: no parent thread id to namespace — return the original
-  // context untouched.
-  if (!needsThreadId) return requestContext;
+  if (typeof parentThreadId !== 'string' || !parentThreadId) return requestContext;
 
   const internalRequestContext = new RequestContext(requestContext.entries());
   internalRequestContext.set(MASTRA_THREAD_ID_KEY, `${parentThreadId}-${omAgentId}`);
-
   return internalRequestContext;
 }

@@ -217,7 +217,5 @@ describe('PROOF: controller-channels instance injection', () => {
     const resolvedTools = Object.keys(await toolAgent.getToolsForExecution({}));
     expect(resolvedTools).not.toContain('send_message');
     expect(resolvedTools).not.toContain('add_reaction');
-
-    console.log('PROOF: GREEN — instance channels render, forked subagent stays silent, no auto tools');
   }, 40_000);
 });
