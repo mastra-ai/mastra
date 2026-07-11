@@ -74,7 +74,8 @@
     "vscode-jsonrpc": "^8.2.1",
     "vscode-languageserver-protocol": "^3.17.5",
     "yaml": "^2.7.1",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "@mastra/behaviors": "workspace:*"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -1101,6 +1101,9 @@ export {
   renderTextResult,
   renderJsonResult,
 } from './headless/index.js';
+export { createMastraCodeBehaviorPlugin } from './plugins/behavior-plugin.js';
+export type { MastraCodeBehaviorPluginOptions } from './plugins/behavior-plugin.js';
+
 export type {
   RunMCOptions,
   RunMCResult,

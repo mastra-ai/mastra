@@ -124,3 +124,24 @@ The behavior store is authoritative. The provider can mirror committed records i
 Deterministic guards run before the optional judge. A failed guard prevents the judge call. The engine commits a judged transition only when the runtime revision still matches the revision that the judge reviewed.
 
 `JUDGE.md` and `judgeInstructions` are sent only to the judge. They aren't included in the acting agent's state signal.
+
+## Require intent for tools
+
+The provider adds an `intent` field to each governed tool once when it attaches to the agent. Tool names, schemas, and wrapper identities stay stable when the behavior changes state, preserving prompt-cache compatibility.
+
+Set `intent` to the active state ID for automatic approval. A free-form value uses `judgeIntent`. Calls without approved intent are rejected before execution and checked again against current durable state inside the wrapper.
+
+## Use behaviors in Mastra Code
+
+Create a thin local plugin with `createMastraCodeBehaviorPlugin()`. The plugin uses the same `BehaviorSignalProvider` as an ordinary agent.
+
+```typescript title=".mastracode/plugins/debug.ts"
+import { createMastraCodeBehaviorPlugin } from '@mastra/code-sdk/plugins/behavior-plugin'
+
+export default createMastraCodeBehaviorPlugin({
+  id: 'debug-behavior',
+  definition: './behaviors/debug',
+})
+```
+
+State model IDs are returned to Mastra Code's normal model resolver, so the active session's gateway and authentication configuration continue to apply.

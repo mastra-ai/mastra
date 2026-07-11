@@ -21,7 +21,12 @@ const definition = normalizeBehavior({
 
 const makeProvider = async (overrides = {}) => {
   const store = new InMemoryBehaviorRuntimeStore();
-  const provider = new BehaviorSignalProvider({ definition, store, ...overrides });
+  const provider = new BehaviorSignalProvider({
+    definition,
+    store,
+    resolveThreadId: requestContext => requestContext?.get('threadId'),
+    ...overrides,
+  });
   await provider.start();
   await provider.engine.initialize('thread');
   return { provider, store };
@@ -42,8 +47,14 @@ describe('BehaviorSignalProvider integration', () => {
       processInputStep(args: never): Promise<{ systemMessages?: unknown[] }>;
     };
     const result = await routing.processInputStep(inputArgs());
-    expect(resolveModel).toHaveBeenCalledWith('small', { threadId: 'thread', stateId: 'understand' });
-    expect(resolveSkillInstructions).toHaveBeenCalledWith(['debugging'], { threadId: 'thread', stateId: 'understand' });
+    expect(resolveModel).toHaveBeenCalledWith(
+      'small',
+      expect.objectContaining({ threadId: 'thread', stateId: 'understand' }),
+    );
+    expect(resolveSkillInstructions).toHaveBeenCalledWith(
+      ['debugging'],
+      expect.objectContaining({ threadId: 'thread', stateId: 'understand' }),
+    );
     expect(result.systemMessages).toEqual([
       { role: 'system', content: 'Understand before editing.\n\nDebug systematically.' },
     ]);
@@ -60,9 +71,10 @@ describe('BehaviorSignalProvider integration', () => {
     const { provider, store } = await makeProvider();
     const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
     expect(Object.keys(tools)).toEqual(['behavior_select', 'behavior_intent', 'behavior_transition', 'behavior_exit']);
-    await tools.behavior_intent!.execute({ intent: 'understand' }, { threadId: 'thread' });
+    const context = { requestContext: { get: (key: string) => (key === 'threadId' ? 'thread' : undefined) } };
+    await tools.behavior_intent!.execute({ intent: 'understand' }, context);
     expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.intent).toBe('understand');
-    await tools.behavior_exit!.execute({ attemptId: 'exit-1' }, { threadId: 'thread' });
+    await tools.behavior_exit!.execute({ attemptId: 'exit-1' }, context);
     expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.status).toBe('exited');
   });
 });

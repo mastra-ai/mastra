@@ -125,6 +125,10 @@ const provider = new BehaviorSignalProvider({ definition, store })
 
 The projected `<current-behavior>` state includes acting instructions, transition IDs, intent, and status. It excludes judge instructions.
 
+The provider also exposes stable `behavior_select`, `behavior_intent`, `behavior_transition`, and `behavior_exit` tools. Configure `resolveThreadId` to read the host's thread ID from `RequestContext`. Optional `resolveModel` and `resolveSkillInstructions` callbacks route state-specific models and skill instructions without constructing provider clients.
+
+Governed host tools receive one required `intent` input. `BehaviorIntentPolicyProcessor` memoizes wrappers by original tool identity and checks authorization both before and during execution.
+
 ## Errors
 
 Definition failures throw `BehaviorDefinitionError` with path-specific diagnostics. Transition failures throw `BehaviorTransitionError`, including missing guards, unavailable transitions, rejected judges, and stale results.
