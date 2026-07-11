@@ -3,8 +3,6 @@ import path from 'node:path';
 
 import { execa } from 'execa';
 
-const NON_INTERACTIVE_INSTALL_ENV = { ...process.env, GIT_TERMINAL_PROMPT: '0' };
-
 type InstallCommand = {
   command: string;
   args: string[];
@@ -35,7 +33,7 @@ export async function installPluginDependencies(
 
   const child = execa(installCommand.command, installCommand.args, {
     cwd: pluginRoot,
-    env: NON_INTERACTIVE_INSTALL_ENV,
+    env: { ...process.env, GIT_TERMINAL_PROMPT: '0' },
     stdout: options.onOutput ? 'pipe' : 'ignore',
     stderr: options.onOutput ? 'pipe' : 'ignore',
     cancelSignal: options.signal,

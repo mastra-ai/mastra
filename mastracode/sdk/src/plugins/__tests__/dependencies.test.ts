@@ -14,6 +14,7 @@ let tempDir: string | undefined;
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.unstubAllEnvs();
   if (tempDir) {
     fs.rmSync(tempDir, { recursive: true, force: true });
     tempDir = undefined;
@@ -133,6 +134,7 @@ describe('installPluginDependencies', () => {
     const stderr = new EventEmitter();
     const output: string[] = [];
     const signal = new AbortController().signal;
+    vi.stubEnv('PATH', '/isolated/plugin-install-bin');
     writePackageJson(pluginRoot, { packageManager: 'pnpm@10.24.0' });
     execaMock.mockReturnValueOnce(Object.assign(Promise.resolve({}), { stdout, stderr }));
 
@@ -149,7 +151,7 @@ describe('installPluginDependencies', () => {
       'corepack',
       expectedCorepackArgs('10.24.0'),
       expect.objectContaining({
-        env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0' }),
+        env: expect.objectContaining({ GIT_TERMINAL_PROMPT: '0', PATH: '/isolated/plugin-install-bin' }),
         stdout: 'pipe',
         stderr: 'pipe',
         cancelSignal: signal,
