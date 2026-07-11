@@ -5,6 +5,8 @@ import type {
 } from '@mastra/core/processors';
 import { z } from 'zod';
 
+import type { RequestContext } from '@mastra/core/request-context';
+
 import type { NormalizedBehaviorDefinition } from '../definition/types.js';
 import type { BehaviorRuntimeRecord, BehaviorRuntimeStore } from '../runtime/types.js';
 
@@ -21,6 +23,7 @@ export type BehaviorIntentPolicyOptions = {
   definition: NormalizedBehaviorDefinition;
   store: BehaviorRuntimeStore;
   judgeIntent?: BehaviorIntentJudge;
+  resolveThreadId?: (requestContext?: RequestContext) => string | undefined;
 };
 
 type ToolLike = {
@@ -55,10 +58,32 @@ export class BehaviorIntentPolicyProcessor {
 
   async processOutputStep(args: ProcessOutputStepArgs) {
     for (const call of args.toolCalls ?? []) {
+      if (call.toolName.startsWith('behavior_')) continue;
       const intent = this.readIntent(call.args);
       if (!intent) args.abort(`Tool "${call.toolName}" requires an intent`, { retry: true });
+      const threadId = this.options.resolveThreadId?.(args.requestContext);
+      if (!threadId) args.abort(`Tool "${call.toolName}" requires behavior thread context`, { retry: true });
+      try {
+        await this.authorize(threadId, call.toolName, intent);
+      } catch (error) {
+        args.abort(error instanceof Error ? error.message : String(error), { retry: true });
+      }
     }
     return args.messages;
+  }
+
+  async setIntent(threadId: string, intent: string): Promise<BehaviorRuntimeRecord> {
+    const current = await this.options.store.readThread({ threadId, behaviorId: this.options.definition.id });
+    if (!current || current.status !== 'active') throw new Error('Behavior is not active');
+    await this.authorize(threadId, 'behavior_intent', intent);
+    const committed = await this.options.store.transactThread(
+      { threadId, behaviorId: this.options.definition.id },
+      latest => {
+        if (!latest || latest.revision !== current.revision) throw new Error('Behavior state changed while intent was approved');
+        return { next: { ...latest, intent, revision: latest.revision + 1 }, result: undefined };
+      },
+    );
+    return committed.runtime;
   }
 
   private wrapTool(name: string, tool: ToolLike): ToolLike {
@@ -71,7 +96,10 @@ export class BehaviorIntentPolicyProcessor {
       ...tool,
       inputSchema,
       execute: async (input, context) => {
-        const threadId = getThreadId(context);
+        const requestContext = context && typeof context === 'object'
+          ? (context as { requestContext?: RequestContext }).requestContext
+          : undefined;
+        const threadId = this.options.resolveThreadId?.(requestContext) ?? getThreadId(context);
         if (!threadId) throw new Error(`Tool "${name}" requires behavior thread context`);
         await this.authorize(threadId, name, this.readIntent(input));
         const { intent: _intent, ...originalInput } = input;
@@ -100,7 +128,9 @@ export class BehaviorIntentPolicyProcessor {
     if (!record || record.status !== 'active') throw new Error('Behavior is not active');
     const state = this.options.definition.states[record.activeState];
     if (!state) throw new Error(`Behavior state "${record.activeState}" is unavailable`);
-    if (state.tools.length && !state.tools.includes(toolName)) throw new Error(`Tool "${toolName}" is not allowed in state "${state.id}"`);
+    if (!toolName.startsWith('behavior_') && state.tools.length && !state.tools.includes(toolName)) {
+      throw new Error(`Tool "${toolName}" is not allowed in state "${state.id}"`);
+    }
     if (intent === state.id) return;
     if (!this.options.judgeIntent) throw new Error(`Intent must equal active state "${state.id}"`);
     const result = await this.options.judgeIntent({ intent, toolName, record, allowedTools: state.tools });
