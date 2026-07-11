@@ -11,3 +11,26 @@ export type {
   NormalizedBehaviorState,
   NormalizedBehaviorTransition,
 } from './definition/types.js';
+export { InMemoryBehaviorRuntimeStore } from './runtime/in-memory-store.js';
+export { LibSQLBehaviorRuntimeStore } from './runtime/libsql-store.js';
+export { BehaviorSignalProvider } from './runtime/provider.js';
+export type { BehaviorSignalProviderOptions } from './runtime/provider.js';
+export { BehaviorStateProcessor } from './runtime/state-processor.js';
+export {
+  behaviorThreadStateType,
+  BehaviorTransitionEngine,
+  BehaviorTransitionError,
+} from './runtime/transition-engine.js';
+export type { BehaviorTransitionEngineOptions } from './runtime/transition-engine.js';
+export type {
+  BehaviorDueWork,
+  BehaviorGuardEvaluator,
+  BehaviorRuntimeRecord,
+  BehaviorRuntimeStore,
+  BehaviorStatus,
+  BehaviorThreadKey,
+  BehaviorThreadStateMirror,
+  BehaviorTransactionResult,
+  BehaviorTransitionJudge,
+  BehaviorTransitionRecord,
+} from './runtime/types.js';

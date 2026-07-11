@@ -24,7 +24,7 @@
   "repository": { "type": "git", "url": "git+https://github.com/mastra-ai/mastra.git", "directory": "packages/behaviors" },
   "engines": { "node": ">=22.13.0" },
   "peerDependencies": { "@mastra/core": ">=1.0.0-0 <2.0.0-0", "zod": ">=3.0.0 || >=4.0.0" },
-  "dependencies": { "yaml": "^2.7.1" },
+  "dependencies": { "@libsql/client": "0.17.4", "yaml": "^2.7.1" },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
