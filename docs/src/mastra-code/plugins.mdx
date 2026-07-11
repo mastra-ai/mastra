@@ -44,7 +44,7 @@ Every provider must be a `SignalProvider` instance with an ID that is unique acr
 
 Mastra Code registers a stable plugin-provider bridge when it creates the coding agent. On plugin reload, the bridge validates the complete replacement provider set and then swaps its delegates. The coding agent, controller, sessions, thread IDs, and state remain unchanged.
 
-Input and output processors are resolved from the current provider set for each request. Provider tools use stable live proxies, so a reload updates their implementations without replacing the coding agent.
+Input and output processors are resolved from the current provider set for each request. Provider tools use stable live proxies, so a reload updates their implementations without replacing the coding agent. Providers that define `pollInterval` use the standard `SignalProvider` polling lifecycle.
 
 Mastra Code calls `stop()` on every removed or replaced provider. A provider can also implement `dispose()` to release plugin-owned resources such as file watchers or schedulers:
 

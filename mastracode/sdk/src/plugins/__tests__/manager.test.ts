@@ -96,6 +96,29 @@ describe('PluginSignalProviderBridge', () => {
     expect(bridge.currentProviders).toEqual([previous]);
     expect(failing.dispose).toHaveBeenCalledOnce();
   });
+
+  it('starts polling and removes initial providers that fail to start', async () => {
+    const bridge = new PluginSignalProviderBridge();
+    const polling = new (class extends SignalProvider {
+      readonly id = 'polling-provider';
+    })();
+    const failing = new (class extends SignalProvider {
+      readonly id = 'initial-failing-provider';
+      readonly dispose = vi.fn();
+      start() {
+        throw new Error('initial start failed');
+      }
+    })();
+    const startPolling = vi.spyOn(polling, 'startPolling');
+
+    await bridge.replace([polling, failing]);
+    bridge.connect({} as Agent<any, any, any, any>);
+    await bridge.start();
+
+    expect(bridge.currentProviders).toEqual([polling]);
+    expect(startPolling).toHaveBeenCalledOnce();
+    expect(failing.dispose).toHaveBeenCalledOnce();
+  });
 });
 
 describe('PluginManager', () => {

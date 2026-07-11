@@ -39,7 +39,13 @@ export class PluginSignalProviderBridge extends SignalProvider<'mastracode-plugi
   }
 
   async start(): Promise<void> {
-    await Promise.all(this.providers.map(provider => provider.start?.()));
+    const providers = this.providers;
+    const results = await Promise.allSettled(providers.map(provider => this.startProvider(provider)));
+    const failedProviders = providers.filter((_, index) => results[index]?.status === 'rejected');
+    if (failedProviders.length === 0) return;
+
+    this.providers = providers.filter(provider => !failedProviders.includes(provider));
+    await Promise.all(failedProviders.map(provider => this.dispose(provider)));
   }
 
   __registerMastra(...args: Parameters<SignalProvider['__registerMastra']>): void {
@@ -53,9 +59,9 @@ export class PluginSignalProviderBridge extends SignalProvider<'mastracode-plugi
     try {
       for (const provider of nextProviders) {
         if (this.mastra) provider.__registerMastra(this.mastra);
-        if (this.connectedAgent) {
+        if (this.connectedAgent && !previousProviders.includes(provider)) {
           this.connectProvider(provider);
-          await provider.start?.();
+          await this.startProvider(provider);
         }
       }
     } catch (error) {
@@ -80,6 +86,11 @@ export class PluginSignalProviderBridge extends SignalProvider<'mastracode-plugi
   private connectProvider(provider: DisposableMastraCodePluginSignalProvider): void {
     if (!this.connectedAgent || provider.isConnected) return;
     provider.connect(this.connectedAgent);
+  }
+
+  private async startProvider(provider: DisposableMastraCodePluginSignalProvider): Promise<void> {
+    await provider.start?.();
+    provider.startPolling();
   }
 
   private async dispose(provider: DisposableMastraCodePluginSignalProvider): Promise<void> {
