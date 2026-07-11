@@ -73,7 +73,7 @@ const agent = createCodingAgent({
     name: 'errorProcessors',
     type: 'Processor[]',
     description:
-      'Error processors for the agent. When omitted, defaults to the ECONNRESET/bad-request retry stack plus PrefillErrorHandler and ProviderHistoryCompat.',
+      'Error processors for the agent. When omitted, defaults to catch-all stream retries with specialized ECONNRESET and bad-request policies, plus PrefillErrorHandler and ProviderHistoryCompat.',
     isOptional: true,
   },
   {
@@ -106,7 +106,7 @@ The factory only fills a default when you don't provide the corresponding field.
 | - | - |
 | `workspace` | A [`Workspace`](/reference/workspace/workspace-class) backed by `LocalFilesystem` and `LocalSandbox` rooted at the base path. |
 | `signals` | A single [`TaskSignalProvider`](/reference/signals/task-signal-provider). |
-| `errorProcessors` | ECONNRESET and bad-request retry processors plus `PrefillErrorHandler` and `ProviderHistoryCompat`. |
+| `errorProcessors` | Catch-all stream retries with specialized ECONNRESET and bad-request policies, plus `PrefillErrorHandler` and `ProviderHistoryCompat`. |
 | `goal.prompt` | `DEFAULT_GOAL_JUDGE_PROMPT` (only when a `goal` is configured). |
 
 ### Workspace
@@ -137,12 +137,13 @@ const agent = createCodingAgent({
 
 ### Error processors
 
-The default error processors apply a retry policy for transient failures:
+The default [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor) applies these retry policies:
 
+- Errors left unmatched by provider metadata or a specific matcher retry up to twice with a `3000ms` delay.
 - Network resets (`ECONNRESET` / `socket hang up`) retry up to twice with exponential backoff (`1000ms * 2^retryCount`, capped at `30000ms`).
 - Bad-request errors retry once after `2000ms`.
 
-`PrefillErrorHandler` and `ProviderHistoryCompat` are also included for provider compatibility.
+Specific network-reset and bad-request policies take precedence over the catch-all policy. Passing `errorProcessors` replaces the default processor stack. `PrefillErrorHandler` and `ProviderHistoryCompat` are also included for provider compatibility.
 
 ## Related
 
