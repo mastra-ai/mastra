@@ -6,6 +6,7 @@ import { z } from 'zod';
 
 import type { NormalizedBehaviorDefinition } from '../definition/types.js';
 import { BehaviorIntentPolicyProcessor, type BehaviorIntentJudge } from '../enforcement/intent-policy.js';
+import { BehaviorScheduler, type BehaviorAuditEvent } from '../scheduler/scheduler.js';
 import { BehaviorStateProcessor } from './state-processor.js';
 import { BehaviorTransitionEngine, type BehaviorTransitionEngineOptions } from './transition-engine.js';
 import type { BehaviorRuntimeStore } from './types.js';
@@ -24,6 +25,12 @@ export type BehaviorSignalProviderOptions = Omit<BehaviorTransitionEngineOptions
     input: { threadId: string; stateId: string; requestContext?: RequestContext },
   ) => Promise<string[]> | string[];
   unavailableModel?: 'fallback' | 'error';
+  scheduler?: false | {
+    intervalMs?: number;
+    leaseMs?: number;
+    retryBackoffMs?: number;
+    onAudit?: (event: BehaviorAuditEvent) => void | Promise<void>;
+  };
 };
 
 type BehaviorToolContext = {
@@ -83,6 +90,7 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
   private readonly intentProcessor: BehaviorIntentPolicyProcessor;
   private readonly routingProcessor: BehaviorRoutingProcessor;
   private readonly tools: Record<string, unknown>;
+  private readonly scheduler?: BehaviorScheduler;
   private readonly threadIds = new WeakMap<RequestContext, string>();
   private readonly resolveThreadId: (requestContext?: RequestContext) => string | undefined;
 
@@ -104,10 +112,25 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
     this.intentProcessor = new BehaviorIntentPolicyProcessor(runtimeOptions);
     this.routingProcessor = new BehaviorRoutingProcessor(runtimeOptions, this.engine);
     this.tools = this.createTools();
+    if (options.scheduler !== false) {
+      this.scheduler = new BehaviorScheduler({
+        behaviorId: options.definition.id,
+        definition: options.definition,
+        store: options.store,
+        engine: this.engine,
+        ...options.scheduler,
+      });
+    }
   }
 
   async start(): Promise<void> {
     await this.options.store.init();
+    this.scheduler?.start();
+  }
+
+  async stop(): Promise<void> {
+    this.scheduler?.stop();
+    super.stop();
   }
 
   getInputProcessors() {
