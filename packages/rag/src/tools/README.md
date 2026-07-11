@@ -195,3 +195,29 @@ const vectorTool = createVectorQueryTool({
 + }
 });
 ```
+
+### Amazon Bedrock Knowledge Base
+
+The `createBedrockKBTool` function provides direct integration with Amazon Bedrock Managed Knowledge Bases. No external vector store is needed — the knowledge base is fully managed by AWS.
+
+```typescript
+import { createBedrockKBTool } from '@mastra/rag';
+
+const kbTool = createBedrockKBTool({
+  knowledgeBaseId: 'ABCDEFGHIJ',
+  region: 'us-west-2',
+});
+
+const results = await kbTool.execute('What are our policies?');
+```
+
+#### Key Features
+
+- **No external vector store required** — Amazon Bedrock manages the vector storage, indexing, and retrieval infrastructure for you.
+- **Agentic Retrieval** — Enabled by default. Advanced query decomposition and managed reranking is used automatically. To disable, set `USE_AGENTIC_RETRIEVAL=false`:
+
+```bash
+export USE_AGENTIC_RETRIEVAL=false  # disable agentic, use standard retrieve
+```
+
+When agentic retrieval is enabled (default), complex queries are automatically decomposed into sub-queries and results are reranked for improved relevance. Falls back to standard retrieval on failure.
