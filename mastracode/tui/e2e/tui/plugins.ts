@@ -72,23 +72,53 @@ function writeBehaviorPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectD
   mkdirSync(pluginSrcDir, { recursive: true });
   writePluginPackageLink(pluginDir);
   writeFileSync(
+    join(pluginDir, 'behavior.yaml'),
+    JSON.stringify({
+      id: 'coding',
+      version: '1',
+      initialState: 'understand',
+      states: [
+        {
+          id: 'understand',
+          instructions: 'Understand before editing.',
+          tools: ['e2e_governed_probe'],
+          transitions: [
+            { id: 'implement', target: 'implement' },
+            { id: 'exit', target: 'exit', exit: true },
+          ],
+        },
+        {
+          id: 'implement',
+          instructions: 'Implementation state.',
+          tools: ['e2e_governed_probe'],
+          transitions: [{ id: 'exit', target: 'exit', exit: true }],
+        },
+      ],
+    }),
+  );
+  writeFileSync(
     join(pluginSrcDir, 'index.ts'),
     `import { createMastraCodeBehaviorPlugin } from 'mastracode';
+import { createTool, z } from 'mastracode/plugin';
 
-export default createMastraCodeBehaviorPlugin({
+const behavior = createMastraCodeBehaviorPlugin({
   id: '${PLUGIN_ID}',
-  definition: {
-    id: 'coding',
-    version: '1',
-    initialState: 'understand',
-    states: [{
-      id: 'understand',
-      instructions: 'Understand before editing.',
-      tools: ['view'],
-      transitions: [{ id: 'exit', target: 'exit', exit: true }],
-    }],
-  },
+  definition: ${JSON.stringify(pluginDir)},
 });
+
+export default {
+  ...behavior,
+  tools: {
+    e2e_governed_probe: {
+      tool: createTool({
+        id: 'e2e_governed_probe',
+        description: 'Return behavior enforcement proof.',
+        inputSchema: z.object({ value: z.string() }),
+        execute: async input => ({ value: input.value, governed: true }),
+      }),
+    },
+  },
+};
 `,
   );
   return pluginDir;
@@ -517,6 +547,16 @@ export const behaviorsScenario: McE2eScenario = {
     for (const name of ['behavior_select', 'behavior_intent', 'behavior_transition', 'behavior_exit']) {
       if (!names.includes(name)) throw new Error(`Expected behavior tool ${name}. Names: ${names.join(', ')}`);
     }
+    const schemas = (
+      requests as Array<{ body?: { tools?: Array<{ function?: { name?: string; parameters?: unknown } }> } }>
+    )
+      .flatMap(request => request.body?.tools ?? [])
+      .filter(tool => tool.function?.name === 'e2e_governed_probe')
+      .map(tool => JSON.stringify(tool.function?.parameters));
+    if (!schemas.length || !schemas.every(schema => schema.includes('intent'))) {
+      throw new Error(`Expected governed probe schema to require intent. Schemas: ${schemas.join(', ')}`);
+    }
+    if (new Set(schemas).size !== 1) throw new Error('Expected governed probe schema to remain stable across requests');
   },
 };
 

@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { BehaviorSignalProvider, InMemoryBehaviorRuntimeStore, loadBehaviorDirectory } from '@mastra/behaviors';
 import type { BehaviorRuntimeStore, NormalizedBehaviorDefinition } from '@mastra/behaviors';
 
@@ -35,6 +37,16 @@ export function createMastraCodeBehaviorPlugin(options: MastraCodeBehaviorPlugin
             return controller?.threadId ?? requestContext?.get('threadId');
           },
           resolveModel: (model, { requestContext }) => resolveModel(model, { requestContext }),
+          resolveSkillInstructions: async skills =>
+            Promise.all(
+              skills.map(async skill => {
+                try {
+                  return await readFile(join(skill, 'SKILL.md'), 'utf8');
+                } catch {
+                  return await readFile(skill, 'utf8');
+                }
+              }),
+            ),
           unavailableModel: 'error',
         }),
       ];

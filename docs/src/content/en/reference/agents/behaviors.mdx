@@ -120,7 +120,11 @@ Registers `BehaviorStateProcessor` through the standard Mastra signal-provider A
 ```typescript
 import { BehaviorSignalProvider } from '@mastra/behaviors'
 
-const provider = new BehaviorSignalProvider({ definition, store })
+const provider = new BehaviorSignalProvider({
+  definition,
+  store,
+  resolveThreadId: requestContext => requestContext?.get('threadId'),
+})
 ```
 
 The projected `<current-behavior>` state includes acting instructions, transition IDs, intent, and status. It excludes judge instructions.

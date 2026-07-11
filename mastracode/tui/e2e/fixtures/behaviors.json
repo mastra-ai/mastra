@@ -19,7 +19,6 @@
     {
       "match": {
         "endpoint": "chat",
-        "toolCallId": "call_behavior_select",
         "hasToolResult": true
       },
       "response": {
