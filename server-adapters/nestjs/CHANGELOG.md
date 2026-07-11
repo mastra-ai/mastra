@@ -1,5 +1,13 @@
 # @mastra/nestjs
 
+## 0.2.7-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`615783e`](https://github.com/mastra-ai/mastra/commit/615783ef8e27d7689faae84fc60709d4e423d4c9), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e), [`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73)]:
+  - @mastra/core@1.51.0-alpha.5
+  - @mastra/server@1.51.0-alpha.5
+
 ## 0.2.7-alpha.4
 
 ### Patch Changes

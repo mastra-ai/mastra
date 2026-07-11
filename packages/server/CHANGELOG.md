@@ -1,5 +1,16 @@
 # @mastra/server
 
+## 1.51.0-alpha.5
+
+### Patch Changes
+
+- Fixed streamed agent-controller error events losing their message: Error instances are now flattened before serialization so clients see the real failure reason instead of a generic "Error". ([#19258](https://github.com/mastra-ai/mastra/pull/19258))
+
+- The tool provider authorize handler now falls back to the provider's `defaultScope` when a request does not specify a connection `scope`. Precedence is: explicit request `scope`, then the provider's `defaultScope`, then `'per-author'`. This lets a provider configured with `defaultScope: 'caller-supplied'` produce per-tenant connections through the Agent Builder connect flow, which does not send a scope. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+
 ## 1.51.0-alpha.4
 
 ### Patch Changes
