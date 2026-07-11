@@ -326,6 +326,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'custom-providers', description: 'Manage custom providers and models' },
     { name: 'subagents', description: 'Configure subagent model defaults' },
     { name: 'memory', description: 'Configure Observational Memory' },
+    { name: 'om', description: 'Alias for /memory' },
     { name: 'think', description: 'Set thinking (off|low|medium|high|xhigh|status)' },
     { name: 'login', description: 'Login with OAuth provider' },
     { name: 'skills', description: 'List available skills' },
