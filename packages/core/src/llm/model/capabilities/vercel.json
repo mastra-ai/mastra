@@ -339,6 +339,7 @@
     "openai/gpt-oss-safeguard-20b",
     "openai/gpt-realtime-1.5",
     "openai/gpt-realtime-2",
+    "openai/gpt-realtime-2.1",
     "openai/gpt-realtime-mini",
     "openai/o3-deep-research",
     "openai/o3-pro",
