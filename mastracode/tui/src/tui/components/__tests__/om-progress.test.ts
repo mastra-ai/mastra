@@ -165,6 +165,16 @@ describe('formatOMContextIndicator', () => {
     expect(visibleWidth(withSavings.styled)).toBe(visibleWidth(withSavings.plain));
   });
 
+  it('preserves the numeric context measurement when the bar is hidden', () => {
+    const indicator = formatOMContextIndicator(
+      createState({ pendingTokens: 30_000, observationTokens: 30_000, messageSavings: 2_000 }),
+      { showBar: false },
+    );
+
+    expect(indicator.plain).toBe('60/120k↓ ');
+    expect(indicator.styled).toBe('60/120k↓ ');
+  });
+
   it('renders observations first, then messages, then unused capacity', () => {
     const indicator = formatOMContextIndicator(createState({ pendingTokens: 30_000, observationTokens: 30_000 }), {
       messages: segment => `<messages>${segment}</messages>`,

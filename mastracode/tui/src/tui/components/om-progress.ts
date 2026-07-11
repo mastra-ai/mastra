@@ -153,15 +153,16 @@ interface OMContextIndicator {
   unusedCells: number;
 }
 
-interface OMContextIndicatorStylers {
+interface OMContextIndicatorOptions {
   messages?: (segment: string) => string;
   memory?: (segment: string) => string;
   unused?: (segment: string) => string;
+  showBar?: boolean;
 }
 
 export function formatOMContextIndicator(
   state: OMProgressState,
-  stylers: OMContextIndicatorStylers = {},
+  options: OMContextIndicatorOptions = {},
 ): OMContextIndicator {
   const used = Math.max(0, state.pendingTokens) + Math.max(0, state.observationTokens);
   const capacity = Math.max(0, state.threshold) + Math.max(0, state.reflectionThreshold);
@@ -188,15 +189,17 @@ export function formatOMContextIndicator(
   const hasSavings = messageSavings + reflectionSavings > 0;
   const savingsSlot = hasSavings ? '↓ ' : '  ';
 
-  const plain = `${memorySegment}${messageSegment}${unusedSegment}  ${fraction}${savingsSlot}`;
-  const styleMessages = stylers.messages ?? (segment => theme.fg('text', segment));
-  const styleMemory = stylers.memory ?? (segment => theme.fg('dim', segment));
-  const styleUnused = stylers.unused ?? (segment => theme.fg('muted', segment));
+  const barPlain = options.showBar === false ? '' : `${memorySegment}${messageSegment}${unusedSegment}  `;
+  const plain = `${barPlain}${fraction}${savingsSlot}`;
+  const styleMessages = options.messages ?? (segment => theme.fg('text', segment));
+  const styleMemory = options.memory ?? (segment => theme.fg('dim', segment));
+  const styleUnused = options.unused ?? (segment => theme.fg('muted', segment));
+  const barStyled =
+    options.showBar === false
+      ? ''
+      : styleMemory(memorySegment) + styleMessages(messageSegment) + styleUnused(unusedSegment) + '  ';
   const styled =
-    styleMemory(memorySegment) +
-    styleMessages(messageSegment) +
-    styleUnused(unusedSegment) +
-    '  ' +
+    barStyled +
     chalk.bold(theme.fg('text', usedText)) +
     theme.fg('thinkingText', `/${capacityText}`) +
     (hasSavings ? `${theme.fg('success', '↓')} ` : '  ');

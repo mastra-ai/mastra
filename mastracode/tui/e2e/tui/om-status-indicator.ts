@@ -126,8 +126,8 @@ export const omStatusIndicatorScenario: McE2eScenario = {
 
       process.stdout.columns = 60;
       setUsage(30_000, 30_000);
-      const narrow = await checkpoint('narrow', /openai\/gpt-5\.5/);
-      expect(narrow).not.toContain('60/120k');
+      const narrow = await checkpoint('narrow', /60\/120k↓/);
+      expect(narrow).not.toContain('━━━━━━━━━━');
 
       process.stdout.columns = 120;
       let offset = 0;

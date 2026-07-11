@@ -302,6 +302,7 @@ export function updateStatusLine(state: TUIState): void {
   const buildLine = (opts: {
     modelId: string;
     showOM?: boolean;
+    showOMBar?: boolean;
     showDir: boolean;
     dir?: string | null;
     allowDirTruncation?: boolean;
@@ -368,6 +369,7 @@ export function updateStatusLine(state: TUIState): void {
             messages: messageSegmentStyler,
             memory: memorySegmentStyler,
             unused: unusedSegmentStyler,
+            showBar: opts.showOMBar,
           })
         : null;
     if (opts.showQueue && goalLabel) {
@@ -480,18 +482,19 @@ export function updateStatusLine(state: TUIState): void {
     }) ??
     buildLine({
       modelId: fullModelId,
-      showOM: false,
+      showOMBar: false,
       showDir: false,
       dir: centerText,
       allowDirTruncation: false,
       showQueue: true,
     }) ??
-    buildLine({ modelId: fullModelId, showOM: false, showDir: false, dir: centerTextShort, showQueue: true }) ??
-    buildLine({ modelId: fullModelId, showOM: false, showDir: false, showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showOM: false, showDir: false, showQueue: true }) ??
+    buildLine({ modelId: fullModelId, showOMBar: false, showDir: false, dir: centerTextShort, showQueue: true }) ??
+    buildLine({ modelId: fullModelId, showOMBar: false, showDir: false, showQueue: true }) ??
+    buildLine({ modelId: tinyModelId, showOMBar: false, showDir: false, showQueue: true }) ??
+    buildLine({ modelId: tinyModelId, showOMBar: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
-    buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showOM: false, showDir: false }) ??
+    buildLine({ modelId: '', showOMBar: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short' });
 
   state.statusLine.setText(result?.styled ?? shortModeBadge + styleModelId(tinyModelId));
