@@ -37,7 +37,7 @@ const SPAN_TYPE_TO_KIND_LEGACY: Partial<Record<SpanType, DatadogSpanKind>> = {
   [SpanType.MODEL_STEP]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
-  [SpanType.SERVER_TOOL_CALL]: 'tool',
+  [SpanType.PROVIDER_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_RUN]: 'workflow',
 };
 
@@ -55,7 +55,7 @@ const SPAN_TYPE_TO_KIND_INFERENCE: Partial<Record<SpanType, DatadogSpanKind>> = 
   [SpanType.MODEL_INFERENCE]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
-  [SpanType.SERVER_TOOL_CALL]: 'tool',
+  [SpanType.PROVIDER_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_RUN]: 'workflow',
 };
 

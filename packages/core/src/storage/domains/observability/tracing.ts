@@ -587,7 +587,7 @@ export const BRANCH_SPAN_TYPES = [
   SpanType.RAG_INGESTION,
   SpanType.TOOL_CALL,
   SpanType.MCP_TOOL_CALL,
-  SpanType.SERVER_TOOL_CALL,
+  SpanType.PROVIDER_TOOL_CALL,
 ] as const satisfies readonly SpanType[];
 
 /** Set form of {@link BRANCH_SPAN_TYPES} for fast membership checks. */

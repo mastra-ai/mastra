@@ -136,7 +136,7 @@ function getOperationName(span: AnyExportedSpan): string {
       return 'embeddings';
     case SpanType.TOOL_CALL:
     case SpanType.MCP_TOOL_CALL:
-    case SpanType.SERVER_TOOL_CALL:
+    case SpanType.PROVIDER_TOOL_CALL:
       return 'execute_tool';
     case SpanType.AGENT_RUN:
       return 'invoke_agent';
@@ -208,7 +208,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     } else if (
       span.type === SpanType.TOOL_CALL ||
       span.type === SpanType.MCP_TOOL_CALL ||
-      span.type === SpanType.SERVER_TOOL_CALL
+      span.type === SpanType.PROVIDER_TOOL_CALL
     ) {
       attributes['gen_ai.tool.call.arguments'] = inputStr;
     } else {
@@ -226,7 +226,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     } else if (
       span.type === SpanType.TOOL_CALL ||
       span.type === SpanType.MCP_TOOL_CALL ||
-      span.type === SpanType.SERVER_TOOL_CALL
+      span.type === SpanType.PROVIDER_TOOL_CALL
     ) {
       attributes['gen_ai.tool.call.result'] = outputStr;
     } else {
@@ -323,7 +323,7 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
   if (
     (span.type === SpanType.TOOL_CALL ||
       span.type === SpanType.MCP_TOOL_CALL ||
-      span.type === SpanType.SERVER_TOOL_CALL) &&
+      span.type === SpanType.PROVIDER_TOOL_CALL) &&
     span.attributes
   ) {
     // Tool identification

@@ -31,7 +31,7 @@ Duration metrics record execution time in milliseconds, calculated from the span
 | Metric name | Span type | Description |
 | - | - | - |
 | `mastra_agent_duration_ms` | `AGENT_RUN` | Execution time of an agent run |
-| `mastra_tool_duration_ms` | `TOOL_CALL`, `MCP_TOOL_CALL`, `SERVER_TOOL_CALL` | Execution time of a tool call, including MCP and provider-executed tool calls |
+| `mastra_tool_duration_ms` | `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL` | Execution time of a tool call, including MCP and provider-executed tool calls |
 | `mastra_workflow_duration_ms` | `WORKFLOW_RUN` | Execution time of a workflow run |
 | `mastra_model_duration_ms` | `MODEL_GENERATION` | Execution time of a model generation |
 | `mastra_processor_duration_ms` | `PROCESSOR_RUN` | Execution time of a processor run |
@@ -129,7 +129,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 ### Duration metrics are missing
 
 - **Span has timestamps**: Duration is calculated from `startTime` and `endTime`. If either is missing, the metric is skipped.
-- **Span type maps to a metric**: Only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `SERVER_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
+- **Span type maps to a metric**: Only `AGENT_RUN`, `TOOL_CALL`, `MCP_TOOL_CALL`, `PROVIDER_TOOL_CALL`, `WORKFLOW_RUN`, `MODEL_GENERATION`, and `PROCESSOR_RUN` spans produce duration metrics.
 
 ### Token metrics are missing
 

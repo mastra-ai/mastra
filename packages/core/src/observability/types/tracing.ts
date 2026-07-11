@@ -71,7 +71,7 @@ export enum SpanType {
    * provider executes (e.g. Anthropic code execution, server-side
    * web search). Opened on tool-call chunk, closed on tool-result.
    */
-  SERVER_TOOL_CALL = 'server_tool_call',
+  PROVIDER_TOOL_CALL = 'provider_tool_call',
   /** Workflow run - root span for workflow processes */
   WORKFLOW_RUN = 'workflow_run',
   /** Workflow step execution with step status, data flow */
@@ -383,15 +383,15 @@ export interface ClientToolCallAttributes extends AIBaseAttributes {
 }
 
 /**
- * Server Tool Call attributes.
+ * Provider Tool Call attributes.
  *
- * SERVER_TOOL_CALL is a synthetic span reconstructed from stream
+ * PROVIDER_TOOL_CALL is a synthetic span reconstructed from stream
  * chunks for tools executed by the model provider (e.g. Anthropic
  * code execution, server-side web search). The span is opened on
  * the tool-call chunk and closed on the paired tool-result chunk.
  */
-export interface ServerToolCallAttributes extends AIBaseAttributes {
-  /** Tool category: 'server-tool' */
+export interface ProviderToolCallAttributes extends AIBaseAttributes {
+  /** Tool category: 'provider-tool' */
   toolType?: string;
   /** Tool description from tool definition */
   toolDescription?: string;
@@ -715,7 +715,7 @@ export interface SpanTypeMap {
   [SpanType.MODEL_CHUNK]: ModelChunkAttributes;
   [SpanType.TOOL_CALL]: ToolCallAttributes;
   [SpanType.CLIENT_TOOL_CALL]: ClientToolCallAttributes;
-  [SpanType.SERVER_TOOL_CALL]: ServerToolCallAttributes;
+  [SpanType.PROVIDER_TOOL_CALL]: ProviderToolCallAttributes;
   [SpanType.MCP_TOOL_CALL]: MCPToolCallAttributes;
   [SpanType.PROCESSOR_RUN]: ProcessorRunAttributes;
   [SpanType.WORKFLOW_STEP]: WorkflowStepAttributes;

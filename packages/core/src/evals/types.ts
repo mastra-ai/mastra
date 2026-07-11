@@ -310,8 +310,8 @@ export type McpToolCallStep = TrajectoryStepBase & {
   success?: boolean;
 };
 
-export type ServerToolCallStep = TrajectoryStepBase & {
-  stepType: 'server_tool_call';
+export type ProviderToolCallStep = TrajectoryStepBase & {
+  stepType: 'provider_tool_call';
   /** Arguments passed to the server-side tool */
   toolArgs?: Record<string, unknown>;
   /** Result returned by the server-side tool */
@@ -410,7 +410,7 @@ export type ProcessorRunStep = TrajectoryStepBase & {
 export type TrajectoryStep =
   | ToolCallStep
   | McpToolCallStep
-  | ServerToolCallStep
+  | ProviderToolCallStep
   | ModelGenerationStep
   | AgentRunStep
   | WorkflowStepStep
@@ -837,13 +837,13 @@ function spanToTrajectorySteps(node: SpanTreeNode): TrajectoryStep[] {
       ];
     }
 
-    case SpanType.SERVER_TOOL_CALL: {
+    case SpanType.PROVIDER_TOOL_CALL: {
       const toolArgs = toRecordOrUndefined(span.input);
       const toolResult = toRecordOrUndefined(span.output);
       return [
         {
           ...base,
-          stepType: 'server_tool_call' as const,
+          stepType: 'provider_tool_call' as const,
           toolArgs,
           toolResult,
           success: typeof attrs.success === 'boolean' ? attrs.success : undefined,

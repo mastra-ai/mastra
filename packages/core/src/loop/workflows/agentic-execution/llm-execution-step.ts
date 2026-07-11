@@ -150,8 +150,8 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   mastra?: Mastra;
   /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
   tracingContext?: TracingContext;
-  /** Closure-scoped map for SERVER_TOOL_CALL spans that may persist across iterations. */
-  serverToolSpansByToolCallId?: Map<string, { span: AnySpan; ended: boolean }>;
+  /** Closure-scoped map for PROVIDER_TOOL_CALL spans that may persist across iterations. */
+  providerToolSpansByToolCallId?: Map<string, { span: AnySpan; ended: boolean }>;
 };
 
 type ToolResolvers = {
@@ -438,7 +438,7 @@ async function processOutputStream<OUTPUT = undefined>({
   toolPayloadTransform,
   mastra,
   tracingContext,
-  serverToolSpansByToolCallId,
+  providerToolSpansByToolCallId,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -554,7 +554,7 @@ async function processOutputStream<OUTPUT = undefined>({
     return { toolDef, inferredProviderExecuted };
   };
 
-  const injectServerToolObservability = ({
+  const injectProviderToolObservability = ({
     toolCallId,
     toolName,
     args,
@@ -565,7 +565,7 @@ async function processOutputStream<OUTPUT = undefined>({
     args?: unknown;
     providerExecuted?: boolean;
   }) => {
-    if (!serverToolSpansByToolCallId || !tracingContext?.currentSpan) {
+    if (!providerToolSpansByToolCallId || !tracingContext?.currentSpan) {
       return;
     }
 
@@ -576,7 +576,7 @@ async function processOutputStream<OUTPUT = undefined>({
       return;
     }
 
-    if (serverToolSpansByToolCallId.has(toolCallId)) {
+    if (providerToolSpansByToolCallId.has(toolCallId)) {
       return;
     }
 
@@ -587,13 +587,13 @@ async function processOutputStream<OUTPUT = undefined>({
           : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
 
       const span = parentSpan.createChildSpan({
-        type: SpanType.SERVER_TOOL_CALL,
-        name: `server_tool: '${toolName}'`,
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: `provider_tool: '${toolName}'`,
         entityType: EntityType.TOOL,
         entityId: toolName,
         entityName: toolName,
         attributes: {
-          toolType: 'server-tool',
+          toolType: 'provider-tool',
           toolDescription: (toolDef as { description?: string } | undefined)?.description,
           toolCallId,
         },
@@ -602,10 +602,10 @@ async function processOutputStream<OUTPUT = undefined>({
       });
 
       if (span) {
-        serverToolSpansByToolCallId.set(toolCallId, { span, ended: false });
+        providerToolSpansByToolCallId.set(toolCallId, { span, ended: false });
       }
     } catch (err) {
-      logger?.warn?.('[ServerToolObservability] failed to create SERVER_TOOL_CALL span', {
+      logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
         error: err instanceof Error ? err.message : String(err),
         toolName,
       });
@@ -652,7 +652,7 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
-      injectServerToolObservability({
+      injectProviderToolObservability({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         providerExecuted: chunk.payload.providerExecuted,
@@ -677,7 +677,7 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       });
-      injectServerToolObservability({
+      injectProviderToolObservability({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
         args: chunk.payload.args,
@@ -807,15 +807,15 @@ async function processOutputStream<OUTPUT = undefined>({
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
         }
-        // Close SERVER_TOOL_CALL span if one was opened for this tool call
-        if (serverToolSpansByToolCallId) {
-          const serverEntry = serverToolSpansByToolCallId.get(chunk.payload.toolCallId);
-          if (serverEntry && !serverEntry.ended) {
-            serverEntry.span.end({
+        // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
+        if (providerToolSpansByToolCallId) {
+          const providerEntry = providerToolSpansByToolCallId.get(chunk.payload.toolCallId);
+          if (providerEntry && !providerEntry.ended) {
+            providerEntry.span.end({
               output: chunk.payload.result,
               attributes: { success: !chunk.payload.isError },
             });
-            serverEntry.ended = true;
+            providerEntry.ended = true;
           }
         }
         safeEnqueue(controller, chunk);
@@ -953,16 +953,16 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
-  const serverToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+  const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
 
   const cleanupServerToolSpans = (terminal: boolean) => {
-    for (const [toolCallId, entry] of serverToolSpansByToolCallId.entries()) {
+    for (const [toolCallId, entry] of providerToolSpansByToolCallId.entries()) {
       if (entry.ended) {
-        serverToolSpansByToolCallId.delete(toolCallId);
+        providerToolSpansByToolCallId.delete(toolCallId);
       } else if (terminal) {
         entry.span.end();
         entry.ended = true;
-        serverToolSpansByToolCallId.delete(toolCallId);
+        providerToolSpansByToolCallId.delete(toolCallId);
       }
     }
   };
@@ -1527,7 +1527,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-              serverToolSpansByToolCallId,
+              providerToolSpansByToolCallId,
             });
 
             // Build messages from the full chunk sequence and add to messageList.

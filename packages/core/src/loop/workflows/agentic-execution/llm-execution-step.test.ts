@@ -2176,7 +2176,7 @@ describe('createLLMExecutionStep gateway provider tools', () => {
   });
 });
 
-describe('SERVER_TOOL_CALL observability spans', () => {
+describe('PROVIDER_TOOL_CALL observability spans', () => {
   let controller: ReadableStreamDefaultController;
   let messageList: MessageList;
   let bail: Mock;
@@ -2244,16 +2244,16 @@ describe('SERVER_TOOL_CALL observability spans', () => {
     bail = vi.fn(data => data);
   });
 
-  it('creates a SERVER_TOOL_CALL span for provider-executed tools and closes it on tool-result', async () => {
-    const serverToolSpan = {
+  it('creates a PROVIDER_TOOL_CALL span for provider-executed tools and closes it on tool-result', async () => {
+    const providerToolSpan = {
       id: 'server-span-1',
-      type: SpanType.SERVER_TOOL_CALL,
+      type: SpanType.PROVIDER_TOOL_CALL,
       end: vi.fn(),
     };
     const agentRunSpan = {
       id: 'agent-span',
       type: SpanType.AGENT_RUN,
-      createChildSpan: vi.fn(() => serverToolSpan),
+      createChildSpan: vi.fn(() => providerToolSpan),
       findParent: vi.fn(),
     };
 
@@ -2340,26 +2340,26 @@ describe('SERVER_TOOL_CALL observability spans', () => {
     // Verify span was created with correct attributes
     expect(agentRunSpan.createChildSpan).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: SpanType.SERVER_TOOL_CALL,
-        name: "server_tool: 'web_search'",
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: "provider_tool: 'web_search'",
         entityType: 'tool',
         entityId: 'web_search',
         entityName: 'web_search',
         attributes: expect.objectContaining({
-          toolType: 'server-tool',
+          toolType: 'provider-tool',
           toolCallId: 'srvtoolu_123',
         }),
       }),
     );
 
     // Verify span was ended with the result
-    expect(serverToolSpan.end).toHaveBeenCalledWith({
+    expect(providerToolSpan.end).toHaveBeenCalledWith({
       output: { answer: 'Latest AI news results' },
       attributes: { success: true },
     });
   });
 
-  it('does not create a SERVER_TOOL_CALL span when tracingContext is absent', async () => {
+  it('does not create a PROVIDER_TOOL_CALL span when tracingContext is absent', async () => {
     const tools = {
       web_search: {
         type: 'provider' as const,
@@ -2437,7 +2437,7 @@ describe('SERVER_TOOL_CALL observability spans', () => {
     expect(result).toBeDefined();
   });
 
-  it('does not create a SERVER_TOOL_CALL span for non-provider-executed tools', async () => {
+  it('does not create a PROVIDER_TOOL_CALL span for non-provider-executed tools', async () => {
     const agentRunSpan = {
       id: 'agent-span',
       type: SpanType.AGENT_RUN,
@@ -2520,9 +2520,9 @@ describe('SERVER_TOOL_CALL observability spans', () => {
 
     await llmExecutionStep.execute(executeParams);
 
-    // createChildSpan should NOT have been called with SERVER_TOOL_CALL
+    // createChildSpan should NOT have been called with PROVIDER_TOOL_CALL
     const serverToolCalls = (agentRunSpan.createChildSpan as Mock).mock.calls.filter(
-      ([opts]: any[]) => opts.type === SpanType.SERVER_TOOL_CALL,
+      ([opts]: any[]) => opts.type === SpanType.PROVIDER_TOOL_CALL,
     );
     expect(serverToolCalls).toHaveLength(0);
   });

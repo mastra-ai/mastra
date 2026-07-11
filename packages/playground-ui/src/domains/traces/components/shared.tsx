@@ -13,7 +13,7 @@ export const spanTypePrefixes = [
   'model',
   'mcp',
   'tool',
-  'server',
+  'provider',
   'memory',
   'workspace',
   'scorer',
@@ -51,11 +51,11 @@ const spanTypeToUiElements: Record<string, UISpanStyle> = {
     label: 'Tool',
     typePrefix: 'tool',
   },
-  server: {
+  provider: {
     icon: <ToolsIcon />,
     color: 'oklch(0.75 0.15 60)',
-    label: 'Server Tool',
-    typePrefix: 'server',
+    label: 'Provider Tool',
+    typePrefix: 'provider',
   },
   memory: {
     icon: <MemoryIcon />,
