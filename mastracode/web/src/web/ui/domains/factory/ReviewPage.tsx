@@ -1,10 +1,10 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitPullRequest, Play } from 'lucide-react';
+import { GitPullRequest } from 'lucide-react';
 
 import { relativeTime } from '../../../../shared/lib/date';
 import { SkeletonRows } from '../../ui';
+import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
 import { useProjectPullRequestsQuery } from './hooks/useFactoryData';
@@ -28,6 +28,14 @@ function prPrompt(pr: GithubPullRequest): string {
   return [
     `Use the understand-pr skill to review GitHub pull request #${pr.number}: "${pr.title}" (${pr.url}).`,
     `The PR head branch is ${pr.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${pr.number}\`).`,
+  ].join(' ');
+}
+
+function prCustomPrompt(pr: GithubPullRequest, instructions: string): string {
+  return [
+    `Regarding GitHub pull request #${pr.number}: "${pr.title}" (${pr.url}).`,
+    `The PR head branch is ${pr.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${pr.number}\`).`,
+    instructions,
   ].join(' ');
 }
 
@@ -65,11 +73,11 @@ function PullRequestList({ githubProjectId }: { githubProjectId: string }) {
             pr={pr}
             starting={start.isPending && start.variables?.branch === prBranch(pr)}
             disabled={!enabled || start.isPending}
-            onReview={() =>
+            onRun={prompt =>
               start.mutate({
                 branch: prBranch(pr),
                 threadTitle: `PR #${pr.number}: ${pr.title}`,
-                prompt: prPrompt(pr),
+                prompt: prompt === undefined ? prPrompt(pr) : prCustomPrompt(pr, prompt),
               })
             }
           />
@@ -89,12 +97,13 @@ function PullRequestRow({
   pr,
   starting,
   disabled,
-  onReview,
+  onRun,
 }: {
   pr: GithubPullRequest;
   starting: boolean;
   disabled: boolean;
-  onReview: () => void;
+  /** Start a run; `undefined` = default Review, string = custom prompt. */
+  onRun: (prompt?: string) => void;
 }) {
   return (
     <li className="flex items-start gap-2.5 rounded-md px-2 py-2 transition hover:bg-surface3">
@@ -114,17 +123,14 @@ function PullRequestRow({
           </span>
         </span>
       </a>
-      <Button
-        variant="ghost"
-        size="sm"
-        className="shrink-0"
-        aria-label={`Review pull request #${pr.number}`}
+      <FactoryItemActions
+        actionLabel="Review"
+        itemLabel={`pull request #${pr.number}`}
+        starting={starting}
         disabled={disabled}
-        onClick={onReview}
-      >
-        <Play size={13} aria-hidden />
-        {starting ? 'Starting…' : 'Review'}
-      </Button>
+        onAction={() => onRun()}
+        onRunPrompt={prompt => onRun(prompt)}
+      />
     </li>
   );
 }

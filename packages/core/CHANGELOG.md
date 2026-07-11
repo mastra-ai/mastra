@@ -1,5 +1,51 @@
 # @mastra/core
 
+## 1.51.0-alpha.5
+
+### Minor Changes
+
+- Added file-system routing for a Mastra logger and per-agent scorers. ([#19262](https://github.com/mastra-ai/mastra/pull/19262))
+
+  Define a logger in `src/mastra/logger.ts` (default export) and it is auto-registered as the Mastra logger, just like `storage.ts` and `observability.ts`. A code-registered logger still wins.
+
+  Register scorers per agent by adding an `agents/<name>/scorers/` folder. Each module's default export (a `MastraScorer`, or a `{ scorer, sampling }` entry) is wired into that agent, keyed by filename. `config.scorers` wins on collision.
+
+  ```text
+  src/mastra/
+    logger.ts                 # export default new PinoLogger({ name: 'App' })
+    agents/weather/
+      config.ts
+      scorers/
+        relevance.ts          # export default myRelevanceScorer
+  ```
+
+### Patch Changes
+
+- Added an optional `scope` field to `ResolveToolsOpts` so tool providers can see a connection's identity bucketing (`per-author`, `shared`, or `caller-supplied`) when resolving tools. Providers can use this to let the backend auto-resolve an account within a caller's bucket instead of pinning a specific one. The field is optional and defaults to previous behavior when absent. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+  Also added an optional `defaultScope` to `BaseToolProviderOptions` (surfaced on the `ToolProvider` interface as `defaultScope`). This lets an app author set a tool provider's connection scope at config time — for example `defaultScope: 'caller-supplied'` for multi-tenant OAuth — so every connection authorized against the provider is bucketed correctly without any per-connection UI control. Defaults to `'per-author'` when absent.
+
+  ```ts
+  import { BaseToolProvider, type ResolveToolsOpts } from '@mastra/core/tool-provider';
+
+  class MyToolProvider extends BaseToolProvider {
+    // ...required members like `info` and `capabilities` elided
+
+    constructor() {
+      // Config-level tenancy decision: bucket connections per caller.
+      super({ defaultScope: 'caller-supplied' });
+    }
+
+    async resolveToolsVNext(opts: ResolveToolsOpts) {
+      if (opts.scope === 'caller-supplied') {
+        // Let the backend auto-resolve an account within the caller's
+        // bucket instead of pinning a specific connected account.
+      }
+      // ...
+    }
+  }
+  ```
+
 ## 1.51.0-alpha.4
 
 ### Minor Changes
