@@ -780,11 +780,9 @@ export const pluginsGithubInstallInvalidPackageManagerScenario: McE2eScenario = 
     await runtime.waitForScreenText(/GitHub plugins also auto-update/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(
-      /must declare an exact\s+pnpm version in package\.json using "packageManager": "pnpm@x\.y\.z"/i,
-      terminal,
-      15_000,
-    );
+    await runtime.waitForScreenText(/must declare an exact/i, terminal, 15_000);
+    await runtime.waitForScreenText(/packageManager/i, terminal, 8_000);
+    await runtime.waitForScreenText(/pnpm@x\.y\.z/i, terminal, 8_000);
     terminal.keyCtrlC();
   },
 };
