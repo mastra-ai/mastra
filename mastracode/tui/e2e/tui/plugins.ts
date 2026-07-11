@@ -634,7 +634,9 @@ function createGithubInstallScenario(
       resetPluginScenarioState();
       prepareGithubInstallGhPlugin(projectDir, { pnpmVersion });
       if (options.missingCorepack && githubInstallBinDir) {
-        rmSync(join(githubInstallBinDir, 'corepack'));
+        const corepackPath = join(githubInstallBinDir, 'corepack');
+        rmSync(corepackPath);
+        symlinkSync(join(githubInstallBinDir, 'missing-corepack'), corepackPath);
       }
     },
     env() {
