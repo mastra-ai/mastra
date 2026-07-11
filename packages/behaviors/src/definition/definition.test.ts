@@ -97,6 +97,16 @@ describe('behavior definitions', () => {
     expect(() => defineBehavior({ ...input, states: [...input.states, unreachable] })).toThrow('unreachable');
   });
 
+  it('rejects filesystem state ID traversal before resolving assets', async () => {
+    const root = await writeFixture();
+    const manifest = JSON.parse(await fs.readFile(path.join(root, 'behavior.yaml'), 'utf8'));
+    manifest.initialState = '../../../outside';
+    manifest.states[0].id = '../../../outside';
+    manifest.states[0].skills = ['secret'];
+    await fs.writeFile(path.join(root, 'behavior.yaml'), JSON.stringify(manifest));
+    await expect(loadBehaviorDirectory(root)).rejects.toThrow('may contain only');
+  });
+
   it('rejects traversal and symlink escape', async () => {
     const root = await writeFixture();
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-outside-'));

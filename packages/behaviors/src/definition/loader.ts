@@ -53,7 +53,12 @@ export async function loadBehaviorDirectory(directory: string): Promise<Normaliz
         throw new BehaviorDefinitionError([{ path: `states[${index}]`, message: 'must be an object' }]);
       }
       const item = state as BehaviorStateInput;
-      const stateRoot = item.id ? path.join(root, 'states', item.id) : root;
+      if (!item.id || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(item.id)) {
+        throw new BehaviorDefinitionError([
+          { path: `states[${index}].id`, message: 'may contain only letters, numbers, dots, underscores, and hyphens' },
+        ]);
+      }
+      const stateRoot = path.join(root, 'states', item.id);
       const instructions = item.instructions ?? (await readAsset(root, item.agentsFile, `states[${index}].agentsFile`));
       const judgeInstructions =
         item.judgeInstructions ?? (await readAsset(root, item.judgeFile, `states[${index}].judgeFile`));
