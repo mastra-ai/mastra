@@ -718,6 +718,16 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         c.req.raw.headers.forEach((v, k) => {
           reqHeaders[k] = v;
         });
+        // Forward the platform execution context (e.g. Cloudflare Workers'
+        // `waitUntil`) so custom route handlers can keep background work alive
+        // after the response. Hono's `executionCtx` getter throws when no
+        // ExecutionContext exists (e.g. Node), so guard the access.
+        let executionCtx: unknown;
+        try {
+          executionCtx = c.executionCtx;
+        } catch {
+          executionCtx = undefined;
+        }
         const response = await this.handleCustomRouteRequest(
           c.req.url,
           c.req.method,
@@ -725,6 +735,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           c.req.raw.body,
           c.get('requestContext'),
           c.req.raw.signal,
+          executionCtx,
         );
         if (!response) {
           return c.json({ error: 'Not Found' }, 404);

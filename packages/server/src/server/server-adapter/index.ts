@@ -336,7 +336,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected customApiRoutes?: ApiRoute[];
   protected mcpOptions?: MCPOptions;
   private customRouteHandler:
-    | ((request: Request, env?: { requestContext?: RequestContext }) => Promise<Response>)
+    | ((request: Request, env?: { requestContext?: RequestContext }, executionCtx?: unknown) => Promise<Response>)
     | null = null;
 
   constructor({
@@ -914,7 +914,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Mark unmatched requests so the adapter bridge can fall through to next()
     app.notFound(() => new Response(null, { status: 404, headers: { [NOT_FOUND_HEADER]: 'true' } }));
 
-    this.customRouteHandler = async (request, env) => app.fetch(request, env);
+    // Forward the platform execution context (e.g. Cloudflare Workers' `waitUntil`)
+    // into the internal app so custom route handlers can keep background work
+    // alive after the response is sent. Without this third arg, serverless
+    // runtimes freeze the invocation on return and kill any in-flight work.
+    this.customRouteHandler = async (request, env, executionCtx) =>
+      app.fetch(request, env, executionCtx as Parameters<typeof app.fetch>[2]);
     return true;
   }
 
@@ -929,6 +934,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     body: unknown,
     requestContext?: RequestContext,
     signal?: AbortSignal,
+    executionCtx?: unknown,
   ): Promise<Response | null> {
     if (!this.customRouteHandler) return null;
 
@@ -959,7 +965,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     const request = new globalThis.Request(url, init);
-    const response = await this.customRouteHandler(request, { requestContext });
+    const response = await this.customRouteHandler(request, { requestContext }, executionCtx);
 
     if (response.headers.get('x-mastra-custom-route-not-found') === 'true') return null;
     return response;
