@@ -95,6 +95,46 @@ describe('withOmInternalThreadId', () => {
     expect(result?.get('tenantId')).toBe('tenant-1');
     expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
   });
+
+  it('strips controller channels so OM internal runs do not render to the channel', () => {
+    const requestContext = createParentRequestContext();
+    const channels = { render: () => {} };
+    requestContext.set('controller', { controllerId: 'ctrl-1', channels, state: { projectPath: '/tmp/x' } });
+
+    const result = withOmInternalThreadId(requestContext, 'observational-memory-observer');
+
+    const controller = result?.get('controller') as Record<string, unknown>;
+    expect(controller.channels).toBeUndefined();
+    // Other controller fields are preserved.
+    expect(controller.controllerId).toBe('ctrl-1');
+    expect(controller.state).toEqual({ projectPath: '/tmp/x' });
+    // Parent context is not mutated.
+    expect((requestContext.get('controller') as Record<string, unknown>).channels).toBe(channels);
+  });
+
+  it('strips controller channels even when there is no parent thread id', () => {
+    const requestContext = new RequestContext();
+    const channels = { render: () => {} };
+    requestContext.set('controller', { controllerId: 'ctrl-1', channels });
+
+    const result = withOmInternalThreadId(requestContext, 'observational-memory-observer');
+
+    expect(result).not.toBe(requestContext);
+    expect((result?.get('controller') as Record<string, unknown>).channels).toBeUndefined();
+    expect((result?.get('controller') as Record<string, unknown>).controllerId).toBe('ctrl-1');
+    expect((requestContext.get('controller') as Record<string, unknown>).channels).toBe(channels);
+  });
+
+  it('leaves a controller value without channels untouched', () => {
+    const requestContext = createParentRequestContext();
+    requestContext.set('controller', { controllerId: 'ctrl-1' });
+
+    const result = withOmInternalThreadId(requestContext, 'observational-memory-observer');
+
+    const controller = result?.get('controller') as Record<string, unknown>;
+    expect('channels' in controller).toBe(false);
+    expect(controller.controllerId).toBe('ctrl-1');
+  });
 });
 
 describe('OM internal agent request contexts', () => {
