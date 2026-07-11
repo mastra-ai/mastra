@@ -24,6 +24,8 @@ export {
   BehaviorTransitionError,
 } from './runtime/transition-engine.js';
 export type { BehaviorTransitionEngineOptions } from './runtime/transition-engine.js';
+export { BehaviorScheduler } from './scheduler/scheduler.js';
+export type { BehaviorAuditEvent, BehaviorSchedulerOptions } from './scheduler/scheduler.js';
 export type {
   BehaviorDueWork,
   BehaviorGuardEvaluator,
