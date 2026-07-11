@@ -270,6 +270,34 @@ describe('StreamErrorRetryProcessor', () => {
       },
     );
 
+    it('detects terminal authorization codes in API call response bodies', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+      const error = new APICallError({
+        message: 'invalid credentials',
+        url: 'https://api.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: JSON.stringify({ error: { type: 'authentication_error' } }),
+        isRetryable: false,
+      });
+
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+    });
+
+    it('does not treat isRetryable false alone as a terminal error', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+      const error = new APICallError({
+        message: 'unknown provider failure',
+        url: 'https://api.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 422,
+        responseBody: JSON.stringify({ error: { type: 'unknown_stream_failure' } }),
+        isRetryable: false,
+      });
+
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
+    });
+
     it('uses the processor delayMs for unmatched errors', async () => {
       vi.useFakeTimers();
       const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, delayMs: 1000 });

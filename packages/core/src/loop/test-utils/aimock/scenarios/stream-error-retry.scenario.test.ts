@@ -23,7 +23,7 @@ const AUTHORIZATION_ERROR = {
   status: 403,
 } as const;
 
-describe('AIMock coding-agent scenario: retry unmatched stream errors', () => {
+describe('AIMock coding-agent scenario: retry unknown stream errors', () => {
   let llm: LLMock;
 
   beforeAll(async () => {
@@ -48,8 +48,8 @@ describe('AIMock coding-agent scenario: retry unmatched stream errors', () => {
     });
 
     return createCodingAgent({
-      id: `retry-all-errors-${errorProcessors ? 'control' : 'default'}`,
-      name: 'Retry all stream errors test agent',
+      id: `retry-unknown-errors-${errorProcessors ? 'control' : 'default'}`,
+      name: 'Retry unknown stream errors test agent',
       instructions: 'Return the scripted AIMock response.',
       model: openai('gpt-4o-mini'),
       tools: {},

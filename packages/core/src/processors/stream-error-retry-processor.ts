@@ -155,9 +155,19 @@ function isKnownTerminalAuthorizationError(error: unknown): boolean {
     if (statusCode === 401 || statusCode === 403) return true;
 
     const code = getStringProperty(candidate, 'code') ?? getStringProperty(candidate, 'type');
-    if (code && TERMINAL_AUTHORIZATION_ERROR_CODES.has(code.toLowerCase())) return true;
+    if (code && TERMINAL_AUTHORIZATION_ERROR_CODES.has(code.trim().toLowerCase())) return true;
 
-    return visit(candidate.error) || visit(candidate.cause);
+    const responseBody = getStringProperty(candidate, 'responseBody');
+    let parsedResponseBody: unknown;
+    if (responseBody) {
+      try {
+        parsedResponseBody = JSON.parse(responseBody);
+      } catch {
+        // Ignore non-JSON provider response bodies.
+      }
+    }
+
+    return visit(candidate.error) || visit(candidate.data) || visit(parsedResponseBody) || visit(candidate.cause);
   }
 
   return visit(error);
