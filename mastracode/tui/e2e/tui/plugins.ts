@@ -641,7 +641,7 @@ function createGithubInstallScenario(
       if (!githubInstallBinDir || !githubInstallCorepackHome) {
         throw new Error('GitHub install package manager isolation fixture was not prepared');
       }
-      return { PATH: `${githubInstallBinDir}:/usr/bin:/bin`, COREPACK_HOME: githubInstallCorepackHome };
+      return { PATH: githubInstallBinDir, COREPACK_HOME: githubInstallCorepackHome };
     },
     async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
       if (!githubInstallGhPath) throw new Error('GitHub install gh fixture was not prepared');
@@ -745,7 +745,7 @@ export const pluginsGithubInstallInvalidPackageManagerScenario: McE2eScenario = 
     if (!githubInstallBinDir || !githubInstallCorepackHome) {
       throw new Error('GitHub install package manager isolation fixture was not prepared');
     }
-    return { PATH: `${githubInstallBinDir}:/usr/bin:/bin`, COREPACK_HOME: githubInstallCorepackHome };
+    return { PATH: githubInstallBinDir, COREPACK_HOME: githubInstallCorepackHome };
   },
   async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
     if (!githubInstallGhPath) throw new Error('GitHub install gh fixture was not prepared');
@@ -779,7 +779,7 @@ export const pluginsGithubInstallInvalidPackageManagerScenario: McE2eScenario = 
     terminal.write('\r');
 
     await runtime.waitForScreenText(
-      /must declare an exact pnpm version in package\.json using "packageManager": "pnpm@x\.y\.z"/i,
+      /must declare an exact\s+pnpm version in package\.json using "packageManager": "pnpm@x\.y\.z"/i,
       terminal,
       15_000,
     );
