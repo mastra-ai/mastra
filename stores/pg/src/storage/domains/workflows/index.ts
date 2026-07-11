@@ -1,5 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  mergeWorkflowStepResult,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
@@ -12,10 +13,16 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   CreateIndexOptions,
+  TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import { PgDB, resolvePgConfig, generateTableSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 
 function getSchemaName(schema?: string) {
   return schema ? `"${schema}"` : '"public"';
@@ -28,18 +35,25 @@ function getTableName({ indexName, schemaName }: { indexName: string; schemaName
 
 /**
  * Sanitizes JSON string for PostgreSQL jsonb:
- * - Escapes invalid JSON escape sequences (e.g. \v, \k → \\v, \\k)
  * - Removes problematic Unicode sequences:
  *   - \u0000 (null character) - causes error 22P05 "unsupported Unicode escape sequence"
  *   - \uD800-\uDFFF (unpaired surrogates) - causes "Unicode low surrogate must follow a high surrogate"
+ *   - \\uD800 (escaped-backslash + surrogate, e.g. from JS regex literals like [^\ud800-\udfff]):
+ *     removing just \uXXXX would leave a dangling backslash that creates a new invalid escape (e.g. \-)
+ * - Escapes any remaining invalid JSON escape sequences (e.g. \v, \k, \-)
  */
-function sanitizeJsonForPg(jsonString: string): string {
+export function sanitizeJsonForPg(jsonString: string): string {
   return (
     jsonString
-      // Fix invalid JSON escape sequences safely without rewriting already-escaped backslashes.
+      // Remove null char and surrogate escape sequences. The optional extra backslash (\\\\?)
+      // also handles the escaped-backslash variant (\\uXXXX), which would otherwise leave a
+      // dangling backslash and produce a new invalid escape sequence after removal.
+      .replace(/\\\\?u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '')
+      // Fix any remaining invalid JSON escape sequences safely without rewriting
+      // already-escaped backslashes. Running this AFTER surrogate removal ensures that
+      // characters newly exposed by the removal (e.g. a hyphen left after \\ud800-\\udfff)
+      // are also caught and escaped.
       .replace(/(^|[^\\])(\\(?!["\\/bfnrtu]))/g, '$1\\\\')
-      // Remove problematic Unicode sequences.
-      .replace(/\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})/g, '')
   );
 }
 
@@ -51,6 +65,15 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   /** Tables managed by this domain */
   static readonly MANAGED_TABLES = [TABLE_WORKFLOW_SNAPSHOT] as const;
+
+  /**
+   * Workflow run snapshots accumulate as runs execute. Anchored on the
+   * timezone-aware `updatedAtZ` mirror column (last activity) so suspended or
+   * long-running runs are not pruned by start age.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    workflowSnapshot: { table: TABLE_WORKFLOW_SNAPSHOT, column: 'updatedAtZ', indexed: true },
+  };
 
   constructor(config: PgDomainConfig) {
     super();
@@ -136,6 +159,42 @@ export class WorkflowsPG extends WorkflowsStorage {
   }
 
   /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema && this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(WorkflowsPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
+  }
+
+  /** Delete workflow run snapshots older than the `workflowSnapshot` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: WorkflowsPG.retentionTables,
+      order: ['workflowSnapshot'],
+    });
+    return runPrune({ db: this.#db, domain: 'workflows', targets, options });
+  }
+
+  /**
    * Creates custom user-defined indexes for this domain's tables.
    */
   async createCustomIndexes(): Promise<void> {
@@ -205,19 +264,20 @@ export class WorkflowsPG extends WorkflowsStorage {
           snapshot = typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         }
 
-        // Merge the new step result and request context
-        snapshot.context[stepId] = result;
-        snapshot.requestContext = { ...snapshot.requestContext, ...requestContext };
+        // Merge the new step result using element-wise array merging
+        // (critical for concurrent foreach iteration results)
+        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
         await t.none(
-          `INSERT INTO ${tableName} (workflow_name, run_id, snapshot, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5)
+          `INSERT INTO ${tableName}
+           (workflow_name, run_id, snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
            ON CONFLICT (workflow_name, run_id) DO UPDATE
-           SET snapshot = $3, "updatedAt" = $5`,
-          [workflowName, runId, sanitizedSnapshot, now, now],
+           SET snapshot = $3, "updatedAt" = $5, "updatedAtZ" = $7`,
+          [workflowName, runId, sanitizedSnapshot, now, now, now, now],
         );
 
         return snapshot.context;
@@ -276,9 +336,12 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(updatedSnapshot));
+        const now = new Date();
         await t.none(
-          `UPDATE ${tableName} SET snapshot = $1, "updatedAt" = $2 WHERE workflow_name = $3 AND run_id = $4`,
-          [sanitizedSnapshot, new Date(), workflowName, runId],
+          `UPDATE ${tableName}
+           SET snapshot = $1, "updatedAt" = $2, "updatedAtZ" = $3
+           WHERE workflow_name = $4 AND run_id = $5`,
+          [sanitizedSnapshot, now, now, workflowName, runId],
         );
 
         return updatedSnapshot;
@@ -321,11 +384,21 @@ export class WorkflowsPG extends WorkflowsStorage {
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = sanitizeJsonForPg(JSON.stringify(snapshot));
       await this.#db.client.none(
-        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
-                 VALUES ($1, $2, $3, $4, $5, $6)
+        `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })}
+                 (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
-        [workflowName, runId, resourceId, sanitizedSnapshot, createdAtValue, updatedAtValue],
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+        [
+          workflowName,
+          runId,
+          resourceId,
+          sanitizedSnapshot,
+          createdAtValue,
+          updatedAtValue,
+          createdAtValue,
+          updatedAtValue,
+        ],
       );
     } catch (error) {
       throw new MastraError(

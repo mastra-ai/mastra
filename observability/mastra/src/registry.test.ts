@@ -9,7 +9,7 @@ import type {
 } from '@mastra/core/observability';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Observability } from './default';
-import { CloudExporter, DefaultExporter, TestExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter, TestExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
 import { SensitiveDataFilter } from './span_processors';
 
@@ -352,6 +352,40 @@ describe('Observability Registry', () => {
       expect(customTracing?.getConfig().serviceName).toBe('custom-service');
     });
 
+    it('should flush all registered instances without shutting down', async () => {
+      let flushCalled = false;
+
+      class TestInstance extends BaseObservabilityInstance {
+        protected createSpan<TType extends SpanType>(_options: CreateSpanOptions<TType>): Span<TType> {
+          return {} as Span<TType>;
+        }
+
+        async flush(): Promise<void> {
+          flushCalled = true;
+          await super.flush();
+        }
+      }
+
+      const testInstance = new TestInstance({
+        serviceName: 'test-service',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [new TestExporter()],
+      });
+
+      observability = new Observability({
+        configs: {
+          test: testInstance,
+        },
+      });
+
+      await observability.flush();
+
+      expect(flushCalled).toBe(true);
+      // Instances should still be registered after flush (unlike shutdown)
+      expect(observability.getInstance('test')).toBe(testInstance);
+    });
+
     it('should handle registry shutdown during Mastra shutdown', async () => {
       let shutdownCalled = false;
 
@@ -431,6 +465,26 @@ describe('Observability Registry', () => {
       expect(observability.getSelectedInstance(agentOptions)).toBe(observability.getInstance('langfuse'));
       expect(observability.getSelectedInstance(workflowOptions)).toBe(observability.getInstance('datadog'));
       expect(observability.getSelectedInstance(genericOptions)).toBe(observability.getDefaultInstance()); // Falls back to default (console)
+    });
+
+    it('propagates the Mastra environment to instances registered after setMastraContext', () => {
+      observability = new Observability({});
+
+      // Simulate Mastra construction: setMastraContext fires before any instance
+      // is in the registry (this is the path Mastra.registerExporter takes when
+      // bootstrapping observability from a NoOp).
+      const fakeMastra = { getEnvironment: () => 'production' } as any;
+      observability.setMastraContext({ mastra: fakeMastra });
+
+      // Late registration — must still pick up the environment.
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'late-registered',
+        name: 'late',
+        exporters: [new TestExporter()],
+      });
+      observability.registerInstance('late', instance, true);
+
+      expect(instance.getMastraEnvironment()).toBe('production');
     });
   });
 
@@ -602,7 +656,7 @@ describe('Observability Registry', () => {
 
   describe('Default Config', () => {
     beforeEach(() => {
-      // Mock environment variable for CloudExporter
+      // Mock environment variable for MastraPlatformExporter
       vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', 'test-token-123');
     });
 
@@ -627,9 +681,8 @@ describe('Observability Registry', () => {
       // Verify exporters
       const exporters = defaultInstance?.getExporters();
       expect(exporters).toHaveLength(2);
-      console.log(exporters);
-      expect(exporters?.[0]).toBeInstanceOf(DefaultExporter);
-      expect(exporters?.[1]).toBeInstanceOf(CloudExporter);
+      expect(exporters?.[0]).toBeInstanceOf(MastraStorageExporter);
+      expect(exporters?.[1]).toBeInstanceOf(MastraPlatformExporter);
 
       // Verify processors
       const processors = defaultInstance?.getSpanOutputProcessors();
@@ -765,25 +818,258 @@ describe('Observability Registry', () => {
       expect(observability.getSelectedInstance(config2Options)).toBe(observability.getInstance('config2'));
     });
 
-    it('should handle CloudExporter gracefully when token is missing', async () => {
-      // Clear the token environment variable
-      const originalToken = process.env.MASTRA_CLOUD_ACCESS_TOKEN;
-      delete process.env.MASTRA_CLOUD_ACCESS_TOKEN;
-      vi.unstubAllEnvs(); // Make sure mock is cleared
+    describe('Sensitive Data Filter Default', () => {
+      it('should auto-append SensitiveDataFilter to user configs by default', () => {
+        observability = new Observability({
+          configs: {
+            custom: {
+              serviceName: 'custom-service',
+              exporters: [new TestExporter()],
+            },
+          },
+        });
+
+        const instance = observability.getInstance('custom');
+        const processors = instance?.getSpanOutputProcessors() ?? [];
+        expect(processors).toHaveLength(1);
+        expect(processors[processors.length - 1]).toBeInstanceOf(SensitiveDataFilter);
+      });
+
+      it('should auto-append SensitiveDataFilter to every user config', () => {
+        observability = new Observability({
+          configs: {
+            first: {
+              serviceName: 'service-first',
+              exporters: [new TestExporter()],
+            },
+            second: {
+              serviceName: 'service-second',
+              exporters: [new TestExporter()],
+              spanOutputProcessors: [],
+            },
+          },
+          configSelector: () => 'first',
+        });
+
+        const firstProcessors = observability.getInstance('first')?.getSpanOutputProcessors() ?? [];
+        const secondProcessors = observability.getInstance('second')?.getSpanOutputProcessors() ?? [];
+
+        expect(firstProcessors).toHaveLength(1);
+        expect(secondProcessors).toHaveLength(1);
+        expect(firstProcessors[firstProcessors.length - 1]).toBeInstanceOf(SensitiveDataFilter);
+        expect(secondProcessors[secondProcessors.length - 1]).toBeInstanceOf(SensitiveDataFilter);
+      });
+
+      it('should append SensitiveDataFilter after user spanOutputProcessors so it always runs last', () => {
+        // Running last guarantees that any sensitive data introduced or surfaced
+        // by upstream user processors is still redacted before export.
+        const userProcessor = {
+          name: 'user-processor',
+          process: (span: any) => span,
+          shutdown: async () => {},
+        };
+
+        observability = new Observability({
+          configs: {
+            custom: {
+              serviceName: 'custom-service',
+              exporters: [new TestExporter()],
+              spanOutputProcessors: [userProcessor],
+            },
+          },
+        });
+
+        const processors = observability.getInstance('custom')?.getSpanOutputProcessors();
+        expect(processors).toHaveLength(2);
+        expect(processors?.[0]).toBe(userProcessor);
+        expect(processors?.[1]).toBeInstanceOf(SensitiveDataFilter);
+      });
+
+      it('should use the user-supplied SensitiveDataFilter (and its options) when one is provided', () => {
+        // User supplies their own filter with custom options. We must register
+        // their instance unchanged and not auto-add a second filter that would
+        // override their configuration.
+        const userFilter = new SensitiveDataFilter({
+          redactionToken: '[USER]',
+          sensitiveFields: ['mySecret'],
+        });
+
+        observability = new Observability({
+          configs: {
+            custom: {
+              serviceName: 'custom-service',
+              exporters: [new TestExporter()],
+              spanOutputProcessors: [userFilter],
+            },
+          },
+          // Even when a top-level option is set, the user-supplied filter wins.
+          sensitiveDataFilter: { redactionToken: '[REGISTRY]' },
+        });
+
+        const processors = observability.getInstance('custom')?.getSpanOutputProcessors();
+        expect(processors).toHaveLength(1);
+        expect(processors?.[0]).toBe(userFilter);
+
+        // Verify the user's options actually drive redaction end-to-end
+        // (no double-wrapping with the registry-level config).
+        const filtered = (processors?.[0] as SensitiveDataFilter).process({
+          attributes: { mySecret: 'value', password: 'not-in-user-list' },
+          metadata: undefined,
+          input: undefined,
+          output: undefined,
+          errorInfo: undefined,
+        } as any);
+
+        expect((filtered as any).attributes.mySecret).toBe('[USER]');
+        // password is not in the user's sensitiveFields list so it is not redacted
+        expect((filtered as any).attributes.password).toBe('not-in-user-list');
+      });
+
+      it('should not auto-apply SensitiveDataFilter when set to false', () => {
+        observability = new Observability({
+          configs: {
+            custom: {
+              serviceName: 'custom-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: false,
+        });
+
+        const processors = observability.getInstance('custom')?.getSpanOutputProcessors();
+        expect(processors).toHaveLength(0);
+      });
+
+      it('should pass options to auto-applied SensitiveDataFilter when given an object', () => {
+        observability = new Observability({
+          configs: {
+            custom: {
+              serviceName: 'custom-service',
+              exporters: [new TestExporter()],
+            },
+          },
+          sensitiveDataFilter: {
+            sensitiveFields: ['customSecret'],
+            redactionToken: '[CUSTOM]',
+          },
+        });
+
+        const processors = observability.getInstance('custom')?.getSpanOutputProcessors();
+        expect(processors).toHaveLength(1);
+        const filter = processors?.[0] as SensitiveDataFilter;
+        expect(filter).toBeInstanceOf(SensitiveDataFilter);
+
+        const filtered = filter.process({
+          attributes: { customSecret: 'my-value', password: 'still-redacted' },
+          metadata: undefined,
+          input: undefined,
+          output: undefined,
+          errorInfo: undefined,
+        } as any);
+        expect((filtered as any).attributes.customSecret).toBe('[CUSTOM]');
+        // password is no longer in the override list, so it should pass through
+        expect((filtered as any).attributes.password).toBe('still-redacted');
+      });
+
+      it('should still auto-apply SensitiveDataFilter under the deprecated default config', async () => {
+        observability = new Observability({
+          default: { enabled: true },
+        });
+
+        const defaultInstance = observability.getInstance('default');
+        const processors = defaultInstance?.getSpanOutputProcessors();
+        expect(processors).toHaveLength(1);
+        expect(processors?.[0]).toBeInstanceOf(SensitiveDataFilter);
+      });
+
+      it('should respect sensitiveDataFilter=false under the deprecated default config', async () => {
+        observability = new Observability({
+          default: { enabled: true },
+          sensitiveDataFilter: false,
+        });
+
+        const defaultInstance = observability.getInstance('default');
+        expect(defaultInstance?.getSpanOutputProcessors()).toHaveLength(0);
+      });
+
+      it('should not modify pre-instantiated ObservabilityInstance values', () => {
+        // Default ConsoleLogger level is ERROR, so warn() is a no-op. Spy on the
+        // method itself so we can assert the call regardless of the level gate.
+        const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+
+        const preBuilt = new DefaultObservabilityInstance({
+          serviceName: 'pre-built',
+          name: 'pre-built',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [new TestExporter()],
+          spanOutputProcessors: [],
+        });
+
+        observability = new Observability({
+          configs: {
+            preBuilt,
+          },
+        });
+
+        // Pre-built instance is registered as-is, no auto-injected filter.
+        const registered = observability.getInstance('preBuilt');
+        expect(registered).toBe(preBuilt);
+        expect(registered?.getSpanOutputProcessors()).toHaveLength(0);
+
+        // With auto-apply enabled (default) and no filter present, a warning is logged.
+        expect(warnSpy).toHaveBeenCalledWith(
+          expect.stringContaining('Pre-instantiated observability instance does not include a SensitiveDataFilter'),
+          expect.objectContaining({ instanceName: 'preBuilt' }),
+        );
+
+        warnSpy.mockRestore();
+      });
+
+      it('should not warn for pre-instantiated instances when sensitiveDataFilter is disabled', () => {
+        const warnSpy = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+
+        const preBuilt = new DefaultObservabilityInstance({
+          serviceName: 'pre-built',
+          name: 'pre-built',
+          sampling: { type: SamplingStrategyType.ALWAYS },
+          exporters: [new TestExporter()],
+          spanOutputProcessors: [],
+        });
+
+        observability = new Observability({
+          configs: { preBuilt },
+          sensitiveDataFilter: false,
+        });
+
+        expect(warnSpy).not.toHaveBeenCalledWith(
+          expect.stringContaining('Pre-instantiated observability instance does not include a SensitiveDataFilter'),
+          expect.anything(),
+        );
+
+        warnSpy.mockRestore();
+      });
+    });
+
+    it('should handle MastraPlatformExporter gracefully when token is missing', async () => {
+      // Empty string is treated as "missing" by the exporter; using vi.stubEnv
+      // keeps Vitest's env restoration intact so the suite-level afterEach
+      // can roll it back without leaking the test value into later tests.
+      vi.stubEnv('MASTRA_CLOUD_ACCESS_TOKEN', '');
+      vi.stubEnv('MASTRA_PLATFORM_ACCESS_TOKEN', '');
 
       const logger = new ConsoleLogger({ level: LogLevel.DEBUG });
 
-      // Spy on console to check for warning message
-      // Note: ConsoleLogger.warn() calls console.info() internally
+      // Spy on console to check for disabled message
+      // Note: ConsoleLogger.debug() calls console.info() internally
       const infoSpy = vi.spyOn(console, 'info').mockImplementation(() => {});
 
-      // CloudExporter should not throw, but log warning instead
-      const exporter = new CloudExporter({ logger });
+      // MastraPlatformExporter should not throw, but log debug message instead
+      const exporter = new MastraPlatformExporter({ logger });
 
-      // Verify warning message was logged with new exporter name
+      // Verify debug message was logged with exporter name
       expect(infoSpy).toHaveBeenCalledWith(
         expect.stringContaining(
-          'mastra-cloud-observability-exporter disabled: MASTRA_CLOUD_ACCESS_TOKEN environment variable not set',
+          'mastra-platform-exporter disabled: MASTRA_PLATFORM_ACCESS_TOKEN environment variable not set',
         ),
       );
 
@@ -806,12 +1092,7 @@ describe('Observability Registry', () => {
       // Should not throw when exporting
       await expect(exporter.exportTracingEvent(event)).resolves.not.toThrow();
 
-      // Restore mocks
       infoSpy.mockRestore();
-      // Restore env var safely (avoid setting to string "undefined")
-      if (originalToken !== undefined) {
-        process.env.MASTRA_CLOUD_ACCESS_TOKEN = originalToken;
-      }
     });
   });
 });

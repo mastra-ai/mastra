@@ -8,6 +8,7 @@ export const ssoConfigSchema = z.object({
   provider: z.string(),
   text: z.string(),
   icon: z.string().optional(),
+  description: z.string().optional(),
   url: z.string(),
 });
 
@@ -16,6 +17,7 @@ export const loginConfigSchema = z
     type: z.enum(['sso', 'credentials', 'both']),
     sso: ssoConfigSchema.optional(),
     signUpEnabled: z.boolean().optional(),
+    description: z.string().optional(),
   })
   .nullable();
 
@@ -89,6 +91,14 @@ export const logoutResponseSchema = z.object({
 });
 
 // ============================================================================
+// Refresh Schema
+// ============================================================================
+
+export const refreshResponseSchema = z.object({
+  success: z.boolean(),
+});
+
+// ============================================================================
 // Current User Schema
 // ============================================================================
 
@@ -121,4 +131,16 @@ export const credentialsSignUpBodySchema = z.object({
 export const credentialsResponseSchema = z.object({
   user: authenticatedUserSchema,
   token: z.string().optional(),
+});
+
+/**
+ * Response schema for GET /auth/permission-patterns.
+ *
+ * Returns the authoritative list of valid permission-pattern strings (the keys
+ * of the EE `PERMISSION_PATTERNS` table). Studio fetches this to validate the
+ * hardcoded route→permission literals it ships, replacing a compile-time
+ * `@mastra/core/auth/ee` import in the browser bundle.
+ */
+export const permissionPatternsResponseSchema = z.object({
+  patterns: z.array(z.string()),
 });

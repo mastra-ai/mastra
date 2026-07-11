@@ -1,16 +1,16 @@
 import type { StorageThreadType } from '@mastra/core/memory';
-import { ChatThreads, useLinkComponent, useDeleteThread } from '@mastra/playground-ui';
+import { MemorySidebar } from '@/domains/agents/components/memory-sidebar/memory-sidebar';
+import { useDeleteThread } from '@/domains/memory/hooks/use-memory';
+import { useLinkComponent } from '@/lib/framework';
 
 export function AgentSidebar({
   agentId,
   threadId,
   threads,
-  isLoading,
 }: {
   agentId: string;
   threadId: string;
-  threads?: StorageThreadType[];
-  isLoading: boolean;
+  threads: StorageThreadType[];
 }) {
   const { mutateAsync } = useDeleteThread();
   const { paths, navigate } = useLinkComponent();
@@ -22,14 +22,5 @@ export function AgentSidebar({
     }
   };
 
-  return (
-    <ChatThreads
-      resourceId={agentId}
-      resourceType={'agent'}
-      threads={threads || []}
-      isLoading={isLoading}
-      threadId={threadId}
-      onDelete={handleDelete}
-    />
-  );
+  return <MemorySidebar agentId={agentId} threadId={threadId} threads={threads} onDelete={handleDelete} />;
 }

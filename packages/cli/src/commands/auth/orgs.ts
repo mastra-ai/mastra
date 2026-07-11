@@ -1,0 +1,146 @@
+import * as p from '@clack/prompts';
+import { fetchOrgs } from './api.js';
+import { getToken, getCurrentOrgId, setCurrentOrgId } from './credentials.js';
+
+export interface ResolveCurrentOrgOptions {
+  /**
+   * If true and the user belongs to multiple orgs, always show the picker
+   * (with the persisted current org pre-selected) instead of silently
+   * reusing the persisted choice. Useful for "create a new project"-style
+   * flows where the user should consciously choose the target org.
+   *
+   * Ignored if MASTRA_ORG_ID is set or the user only belongs to one org.
+   */
+  forcePrompt?: boolean;
+}
+
+function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY) && !process.env.CI;
+}
+
+/**
+ * Resolve the current org, auto-selecting if only one exists.
+ * If multiple orgs exist and none is currently set, prompts the user.
+ * Pass `{ forcePrompt: true }` to always prompt when there's more than one
+ * org, even if a current org is persisted. In non-interactive environments,
+ * a persisted current org is reused and otherwise a clear setup error is
+ * thrown instead of starting a prompt that cannot be answered.
+ */
+export async function resolveCurrentOrg(
+  token: string,
+  opts: ResolveCurrentOrgOptions = {},
+): Promise<{ orgId: string; orgName: string }> {
+  const orgs = await fetchOrgs(token);
+
+  if (orgs.length === 0) {
+    throw new Error('No organizations found.');
+  }
+
+  if (orgs.length === 1) {
+    return { orgId: orgs[0]!.id, orgName: orgs[0]!.name };
+  }
+
+  // MASTRA_ORG_ID always wins; never prompt in headless/CI mode.
+  const envOrgId = process.env.MASTRA_ORG_ID;
+  if (envOrgId) {
+    const match = orgs.find(o => o.id === envOrgId);
+    if (match) return { orgId: match.id, orgName: match.name };
+  }
+
+  const currentOrgId = await getCurrentOrgId();
+
+  if (currentOrgId && (!opts.forcePrompt || !isInteractive())) {
+    const match = orgs.find(o => o.id === currentOrgId);
+    if (match) return { orgId: match.id, orgName: match.name };
+  }
+
+  if (!isInteractive()) {
+    throw new Error('Multiple organizations found. Run `mastra auth orgs switch` interactively or set MASTRA_ORG_ID.');
+  }
+
+  const selected = await p.select({
+    message: 'Select an organization',
+    initialValue: currentOrgId ?? undefined,
+    options: orgs.map(o => ({
+      value: o.id,
+      label: `${o.name}${o.id === currentOrgId ? ' (current)' : ''}`,
+      hint: o.id,
+    })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+
+  const org = orgs.find(o => o.id === selected)!;
+
+  // Persist the choice so subsequent CLI commands stay in the same org.
+  if (org.id !== currentOrgId) {
+    await setCurrentOrgId(org.id);
+  }
+
+  return { orgId: org.id, orgName: org.name };
+}
+
+export async function listOrgsAction() {
+  const token = await getToken();
+  const currentOrgId = await getCurrentOrgId();
+  const orgs = await fetchOrgs(token);
+
+  if (orgs.length === 0) {
+    console.info('\nNo organizations found.\n');
+    return;
+  }
+
+  console.info('\nOrganizations:\n');
+  for (const org of orgs) {
+    const marker = org.id === currentOrgId ? ' (current)' : '';
+    const role = org.role ? ` [${org.role}]` : '';
+    console.info(`  ${org.name}${role}${marker}`);
+    console.info(`    ID: ${org.id}`);
+  }
+  console.info('');
+}
+
+export async function switchOrgAction() {
+  if (process.env.MASTRA_API_TOKEN) {
+    console.error('\nCannot switch org when using MASTRA_API_TOKEN. Unset it and log in with: mastra auth login\n');
+    process.exit(1);
+  }
+  if (process.env.MASTRA_ORG_ID) {
+    console.error('\nCannot switch org when MASTRA_ORG_ID is set. Unset it to use persistent org selection.\n');
+    process.exit(1);
+  }
+
+  const token = await getToken();
+  const currentOrgId = await getCurrentOrgId();
+  const orgs = await fetchOrgs(token);
+
+  if (orgs.length === 0) {
+    console.info('\nNo organizations found.\n');
+    return;
+  }
+
+  if (orgs.length === 1) {
+    console.info(`\nYou only have one organization: ${orgs[0]!.name}\n`);
+    return;
+  }
+
+  const selected = await p.select({
+    message: 'Switch to organization',
+    options: orgs.map(o => ({
+      value: o.id,
+      label: `${o.name}${o.id === currentOrgId ? ' (current)' : ''}`,
+    })),
+  });
+
+  if (p.isCancel(selected)) {
+    p.cancel('Cancelled.');
+    process.exit(0);
+  }
+
+  await setCurrentOrgId(selected as string);
+  const org = orgs.find(o => o.id === selected)!;
+  console.info(`\nSwitched to ${org.name} (${org.id})\n`);
+}

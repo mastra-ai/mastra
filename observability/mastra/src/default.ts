@@ -4,17 +4,36 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { RegisteredLogger } from '@mastra/core/logger';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type {
+  ClientObservabilityProxy,
+  CorrelationContext,
   ConfigSelector,
   ConfigSelectorOptions,
+  FeedbackInput,
+  FeedbackEvent,
   ObservabilityEntrypoint,
+  ObservabilityDropEvent,
   ObservabilityInstance,
+  RecordedTrace,
+  ScoreInput,
+  ScoreEvent,
 } from '@mastra/core/observability';
+import type { ObservabilityStorage } from '@mastra/core/storage';
+import { routeToHandler } from './bus/route-event';
+import { createClientObservabilityProxy } from './client';
 import { SamplingStrategyType, observabilityRegistryConfigSchema, observabilityConfigValueSchema } from './config';
 import type { ObservabilityInstanceConfig, ObservabilityRegistryConfig } from './config';
-import { CloudExporter, DefaultExporter } from './exporters';
+import { MastraPlatformExporter, MastraStorageExporter } from './exporters';
 import { BaseObservabilityInstance, DefaultObservabilityInstance } from './instances';
+import {
+  buildFeedbackEvent,
+  buildScoreEvent,
+  buildRecordedFeedbackEventFromTrace,
+  buildRecordedScoreEventFromTrace,
+  hydrateRecordedTrace,
+} from './recorded';
 import { ObservabilityRegistry } from './registry';
 import { SensitiveDataFilter } from './span_processors';
+import type { SensitiveDataFilterOptions } from './span_processors';
 
 /**
  * Type guard to check if an object is a BaseObservability instance
@@ -31,6 +50,8 @@ function isInstance(
  */
 export class Observability extends MastraBase implements ObservabilityEntrypoint {
   #registry = new ObservabilityRegistry();
+  #mastra?: Mastra;
+  #clientObservabilityProxy?: ClientObservabilityProxy;
 
   constructor(config: ObservabilityRegistryConfig) {
     super({
@@ -89,20 +110,37 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       }
     }
 
+    // Resolve sensitive data filter setting (defaults to enabled).
+    const sensitiveDataFilterSetting = config.sensitiveDataFilter ?? true;
+    const shouldAutoApplySensitiveFilter = sensitiveDataFilterSetting !== false;
+    const sensitiveDataFilterOptions: SensitiveDataFilterOptions | undefined =
+      typeof sensitiveDataFilterSetting === 'object' && sensitiveDataFilterSetting !== null
+        ? sensitiveDataFilterSetting
+        : undefined;
+
+    const buildAutoSensitiveFilter = (): SensitiveDataFilter | undefined => {
+      if (!shouldAutoApplySensitiveFilter) {
+        return undefined;
+      }
+      return new SensitiveDataFilter(sensitiveDataFilterOptions);
+    };
+
     // Setup default config if enabled (deprecated)
     if (config.default?.enabled) {
       console.warn(
         '[Mastra Observability] The "default: { enabled: true }" configuration is deprecated and will be removed in a future version. ' +
-          'Please use explicit configs with DefaultExporter, CloudExporter, and SensitiveDataFilter instead. ' +
+          'Please use explicit configs with MastraStorageExporter and MastraPlatformExporter instead. ' +
+          'Sensitive data filtering is applied by default and can be controlled via the top-level "sensitiveDataFilter" option. ' +
           'See https://mastra.ai/docs/observability/tracing/overview for the recommended configuration.',
       );
 
+      const autoFilter = buildAutoSensitiveFilter();
       const defaultInstance = new DefaultObservabilityInstance({
         serviceName: 'mastra',
         name: 'default',
         sampling: { type: SamplingStrategyType.ALWAYS },
-        exporters: [new DefaultExporter(), new CloudExporter()],
-        spanOutputProcessors: [new SensitiveDataFilter()],
+        exporters: [new MastraStorageExporter(), new MastraPlatformExporter()],
+        spanOutputProcessors: autoFilter ? [autoFilter] : [],
       });
 
       // Register as default with high priority
@@ -114,9 +152,38 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
       const instances = Object.entries(config.configs);
 
       instances.forEach(([name, tracingDef], index) => {
-        const instance = isInstance(tracingDef)
-          ? tracingDef // Pre-instantiated custom implementation
-          : new DefaultObservabilityInstance({ ...tracingDef, name }); // Config -> Observability with instance name
+        let instance: ObservabilityInstance;
+        if (isInstance(tracingDef)) {
+          // Pre-instantiated custom implementation. We don't mutate it since
+          // the caller already owns it; warn if no SensitiveDataFilter is
+          // present and auto-apply is enabled.
+          instance = tracingDef;
+          if (shouldAutoApplySensitiveFilter) {
+            const processors = instance.getSpanOutputProcessors?.() ?? [];
+            const hasFilter = processors.some(p => p instanceof SensitiveDataFilter);
+            if (!hasFilter) {
+              this.logger?.warn(
+                '[Mastra Observability] Pre-instantiated observability instance does not include a SensitiveDataFilter. ' +
+                  'Auto-applied filtering is skipped for pre-instantiated instances. ' +
+                  'Add a SensitiveDataFilter to spanOutputProcessors when constructing the instance to redact sensitive data.',
+                { instanceName: name },
+              );
+            }
+          }
+        } else {
+          const userProcessors = tracingDef.spanOutputProcessors ?? [];
+          const hasFilter = userProcessors.some(p => p instanceof SensitiveDataFilter);
+          const autoFilter = !hasFilter ? buildAutoSensitiveFilter() : undefined;
+          // Auto-applied filter runs LAST so any sensitive data introduced by
+          // user processors (e.g. enrichment that copies headers/config into
+          // attributes) is still redacted before export.
+          const spanOutputProcessors = autoFilter ? [...userProcessors, autoFilter] : userProcessors;
+          instance = new DefaultObservabilityInstance({
+            ...tracingDef,
+            name,
+            spanOutputProcessors,
+          });
+        }
 
         // First user-provided instance becomes default only if no default config
         const isDefault = !config.default?.enabled && index === 0;
@@ -134,15 +201,26 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
   setMastraContext(options: { mastra: Mastra }): void {
     const instances = this.listInstances();
     const { mastra } = options;
+    this.#mastra = mastra;
+
+    const mastraEnvironment = mastra.getEnvironment?.();
 
     instances.forEach(instance => {
+      // Propagate the Mastra-level environment so spans can fall back to it
+      // when `metadata.environment` isn't set on a specific span.
+      instance.__setMastraEnvironment?.(mastraEnvironment);
+
       const config = instance.getConfig();
       const exporters = instance.getExporters();
+      const emitDropEvent =
+        instance instanceof BaseObservabilityInstance
+          ? (event: ObservabilityDropEvent) => instance.getObservabilityBus().emitDropEvent(event)
+          : undefined;
       exporters.forEach(exporter => {
         // Initialize exporter if it has an init method
         if ('init' in exporter && typeof exporter.init === 'function') {
           try {
-            exporter.init({ mastra, config });
+            exporter.init({ mastra, config, emitDropEvent });
           } catch (error) {
             this.logger?.warn('Failed to initialize observability exporter', {
               exporterName: exporter.name,
@@ -167,9 +245,131 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     return this.#registry.getSelected(options);
   }
 
+  async getRecordedTrace(args: { traceId: string }): Promise<RecordedTrace | null> {
+    const observabilityStorage = await this.#getObservabilityStorage();
+    if (!observabilityStorage) {
+      return null;
+    }
+
+    const trace = await observabilityStorage.getTrace({ traceId: args.traceId });
+    if (!trace) {
+      return null;
+    }
+
+    return hydrateRecordedTrace({
+      trace,
+      emitRecordedEvent: event => this.#emitRecordedEvent(event),
+      canEmitRecordedEvent: () => !!this.#getRecordedTraceInstance(),
+      debugRecordedAnnotationUnavailable: ({ kind, traceId, spanId }) => {
+        this.logger?.debug(
+          kind === 'score'
+            ? 'addScore() is unavailable; rehydrate the trace before calling addScore()'
+            : 'addFeedback() is unavailable; rehydrate the trace before calling addFeedback()',
+          {
+            traceId,
+            spanId,
+          },
+        );
+      },
+    });
+  }
+
+  async addScore(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    score: ScoreInput;
+  }): Promise<void> {
+    const targetTraceId = args.traceId ?? args.correlationContext?.traceId;
+    const targetSpanId = args.spanId ?? args.correlationContext?.spanId;
+
+    if (args.correlationContext) {
+      await this.#emitRecordedEvent(
+        buildScoreEvent({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          correlationContext: args.correlationContext,
+          score: args.score,
+        }),
+      );
+      return;
+    }
+
+    if (!args.traceId) {
+      return;
+    }
+
+    const trace = await this.#getStoredTrace(args.traceId);
+    if (!trace) {
+      return;
+    }
+
+    const event = buildRecordedScoreEventFromTrace({
+      trace,
+      spanId: args.spanId,
+      score: args.score,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    await this.#emitRecordedEvent(event);
+  }
+
+  async addFeedback(args: {
+    traceId?: string;
+    spanId?: string;
+    correlationContext?: CorrelationContext;
+    feedback: FeedbackInput;
+  }): Promise<void> {
+    const targetTraceId = args.traceId ?? args.correlationContext?.traceId;
+    const targetSpanId = args.spanId ?? args.correlationContext?.spanId;
+
+    if (args.correlationContext) {
+      await this.#emitRecordedEvent(
+        buildFeedbackEvent({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          correlationContext: args.correlationContext,
+          feedback: args.feedback,
+        }),
+      );
+      return;
+    }
+
+    if (!args.traceId) {
+      return;
+    }
+
+    const trace = await this.#getStoredTrace(args.traceId);
+    if (!trace) {
+      return;
+    }
+
+    const event = buildRecordedFeedbackEventFromTrace({
+      trace,
+      spanId: args.spanId,
+      feedback: args.feedback,
+    });
+
+    if (!event) {
+      return;
+    }
+
+    await this.#emitRecordedEvent(event);
+  }
+
   /** Register a named observability instance, optionally marking it as default. */
   registerInstance(name: string, instance: ObservabilityInstance, isDefault = false): void {
     this.#registry.register(name, instance, isDefault);
+
+    // If Mastra context has already been set, propagate the environment to
+    // this late-registered instance so it auto-tags spans like instances
+    // registered before setMastraContext.
+    if (this.#mastra) {
+      instance.__setMastraEnvironment?.(this.#mastra.getEnvironment?.());
+    }
   }
 
   /** Get a registered instance by name. */
@@ -207,8 +407,82 @@ export class Observability extends MastraBase implements ObservabilityEntrypoint
     this.#registry.clear();
   }
 
+  /** Flush all registered instances without shutting down. */
+  async flush(): Promise<void> {
+    await this.#registry.flush();
+  }
+
   /** Shut down all registered instances, flushing any pending data. */
   async shutdown(): Promise<void> {
     await this.#registry.shutdown();
+  }
+
+  /**
+   * Returns the proxy responsible for client observability (W3C trace
+   * context injection + OTLP/JSON payload reception for spans/logs
+   * returned from client-side execution).
+   *
+   * Lazily constructed on first call. Resolves the target observability
+   * instance per receive call so config selection works the same way
+   * as for server-side spans.
+   */
+  getClientObservabilityProxy(): ClientObservabilityProxy | undefined {
+    if (!this.#clientObservabilityProxy) {
+      this.#clientObservabilityProxy = createClientObservabilityProxy({
+        resolveInstance: () => this.getDefaultInstance(),
+        logger: this.logger,
+      });
+    }
+    return this.#clientObservabilityProxy;
+  }
+
+  async #getObservabilityStorage(): Promise<ObservabilityStorage | null> {
+    const storage = this.#mastra?.getStorage();
+    if (!storage) {
+      return null;
+    }
+
+    return (await storage.getStore('observability')) ?? null;
+  }
+
+  async #getStoredTrace(traceId: string) {
+    const observabilityStorage = await this.#getObservabilityStorage();
+    if (!observabilityStorage) {
+      return null;
+    }
+
+    return observabilityStorage.getTrace({ traceId });
+  }
+
+  #getRecordedTraceInstance(): ObservabilityInstance | undefined {
+    return this.getDefaultInstance() ?? Array.from(this.listInstances().values())[0];
+  }
+
+  async #emitRecordedEvent(event: ScoreEvent | FeedbackEvent): Promise<void> {
+    const instance = this.#getRecordedTraceInstance();
+    if (!instance) {
+      this.logger?.debug(
+        event.type === 'score'
+          ? 'Score event was dropped because no observability instance is registered'
+          : 'Feedback event was dropped because no observability instance is registered',
+        { eventType: event.type },
+      );
+      return;
+    }
+
+    if (instance instanceof BaseObservabilityInstance) {
+      instance.__emitRecordedEvent(event);
+      return;
+    }
+
+    const bridge = instance.getBridge();
+    const handlerResults = [
+      ...instance.getExporters().map(exporter => routeToHandler(exporter, event, this.logger)),
+      ...(bridge ? [routeToHandler(bridge, event, this.logger)] : []),
+    ].filter((result): result is Promise<void> => !!result && typeof result.then === 'function');
+
+    if (handlerResults.length > 0) {
+      await Promise.allSettled(handlerResults);
+    }
   }
 }

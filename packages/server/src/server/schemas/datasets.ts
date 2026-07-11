@@ -11,14 +11,209 @@ const jsonSchemaObject: z.ZodType<Record<string, unknown>> = z.lazy(() => z.reco
 // JSON Schema field (object or null to disable)
 const jsonSchemaField = z.union([jsonSchemaObject, z.null()]).optional();
 
+// ============================================================================
+// Trajectory Expectation Schema (2 levels deep, children at level 2 use z.any())
+// ============================================================================
+
+// Shared base fields for expected steps (level 2 — children typed as z.any())
+const expectedStepBase = {
+  name: z.string().describe('Step name to match'),
+  durationMs: z.number().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+  children: z.any().optional().describe('Nested trajectory expectation (untyped at this depth)'),
+};
+
+// Typed step variants keyed by stepType
+const expectedToolCallStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('tool_call'),
+  toolArgs: z.record(z.string(), z.unknown()).optional(),
+  toolResult: z.record(z.string(), z.unknown()).optional(),
+  success: z.boolean().optional(),
+});
+
+const expectedMcpToolCallStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('mcp_tool_call'),
+  toolArgs: z.record(z.string(), z.unknown()).optional(),
+  toolResult: z.record(z.string(), z.unknown()).optional(),
+  mcpServer: z.string().optional(),
+  success: z.boolean().optional(),
+});
+
+const expectedModelGenerationStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('model_generation'),
+  modelId: z.string().optional(),
+  promptTokens: z.number().optional(),
+  completionTokens: z.number().optional(),
+  finishReason: z.string().optional(),
+});
+
+const expectedAgentRunStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('agent_run'),
+  agentId: z.string().optional(),
+});
+
+const expectedWorkflowStepStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_step'),
+  stepId: z.string().optional(),
+  status: z.string().optional(),
+  output: z.record(z.string(), z.unknown()).optional(),
+});
+
+const expectedWorkflowRunStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_run'),
+  workflowId: z.string().optional(),
+  status: z.string().optional(),
+});
+
+const expectedWorkflowConditionalStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_conditional'),
+  conditionCount: z.number().optional(),
+  selectedSteps: z.array(z.string()).optional(),
+});
+
+const expectedWorkflowParallelStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_parallel'),
+  branchCount: z.number().optional(),
+  parallelSteps: z.array(z.string()).optional(),
+});
+
+const expectedWorkflowLoopStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_loop'),
+  loopType: z.string().optional(),
+  totalIterations: z.number().optional(),
+});
+
+const expectedWorkflowSleepStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_sleep'),
+  sleepDurationMs: z.number().optional(),
+  sleepType: z.string().optional(),
+});
+
+const expectedWorkflowWaitEventStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('workflow_wait_event'),
+  eventName: z.string().optional(),
+  eventReceived: z.boolean().optional(),
+});
+
+const expectedProcessorRunStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.literal('processor_run'),
+  processorId: z.string().optional(),
+});
+
+// Generic step (no stepType — matches by name only)
+const expectedGenericStepSchema = z.object({
+  ...expectedStepBase,
+  stepType: z.undefined().optional(),
+});
+
+// Union of all expected step types
+const expectedStepSchema = z.union([
+  z.discriminatedUnion('stepType', [
+    expectedToolCallStepSchema,
+    expectedMcpToolCallStepSchema,
+    expectedModelGenerationStepSchema,
+    expectedAgentRunStepSchema,
+    expectedWorkflowStepStepSchema,
+    expectedWorkflowRunStepSchema,
+    expectedWorkflowConditionalStepSchema,
+    expectedWorkflowParallelStepSchema,
+    expectedWorkflowLoopStepSchema,
+    expectedWorkflowSleepStepSchema,
+    expectedWorkflowWaitEventStepSchema,
+    expectedProcessorRunStepSchema,
+  ]),
+  expectedGenericStepSchema,
+]);
+
+// Full TrajectoryExpectation schema
+const trajectoryExpectationSchema = z
+  .object({
+    // Accuracy
+    steps: z.array(expectedStepSchema).optional().describe('Expected steps for accuracy checking'),
+    ordering: z
+      .enum(['strict', 'relaxed', 'unordered'])
+      .optional()
+      .describe('How to compare step ordering (default: relaxed)'),
+    allowRepeatedSteps: z.boolean().optional().describe('Whether to allow repeated steps (default: true)'),
+
+    // Efficiency
+    maxSteps: z.number().int().optional().describe('Maximum number of steps allowed'),
+    maxTotalTokens: z.number().int().optional().describe('Maximum total tokens across all model_generation steps'),
+    maxTotalDurationMs: z.number().optional().describe('Maximum total duration in milliseconds'),
+    noRedundantCalls: z
+      .boolean()
+      .optional()
+      .describe('Whether to penalize redundant calls (same tool + same args consecutively, default: true)'),
+
+    // Blacklist
+    blacklistedTools: z.array(z.string()).optional().describe('Tool names that should never appear'),
+    blacklistedSequences: z
+      .array(z.array(z.string()))
+      .optional()
+      .describe('Tool name sequences that should never appear'),
+
+    // Tool failure tolerance
+    maxRetriesPerTool: z.number().int().optional().describe('Maximum retries per tool before penalizing (default: 2)'),
+  })
+  .optional()
+  .nullable()
+  .describe('Expected trajectory configuration for trajectory scoring');
+
 // Dataset item source tracking
 const datasetItemSourceSchema = z
   .object({
-    type: z.enum(['csv', 'json', 'trace', 'llm', 'experiment-result']).describe('How this item was created'),
+    type: z
+      .enum(['csv', 'json', 'trace', 'llm', 'experiment-result', 'candidate-screener'])
+      .describe('How this item was created'),
     referenceId: z.string().optional().describe('Reference identifier (e.g., trace id, csv filename)'),
   })
   .optional()
   .describe('Source/provenance of this dataset item');
+
+// Item-level static tool mocks (agent targets only).
+const itemToolMockSchema = z.object({
+  toolName: z.string().describe('Name of the tool this mock applies to'),
+  args: z.record(z.string(), z.unknown()).describe('Arguments to match against the tool call'),
+  output: z.unknown().describe('Output served to the agent when matched'),
+  matchArgs: z
+    .enum(['strict', 'ignore'])
+    .optional()
+    .describe("Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only"),
+});
+
+const toolMocksSchema = z
+  .array(itemToolMockSchema)
+  .optional()
+  .describe('Ordered item-level static tool mocks served in place of executing the real tool');
+
+// Diagnostic receipt for item-level tool mocks, persisted on experiment results.
+const toolMockReportSchema = z
+  .object({
+    served: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    unconsumed: z.array(z.object({ mockIndex: z.number().int(), toolName: z.string(), args: z.unknown() })),
+    liveCalls: z.array(z.object({ toolName: z.string(), args: z.unknown() })),
+    failure: z
+      .object({
+        code: z.enum(['TOOL_MOCK_MISMATCH', 'TOOL_MOCK_EXHAUSTED']),
+        toolName: z.string(),
+        args: z.unknown(),
+      })
+      .optional(),
+  })
+  .optional()
+  .describe('Diagnostic receipt for item-level tool mocks');
 
 // ============================================================================
 // Path Parameter Schemas
@@ -61,6 +256,11 @@ export const paginationQuerySchema = z.object({
   perPage: z.coerce.number().optional().default(10),
 });
 
+export const tenancyQuerySchema = z.object({
+  organizationId: z.string().optional().describe('Restrict lookup to the given organization'),
+  projectId: z.string().optional().describe('Restrict lookup to the given project'),
+});
+
 export const listItemsQuerySchema = z.object({
   page: z.coerce.number().optional().default(0),
   perPage: z.coerce.number().optional().default(10),
@@ -81,6 +281,7 @@ export const createDatasetBodySchema = z.object({
   requestContextSchema: jsonSchemaField.describe('JSON Schema describing expected request context shape'),
   targetType: z.string().optional().describe('Target entity type (e.g. agent, workflow, scorer)'),
   targetIds: z.array(z.string()).optional().describe('IDs of target entities this dataset is attached to'),
+  scorerIds: z.array(z.string()).optional().describe('IDs of scorers attached to this dataset'),
 });
 
 export const updateDatasetBodySchema = z.object({
@@ -93,11 +294,14 @@ export const updateDatasetBodySchema = z.object({
   tags: z.array(z.string()).optional().describe('Tag definitions for categorizing experiment results'),
   targetType: z.string().optional().describe('Target entity type (e.g. agent, workflow, scorer)'),
   targetIds: z.array(z.string()).optional().describe('IDs of target entities this dataset is attached to'),
+  scorerIds: z.array(z.string()).optional().nullable().describe('IDs of scorers attached to this dataset'),
 });
 
 export const addItemBodySchema = z.object({
   input: z.unknown().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  expectedTrajectory: trajectoryExpectationSchema,
+  toolMocks: toolMocksSchema,
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -106,6 +310,8 @@ export const addItemBodySchema = z.object({
 export const updateItemBodySchema = z.object({
   input: z.unknown().optional().describe('Input data for the dataset item'),
   groundTruth: z.unknown().optional().describe('Expected output for comparison'),
+  expectedTrajectory: trajectoryExpectationSchema,
+  toolMocks: toolMocksSchema,
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Request context preset for this item'),
   metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
   source: datasetItemSourceSchema,
@@ -119,6 +325,18 @@ export const triggerExperimentBodySchema = z.object({
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
+  versions: z
+    .object({
+      agents: z
+        .record(
+          z.string(),
+          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+        )
+        .optional(),
+      defaultStatus: z.enum(['draft', 'published']).optional(),
+    })
+    .optional()
+    .describe('Version overrides for sub-agent delegation during experiment execution'),
 });
 
 export const compareExperimentsBodySchema = z.object({
@@ -142,6 +360,7 @@ export const datasetResponseSchema = z.object({
   tags: z.array(z.string()).optional().nullable(),
   targetType: z.string().optional().nullable(),
   targetIds: z.array(z.string()).optional().nullable(),
+  scorerIds: z.array(z.string()).optional().nullable(),
   version: z.number().int(),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
@@ -154,6 +373,8 @@ export const datasetItemResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
+  expectedTrajectory: z.unknown().optional(),
+  toolMocks: toolMocksSchema,
   requestContext: z.record(z.string(), z.unknown()).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
   source: datasetItemSourceSchema,
@@ -201,6 +422,7 @@ export const experimentResultResponseSchema = z.object({
   input: z.unknown(),
   output: z.unknown().nullable(),
   groundTruth: z.unknown().nullable(),
+  expectedTrajectory: z.unknown().optional(),
   error: z
     .object({
       message: z.string(),
@@ -214,6 +436,7 @@ export const experimentResultResponseSchema = z.object({
   traceId: z.string().nullable(),
   status: z.enum(['needs-review', 'reviewed', 'complete']).nullable().optional(),
   tags: z.array(z.string()).nullable().optional(),
+  toolMockReport: toolMockReportSchema.nullable(),
   createdAt: z.coerce.date(),
 });
 
@@ -265,6 +488,7 @@ export const experimentSummaryResponseSchema = z.object({
       startedAt: z.coerce.date(),
       completedAt: z.coerce.date(),
       retryCount: z.number(),
+      toolMockReport: toolMockReportSchema.nullable(),
       scores: z.array(
         z.object({
           scorerId: z.string(),
@@ -332,6 +556,8 @@ export const itemVersionResponseSchema = z.object({
   datasetVersion: z.number().int(),
   input: z.unknown(),
   groundTruth: z.unknown().optional(),
+  expectedTrajectory: z.unknown().optional(),
+  toolMocks: toolMocksSchema,
   metadata: z.record(z.string(), z.unknown()).optional(),
   validTo: z.number().int().nullable(),
   isDeleted: z.boolean(),
@@ -365,6 +591,8 @@ export const batchInsertItemsBodySchema = z.object({
     z.object({
       input: z.unknown(),
       groundTruth: z.unknown().optional(),
+      expectedTrajectory: trajectoryExpectationSchema,
+      toolMocks: toolMocksSchema,
       requestContext: z.record(z.string(), z.unknown()).optional(),
       metadata: z.record(z.string(), z.unknown()).optional(),
       source: datasetItemSourceSchema,

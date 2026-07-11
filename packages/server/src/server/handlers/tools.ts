@@ -1,6 +1,8 @@
 import { isVercelTool, isProviderDefinedTool } from '@mastra/core/tools';
-import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
+import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import type { PublicSchema } from '@mastra/schema-compat/schema';
 import { stringify } from 'superjson';
+import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   executeToolContextBodySchema,
@@ -19,19 +21,57 @@ import { handleError } from './error';
 import { validateBody } from './utils';
 
 /**
- * Resolves a schema value that may be a lazy function (as used by AI SDK provider tools).
- * Provider tools use lazy schemas: `inputSchema` is a function that returns an AI SDK Schema
- * object with `{ jsonSchema, validate, _type }`.
+ * Resolves a schema that may be a lazy function (e.g. AI SDK provider tools).
+ * Recursively resolves until a non-function value is returned.
+ * Skips functions that are themselves valid schemas (e.g. ArkType types are
+ * callable but also implement StandardSchema via ~standard).
  */
-function resolveSchema(schema: unknown): unknown {
-  if (typeof schema === 'function') {
-    try {
-      return schema();
-    } catch {
-      return undefined;
-    }
+function resolveLazySchema(schema: unknown): unknown {
+  if (typeof schema === 'function' && !('~standard' in schema)) {
+    return resolveLazySchema(schema());
   }
   return schema;
+}
+
+function schemaToJsonSchema(schema: PublicSchema<unknown> | undefined) {
+  if (!schema) {
+    return undefined;
+  }
+
+  return standardSchemaToJSONSchema(toStandardSchema(schema), { target: 'draft-2020-12' });
+}
+
+function serializeSchema(schema: unknown): string | undefined {
+  const jsonSchema = schemaToJsonSchema(resolveLazySchema(schema) as PublicSchema<unknown> | undefined);
+  if (jsonSchema === undefined) return undefined;
+  return stringify(jsonSchema);
+}
+
+/**
+ * Searches dynamically-resolved agent tools (provided via `toolsResolver` /
+ * function-based `tools`) for a tool with the given id. Used as a fallback
+ * after the static tool registry (`registeredTools` + `mastra.getToolById`)
+ * misses, so global tool routes can resolve tools that only exist on agents.
+ *
+ * Errors thrown by an individual agent's `listTools()` are logged and
+ * skipped so a single broken resolver doesn't take down the whole lookup.
+ */
+async function findToolInAgents(mastra: any, toolId: string, requestContext: any): Promise<any | undefined> {
+  const agents = mastra.listAgents() || {};
+  for (const agent of Object.values(agents) as any[]) {
+    try {
+      const agentTools = await agent.listTools({ requestContext });
+      const found = Object.values(agentTools || {}).find((t: any) => t.id === toolId);
+      if (found) return found;
+    } catch (error) {
+      mastra.getLogger?.()?.warn?.('Failed to list tools for agent while resolving tool by id', {
+        agentId: agent?.id,
+        toolId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+  return undefined;
 }
 
 /**
@@ -43,8 +83,8 @@ function serializeTool(tool: any): any {
   // have lazy inputSchema functions that return AI SDK Schema objects, not Zod schemas.
   // We resolve them and use the jsonSchema property directly.
   if (isProviderDefinedTool(tool)) {
-    const resolvedInput = resolveSchema(tool.inputSchema);
-    const resolvedOutput = resolveSchema(tool.outputSchema);
+    const resolvedInput = resolveLazySchema(tool.inputSchema);
+    const resolvedOutput = resolveLazySchema(tool.outputSchema);
     return {
       ...tool,
       inputSchema:
@@ -60,9 +100,9 @@ function serializeTool(tool: any): any {
 
   return {
     ...tool,
-    inputSchema: tool.inputSchema ? stringify(zodToJsonSchema(tool.inputSchema)) : undefined,
-    outputSchema: tool.outputSchema ? stringify(zodToJsonSchema(tool.outputSchema)) : undefined,
-    requestContextSchema: tool.requestContextSchema ? stringify(zodToJsonSchema(tool.requestContextSchema)) : undefined,
+    inputSchema: serializeSchema(tool.inputSchema),
+    outputSchema: serializeSchema(tool.outputSchema),
+    requestContextSchema: serializeSchema(tool.requestContextSchema),
   };
 }
 
@@ -79,10 +119,34 @@ export const LIST_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, registeredTools }) => {
+  handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
-      const allTools =
-        registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : mastra.listTools() || {};
+      // Merge tools from two sources: mastra.listTools() includes dynamically created tools
+      // (e.g. MCP tools, or agent tools registered by their intrinsic id), while registeredTools
+      // includes tools discovered by the CLI bundler (keyed by export name).
+      //
+      // The same tool instance can appear in both maps under different keys (e.g. an agent
+      // registers it by `tool.id` while the bundler registers it by export name). Dedupe by
+      // `tool.id`, preferring the registeredTools (bundler) key, so each tool appears once.
+      const registered = registeredTools && Object.keys(registeredTools).length > 0 ? registeredTools : {};
+
+      const allTools: Record<string, any> = {};
+      const seenToolIds = new Map<string, string>();
+
+      // registeredTools first so their key wins for a given tool.id.
+      for (const [key, tool] of Object.entries(registered)) {
+        const toolId = typeof (tool as any)?.id === 'string' ? (tool as any).id : undefined;
+        if (toolId !== undefined) seenToolIds.set(toolId, key);
+        allTools[key] = tool;
+      }
+
+      for (const [key, tool] of Object.entries(mastra.listTools() ?? {})) {
+        const toolId = typeof (tool as any)?.id === 'string' ? (tool as any).id : undefined;
+        // Skip if this exact tool.id was already registered (under any key) by registeredTools.
+        if (toolId !== undefined && seenToolIds.has(toolId)) continue;
+        if (toolId !== undefined) seenToolIds.set(toolId, key);
+        allTools[key] = tool;
+      }
 
       const serializedTools = Object.entries(allTools).reduce(
         (acc, [id, _tool]) => {
@@ -91,6 +155,20 @@ export const LIST_TOOLS_ROUTE = createRoute({
         },
         {} as Record<string, any>,
       );
+
+      // Filter tools by FGA if configured
+      const fgaProvider = mastra.getServer?.()?.fga;
+      const user = requestContext?.get('user');
+      if (fgaProvider && user) {
+        const toolList = Object.entries(serializedTools).map(([id, t]) => ({ id, ...t }));
+        const accessible = await fgaProvider.filterAccessible(user, toolList, 'tool', MastraFGAPermissions.TOOLS_READ);
+        const accessibleSet = new Set(accessible.map((t: any) => t.id));
+        for (const id of Object.keys(serializedTools)) {
+          if (!accessibleSet.has(id)) {
+            delete serializedTools[id];
+          }
+        }
+      }
 
       return serializedTools;
     } catch (error) {
@@ -109,15 +187,25 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
   requiresAuth: true,
-  handler: async ({ mastra, registeredTools, toolId }) => {
+  handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
       let tool: any;
 
       // Try explicit registeredTools first, then fallback to mastra
       if (registeredTools && Object.keys(registeredTools).length > 0) {
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      } else {
-        tool = mastra.getToolById(toolId);
+      }
+      if (!tool) {
+        try {
+          tool = mastra.getToolById(toolId);
+        } catch {
+          // tool not found in global registry, continue to agent fallback
+        }
+      }
+
+      // Fallback: search dynamically-resolved agent tools (toolsResolver)
+      if (!tool) {
+        tool = await findToolInAgents(mastra, toolId, requestContext);
       }
 
       if (!tool) {
@@ -154,8 +242,18 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
       // Try explicit registeredTools first, then fallback to mastra
       if (registeredTools && Object.keys(registeredTools).length > 0) {
         tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      } else {
-        tool = mastra.getToolById(toolId);
+      }
+      if (!tool) {
+        try {
+          tool = mastra.getToolById(toolId);
+        } catch {
+          // tool not found in global registry, continue to agent fallback
+        }
+      }
+
+      // Fallback: search dynamically-resolved agent tools (toolsResolver)
+      if (!tool) {
+        tool = await findToolInAgents(mastra, toolId, requestContext);
       }
 
       if (!tool) {

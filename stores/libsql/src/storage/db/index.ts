@@ -18,6 +18,7 @@ import {
   prepareStatement,
   prepareUpdateStatement,
 } from './utils';
+import { withClientWriteLock } from './write-lock';
 
 /**
  * Base configuration options shared across LibSQL domain configurations
@@ -34,7 +35,23 @@ export type LibSQLDomainBaseConfig = {
    * @default 100
    */
   initialBackoffMs?: number;
+  /**
+   * SQLite `busy_timeout` (in milliseconds) applied to the underlying connection
+   * for local (`file:`/`:memory:`) databases. Lets a write wait for a lock to
+   * clear instead of failing immediately with `SQLITE_BUSY`. Requires
+   * `@libsql/client` >= 0.17.4 (see libsql-client-ts#288/#345). Ignored when an
+   * existing `client` is supplied.
+   * @default 5000
+   */
+  connectionTimeoutMs?: number;
 };
+
+/**
+ * Default SQLite `busy_timeout` (ms) for local LibSQL connections. Chosen to
+ * comfortably exceed the write-retry backoff window so contended writes block
+ * briefly rather than surfacing as `SQLITE_BUSY` errors.
+ */
+export const DEFAULT_CONNECTION_TIMEOUT_MS = 5000;
 
 /**
  * Configuration for LibSQL domains - accepts either credentials or an existing client
@@ -62,10 +79,26 @@ export function resolveClient(config: LibSQLDomainConfig): Client {
   if ('client' in config) {
     return config.client;
   }
+  const isLocal = config.url.startsWith('file:') || config.url.includes(':memory:');
+  const timeout = config.connectionTimeoutMs ?? DEFAULT_CONNECTION_TIMEOUT_MS;
   return createClient({
     url: config.url,
     ...(config.authToken ? { authToken: config.authToken } : {}),
+    // Only local sqlite3 connections honor `busy_timeout`; remote contention is
+    // resolved server-side, so passing it there is meaningless.
+    ...(isLocal ? { timeout } : {}),
   });
+}
+
+/**
+ * Guard prune batch limits: a non-positive limit deletes nothing while callers'
+ * drain checks (`affected < limit`) never fire, which turns the prune loop into
+ * an infinite spin. Fail loudly instead.
+ */
+function assertPositiveLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error(`prune limit must be a positive integer; received ${limit}`);
+  }
 }
 
 export class LibSQLDB extends MastraBase {
@@ -182,11 +215,13 @@ export class LibSQLDB extends MastraBase {
     // Filter out columns that don't exist in the actual database table
     const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
     if (Object.keys(filteredRecord).length === 0) return; // No known columns after filtering - skip insert
-    await this.client.execute(
-      prepareStatement({
-        tableName,
-        record: filteredRecord,
-      }),
+    await withClientWriteLock(this.client, () =>
+      this.client.execute(
+        prepareStatement({
+          tableName,
+          record: filteredRecord,
+        }),
+      ),
     );
   }
 
@@ -216,7 +251,9 @@ export class LibSQLDB extends MastraBase {
     // Filter out columns that don't exist in the actual database table
     const filteredData = await this.filterRecordToKnownColumns(tableName, data);
     if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
-    await this.client.execute(prepareUpdateStatement({ tableName, updates: filteredData, keys }));
+    await withClientWriteLock(this.client, () =>
+      this.client.execute(prepareUpdateStatement({ tableName, updates: filteredData, keys })),
+    );
   }
 
   /**
@@ -248,7 +285,7 @@ export class LibSQLDB extends MastraBase {
     const nonEmptyRecords = filteredRecords.filter(r => Object.keys(r).length > 0);
     if (nonEmptyRecords.length === 0) return;
     const batchStatements = nonEmptyRecords.map(r => prepareStatement({ tableName, record: r }));
-    await this.client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
   /**
@@ -312,7 +349,7 @@ export class LibSQLDB extends MastraBase {
       }),
     );
 
-    await this.client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
   /**
@@ -369,7 +406,7 @@ export class LibSQLDB extends MastraBase {
       }),
     );
 
-    await this.client.batch(batchStatements, 'write');
+    await withClientWriteLock(this.client, () => this.client.batch(batchStatements, 'write'));
   }
 
   /**
@@ -410,7 +447,7 @@ export class LibSQLDB extends MastraBase {
    * Internal single-record delete implementation without retry logic.
    */
   private async doDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any> }): Promise<void> {
-    await this.client.execute(prepareDeleteStatement({ tableName, keys }));
+    await withClientWriteLock(this.client, () => this.client.execute(prepareDeleteStatement({ tableName, keys })));
   }
 
   /**
@@ -698,15 +735,21 @@ export class LibSQLDB extends MastraBase {
 
     try {
       // Add any columns from current schema that don't exist in the database
+      const existingColumnsRaw = await this.getTableColumns(TABLE_SPANS);
+      const existingColumns = new Set([...existingColumnsRaw].map(column => column.toLowerCase()));
+      let addedColumns = false;
       for (const [columnName, columnDef] of Object.entries(schema)) {
-        const columnExists = await this.hasColumn(TABLE_SPANS, columnName);
-        if (!columnExists) {
+        if (!existingColumns.has(columnName.toLowerCase())) {
           const sqlType = this.getSqlType(columnDef.type);
           // For new columns, use nullable (no default needed) since existing rows will have NULL
           const alterSql = `ALTER TABLE "${TABLE_SPANS}" ADD COLUMN "${columnName}" ${sqlType}`;
           await this.client.execute(alterSql);
+          addedColumns = true;
           this.logger.debug(`LibSQLDB: Added column '${columnName}' to ${TABLE_SPANS}`);
         }
+      }
+      if (addedColumns) {
+        this.tableColumnsCache.delete(TABLE_SPANS);
       }
 
       // Check if unique index already exists - if so, skip migration
@@ -1053,7 +1096,7 @@ export class LibSQLDB extends MastraBase {
   async deleteData({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
     try {
-      await this.client.execute(`DELETE FROM ${parsedTableName}`);
+      await withClientWriteLock(this.client, () => this.client.execute(`DELETE FROM ${parsedTableName}`));
     } catch (e) {
       const mastraError = new MastraError(
         {
@@ -1069,5 +1112,130 @@ export class LibSQLDB extends MastraBase {
       this.logger?.trackException?.(mastraError);
       this.logger?.error?.(mastraError.toString());
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Retention helpers (prune)
+  //
+  // Low-level SQL primitives the memory and observability domains build their
+  // `prune()` on, plus a plain user-invoked `VACUUM`. Keeping the SQL here
+  // reuses the existing write-lock + retry machinery and keeps identifier
+  // parsing in one place.
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Delete up to `limit` of the oldest rows whose `column` timestamp is strictly
+   * before `cutoffMs`, in a single bounded statement. Returns the number of rows
+   * removed so the caller can decide whether more batches remain.
+   *
+   * Deletes by `rowid` so the range scan is bounded by LIMIT and the write set
+   * stays small — short locks, bounded WAL growth. Requires an index on
+   * `column` to be fast at scale (see ensureIndex).
+   */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    /**
+     * Exclusive upper bound for the anchor column. Must match the column's
+     * stored type — the memory/observability timestamp anchors are stored as
+     * ISO-8601 strings, which sort lexicographically in chronological order, so
+     * the caller passes an ISO string cutoff.
+     */
+    cutoff: string | number;
+    limit: number;
+  }): Promise<number> {
+    assertPositiveLimit(limit);
+    const parsedTable = parseSqlIdentifier(tableName, 'table name');
+    const parsedColumn = parseSqlIdentifier(column, 'column name');
+    const sql = `DELETE FROM "${parsedTable}" WHERE rowid IN (SELECT rowid FROM "${parsedTable}" WHERE "${parsedColumn}" < ? LIMIT ?)`;
+    const result = await this.executeWriteOperationWithRetry(
+      () => withClientWriteLock(this.client, () => this.client.execute({ sql, args: [cutoff, limit] })),
+      `prune ${tableName}`,
+    );
+    return Number(result.rowsAffected ?? 0);
+  }
+
+  /**
+   * Delete up to `limit` aged parent rows *and* their child rows together, in a
+   * single transaction. Used for whole-unit (parent-driven) pruning where
+   * children must die with their parent (e.g. an aged experiment and its
+   * experiment_results) — deleting per unit means a bound or abort between
+   * batches never leaves a parent hollow (kept, but with its children gone) or
+   * children orphaned.
+   *
+   * Both deletes target the same parent set via an identical deterministic
+   * subquery (`ORDER BY rowid LIMIT ?`); the batch runs as one write
+   * transaction, so the set cannot change between the two statements.
+   */
+  async pruneUnitsBatch({
+    parentTable,
+    parentKey,
+    parentColumn,
+    childTable,
+    childForeignKey,
+    cutoff,
+    limit,
+  }: {
+    parentTable: TABLE_NAMES;
+    parentKey: string;
+    parentColumn: string;
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
+    cutoff: string | number;
+    limit: number;
+  }): Promise<{ parents: number; children: number }> {
+    assertPositiveLimit(limit);
+    const parsedChild = parseSqlIdentifier(childTable, 'table name');
+    const parsedChildFk = parseSqlIdentifier(childForeignKey, 'column name');
+    const parsedParent = parseSqlIdentifier(parentTable, 'table name');
+    const parsedParentKey = parseSqlIdentifier(parentKey, 'column name');
+    const parsedParentColumn = parseSqlIdentifier(parentColumn, 'column name');
+    const agedParents =
+      `SELECT "${parsedParentKey}" FROM "${parsedParent}" ` +
+      `WHERE "${parsedParentColumn}" < ? ORDER BY rowid LIMIT ?`;
+    const results = await this.executeWriteOperationWithRetry(
+      () =>
+        withClientWriteLock(this.client, () =>
+          this.client.batch(
+            [
+              {
+                sql: `DELETE FROM "${parsedChild}" WHERE "${parsedChildFk}" IN (${agedParents})`,
+                args: [cutoff, limit],
+              },
+              {
+                sql: `DELETE FROM "${parsedParent}" WHERE "${parsedParentKey}" IN (${agedParents})`,
+                args: [cutoff, limit],
+              },
+            ],
+            'write',
+          ),
+        ),
+      `prune units ${parentTable}`,
+    );
+    return {
+      children: Number(results[0]?.rowsAffected ?? 0),
+      parents: Number(results[1]?.rowsAffected ?? 0),
+    };
+  }
+
+  /** Create an index if it does not already exist. */
+  async ensureIndex({
+    indexName,
+    tableName,
+    column,
+  }: {
+    indexName: string;
+    tableName: TABLE_NAMES;
+    column: string;
+  }): Promise<void> {
+    const parsedTable = parseSqlIdentifier(tableName, 'table name');
+    const parsedColumn = parseSqlIdentifier(column, 'column name');
+    const parsedIndex = parseSqlIdentifier(indexName, 'index name');
+    await this.client.execute(`CREATE INDEX IF NOT EXISTS "${parsedIndex}" ON "${parsedTable}" ("${parsedColumn}")`);
   }
 }

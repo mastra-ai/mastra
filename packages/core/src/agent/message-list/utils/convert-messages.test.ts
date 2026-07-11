@@ -101,6 +101,53 @@ describe('convertMessages', () => {
     });
   });
 
+  // Regression for issue #17218: a declined approval is stored as `state: 'output-denied'`.
+  // AI SDK v4 has no denied state and requires every tool invocation to carry a result, so
+  // converting to AIV4.Core (used by the agent's onFinish memory save) used to throw
+  // "ToolInvocation must have a result". It must downgrade to a result whose value is the reason.
+  describe('Mastra V2 output-denied tool invocation', () => {
+    const deniedMessage: MastraDBMessage = {
+      id: 'assistant-denied',
+      role: 'assistant',
+      createdAt: new Date(),
+      content: {
+        format: 2,
+        parts: [
+          {
+            type: 'tool-invocation',
+            toolInvocation: {
+              state: 'output-denied',
+              toolCallId: 'call-1',
+              toolName: 'findUserTool',
+              args: { name: 'Dero Israel' },
+              approval: { id: 'call-1', approved: false, reason: 'Tool call was not approved by the user' },
+            },
+          },
+          { type: 'text', text: 'All done.' },
+        ],
+      },
+    };
+
+    it('converts to AIV4.Core without throwing, using the decline reason as the result', () => {
+      const result = convertMessages(deniedMessage).to('AIV4.Core');
+      const toolMessage = result.find(m => m.role === 'tool');
+      expect(toolMessage).toBeDefined();
+      expect(toolMessage?.content).toMatchObject([
+        { type: 'tool-result', toolCallId: 'call-1', result: 'Tool call was not approved by the user' },
+      ]);
+    });
+
+    it('converts to AIV4.UI as an output-available tool part carrying the reason', () => {
+      const [uiMessage] = convertMessages(deniedMessage).to('AIV4.UI');
+      const toolPart = (uiMessage.parts ?? []).find((p: any) => p.type === 'tool-invocation') as any;
+      expect(toolPart?.toolInvocation).toMatchObject({
+        state: 'result',
+        toolCallId: 'call-1',
+        result: 'Tool call was not approved by the user',
+      });
+    });
+  });
+
   describe('Multiple messages', () => {
     const messages: AIV4.UIMessage[] = [
       {
@@ -165,9 +212,6 @@ describe('convertMessages', () => {
   });
 
   describe('data-* parts preservation', () => {
-    // Test for issue #10936 and #10477: data-* parts should survive the round-trip
-    // Stream → Storage → UI conversion
-
     const mastraV2MessageWithDataParts: MastraDBMessage = {
       id: 'test-data-parts',
       role: 'assistant',
@@ -226,27 +270,64 @@ describe('convertMessages', () => {
     });
 
     it('should preserve data-* parts when converting Mastra V2 to AIV4 UI', () => {
-      // Note: AIV4 doesn't natively support data-* parts, but we should not lose them
-      // The filterDataParts function filters them out for V4 type compatibility
-      // This test documents the current behavior - data-* parts ARE filtered for V4
       const result = convertMessages(mastraV2MessageWithDataParts).to('AIV4.UI');
 
       expect(result).toHaveLength(1);
       expect(result[0].role).toBe('assistant');
 
-      // Text part should be preserved
       const textPart = result[0].parts.find(p => p.type === 'text');
       expect(textPart).toBeDefined();
 
-      // Data parts are filtered out in V4 conversion (current behavior)
-      // If we want to preserve them, we'd need to update filterDataParts
-      const progressPart = result[0].parts.find(p => p.type === 'data-progress');
-      const fileRefPart = result[0].parts.find(p => p.type === 'data-file-reference');
+      const progressPart = result[0].parts.find((p: any) => p.type === 'data-progress');
+      expect(progressPart).toBeDefined();
+      expect((progressPart as any).data).toEqual({
+        taskName: 'file-upload',
+        progress: 50,
+        status: 'in-progress',
+      });
 
-      // Current behavior: data-* parts are filtered out for AIV4.UI
-      // This is intentional for type safety, but users may want them preserved
-      expect(progressPart).toBeUndefined();
-      expect(fileRefPart).toBeUndefined();
+      const fileRefPart = result[0].parts.find((p: any) => p.type === 'data-file-reference');
+      expect(fileRefPart).toBeDefined();
+      expect((fileRefPart as any).data).toEqual({
+        fileId: 'file-123',
+        fileName: 'document.pdf',
+      });
+    });
+
+    it('should preserve data-tool-call-suspended parts for HITL workflow resume', () => {
+      const suspendedMessage: MastraDBMessage = {
+        id: 'test-suspended',
+        role: 'assistant',
+        createdAt: new Date(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Waiting for approval...' },
+            {
+              type: 'data-tool-call-suspended',
+              data: {
+                runId: 'run-abc-123',
+                toolCallId: 'tc-xyz-456',
+                suspendPayload: { question: 'Approve this action?' },
+                resumeSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+              },
+            } as any,
+          ],
+          content: 'Waiting for approval...',
+        },
+      };
+
+      const result = convertMessages(suspendedMessage).to('AIV4.UI');
+
+      expect(result).toHaveLength(1);
+      const suspendedPart = result[0].parts.find((p: any) => p.type === 'data-tool-call-suspended');
+      expect(suspendedPart).toBeDefined();
+      expect((suspendedPart as any).data).toEqual({
+        runId: 'run-abc-123',
+        toolCallId: 'tc-xyz-456',
+        suspendPayload: { question: 'Approve this action?' },
+        resumeSchema: { type: 'object', properties: { approved: { type: 'boolean' } } },
+      });
     });
 
     it('should preserve data-* parts in Mastra V2 round-trip', () => {

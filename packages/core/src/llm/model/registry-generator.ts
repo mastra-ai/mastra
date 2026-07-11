@@ -5,7 +5,39 @@
 
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { MastraModelGateway, ProviderConfig } from './gateways/base.js';
+import type {
+  AttachmentCapabilities,
+  MastraModelGatewayInterface,
+  ProviderConfig,
+  TemperatureCapabilities,
+} from './gateways/base.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
+
+interface GatewayWithAttachmentCapabilities {
+  getAttachmentCapabilities(): AttachmentCapabilities;
+}
+
+interface GatewayWithTemperatureCapabilities {
+  getTemperatureCapabilities(): TemperatureCapabilities;
+}
+
+function hasAttachmentCapabilities(
+  gateway: MastraModelGatewayInterface,
+): gateway is MastraModelGatewayInterface & GatewayWithAttachmentCapabilities {
+  return (
+    'getAttachmentCapabilities' in gateway &&
+    typeof (gateway as { getAttachmentCapabilities?: unknown }).getAttachmentCapabilities === 'function'
+  );
+}
+
+function hasTemperatureCapabilities(
+  gateway: MastraModelGatewayInterface,
+): gateway is MastraModelGatewayInterface & GatewayWithTemperatureCapabilities {
+  return (
+    'getTemperatureCapabilities' in gateway &&
+    typeof (gateway as { getTemperatureCapabilities?: unknown }).getTemperatureCapabilities === 'function'
+  );
+}
 
 /**
  * Write a file atomically using the write-to-temp-then-rename pattern.
@@ -46,63 +78,97 @@ export async function atomicWriteFile(
 }
 
 /**
- * Fetch providers from all gateways with retry logic
+ * Fetch providers from all enabled gateways with silent retry logic.
+ * Retries up to 3 times per gateway with exponential backoff. If all
+ * retries are exhausted the gateway is silently skipped (no error logging)
+ * since the bundled registry already contains all model data.
  * @param gateways - Array of gateway instances to fetch from
  * @returns Object containing providers and models records
  */
-export async function fetchProvidersFromGateways(
-  gateways: MastraModelGateway[],
-): Promise<{ providers: Record<string, ProviderConfig>; models: Record<string, string[]> }> {
+export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInterface[]): Promise<{
+  providers: Record<string, ProviderConfig>;
+  models: Record<string, string[]>;
+  attachmentCapabilities: AttachmentCapabilities;
+  temperatureCapabilities: TemperatureCapabilities;
+  failedGateways: string[];
+}> {
+  const enabledGateways: MastraModelGatewayInterface[] = [];
+
+  for (const gateway of gateways) {
+    if (shouldEnableGateway(gateway)) {
+      enabledGateways.push(gateway);
+    }
+  }
+
   const allProviders: Record<string, ProviderConfig> = {};
   const allModels: Record<string, string[]> = {};
+  const allAttachmentCapabilities: AttachmentCapabilities = {};
+  const allTemperatureCapabilities: TemperatureCapabilities = {};
+  const failedGateways: string[] = [];
 
   const maxRetries = 3;
 
-  for (const gateway of gateways) {
-    let lastError: Error | null = null;
+  for (const gateway of enabledGateways) {
+    let providers: Record<string, ProviderConfig> | null = null;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        const providers = await gateway.fetchProviders();
-
-        // models.dev is a provider registry, not a true gateway - don't prefix its providers
-        const isProviderRegistry = gateway.id === 'models.dev';
-
-        for (const [providerId, config] of Object.entries(providers)) {
-          // For true gateways, use gateway.id as prefix (e.g., "netlify/anthropic")
-          // Special case: if providerId matches gateway.id, it's a unified gateway (e.g., azure-openai returning {azure-openai: {...}})
-          // In this case, use just the gateway ID to avoid duplication (azure-openai, not azure-openai/azure-openai)
-          const typeProviderId = isProviderRegistry
-            ? providerId
-            : providerId === gateway.id
-              ? gateway.id
-              : `${gateway.id}/${providerId}`;
-
-          allProviders[typeProviderId] = config;
-          // Sort models alphabetically for consistent ordering
-          allModels[typeProviderId] = config.models.sort();
-        }
-
-        lastError = null;
-        break; // Success, exit retry loop
-      } catch (error) {
-        lastError = error instanceof Error ? error : new Error(String(error));
-
+        providers = await gateway.fetchProviders();
+        break;
+      } catch {
         if (attempt < maxRetries) {
-          // Wait before retrying (exponential backoff)
           const delayMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
           await new Promise(resolve => setTimeout(resolve, delayMs));
         }
       }
     }
 
-    // If all retries failed, throw the last error
-    if (lastError) {
-      throw lastError;
+    if (!providers) {
+      failedGateways.push(getGatewayId(gateway));
+      continue;
+    }
+
+    const gatewayId = getGatewayId(gateway);
+    // models.dev is a provider registry, not a true gateway - don't prefix its providers
+    const isProviderRegistry = gatewayId === 'models.dev';
+
+    // Collect capabilities if the gateway exposes them
+    const gatewayAttachmentCaps = hasAttachmentCapabilities(gateway) ? gateway.getAttachmentCapabilities() : undefined;
+    const gatewayTemperatureCaps = hasTemperatureCapabilities(gateway)
+      ? gateway.getTemperatureCapabilities()
+      : undefined;
+
+    for (const [providerId, config] of Object.entries(providers)) {
+      // For true gateways, use gateway id as prefix (e.g., "netlify/anthropic")
+      // Special case: if providerId matches gateway id, it's a unified gateway (e.g., azure-openai returning {azure-openai: {...}})
+      // In this case, use just the gateway ID to avoid duplication (azure-openai, not azure-openai/azure-openai)
+      const typeProviderId = isProviderRegistry
+        ? providerId
+        : providerId === gatewayId
+          ? gatewayId
+          : `${gatewayId}/${providerId}`;
+
+      allProviders[typeProviderId] = config;
+      // Sort models alphabetically for consistent ordering
+      allModels[typeProviderId] = config.models.sort();
+
+      // Merge capabilities for this provider if available
+      if (gatewayAttachmentCaps?.[providerId]) {
+        allAttachmentCapabilities[typeProviderId] = gatewayAttachmentCaps[providerId];
+      }
+      if (gatewayTemperatureCaps?.[providerId]) {
+        allTemperatureCapabilities[typeProviderId] = gatewayTemperatureCaps[providerId];
+      }
     }
   }
 
-  return { providers: allProviders, models: allModels };
+  return {
+    providers: allProviders,
+    models: allModels,
+    attachmentCapabilities: allAttachmentCapabilities,
+    temperatureCapabilities: allTemperatureCapabilities,
+    failedGateways,
+  };
 }
 
 /**
@@ -167,6 +233,7 @@ export type ModelRouterModelId =
   | {
       [P in Provider]: \`\${P}/\${ProviderModelsMap[P][number]}\`;
     }[Provider]
+  | \`mastra/\${ProviderModelsMap['openrouter'][number]}\`
   | (string & {});
 
 /**
@@ -190,6 +257,8 @@ export async function writeRegistryFiles(
   typesPath: string,
   providers: Record<string, ProviderConfig>,
   models: Record<string, string[]>,
+  attachmentCapabilities?: AttachmentCapabilities,
+  temperatureCapabilities?: TemperatureCapabilities,
 ): Promise<void> {
   // 0. Ensure directories exist
   const jsonDir = path.dirname(jsonPath);
@@ -209,4 +278,40 @@ export async function writeRegistryFiles(
   // 2. Generate .d.ts file with type-only declarations (also atomic)
   const typeContent = generateTypesContent(models);
   await atomicWriteFile(typesPath, typeContent, 'utf-8');
+
+  // 3. Write per-provider capability files into a capabilities/ directory
+  const hasCapabilities =
+    (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) ||
+    (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0);
+  if (hasCapabilities) {
+    const capDir = path.join(jsonDir, 'capabilities');
+    await fs.mkdir(capDir, { recursive: true });
+
+    // Clean out stale provider files from previous runs
+    try {
+      const existing = await fs.readdir(capDir);
+      for (const file of existing) {
+        if (file.endsWith('.json')) {
+          await fs.unlink(path.join(capDir, file));
+        }
+      }
+    } catch {
+      // Directory may not exist yet — ignore
+    }
+
+    // Build a merged capability object per provider
+    const allProviderIds = new Set([
+      ...(attachmentCapabilities ? Object.keys(attachmentCapabilities) : []),
+      ...(temperatureCapabilities ? Object.keys(temperatureCapabilities) : []),
+    ]);
+
+    for (const provider of allProviderIds) {
+      const capData: Record<string, string[]> = {};
+      if (attachmentCapabilities?.[provider]) capData.attachment = attachmentCapabilities[provider];
+      if (temperatureCapabilities?.[provider]) capData.temperature = temperatureCapabilities[provider];
+
+      const providerFile = path.join(capDir, `${provider}.json`);
+      await atomicWriteFile(providerFile, JSON.stringify(capData, null, 2), 'utf-8');
+    }
+  }
 }

@@ -50,11 +50,7 @@ export const testMcpClient = new MCPClient({
 })
 ```
 
-:::info
-
 Visit [MCPClient](/reference/tools/mcp-client) for a full list of configuration options.
-
-:::
 
 :::tip Authentication
 
@@ -80,16 +76,29 @@ export const testAgent = new Agent({
       - US National Weather Service
 
       Answer questions using the information you find using the MCP Servers.`,
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   tools: await testMcpClient.listTools(),
 })
 ```
 
-:::info
-
 Visit [Agent Class](/reference/agents/agent) for a full list of configuration options.
 
-:::
+## Tool approval
+
+You can require human approval before MCP tools are executed by setting `requireToolApproval` on a server definition. This integrates with the existing [human-in-the-loop](/docs/workflows/human-in-the-loop) approval flow.
+
+```typescript
+export const mcp = new MCPClient({
+  servers: {
+    github: {
+      url: new URL('http://localhost:3000/mcp'),
+      requireToolApproval: true,
+    },
+  },
+})
+```
+
+You can also pass a function to decide dynamically per-call. See the [MCPClient reference](/reference/tools/mcp-client#tool-approval) for the full API.
 
 ## Configuring `MCPServer`
 
@@ -112,11 +121,7 @@ export const testMcpServer = new MCPServer({
 })
 ```
 
-:::info
-
 Visit [MCPServer](/reference/tools/mcp-server) for a full list of configuration options.
-
-:::
 
 :::tip Authentication
 
@@ -151,13 +156,7 @@ export const mastra = new Mastra({
 
 ### Static tools
 
-Use the `.listTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent.
-
-:::info
-
-Visit [listTools()](/reference/tools/mcp-client#listtools) for more information.
-
-:::
+Use the `.listTools()` method to fetch tools from all configured MCP servers. This is suitable when configuration (such as API keys) is static and consistent across users or requests. Call it once and pass the result to the `tools` property when defining your agent. Visit [listTools()](/reference/tools/mcp-client#listtools) for more information.
 
 ```typescript {6} title="src/mastra/agents/test-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -206,11 +205,7 @@ async function handleRequest(userPrompt: string, userApiKey: string) {
 }
 ```
 
-:::info
-
 Visit [listToolsets()](/reference/tools/mcp-client#listtoolsets) for more information.
-
-:::
 
 ## Connecting to an MCP registry
 
@@ -334,6 +329,31 @@ MCP servers can be discovered through registries. Here's how to connect to some 
     ```
   </TabItem>
 
+  <TabItem value="apify" label="Apify">
+    [Apify](https://apify.com) is the largest marketplace of tools for AI, with thousands of ready-made [Actors](https://apify.com/store) to extract real-time data from any website, track competitors, generate leads, analyze sentiment, or orchestrate your apps. Connect your agent through the [Apify MCP Server](https://mcp.apify.com).
+
+    ```typescript
+    import { MCPClient } from '@mastra/mcp'
+
+    export const mcp = new MCPClient({
+      servers: {
+        apify: {
+          url: new URL('https://mcp.apify.com'),
+          requestInit: {
+            headers: {
+              Authorization: `Bearer ${process.env.APIFY_TOKEN}`,
+            },
+          },
+        },
+      },
+    })
+    ```
+
+    Get your API token from the [Apify Console](https://console.apify.com/settings/integrations) and store it as `APIFY_TOKEN` in your environment.
+
+    To pick specific Actors and tools, use the [Apify MCP server configurator](https://mcp.apify.com) and copy the generated URL.
+  </TabItem>
+
   <TabItem value="ampersand" label="Ampersand">
     [Ampersand](https://withampersand.com?utm_source=mastra-docs) offers an [MCP Server](https://docs.withampersand.com/mcp) that allows you to connect your agent to 150+ integrations with SaaS products like Salesforce, Hubspot, and Zendesk.
 
@@ -386,8 +406,13 @@ MCP servers can be discovered through registries. Here's how to connect to some 
   </TabItem>
 </Tabs>
 
+## MCP Apps
+
+MCP servers can serve interactive HTML UIs via the MCP Apps extension. Tools with associated `ui://` resources render sandboxed iframes in Studio — both on tool detail pages and inline in agent chat. The app iframe can call server tools and inject messages into the conversation. Visit [MCP Apps](/docs/mcp/mcp-apps) for setup instructions and the app bridge API.
+
 ## Related
 
+- [MCP Apps](/docs/mcp/mcp-apps)
 - [Using Tools](/docs/agents/using-tools)
 - [MCPClient](/reference/tools/mcp-client)
 - [MCPServer](/reference/tools/mcp-server)

@@ -1,6 +1,6 @@
-import { Agent } from '@mastra/core/agent';
+import { Agent, createMessageSignal, createSignal } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core';
-import { Mock, vi } from 'vitest';
+import { expect, Mock, vi } from 'vitest';
 import { Workflow } from '@mastra/core/workflows';
 import { normalizeRoutePath } from './route-test-utils';
 import { createScorer } from '@mastra/core/evals';
@@ -10,6 +10,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { MastraVector } from '@mastra/core/vector';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { UnknownToolProviderError } from '@mastra/core/tool-provider';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
 import type { ZodTypeAny } from 'zod';
 import { ServerRoute, WorkflowRegistry } from '@mastra/server/server-adapter';
@@ -177,6 +178,9 @@ export function mockAgentMethods(agent: Agent) {
   // Mock stream method - returns object with fullStream property
   vi.spyOn(agent, 'stream').mockResolvedValue({ fullStream: createMockStream() } as any);
 
+  // Mock resumeStream method - returns object with fullStream property
+  vi.spyOn(agent, 'resumeStream').mockResolvedValue({ fullStream: createMockStream() } as any);
+
   // Mock legacy generate - returns GenerateTextResult (JSON object, not stream)
   vi.spyOn(agent, 'generateLegacy').mockResolvedValue({
     text: 'test response',
@@ -225,8 +229,50 @@ export function mockAgentMethods(agent: Agent) {
   // Mock declineToolCallGenerate method - returns same format as generate
   vi.spyOn(agent, 'declineToolCallGenerate').mockResolvedValue({ text: 'test response' } as any);
 
+  vi.spyOn(agent, 'sendToolApproval').mockResolvedValue({
+    accepted: true,
+    runId: 'test-run',
+    toolCallId: 'test-tool',
+  } as any);
+
   // Mock network method
   vi.spyOn(agent, 'network').mockResolvedValue(createMockStream() as any);
+
+  vi.spyOn(agent, 'sendSignal').mockImplementation((signal: any, target: any) => {
+    const createdSignal = createSignal(signal);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'sendMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'queueMessage').mockImplementation((message: any, target: any) => {
+    const createdSignal = createMessageSignal(message);
+    const runId = target?.runId ?? 'test-run';
+    return {
+      accepted: Promise.resolve({ action: 'deliver', runId }),
+      signal: createdSignal,
+    } as any;
+  });
+
+  vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+    stream: (async function* () {
+      yield { type: 'text-delta', textDelta: 'test' };
+    })(),
+    activeRunId: () => 'test-run',
+    abort: vi.fn(() => true),
+    unsubscribe: vi.fn(),
+  } as any);
 
   // Mock getVoice to return the voice object that the handler expects
   const mockVoice = createMockVoice();
@@ -410,7 +456,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     },
   });
 
-  // Create real MCP servers with tools
+  // Create real MCP servers with tools and app resources
   const mcpServer1 = new MCPServer({
     name: 'Test Server 1',
     version: '1.0.0',
@@ -418,6 +464,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     tools: {
       getWeather: weatherTool,
       calculate: calculatorTool,
+    },
+    appResources: {
+      'ui://test/app': {
+        name: 'Test App',
+        html: '<html><body>Test</body></html>',
+      },
     },
   });
 
@@ -428,12 +480,44 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     tools: {
       failingTool: failingTool,
     },
+    appResources: {
+      'ui://test/app2': {
+        name: 'Test App 2',
+        html: '<html><body>Test 2</body></html>',
+      },
+    },
   });
 
   // Create test workspace with local filesystem and mock files
   const workspace = await createTestWorkspace();
 
   // Create Mastra instance with all test entities
+  // Mock channel provider for channel route tests
+  const mockChannelProvider = {
+    id: 'test-platform',
+    getRoutes: () => [],
+    getInfo: () => ({
+      id: 'test-platform',
+      name: 'Test Platform',
+      isConfigured: true,
+    }),
+    connect: async () => ({
+      type: 'immediate' as const,
+      installationId: 'test-installation',
+    }),
+    disconnect: async () => {},
+    listInstallations: async () => [
+      {
+        id: 'test-installation',
+        platform: 'test-platform',
+        agentId: 'test-agent',
+        status: 'active' as const,
+        displayName: 'Test Installation',
+        installedAt: new Date(),
+      },
+    ],
+  };
+
   const mastra = new Mastra({
     logger: mockLogger as unknown as IMastraLogger,
     storage: new InMemoryStore(),
@@ -453,6 +537,12 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     processors: {
       'test-processor': testProcessor,
     },
+    backgroundTasks: {
+      enabled: true,
+    },
+    channels: {
+      'test-platform': mockChannelProvider as any,
+    },
   });
 
   // Mock getEditor to return an object with namespaced methods for stored agents routes
@@ -469,6 +559,13 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     createProcessor: vi.fn(),
   };
   vi.spyOn(mastra, 'getEditor').mockReturnValue({
+    hasEnabledBuilderConfig: () => true,
+    resolveBuilder: async () => ({
+      enabled: true,
+      getFeatures: () => ({ agent: { favorites: true } }),
+      getConfiguration: () => undefined,
+      getModelPolicyWarnings: () => [],
+    }),
     prompt: {
       preview: vi.fn().mockResolvedValue('resolved instructions preview'),
       clearCache: vi.fn(),
@@ -479,6 +576,11 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     agent: {
       list: vi.fn().mockResolvedValue({ agents: [] }),
       clearCache: vi.fn(),
+      create: vi.fn().mockImplementation(async (input: any) => {
+        // Delegate to storage directly, mirroring what editor.agent.create does
+        const agents = await mastra.getStorage()!.getStore('agents');
+        return agents!.create({ agent: input });
+      }),
       clone: vi.fn().mockResolvedValue({
         id: 'cloned-agent',
         name: 'Test Agent (Clone)',
@@ -497,6 +599,10 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     getToolProvider: vi
       .fn()
       .mockImplementation((id: string) => (id === 'test-provider' ? mockToolProvider : undefined)),
+    getToolProviderOrThrow: vi.fn().mockImplementation((id: string) => {
+      if (id === 'test-provider') return mockToolProvider;
+      throw new UnknownToolProviderError(id, ['test-provider']);
+    }),
     getProcessorProviders: vi.fn().mockReturnValue({ 'test-provider': mockProcessorProvider }),
     getProcessorProvider: vi
       .fn()
@@ -519,7 +625,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     if (observability) {
       await observability.createSpan({
         span: {
-          spanId: 'test-span-1',
+          spanId: 'test-span',
           traceId: 'test-trace',
           name: 'test-span',
           spanType: SpanType.GENERIC,
@@ -657,10 +763,56 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
-    // Add test thread and messages to Mastra's storage for memory routes without agentId
-    // This is needed because when agentId is not provided, the handler falls back to storage directly
-    const memoryStore = await storage.getStore('memory');
-    if (memoryStore) {
+    const backgroundTasks = await storage.getStore('backgroundTasks');
+    if (backgroundTasks) {
+      await backgroundTasks.createTask({
+        id: 'test-background-task-id',
+        status: 'pending',
+        toolName: 'test-tool',
+        toolCallId: 'test-tool-call-id',
+        agentId: 'test-agent',
+        runId: 'test-run',
+        args: { query: 'test' },
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 300_000,
+        createdAt: new Date(),
+      });
+
+      await backgroundTasks.updateTask('test-background-task-id', {
+        status: 'running',
+        startedAt: new Date(),
+      });
+    }
+
+    const schedules = await storage.getStore('schedules');
+    if (schedules) {
+      const now = Date.now();
+      await schedules.createSchedule({
+        id: 'test-schedule',
+        target: { type: 'workflow', workflowId: 'test-workflow' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await schedules.createSchedule({
+        id: 'agent_test-agent-schedule',
+        target: { type: 'agent', agentId: 'test-agent', prompt: 'ping' },
+        cron: '* * * * *',
+        status: 'active',
+        nextFireAt: now + 60_000,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const saveStoredResponseFixtures = async (memoryStore: Awaited<ReturnType<InMemoryStore['getStore']>>) => {
+      if (!memoryStore) {
+        return;
+      }
+
       await memoryStore.saveThread({
         thread: {
           id: 'test-thread',
@@ -682,9 +834,43 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
             },
             createdAt: new Date(),
           },
+          {
+            id: 'test-response',
+            threadId: 'test-thread',
+            resourceId: 'test-resource',
+            role: 'assistant',
+            type: 'text',
+            content: {
+              format: 2,
+              parts: [{ type: 'text', text: 'Test stored response' }],
+              metadata: {
+                mastra: {
+                  response: {
+                    agentId: 'test-agent',
+                    model: 'openai/gpt-4o',
+                    createdAt: Math.floor(Date.now() / 1000),
+                    completedAt: Math.floor(Date.now() / 1000),
+                    status: 'completed',
+                    usage: null,
+                    tools: [],
+                    store: true,
+                    messageIds: ['test-message-1', 'test-response'],
+                  },
+                },
+              },
+            },
+            createdAt: new Date(),
+          },
         ],
       });
-    }
+    };
+
+    // Seed the root memory store for routes that resolve memory directly from Mastra storage.
+    await saveStoredResponseFixtures(await storage.getStore('memory'));
+
+    // Seed the agent memory store for Responses routes that now resolve stored responses
+    // through agent memory first and only inherit root storage via the agent-memory path.
+    await saveStoredResponseFixtures(await memory.storage.getStore('memory'));
   }
 
   return {
@@ -1298,6 +1484,49 @@ export function createStreamWithSensitiveData(format: 'v1' | 'v2' = 'v2'): Reada
       controller.close();
     },
   });
+}
+
+/**
+ * Creates a ReadableStream for testing per-chunk serialization error handling
+ * (https://github.com/mastra-ai/mastra/issues/17821).
+ *
+ * Emits three chunks:
+ * 1. a chunk whose payload contains a BigInt (not JSON-serializable natively — must be coerced to a string)
+ * 2. a chunk that cannot be serialized at all (throwing toJSON — must be skipped without killing the stream)
+ * 3. a final chunk that must still be delivered after the unserializable one
+ *
+ * Use {@link expectSerializedStreamChunks} to assert on the consumed result.
+ */
+export function createStreamWithUnserializableChunk(): ReadableStream {
+  return new ReadableStream({
+    start(controller) {
+      controller.enqueue({ type: 'workflow-step-result', payload: { output: { count: 42n } } });
+      controller.enqueue({
+        type: 'poison',
+        toJSON() {
+          throw new Error('cannot serialize');
+        },
+      });
+      controller.enqueue({ type: 'workflow-finish', payload: { workflowStatus: 'success' } });
+      controller.close();
+    },
+  });
+}
+
+/**
+ * Asserts the chunks consumed from {@link createStreamWithUnserializableChunk}:
+ * BigInt coerced to a string, the poison chunk skipped, and the final chunk delivered.
+ */
+export function expectSerializedStreamChunks(chunks: any[]): void {
+  const stepResult = chunks.find(c => c.type === 'workflow-step-result');
+  expect(stepResult).toBeDefined();
+  expect(stepResult.payload.output).toEqual({ count: '42' });
+
+  expect(chunks.find(c => c.type === 'poison')).toBeUndefined();
+
+  const finish = chunks.find(c => c.type === 'workflow-finish');
+  expect(finish, 'chunks after an unserializable chunk must still be delivered').toBeDefined();
+  expect(finish.payload.workflowStatus).toBe('success');
 }
 
 /**

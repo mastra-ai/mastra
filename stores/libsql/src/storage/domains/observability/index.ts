@@ -24,13 +24,28 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { transformFromSqlRow } from '../../db/utils';
+import { runPrune, resolveTargets } from '../../retention';
 
 export class ObservabilityLibSQL extends ObservabilityStorage {
+  /**
+   * Spans are the only physical table; traces are derived from them. Spans
+   * anchor on `startedAt` (not `createdAt`), stored as an ISO-8601 string.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
 
   constructor(config: LibSQLDomainConfig) {
@@ -51,6 +66,16 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_SPANS });
+  }
+
+  /** Delete spans older than the `spans` policy's `maxAge`, batched. */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityLibSQL.retentionTables,
+      order: ['spans'],
+    });
+    return runPrune({ db: this.#db, domain: 'observability', targets, options, logger: this.logger });
   }
 
   /**
@@ -204,6 +229,42 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const spans = await this.#db.selectMany<SpanRecord>({
+        tableName: TABLE_SPANS,
+        whereClause: { sql: ' WHERE traceId = ?', args: [traceId] },
+        orderBy: 'startedAt ASC',
+      });
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map(span => {
+          const transformed = transformFromSqlRow<SpanRecord>({ tableName: TABLE_SPANS, sqlRow: span });
+          const { input, output, attributes, metadata, tags, links, ...light } = transformed;
+          return light as LightSpanRecord;
+        }),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

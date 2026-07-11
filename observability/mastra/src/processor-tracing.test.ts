@@ -13,7 +13,7 @@ import type {
   TracingContext,
 } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
-import { ProcessorStepSchema } from '@mastra/core/processors';
+import { ModerationProcessor, ProcessorStepSchema } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
 import { createWorkflow, createStep } from '@mastra/core/workflows';
@@ -69,6 +69,8 @@ class ProcessorTestExporter implements ObservabilityExporter {
     this.events.push(event);
   }
 
+  async flush() {}
+
   async shutdown() {}
 
   reset() {
@@ -114,6 +116,10 @@ class ProcessorTestExporter implements ObservabilityExporter {
     return this.getSpansByType(SpanType.MODEL_STEP);
   }
 
+  getModelInferenceSpans() {
+    return this.getSpansByType(SpanType.MODEL_INFERENCE);
+  }
+
   getWorkflowStepSpans() {
     return this.getSpansByType(SpanType.WORKFLOW_STEP);
   }
@@ -157,14 +163,23 @@ class ProcessorTestExporter implements ObservabilityExporter {
     expect(timeA).toBeLessThanOrEqual(timeB);
   }
 
-  finalExpectations() {
+  async finalExpectations() {
     try {
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const incompleteSpans = Array.from(this.spanStates.values()).filter(state => !state.hasEnd);
+        if (incompleteSpans.length === 0) {
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 0));
+      }
+
       const allSpans = this.getAllSpans();
       const traceIds = [...new Set(allSpans.map(span => span?.traceId))];
       expect(traceIds).toHaveLength(1);
 
+      const completedTraceId = traceIds[0];
       const incompleteSpans = Array.from(this.spanStates.entries())
-        .filter(([_, state]) => !state.hasEnd)
+        .filter(([_, state]) => !state.hasEnd && state.events[0]?.exportedSpan.traceId === completedTraceId)
         .map(([spanId, state]) => ({ spanId, span: state.events[0]?.exportedSpan }));
 
       expect(incompleteSpans, `Found incomplete spans`).toHaveLength(0);
@@ -385,12 +400,13 @@ function createProcessorWorkflow(id: string) {
 let testExporter: ProcessorTestExporter;
 let observability: Observability;
 
-function getBaseMastraConfig(exporter: ProcessorTestExporter) {
+function getBaseMastraConfig(exporter: ProcessorTestExporter, options: Record<string, unknown> = {}) {
   observability = new Observability({
     configs: {
       test: {
         serviceName: 'processor-tracing-tests',
         exporters: [exporter],
+        ...options,
       },
     },
   });
@@ -485,7 +501,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: input processor starts before MODEL_GENERATION
       testExporter.expectStartedBefore(inputProcessorSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -546,7 +562,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: MODEL_GENERATION starts before output processor
       testExporter.expectStartedBefore(modelSpan, outputProcessorSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -630,7 +646,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(secondSpan, thirdSpan);
       testExporter.expectStartedBefore(thirdSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -695,7 +711,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(modelSpan, firstSpan);
       testExporter.expectStartedBefore(firstSpan, secondSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -761,7 +777,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -802,16 +818,19 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 1 step processor span
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       // Step processors only run during inputStep phase (per LLM call in agent loop)
       const inputStepSpans = processorSpans.filter(
@@ -828,17 +847,19 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Step processor span is child of MODEL_STEP span
+      // 3. Step processor span is child of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 4. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 4. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: input_step_processor → model_chunks
-      const firstChunkInStep = chunkSpansInStep[0];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
+      const firstChunkInInference = chunkSpansInInference[0];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -873,16 +894,19 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 1 step processor span
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       const outputStepSpans = processorSpans.filter(
         s => s.name?.includes('output step processor') || s.entityType === EntityType.OUTPUT_STEP_PROCESSOR,
@@ -898,17 +922,19 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 3. Step processor span is child of MODEL_STEP span
+      // 3. Step processor span is child of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 4. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 4. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: model_chunks → output_step_processor
-      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
-      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
+      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -947,17 +973,20 @@ describe('Processor Tracing Tests', () => {
       const processorSpans = testExporter.getProcessorSpans();
       const modelSpans = testExporter.getModelSpans();
       const modelStepSpans = testExporter.getModelStepSpans();
+      const modelInferenceSpans = testExporter.getModelInferenceSpans();
       const modelChunkSpans = testExporter.getModelChunkSpans();
 
       // EXPECTED: 1 agent span, 1 model span, 1+ model step spans, and 4 processor spans
       expect(agentSpans.length).toBe(1);
       expect(modelSpans.length).toBe(1);
       expect(modelStepSpans.length).toBe(1);
+      expect(modelInferenceSpans.length).toBe(1);
       expect(processorSpans.length).toBe(4);
 
       const agentSpan = agentSpans[0];
       const modelSpan = modelSpans[0];
       const modelStepSpan = modelStepSpans[0];
+      const modelInferenceSpan = modelInferenceSpans[0];
 
       // Verify correct entity types for each phase
       const inputSpan = processorSpans.find(s => s.name === 'input processor: full-input');
@@ -978,24 +1007,26 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.parentSpanId).toBe(agentSpan?.id);
       // 3. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
-      // 4. Step processors are children of MODEL_STEP span
+      // 4. Step processors are children of MODEL_STEP span (siblings of MODEL_INFERENCE)
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_STEP span
-      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
-      expect(chunkSpansInStep.length).toBe(1);
+      // 5. MODEL_INFERENCE is child of MODEL_STEP
+      expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
+      // 6. Model chunk spans are children of MODEL_INFERENCE (the provider call)
+      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
+      expect(chunkSpansInInference.length).toBe(1);
 
       // EXECUTION ORDER: input -> MODEL_GENERATION -> output
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
       // EXECUTION ORDER within MODEL_STEP: input_step → model_chunks → output_step
-      const firstChunkInStep = chunkSpansInStep[0];
-      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
-      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
+      const firstChunkInInference = chunkSpansInInference[0];
+      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
+      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1059,7 +1090,7 @@ describe('Processor Tracing Tests', () => {
       expect(streamSpan1?.parentSpanId).toBe(agentSpan?.id);
       expect(streamSpan2?.parentSpanId).toBe(agentSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1137,7 +1168,148 @@ describe('Processor Tracing Tests', () => {
       // Internal agent completes within processor span
       testExporter.expectStartedBefore(internalAgentSpan, mainAgentModelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
+    });
+  });
+
+  // ==========================================================================
+  // Mastra-Owned Processor Internal Span Hiding
+  // ==========================================================================
+
+  describe('Mastra-owned processors hide internal spans', () => {
+    /**
+     * Mastra-owned processors (Moderation, PII detector, etc.) build internal
+     * agents to do their work. Those agents create AGENT_RUN/MODEL_GENERATION
+     * spans, but users don't control that code, so those spans are marked
+     * internal and filtered from exported traces by default.
+     *
+     * The PROCESSOR_RUN span itself should still be visible.
+     */
+    function createModerationMockModel() {
+      // Always return a JSON body matching the moderation schema so the
+      // moderation processor's structured-output parse succeeds cleanly.
+      const moderationJson = JSON.stringify({ category_scores: null, reason: null });
+      return new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: moderationJson }],
+          finishReason: 'stop' as const,
+          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'response-metadata', id: '1' },
+            { type: 'text-delta', id: '1', delta: moderationJson },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } },
+          ]),
+        }),
+      });
+    }
+
+    it("does not export the internal moderation agent's spans by default", async () => {
+      const model = createModerationMockModel();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      const processorSpans = testExporter.getProcessorSpans();
+
+      // Exactly one user-visible AGENT_RUN — the main agent. The internal
+      // 'content-moderator' agent run is internal and must not be exported.
+      expect(agentSpans.length).toBe(1);
+      expect(agentSpans[0]?.entityId).toBe('test-agent');
+      expect(agentSpans.some(s => s.entityId === 'content-moderator')).toBe(false);
+
+      // PROCESSOR_RUN is still visible.
+      expect(processorSpans.length).toBe(1);
+      expect(processorSpans[0]?.name).toBe('input processor: moderation');
+      expect(processorSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+
+      // Model spans created inside the moderation agent must not leak — this
+      // covers MODEL_GENERATION and its descendants (MODEL_STEP,
+      // MODEL_INFERENCE, MODEL_CHUNK), which inherit the agent's tracingPolicy
+      // via the model tracker.
+      const modelSpans = testExporter.getModelSpans();
+      expect(modelSpans.length).toBe(1);
+      expect(modelSpans[0]?.parentSpanId).toBe(agentSpans[0]?.id);
+      // Only the main agent's MODEL_STEP/INFERENCE/CHUNK should be present;
+      // each must be a descendant of the main agent's MODEL_GENERATION.
+      const mainModelId = modelSpans[0]?.id;
+      const modelStepSpans = testExporter.getModelStepSpans();
+      expect(modelStepSpans.every(s => s.parentSpanId === mainModelId)).toBe(true);
+      const modelChunkSpans = testExporter.getModelChunkSpans();
+      // chunks parent to inference or step; just assert none belong to the
+      // moderation agent by walking up to the closest model_generation.
+      const visibleIds = new Set(testExporter.getAllSpans().map(s => s.id));
+      for (const chunk of modelChunkSpans) {
+        // every chunk's parent must be a visible span (no orphans into hidden
+        // inference/step spans).
+        expect(chunk.parentSpanId && visibleIds.has(chunk.parentSpanId)).toBe(true);
+      }
+
+      // No orphan spans: every non-root exported span's parentSpanId must
+      // resolve to another exported span. This guards against an internal
+      // ancestor being filtered without its visible descendants getting
+      // re-parented to the closest external ancestor.
+      const allSpans = testExporter.getAllSpans();
+      const exportedIds = new Set(allSpans.map(s => s.id));
+      const orphans = allSpans.filter(s => s.parentSpanId && !exportedIds.has(s.parentSpanId));
+      expect(
+        orphans,
+        `Found orphan spans pointing at filtered parents: ${orphans
+          .map(s => `${s.type}/${s.name} -> ${s.parentSpanId}`)
+          .join(', ')}`,
+      ).toHaveLength(0);
+
+      await testExporter.finalExpectations();
+    });
+
+    it("exports the internal moderation agent's spans when includeInternalSpans is true", async () => {
+      // Sanity check: the internal spans really are being created — they're
+      // just filtered. Flipping includeInternalSpans on must surface them
+      // again, otherwise the assertion above could pass trivially (e.g., if
+      // the moderation agent simply wasn't running).
+      const model = createModerationMockModel();
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'Test',
+        model,
+        inputProcessors: [new ModerationProcessor({ model, strategy: 'warn' })],
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter, { includeInternalSpans: true }),
+        agents: { agent },
+      });
+
+      await mastra.getAgent('agent').generate('Hello');
+
+      const agentSpans = testExporter.getAgentSpans();
+      const moderationAgentSpan = agentSpans.find(s => s.entityId === 'content-moderator');
+
+      // With internal spans included, the moderation agent's AGENT_RUN
+      // appears, parented to the PROCESSOR_RUN span. The contrast with the
+      // previous test (where the same setup hides this span) is what proves
+      // the span is created internally and merely filtered by default.
+      expect(moderationAgentSpan).toBeDefined();
+
+      const processorSpan = testExporter.getProcessorSpans()[0];
+      expect(moderationAgentSpan?.parentSpanId).toBe(processorSpan?.id);
+
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1236,7 +1408,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: workflow processor runs before MODEL_GENERATION
       testExporter.expectStartedBefore(inputWorkflowSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1349,7 +1521,7 @@ describe('Processor Tracing Tests', () => {
       // EXECUTION ORDER: MODEL_GENERATION runs before workflow processor
       testExporter.expectStartedBefore(modelSpan, outputWorkflowSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1438,7 +1610,7 @@ describe('Processor Tracing Tests', () => {
       testExporter.expectStartedBefore(simpleInputSpan, modelSpan);
       testExporter.expectStartedBefore(fullInputSpan, modelSpan);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1517,7 +1689,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1587,7 +1759,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1661,7 +1833,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1733,7 +1905,7 @@ describe('Processor Tracing Tests', () => {
       // 2. MODEL_STEP is child of MODEL_GENERATION
       expect(modelStepSpan?.parentSpanId).toBe(modelSpan?.id);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 
@@ -1826,7 +1998,7 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.attributes?.model).toBe('overridden-model');
       expect(modelSpan?.attributes?.provider).toBe('overridden-provider');
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1879,7 +2051,7 @@ describe('Processor Tracing Tests', () => {
         maxOutputTokens: 4096,
       });
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -1965,7 +2137,7 @@ describe('Processor Tracing Tests', () => {
         temperature: 0.1,
       });
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2009,7 +2181,7 @@ describe('Processor Tracing Tests', () => {
       // AGENT_RUN span should reflect the overridden active tools
       expect(agentSpan?.attributes?.availableTools).toEqual(['search', 'calculate']);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2070,7 +2242,7 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.attributes?.model).toBe('test-model');
       expect(modelSpan?.attributes?.provider).toBe('test-provider');
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2139,7 +2311,7 @@ describe('Processor Tracing Tests', () => {
       expect(modelSpan?.attributes?.model).toBe('stream-model');
       expect(modelSpan?.attributes?.provider).toBe('stream-provider');
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
 
     /**
@@ -2183,7 +2355,7 @@ describe('Processor Tracing Tests', () => {
       // AGENT_RUN span availableTools should be cleared to an empty array
       expect(agentSpan?.attributes?.availableTools).toEqual([]);
 
-      testExporter.finalExpectations();
+      await testExporter.finalExpectations();
     });
   });
 });

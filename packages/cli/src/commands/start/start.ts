@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import { join } from 'node:path';
 import { config } from 'dotenv';
+import { getAnalytics } from '../../analytics/index.js';
 import { logger } from '../../utils/logger';
 import { shouldSkipDotenvLoading } from '../utils';
 interface StartOptions {
@@ -39,48 +40,39 @@ export async function start(options: StartOptions = {}) {
       env: {
         ...process.env,
         NODE_ENV: 'production',
+        MASTRA_TELEMETRY_COMMAND: 'start',
+        MASTRA_PROJECT_ROOT: process.cwd(),
+        ...(getAnalytics()?.getDistinctId() ? { MASTRA_CLI_DISTINCT_ID: getAnalytics()!.getDistinctId() } : {}),
       },
     });
 
     let stderrBuffer = '';
     server.stderr.on('data', data => {
       stderrBuffer += data.toString();
+      // Stream the server's stderr through live so logs from a healthy,
+      // running process (warnings, channel/adapter errors) are visible.
+      // The buffer above is retained only for the non-zero exit diagnostics.
+      process.stderr.write(data);
     });
 
     server.on('exit', code => {
-      if (code !== 0 && stderrBuffer) {
+      if (code !== 0) {
+        // Raw stderr has already been streamed live above. On a crash, add a
+        // friendly hint for the common "missing dependency" case on top of it.
         if (stderrBuffer.includes('ERR_MODULE_NOT_FOUND')) {
           const packageNameMatch = stderrBuffer.match(/Cannot find package '([^']+)'/);
           const packageName = packageNameMatch ? packageNameMatch[1] : null;
 
-          if (!packageName) {
-            logger.error(stderrBuffer.trim());
-          } else {
-            logger.error(`Module \`${packageName}\` not found while starting the Mastra server.
-This usually indicates that a transitive dependency could not be bundled correctly during the build process.
-Try adding \`${packageName}\` to your externals:
-
-export const mastra = new Mastra({
-  bundler: {
-    externals: ["${packageName}"],
-  }
-})
-
-If this doesn't resolve the issue, investigate the dependencies you added to your package.json as one of them might use \`${packageName}\` internally. Add that particular dependency to the externals instead. Also consider opening an issue.
-
-Original error:
-
-${stderrBuffer.trim()}`);
+          if (packageName) {
+            logger.error('Module not found while starting Mastra server', { package: packageName });
           }
-        } else {
-          logger.error(stderrBuffer.trim());
         }
         process.exit(code);
       }
     });
 
     server.on('error', err => {
-      logger.error(`Failed to start server: ${err.message}`);
+      logger.error('Failed to start server', { error: err.message });
       process.exit(1);
     });
 
@@ -94,7 +86,7 @@ ${stderrBuffer.trim()}`);
       process.exit(0);
     });
   } catch (error: any) {
-    logger.error(`Failed to start Mastra server: ${error.message}`);
+    logger.error('Failed to start Mastra server', { error: error.message });
     process.exit(1);
   }
 }

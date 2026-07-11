@@ -21,11 +21,15 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
   private model: string;
   private apiKey?: string;
   constructor(model: string, apiKey?: string) {
-    this.apiKey = apiKey;
+    this.apiKey = apiKey ?? process.env.COHERE_API_KEY;
     this.model = model;
   }
 
   async getRelevanceScore(query: string, text: string): Promise<number> {
+    if (!this.apiKey) {
+      throw new Error('Cohere API key is required. Pass an apiKey or set COHERE_API_KEY.');
+    }
+
     const response = await fetch(`https://api.cohere.com/v2/rerank`, {
       method: 'POST',
       headers: {
@@ -47,7 +51,7 @@ export class CohereRelevanceScorer implements RelevanceScoreProvider {
     const data = (await response.json()) as CohereRerankingResponse;
     const relevanceScore = data.results[0]?.relevance_score;
 
-    if (!relevanceScore) {
+    if (typeof relevanceScore !== 'number' || !Number.isFinite(relevanceScore)) {
       throw new Error('No relevance score found on Cohere response');
     }
 

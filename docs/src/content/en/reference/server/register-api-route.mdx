@@ -27,7 +27,7 @@ The URL path for the route. Supports path parameters using `:param` syntax.
 registerApiRoute("/items/:itemId", { ... })
 ```
 
-**Note:** Paths can't start with `/api/` as this prefix is reserved for Mastra server routes.
+**Note:** Custom route paths can't start with the server's configured `apiPrefix` (default: `/api`), as that prefix is reserved for built-in Mastra routes. If you set a custom `apiPrefix`, only that prefix is reserved — for example, with `apiPrefix: '/mastra/api'`, paths like `/api/my-endpoint` are allowed.
 
 ### options
 
@@ -55,6 +55,13 @@ registerApiRoute("/items/:itemId", { ... })
     name: 'middleware',
     type: 'MiddlewareHandler | MiddlewareHandler[]',
     description: 'Route-specific middleware functions',
+    isOptional: true,
+  },
+  {
+    name: 'cors',
+    type: 'CorsOptions',
+    description:
+      'Route-specific CORS configuration. Use this when one custom route needs a different cross-origin policy from `server.cors`.',
     isOptional: true,
   },
   {
@@ -225,6 +232,23 @@ registerApiRoute('/protected', {
 })
 ```
 
+### Route with CORS
+
+Use route-specific CORS when one custom route needs cross-origin credentials, but the rest of the server should keep the global CORS policy.
+
+```typescript
+registerApiRoute('/customer-webhook', {
+  method: 'POST',
+  cors: {
+    origin: ['https://customer-saas.example'],
+    credentials: true,
+  },
+  handler: async c => {
+    return c.json({ ok: true })
+  },
+})
+```
+
 ### Route with OpenAPI Documentation
 
 ```typescript
@@ -314,7 +338,7 @@ registerApiRoute('/items/:itemId', {
 
 ## Related
 
-- [Custom API Routes Guide](/docs/server/custom-api-routes) - Usage guide with examples
-- [Server Middleware](/docs/server/middleware) - Global middleware configuration
-- [createRoute()](/reference/server/create-route) - Type-safe route creation for server adapters
-- [Server Routes](/reference/server/routes) - Built-in Mastra server routes
+- [Custom API Routes Guide](/docs/server/custom-api-routes): Usage guide with examples
+- [Server Middleware](/docs/server/middleware): Global middleware configuration
+- [createRoute()](/reference/server/create-route): Type-safe route creation for server adapters
+- [Server Routes](/reference/server/routes): Built-in Mastra server routes

@@ -31,11 +31,12 @@ export const registryData: RegistryFile = {
     {
       id: 'apify',
       name: 'Apify',
-      description: 'A MCP marketplace enabling AI agents to use 5,000+ ready-made servers and Actors.',
+      description:
+        'Extract data from any website with thousands of scrapers, crawlers, and automations on Apify Store.',
       url: 'https://apify.com/store',
       servers_url: 'https://api.apify.com/v2/store',
       tags: ['verified'],
-      count: '5000+',
+      count: '17000+',
       postProcessServers: processApifyServers,
     },
     {
@@ -209,6 +210,13 @@ export const registryData: RegistryFile = {
       tags: ['verified'],
       count: 3653,
       postProcessServers: processPulseMcpServers,
+    },
+    {
+      id: 'remoteopenclaw',
+      name: 'Remote OpenClaw',
+      description: 'Free searchable directory of MCP servers, agent skills, and plugins for coding agents.',
+      url: 'https://www.remoteopenclaw.com/',
+      count: 13870,
     },
     {
       id: 'smithery',

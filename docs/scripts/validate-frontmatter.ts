@@ -18,12 +18,12 @@ const DEFAULT_CONFIG: ValidationConfig = {
   sourceDir: 'src/content/en',
   skipPaths: [
     'guides/',
-    'docs/community/',
+    'docs/license.mdx',
     'docs/getting-started/',
-    'docs/mastra-cloud/',
+    'docs/mastra-platform/',
     'docs/index.mdx',
     'models/',
-    'docs/build-with-ai/skills.mdx',
+    'docs/studio/cloud.mdx',
   ],
   // Allow for @mastra/* packages + mastra + create-mastra + mastracode
   packagePattern: /^(@mastra\/[\w-]+|mastra|create-mastra|mastracode)$/,

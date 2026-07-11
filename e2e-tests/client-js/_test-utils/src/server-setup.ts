@@ -1,4 +1,7 @@
 import type { TestProject } from 'vitest/node';
+import { randomUUID } from 'crypto';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import getPort from 'get-port';
@@ -76,10 +79,14 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       { Mastra },
       { Agent },
       { MastraCompositeStore, InMemoryStore },
-      { LibSQLStore },
+      { LibSQLStore, LibSQLVector },
       { MastraServer },
       { registerApiRoute },
-      { Observability, DefaultExporter },
+      { Observability, MastraStorageExporter },
+      { Memory },
+      { createWorkflow, createStep },
+      { createTool },
+      { z },
     ] = await Promise.all([
       import('@mastra/core/mastra'),
       import('@mastra/core/agent'),
@@ -88,15 +95,25 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       import('@mastra/hono'),
       import('@mastra/core/server'),
       import('@mastra/observability'),
+      import('@mastra/memory'),
+      import('@mastra/core/workflows'),
+      import('@mastra/core/tools'),
+      import('zod'),
     ]);
 
     const port = await getPort();
     const baseUrl = `http://localhost:${port}`;
 
-    // Create storage
+    // Create storage. LibSQL's `:memory:` URL gives each pooled connection its own
+    // private in-memory database, so a table created by one connection is invisible
+    // to the next — which the evented agentic-loop tickles by spreading workflow
+    // snapshot reads/writes across multiple operations. Use a per-process temp file
+    // so all pooled connections open the same on-disk database (mirrors the vector
+    // store treatment already in place below).
+    const libSqlDbPath = `file:${join(tmpdir(), `mastra-libsql-${randomUUID()}.db`)}`;
     const libSqlStore = new LibSQLStore({
       id: storageId,
-      url: ':memory:',
+      url: libSqlDbPath,
     });
 
     const inMemoryStore = new InMemoryStore({
@@ -111,18 +128,74 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       },
     });
 
-    // Create a simple test agent
+    // Create vector store (use file-based temp db because libsql vector extensions
+    // may not work reliably with :memory: for cross-operation queries)
+    const vectorDbPath = `file:${join(tmpdir(), `mastra-vector-${randomUUID()}.db`)}`;
+    const testVector = new LibSQLVector({
+      id: `${storageId}-vector`,
+      url: vectorDbPath,
+    });
+
+    // Create memory backed by the same storage
+    const memory = new Memory({ storage });
+
+    // Create test tools
+    const calculatorTool = createTool({
+      id: 'calculator',
+      description: 'Adds two numbers together',
+      inputSchema: z.object({ a: z.number(), b: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      execute: async ({ a, b }) => {
+        return { result: a + b };
+      },
+    });
+
+    const greeterTool = createTool({
+      id: 'greeter',
+      description: 'Greets a person by name',
+      inputSchema: z.object({ name: z.string() }),
+      outputSchema: z.object({ greeting: z.string() }),
+      execute: async ({ name }) => {
+        return { greeting: `Hello, ${name}!` };
+      },
+    });
+
+    // Create a simple workflow (add two numbers, no LLM needed)
+    const addStep = createStep({
+      id: 'add-numbers',
+      inputSchema: z.object({ a: z.number(), b: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      execute: async ({ inputData }) => {
+        return { result: inputData.a + inputData.b };
+      },
+    });
+
+    const addWorkflow = createWorkflow({
+      id: 'add-workflow',
+      inputSchema: z.object({ a: z.number(), b: z.number() }),
+      outputSchema: z.object({ result: z.number() }),
+      steps: [addStep],
+    });
+
+    addWorkflow.then(addStep).commit();
+
+    // Create a simple test agent with memory and tools
     const testAgent = new Agent({
       id: 'testAgent',
       name: 'testAgent',
       instructions: 'You are a helpful test assistant.',
       model: 'openai/gpt-4.1-mini',
+      memory,
+      tools: { calculator: calculatorTool, greeter: greeterTool },
     });
 
     // Create Mastra instance with observability configured
     const mastra = new Mastra({
       agents: { testAgent },
       storage,
+      vectors: { testVector },
+      workflows: { 'add-workflow': addWorkflow },
+      tools: { calculator: calculatorTool, greeter: greeterTool },
       observability: new Observability({
         configs: {
           default: {
@@ -130,7 +203,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
             exporters: [
               // Use realtime strategy for tests to ensure spans are persisted immediately
               // (default batch strategy has 5 second flush interval which is too slow for tests)
-              new DefaultExporter({ strategy: 'realtime' }),
+              new MastraStorageExporter({ strategy: 'realtime' }),
             ],
           },
         },
@@ -143,6 +216,10 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
               const observabilityStore = await storage.getStore('observability');
               if (observabilityStore) {
                 await observabilityStore.dangerouslyClearAll();
+              }
+              const memoryStore = await storage.getStore('memory');
+              if (memoryStore) {
+                await memoryStore.dangerouslyClearAll();
               }
               return c.json({ message: 'Storage reset' }, 200);
             },
@@ -210,6 +287,16 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
     return async () => {
       console.log(`[Teardown] Stopping test server (${variant})`);
       await closeServer(serverToClose);
+      // Clean up temp vector database file
+      try {
+        const { unlink } = await import('fs/promises');
+        const vectorFilePath = vectorDbPath.replace('file:', '');
+        await unlink(vectorFilePath).catch(() => {});
+        await unlink(`${vectorFilePath}-wal`).catch(() => {});
+        await unlink(`${vectorFilePath}-shm`).catch(() => {});
+      } catch {
+        // ignore cleanup errors
+      }
     };
   };
 }

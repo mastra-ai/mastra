@@ -18,7 +18,35 @@
 
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod/v4';
-import { asJsonSchema } from './schema';
+import { asJsonSchema, getResponseFormat } from './schema';
+
+describe('getResponseFormat', () => {
+  it('applies Anthropic schema compatibility without removing local validation', async () => {
+    const schema = z.object({
+      score: z.number().min(0).max(1),
+    });
+
+    const responseFormat = getResponseFormat(schema, {
+      model: {
+        provider: 'anthropic',
+        modelId: 'claude-3-5-sonnet',
+        supportsStructuredOutputs: true,
+      },
+    });
+
+    expect(responseFormat.type).toBe('json');
+    const schemaJson = JSON.stringify(responseFormat.type === 'json' ? responseFormat.schema : undefined);
+    expect(schemaJson).toContain('score');
+    expect(schemaJson).not.toContain('minimum');
+    expect(schemaJson).not.toContain('maximum');
+
+    const validResult = await schema['~standard'].validate({ score: 0.5 });
+    expect(validResult).toEqual({ value: { score: 0.5 } });
+
+    const invalidResult = await schema['~standard'].validate({ score: 1.2 });
+    expect('issues' in invalidResult).toBe(true);
+  });
+});
 
 describe('asJsonSchema - Zod v4 transform compatibility', () => {
   describe('should handle schemas with transforms', () => {

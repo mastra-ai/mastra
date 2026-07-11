@@ -3,12 +3,13 @@ import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage';
 import type { StorageDomains } from '@mastra/core/storage';
 
+import { BackgroundTasksStorageDO } from './storage/domains/background-tasks';
 import { MemoryStorageDO } from './storage/domains/memory';
 import { ScoresStorageDO } from './storage/domains/scores';
 import { WorkflowsStorageDO } from './storage/domains/workflows';
 
 // Export domain classes for direct use with MastraStorage composition
-export { MemoryStorageDO, ScoresStorageDO, WorkflowsStorageDO };
+export { BackgroundTasksStorageDO, MemoryStorageDO, ScoresStorageDO, WorkflowsStorageDO };
 export type { DODomainConfig } from './storage/db';
 export { DODB } from './storage/db';
 
@@ -96,6 +97,7 @@ export class CloudflareDOStorage extends MastraCompositeStore {
         memory: new MemoryStorageDO(domainConfig),
         workflows: new WorkflowsStorageDO(domainConfig),
         scores: new ScoresStorageDO(domainConfig),
+        backgroundTasks: new BackgroundTasksStorageDO(domainConfig),
       };
 
       this.logger.info('Using Durable Objects SqlStorage');

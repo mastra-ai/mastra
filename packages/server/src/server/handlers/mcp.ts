@@ -12,6 +12,10 @@ import {
   listMcpServerToolsResponseSchema,
   mcpToolInfoSchema,
   executeToolResponseSchema,
+  mcpServerResourcePathParams,
+  readResourceBodySchema,
+  readResourceResponseSchema,
+  listResourcesResponseSchema,
 } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
 import { createRoute } from '../server-adapter/routes/route-builder';
@@ -144,7 +148,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
   requiresAuth: true,
-  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
+  handler: async ({ mastra, serverId, requestContext }: ServerContext & { serverId: string }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
     }
@@ -159,7 +163,7 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot list tools in this way.` });
     }
 
-    return server.getToolListInfo();
+    return await server.getToolListInfo(requestContext);
   },
 });
 
@@ -188,7 +192,7 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot provide tool details in this way.` });
     }
 
-    const toolInfo = server.getToolInfo(toolId);
+    const toolInfo = await server.getToolInfo(toolId);
     if (!toolInfo) {
       throw new HTTPException(404, { message: `Tool with ID '${toolId}' not found on MCP server '${serverId}'` });
     }
@@ -213,6 +217,7 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
     serverId,
     toolId,
     data,
+    requestContext,
   }: ServerContext & { serverId: string; toolId: string; data?: unknown }) => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
@@ -228,8 +233,79 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
       throw new HTTPException(501, { message: `Server '${serverId}' cannot execute tools in this way.` });
     }
 
-    const result = await server.executeTool(toolId, data);
+    const result = await server.executeTool(toolId, data, { requestContext });
     return { result };
+  },
+});
+
+// ============================================================================
+// MCP Resource Routes
+// ============================================================================
+
+export const LIST_MCP_SERVER_RESOURCES_ROUTE = createRoute({
+  method: 'GET',
+  path: '/mcp/:serverId/resources',
+  responseType: 'json',
+  pathParamSchema: mcpServerResourcePathParams,
+  responseSchema: listResourcesResponseSchema,
+  summary: 'List MCP server resources',
+  description: 'Returns a list of resources available on the MCP server, including ui:// app resources',
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
+    }
+
+    if (typeof server.listResources !== 'function') {
+      return { resources: [] };
+    }
+
+    return server.listResources();
+  },
+});
+
+export const READ_MCP_SERVER_RESOURCE_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/resources/read',
+  responseType: 'json',
+  pathParamSchema: mcpServerResourcePathParams,
+  bodySchema: readResourceBodySchema,
+  responseSchema: readResourceResponseSchema,
+  summary: 'Read MCP server resource content',
+  description: 'Reads the content of a resource by URI, used for rendering MCP App ui:// resources',
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({ mastra, serverId, uri }: ServerContext & { serverId: string; uri: string }) => {
+    if (!mastra || typeof mastra.getMCPServerById !== 'function') {
+      throw new HTTPException(500, { message: 'Mastra instance or getMCPServerById method not available' });
+    }
+
+    const server = mastra.getMCPServerById(serverId);
+
+    if (!server) {
+      throw new HTTPException(404, { message: `MCP server with ID '${serverId}' not found` });
+    }
+
+    if (typeof server.readResource !== 'function') {
+      throw new HTTPException(501, { message: `Server '${serverId}' does not support reading resources` });
+    }
+
+    try {
+      return await server.readResource(uri);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('not found') || message.includes('not configured')) {
+        throw new HTTPException(404, { message: `Resource '${uri}' not found on server '${serverId}'` });
+      }
+      throw error;
+    }
   },
 });
 

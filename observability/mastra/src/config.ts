@@ -14,8 +14,12 @@ import type {
   ConfigSelector,
   SerializationOptions,
   CardinalityConfig,
+  LogLevel,
+  AnyExportedSpan,
 } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import { z } from 'zod/v4';
+import type { SensitiveDataFilterOptions } from './span_processors';
 
 // ============================================================================
 // Sampling Strategy Types
@@ -30,6 +34,10 @@ export enum SamplingStrategyType {
   RATIO = 'ratio',
   CUSTOM = 'custom',
 }
+
+const functionSchema = z.custom<(...args: any[]) => unknown>(value => typeof value === 'function', {
+  message: 'Expected function',
+});
 
 /**
  * Options passed when using a custom sampler strategy
@@ -71,6 +79,36 @@ export interface ObservabilityInstanceConfig {
   /** Set to `true` if you want to see spans internal to the operation of mastra */
   includeInternalSpans?: boolean;
   /**
+   * Span types to exclude from export. Spans of these types are silently dropped
+   * before reaching exporters. This is useful for reducing noise and costs in
+   * observability platforms that charge per-span (e.g., Langfuse).
+   *
+   * @example
+   * ```typescript
+   * excludeSpanTypes: [SpanType.MODEL_CHUNK, SpanType.MODEL_STEP]
+   * ```
+   */
+  excludeSpanTypes?: SpanType[];
+  /**
+   * Filter function to control which spans are exported. Return `true` to keep
+   * the span, `false` to drop it. This runs after `excludeSpanTypes` and
+   * `spanOutputProcessors`, giving you access to the final exported span data
+   * for fine-grained filtering by type, attributes, entity, metadata, or any
+   * combination.
+   *
+   * @example
+   * ```typescript
+   * spanFilter: (span) => {
+   *   // Drop all model chunks
+   *   if (span.type === SpanType.MODEL_CHUNK) return false;
+   *   // Only keep tool calls that failed
+   *   if (span.type === SpanType.TOOL_CALL && span.attributes?.success) return false;
+   *   return true;
+   * }
+   * ```
+   */
+  spanFilter?: (span: AnyExportedSpan) => boolean;
+  /**
    * RequestContext keys to automatically extract as metadata for all spans
    * created with this tracing configuration.
    * Supports dot notation for nested values.
@@ -87,6 +125,16 @@ export interface ObservabilityInstanceConfig {
    * Applied to all metrics (auto-extracted and user-defined).
    */
   cardinality?: CardinalityConfig;
+  /**
+   * Configuration for the observability logger (loggerVNext).
+   * Controls log level filtering and whether dual-write logging is enabled.
+   */
+  logging?: {
+    /** Set to `false` to disable dual-write logging to observability storage. Defaults to `true`. */
+    enabled?: boolean;
+    /** Minimum log level to write to observability storage. Defaults to `'warn'`. */
+    level?: LogLevel;
+  };
 }
 
 /**
@@ -95,7 +143,7 @@ export interface ObservabilityInstanceConfig {
 export interface ObservabilityRegistryConfig {
   /**
    * Enables default exporters, with sampling: always, and sensitive data filtering
-   * @deprecated Use explicit `configs` with DefaultExporter, CloudExporter, and SensitiveDataFilter instead.
+   * @deprecated Use explicit `configs` with MastraStorageExporter, MastraPlatformExporter, and SensitiveDataFilter instead.
    * This option will be removed in a future version.
    */
   default?: {
@@ -105,6 +153,25 @@ export interface ObservabilityRegistryConfig {
   configs?: Record<string, Omit<ObservabilityInstanceConfig, 'name'> | ObservabilityInstance>;
   /** Optional selector function to choose which tracing instance to use */
   configSelector?: ConfigSelector;
+  /**
+   * Controls whether a `SensitiveDataFilter` span output processor is automatically
+   * applied to every configured observability instance. This protects against
+   * accidentally exporting secrets (API keys, tokens, passwords, etc.) to
+   * exporters such as the Mastra cloud exporter.
+   *
+   * - `true` (default): apply `SensitiveDataFilter` with default options.
+   * - `false`: do not auto-apply the filter. You can still add it manually via
+   *   `spanOutputProcessors` on a specific config.
+   * - an object: apply `SensitiveDataFilter` with the provided options.
+   *
+   * If a config already includes a `SensitiveDataFilter` in
+   * `spanOutputProcessors`, the auto-applied filter is skipped to avoid
+   * double redaction. The auto-applied filter runs last (after any
+   * user-provided processors) so that sensitive data introduced or
+   * surfaced by upstream processors is still redacted before export.
+   * Pre-instantiated `ObservabilityInstance` values are not modified.
+   */
+  sensitiveDataFilter?: boolean | SensitiveDataFilterOptions;
 }
 
 // ============================================================================
@@ -127,7 +194,7 @@ export const samplingStrategySchema = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal(SamplingStrategyType.CUSTOM),
-    sampler: z.function({ input: z.tuple([z.any().optional()]), output: z.boolean() }),
+    sampler: functionSchema,
   }),
 ]);
 
@@ -143,6 +210,39 @@ export const serializationOptionsSchema = z
   })
   .optional();
 
+const LOG_LEVELS = ['debug', 'info', 'warn', 'error', 'fatal'] as const;
+
+const cardinalityConfigSchema = z
+  .object({
+    blockedLabels: z.array(z.string()).optional(),
+    blockUUIDs: z.boolean().optional(),
+  })
+  .optional();
+
+const loggingConfigSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    level: z.enum(LOG_LEVELS).optional(),
+  })
+  .optional();
+
+const spanFilterSchema = functionSchema.optional();
+
+const observabilityInstanceConfigFields = {
+  serviceName: z.string().min(1, 'Service name is required'),
+  sampling: samplingStrategySchema.optional(),
+  exporters: z.array(z.any()).optional(),
+  bridge: z.any().optional(),
+  spanOutputProcessors: z.array(z.any()).optional(),
+  includeInternalSpans: z.boolean().optional(),
+  excludeSpanTypes: z.array(z.nativeEnum(SpanType)).optional(),
+  spanFilter: spanFilterSchema,
+  requestContextKeys: z.array(z.string()).optional(),
+  serializationOptions: serializationOptionsSchema,
+  cardinality: cardinalityConfigSchema,
+  logging: loggingConfigSchema,
+};
+
 /**
  * Zod schema for ObservabilityInstanceConfig
  * Note: exporters, spanOutputProcessors, bridge, and configSelector are validated as any
@@ -151,15 +251,7 @@ export const serializationOptionsSchema = z
 export const observabilityInstanceConfigSchema = z
   .object({
     name: z.string().min(1, 'Name is required'),
-    serviceName: z.string().min(1, 'Service name is required'),
-    sampling: samplingStrategySchema.optional(),
-    exporters: z.array(z.any()).optional(),
-    bridge: z.any().optional(),
-    spanOutputProcessors: z.array(z.any()).optional(),
-    includeInternalSpans: z.boolean().optional(),
-    requestContextKeys: z.array(z.string()).optional(),
-    serializationOptions: serializationOptionsSchema,
-    cardinality: z.any().optional(),
+    ...observabilityInstanceConfigFields,
   })
   .refine(
     data => {
@@ -177,28 +269,17 @@ export const observabilityInstanceConfigSchema = z
  * Zod schema for config values in the configs map
  * This is the config object without the name field
  */
-export const observabilityConfigValueSchema = z
-  .object({
-    serviceName: z.string().min(1, 'Service name is required'),
-    sampling: samplingStrategySchema.optional(),
-    exporters: z.array(z.any()).optional(),
-    bridge: z.any().optional(),
-    spanOutputProcessors: z.array(z.any()).optional(),
-    includeInternalSpans: z.boolean().optional(),
-    requestContextKeys: z.array(z.string()).optional(),
-    serializationOptions: serializationOptionsSchema,
-  })
-  .refine(
-    data => {
-      // At least one exporter or a bridge must be provided
-      const hasExporters = data.exporters && data.exporters.length > 0;
-      const hasBridge = !!data.bridge;
-      return hasExporters || hasBridge;
-    },
-    {
-      message: 'At least one exporter or a bridge is required',
-    },
-  );
+export const observabilityConfigValueSchema = z.object(observabilityInstanceConfigFields).refine(
+  data => {
+    // At least one exporter or a bridge must be provided
+    const hasExporters = data.exporters && data.exporters.length > 0;
+    const hasBridge = !!data.bridge;
+    return hasExporters || hasBridge;
+  },
+  {
+    message: 'At least one exporter or a bridge is required',
+  },
+);
 
 /**
  * Zod schema for ObservabilityRegistryConfig
@@ -206,6 +287,14 @@ export const observabilityConfigValueSchema = z
  * both plain config objects and pre-instantiated ObservabilityInstance objects.
  * The schema is permissive to handle edge cases gracefully (arrays, null values).
  */
+const sensitiveDataFilterOptionsSchema = z
+  .object({
+    sensitiveFields: z.array(z.string()).optional(),
+    redactionToken: z.string().optional(),
+    redactionStyle: z.enum(['full', 'partial']).optional(),
+  })
+  .strict();
+
 export const observabilityRegistryConfigSchema = z
   .object({
     default: z
@@ -215,7 +304,8 @@ export const observabilityRegistryConfigSchema = z
       .optional()
       .nullable(),
     configs: z.union([z.record(z.string(), z.any()), z.array(z.any()), z.null()]).optional(),
-    configSelector: z.function().optional(),
+    configSelector: functionSchema.optional(),
+    sensitiveDataFilter: z.union([z.boolean(), sensitiveDataFilterOptionsSchema]).optional(),
   })
   .passthrough() // Allow additional properties
   .refine(

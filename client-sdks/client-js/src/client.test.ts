@@ -652,6 +652,51 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
 
+      it('should not include system reminders by default', async () => {
+        const mockMessages = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockMessages,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockMessages);
+      });
+
+      it('should include system reminders when requested', async () => {
+        const mockMessages = {
+          messages: [{ id: 'msg-1', content: 'Hello' }],
+        };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockMessages,
+        });
+
+        const result = await client.listThreadMessages('thread-1', {
+          agentId: 'agent-1',
+          includeSystemReminders: true,
+        });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1&includeSystemReminders=true',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockMessages);
+      });
+
       it('should list messages without agentId (storage fallback)', async () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
@@ -671,6 +716,247 @@ describe('MastraClient', () => {
         );
         expect(result).toEqual(mockMessages);
       });
+    });
+
+    describe('deleteThread', () => {
+      it('should delete a thread with agentId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { agentId: 'agent-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/threads/thread-1?agentId=agent-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should delete a network thread with networkId', async () => {
+        const mockResponse = { success: true, message: 'Thread deleted' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.deleteThread('thread-1', { networkId: 'network-1' });
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/memory/network/threads/thread-1?networkId=network-1',
+          expect.objectContaining({ method: 'DELETE' }),
+        );
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('should throw when neither agentId nor networkId is provided', () => {
+        expect(() => client.deleteThread('thread-1', {} as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when opts is missing entirely', () => {
+        expect(() => client.deleteThread('thread-1', undefined as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it('should throw when both agentId and networkId are provided', () => {
+        expect(() => client.deleteThread('thread-1', { agentId: 'agent-1', networkId: 'network-1' } as any)).toThrow(
+          /requires exactly one of agentId or networkId/,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  describe('Background Tasks', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    describe('listBackgroundTasks', () => {
+      it('calls GET /background-tasks with no params', async () => {
+        const mockResponse = { tasks: [], total: 0 };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => mockResponse,
+        });
+
+        const result = await client.listBackgroundTasks();
+
+        expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/api/background-tasks', expect.any(Object));
+        expect(result).toEqual(mockResponse);
+      });
+
+      it('passes filter params as query string', async () => {
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ tasks: [], total: 0 }),
+        });
+
+        await client.listBackgroundTasks({
+          agentId: 'a1',
+          status: 'completed',
+          page: 1,
+          perPage: 10,
+          orderBy: 'completedAt',
+          orderDirection: 'desc',
+        });
+
+        const calledUrl = (global.fetch as any).mock.calls[0][0] as string;
+        expect(calledUrl).toContain('agentId=a1');
+        expect(calledUrl).toContain('status=completed');
+        expect(calledUrl).toContain('page=1');
+        expect(calledUrl).toContain('perPage=10');
+        expect(calledUrl).toContain('orderBy=completedAt');
+        expect(calledUrl).toContain('orderDirection=desc');
+      });
+
+      it('serializes date params as ISO strings', async () => {
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => ({ tasks: [], total: 0 }),
+        });
+
+        const from = new Date('2024-01-01');
+        const to = new Date('2024-02-01');
+        await client.listBackgroundTasks({ fromDate: from, toDate: to, dateFilterBy: 'completedAt' });
+
+        const calledUrl = (global.fetch as any).mock.calls[0][0] as string;
+        expect(calledUrl).toContain(`fromDate=${encodeURIComponent(from.toISOString())}`);
+        expect(calledUrl).toContain(`toDate=${encodeURIComponent(to.toISOString())}`);
+        expect(calledUrl).toContain('dateFilterBy=completedAt');
+      });
+    });
+
+    describe('getBackgroundTask', () => {
+      it('calls GET /background-tasks/:backgroundTaskId', async () => {
+        const mockTask = { id: 'background-task-1', status: 'completed', toolName: 'tool' };
+        (global.fetch as any).mockResolvedValueOnce({
+          ok: true,
+          headers: { get: () => 'application/json' },
+          json: async () => mockTask,
+        });
+
+        const result = await client.getBackgroundTask('background-task-1');
+
+        expect(global.fetch).toHaveBeenCalledWith(
+          'http://localhost:4111/api/background-tasks/background-task-1',
+          expect.any(Object),
+        );
+        expect(result).toEqual(mockTask);
+      });
+    });
+  });
+
+  describe('Agent Builder Actions', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('getAgentBuilderActions should hit /agent-builder (no trailing slash)', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.getAgentBuilderActions();
+
+      expect(global.fetch).toHaveBeenCalledWith('http://localhost:4111/api/agent-builder', expect.any(Object));
+    });
+  });
+
+  describe('Stored Skills', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('createStoredSkill should POST the required description and other fields', async () => {
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({}),
+      });
+
+      await client.createStoredSkill({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/stored/skills');
+      expect(init.method).toBe('POST');
+      const body = JSON.parse(init.body);
+      expect(body).toMatchObject({
+        name: 'my-skill',
+        description: 'Does a thing',
+        instructions: 'Run the thing',
+      });
+    });
+  });
+
+  describe('Dataset Item Tool Mocks', () => {
+    let client: MastraClient;
+
+    beforeEach(() => {
+      vi.resetAllMocks();
+      client = new MastraClient({ baseUrl: 'http://localhost:4111', retries: 0 });
+    });
+
+    it('addDatasetItem posts toolMocks in the request body', async () => {
+      const toolMocks = [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', toolMocks }),
+      });
+
+      const result = await client.addDatasetItem({ datasetId: 'ds-1', input: { q: 'x' }, toolMocks });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body)).toMatchObject({ input: { q: 'x' }, toolMocks });
+      expect(result.toolMocks).toEqual(toolMocks);
+    });
+
+    it('updateDatasetItem posts toolMocks in the request body', async () => {
+      const toolMocks = [{ toolName: 'write', args: { f: 'a' }, output: 'ok' }];
+      (global.fetch as any).mockResolvedValueOnce({
+        ok: true,
+        headers: { get: () => 'application/json' },
+        json: async () => ({ id: 'item-1', toolMocks }),
+      });
+
+      await client.updateDatasetItem({ datasetId: 'ds-1', itemId: 'item-1', toolMocks });
+
+      const [url, init] = (global.fetch as any).mock.calls[0];
+      expect(url).toBe('http://localhost:4111/api/datasets/ds-1/items/item-1');
+      expect(init.method).toBe('PATCH');
+      expect(JSON.parse(init.body)).toMatchObject({ toolMocks });
     });
   });
 });

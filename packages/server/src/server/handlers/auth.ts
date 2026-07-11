@@ -15,9 +15,12 @@ import type {
   ICredentialsProvider,
   SSOCallbackResult,
 } from '@mastra/core/auth';
-import type { IRBACProvider, EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProvider } from '@mastra/core/server';
+import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 
+import { z } from 'zod/v4';
+import { supportsSessionRefresh } from '../auth/helpers';
+import { MASTRA_USER_PERMISSIONS_KEY, MASTRA_CLIENT_TYPE_HEADER, isStudioClientTypeHeader } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   capabilitiesResponseSchema,
@@ -26,11 +29,17 @@ import {
   currentUserResponseSchema,
   credentialsSignInBodySchema,
   credentialsSignUpBodySchema,
+  refreshResponseSchema,
+  permissionPatternsResponseSchema,
 } from '../schemas/auth';
-import { createPublicRoute } from '../server-adapter/routes/route-builder';
+import { createPublicRoute, createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 
-type BuildCapabilitiesFn = (auth: any, request: Request, options?: { rbac?: any; apiPrefix?: string }) => Promise<any>;
+type BuildCapabilitiesFn = (
+  auth: any,
+  request: Request,
+  options?: { rbac?: any; fga?: any; apiPrefix?: string },
+) => Promise<any>;
 let _buildCapabilitiesPromise: Promise<BuildCapabilitiesFn | undefined> | undefined;
 function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   if (!_buildCapabilitiesPromise) {
@@ -46,50 +55,128 @@ function loadBuildCapabilities(): Promise<BuildCapabilitiesFn | undefined> {
   return _buildCapabilitiesPromise;
 }
 
+let _permissionPatternsPromise: Promise<Record<string, unknown> | undefined> | undefined;
+function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> {
+  if (!_permissionPatternsPromise) {
+    _permissionPatternsPromise = import('@mastra/core/auth/ee')
+      .then(m => m.PERMISSION_PATTERNS as Record<string, unknown>)
+      .catch(() => {
+        console.error(
+          '[@mastra/server] EE auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+        );
+        return undefined;
+      });
+  }
+  return _permissionPatternsPromise;
+}
+
 /**
  * Helper to get auth provider from Mastra instance.
+ *
+ * Dual auth is OPT-IN: if studio.auth is explicitly configured, Studio requests
+ * use it exclusively. Otherwise, Studio requests fall back to server.auth for
+ * backward compatibility.
  */
-function getAuthProvider(mastra: any): MastraAuthProvider | null {
+function getAuthProvider(mastra: any, isStudio?: boolean): IMastraAuthProvider | null {
+  // Check if studio.auth is explicitly configured
+  const studioConfig = mastra.getStudio?.();
+  const hasStudioAuth = studioConfig?.auth && typeof studioConfig.auth.authenticateToken === 'function';
+
+  // If this is a Studio request AND studio.auth is configured, use it exclusively
+  if (isStudio && hasStudioAuth) {
+    return studioConfig.auth as IMastraAuthProvider;
+  }
+
+  // Otherwise (non-studio request, OR studio request without studio.auth configured),
+  // fall back to server.auth for backward compatibility
   const serverConfig = mastra.getServer?.();
   if (!serverConfig?.auth) return null;
 
   // Auth can be either MastraAuthConfig or MastraAuthProvider
   // If it has authenticateToken method, it's a provider
   if (typeof serverConfig.auth.authenticateToken === 'function') {
-    return serverConfig.auth as MastraAuthProvider;
+    return serverConfig.auth as IMastraAuthProvider;
   }
 
   return null;
 }
 
 /**
+ * Check if the request is from Studio (via x-mastra-client-type header).
+ */
+function isStudioRequest(request: Request): boolean {
+  return isStudioClientTypeHeader(request.headers.get(MASTRA_CLIENT_TYPE_HEADER) ?? undefined);
+}
+
+/**
  * Get the public-facing origin from a request, respecting reverse proxy headers.
- * Behind a proxy (e.g. edge router), request.url contains the internal hostname.
- * X-Forwarded-Host tells us the real public hostname.
- * Always uses https when behind a proxy — Knative's queue-proxy overwrites
- * X-Forwarded-Proto based on the internal HTTP connection, so it's unreliable.
+ * Behind a proxy (e.g. edge router), request.url contains the internal hostname,
+ * so we rely on forwarded headers to reconstruct the real public origin.
+ *
+ * Assumes the server is behind a trusted proxy (or running locally). When
+ * exposed directly to untrusted clients, the Host header is attacker-controlled
+ * and must be validated upstream.
+ *
+ * Priority:
+ * 1. X-Forwarded-Host (traditional reverse proxy) → always HTTPS. Knative's
+ *    queue-proxy overwrites X-Forwarded-Proto based on the internal HTTP
+ *    connection, so X-Forwarded-Proto is ignored here.
+ * 2. Host header with X-Forwarded-Proto (AWS ALB, some proxies) → respect proto.
+ * 3. Host header alone → use the scheme from request.url (covers both direct
+ *    HTTP access and proxies that preserve Host but don't set a proto header).
+ * 4. No Host header → fall back to request.url.origin (local dev / direct access).
  */
 export function getPublicOrigin(request: Request): string {
   const forwardedHost = request.headers.get('x-forwarded-host')?.split(',')[0]?.trim();
   if (forwardedHost) {
     return `https://${forwardedHost}`;
   }
+
+  const host = request.headers.get('host');
+  if (host) {
+    const forwardedProto = request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim();
+    const proto = forwardedProto || new URL(request.url).protocol.replace(':', '');
+    return `${proto}://${host}`;
+  }
+
   return new URL(request.url).origin;
 }
 
 /**
- * Helper to get RBAC provider from Mastra server config.
+ * Helper to get RBAC provider from Mastra config.
+ * Checks studio config first when isStudio is true.
  */
-function getRBACProvider(mastra: any): IRBACProvider<EEUser> | undefined {
+function getRBACProvider(mastra: any, isStudio?: boolean): IRBACProvider<EEUser> | undefined {
+  if (isStudio) {
+    const studioConfig = mastra.getStudio?.();
+    if (studioConfig?.rbac) {
+      return studioConfig.rbac as IRBACProvider<EEUser>;
+    }
+  }
   const serverConfig = mastra.getServer?.();
   return serverConfig?.rbac as IRBACProvider<EEUser> | undefined;
+}
+
+/**
+ * Helper to get FGA provider from Mastra config.
+ * Checks studio config first when isStudio is true.
+ */
+function getFGAProvider(mastra: any, isStudio?: boolean): IFGAProvider<EEUser> | undefined {
+  if (isStudio) {
+    const studioConfig = mastra.getStudio?.();
+    if (studioConfig?.fga) {
+      return studioConfig.fga as IFGAProvider<EEUser>;
+    }
+  }
+  const serverConfig = mastra.getServer?.();
+  return serverConfig?.fga as IFGAProvider<EEUser> | undefined;
 }
 
 /**
  * Type guard to check if auth provider implements an interface.
  */
 function implementsInterface<T>(auth: unknown, method: keyof T): auth is T {
-  return auth !== null && typeof auth === 'object' && method in auth;
+  return auth !== null && typeof auth === 'object' && typeof (auth as any)[method] === 'function';
 }
 
 // ============================================================================
@@ -109,19 +196,58 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
     try {
       const { mastra, request, routePrefix } = ctx as any;
 
-      const auth = getAuthProvider(mastra);
+      // Check if this is a Studio request (via x-mastra-client-type header)
+      const isStudio = isStudioRequest(request);
+
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth) {
         return { enabled: false, login: null };
       }
 
-      const rbac = getRBACProvider(mastra);
+      const rbac = getRBACProvider(mastra, isStudio);
+      const fga = getFGAProvider(mastra, isStudio);
 
       const buildCapabilities = await loadBuildCapabilities();
       if (!buildCapabilities) {
         return { enabled: false, login: null };
       }
-      const capabilities = await buildCapabilities(auth, request, { rbac, apiPrefix: routePrefix });
+      const capabilities = await buildCapabilities(auth, request, { rbac, fga, apiPrefix: routePrefix });
+
+      // If capabilities came back without a user, the session may have expired.
+      // Attempt a transparent refresh (same logic as coreAuthMiddleware) and retry.
+      if (!('user' in capabilities) && supportsSessionRefresh(auth)) {
+        try {
+          const sessionId = await auth.getSessionIdFromRequest(request);
+          if (sessionId) {
+            const refreshedSession = await auth.refreshSession(sessionId);
+            if (refreshedSession) {
+              const sessionHeaders = await auth.getSessionHeaders(refreshedSession);
+              const cookieValue = extractCookieFromHeaders(sessionHeaders);
+              if (cookieValue) {
+                // Rebuild capabilities with the refreshed cookie
+                const refreshedRequest = new Request(request.url, {
+                  method: request.method,
+                  headers: new Headers(request.headers),
+                });
+                refreshedRequest.headers.set('Cookie', cookieValue);
+                const refreshedCapabilities = await buildCapabilities(auth, refreshedRequest, {
+                  rbac,
+                  apiPrefix: routePrefix,
+                });
+
+                // Attach refresh headers so the adapter can set the new cookie
+                if ('user' in refreshedCapabilities) {
+                  (refreshedCapabilities as any).__refreshHeaders = sessionHeaders;
+                }
+                return refreshedCapabilities;
+              }
+            }
+          }
+        } catch {
+          // Refresh failed — return original unauthenticated capabilities
+        }
+      }
 
       return capabilities;
     } catch (error) {
@@ -129,6 +255,17 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
     }
   },
 });
+
+/**
+ * Extract a full cookie string from session headers (e.g. Set-Cookie → Cookie).
+ */
+function extractCookieFromHeaders(headers: Record<string, string>): string | null {
+  const setCookie = headers['Set-Cookie'] || headers['set-cookie'];
+  if (!setCookie) return null;
+  // Set-Cookie value is "name=value; Path=/; ..." — extract "name=value"
+  const match = setCookie.match(/^([^;]+)/);
+  return match ? (match[1] ?? null) : null;
+}
 
 // ============================================================================
 // GET /auth/me
@@ -145,8 +282,9 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
   handler: async ctx => {
     try {
       const { mastra, request } = ctx as any;
-      const auth = getAuthProvider(mastra);
-      const rbac = getRBACProvider(mastra);
+      const isStudio = isStudioRequest(request);
+      const auth = getAuthProvider(mastra, isStudio);
+      const rbac = getRBACProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<IUserProvider>(auth, 'getCurrentUser')) {
         return null;
@@ -197,7 +335,8 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   handler: async ctx => {
     try {
       const { mastra, redirect_uri, request, routePrefix } = ctx as any;
-      const auth = getAuthProvider(mastra);
+      const isStudio = isStudioRequest(request);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'getLoginUrl')) {
         throw new HTTPException(404, { message: 'SSO not configured' });
@@ -241,7 +380,7 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       const stateId = crypto.randomUUID();
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
-      const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
+      const loginUrl = await Promise.resolve(auth.getLoginUrl(oauthCallbackUri, state));
 
       // Build response with optional PKCE cookies
       const headers = new Headers({ 'Content-Type': 'application/json' });
@@ -278,6 +417,7 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, code, state, request } = ctx as any;
+    const _isStudio = isStudioRequest(request); // Kept for potential future use; currently we prefer studio auth for SSO
 
     // Build base URL for redirects (Response.redirect requires absolute URL)
     const baseUrl = getPublicOrigin(request);
@@ -317,7 +457,15 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     }
 
     try {
-      const auth = getAuthProvider(mastra);
+      // For SSO callback, the redirect from the identity provider won't include
+      // the x-mastra-client-type header. Prefer studio auth for SSO (it's the
+      // typical SSO use case), fall back to server auth only if studio doesn't exist.
+      let auth = getAuthProvider(mastra, true); // Try studio first
+
+      // If studio doesn't have SSO, fall back to server
+      if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
+        auth = getAuthProvider(mastra, false);
+      }
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
         return Response.redirect(`${absoluteRedirect}?error=sso_not_configured`, 302);
@@ -380,9 +528,10 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth) {
         return new Response(JSON.stringify({ success: true }), {
@@ -430,6 +579,65 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// POST /auth/refresh
+// ============================================================================
+
+export const POST_REFRESH_ROUTE = createPublicRoute({
+  method: 'POST',
+  path: '/auth/refresh',
+  responseType: 'datastream-response',
+  responseSchema: refreshResponseSchema,
+  summary: 'Refresh session',
+  description: 'Refreshes the current session, extending its expiry. Sets a new session cookie on success.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    const { mastra, request } = ctx as any;
+    const isStudio = isStudioRequest(request);
+
+    try {
+      const auth = getAuthProvider(mastra, isStudio);
+
+      if (
+        !auth ||
+        !implementsInterface<ISessionProvider>(auth, 'refreshSession') ||
+        !implementsInterface<ISessionProvider>(auth, 'getSessionIdFromRequest')
+      ) {
+        throw new HTTPException(404, { message: 'Session refresh not configured' });
+      }
+
+      // Get session ID from request
+      const sessionId = auth.getSessionIdFromRequest(request);
+      if (!sessionId) {
+        throw new HTTPException(401, { message: 'No session' });
+      }
+
+      // Refresh the session
+      const newSession = await auth.refreshSession(sessionId);
+      if (!newSession) {
+        throw new HTTPException(401, { message: 'Session expired' });
+      }
+
+      // Build response with new session headers
+      const headers = new Headers({ 'Content-Type': 'application/json' });
+      if (implementsInterface<ISessionProvider>(auth, 'getSessionHeaders')) {
+        const sessionHeaders = auth.getSessionHeaders(newSession);
+        for (const [key, value] of Object.entries(sessionHeaders)) {
+          headers.append(key, value);
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers,
+      });
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error refreshing session');
+    }
+  },
+});
+
+// ============================================================================
 // POST /auth/credentials/sign-in
 // ============================================================================
 
@@ -443,9 +651,10 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request, email, password } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signIn')) {
         throw new HTTPException(404, { message: 'Credentials authentication not configured' });
@@ -499,9 +708,10 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, request, email, password, name } = ctx as any;
+    const isStudio = isStudioRequest(request);
 
     try {
-      const auth = getAuthProvider(mastra);
+      const auth = getAuthProvider(mastra, isStudio);
 
       if (!auth || !implementsInterface<ICredentialsProvider>(auth, 'signUp')) {
         throw new HTTPException(404, { message: 'Credentials authentication not configured' });
@@ -545,6 +755,69 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
 });
 
 // ============================================================================
+// GET /auth/roles/:roleId/permissions
+// ============================================================================
+
+const rolePermissionsPathSchema = z.object({ roleId: z.string() });
+const rolePermissionsResponseSchema = z.object({ roleId: z.string(), permissions: z.array(z.string()) });
+
+export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/roles/:roleId/permissions',
+  requiresAuth: true,
+  responseType: 'json',
+  pathParamSchema: rolePermissionsPathSchema,
+  responseSchema: rolePermissionsResponseSchema,
+  summary: 'Get permissions for a role',
+  description:
+    'Returns the resolved permissions for a specific role. Only accessible by admin users. Used by the "View as role" feature.',
+  tags: ['Auth'],
+  handler: async ctx => {
+    try {
+      const { mastra, requestContext, roleId } = ctx as any;
+
+      // Check that the caller is an admin
+      const callerPermissions: string[] = requestContext?.get(MASTRA_USER_PERMISSIONS_KEY) ?? [];
+      const isAdmin = callerPermissions.some((p: string) => p === '*' || p === '*:*');
+      if (!isAdmin) {
+        throw new HTTPException(403, { message: 'Admin access required' });
+      }
+
+      const rbac = getRBACProvider(mastra);
+      if (!rbac?.getPermissionsForRole) {
+        throw new HTTPException(404, { message: 'RBAC provider does not support role permission resolution' });
+      }
+
+      const permissions = await rbac.getPermissionsForRole(roleId);
+      return { roleId, permissions };
+    } catch (error) {
+      if (error instanceof HTTPException) throw error;
+      return handleError(error, 'Error getting role permissions');
+    }
+  },
+});
+
+// ============================================================================
+// GET /auth/permission-patterns
+// ============================================================================
+
+export const GET_PERMISSION_PATTERNS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/auth/permission-patterns',
+  requiresAuth: true,
+  responseType: 'json',
+  responseSchema: permissionPatternsResponseSchema,
+  summary: 'List valid permission patterns',
+  description:
+    'Returns the authoritative list of valid permission-pattern strings. Used by Studio to validate the route→permission literals it ships and to gate the sidebar.',
+  tags: ['Auth'],
+  handler: async () => {
+    const patterns = await loadPermissionPatterns();
+    return { patterns: Object.keys(patterns ?? {}) };
+  },
+});
+
+// ============================================================================
 // Export all auth routes
 // ============================================================================
 
@@ -554,6 +827,9 @@ export const AUTH_ROUTES = [
   GET_SSO_LOGIN_ROUTE,
   GET_SSO_CALLBACK_ROUTE,
   POST_LOGOUT_ROUTE,
+  POST_REFRESH_ROUTE,
   POST_CREDENTIALS_SIGN_IN_ROUTE,
   POST_CREDENTIALS_SIGN_UP_ROUTE,
+  GET_ROLE_PERMISSIONS_ROUTE,
+  GET_PERMISSION_PATTERNS_ROUTE,
 ] as const;

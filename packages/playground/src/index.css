@@ -1,173 +1,55 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import './fonts.css';
+@import '../../playground-ui/src/index.css';
 
-@font-face {
-  font-family: 'TasaExplorer';
-  src:
-    local('TasaExplorer'),
-    url('./assets/fonts/TASAExplorerVF.woff2') format('woff2');
-}
-@font-face {
-  font-family: 'Inter';
-  src:
-    local('Inter'),
-    url('./assets/fonts/InterVariable.ttf') format('truetype');
-}
+/* Scan playground-ui dist for Tailwind classes used by consumed components */
+@source '../../node_modules/@mastra/playground-ui';
 
-@font-face {
-  font-family: 'GeistMonoVF';
-  src:
-    local('GeistMonoVF'),
-    url('./assets/fonts/GeistMonoVF.woff') format('woff');
-}
+@layer base {
+  :root {
+    --top-bar-height: 40px;
+    --color-thumb: var(--surface4);
+    --color-thumb-hover: var(--surface6);
+    --color-track: transparent;
 
-:root {
-  --font-inter: 'Inter', sans-serif;
-  --tasa-explorer: 'TasaExplorer', sans-serif;
-  --geist-mono: 'GeistMonoVF', monospace;
-
-  /* Dark theme (default) */
-  --surface1: #09090b;
-  --surface2: #111113;
-  --surface3: #18181b;
-  --surface4: #212124;
-  --surface5: rgba(39, 39, 42, 0.9);
-  --surface6: #3b3b40;
-
-  --accent1: #22c55e;
-  --accent2: #ef4444;
-  --accent3: #3b82f6;
-  --accent5: #60a5fa;
-  --accent6: #f59e0b;
-
-  --accent1Dark: #0d2818;
-  --accent2Dark: #2a1515;
-  --accent3Dark: #152036;
-  --accent5Dark: #15202a;
-  --accent6Dark: #261d0d;
-
-  --accent1Darker: #0a1a10;
-  --accent2Darker: #1a1010;
-  --accent3Darker: #0f1520;
-  --accent5Darker: #0f151a;
-  --accent6Darker: #1a140a;
-
-  --neutral1: #52525b;
-  --neutral2: #71717a;
-  --neutral3: #a1a1aa;
-  --neutral4: #d4d4d8;
-  --neutral5: #e4e4e7;
-  --neutral6: #fafafa;
-
-  --error: #ef4444;
-  --overlay: rgba(0, 0, 0, 0.75);
-  --border1: rgba(255, 255, 255, 0.08);
-  --border2: rgba(255, 255, 255, 0.12);
+    /*
+     * Override playground-ui semantic font tokens with locally-bundled fonts.
+     * Studio uses Mona Sans for both display and body.
+     */
+    --font-display:
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
+    --font-body:
+      'Mona Sans', system-ui, ui-sans-serif, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol',
+      'Noto Color Emoji';
+    --font-mono:
+      'CommitMono', ui-monospace, sfmono-regular, menlo, monaco, consolas, 'Liberation Mono', 'Courier New', monospace;
+  }
+  html {
+    font-feature-settings: 'ss06' on;
+    scrollbar-color: var(--color-thumb) var(--color-track);
+    scrollbar-width: thin;
+  }
 }
 
-html.light {
-  --surface1: #ffffff;
-  --surface2: #f8fafc;
-  --surface3: #f1f5f9;
-  --surface4: #e2e8f0;
-  --surface5: rgba(226, 232, 240, 0.9);
-  --surface6: #cbd5e1;
-
-  --accent1: #16a34a;
-  --accent2: #dc2626;
-  --accent3: #2563eb;
-  --accent5: #3b82f6;
-  --accent6: #d97706;
-
-  --accent1Dark: #dcfce7;
-  --accent2Dark: #fee2e2;
-  --accent3Dark: #dbeafe;
-  --accent5Dark: #dbeafe;
-  --accent6Dark: #fef3c7;
-
-  --accent1Darker: #bbf7d0;
-  --accent2Darker: #fecaca;
-  --accent3Darker: #bfdbfe;
-  --accent5Darker: #bfdbfe;
-  --accent6Darker: #fde68a;
-
-  --neutral1: #64748b;
-  --neutral2: #475569;
-  --neutral3: #334155;
-  --neutral4: #1e293b;
-  --neutral5: #0f172a;
-  --neutral6: #020617;
-
-  --error: #dc2626;
-  --overlay: rgba(15, 23, 42, 0.45);
-  --border1: rgba(15, 23, 42, 0.12);
-  --border2: rgba(15, 23, 42, 0.2);
-}
-
-/* width */
 ::-webkit-scrollbar {
   width: 5px;
   height: 8px;
 }
-
-/* Track */
 ::-webkit-scrollbar-track {
   background: transparent;
   border-radius: 5px;
 }
-
-/* Handle */
-::-webkit-scrollbar-thumb {
-  background: #303030;
+html::-webkit-scrollbar-thumb {
+  background: var(--color-thumb);
   border-radius: 4px;
 }
-
-/* Handle on hover */
-::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-@layer base {
-  :root {
-    --radius: 0.5rem;
-    --top-bar-height: 40px;
-    --color-thumb: rgb(64, 64, 64);
-    --color-thumb-hover: rgb(96, 96, 96);
-    --color-track: transparent;
-  }
-}
-
-@layer base {
-  * {
-    @apply border-border1;
-  }
-  body {
-    @apply bg-surface1 text-neutral6;
-  }
-  html {
-    scrollbar-color: var(--color-thumb) var(--color-track);
-    scrollbar-width: thin;
-  }
-
-  *:focus,
-  *:focus-visible {
-    @apply outline-none;
-  }
-
-  *:focus-visible {
-    @apply outline outline-accent1;
-  }
-}
-
-.react-flow__controls-button {
-  @apply !text-neutral5 !bg-surface2 !border-none;
+html::-webkit-scrollbar-thumb:hover {
+  background: var(--color-thumb-hover);
 }
 
 .scorerListItem:has(+ .expanded) {
   border-bottom: none;
 }
-
 .scorerListItem.expanded:has(+ .expanded) {
   margin-bottom: 5px;
 }
@@ -190,13 +72,169 @@ html.light {
   }
 }
 
+@keyframes shimmer-text {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 div[class^='language-'],
 pre[class^='language-'],
 code[class^='language-'] {
-  font-family: var(--geist-mono) !important;
+  font-family: var(--font-mono) !important;
 }
 
 th:has(header) {
   height: var(--top-bar-height) !important;
-  padding-block: 0 !important ;
+  padding-block: 0 !important;
+}
+
+@layer base {
+  /*
+   * Agent builder starter page — editorial serif minimal motion.
+   * A slow aurora-like gradient drifts behind the content, and the
+   * headline / prompt / chips stagger in on mount. Low contrast on
+   * purpose so the motion feels atmospheric, never loud.
+   */
+  .starter-aurora {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .starter-aurora::before {
+    content: '';
+    position: absolute;
+    inset: -20%;
+    background:
+      radial-gradient(ellipse 55% 45% at 25% 30%, rgba(212, 212, 216, 0.09), transparent 65%),
+      radial-gradient(ellipse 50% 40% at 75% 70%, rgba(161, 161, 170, 0.07), transparent 65%),
+      radial-gradient(ellipse 40% 35% at 50% 95%, rgba(244, 244, 245, 0.05), transparent 70%);
+    filter: blur(40px);
+    animation: starter-drift 28s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  @keyframes starter-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    33% {
+      transform: translate3d(-2%, 1.5%, 0) scale(1.04);
+    }
+    66% {
+      transform: translate3d(1.5%, -2%, 0) scale(0.98);
+    }
+  }
+
+  @keyframes starter-enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .starter-heading {
+    animation: starter-enter 520ms var(--ease-out-custom) both;
+  }
+  .starter-prompt {
+    animation: starter-enter 520ms var(--ease-out-custom) 120ms both;
+  }
+  .starter-chip {
+    animation: starter-enter 420ms var(--ease-out-custom) both;
+  }
+
+  /*
+   * Agent builder "Your agent is ready" panel — a polished, finite light pass.
+   * A soft ambient aurora gently drifts behind the content, while a bright
+   * specular highlight sweeps diagonally across the surface once on mount
+   * (~2.4s), like a light moving over a car's bodywork, then settles.
+   */
+  .ready-stage {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  /* Ambient aurora — agent-tinted, slow, always present, low contrast. */
+  .ready-stage::before {
+    content: '';
+    position: absolute;
+    inset: -25%;
+    background:
+      radial-gradient(ellipse 50% 45% at 30% 28%, var(--ready-aurora-1, rgba(212, 212, 216, 0.14)), transparent 62%),
+      radial-gradient(ellipse 48% 42% at 72% 74%, var(--ready-aurora-2, rgba(161, 161, 170, 0.1)), transparent 64%);
+    filter: blur(48px);
+    animation: ready-aurora-drift 22s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  /*
+   * Specular sweep — a single bright diagonal pass. The animation itself is
+   * driven once via the Web Animations API in AgentProfileReadyStep so that a
+   * layout/view-transition repaint can never replay it; this rule only defines
+   * the gradient surface and its resting (faded-out) state.
+   */
+  .ready-stage-sweep {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 30%,
+      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 44%,
+      var(--ready-sweep-hot, rgba(255, 255, 255, 0.22)) 50%,
+      var(--ready-sweep-soft, rgba(255, 255, 255, 0.06)) 56%,
+      transparent 70%
+    );
+    background-size: 250% 100%;
+    background-position: -80% 0;
+    mix-blend-mode: screen;
+    filter: blur(6px);
+    opacity: 0;
+    pointer-events: none;
+    z-index: 1;
+    will-change: background-position, opacity;
+  }
+
+  @keyframes ready-aurora-drift {
+    0%,
+    100% {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    50% {
+      transform: translate3d(-2%, 2%, 0) scale(1.05);
+    }
+  }
+
+  .ready-stage-content {
+    position: relative;
+    z-index: 2;
+    animation: starter-enter 560ms var(--ease-out-custom) 200ms both;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .starter-aurora::before,
+    .starter-heading,
+    .starter-prompt,
+    .starter-chip,
+    .ready-stage::before,
+    .ready-stage-content {
+      animation: none;
+    }
+    .ready-stage-sweep {
+      opacity: 0;
+    }
+  }
 }

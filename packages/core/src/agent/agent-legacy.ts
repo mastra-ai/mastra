@@ -16,6 +16,7 @@ import type {
   StreamTextWithMessagesArgs,
   StreamObjectWithMessagesArgs,
 } from '../llm/model/base.types';
+import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraModelConfig, TripwireProperties } from '../llm/model/shared.types';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
@@ -31,8 +32,9 @@ import {
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors/index';
 import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '../request-context';
 import type { ChunkType } from '../stream/types';
-import type { CoreTool } from '../tools/types';
+import type { CoreTool, ToolHooks } from '../tools/types';
 import type { DynamicArgument } from '../types';
+import type { OutputWriter } from '../workflows';
 import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
 import type {
@@ -78,8 +80,8 @@ export interface AgentLegacyCapabilities {
   hasOwnMemory(): boolean;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
-  /** Get LLM instance */
-  getLLM(options: { requestContext: RequestContext }): Promise<MastraLLMV1>;
+  /** Get the agent's LLM instance, optionally using a request-scoped model override */
+  getLLM(options: { requestContext: RequestContext; model?: DynamicArgument<MastraModelConfig> }): Promise<MastraLLMV1>;
   /** Get memory instance */
   getMemory(options: { requestContext: RequestContext }): Promise<MastraMemory | undefined>;
   /** Get memory messages (deprecated - use input processors) */
@@ -102,6 +104,8 @@ export interface AgentLegacyCapabilities {
       writableStream?: WritableStream<ChunkType>;
       methodType: AgentMethodType;
       memoryConfig?: MemoryConfigInternal;
+      inputProcessors?: InputProcessorOrWorkflow[];
+      hooks?: ToolHooks;
     } & ObservabilityContext,
   ): Promise<Record<string, CoreTool>>;
 
@@ -127,9 +131,19 @@ export interface AgentLegacyCapabilities {
       requestContext: RequestContext;
       messageList: MessageList;
       stepNumber?: number;
+      inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      tools?: Record<string, CoreTool>;
+      runId?: string;
+      threadId?: string;
+      resourceId?: string;
+      outputWriter?: OutputWriter;
+      autoResumeSuspendedTools?: boolean;
+      backgroundTaskEnabled?: boolean;
+      providerOptions?: ProviderOptions;
     },
   ): Promise<{
     messageList: MessageList;
+    tools?: Record<string, CoreTool>;
     tripwire?: {
       reason: string;
       retry?: boolean;
@@ -153,19 +167,24 @@ export interface AgentLegacyCapabilities {
   resolveTitleGenerationConfig(
     generateTitleConfig:
       | boolean
-      | { model: DynamicArgument<MastraModelConfig, any>; instructions?: DynamicArgument<string> }
+      | {
+          model?: DynamicArgument<MastraModelConfig, any>;
+          instructions?: DynamicArgument<string>;
+          minMessages?: number;
+        }
       | undefined,
   ): {
     shouldGenerate: boolean;
     model?: DynamicArgument<MastraModelConfig, any>;
     instructions?: DynamicArgument<string>;
+    minMessages?: number;
   };
-  /** Save step messages */
-  saveStepMessages(args: { result: any; messageList: MessageList; runId: string }): Promise<void>;
   /** Convert instructions to string */
   convertInstructionsToString(instructions: AgentInstructions): string;
   /** Options for tracing policy */
   tracingPolicy?: any;
+  /** Resolved version ID from stored config */
+  resolvedVersionId?: string;
   /** Agent network append flag */
   _agentNetworkAppend?: boolean;
   /** List resolved output processors */
@@ -226,6 +245,9 @@ export class AgentLegacyHandler {
     writableStream,
     methodType,
     tracingOptions,
+    inputProcessors,
+    providerOptions,
+    hooks,
     ...rest
   }: {
     instructions: AgentInstructions;
@@ -241,14 +263,13 @@ export class AgentLegacyHandler {
     writableStream?: WritableStream<ChunkType>;
     methodType: 'generate' | 'stream';
     tracingOptions?: TracingOptions;
+    inputProcessors?: InputProcessorOrWorkflow[];
+    providerOptions?: ProviderOptions;
+    hooks?: ToolHooks;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     return {
       before: async () => {
-        if (process.env.NODE_ENV !== 'test') {
-          this.capabilities.logger.debug(`[Agents:${this.capabilities.name}] - Starting generation`, { runId });
-        }
-
         const agentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
           name: `agent run: '${this.capabilities.id}'`,
@@ -264,6 +285,7 @@ export class AgentLegacyHandler {
               ...(toolsets ? Object.keys(toolsets) : []),
               ...(clientTools ? Object.keys(clientTools) : []),
             ],
+            ...(this.capabilities.resolvedVersionId ? { resolvedVersionId: this.capabilities.resolvedVersionId } : {}),
           },
           metadata: {
             runId,
@@ -281,28 +303,9 @@ export class AgentLegacyHandler {
 
         const memory = await this.capabilities.getMemory({ requestContext });
 
-        const toolEnhancements = [
-          // toolsets
-          toolsets && Object.keys(toolsets || {}).length > 0
-            ? `toolsets present (${Object.keys(toolsets || {}).length} tools)`
-            : undefined,
-
-          // memory tools
-          memory && resourceId ? 'memory and resourceId available' : undefined,
-        ]
-          .filter(Boolean)
-          .join(', ');
-        this.capabilities.logger.debug(`[Agent:${this.capabilities.name}] - Enhancing tools: ${toolEnhancements}`, {
-          runId,
-          toolsets: toolsets ? Object.keys(toolsets) : undefined,
-          clientTools: clientTools ? Object.keys(clientTools) : undefined,
-          hasMemory: !!memory,
-          hasResourceId: !!resourceId,
-        });
-
         const threadId = thread?.id;
 
-        const convertedTools = await this.capabilities.convertTools({
+        let convertedTools = await this.capabilities.convertTools({
           toolsets,
           clientTools,
           threadId,
@@ -313,6 +316,8 @@ export class AgentLegacyHandler {
           writableStream,
           methodType: methodType === 'generate' ? 'generateLegacy' : 'streamLegacy',
           memoryConfig,
+          inputProcessors,
+          hooks,
         });
 
         let messageList = new MessageList({
@@ -331,6 +336,7 @@ export class AgentLegacyHandler {
             requestContext,
             ...innerObservabilityContext,
             messageList,
+            inputProcessorOverrides: inputProcessors,
           });
           // Run processInputStep for step 0 (legacy path compatibility)
           if (!tripwire) {
@@ -339,7 +345,16 @@ export class AgentLegacyHandler {
               ...innerObservabilityContext,
               messageList,
               stepNumber: 0,
+              inputProcessorOverrides: inputProcessors,
+              tools: convertedTools,
+              providerOptions,
+              runId,
+              threadId,
+              resourceId,
             });
+            if (inputStepResult.tools) {
+              convertedTools = inputStepResult.tools;
+            }
             if (inputStepResult.tripwire) {
               return {
                 messageObjects: [],
@@ -375,20 +390,9 @@ export class AgentLegacyHandler {
             text: `A resourceId and a threadId must be provided when using Memory. Saw threadId "${threadId}" and resourceId "${resourceId}"`,
           });
           (this.capabilities.logger as any).trackException(mastraError);
-          this.capabilities.logger.error(mastraError.toString());
           agentSpan?.error({ error: mastraError });
           throw mastraError;
         }
-        const store = memory.constructor.name;
-        this.capabilities.logger.debug(
-          `[Agent:${this.capabilities.name}] - Memory persistence enabled: store=${store}, resourceId=${resourceId}`,
-          {
-            runId,
-            resourceId,
-            threadId,
-            memoryStore: store,
-          },
-        );
 
         let threadObject: StorageThreadType | undefined = undefined;
         const existingThread = await memory.getThreadById({ threadId });
@@ -398,7 +402,7 @@ export class AgentLegacyHandler {
             (thread.metadata && !deepEqual(existingThread.metadata, thread.metadata))
           ) {
             threadObject = await memory.saveThread({
-              thread: { ...existingThread, metadata: thread.metadata },
+              thread: { ...existingThread, metadata: { ...(existingThread.metadata ?? {}), ...thread.metadata } },
               memoryConfig,
             });
           } else {
@@ -434,6 +438,7 @@ export class AgentLegacyHandler {
           requestContext,
           ...innerObservabilityContext,
           messageList,
+          inputProcessorOverrides: inputProcessors,
         });
         messageList = processedMessageList;
 
@@ -447,7 +452,16 @@ export class AgentLegacyHandler {
             ...innerObservabilityContext,
             messageList,
             stepNumber: 0,
+            inputProcessorOverrides: inputProcessors,
+            tools: convertedTools,
+            providerOptions,
+            runId,
+            threadId,
+            resourceId,
           });
+          if (inputStepResult.tools) {
+            convertedTools = inputStepResult.tools;
+          }
           if (inputStepResult.tripwire) {
             return {
               convertedTools,
@@ -519,32 +533,16 @@ export class AgentLegacyHandler {
           }),
         };
 
-        this.capabilities.logger.debug(`[Agent:${this.capabilities.name}] - Post processing LLM response`, {
+        this.capabilities.logger.debug('Post processing LLM response', {
+          agentName: this.capabilities.name,
           runId,
           result: resToLog,
           threadId,
         });
 
-        const messageListResponses = new MessageList({
-          threadId,
-          resourceId,
-          generateMessageId: this.capabilities.mastra?.generateId?.bind(this.capabilities.mastra),
-          // @ts-expect-error Flag for agent network messages
-          _agentNetworkAppend: this.capabilities._agentNetworkAppend,
-        })
-          .add(result.response.messages, 'response')
-          .get.all.core();
-
-        const usedWorkingMemory = messageListResponses?.some(
-          m => m.role === 'tool' && m?.content?.some(c => c?.toolName === 'updateWorkingMemory'),
-        );
-        // working memory updates the thread, so we need to get the latest thread if we used it
+        // re-read the latest thread so metadata written mid-run (working memory, processors) isn't overwritten
         const memory = await this.capabilities.getMemory({ requestContext });
-        const thread = usedWorkingMemory
-          ? threadId
-            ? await memory?.getThreadById({ threadId })
-            : undefined
-          : threadAfter;
+        const thread = (threadId ? await memory?.getThreadById({ threadId }) : undefined) ?? threadAfter;
 
         if (memory && resourceId && thread) {
           try {
@@ -583,31 +581,40 @@ export class AgentLegacyHandler {
 
             // Add title generation to promises if needed
             const config = memory.getMergedThreadConfig(memoryConfig);
-            const userMessage = this.capabilities.getMostRecentUserMessage(messageList.get.all.ui());
 
             const {
               shouldGenerate,
               model: titleModel,
               instructions: titleInstructions,
+              minMessages,
             } = this.capabilities.resolveTitleGenerationConfig(config?.generateTitle);
 
-            if (shouldGenerate && !thread.title && userMessage) {
-              const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
-              promises.push(
-                this.capabilities
-                  .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
-                  .then(title => {
-                    if (title) {
-                      return memory.createThread({
-                        threadId: thread.id,
-                        resourceId,
-                        memoryConfig,
-                        title,
-                        metadata: thread.metadata,
-                      });
-                    }
-                  }),
-              );
+            const uiMessages = messageList.get.all.ui();
+            const messages = messageList.get.all.core();
+            const requiredMessages = minMessages ?? 1;
+
+            if (shouldGenerate && !thread.title && messages.length >= requiredMessages) {
+              const userMessage = this.capabilities.getMostRecentUserMessage(uiMessages);
+
+              if (userMessage) {
+                const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
+
+                promises.push(
+                  this.capabilities
+                    .genTitle(userMessage, requestContext, observabilityContext, titleModel, titleInstructions)
+                    .then(title => {
+                      if (title) {
+                        return memory.createThread({
+                          threadId: thread.id,
+                          resourceId,
+                          memoryConfig,
+                          title,
+                          metadata: thread.metadata,
+                        });
+                      }
+                    }),
+                );
+              }
             }
 
             if (promises.length > 0) {
@@ -634,7 +641,6 @@ export class AgentLegacyHandler {
               e,
             );
             (this.capabilities.logger as any).trackException(mastraError);
-            this.capabilities.logger.error(mastraError.toString());
             agentSpan?.error({ error: mastraError });
             throw mastraError;
           }
@@ -710,6 +716,7 @@ export class AgentLegacyHandler {
     messages: MessageListInput,
     options: (AgentGenerateOptions<Output, ExperimentalOutput> | AgentStreamOptions<Output, ExperimentalOutput>) & {
       writableStream?: WritableStream<ChunkType>;
+      hooks?: ToolHooks;
     } & Record<string, any>,
     methodType: 'generate' | 'stream',
   ): Promise<{
@@ -754,6 +761,8 @@ export class AgentLegacyHandler {
       tracingOptions,
       savePerStep,
       writableStream,
+      inputProcessors,
+      hooks,
       ...args
     } = options;
 
@@ -772,9 +781,9 @@ export class AgentLegacyHandler {
     const memoryConfig = (args.memory as any)?.options || memoryConfigFromArgs;
 
     if (resourceId && threadFromArgs && !this.capabilities.hasOwnMemory()) {
-      this.capabilities.logger.warn(
-        `[Agent:${this.capabilities.name}] - No memory is configured but resourceId and threadId were passed in args. This will not work.`,
-      );
+      this.capabilities.logger.warn('No memory configured but resourceId and threadId were passed in args', {
+        agent: this.capabilities.name,
+      });
     }
     const runId =
       args.runId ||
@@ -787,7 +796,10 @@ export class AgentLegacyHandler {
       }) ||
       randomUUID();
     const instructions = args.instructions || (await this.capabilities.getInstructions({ requestContext }));
-    const llm = await this.capabilities.getLLM({ requestContext });
+    const llm = await this.capabilities.getLLM({
+      requestContext,
+      model: (args as { model?: DynamicArgument<MastraModelConfig> }).model,
+    });
 
     const memory = await this.capabilities.getMemory({ requestContext });
 
@@ -805,6 +817,9 @@ export class AgentLegacyHandler {
       writableStream,
       methodType,
       tracingOptions,
+      inputProcessors,
+      providerOptions: args.providerOptions,
+      hooks,
       ...resolveObservabilityContext(args as Partial<ObservabilityContext>),
     });
 
@@ -848,12 +863,6 @@ export class AgentLegacyHandler {
                 });
                 threadCreatedByStep = true;
               }
-
-              await this.capabilities.saveStepMessages({
-                result: props,
-                messageList,
-                runId,
-              });
             }
 
             return onStepFinish?.({ ...props, runId });
@@ -1379,10 +1388,6 @@ export class AgentLegacyHandler {
     const observabilityContext = createObservabilityContext({ currentSpan: agentSpan });
 
     if (!output || experimental_output) {
-      this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm stream call`, {
-        runId,
-      });
-
       const streamResult = llm.__stream({
         ...llmOptions,
         experimental_output,
@@ -1443,7 +1448,8 @@ export class AgentLegacyHandler {
         | (StreamObjectResult<OUTPUT extends ZodSchema | JSONSchema7 ? OUTPUT : never> & TracingProperties);
     }
 
-    this.capabilities.logger.debug(`Starting agent ${this.capabilities.name} llm streamObject call`, {
+    this.capabilities.logger.debug('Starting LLM streamObject call', {
+      agent: this.capabilities.name,
       runId,
     });
 

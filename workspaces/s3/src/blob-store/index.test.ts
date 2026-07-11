@@ -342,8 +342,21 @@ describe('S3BlobStore', () => {
     });
   });
 
-  describe('sessionToken', () => {
-    it('should pass sessionToken to S3Client credentials when provided', async () => {
+  describe('credential resolution', () => {
+    it('should use credentials provider when provided', async () => {
+      const provider = vi.fn();
+      const store = new S3BlobStore({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        credentials: provider,
+      });
+
+      await store.has('trigger-client-creation');
+
+      expect(lastS3ClientConfig.credentials).toBe(provider);
+    });
+
+    it('should use static credentials when accessKeyId/secretAccessKey provided', async () => {
       const store = new S3BlobStore({
         bucket: 'test-bucket',
         region: 'us-east-1',
@@ -352,7 +365,6 @@ describe('S3BlobStore', () => {
         sessionToken: 'FwoGZXIvYXdzEBYaDH7EXAMPLE',
       });
 
-      await store.init();
       await store.has('trigger-client-creation');
 
       expect(lastS3ClientConfig.credentials).toEqual({
@@ -362,16 +374,41 @@ describe('S3BlobStore', () => {
       });
     });
 
-    it('should not include sessionToken in S3Client credentials when not provided', async () => {
+    it('should omit sessionToken from static credentials when not provided', async () => {
       const store = createStore();
 
-      await store.init();
       await store.has('trigger-client-creation');
 
       expect(lastS3ClientConfig.credentials).toEqual({
         accessKeyId: 'test-key',
         secretAccessKey: 'test-secret',
       });
+    });
+
+    it('should use SDK default credential chain when no credentials provided', async () => {
+      const store = new S3BlobStore({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+      });
+
+      await store.has('trigger-client-creation');
+
+      expect(lastS3ClientConfig).not.toHaveProperty('credentials');
+    });
+
+    it('should prefer credentials option over accessKeyId/secretAccessKey', async () => {
+      const provider = vi.fn();
+      const store = new S3BlobStore({
+        bucket: 'test-bucket',
+        region: 'us-east-1',
+        credentials: provider,
+        accessKeyId: 'test-key',
+        secretAccessKey: 'test-secret',
+      });
+
+      await store.has('trigger-client-creation');
+
+      expect(lastS3ClientConfig.credentials).toBe(provider);
     });
   });
 

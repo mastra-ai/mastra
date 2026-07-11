@@ -21,3 +21,6 @@ export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
 
 // anything here doesn't show up in model router. for now that's just copilot which requires a special oauth flow
 export const EXCLUDED_PROVIDERS = ['github-copilot'];
+
+// Header used to pass gateway API key when Authorization is occupied by an OAuth token
+export const GATEWAY_AUTH_HEADER = 'X-Memory-Gateway-Authorization';

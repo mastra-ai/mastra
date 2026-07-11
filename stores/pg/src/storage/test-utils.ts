@@ -1,4 +1,4 @@
-import { createSampleThread } from '@internal/storage-test-utils';
+import { createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
 import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -70,6 +70,35 @@ export function pgTests() {
         await store.init();
         // Recreate dbOps with new store connection
         dbOps = new PgDB({ client: store.db });
+      });
+    });
+
+    describe('Memory saveMessages batching', () => {
+      it('should save a message batch larger than one PostgreSQL bind-parameter chunk', async () => {
+        const memory = (await store.getStore('memory'))!;
+        const thread = createSampleThread({
+          id: `batch-thread-${Date.now()}`,
+          resourceId: `batch-resource-${Date.now()}`,
+        });
+        await memory.saveThread({ thread });
+
+        const messages = Array.from({ length: 8192 }, (_, index) =>
+          createSampleMessageV2({
+            threadId: thread.id,
+            resourceId: thread.resourceId,
+            content: { content: `Batch message ${index}` },
+            createdAt: new Date(Date.now() + index),
+          }),
+        );
+
+        const { messages: savedMessages } = await memory.saveMessages({ messages });
+        expect(savedMessages).toHaveLength(8192);
+
+        const row = await store.db.one<{ count: string }>(
+          'SELECT COUNT(*)::text AS count FROM mastra_messages WHERE thread_id = $1',
+          [thread.id],
+        );
+        expect(Number(row.count)).toBe(8192);
       });
     });
 
@@ -915,6 +944,384 @@ export function pgTests() {
         expect(runs.length).toBeGreaterThanOrEqual(1);
         const foundRun = runs.find((r: any) => r.workflowName === workflowName);
         expect(foundRun).toBeDefined();
+      });
+    });
+
+    // PG-specific: AgentsPG resilience to jsonb scalar string rows
+    // See: https://github.com/mastra-ai/mastra/issues/16224
+    describe('AgentsPG jsonb scalar string resilience (#16224)', () => {
+      let agentsStore: any;
+      let agentsTestStore: PostgresStore;
+
+      beforeAll(async () => {
+        agentsTestStore = new PostgresStore({ ...TEST_CONFIG, id: 'agents-jsonb-scalar-test' });
+        await agentsTestStore.init();
+        agentsStore = await agentsTestStore.getStore('agents');
+      });
+
+      afterAll(async () => {
+        try {
+          await agentsTestStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        // Wipe both tables — versions first because of the FK direction
+        await agentsTestStore.db.none(`DELETE FROM mastra_agent_versions`);
+        await agentsTestStore.db.none(`DELETE FROM mastra_agents`);
+      });
+
+      it('listVersions skips rows whose jsonb model column is a scalar string instead of crashing', async () => {
+        const agentId = `agent-${Date.now()}`;
+        const goodVersionId = `${agentId}-v1`;
+        const badVersionId = `${agentId}-v2`;
+
+        // Seed the parent agent row
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agents (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [agentId],
+        );
+
+        // Good version with model stored as a jsonb object (the canonical shape)
+        await agentsStore.createVersion({
+          id: goodVersionId,
+          agentId,
+          versionNumber: 1,
+          name: 'good-agent',
+          instructions: 'be helpful',
+          model: { slug: 'anthropic/claude-haiku-4.5' },
+        });
+
+        // Bad version: bypass createVersion (which now rejects strings) and write the
+        // exact pathological shape the bug describes — jsonb scalar string. The pg
+        // driver auto-deserialises this back to a JS string on read, which used to
+        // make parseJson crash and take down the whole listing.
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agent_versions (
+             id, "agentId", "versionNumber", name, instructions, model,
+             "createdAt", "createdAtZ"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())`,
+          [badVersionId, agentId, 2, 'bad-agent', 'be helpful', '"google/gemini-3-flash"'],
+        );
+
+        // The crucial assertion: the listing returns successfully (one bad row no
+        // longer fails fast), and the bad row's model arrives as the deserialised
+        // scalar instead of throwing.
+        const result = await agentsStore.listVersions({ agentId, perPage: false });
+
+        expect(result.versions.length).toBe(2);
+        const versionsById = new Map(result.versions.map((v: any) => [v.id, v]));
+        expect((versionsById.get(goodVersionId) as any)?.model).toEqual({
+          slug: 'anthropic/claude-haiku-4.5',
+        });
+        expect((versionsById.get(badVersionId) as any)?.model).toBe('google/gemini-3-flash');
+      });
+
+      it('getVersion returns a jsonb scalar string model as the deserialised scalar instead of throwing', async () => {
+        const agentId = `agent-${Date.now()}-getversion`;
+        const versionId = `${agentId}-v1`;
+
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agents (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [agentId],
+        );
+
+        await agentsTestStore.db.none(
+          `INSERT INTO mastra_agent_versions (
+             id, "agentId", "versionNumber", name, instructions, model,
+             "createdAt", "createdAtZ"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW(), NOW())`,
+          [versionId, agentId, 1, 'scalar-model-agent', 'be helpful', '"openai/gpt-4o-mini"'],
+        );
+
+        const version = await agentsStore.getVersion(versionId);
+
+        expect(version).toBeDefined();
+        expect(version.model).toBe('openai/gpt-4o-mini');
+      });
+    });
+
+    // PG-specific: jsonb scalar string resilience across the other versioned
+    // domains. Same bug class as #16224 (which originally fixed only the agents
+    // domain) — each of mcpClients, mcpServers, promptBlocks, scorerDefinitions,
+    // skills and workspaces used to ship its own private parseJson + fail-fast
+    // .map(parseRow) that crashed when a single jsonb column contained a scalar
+    // string (the pg driver auto-deserialises it to a bare JS string, which
+    // JSON.parse then rejects).
+    //
+    // Each domain now uses the shared `parseJsonResilient` helper from
+    // `domains/utils.ts` plus a `flatMap` + try/catch in its list methods, so
+    // listings no longer fail fast on one malformed row. These tests assert that
+    // resilient behaviour per domain.
+    //
+    // See: https://github.com/mastra-ai/mastra/issues/16224
+    describe('Other PG domains: jsonb scalar string resilience (#16224 follow-up)', () => {
+      let domainsTestStore: PostgresStore;
+
+      beforeAll(async () => {
+        domainsTestStore = new PostgresStore({ ...TEST_CONFIG, id: 'domains-jsonb-scalar-test' });
+        await domainsTestStore.init();
+      });
+
+      afterAll(async () => {
+        try {
+          await domainsTestStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        // Wipe each versioned domain's tables — versions first because of FK direction
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_client_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_clients`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_server_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_mcp_servers`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_prompt_block_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_prompt_blocks`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_scorer_definition_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_scorer_definitions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_skill_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_skills`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_workspace_versions`);
+        await domainsTestStore.db.none(`DELETE FROM mastra_workspaces`);
+      });
+
+      it('MCPClientsPG.listVersions returns a jsonb scalar string `servers` column as the deserialised scalar', async () => {
+        const mcpClientsStore: any = await domainsTestStore.getStore('mcpClients');
+        const parentId = `mcp-client-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_clients (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        // jsonb scalar string in the required `servers` column. Pre-fix this crashed
+        // listVersions; post-fix the row survives and `servers` arrives as a string.
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_client_versions (
+             id, "mcpClientId", "versionNumber", name, servers, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-client', '"servers-as-scalar-string"'],
+        );
+
+        const result = await mcpClientsStore.listVersions({ mcpClientId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].servers).toBe('servers-as-scalar-string');
+      });
+
+      it('MCPServersPG.listVersions returns a jsonb scalar string `tools` column as the deserialised scalar', async () => {
+        const mcpServersStore: any = await domainsTestStore.getStore('mcpServers');
+        const parentId = `mcp-server-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_servers (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_mcp_server_versions (
+             id, "mcpServerId", "versionNumber", name, version, tools, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-server', '1.0.0', '"tools-as-scalar-string"'],
+        );
+
+        const result = await mcpServersStore.listVersions({ mcpServerId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].tools).toBe('tools-as-scalar-string');
+      });
+
+      it('PromptBlocksPG.listVersions returns a jsonb scalar string `rules` column as the deserialised scalar', async () => {
+        const promptBlocksStore: any = await domainsTestStore.getStore('promptBlocks');
+        const parentId = `prompt-block-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_prompt_blocks (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_prompt_block_versions (
+             id, "blockId", "versionNumber", name, content, rules, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-block', 'some content', '"rules-as-scalar-string"'],
+        );
+
+        const result = await promptBlocksStore.listVersions({ blockId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].rules).toBe('rules-as-scalar-string');
+      });
+
+      it('ScorerDefinitionsPG.listVersions returns a jsonb scalar string `model` column as the deserialised scalar', async () => {
+        const scorerDefinitionsStore: any = await domainsTestStore.getStore('scorerDefinitions');
+        const parentId = `scorer-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_scorer_definitions (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        // Same shape as the bug in #16224 — model stored as a jsonb scalar string.
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_scorer_definition_versions (
+             id, "scorerDefinitionId", "versionNumber", name, type, model, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-scorer', 'llm-judge', '"google/gemini-3-flash"'],
+        );
+
+        const result = await scorerDefinitionsStore.listVersions({ scorerDefinitionId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].model).toBe('google/gemini-3-flash');
+      });
+
+      it('SkillsPG.listVersions returns a jsonb scalar string `source` column as the deserialised scalar', async () => {
+        const skillsStore: any = await domainsTestStore.getStore('skills');
+        const parentId = `skill-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_skills (id, status, "authorId", "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_skill_versions (
+             id, "skillId", "versionNumber", name, description, instructions, source, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-skill', 'desc', 'instructions', '"source-as-scalar-string"'],
+        );
+
+        const result = await skillsStore.listVersions({ skillId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].source).toBe('source-as-scalar-string');
+      });
+
+      it('WorkspacesPG.listVersions returns a jsonb scalar string `filesystem` column as the deserialised scalar', async () => {
+        const workspacesStore: any = await domainsTestStore.getStore('workspaces');
+        const parentId = `workspace-${Date.now()}`;
+        const versionId = `${parentId}-v1`;
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_workspaces (id, status, "authorId", metadata, "createdAt", "updatedAt")
+           VALUES ($1, 'draft', NULL, NULL, NOW(), NOW())`,
+          [parentId],
+        );
+
+        await domainsTestStore.db.none(
+          `INSERT INTO mastra_workspace_versions (
+             id, "workspaceId", "versionNumber", name, filesystem, "createdAt"
+           ) VALUES ($1, $2, $3, $4, $5::jsonb, NOW())`,
+          [versionId, parentId, 1, 'bad-workspace', '"filesystem-as-scalar-string"'],
+        );
+
+        const result = await workspacesStore.listVersions({ workspaceId: parentId, perPage: false });
+
+        expect(result.versions.length).toBe(1);
+        expect(result.versions[0].id).toBe(versionId);
+        expect(result.versions[0].filesystem).toBe('filesystem-as-scalar-string');
+      });
+    });
+
+    describe('ScorerDefinitionsPG tenancy', () => {
+      let tenancyStore: PostgresStore;
+
+      const baseSnapshot = {
+        name: 'Tenant Scorer',
+        type: 'llm-judge' as const,
+        model: { provider: 'openai', name: 'gpt-4' },
+        instructions: 'Evaluate accuracy',
+      };
+
+      beforeAll(async () => {
+        tenancyStore = new PostgresStore({ ...TEST_CONFIG, id: 'scorer-definitions-tenancy-test' });
+        await tenancyStore.init();
+      });
+
+      afterAll(async () => {
+        try {
+          await tenancyStore.close();
+        } catch {}
+      });
+
+      beforeEach(async () => {
+        await tenancyStore.db.none(`DELETE FROM mastra_scorer_definition_versions`);
+        await tenancyStore.db.none(`DELETE FROM mastra_scorer_definitions`);
+      });
+
+      it('persists organizationId/projectId on create and getById', async () => {
+        const store: any = await tenancyStore.getStore('scorerDefinitions');
+        const created = await store.create({
+          scorerDefinition: { id: 'tenant-1', organizationId: 'org-a', projectId: 'proj-1', ...baseSnapshot },
+        });
+        expect(created.organizationId).toBe('org-a');
+        expect(created.projectId).toBe('proj-1');
+
+        const fetched = await store.getById('tenant-1');
+        expect(fetched.organizationId).toBe('org-a');
+        expect(fetched.projectId).toBe('proj-1');
+      });
+
+      it('filters list by organizationId, projectId, and both together', async () => {
+        const store: any = await tenancyStore.getStore('scorerDefinitions');
+        await store.create({
+          scorerDefinition: { id: 'a1', organizationId: 'org-a', projectId: 'proj-1', ...baseSnapshot },
+        });
+        await store.create({
+          scorerDefinition: { id: 'a2', organizationId: 'org-a', projectId: 'proj-2', ...baseSnapshot },
+        });
+        await store.create({
+          scorerDefinition: { id: 'b1', organizationId: 'org-b', projectId: 'proj-1', ...baseSnapshot },
+        });
+
+        const byOrg = await store.list({ status: 'draft', organizationId: 'org-a' });
+        expect(byOrg.total).toBe(2);
+        expect(byOrg.scorerDefinitions.every((s: any) => s.organizationId === 'org-a')).toBe(true);
+
+        const byProject = await store.list({ status: 'draft', projectId: 'proj-1' });
+        expect(byProject.total).toBe(2);
+        expect(byProject.scorerDefinitions.every((s: any) => s.projectId === 'proj-1')).toBe(true);
+
+        const byBoth = await store.list({ status: 'draft', organizationId: 'org-a', projectId: 'proj-1' });
+        expect(byBoth.total).toBe(1);
+        expect(byBoth.scorerDefinitions[0].id).toBe('a1');
+
+        const noMatch = await store.list({ status: 'draft', organizationId: 'org-c' });
+        expect(noMatch.total).toBe(0);
+      });
+
+      it('propagates tenancy filters through listResolved', async () => {
+        const store: any = await tenancyStore.getStore('scorerDefinitions');
+        await store.create({
+          scorerDefinition: { id: 'a1', organizationId: 'org-a', projectId: 'proj-1', ...baseSnapshot },
+        });
+        await store.create({
+          scorerDefinition: { id: 'a2', organizationId: 'org-a', projectId: 'proj-2', ...baseSnapshot },
+        });
+
+        const resolved = await store.listResolved({ status: 'draft', organizationId: 'org-a', projectId: 'proj-2' });
+        expect(resolved.total).toBe(1);
+        expect(resolved.scorerDefinitions[0].id).toBe('a2');
+        expect(resolved.scorerDefinitions[0].organizationId).toBe('org-a');
+        expect(resolved.scorerDefinitions[0].name).toBe('Tenant Scorer');
       });
     });
   });

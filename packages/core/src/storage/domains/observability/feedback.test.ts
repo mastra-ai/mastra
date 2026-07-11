@@ -5,6 +5,14 @@ import {
   feedbackFilterSchema,
   feedbackInputSchema,
   feedbackRecordSchema,
+  getFeedbackAggregateArgsSchema,
+  getFeedbackAggregateResponseSchema,
+  getFeedbackBreakdownArgsSchema,
+  getFeedbackBreakdownResponseSchema,
+  getFeedbackPercentilesArgsSchema,
+  getFeedbackPercentilesResponseSchema,
+  getFeedbackTimeSeriesArgsSchema,
+  getFeedbackTimeSeriesResponseSchema,
   listFeedbackArgsSchema,
   listFeedbackResponseSchema,
 } from './feedback';
@@ -18,18 +26,23 @@ describe('Feedback Schemas', () => {
         timestamp: now,
         traceId: 'trace-1',
         spanId: 'span-1',
-        source: 'user',
+        feedbackSource: 'user',
         feedbackType: 'thumbs',
         value: 1,
         comment: 'Great response!',
         experimentId: 'exp-1',
-        userId: 'user-123',
+        userId: 'trace-user-123',
+        feedbackUserId: 'user-123',
+        entityType: 'agent',
+        executionSource: 'cloud',
+        tags: ['prod'],
         metadata: { page: '/chat' },
       });
-      expect(record.source).toBe('user');
+      expect(record.feedbackSource).toBe('user');
       expect(record.feedbackType).toBe('thumbs');
       expect(record.value).toBe(1);
-      expect(record.userId).toBe('user-123');
+      expect(record.feedbackUserId).toBe('user-123');
+      expect(record.userId).toBe('trace-user-123');
     });
 
     it('accepts string value', () => {
@@ -37,7 +50,7 @@ describe('Feedback Schemas', () => {
         id: 'fb-2',
         timestamp: now,
         traceId: 'trace-1',
-        source: 'qa',
+        feedbackSource: 'qa',
         feedbackType: 'correction',
         value: 'The correct answer is 42',
         createdAt: now,
@@ -51,7 +64,7 @@ describe('Feedback Schemas', () => {
         id: 'fb-3',
         timestamp: now,
         traceId: 'trace-1',
-        source: 'user',
+        feedbackSource: 'user',
         feedbackType: 'rating',
         value: 4,
         createdAt: now,
@@ -61,18 +74,17 @@ describe('Feedback Schemas', () => {
       expect(record.comment).toBeUndefined();
     });
 
-    it('rejects missing traceId', () => {
-      expect(() =>
-        feedbackRecordSchema.parse({
-          id: 'fb-4',
-          timestamp: now,
-          source: 'user',
-          feedbackType: 'thumbs',
-          value: 1,
-          createdAt: now,
-          updatedAt: null,
-        }),
-      ).toThrow();
+    it('accepts unanchored feedback without traceId', () => {
+      const record = feedbackRecordSchema.parse({
+        id: 'fb-4',
+        timestamp: now,
+        feedbackSource: 'user',
+        feedbackType: 'thumbs',
+        value: 1,
+        createdAt: now,
+        updatedAt: null,
+      });
+      expect(record.traceId).toBeUndefined();
     });
   });
 
@@ -83,12 +95,12 @@ describe('Feedback Schemas', () => {
         feedbackType: 'thumbs',
         value: 1,
         comment: 'Helpful',
-        userId: 'user-123',
+        feedbackUserId: 'user-123',
         metadata: { page: '/chat' },
         experimentId: 'exp-1',
       });
       expect(input.source).toBe('user');
-      expect(input.userId).toBe('user-123');
+      expect(input.feedbackUserId).toBe('user-123');
     });
 
     it('accepts minimal input', () => {
@@ -98,7 +110,7 @@ describe('Feedback Schemas', () => {
         value: 3,
       });
       expect(input.comment).toBeUndefined();
-      expect(input.userId).toBeUndefined();
+      expect(input.feedbackUserId).toBeUndefined();
     });
   });
 
@@ -107,7 +119,7 @@ describe('Feedback Schemas', () => {
       const record = createFeedbackRecordSchema.parse({
         timestamp: now,
         traceId: 'trace-1',
-        source: 'user',
+        feedbackSource: 'user',
         feedbackType: 'thumbs',
         value: 1,
       });
@@ -122,13 +134,13 @@ describe('Feedback Schemas', () => {
         feedback: {
           timestamp: now,
           traceId: 'trace-1',
-          source: 'user',
+          feedbackSource: 'user',
           feedbackType: 'thumbs',
           value: 1,
         },
       });
       expect(args.feedback.traceId).toBe('trace-1');
-      expect(args.feedback.source).toBe('user');
+      expect(args.feedback.feedbackSource).toBe('user');
       expect(args.feedback.value).toBe(1);
     });
   });
@@ -140,13 +152,17 @@ describe('Feedback Schemas', () => {
         traceId: 'trace-1',
         spanId: 'span-1',
         feedbackType: ['thumbs', 'rating'],
-        source: 'user',
+        feedbackSource: 'user',
         experimentId: 'exp-1',
-        userId: 'user-123',
+        userId: 'trace-user-123',
+        feedbackUserId: 'user-123',
+        tags: ['prod'],
         environment: 'production',
+        executionSource: 'cloud',
       });
       expect(filter.feedbackType).toEqual(['thumbs', 'rating']);
-      expect(filter.source).toBe('user');
+      expect(filter.feedbackSource).toBe('user');
+      expect(filter.executionSource).toBe('cloud');
     });
 
     it('accepts single feedback type as string', () => {
@@ -185,7 +201,7 @@ describe('Feedback Schemas', () => {
             id: 'fb-1',
             timestamp: now,
             traceId: 'trace-1',
-            source: 'user',
+            feedbackSource: 'user',
             feedbackType: 'thumbs',
             value: 1,
             createdAt: now,
@@ -195,6 +211,89 @@ describe('Feedback Schemas', () => {
       });
       expect(response.feedback).toHaveLength(1);
       expect(response.pagination.hasMore).toBe(false);
+    });
+  });
+
+  describe('feedback OLAP schemas', () => {
+    it('getFeedbackAggregateArgsSchema validates', () => {
+      const args = getFeedbackAggregateArgsSchema.parse({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg',
+        comparePeriod: 'previous_week',
+      });
+      expect(args.feedbackType).toBe('rating');
+      expect(args.feedbackSource).toBe('user');
+    });
+
+    it('getFeedbackAggregateResponseSchema validates', () => {
+      const response = getFeedbackAggregateResponseSchema.parse({
+        value: 4.2,
+        previousValue: 4.0,
+        changePercent: 5,
+      });
+      expect(response.value).toBe(4.2);
+    });
+
+    it('getFeedbackBreakdownArgsSchema validates', () => {
+      const args = getFeedbackBreakdownArgsSchema.parse({
+        feedbackType: 'rating',
+        aggregation: 'avg',
+        groupBy: ['entityName'],
+      });
+      expect(args.groupBy).toEqual(['entityName']);
+    });
+
+    it('getFeedbackBreakdownResponseSchema validates', () => {
+      const response = getFeedbackBreakdownResponseSchema.parse({
+        groups: [{ dimensions: { entityName: 'agent-a' }, value: 4.5 }],
+      });
+      expect(response.groups[0]?.value).toBe(4.5);
+    });
+
+    it('getFeedbackTimeSeriesArgsSchema validates', () => {
+      const args = getFeedbackTimeSeriesArgsSchema.parse({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        aggregation: 'avg',
+        interval: '1d',
+      });
+      expect(args.interval).toBe('1d');
+    });
+
+    it('getFeedbackTimeSeriesResponseSchema validates', () => {
+      const response = getFeedbackTimeSeriesResponseSchema.parse({
+        series: [{ name: 'rating', points: [{ timestamp: now, value: 4.5 }] }],
+      });
+      expect(response.series[0]?.points[0]?.value).toBe(4.5);
+    });
+
+    it('getFeedbackPercentilesArgsSchema validates', () => {
+      const args = getFeedbackPercentilesArgsSchema.parse({
+        feedbackType: 'rating',
+        feedbackSource: 'user',
+        percentiles: [0.5, 0.95],
+        interval: '1h',
+      });
+      expect(args.percentiles).toEqual([0.5, 0.95]);
+    });
+
+    it('getFeedbackPercentilesArgsSchema rejects empty percentile arrays', () => {
+      expect(() =>
+        getFeedbackPercentilesArgsSchema.parse({
+          feedbackType: 'rating',
+          feedbackSource: 'user',
+          percentiles: [],
+          interval: '1h',
+        }),
+      ).toThrow();
+    });
+
+    it('getFeedbackPercentilesResponseSchema validates', () => {
+      const response = getFeedbackPercentilesResponseSchema.parse({
+        series: [{ percentile: 0.95, points: [{ timestamp: now, value: 5 }] }],
+      });
+      expect(response.series[0]?.percentile).toBe(0.95);
     });
   });
 });

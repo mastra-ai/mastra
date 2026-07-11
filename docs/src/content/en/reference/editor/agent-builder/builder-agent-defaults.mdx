@@ -1,0 +1,178 @@
+---
+title: "Reference: BuilderAgentDefaults | Editor"
+description: "Reference for BuilderAgentDefaults, the admin-pinned defaults applied to every Agent Builder agent."
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# BuilderAgentDefaults
+
+`BuilderAgentDefaults` describes the admin-pinned defaults applied to every agent the Agent Builder produces. Pass it as `builder.configuration.agent`. End users can't override these values from the Builder UI.
+
+See [Configuration](/docs/agent-builder/configuration) and [Memory](/docs/agent-builder/memory) for worked examples.
+
+## Usage example
+
+```typescript title="src/mastra/index.ts"
+import { MastraEditor } from '@mastra/editor'
+
+new MastraEditor({
+  builder: {
+    enabled: true,
+    configuration: {
+      agent: {
+        memory: { observationalMemory: true },
+        workspace: {
+          type: 'inline',
+          config: {
+            name: 'builder-workspace',
+            filesystem: {
+              provider: 'local',
+              config: { basePath: './workspace' },
+            },
+          },
+        },
+        models: {
+          allowed: [
+            { provider: 'openai', modelId: 'gpt-5.4-mini' },
+            { provider: 'openai', modelId: 'gpt-5.4' },
+            { provider: 'anthropic', modelId: 'claude-opus-4-7' },
+          ],
+        },
+        tools: { allowed: ['weather-info'] },
+        agents: { allowed: ['weather-agent'] },
+        workflows: { allowed: ['greet-workflow'] },
+      },
+    },
+  },
+})
+```
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'memory',
+    type: 'SerializedMemoryConfig',
+    description:
+      'Default memory configuration for new agents. Pass `{ observationalMemory: true }` to enable long-lived fact extraction. Requires `Mastra.storage`. See the SerializedMemoryConfig reference for the full schema.',
+    isOptional: true,
+  },
+  {
+    name: 'workspace',
+    type: 'StorageWorkspaceRef',
+    description:
+      "Default workspace reference for new agents. Pass `{ type: 'inline', config }` to embed a snapshot, or `{ type: 'id', workspaceId }` to point at a workspace registered on `Mastra.workspace`. See the StorageWorkspaceRef reference for both variants.",
+    isOptional: true,
+  },
+  {
+    name: 'browser',
+    type: 'StorageBrowserRef',
+    description:
+      "Default browser configuration for new agents. Pass `{ type: 'inline', config: { provider } }` to attach a registered browser provider. See the StorageBrowserRef reference for the full schema.",
+    isOptional: true,
+  },
+  {
+    name: 'models',
+    type: '{ allowed?: ProviderModelEntry[]; default?: DefaultModelEntry }',
+    description:
+      'Model allowlist and default applied to every Builder-created agent. See the BuilderModels reference for the full schema and validation rules.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: ProviderModelEntry[]; default?: DefaultModelEntry }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'ProviderModelEntry[]',
+            description:
+              'Allowlist of providers and models. Omit to allow every registered model. ProviderModelEntry is a discriminated union (known providers vs. custom).',
+            isOptional: true,
+          },
+          {
+            name: 'default',
+            type: 'DefaultModelEntry',
+            description:
+              'Pre-selected model on new-agent create. Required when the model picker is hidden. DefaultModelEntry requires `provider` and `modelId`, with an optional `kind`.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'tools',
+    type: '{ allowed?: string[] }',
+    description:
+      'Allowlist of tool IDs visible in the Builder tools picker. Unknown IDs are dropped and surfaced as warnings.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `tool.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed tools.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'agents',
+    type: '{ allowed?: string[] }',
+    description:
+      'Allowlist of agent IDs visible in the Builder sub-agents picker. Unknown IDs are dropped and surfaced as warnings.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `Agent.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed agents.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
+    name: 'workflows',
+    type: '{ allowed?: string[] }',
+    description:
+      'Allowlist of workflow IDs visible in the Builder workflows picker. Unknown IDs are dropped and surfaced as warnings.',
+    isOptional: true,
+    properties: [
+      {
+        type: '{ allowed?: string[] }',
+        parameters: [
+          {
+            name: 'allowed',
+            type: 'string[]',
+            description:
+              'Allowlist of `workflow.id` values. Omit for unrestricted, pass `[]` to lock the picker down, pass `[...ids]` to restrict to the listed workflows.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+## Related
+
+- [AgentBuilderOptions](/reference/editor/agent-builder/agent-builder-options) — the parent options object.
+- [builder.configuration.agent.models](/reference/editor/agent-builder/builder-models) — admin-facing model allowlist and default.
+- [SerializedMemoryConfig](/reference/memory/serialized-memory-config) — memory shape for new agents.
+- [StorageWorkspaceRef](/reference/editor/storage-workspace-ref) — workspace reference shape.
+- [StorageBrowserRef](/reference/editor/storage-browser-ref) — browser reference shape.
+- [Configuration](/docs/agent-builder/configuration) — concept and worked examples.

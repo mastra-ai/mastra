@@ -733,6 +733,71 @@ describe('PosthogExporter', () => {
         },
       ]);
     });
+
+    it('should unwrap {messages: [...]} wrapper from generation input', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: {
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant.' },
+            { role: 'user', content: 'What is the weather?' },
+          ],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([
+        {
+          role: 'system',
+          content: [{ type: 'text', text: 'You are a helpful assistant.' }],
+        },
+        {
+          role: 'user',
+          content: [{ type: 'text', text: 'What is the weather?' }],
+        },
+      ]);
+    });
+
+    it('should extract text from generation output object without tool calls', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        output: {
+          text: 'The weather is sunny.',
+          files: [],
+          reasoning: [],
+          reasoningText: '',
+          sources: [],
+          warnings: [],
+        },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedOutput = mockCapture.mock.calls[0][0].properties.$ai_output_choices;
+      expect(capturedOutput).toEqual([
+        {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The weather is sunny.' }],
+        },
+      ]);
+    });
+
+    it('should handle empty messages array without stringifying', async () => {
+      const generation = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        input: { messages: [] },
+      });
+
+      await exportSpanLifecycle(exporter, generation);
+
+      const capturedInput = mockCapture.mock.calls[0][0].properties.$ai_input;
+      expect(capturedInput).toEqual([]);
+    });
   });
 
   // --- Priority 4: Integration Scenarios ---
@@ -1006,6 +1071,77 @@ describe('PosthogExporter', () => {
       expect(mockCapture).toHaveBeenCalledTimes(1);
       const props = mockCapture.mock.calls[0][0].properties;
       expect(props).not.toHaveProperty('should-not-appear');
+    });
+  });
+
+  describe('Group Analytics', () => {
+    beforeEach(() => {
+      exporter = new TestPosthogExporter(validConfig);
+    });
+
+    it('should mirror metadata.$groups to top-level groups on child spans', async () => {
+      const child = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        metadata: { $groups: { publication: 'publication-1' } },
+      });
+
+      await exportSpanLifecycle(exporter, child);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$ai_generation',
+          groups: { publication: 'publication-1' },
+          properties: expect.objectContaining({ $groups: { publication: 'publication-1' } }),
+        }),
+      );
+    });
+
+    it('should mirror metadata.$groups to top-level groups on root spans ($ai_trace)', async () => {
+      const root = createSpan({
+        type: SpanType.AGENT_RUN,
+        isRootSpan: true,
+        metadata: { $groups: { publication: 'publication-1' } },
+      });
+
+      await exportSpanLifecycle(exporter, root);
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          event: '$ai_trace',
+          groups: { publication: 'publication-1' },
+        }),
+      );
+    });
+
+    it('should mirror metadata.$groups to top-level groups on event spans', async () => {
+      const eventSpan = createSpan({
+        isEvent: true,
+        metadata: { $groups: { publication: 'publication-1' } },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: eventSpan,
+      });
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        expect.objectContaining({
+          groups: { publication: 'publication-1' },
+        }),
+      );
+    });
+
+    it('should not set top-level groups when metadata.$groups is absent', async () => {
+      const child = createSpan({
+        type: SpanType.MODEL_GENERATION,
+        parentSpanId: 'parent-1',
+        metadata: { userId: 'user-1' },
+      });
+
+      await exportSpanLifecycle(exporter, child);
+
+      expect(mockCapture.mock.calls[0][0]).not.toHaveProperty('groups');
     });
   });
 });

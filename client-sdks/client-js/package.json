@@ -1,6 +1,6 @@
 {
   "name": "@mastra/client-js",
-  "version": "1.11.0-alpha.6",
+  "version": "1.31.2-alpha.4",
   "description": "The official TypeScript library for the Mastra Client API",
   "author": "",
   "type": "module",
@@ -35,9 +35,10 @@
   "license": "Apache-2.0",
   "scripts": {
     "lint": "eslint .",
+    "generate:route-types": "pnpm --filter @mastra/server generate:route-types",
     "build:lib": "tsup --config tsup.config.ts",
-    "prepack": "pnpx tsx ../../scripts/generate-package-docs.ts",
-    "dev": "pnpm build:lib --watch",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
+    "dev": "pnpm generate:route-types && pnpm build:lib --watch",
     "test": "vitest",
     "test:unit": "vitest run"
   },
@@ -46,6 +47,8 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
+    "canonicalize": "^1.0.8",
+    "jose": "^6.2.1",
     "json-schema": "^0.4.0"
   },
   "peerDependencies": {
@@ -57,11 +60,12 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^9.39.4",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"

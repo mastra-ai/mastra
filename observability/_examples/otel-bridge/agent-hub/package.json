@@ -15,7 +15,7 @@
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20",
-    "pnpm": "^10"
+    "pnpm": ">=11.0.0"
   },
   "dependencies": {
     "@fastify/otel": "0.9.4",
@@ -32,7 +32,7 @@
     "@opentelemetry/resources": "2.2.0",
     "@opentelemetry/sdk-node": "0.208.0",
     "@opentelemetry/semantic-conventions": "^1.40.0",
-    "fastify": "5.7.3",
+    "fastify": "5.8.5",
     "fastify-plugin": "5.0.1",
     "fastify-type-provider-zod": "4.0.2",
     "pino": "10.1.1",

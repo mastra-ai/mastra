@@ -1,4 +1,5 @@
-import type { JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type { AgentCard, JSONRPCMessage, Message, Task } from '@a2a-js/sdk';
+import type { FullOutput, MastraModelOutput } from '../stream/base/output';
 
 /**
  * Represents a JSON-RPC error object.
@@ -105,6 +106,21 @@ export type ErrorCodePushNotificationNotSupported = typeof ErrorCodePushNotifica
 /** Error code for Unsupported Operation (-32004). The requested operation is not supported by the agent. */
 export const ErrorCodeUnsupportedOperation = -32004;
 export type ErrorCodeUnsupportedOperation = typeof ErrorCodeUnsupportedOperation;
+/** Error code for Content Type Not Supported (-32005). The requested content type is not supported. */
+export const ErrorCodeContentTypeNotSupported = -32005;
+export type ErrorCodeContentTypeNotSupported = typeof ErrorCodeContentTypeNotSupported;
+/** Error code for Invalid Agent Response (-32006). The agent returned an invalid response. */
+export const ErrorCodeInvalidAgentResponse = -32006;
+export type ErrorCodeInvalidAgentResponse = typeof ErrorCodeInvalidAgentResponse;
+/** Error code for Extended Agent Card Not Configured (-32007). The agent has no extended card configured. */
+export const ErrorCodeExtendedAgentCardNotConfigured = -32007;
+export type ErrorCodeExtendedAgentCardNotConfigured = typeof ErrorCodeExtendedAgentCardNotConfigured;
+/** Error code for Extension Support Required (-32008). The request requires extension support. */
+export const ErrorCodeExtensionSupportRequired = -32008;
+export type ErrorCodeExtensionSupportRequired = typeof ErrorCodeExtensionSupportRequired;
+/** Error code for Version Not Supported (-32009). The requested protocol version is not supported. */
+export const ErrorCodeVersionNotSupported = -32009;
+export type ErrorCodeVersionNotSupported = typeof ErrorCodeVersionNotSupported;
 
 /**
  * Union of all well-known A2A and standard JSON-RPC error codes defined in this schema.
@@ -120,4 +136,70 @@ export type KnownErrorCode =
   | typeof ErrorCodeTaskNotFound
   | typeof ErrorCodeTaskNotCancelable
   | typeof ErrorCodePushNotificationNotSupported
-  | typeof ErrorCodeUnsupportedOperation;
+  | typeof ErrorCodeUnsupportedOperation
+  | typeof ErrorCodeContentTypeNotSupported
+  | typeof ErrorCodeInvalidAgentResponse
+  | typeof ErrorCodeExtendedAgentCardNotConfigured
+  | typeof ErrorCodeExtensionSupportRequired
+  | typeof ErrorCodeVersionNotSupported;
+
+export type RequestCredentialsMode = 'omit' | 'same-origin' | 'include';
+
+export interface A2AAgentCardVerificationContext {
+  cardUrl: string;
+  fetchedAt: Date;
+}
+
+export interface A2AAgentVerificationOptions {
+  verify: (card: AgentCard, context: A2AAgentCardVerificationContext) => Promise<void> | void;
+}
+
+export interface A2AAgentOptions {
+  url: string;
+  id?: string;
+  name?: string;
+  description?: string;
+  headers?: Record<string, string>;
+  retries?: number;
+  backoffMs?: number;
+  maxBackoffMs?: number;
+  credentials?: RequestCredentialsMode;
+  fetch?: typeof fetch;
+  abortSignal?: AbortSignal;
+  timeoutMs?: number;
+  verifyAgentCard?: A2AAgentVerificationOptions;
+}
+
+export interface A2AAgentRunState {
+  runId: string;
+  contextId?: string;
+  taskId?: string;
+  executionUrl: string;
+  cardUrl: string;
+  streamingSupported: boolean;
+  waitingForInput: boolean;
+  lastTask?: Task;
+}
+
+export interface A2AAgentResumePayload {
+  taskId?: string;
+  contextId?: string;
+  executionUrl: string;
+  cardUrl: string;
+  waitingForInput: boolean;
+  task?: Task;
+}
+
+export type A2AAgentGenerateResult = FullOutput<undefined> & {
+  task?: Task;
+  message?: Message;
+  resumePayload?: A2AAgentResumePayload;
+  resumeSchema?: string;
+};
+
+export type A2AAgentStreamResult = MastraModelOutput<undefined> & {
+  task: Promise<Task | undefined>;
+  suspendPayload: Promise<A2AAgentResumePayload | undefined>;
+  resumeSchema: Promise<string | undefined>;
+  getResult(): Promise<A2AAgentGenerateResult>;
+};

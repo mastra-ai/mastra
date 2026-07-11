@@ -16,7 +16,12 @@ describe('Workflow (fetch-mocked)', () => {
       if (url.includes('/start?runId=')) return Promise.resolve(createJsonResponse({ message: 'started' }));
       if (url.includes('/start-async')) return Promise.resolve(createJsonResponse({ result: 'started-async' }));
       if (url.includes('/resume?runId=')) return Promise.resolve(createJsonResponse({ message: 'resumed' }));
+      if (url.includes('/resume-no-wait')) return Promise.resolve(createJsonResponse({ runId: 'r-no-wait' }));
       if (url.includes('/resume-async')) return Promise.resolve(createJsonResponse({ result: 'resumed-async' }));
+      if (url.includes('/resume-stream?')) {
+        const body = Workflow.createRecordStream([{ type: 'result', payload: { ok: true } }]);
+        return Promise.resolve(new Response(body as unknown as ReadableStream, { status: 200 }));
+      }
       if (url.includes('/stream?')) {
         const body = Workflow.createRecordStream([
           { type: 'log', payload: { msg: 'hello' } },
@@ -63,6 +68,15 @@ describe('Workflow (fetch-mocked)', () => {
     const run = await wf.createRun();
     const resumeAsyncRes = await run.resumeAsync({ step: 's1' });
     expect(resumeAsyncRes).toEqual({ result: 'resumed-async' });
+  });
+
+  it('resumes workflow run fire-and-forget via resumeNoWait', async () => {
+    const run = await wf.createRun();
+    const resumeNoWaitRes = await run.resumeNoWait({ step: 's1' });
+    expect(resumeNoWaitRes).toEqual({ runId: 'r-no-wait' });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-no-wait'));
+    expect(call).toBeTruthy();
   });
 
   it('streams workflow execution as parsed objects', async () => {
@@ -142,6 +156,36 @@ describe('Workflow (fetch-mocked)', () => {
     const options = call[1];
     const body = JSON.parse(options.body);
     expect(body.tracingOptions).toEqual(tracingOptions);
+  });
+
+  it('forwards forEachIndex when resuming workflow run synchronously', async () => {
+    const run = await wf.createRun();
+    await run.resume({ step: 's1', forEachIndex: 2 });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume?runId='));
+    expect(call).toBeTruthy();
+    const body = JSON.parse(call[1].body);
+    expect(body.forEachIndex).toBe(2);
+  });
+
+  it('forwards forEachIndex when resuming workflow run asynchronously', async () => {
+    const run = await wf.createRun();
+    await run.resumeAsync({ step: 's1', forEachIndex: 3 });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-async'));
+    expect(call).toBeTruthy();
+    const body = JSON.parse(call[1].body);
+    expect(body.forEachIndex).toBe(3);
+  });
+
+  it('forwards forEachIndex when resuming workflow run as a stream', async () => {
+    const run = await wf.createRun();
+    await run.resumeStream({ step: 's1', forEachIndex: 4 });
+
+    const call = fetchMock.mock.calls.find((args: any[]) => String(args[0]).includes('/resume-stream?'));
+    expect(call).toBeTruthy();
+    const body = JSON.parse(call[1].body);
+    expect(body.forEachIndex).toBe(4);
   });
 });
 

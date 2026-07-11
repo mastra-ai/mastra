@@ -38,13 +38,13 @@ const voice = new OpenAIVoice()
 
 Mastra supports several Speech-to-Text providers, each with their own capabilities and strengths:
 
-- [**OpenAI**](/reference/voice/openai/) - High-accuracy transcription with Whisper models
-- [**Azure**](/reference/voice/azure/) - Microsoft's speech recognition with enterprise-grade reliability
-- [**ElevenLabs**](/reference/voice/elevenlabs/) - Advanced speech recognition with support for multiple languages
-- [**Google**](/reference/voice/google/) - Google's speech recognition with extensive language support
-- [**Cloudflare**](/reference/voice/cloudflare/) - Edge-optimized speech recognition for low-latency applications
-- [**Deepgram**](/reference/voice/deepgram/) - AI-powered speech recognition with high accuracy for various accents
-- [**Sarvam**](/reference/voice/sarvam/) - Specialized in Indic languages and accents
+- [**OpenAI**](/reference/voice/openai/): High-accuracy transcription with Whisper models
+- [**Azure**](/reference/voice/azure/): Microsoft's speech recognition with enterprise-grade reliability
+- [**ElevenLabs**](/reference/voice/elevenlabs/): Advanced speech recognition with support for multiple languages
+- [**Google**](/reference/voice/google/): Google's speech recognition with extensive language support
+- [**Cloudflare**](/reference/voice/cloudflare/): Edge-optimized speech recognition for low-latency applications
+- [**Deepgram**](/reference/voice/deepgram/): AI-powered speech recognition with high accuracy for various accents
+- [**Sarvam**](/reference/voice/sarvam/): Specialized in Indic languages and accents
 
 Each provider is implemented as a separate package that you can install as needed:
 
@@ -67,7 +67,7 @@ const agent = new Agent({
   id: 'voice-agent',
   name: 'Voice Agent',
   instructions: 'You are a voice assistant that provides recommendations based on user input.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   voice,
 })
 
@@ -86,4 +86,22 @@ const { text } = await agent.generate(
 console.log(`Recommendation: ${text}`)
 ```
 
-Check out the [Adding Voice to Agents](/docs/agents/adding-voice) documentation to learn how to use STT in an agent.
+## Transcribe an audio file
+
+The `listen()` method accepts a stream of audio data from a microphone or file. Use `createReadStream()` when you want to transcribe an audio file:
+
+```typescript
+import { createReadStream } from 'fs'
+import path from 'path'
+
+const audioFilePath = path.join(process.cwd(), 'agent.m4a')
+const audioStream = createReadStream(audioFilePath)
+
+const transcription = await agent.voice.listen(audioStream, {
+  filetype: 'm4a',
+})
+
+console.log(`Transcription: ${transcription}`)
+```
+
+For a broader overview of voice providers on agents, see [Voice in Mastra](/docs/voice/overview).

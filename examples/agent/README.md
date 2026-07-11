@@ -4,10 +4,11 @@ This directory contains example agents demonstrating various Mastra features.
 
 ## Getting Started
 
-1. Install dependencies (from the repository root):
+1. From the `mastra` repository root, change into this example directory and install dependencies:
 
    ```bash
-   pnpm install
+   cd examples/agent
+   pnpm install --ignore-workspace
    ```
 
 2. Set up environment variables:
@@ -110,8 +111,8 @@ The `requestContextDemoAgent` demonstrates how agents can dynamically adapt thei
   - Log level affects response detail
 
 - **Model Selection**: Automatically chooses appropriate model
-  - Production: `gpt-4o` (higher quality)
-  - Development/Staging: `gpt-4o-mini` (faster iteration)
+  - Production: `gpt-5` (higher quality)
+  - Development/Staging: `gpt-5-mini` (faster iteration)
 
 - **Tool Availability**: Conditionally provides tools based on permissions
   - `apiRequestTool`: Available to all users, uses environment-specific endpoints

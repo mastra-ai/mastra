@@ -3,6 +3,19 @@ import type { SkillVersionTree } from '../../storage/types';
 import type { SkillSource, SkillSourceEntry, SkillSourceStat } from './skill-source';
 
 /**
+ * Trim leading `.`/`/`/`\` characters and trailing `/`/`\` separators from a
+ * path. Index scan instead of regex to avoid backtracking (CodeQL
+ * js/polynomial-redos).
+ */
+function trimPathEdges(path: string): string {
+  let start = 0;
+  let end = path.length;
+  while (start < end && (path[start] === '.' || path[start] === '/' || path[start] === '\\')) start++;
+  while (end > start && (path[end - 1] === '/' || path[end - 1] === '\\')) end--;
+  return path.slice(start, end);
+}
+
+/**
  * A SkillSource implementation that reads skill files from a versioned
  * content-addressable blob store, using a SkillVersionTree manifest.
  *
@@ -48,9 +61,7 @@ export class VersionedSkillSource implements SkillSource {
    * Normalize a path by stripping leading/trailing slashes and dots.
    */
   #normalizePath(path: string): string {
-    let normalized = path.replace(/^[./\\]+|[/\\]+$/g, '');
-    if (normalized === '') return '';
-    return normalized;
+    return trimPathEdges(path);
   }
 
   async exists(path: string): Promise<boolean> {
@@ -142,5 +153,9 @@ export class VersionedSkillSource implements SkillSource {
     }
 
     return entries;
+  }
+
+  async realpath(path: string): Promise<string> {
+    return this.#normalizePath(path);
   }
 }

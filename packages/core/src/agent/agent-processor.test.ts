@@ -1,12 +1,14 @@
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { noopLogger } from '../logger';
 import type { Processor, ProcessOutputStepArgs } from '../processors/index';
 import { isProcessorWorkflow } from '../processors/index';
 import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../processors/step-schema';
 import { RequestContext } from '../request-context';
+import { createTool } from '../tools/tool';
 import { createStep, createWorkflow, isProcessor } from '../workflows';
 import type { MastraDBMessage } from './types';
 import { Agent } from './index';
@@ -2566,6 +2568,43 @@ describe('v1 model - output processors', () => {
 });
 
 describe('Workflow as Processor', () => {
+  it('should use the agent logger for internal combined processor workflows', async () => {
+    const failingProcessor: Processor = {
+      id: 'failing-processor',
+      processInput: async () => {
+        throw new Error('processor failed');
+      },
+    };
+
+    const agent = new Agent({
+      id: 'logger-propagation-test-agent',
+      name: 'Logger Propagation Test Agent',
+      instructions: 'You are a helpful assistant.',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'should not get here' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      }),
+      inputProcessors: [failingProcessor],
+    });
+
+    const logger = {
+      ...noopLogger,
+      debug: vi.fn(),
+      error: vi.fn(),
+      trackException: vi.fn(),
+    };
+    agent.__setLogger(logger);
+
+    await expect(agent.generate('trigger failure')).rejects.toThrow('Input processor error');
+    expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('processor:failing-processor'));
+    expect(logger.trackException).toHaveBeenCalled();
+  });
+
   describe('input processor workflow', () => {
     it('should execute a workflow as an input processor', async () => {
       let workflowExecuted = false;
@@ -3214,6 +3253,61 @@ describe('Workflow as Processor', () => {
       expect(isProcessorWorkflow(configuredProcessors[1])).toBe(false);
     });
 
+    it('should preserve state signal processors on resolved combined input workflows', async () => {
+      const stateProcessor = {
+        id: 'state-proc',
+        name: 'State Processor',
+        processInput: async ({ messages }: any) => messages,
+        computeStateSignal: () => ({ cacheKey: 'state-proc-cache', contents: 'state' }),
+      };
+      const inputProcessor = {
+        id: 'input-proc',
+        name: 'Input Processor',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        inputProcessors: [stateProcessor, inputProcessor],
+      });
+
+      const resolvedProcessors = await agent.listInputProcessors();
+
+      expect(resolvedProcessors).toHaveLength(1);
+      expect(isProcessorWorkflow(resolvedProcessors[0])).toBe(true);
+      expect(resolvedProcessors[0]?.__stateSignalProcessors).toEqual([stateProcessor]);
+    });
+
+    it('should preserve state signal only processors on resolved combined input workflows', async () => {
+      const stateProcessor = {
+        id: 'state-only-proc',
+        name: 'State Only Processor',
+        computeStateSignal: () => ({ cacheKey: 'state-only-cache', contents: 'state' }),
+      };
+      const inputProcessor = {
+        id: 'input-proc',
+        name: 'Input Processor',
+        processInput: async ({ messages }: any) => messages,
+      };
+
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'Test Agent',
+        instructions: 'test',
+        model: testModel,
+        inputProcessors: [stateProcessor, inputProcessor],
+      });
+
+      const resolvedProcessors = await agent.listInputProcessors();
+
+      expect(resolvedProcessors).toHaveLength(1);
+      expect(isProcessorWorkflow(resolvedProcessors[0])).toBe(true);
+      expect(resolvedProcessors[0]?.__stateSignalProcessors).toEqual([stateProcessor]);
+    });
+
     it('should return individual output processors, not a combined workflow', async () => {
       const outputProcessor1 = {
         id: 'output-proc-1',
@@ -3272,6 +3366,116 @@ describe('Workflow as Processor', () => {
       const found = await agent.resolveProcessorById('findable-processor');
       expect(found).toBeDefined();
       expect(found).toHaveProperty('id', 'findable-processor');
+    });
+  });
+
+  describe('processInputStep steps accumulation', () => {
+    it('should pass accumulated steps to processInputStep across agentic loop iterations', async () => {
+      const stepLog: { stepNumber: number; stepsLength: number }[] = [];
+
+      const greetTool = createTool({
+        id: 'greet',
+        description: 'Greets a person by name',
+        inputSchema: z.object({ name: z.string() }),
+        outputSchema: z.object({ greeting: z.string() }),
+        execute: async ({ name }) => ({ greeting: `Hello, ${name}!` }),
+      });
+
+      let callCount = 0;
+      const multiStepModel = new MockLanguageModelV2({
+        doGenerate: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              content: [
+                {
+                  type: 'tool-call' as const,
+                  id: 'tc-1',
+                  toolCallId: 'call-1',
+                  toolName: 'greet',
+                  args: JSON.stringify({ name: 'World' }),
+                },
+              ],
+              finishReason: 'tool-calls' as const,
+              usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              rawCall: { rawPrompt: [], rawSettings: {} },
+              warnings: [],
+            };
+          }
+          return {
+            content: [{ type: 'text' as const, text: 'Done!' }],
+            finishReason: 'stop' as const,
+            usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+        doStream: async () => {
+          callCount++;
+          if (callCount === 1) {
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'resp-1', modelId: 'mock', timestamp: new Date(0) },
+                {
+                  type: 'tool-call',
+                  id: 'tc-1',
+                  toolCallId: 'call-1',
+                  toolName: 'greet',
+                  args: JSON.stringify({ name: 'World' }),
+                },
+                {
+                  type: 'finish',
+                  finishReason: 'tool-calls',
+                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                },
+              ]),
+              rawCall: { rawPrompt: [], rawSettings: {} },
+              warnings: [],
+            };
+          }
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'resp-2', modelId: 'mock', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Done!' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 20, outputTokens: 5, totalTokens: 25 },
+              },
+            ]),
+            rawCall: { rawPrompt: [], rawSettings: {} },
+            warnings: [],
+          };
+        },
+      });
+
+      const trackingProcessor: Processor = {
+        id: 'step-tracker',
+        processInputStep: async ({ stepNumber, steps }) => {
+          stepLog.push({ stepNumber, stepsLength: steps.length });
+          return {};
+        },
+      };
+
+      const agent = new Agent({
+        id: 'steps-accumulation-test-agent',
+        name: 'Steps Accumulation Test Agent',
+        instructions: 'Use the greet tool when asked.',
+        model: multiStepModel,
+        tools: { greet: greetTool },
+        inputProcessors: [trackingProcessor],
+      });
+
+      const result = await agent.generate('Greet World');
+
+      expect(result.text).toBe('Done!');
+      expect(stepLog.length).toBeGreaterThanOrEqual(2);
+      expect(stepLog[0]).toEqual({ stepNumber: 0, stepsLength: 0 });
+      expect(stepLog[1]).toEqual({ stepNumber: 1, stepsLength: 1 });
     });
   });
 });

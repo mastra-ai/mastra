@@ -54,6 +54,13 @@ if (result!.status === 'suspended') {
     isOptional: true,
   },
   {
+    name: 'forEachIndex',
+    type: 'number',
+    description:
+      'Target a specific iteration of a suspended `.foreach()` step. Pass the zero-based index of the iteration to resume; other iterations remain suspended. Omit to resume all suspended iterations of the step with the same `resumeData`.',
+    isOptional: true,
+  },
+  {
     name: 'tracingOptions',
     type: 'TracingOptions',
     isOptional: true,

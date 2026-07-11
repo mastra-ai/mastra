@@ -1,91 +1,274 @@
-import { KeyboardIcon, PanelRightIcon } from 'lucide-react';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
-import { MainSidebarNavSeparator } from './main-sidebar-nav-separator';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
+import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
+import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
 
 export type MainSidebarRootProps = {
   children: React.ReactNode;
   className?: string;
-  footerSlot?: React.ReactNode;
 };
-export function MainSidebarRoot({ children, className, footerSlot }: MainSidebarRootProps) {
-  const { state, toggleSidebar } = useMainSidebar();
+
+const KEYBOARD_STEP = 10;
+const DRAG_THRESHOLD = 5;
+
+export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
+  const {
+    state,
+    width,
+    minWidth,
+    maxWidth,
+    collapseBelow,
+    collapsedWidth,
+    isMobile,
+    openMobile,
+    setOpenMobile,
+    setWidth,
+    collapse,
+    expand,
+    commit,
+    toggleSidebar,
+    setGestureActive,
+  } = useMainSidebar();
   const isCollapsed = state === 'collapsed';
+  const isHidden = isCollapsed && collapsedWidth === 0;
 
+  const draggedRef = useRef(false);
+  // Tracks active drag so unmount mid-gesture can restore body styles.
+  const dragCleanupRef = useRef<(() => void) | null>(null);
+
+  // Restore global state if the component unmounts mid-drag.
   useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.ctrlKey && event.key === 'b') {
-        event.preventDefault();
-        toggleSidebar();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-
     return () => {
-      document.removeEventListener('keydown', handleKeyDown);
+      dragCleanupRef.current?.();
+      dragCleanupRef.current = null;
     };
+  }, []);
+
+  const onPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0) return;
+      event.preventDefault();
+
+      draggedRef.current = false;
+      // Active styles on press, not after drag threshold.
+      setGestureActive(true);
+
+      const startX = event.clientX;
+
+      const handle = event.currentTarget;
+      const pointerId = event.pointerId;
+
+      // Capture pointer: keeps :hover + col-resize cursor on handle for the
+      // whole drag, even when cursor leaves the hotzone (collapsed snap-zone).
+      try {
+        handle.setPointerCapture(pointerId);
+      } catch {
+        // Pointer already gone.
+      }
+
+      // WYSIWYG resize: sidebar width = cursor X relative to sidebar's left edge.
+      // Captured once — sidebar is `shrink-0`, left edge is stable during the gesture.
+      const sidebarEl = handle.parentElement;
+      const sidebarLeft = sidebarEl ? sidebarEl.getBoundingClientRect().left : 0;
+
+      const prevCursor = document.body.style.cursor;
+      const prevUserSelect = document.body.style.userSelect;
+
+      const onMove = (ev: PointerEvent) => {
+        if (ev.pointerId !== pointerId) return;
+        const dx = ev.clientX - startX;
+        if (!draggedRef.current) {
+          if (Math.abs(dx) <= DRAG_THRESHOLD) return;
+          draggedRef.current = true;
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
+        }
+
+        // Single rule, no started-state branch: cursor position alone defines state.
+        const cursorWidth = ev.clientX - sidebarLeft;
+
+        if (collapseBelow > 0 && cursorWidth < collapseBelow) {
+          collapse();
+          return;
+        }
+        expand();
+        setWidth(cursorWidth);
+      };
+      const cleanup = (ev?: PointerEvent) => {
+        if (ev && ev.pointerId !== pointerId) return;
+        window.removeEventListener('pointermove', onMove);
+        window.removeEventListener('pointerup', cleanup);
+        window.removeEventListener('pointercancel', cleanup);
+        document.body.style.cursor = prevCursor;
+        document.body.style.userSelect = prevUserSelect;
+        setGestureActive(false);
+        commit();
+        dragCleanupRef.current = null;
+      };
+      dragCleanupRef.current = () => cleanup();
+      // Window-level listeners: pointer moves off the narrow handle fire reliably,
+      // cursor leaving the window still gets `pointerup`.
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', cleanup);
+      window.addEventListener('pointercancel', cleanup);
+    },
+    [collapseBelow, setWidth, expand, collapse, commit, setGestureActive],
+  );
+
+  const onClick = useCallback(() => {
+    if (draggedRef.current) {
+      draggedRef.current = false;
+      return;
+    }
+    toggleSidebar();
   }, [toggleSidebar]);
 
+  const onKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLDivElement>) => {
+      switch (event.key) {
+        case 'Enter':
+        case ' ': {
+          event.preventDefault();
+          toggleSidebar();
+          return;
+        }
+        case 'ArrowLeft': {
+          event.preventDefault();
+          if (isCollapsed) return;
+          setWidth(width - KEYBOARD_STEP);
+          commit();
+          return;
+        }
+        case 'ArrowRight': {
+          event.preventDefault();
+          if (isCollapsed) {
+            expand();
+            commit();
+            return;
+          }
+          setWidth(width + KEYBOARD_STEP);
+          commit();
+          return;
+        }
+        case 'Home': {
+          event.preventDefault();
+          expand();
+          setWidth(minWidth);
+          commit();
+          return;
+        }
+        case 'End': {
+          event.preventDefault();
+          expand();
+          setWidth(maxWidth);
+          commit();
+          return;
+        }
+      }
+    },
+    [isCollapsed, width, minWidth, maxWidth, setWidth, expand, commit, toggleSidebar],
+  );
+
+  // Mobile: render as an off-canvas drawer via Base UI Drawer.
+  // Auto-close on link navigation (standard drawer UX). Don't gate on
+  // `defaultPrevented` — client-side router links call `preventDefault()` for
+  // SPA navigation, and we still want to close the drawer when they do.
+  const closeOnAnchor = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      const anchor = (event.target as HTMLElement).closest('a');
+      if (!anchor || !anchor.hasAttribute('href')) return;
+      // Skip non-primary clicks and modifier-clicks (open in new tab/window).
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      // Skip explicit external/download targets.
+      if (anchor.target === '_blank' || anchor.hasAttribute('download')) return;
+      setOpenMobile(false);
+    },
+    [setOpenMobile],
+  );
+
+  if (isMobile) {
+    return (
+      <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
+        <DrawerContent
+          className={cn(
+            'w-3/4 max-w-(--sidebar-width-mobile) rounded-none border-0 bg-surface2 shadow-xl overflow-hidden',
+            className,
+          )}
+        >
+          <VisuallyHidden asChild>
+            <DrawerTitle>Navigation</DrawerTitle>
+          </VisuallyHidden>
+          <VisuallyHidden asChild>
+            <DrawerDescription>Primary site navigation drawer</DrawerDescription>
+          </VisuallyHidden>
+          <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
+
+  // Desktop: in-flow sidebar with resize handle.
+  const currentWidth = isCollapsed ? collapsedWidth : width;
   return (
     <div
       className={cn(
-        'flex flex-col h-full px-4 relative overflow-y-auto',
-        // Smooth width transition for collapse/expand
-        'transition-all duration-slow ease-out-custom',
-        {
-          'lg:min-w-52 xl:min-w-56 2xl:min-w-60 3xl:min-w-64 4xl:min-w-72': !isCollapsed,
-        },
+        'sidebar-layout group/sidebar relative shrink-0 self-stretch min-h-0',
+        'w-(--sidebar-width)',
+        'transition-[width] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)]',
+        'motion-reduce:transition-none',
+        'in-data-[sidebar-gesture=active]:transition-none',
         className,
+        // Order matters for tailwind-merge: these win over consumer-supplied border classes.
+        isHidden && 'border-r-0 border-transparent',
       )}
     >
-      {children}
-
-      <div className="bg-surface1 grid sticky bottom-0 pb-3">
-        <MainSidebarNavSeparator />
-        <div className="flex items-center justify-end gap-1">
-          {!isCollapsed && footerSlot}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={toggleSidebar}
-                className={cn(
-                  'inline-flex w-auto items-center text-neutral3 h-8 px-3 rounded-md',
-                  'hover:bg-surface4 hover:text-neutral5',
-                  'transition-all duration-normal ease-out-custom',
-                  'focus:outline-none focus:ring-1 focus:ring-accent1 focus:shadow-focus-ring',
-                  '[&_svg]:w-[1rem] [&_svg]:h-[1rem] [&_svg]:text-neutral3 [&_svg]:transition-transform [&_svg]:duration-normal',
-                )}
-                aria-label="Toggle sidebar"
-              >
-                <PanelRightIcon
-                  className={cn({
-                    'rotate-180': isCollapsed,
-                  })}
-                />
-              </button>
-            </TooltipTrigger>
-
-            <TooltipContent>
-              Toggle Sidebar
-              <div className="flex items-center gap-1 [&>svg]:w-[1em] [&>svg]:h-[1em]">
-                <KeyboardIcon /> Ctrl+B
-              </div>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+      <div
+        className={cn(
+          'flex flex-col h-full min-h-0 overflow-hidden',
+          'transition-opacity duration-200 motion-reduce:transition-none',
+          isCollapsed ? 'px-2' : 'px-4',
+          isHidden && 'opacity-0 pointer-events-none px-0',
+        )}
+      >
+        {children}
       </div>
 
-      <button
-        onClick={toggleSidebar}
-        className={cn('w-[.75rem] h-full right-0 top-0 absolute opacity-10', {
-          'cursor-w-resize': !isCollapsed,
-          'cursor-e-resize': isCollapsed,
-        })}
-        aria-label="Toggle sidebar"
-      ></button>
+      <div
+        // Focusable window-splitter pattern (WAI-ARIA APG): `separator` with
+        // value props + keyboard semantics. Click toggles; Arrow keys resize.
+        role="separator"
+        aria-orientation="vertical"
+        // Collapsed: omit the numeric range so AT doesn't see contradictory
+        // values (valuenow=0/64 inside valuemin=200..valuemax=480). `valuetext`
+        // still describes the state.
+        aria-valuenow={isCollapsed ? undefined : currentWidth}
+        aria-valuemin={isCollapsed ? undefined : minWidth}
+        aria-valuemax={isCollapsed ? undefined : maxWidth}
+        aria-valuetext={isCollapsed ? 'collapsed' : `${currentWidth} pixels`}
+        aria-label={`Resize sidebar. Arrow keys to resize, Enter to ${isCollapsed ? 'expand' : 'collapse'}.`}
+        tabIndex={0}
+        onPointerDown={onPointerDown}
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        className={cn(
+          'group absolute top-0 -right-1 z-10 h-full w-2 cursor-col-resize touch-none',
+          'flex items-center justify-center',
+          'focus-visible:outline-hidden',
+        )}
+      >
+        <ResizeHandleIndicator
+          className={cn(
+            'group-hover:opacity-100',
+            'group-focus-visible:opacity-100 group-focus-visible:via-accent1',
+            'in-data-[sidebar-gesture=active]:opacity-100 in-data-[sidebar-gesture=active]:via-neutral6/45',
+          )}
+        />
+      </div>
     </div>
   );
 }

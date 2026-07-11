@@ -1,93 +1,69 @@
-import {
-  Header,
-  HeaderTitle,
-  MainContentLayout,
-  MainContentContent,
-  WorkflowTable,
-  WorkflowsList,
-  Icon,
-  HeaderAction,
-  Button,
-  ButtonWithTooltip,
-  DocsIcon,
-  WorkflowIcon,
-  ListSearch,
-  MainHeader,
-  EntityListPageLayout,
-  useWorkflows,
-} from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
-import { BookIcon } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { CalendarClockIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Link } from 'react-router';
+import { NoWorkflowsInfo } from '@/domains/workflows/components/workflows-list/no-workflows-info';
+import { WorkflowsList } from '@/domains/workflows/components/workflows-list/workflows-list';
+import { useWorkflows } from '@/domains/workflows/hooks/use-workflows';
 
 function Workflows() {
   const { data: workflows, isLoading, error } = useWorkflows();
-  const { variant } = useExperimentalUI('entity-list-page');
   const [search, setSearch] = useState('');
 
-  const isEmpty = !isLoading && Object.keys(workflows || {}).length === 0;
-
-  if (variant === 'new-proposal') {
+  if (error && is401UnauthorizedError(error)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <WorkflowIcon /> Workflows
-              </MainHeader.Title>
-            </MainHeader.Column>
-            <MainHeader.Column className="flex justify-end gap-2">
-              <ButtonWithTooltip
-                as="a"
-                href="https://mastra.ai/en/docs/workflows/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                tooltipContent="Go to Workflows documentation"
-              >
-                <BookIcon />
-              </ButtonWithTooltip>
-            </MainHeader.Column>
-          </MainHeader>
-          <div className="max-w-[30rem]">
-            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
-          </div>
-        </EntityListPageLayout.Top>
+      <NoDataPageLayout>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-        <WorkflowsList
-          workflows={workflows || {}}
-          isLoading={isLoading}
-          error={error}
-          search={search}
-          onSearch={setSearch}
-        />
-      </EntityListPageLayout>
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout>
+        <PermissionDenied resource="workflows" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout>
+        <ErrorState title="Failed to load workflows" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(workflows || {}).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout>
+        <NoWorkflowsInfo />
+      </NoDataPageLayout>
     );
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <WorkflowIcon />
-          </Icon>
-          Workflows
-        </HeaderTitle>
-
-        <HeaderAction>
-          <Button as={Link} to="https://mastra.ai/en/docs/workflows/overview" target="_blank" variant="ghost" size="md">
-            <DocsIcon />
-            Workflows documentation
+    <PageLayout>
+      <PageLayout.TopArea>
+        <PageLayout.Row align="center" stack="responsive">
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter workflows" placeholder="Filter by name or description" />
+          </div>
+          <Button as={Link} to="/workflows/schedules" variant="primary" className="shrink-0">
+            <CalendarClockIcon />
+            Schedules
           </Button>
-        </HeaderAction>
-      </Header>
+        </PageLayout.Row>
+      </PageLayout.TopArea>
 
-      <MainContentContent isCentered={isEmpty}>
-        <WorkflowTable workflows={workflows || {}} isLoading={isLoading} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <WorkflowsList workflows={workflows || {}} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }
 

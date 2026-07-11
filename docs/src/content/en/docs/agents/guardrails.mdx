@@ -34,11 +34,7 @@ export const normalizedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`UnicodeNormalizer()`](/reference/processors/unicode-normalizer) reference for a full list of configuration options.
-
-:::
 
 ### Prevent prompt injection
 
@@ -61,11 +57,7 @@ export const secureAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`PromptInjectionDetector()`](/reference/processors/prompt-injection-detector) reference for a full list of configuration options.
-
-:::
 
 ### Detect and translate language
 
@@ -88,11 +80,7 @@ export const multilingualAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`LanguageDetector()`](/reference/processors/language-detector) reference for a full list of configuration options.
-
-:::
 
 ## Output processors
 
@@ -118,11 +106,7 @@ export const batchedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`BatchPartsProcessor()`](/reference/processors/batch-parts-processor) reference for a full list of configuration options.
-
-:::
 
 ### Scrub system prompts
 
@@ -149,11 +133,7 @@ const scrubbedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`SystemPromptScrubber()`](/reference/processors/system-prompt-scrubber) reference for a full list of configuration options.
-
-:::
 
 :::note
 When streaming responses over HTTP, Mastra redacts sensitive request data (system prompts, tool definitions, API keys) from stream chunks at the server level by default. See [Stream data redaction](/docs/server/mastra-server#stream-data-redaction) for details.
@@ -185,11 +165,7 @@ export const moderatedAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`ModerationProcessor()`](/reference/processors/moderation-processor) reference for a full list of configuration options.
-
-:::
 
 ### Detect and redact PII
 
@@ -215,11 +191,29 @@ export const privateAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full list of configuration options.
 
-:::
+### Enforce cost limits
+
+The `CostGuardProcessor()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate — metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
+
+```typescript {7-11} title="src/mastra/agents/budgeted-agent.ts"
+import { CostGuardProcessor } from '@mastra/core/processors'
+
+export const budgetedAgent = new Agent({
+  id: 'budgeted-agent',
+  name: 'Budgeted Agent',
+  inputProcessors: [
+    new CostGuardProcessor({
+      maxCost: 5.0,
+      scope: 'thread',
+      window: '24h',
+    }),
+  ],
+})
+```
+
+Visit [`CostGuardProcessor()`](/reference/processors/cost-guard-processor) reference for scoping modes, time windows, metric persistence delays, and the `onViolation` callback. Requires observability storage with `getMetricAggregate` support.
 
 ## Processor strategies
 
@@ -237,6 +231,44 @@ inputProcessors: [
   }),
 ]
 ```
+
+## Violation callbacks
+
+All processors support an `onViolation` callback that fires when a policy violation is detected, regardless of strategy. Use it for side effects like alerting, logging to external systems, or sending notifications.
+
+The callback receives a `ProcessorViolation` object with `processorId`, `message`, and `detail` (processor-specific metadata).
+
+```typescript
+import { CostGuardProcessor, ModerationProcessor, PIIDetector } from '@mastra/core/processors'
+
+// Alert when cost limits are exceeded
+const costGuard = new CostGuardProcessor({
+  maxCost: 10.0,
+  scope: 'resource',
+  window: '30d',
+})
+
+costGuard.onViolation = ({ processorId, message, detail }) => {
+  alertSystem.notify(`[${processorId}] ${message}`)
+  // detail contains: { usage, limit, totalUsage, scope, scopeKey }
+}
+
+// Log moderation violations
+const moderation = new ModerationProcessor({
+  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  strategy: 'block',
+})
+
+moderation.onViolation = ({ processorId, message, detail }) => {
+  auditLog.write({ processor: processorId, violation: message, categories: detail })
+}
+```
+
+The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor — including custom ones — can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `CostGuardProcessor`), the callback also fires on warnings without blocking the request.
+
+Errors thrown by the callback are silently caught to prevent interfering with the processor's main logic.
+
+For more on how violation callbacks integrate with the processor pipeline, see [Violation callbacks](/docs/agents/processors#violation-callbacks) in the Processors documentation.
 
 ## Handle blocked requests
 
@@ -337,7 +369,7 @@ See [workflows as processors](/docs/agents/processors#use-workflows-as-processor
 Guardrail processors don't need your primary model. Use a small, fast model for classification tasks:
 
 ```typescript
-const GUARDRAIL_MODEL = 'openai/gpt-5-nano'
+const GUARDRAIL_MODEL = '__GATEWAY_OPENAI_MODEL_NANO__'
 
 new ModerationProcessor({ model: GUARDRAIL_MODEL })
 new PIIDetector({ model: GUARDRAIL_MODEL })
@@ -362,3 +394,4 @@ outputProcessors: [
 - [Processors](/docs/agents/processors): How processors work, execution order, custom processors, and retry mechanism
 - [`Processor` Interface](/reference/processors/processor-interface): API reference for the `Processor` interface
 - [Memory Processors](/docs/memory/memory-processors): Processors for message history, semantic recall, and working memory
+- 📹 [Mastra processors and guardrails workshop](https://www.youtube.com/watch?v=4Vpp7xQYvl0)

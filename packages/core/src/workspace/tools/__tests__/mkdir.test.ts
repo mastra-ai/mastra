@@ -21,7 +21,7 @@ describe('workspace_mkdir', () => {
 
   it('should create directory', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: 'newdir' }, { workspace });
 
@@ -34,7 +34,7 @@ describe('workspace_mkdir', () => {
 
   it('should create nested directories', async () => {
     const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
-    const tools = createWorkspaceTools(workspace);
+    const tools = await createWorkspaceTools(workspace);
 
     const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.MKDIR].execute({ path: 'a/b/c' }, { workspace });
 

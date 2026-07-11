@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { KeyValueList } from './key-value-list';
 import { BrainIcon, WorkflowIcon, UserIcon, TagIcon } from 'lucide-react';
+import { KeyValueList } from './key-value-list';
 
 const meta: Meta<typeof KeyValueList> = {
   title: 'Elements/KeyValueList',
@@ -8,7 +8,6 @@ const meta: Meta<typeof KeyValueList> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     labelsAreHidden: {
       control: { type: 'boolean' },
@@ -77,6 +76,41 @@ const complexData = [
   },
 ];
 
+const dataWithDescriptions = [
+  {
+    key: 'tools',
+    label: 'Tools',
+    value: [
+      {
+        id: '1',
+        name: 'Web Search',
+        path: '/tools/web-search',
+        description: 'Searches the web and returns ranked results for a query.',
+      },
+      {
+        id: '2',
+        name: 'File System',
+        path: '/tools/file-system',
+        description: 'Reads and writes files in the local workspace.',
+      },
+    ],
+    icon: <BrainIcon />,
+  },
+  {
+    key: 'agents',
+    label: 'Agents',
+    value: [
+      {
+        id: '1',
+        name: 'Research Agent',
+        path: '/agents/research',
+        description: 'Gathers and summarizes information from multiple sources.',
+      },
+    ],
+    icon: <UserIcon />,
+  },
+];
+
 const emptyData = [
   {
     key: 'tools',
@@ -101,6 +135,16 @@ export const Default: Story = {
 export const WithLinks: Story = {
   args: {
     data: complexData,
+  },
+};
+
+/**
+ * Relation items that carry a `description` render inside a hover card
+ * (`@base-ui/react/preview-card`). Hover a linked value to reveal it.
+ */
+export const WithRelationHoverCards: Story = {
+  args: {
+    data: dataWithDescriptions,
   },
 };
 
@@ -133,6 +177,6 @@ export const CustomClassName: Story = {
 
 export const SingleItem: Story = {
   args: {
-    data: [sampleData[0]],
+    data: sampleData.slice(0, 1),
   },
 };

@@ -1,5 +1,6 @@
 import { PassThrough } from 'node:stream';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod';
 import { GeminiLiveVoice } from './index';
 
 // Mock WebSocket
@@ -45,15 +46,6 @@ vi.mock('google-auth-library', () => {
 
   return { GoogleAuth: MockGoogleAuth };
 });
-
-// Mock zod-to-json-schema
-vi.mock('zod-to-json-schema', () => ({
-  zodToJsonSchema: vi.fn().mockImplementation(() => ({
-    type: 'object',
-    properties: {},
-    $schema: 'http://json-schema.org/draft-07/schema#',
-  })),
-}));
 
 describe('GeminiLiveVoice', () => {
   let voice: GeminiLiveVoice;
@@ -260,7 +252,8 @@ describe('GeminiLiveVoice', () => {
       expect(mockWs.send).toHaveBeenCalled();
       const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
       expect(sentData).toHaveProperty('realtime_input');
-      expect(sentData.realtime_input).toHaveProperty('media_chunks');
+      expect(sentData.realtime_input).toHaveProperty('audio');
+      expect(sentData.realtime_input).not.toHaveProperty('media_chunks');
     });
 
     it('should handle audio stream', async () => {
@@ -613,6 +606,67 @@ describe('GeminiLiveVoice', () => {
       const info = voice.getSessionInfo();
       expect(info.config?.enableResumption).toBe(true);
     });
+
+    describe('sendContext', () => {
+      beforeEach(() => {
+        (voice as any).state = 'connected';
+        (voice as any).ws = {
+          send: vi.fn(),
+          readyState: 1,
+          close: vi.fn(),
+          once: vi.fn(),
+        };
+        (voice as any).connectionManager.setWebSocket((voice as any).ws);
+        mockWs = (voice as any).ws;
+      });
+
+      it('should send client_content with turnComplete: false by default', async () => {
+        await voice.sendContext([
+          { role: 'user', content: 'Hello' },
+          { role: 'assistant', content: 'Hi there!' },
+        ]);
+
+        expect(mockWs.send).toHaveBeenCalledTimes(1);
+        const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sentData).toHaveProperty('client_content');
+        expect(sentData.client_content.turnComplete).toBe(false);
+        expect(sentData.client_content.turns).toHaveLength(2);
+        expect(sentData.client_content.turns[0]).toEqual({ role: 'user', parts: [{ text: 'Hello' }] });
+        expect(sentData.client_content.turns[1]).toEqual({ role: 'model', parts: [{ text: 'Hi there!' }] });
+      });
+
+      it('should allow turnComplete: true override', async () => {
+        await voice.sendContext([{ role: 'user', content: 'Final message' }], { turnComplete: true });
+
+        const sentData = JSON.parse(mockWs.send.mock.calls[0][0]);
+        expect(sentData.client_content.turnComplete).toBe(true);
+      });
+
+      it('should update local context history', async () => {
+        voice.clearContext();
+        await voice.sendContext([
+          { role: 'user', content: 'Question' },
+          { role: 'assistant', content: 'Answer' },
+        ]);
+
+        const history = voice.getContextHistory();
+        expect(history).toHaveLength(2);
+        expect(history[0].role).toBe('user');
+        expect(history[0].content).toBe('Question');
+        expect(history[1].role).toBe('assistant');
+        expect(history[1].content).toBe('Answer');
+      });
+
+      it('should skip sending when turns array is empty', async () => {
+        await voice.sendContext([]);
+        expect(mockWs.send).not.toHaveBeenCalled();
+      });
+
+      it('should throw when not connected', async () => {
+        (voice as any).state = 'disconnected';
+        await expect(voice.sendContext([{ role: 'user', content: 'Hello' }])).rejects.toThrow('Not connected');
+      });
+    });
   });
 
   describe('Event System', () => {
@@ -812,7 +866,251 @@ describe('GeminiLiveVoice', () => {
       const setupMsg = payloads.find((p: any) => p.setup);
       expect(setupMsg).toBeDefined();
       expect(setupMsg.setup.model).toBe('models/gemini-2.0-flash-exp');
-      expect(setupMsg.setup.systemInstruction.parts[0].text).toBe('You are test');
+      expect(setupMsg.setup.system_instruction.parts[0].text).toBe('You are test');
+    });
+
+    it('connect() should default model to gemini-3.1-flash-live-preview when none is supplied', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe('models/gemini-3.1-flash-live-preview');
+    });
+
+    it('connect() should always emit generation_config.response_modalities: ["AUDIO"]', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config).toBeDefined();
+      expect(setupMsg.setup.generation_config.response_modalities).toEqual(['AUDIO']);
+    });
+
+    it('connect() should include speech_config.voice_config.prebuilt_voice_config.voice_name when speaker is set', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k', speaker: 'Puck' });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe('Puck');
+    });
+
+    it('connect() should pick up apiKey and model placed on realtimeConfig root (not inside options)', async () => {
+      const v = new GeminiLiveVoice({
+        realtimeConfig: {
+          model: 'gemini-3.1-flash-live-preview',
+          apiKey: 'root-key',
+          // intentionally no `options.apiKey` — caller relies on the root field
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.model).toBe('models/gemini-3.1-flash-live-preview');
+      expect((v as any).options.apiKey).toBe('root-key');
+    });
+
+    it('connect() should honor a VoiceConfig-root speaker passed alongside realtimeConfig', async () => {
+      const v = new GeminiLiveVoice({
+        speaker: 'Charon',
+        realtimeConfig: {
+          model: 'gemini-3.1-flash-live-preview',
+          apiKey: 'k',
+          options: { apiKey: 'k' },
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.generation_config.speech_config.voice_config.prebuilt_voice_config.voice_name).toBe(
+        'Charon',
+      );
+    });
+
+    it('connect() should emit tools as a single function_declarations container holding every tool', async () => {
+      const v = new GeminiLiveVoice({
+        apiKey: 'k',
+        tools: [
+          { name: 'first', description: 'a', parameters: { type: 'object', properties: {} } },
+          { name: 'second', description: 'b', parameters: { type: 'object', properties: {} } },
+        ],
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      expect(setupMsg.setup.tools).toHaveLength(1);
+      expect(setupMsg.setup.tools[0].function_declarations).toHaveLength(2);
+      expect(setupMsg.setup.tools[0].function_declarations.map((d: any) => d.name)).toEqual(['first', 'second']);
+    });
+
+    it('updateSessionConfig({ tools }) should merge config.tools with addTools() registrations into one container', async () => {
+      // Mirror sendInitialConfig: both tool sources contribute. Previously updateSessionConfig
+      // dropped config.tools entirely whenever any `addTools()` registrations existed.
+      voice.addTools({
+        registered: {
+          id: 'registered',
+          description: 'r',
+          parameters: { type: 'object', properties: {} },
+          execute: vi.fn() as any,
+        },
+      });
+
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({
+        tools: [{ name: 'fromConfig', description: 'c', parameters: { type: 'object', properties: {} } }],
+      });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.tools !== undefined);
+      expect(updateMsg.session.tools).toHaveLength(1);
+      const names = updateMsg.session.tools[0].function_declarations.map((d: any) => d.name);
+      expect(names).toContain('fromConfig');
+      expect(names).toContain('registered');
+    });
+
+    it('updateSessionConfig({ tools }) should emit the same single-container function_declarations shape as setup', async () => {
+      // Mid-session updateSessionConfig must not regress to the one-container-per-tool shape; Gemini
+      // accepts that shape at the wire but suppresses tool_call frames, silently breaking tool routing.
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({
+        tools: [
+          { name: 'alpha', description: 'a', parameters: { type: 'object', properties: {} } },
+          { name: 'beta', description: 'b', parameters: { type: 'object', properties: {} } },
+        ],
+      });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.tools !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.tools).toHaveLength(1);
+      expect(updateMsg.session.tools[0].function_declarations).toHaveLength(2);
+      expect(updateMsg.session.tools[0].function_declarations.map((d: any) => d.name)).toEqual(['alpha', 'beta']);
+    });
+
+    it('should wrap array tool results in { result } so the Gemini Live `response` proto field stays a struct', async () => {
+      const mockExecute = vi.fn().mockResolvedValue(['hit-1', 'hit-2']);
+      voice.addTools({
+        searchTool: { id: 'searchTool', description: 'd', inputSchema: {}, execute: mockExecute as any },
+      });
+
+      await (voice as any).handleGeminiMessage({
+        toolCall: { name: 'searchTool', args: {}, id: 'id-array' },
+      });
+
+      const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const toolResult = payloads.find((p: any) => p.toolResponse);
+      expect(toolResult.toolResponse.functionResponses[0].name).toBe('searchTool');
+      expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: ['hit-1', 'hit-2'] });
+    });
+
+    it('should wrap non-plain-object tool results (Date, Map, Set, Error, class instances) in { result }', async () => {
+      // Bare Map/Set/Date/Error/class instances JSON.stringify to `{}` or non-struct shapes; the
+      // proto `response` field is a struct, so we must wrap to keep tool data on the wire.
+      class Custom {
+        constructor(public value: number) {}
+      }
+      const cases: Array<{ id: string; toolName: string; result: unknown }> = [
+        { id: 'id-map', toolName: 'mapTool', result: new Map([['k', 'v']]) },
+        { id: 'id-set', toolName: 'setTool', result: new Set([1, 2]) },
+        { id: 'id-date', toolName: 'dateTool', result: new Date('2026-01-01T00:00:00Z') },
+        { id: 'id-class', toolName: 'classTool', result: new Custom(42) },
+      ];
+
+      for (const c of cases) {
+        voice.addTools({
+          [c.toolName]: {
+            id: c.toolName,
+            description: 'd',
+            inputSchema: {},
+            execute: vi.fn().mockResolvedValue(c.result) as any,
+          },
+        });
+        await (voice as any).handleGeminiMessage({ toolCall: { name: c.toolName, args: {}, id: c.id } });
+      }
+
+      const payloads = mockWs.send.mock.calls.map((call: any[]) => JSON.parse(call[0]));
+      for (const c of cases) {
+        const toolResult = payloads.find((p: any) => p.toolResponse?.functionResponses?.[0]?.id === c.id);
+        expect(toolResult, `payload for ${c.toolName}`).toBeDefined();
+        const response = toolResult.toolResponse.functionResponses[0].response;
+        // Every non-plain-object result must be wrapped — the wire field is always an object with `result` key.
+        expect(response).toHaveProperty('result');
+      }
+    });
+
+    it('should pass plain-object tool results through unwrapped', async () => {
+      const mockExecute = vi.fn().mockResolvedValue({ temperature: 72, conditions: 'sunny' });
+      voice.addTools({
+        weatherTool: { id: 'weatherTool', description: 'd', inputSchema: {}, execute: mockExecute as any },
+      });
+
+      await (voice as any).handleGeminiMessage({
+        toolCall: { name: 'weatherTool', args: {}, id: 'id-plain' },
+      });
+
+      const payloads = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const toolResult = payloads.find((p: any) => p.toolResponse);
+      expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ temperature: 72, conditions: 'sunny' });
+    });
+
+    it('updateSessionConfig({ tools: [] }) should clear tools even when addTools() registry is non-empty', async () => {
+      // Explicit-clear intent: caller passes an empty `config.tools` array to remove all tools
+      // mid-session. Without this honor, addTools() registrations would silently survive.
+      voice.addTools({
+        sticky: { id: 'sticky', description: 'd', inputSchema: {}, execute: vi.fn() as any },
+      });
+
+      setTimeout(() => {
+        (voice as any).eventManager.getEventEmitter().emit('session.updated', { ok: true } as any);
+      }, 10);
+
+      await voice.updateSessionConfig({ tools: [] });
+
+      const calls = mockWs.send.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const updateMsg = calls.find((p: any) => p.session?.tools !== undefined);
+      expect(updateMsg).toBeDefined();
+      expect(updateMsg.session.tools).toEqual([]);
     });
 
     it('speak() should send per-turn session.update before content (language, modalities, voice)', async () => {
@@ -851,7 +1149,121 @@ describe('GeminiLiveVoice', () => {
       expect(toolResult).toBeDefined();
       expect(toolResult.toolResponse.functionResponses).toBeDefined();
       expect(toolResult.toolResponse.functionResponses[0].id).toBe('id-1');
+      expect(toolResult.toolResponse.functionResponses[0].name).toBe('testTool');
       expect(toolResult.toolResponse.functionResponses[0].response).toEqual({ result: 'ok' });
+    });
+
+    /**
+     * Gemini Live's `parameters` field is OpenAPI 3.0 Schema Object, not JSON Schema 2020-12.
+     * Several JSON Schema constructs are rejected by the Gemini Live wire validator with
+     * `1007 Unknown name "..."`. See https://github.com/mastra-ai/mastra/issues/17020.
+     *
+     * The sanitizeToolParameters method currently strips `$schema` and `additionalProperties`,
+     * but the following constructs still pass through unsanitized and are rejected by Gemini:
+     *   - `oneOf` (discriminated unions) — should be rewritten to `anyOf`
+     *   - `const` (literals) — should be rewritten to `enum: [value]`
+     *   - `type: ['T', 'null']` or `type: 'null'` (nullable) — should be rewritten
+     */
+
+    it('should rewrite oneOf to anyOf in tool parameter schemas for Gemini Live OpenAPI 3.0 compat', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      v.addTools({
+        notify: {
+          id: 'notify',
+          description: 'Send a notification',
+          inputSchema: z.object({
+            channel: z.discriminatedUnion('type', [
+              z.object({ type: z.literal('email'), address: z.string() }),
+              z.object({ type: z.literal('sms'), phone: z.string() }),
+            ]),
+          }),
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const params = setupMsg.setup.tools[0].function_declarations[0].parameters;
+
+      // Gemini Live rejects `oneOf` — discriminated unions must use `anyOf`
+      const json = JSON.stringify(params);
+      expect(json).not.toContain('"oneOf"');
+      expect(json).toContain('"anyOf"');
+    });
+
+    it('should rewrite const to enum in tool parameter schemas for Gemini Live OpenAPI 3.0 compat', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      v.addTools({
+        setStatus: {
+          id: 'setStatus',
+          description: 'Set status',
+          inputSchema: z.object({
+            status: z.literal('active'),
+          }),
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const params = setupMsg.setup.tools[0].function_declarations[0].parameters;
+
+      // Gemini Live rejects `const` — literals must use `enum: [value]`
+      const json = JSON.stringify(params);
+      expect(json).not.toContain('"const"');
+      expect(params.properties.status.enum).toEqual(['active']);
+    });
+
+    it('should rewrite nullable type arrays for Gemini Live OpenAPI 3.0 compat', async () => {
+      const v = new GeminiLiveVoice({ apiKey: 'k' });
+
+      v.addTools({
+        update: {
+          id: 'update',
+          description: 'Update a record',
+          inputSchema: z.object({
+            name: z.string().nullable(),
+          }),
+          execute: vi.fn() as any,
+        },
+      });
+
+      vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+      (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+      await v.connect();
+
+      const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+      const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+      const setupMsg = payloads.find((p: any) => p.setup);
+      const params = setupMsg.setup.tools[0].function_declarations[0].parameters;
+
+      // Gemini Live rejects `type: 'null'` and `type: ['string', 'null']`.
+      // Nullable fields should be rewritten to the base type (e.g. `type: 'string'`)
+      // with optional `nullable: true` (OpenAPI 3.0 convention).
+      const json = JSON.stringify(params);
+      expect(json).not.toContain('"null"');
+
+      // The name property should have a concrete type, not an anyOf with null,
+      // and nullability should be expressed via OpenAPI 3.0's `nullable: true`.
+      const nameProp = params.properties.name;
+      expect(nameProp.type).toBe('string');
+      expect(nameProp.nullable).toBe(true);
+      expect(nameProp.anyOf).toBeUndefined();
     });
 
     it('should emit usage event from usageMetadata', async () => {
@@ -866,6 +1278,277 @@ describe('GeminiLiveVoice', () => {
       expect(usage.outputTokens).toBe(2);
       expect(usage.totalTokens).toBe(3);
       expect(['audio', 'text', 'video']).toContain(usage.modality);
+    });
+  });
+
+  describe('Native-audio behavioral signals (#17021)', () => {
+    describe('Setup payload', () => {
+      // Setup-level flags are required by the Gemini Live wire protocol: the server only emits
+      // transcription frames when `input_audio_transcription` / `output_audio_transcription` are
+      // present, and only emits `serverContent.interrupted = true` when `realtime_input_config`
+      // declares `activity_handling: 'START_OF_ACTIVITY_INTERRUPTS'`. These tests pin the wire
+      // shape so we cannot regress these flags without breaking the build.
+      it('enables input/output transcription unconditionally in the setup payload', async () => {
+        const v = new GeminiLiveVoice({ apiKey: 'k', model: 'gemini-2.5-flash-native-audio-preview-12-2025' });
+        vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+        (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+        await v.connect();
+
+        const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+        const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+        const setupMsg = payloads.find((p: any) => p.setup);
+        expect(setupMsg.setup.input_audio_transcription).toEqual({});
+        expect(setupMsg.setup.output_audio_transcription).toEqual({});
+      });
+
+      it('enables activity-based interrupts in the setup payload', async () => {
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+        (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+        await v.connect();
+
+        const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+        const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+        const setupMsg = payloads.find((p: any) => p.setup);
+        expect(setupMsg.setup.realtime_input_config).toEqual({
+          activity_handling: 'START_OF_ACTIVITY_INTERRUPTS',
+        });
+      });
+
+      it('uses snake_case keys for all native-audio setup fields', async () => {
+        // Native-audio models reject camelCase setup keys at the wire level (1007 close code).
+        // Guard explicitly against accidental drift back to camelCase.
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        vi.spyOn((v as any).connectionManager, 'waitForOpen').mockResolvedValue(undefined as any);
+        (v as any).waitForSessionCreated = vi.fn().mockResolvedValue(undefined);
+
+        await v.connect();
+
+        const wsSent = ((v as any).connectionManager.getWebSocket() as any).send as any;
+        const payloads = wsSent.mock.calls.map((c: any[]) => JSON.parse(c[0]));
+        const setupMsg = payloads.find((p: any) => p.setup);
+        const json = JSON.stringify(setupMsg.setup);
+        expect(json).not.toContain('inputAudioTranscription');
+        expect(json).not.toContain('outputAudioTranscription');
+        expect(json).not.toContain('realtimeInputConfig');
+        expect(json).not.toContain('activityHandling');
+      });
+    });
+
+    describe('Transcription routing', () => {
+      it('emits writing { role: "user" } for inputTranscription frames', async () => {
+        const writingPromise = new Promise<any>(resolve => voice.on('writing', resolve));
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            inputTranscription: { text: "What's the weather?" },
+          },
+        });
+
+        const ev = await writingPromise;
+        expect(ev).toEqual({ text: "What's the weather?", role: 'user' });
+      });
+
+      it('emits writing { role: "assistant" } for outputTranscription frames', async () => {
+        const writingPromise = new Promise<any>(resolve => voice.on('writing', resolve));
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            outputTranscription: { text: "It's sunny today." },
+          },
+        });
+
+        const ev = await writingPromise;
+        expect(ev).toEqual({ text: "It's sunny today.", role: 'assistant' });
+      });
+    });
+
+    describe('Interrupt routing', () => {
+      it('emits interrupt event when serverContent.interrupted is true', async () => {
+        const interruptPromise = new Promise<any>(resolve => voice.on('interrupt', resolve));
+        const before = Date.now();
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: { interrupted: true },
+        });
+
+        const ev = await interruptPromise;
+        expect(ev.type).toBe('user');
+        expect(ev.timestamp).toBeGreaterThanOrEqual(before);
+      });
+
+      it('does not emit interrupt when serverContent.interrupted is absent', async () => {
+        const onInterrupt = vi.fn();
+        voice.on('interrupt', onInterrupt);
+
+        await (voice as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'hello' }] },
+          },
+        });
+
+        expect(onInterrupt).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('Thinking vs. writing routing for modelTurn.parts.text', () => {
+      it('routes modelTurn.parts.text to writing on non-native-audio models', async () => {
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-3.1-flash-live-preview', // half-cascade, not native-audio
+        });
+        const onWriting = vi.fn();
+        const onThinking = vi.fn();
+        v.on('writing', onWriting);
+        v.on('thinking', onThinking);
+
+        await (v as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'spoken response' }] },
+          },
+        });
+
+        expect(onWriting).toHaveBeenCalledWith({ text: 'spoken response', role: 'assistant' });
+        expect(onThinking).not.toHaveBeenCalled();
+
+        v.disconnect();
+      });
+
+      it('routes modelTurn.parts.text to thinking on native-audio models', async () => {
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        });
+        const onWriting = vi.fn();
+        const onThinking = vi.fn();
+        v.on('writing', onWriting);
+        v.on('thinking', onThinking);
+
+        await (v as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'internal reasoning' }] },
+          },
+        });
+
+        expect(onThinking).toHaveBeenCalledWith({ text: 'internal reasoning' });
+        // Critically: `writing` must NOT fire for reasoning text on native-audio. If it did, the
+        // consumer would render reasoning as the assistant's spoken response.
+        expect(onWriting).not.toHaveBeenCalled();
+
+        v.disconnect();
+      });
+
+      it('on native-audio, spoken response comes through outputTranscription as writing { role: "assistant" }', async () => {
+        // End-to-end shape test: a single native-audio turn produces (a) `thinking` from
+        // modelTurn.parts.text and (b) `writing { role: "assistant" }` from outputTranscription.
+        // These channels must remain distinct.
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        });
+        const writings: any[] = [];
+        const thinkings: any[] = [];
+        v.on('writing', e => writings.push(e));
+        v.on('thinking', e => thinkings.push(e));
+
+        await (v as any).handleGeminiMessage({
+          serverContent: {
+            modelTurn: { parts: [{ text: 'Let me check the forecast...' }] },
+            outputTranscription: { text: "It's sunny." },
+          },
+        });
+
+        expect(thinkings).toEqual([{ text: 'Let me check the forecast...' }]);
+        expect(writings).toEqual([{ text: "It's sunny.", role: 'assistant' }]);
+
+        v.disconnect();
+      });
+    });
+
+    describe('Per-turn aggregation of assistant context', () => {
+      it('aggregates assistant text across frames and commits to context once per turn', async () => {
+        // Live API streams assistant text across many `serverContent` frames within a single
+        // turn. Each fragment must NOT be committed as its own context entry — otherwise the
+        // conversation history fragments into per-frame chunks. Verify the buffer accumulates
+        // and flushes exactly once on `turnComplete`.
+        const v = new GeminiLiveVoice({
+          apiKey: 'k',
+          model: 'gemini-2.5-flash-native-audio-preview-12-2025',
+        });
+        const addToContext = vi.spyOn(v, 'addToContext');
+
+        await (v as any).handleGeminiMessage({
+          serverContent: { outputTranscription: { text: 'Hello' } },
+        });
+        await (v as any).handleGeminiMessage({
+          serverContent: { outputTranscription: { text: ', world' } },
+        });
+        await (v as any).handleGeminiMessage({
+          serverContent: { outputTranscription: { text: '.' } },
+        });
+        expect(addToContext).not.toHaveBeenCalled();
+
+        await (v as any).handleGeminiMessage({
+          serverContent: { turnComplete: true },
+        });
+
+        expect(addToContext).toHaveBeenCalledTimes(1);
+        expect(addToContext).toHaveBeenCalledWith('assistant', 'Hello, world.');
+
+        v.disconnect();
+      });
+
+      it('resets pending assistant text between turns', async () => {
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        const addToContext = vi.spyOn(v, 'addToContext');
+
+        await (v as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [{ text: 'first' }] } },
+        });
+        await (v as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+        await (v as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [{ text: 'second' }] } },
+        });
+        await (v as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+
+        expect(addToContext).toHaveBeenNthCalledWith(1, 'assistant', 'first');
+        expect(addToContext).toHaveBeenNthCalledWith(2, 'assistant', 'second');
+
+        v.disconnect();
+      });
+    });
+
+    describe('Barge-in cleanup', () => {
+      it('ends active speaker streams and clears pending text when interrupted', async () => {
+        // The cancelled turn will not be followed by `turnComplete`, so the interrupt handler
+        // must end any in-flight speaker streams itself. Otherwise stream counters never drop
+        // and playback hangs on the cancelled audio. The partial assistant text from the
+        // cancelled turn is also discarded — it never reached the user as a completed reply.
+        const v = new GeminiLiveVoice({ apiKey: 'k' });
+        const cleanup = vi.spyOn((v as any).audioStreamManager, 'cleanupSpeakerStreams');
+        const addToContext = vi.spyOn(v, 'addToContext');
+
+        // Buffer some assistant text into the in-flight turn.
+        await (v as any).handleGeminiMessage({
+          serverContent: { modelTurn: { parts: [{ text: 'partial reply' }] } },
+        });
+
+        // Server cancels the turn.
+        await (v as any).handleGeminiMessage({
+          serverContent: { interrupted: true },
+        });
+
+        expect(cleanup).toHaveBeenCalledTimes(1);
+
+        // A subsequent `turnComplete` (if it arrives at all) must not commit the discarded
+        // partial reply to context history.
+        await (v as any).handleGeminiMessage({ serverContent: { turnComplete: true } });
+        expect(addToContext).not.toHaveBeenCalled();
+
+        v.disconnect();
+      });
     });
   });
 });

@@ -1,6 +1,6 @@
 import { readFile, writeFile, rm, mkdir } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 
 /** Convert Windows backslashes to posix forward slashes */
 function slash(p) {
@@ -24,7 +24,7 @@ async function writeDtsFiles() {
 
   // Handle specific path exports
   for (const [key, value] of Object.entries(exports)) {
-    if (key !== '.' && value.require?.types) {
+    if (key !== '.' && value?.require?.types) {
       const pattern = value.require.types;
       const matches = await globby(pattern, {
         cwd: rootPath,
@@ -37,7 +37,9 @@ async function writeDtsFiles() {
           const dir = dirname(file);
           const distRoot = join(rootPath, 'dist');
           const subPath = slash(relative(distRoot, dir));
-          const filename = key.replace('*', subPath);
+          // split/join replaces every '*' and doesn't interpret '$' patterns
+          // in the replacement (CodeQL js/incomplete-sanitization)
+          const filename = key.split('*').join(subPath);
 
           const targetPath = join(rootPath, filename) + '.d.ts';
           await mkdir(dirname(targetPath), { recursive: true });

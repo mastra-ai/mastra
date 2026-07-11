@@ -33,7 +33,6 @@ const meta: Meta<typeof HorizontalBars> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   decorators: [
     Story => (
       <TooltipProvider>

@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import type { TestProject } from 'vitest/node';
 import { prepareMonorepo } from '../_local-registry-setup/prepare.js';
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';

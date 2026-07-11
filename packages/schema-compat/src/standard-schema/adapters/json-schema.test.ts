@@ -198,6 +198,53 @@ describe('json-schema standard-schema adapter', () => {
       expect('issues' in invalidResult).toBe(true);
     });
 
+    it('should preserve recursive $ref schemas when converting output JSON Schema', () => {
+      const jsonSchema = {
+        type: 'object',
+        properties: {
+          root: { $ref: '#/$defs/node' },
+        },
+        required: ['root'],
+        $defs: {
+          node: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              children: {
+                type: 'array',
+                items: { $ref: '#/$defs/node' },
+              },
+            },
+            required: ['name'],
+          },
+        },
+      } as JSONSchema7 & {
+        properties: {
+          root: { $ref: string };
+        };
+        $defs: {
+          node: {
+            properties: {
+              children: {
+                items: { $ref: string };
+              };
+            };
+          };
+        };
+      };
+
+      const standardSchema = toStandardSchema(jsonSchema);
+      const outputSchema = standardSchema['~standard'].jsonSchema.output({
+        target: 'draft-07',
+      }) as unknown as typeof jsonSchema & {
+        $schema?: string;
+      };
+
+      expect(outputSchema.$schema).toBe('http://json-schema.org/draft-07/schema#');
+      expect(outputSchema.properties.root).toEqual({ $ref: '#/$defs/node' });
+      expect(outputSchema.$defs.node.properties.children.items).toEqual({ $ref: '#/$defs/node' });
+    });
+
     it('should expose getSchema method', () => {
       const jsonSchema: JSONSchema7 = {
         type: 'string',
@@ -206,6 +253,42 @@ describe('json-schema standard-schema adapter', () => {
       const standardSchema = toStandardSchema(jsonSchema);
 
       expect(standardSchema.getSchema()).toEqual(jsonSchema);
+    });
+  });
+
+  describe('draft 2020-12 schema support', () => {
+    it('should validate correctly when $schema is draft 2020-12', async () => {
+      const jsonSchema = {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object' as const,
+        properties: {
+          url: { type: 'string' as const },
+          formats: {
+            type: 'array' as const,
+            items: { type: 'string' as const },
+          },
+        },
+        required: ['url'],
+      };
+
+      const standardSchema = toStandardSchema(jsonSchema);
+
+      // Valid input should pass
+      const validResult = await standardSchema['~standard'].validate({
+        url: 'https://example.com',
+        formats: ['markdown'],
+      });
+      expect('value' in validResult).toBe(true);
+
+      // Invalid input should fail
+      const invalidResult = await standardSchema['~standard'].validate({
+        formats: ['markdown'],
+        // missing required 'url'
+      });
+      expect('issues' in invalidResult).toBe(true);
+      if ('issues' in invalidResult && invalidResult.issues) {
+        expect(invalidResult.issues.length).toBeGreaterThan(0);
+      }
     });
   });
 

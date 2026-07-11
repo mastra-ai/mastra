@@ -160,7 +160,7 @@ export class QdrantVector extends MastraVector {
   async upsert({ indexName, vectors, metadata, ids, vectorName }: QdrantUpsertVectorParams): Promise<string[]> {
     // Validate input parameters
     validateUpsertInput('QDRANT', vectors, metadata, ids);
-    const pointIds = ids || vectors.map(() => crypto.randomUUID());
+    const pointIds = ids ? ids.map(id => this.parsePointId(id)) : vectors.map(() => crypto.randomUUID());
 
     // Validate vector name if provided
     if (vectorName) {
@@ -194,7 +194,7 @@ export class QdrantVector extends MastraVector {
         });
       }
 
-      return pointIds;
+      return pointIds.map(String);
     } catch (error) {
       throw new MastraError(
         {
@@ -449,8 +449,9 @@ export class QdrantVector extends MastraVector {
       return {
         dimension: config.params.vectors?.size as number,
         count: points_count || 0,
-        // @ts-expect-error - Object.keys returns string[] but DISTANCE_MAPPING keys are typed
-        metric: Object.keys(DISTANCE_MAPPING).find(key => DISTANCE_MAPPING[key] === distance),
+        metric: (Object.keys(DISTANCE_MAPPING) as (keyof typeof DISTANCE_MAPPING)[]).find(
+          key => DISTANCE_MAPPING[key] === distance,
+        ) as IndexStats['metric'],
       };
     } catch (error) {
       throw new MastraError(

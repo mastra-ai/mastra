@@ -7,6 +7,7 @@
     "moduleResolution": "bundler",
     "allowJs": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,
@@ -14,13 +15,11 @@
     "isolatedModules": true,
     "declaration": true,
     "outDir": "dist",
-    "baseUrl": ".",
     "rootDir": ".",
     "paths": {
-      "@/*": ["./src/*"],
-      "react": ["./node_modules/@types/react"]
+      "@/*": ["./src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "tailwind.config.ts", "tailwind.preset.ts", "vite.config.ts"],
-  "exclude": ["node_modules"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  "exclude": ["node_modules", "src/**/__tests__/**", "src/**/*.test.ts", "src/**/*.test.tsx"]
 }

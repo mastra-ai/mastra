@@ -1,6 +1,10 @@
 import {
+  ErrorCodeContentTypeNotSupported,
+  ErrorCodeExtendedAgentCardNotConfigured,
   ErrorCodeParseError,
+  ErrorCodeExtensionSupportRequired,
   ErrorCodeInvalidRequest,
+  ErrorCodeInvalidAgentResponse,
   ErrorCodeMethodNotFound,
   ErrorCodePushNotificationNotSupported,
   ErrorCodeTaskNotCancelable,
@@ -8,6 +12,7 @@ import {
   ErrorCodeUnsupportedOperation,
   ErrorCodeInvalidParams,
   ErrorCodeInternalError,
+  ErrorCodeVersionNotSupported,
 } from './types';
 import type { JSONRPCError, KnownErrorCode } from './types';
 
@@ -77,5 +82,31 @@ export class MastraA2AError extends Error {
 
   static unsupportedOperation(operation: string): MastraA2AError {
     return new MastraA2AError(ErrorCodeUnsupportedOperation, `Unsupported operation: ${operation}`);
+  }
+
+  static contentTypeNotSupported(contentType: string): MastraA2AError {
+    return new MastraA2AError(ErrorCodeContentTypeNotSupported, `Content type not supported: ${contentType}`, {
+      contentType,
+    });
+  }
+
+  static invalidAgentResponse(message: string, data?: unknown): MastraA2AError {
+    return new MastraA2AError(ErrorCodeInvalidAgentResponse, message, data);
+  }
+
+  static extendedAgentCardNotConfigured(): MastraA2AError {
+    return new MastraA2AError(ErrorCodeExtendedAgentCardNotConfigured, 'Extended agent card is not configured');
+  }
+
+  static extensionSupportRequired(extension?: string): MastraA2AError {
+    return new MastraA2AError(
+      ErrorCodeExtensionSupportRequired,
+      extension ? `Extension support required: ${extension}` : 'Extension support required',
+      extension ? { extension } : undefined,
+    );
+  }
+
+  static versionNotSupported(version: string): MastraA2AError {
+    return new MastraA2AError(ErrorCodeVersionNotSupported, `Version not supported: ${version}`, { version });
   }
 }

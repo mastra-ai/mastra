@@ -9,13 +9,7 @@ packages:
 
 **Added in:** `@mastra/core@1.1.0`
 
-Executes commands on the local system.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Executes commands on the local system. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Usage
 
@@ -37,7 +31,7 @@ const workspace = new Workspace({
 
 const agent = new Agent({
   id: 'dev-agent',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   workspace,
 })
 

@@ -1,7 +1,7 @@
 import { useMastraClient } from '@mastra/react';
 import { useQuery } from '@tanstack/react-query';
-
 import { useMetricsFilters } from './use-metrics-filters';
+import { getOrCreate } from '@/lib/map';
 
 export interface VolumeRow {
   name: string;
@@ -12,13 +12,14 @@ export interface VolumeRow {
 async function fetchVolume(
   client: ReturnType<typeof useMastraClient>,
   metricName: string,
-  timestamp: { start: Date; end: Date },
+  filters: Record<string, unknown>,
 ): Promise<VolumeRow[]> {
   const res = await client.getMetricBreakdown({
     name: [metricName],
     groupBy: ['entityName', 'status'],
     aggregation: 'count',
-    filters: { timestamp },
+    orderDirection: 'DESC',
+    filters,
   });
 
   const map = new Map<string, { completed: number; errors: number }>();
@@ -26,10 +27,8 @@ async function fetchVolume(
   for (const group of res.groups) {
     const name = group.dimensions.entityName ?? 'unknown';
     const status = group.dimensions.status ?? 'ok';
-    if (!map.has(name)) {
-      map.set(name, { completed: 0, errors: 0 });
-    }
-    const entry = map.get(name)!;
+    const entry = getOrCreate(map, name, () => ({ completed: 0, errors: 0 }));
+
     if (status === 'error') {
       entry.errors += group.value;
     } else {
@@ -44,15 +43,15 @@ async function fetchVolume(
 
 export function useTraceVolumeMetrics() {
   const client = useMastraClient();
-  const { datePreset, customRange, timestamp } = useMetricsFilters();
+  const { filters, filterKey } = useMetricsFilters();
 
   return useQuery({
-    queryKey: ['metrics', 'trace-volume', datePreset, customRange],
+    queryKey: ['metrics', 'trace-volume', filterKey],
     queryFn: async () => {
       const [agentData, workflowData, toolData] = await Promise.all([
-        fetchVolume(client, 'mastra_agent_duration_ms', timestamp),
-        fetchVolume(client, 'mastra_workflow_duration_ms', timestamp),
-        fetchVolume(client, 'mastra_tool_duration_ms', timestamp),
+        fetchVolume(client, 'mastra_agent_duration_ms', filters),
+        fetchVolume(client, 'mastra_workflow_duration_ms', filters),
+        fetchVolume(client, 'mastra_tool_duration_ms', filters),
       ]);
       return { agentData, workflowData, toolData };
     },

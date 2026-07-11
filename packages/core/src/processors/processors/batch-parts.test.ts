@@ -120,6 +120,60 @@ describe('BatchPartsProcessor', () => {
         payload: { text: 'ABCDE', id: 'text-1' },
       });
     });
+
+    it('should preserve id and runId from the first chunk when batching (regression #14890)', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 3 });
+
+      const chunks: ChunkType[] = [
+        {
+          type: 'text-delta',
+          payload: { text: 'Hello', id: 'msg_abc123' },
+          runId: 'run_xyz789',
+          from: ChunkFrom.AGENT,
+        },
+        {
+          type: 'text-delta',
+          payload: { text: ' ', id: 'msg_abc123' },
+          runId: 'run_xyz789',
+          from: ChunkFrom.AGENT,
+        },
+        {
+          type: 'text-delta',
+          payload: { text: 'world', id: 'msg_abc123' },
+          runId: 'run_xyz789',
+          from: ChunkFrom.AGENT,
+        },
+      ];
+
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      for (let i = 0; i < 2; i++) {
+        await processor.processOutputStream({
+          part: chunks[i]!,
+          streamParts: chunks.slice(0, i),
+          state,
+          abort: () => {
+            throw new Error('abort');
+          },
+        });
+      }
+
+      const result = await processor.processOutputStream({
+        part: chunks[2]!,
+        streamParts: chunks.slice(0, 2),
+        state,
+        abort: () => {
+          throw new Error('abort');
+        },
+      });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: 'run_xyz789',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: 'msg_abc123' },
+      });
+    });
   });
 
   describe('non-text chunks', () => {
@@ -254,7 +308,7 @@ describe('BatchPartsProcessor', () => {
         payload: { text: 'Hello', id: 'text-1' },
       });
 
-      // Third and fourth chunks - should batch together
+      // Third chunk - should emit the deferred non-text part (object), buffer the text
       result = await processor.processOutputStream({
         part: chunks[2],
         streamParts: [chunks[2]],
@@ -263,8 +317,14 @@ describe('BatchPartsProcessor', () => {
           throw new Error('abort');
         },
       });
-      expect(result).toBeNull();
+      expect(result).toEqual({
+        type: 'object',
+        object: { key: 'value' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      });
 
+      // Fourth chunk - should not emit yet since batch size is 3 and we only have 2 chunks
       result = await processor.processOutputStream({
         part: chunks[3],
         streamParts: [chunks[3]],
@@ -273,7 +333,64 @@ describe('BatchPartsProcessor', () => {
           throw new Error('abort');
         },
       });
-      expect(result).toBeNull(); // Should not emit yet since batch size is 3 and we only have 2 chunks
+      expect(result).toBeNull();
+    });
+
+    it('returns the batched text and stashes the non-text part for reprocessing (issue #17094)', async () => {
+      processor = new BatchPartsProcessor({ batchSize: 10 });
+
+      // A writer being present signals that we're running inside the processor
+      // chain, so the non-text part is stashed for the runner to re-drive
+      // through the chain rather than deferred to a next call that may never come.
+      const writer = { custom: async () => {} };
+
+      const chunks: ChunkType[] = [
+        { type: 'text-delta', payload: { text: 'Hello', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'text-delta', payload: { text: ' world', id: 'text-1' }, runId: '1', from: ChunkFrom.AGENT },
+        { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT },
+      ];
+
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      const abort = () => {
+        throw new Error('abort');
+      };
+
+      // Buffer two text deltas (batch size not reached).
+      expect(
+        await processor.processOutputStream({ part: chunks[0], streamParts: [chunks[0]], state, abort, writer }),
+      ).toBeNull();
+      expect(
+        await processor.processOutputStream({ part: chunks[1], streamParts: [chunks[1]], state, abort, writer }),
+      ).toBeNull();
+
+      // Non-text part arrives: the batched text is returned (so it flows through
+      // downstream processors) and the non-text part is stashed under the
+      // reprocess key for the runner to re-drive — NOT deferred — so nothing is
+      // lost even if the stream stops on this part.
+      const result = await processor.processOutputStream({
+        part: chunks[2],
+        streamParts: [chunks[2]],
+        state,
+        abort,
+        writer,
+      });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: 'text-1' },
+      });
+      expect((state as Record<string, unknown>).__mastraReprocessPart).toEqual({
+        type: 'object',
+        object: { key: 'value' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      });
+      // Nothing should be left in the legacy deferral field.
+      expect((state as Record<string, unknown>).pendingNonText).toBeUndefined();
+      expect(state.batch).toEqual([]);
     });
   });
 
@@ -381,6 +498,62 @@ describe('BatchPartsProcessor', () => {
         },
       });
       expect(result).toBeNull();
+    });
+
+    it('stashes the non-text part for reprocessing even when maxWaitTime is set (issue #17094)', async () => {
+      // maxWaitTime must not interfere with the writer-present stash path: a
+      // non-text part arriving before the timeout still flushes the batch and
+      // stashes the non-text part rather than deferring it.
+      processor = new BatchPartsProcessor({ batchSize: 10, maxWaitTime: 1000 });
+      const writer = { custom: async () => {} };
+      const abort = () => {
+        throw new Error('abort');
+      };
+
+      const text1: ChunkType = {
+        type: 'text-delta',
+        payload: { text: 'Hello', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const text2: ChunkType = {
+        type: 'text-delta',
+        payload: { text: ' world', id: 'text-1' },
+        runId: '1',
+        from: ChunkFrom.AGENT,
+      };
+      const nonText: ChunkType = { type: 'object', object: { key: 'value' }, runId: '1', from: ChunkFrom.AGENT };
+
+      const state: BatchPartsState = { batch: [], timeoutId: undefined, timeoutTriggered: false };
+
+      // Buffer two text deltas (this also arms the maxWaitTime timeout).
+      expect(
+        await processor.processOutputStream({ part: text1, streamParts: [text1], state, abort, writer }),
+      ).toBeNull();
+      expect(
+        await processor.processOutputStream({ part: text2, streamParts: [text2], state, abort, writer }),
+      ).toBeNull();
+
+      // Non-text part arrives before the timeout fires: batch is returned and the
+      // non-text part is stashed for reprocessing (not deferred).
+      const result = await processor.processOutputStream({
+        part: nonText,
+        streamParts: [nonText],
+        state,
+        abort,
+        writer,
+      });
+
+      expect(result).toEqual({
+        type: 'text-delta',
+        runId: '1',
+        from: ChunkFrom.AGENT,
+        payload: { text: 'Hello world', id: 'text-1' },
+      });
+      expect((state as Record<string, unknown>).__mastraReprocessPart).toEqual(nonText);
+      expect((state as Record<string, unknown>).pendingNonText).toBeUndefined();
+      // The pending timeout was cleared by the flush.
+      expect(state.timeoutId).toBeUndefined();
     });
   });
 

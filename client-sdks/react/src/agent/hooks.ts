@@ -1,23 +1,181 @@
-import type { UIMessage } from '@ai-sdk/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { MastraClient } from '@mastra/client-js';
+import type { AIV5Type, MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
+import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { useEffect, useRef, useState } from 'react';
-import type { ExtendedMastraUIMessage, MastraUIMessage } from '../lib/ai-sdk';
-import type { ModelSettings } from './types';
-import { toUIMessage } from '@/lib/ai-sdk';
-import { resolveInitialMessages } from '@/lib/ai-sdk/memory/resolveInitialMessages';
-import { AISdkNetworkTransformer } from '@/lib/ai-sdk/transformers/AISdkNetworkTransformer';
-import { fromCoreUserMessageToUIMessage } from '@/lib/ai-sdk/utils/fromCoreUserMessageToUIMessage';
-import { useMastraClient } from '@/mastra-client-context';
+import type { TaskItem } from '@mastra/core/signals';
+import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  accumulateChunk,
+  accumulateNetworkChunk,
+  CLIENT_MESSAGE_ID_KEY,
+  finishStreamingAssistantMessage,
+  fromCoreUserMessagesToMastraDBMessage,
+} from '../lib/mastra-db';
+import type { MastraDBMessageMetadata } from '../lib/mastra-db';
+import { useMastraClient } from '../mastra-client-context';
+import {
+  extractLatestTasksFromMessages,
+  extractTasksFromSignalChunk,
+  extractTasksFromToolResultChunk,
+} from './extract-tasks';
+import { extractRunIdFromMessages } from './extractRunIdFromMessages';
+import { convertSignalDataToBase64String } from './signal-data';
+import type { ClientToolsInput, ModelSettings } from './types';
+
+const extractPendingToolApprovalIdsFromMessages = (messages: MastraDBMessage[]) => {
+  const pendingToolApprovalIds = new Set<string>();
+
+  for (const message of messages) {
+    const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
+    if (!metadata) continue;
+
+    const metadataSources = [
+      metadata.pendingToolApprovals,
+      metadata.requireApprovalMetadata,
+      metadata.suspendedTools,
+    ] as Array<Record<string, { toolCallId?: unknown }> | undefined>;
+
+    for (const source of metadataSources) {
+      if (!source || typeof source !== 'object') continue;
+
+      for (const suspensionData of Object.values(source)) {
+        const toolCallId = suspensionData?.toolCallId;
+        if (typeof toolCallId === 'string' && toolCallId.length > 0) {
+          pendingToolApprovalIds.add(toolCallId);
+        }
+      }
+    }
+  }
+
+  return pendingToolApprovalIds;
+};
+
+const toolCallHasOutput = (parts: MastraDBMessage['content']['parts'], toolCallId: string): boolean =>
+  parts.some(part => {
+    if (part.type !== 'tool-invocation') return false;
+    const invocation = (part as MastraToolInvocationPart).toolInvocation;
+    if (invocation.toolCallId !== toolCallId) return false;
+    return invocation.state === 'result' || (invocation as { result?: unknown }).result != null;
+  });
+
+/**
+ * Normalize persisted initial messages back into the stream-friendly shape the
+ * UI renders from. Mirrors `main`'s `resolveInitialMessages`:
+ *
+ * - Converts persisted `pendingToolApprovals` (DB shape) into
+ *   `requireApprovalMetadata` (stream shape) so reloaded threads still render
+ *   approve/decline buttons, filtering out approvals whose tool already
+ *   produced output, and marks the message `mode: 'stream'`.
+ * - Drops assistant completion messages flagged `suppressFeedback`, which are
+ *   persisted by the supervisor agent but must stay hidden on reload.
+ */
+const resolveInitialMessages = (messages: MastraDBMessage[]): MastraDBMessage[] =>
+  messages
+    .filter(message => {
+      const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
+      if (metadata?.completionResult?.suppressFeedback || metadata?.isTaskCompleteResult?.suppressFeedback) {
+        return false;
+      }
+      return true;
+    })
+    .map(message => {
+      const metadata = message.content?.metadata as MastraDBMessageMetadata | undefined;
+
+      // A persisted/refetched thread must never show a stuck "sending" bubble
+      // and must never carry the optimistic correlation key: the pending status
+      // and its `clientMessageId` are transient UI state. The `clientMessageId`
+      // can survive into storage (it is sent to the server with the message), so
+      // strip it on every reload regardless of pending status; the rendered row
+      // key falls back to the stable server `id`.
+      const normalizedMessage =
+        metadata && (metadata.status === 'pending' || CLIENT_MESSAGE_ID_KEY in metadata)
+          ? (() => {
+              const { [CLIENT_MESSAGE_ID_KEY]: _omitClientMessageId, ...rest } = metadata;
+              const { status: _omitStatus, ...restWithoutStatus } = rest;
+              return {
+                ...message,
+                content: {
+                  ...message.content,
+                  metadata: metadata.status === 'pending' ? restWithoutStatus : rest,
+                },
+              };
+            })()
+          : message;
+
+      const normalizedMetadata = normalizedMessage.content?.metadata as MastraDBMessageMetadata | undefined;
+      const pendingToolApprovals = normalizedMetadata?.pendingToolApprovals;
+      if (!pendingToolApprovals || typeof pendingToolApprovals !== 'object') {
+        return normalizedMessage;
+      }
+
+      const stillPending = Object.fromEntries(
+        Object.entries(pendingToolApprovals).filter(
+          ([, approval]) =>
+            approval &&
+            typeof approval === 'object' &&
+            typeof approval.toolCallId === 'string' &&
+            !toolCallHasOutput(normalizedMessage.content.parts, approval.toolCallId),
+        ),
+      );
+
+      const { pendingToolApprovals: _omit, ...restMetadata } = normalizedMetadata;
+      const hasStillPending = Object.keys(stillPending).length > 0;
+
+      return {
+        ...normalizedMessage,
+        content: {
+          ...normalizedMessage.content,
+          metadata: {
+            ...restMetadata,
+            mode: 'stream' as const,
+            ...(hasStillPending ? { pendingToolApprovals: stillPending, requireApprovalMetadata: stillPending } : {}),
+          },
+        },
+      };
+    });
+
+type SignalContinuationOptions = {
+  maxSteps?: number;
+  modelSettings?: {
+    frequencyPenalty?: number;
+    presencePenalty?: number;
+    maxRetries?: number;
+    maxOutputTokens?: number;
+    temperature?: number;
+    topK?: number;
+    topP?: number;
+  };
+  instructions?: ModelSettings['instructions'];
+  providerOptions?: ModelSettings['providerOptions'];
+  requireToolApproval?: boolean;
+  tracingOptions?: TracingOptions;
+};
 
 export interface MastraChatProps {
   agentId: string;
   resourceId?: string;
-  initialMessages?: MastraUIMessage[];
+  threadId?: string;
+  initialMessages?: MastraDBMessage[];
+  /** Persistent request context used for tool approval/decline calls (e.g. agentVersionId). */
+  requestContext?: RequestContext;
+  /**
+   * Client-side tool definitions. Forwarded once to `subscribeToThread` so
+   * the client-js subscription drives the full client-tool execution loop
+   * (execute, emit tool-result, continuation) without any logic in React.
+   */
+  clientTools?: ClientToolsInput;
+  onSignalSent?: (signalId: string, preview: string) => void;
+  onSignalEcho?: (signalId: string) => void;
+  onThreadSignalsUnsupported?: () => void;
+  /**
+   * Use the agent-signals streaming path (sendSignal + subscribeToThread).
+   * Defaults to `false`; set to `true` to opt into thread signals.
+   */
+  enableThreadSignals?: boolean;
 }
 
 interface SharedArgs {
@@ -36,51 +194,355 @@ export type SendMessageArgs = { message: string; coreUserMessages?: CoreUserMess
   | ({ mode?: undefined } & Omit<StreamArgs, 'coreUserMessages'>)
 );
 
-export type GenerateArgs = SharedArgs & { onFinish?: (messages: UIMessage[]) => Promise<void> };
+export type GenerateArgs = SharedArgs & {
+  onFinish?: (messages: MastraDBMessage[]) => Promise<void>;
+  clientTools?: ClientToolsInput;
+};
 
 export type StreamArgs = SharedArgs & {
   onChunk?: (chunk: ChunkType) => Promise<void>;
+  clientTools?: ClientToolsInput;
+  signalId?: string;
+  /**
+   * Client-generated correlation id stamped on the optimistic pending bubble
+   * and the outgoing message metadata so the server echo can reconcile them.
+   */
+  clientMessageId?: string;
 };
 
 export type NetworkArgs = SharedArgs & {
   onNetworkChunk?: (chunk: NetworkChunkType) => Promise<void>;
 };
 
-// Extract runId from any pending suspensions in initial messages
-const extractRunIdFromMessages = (messages: ExtendedMastraUIMessage[]): string | undefined => {
-  for (const message of messages) {
-    const pendingToolApprovals = message.metadata?.pendingToolApprovals as Record<string, any> | undefined;
-    if (pendingToolApprovals && typeof pendingToolApprovals === 'object') {
-      const suspensionData = Object.values(pendingToolApprovals)[0];
-      if (suspensionData?.runId) {
-        return suspensionData.runId;
-      }
-    }
+const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null;
+
+const getErrorName = (error: unknown) => (isObject(error) && typeof error.name === 'string' ? error.name : undefined);
+
+const isAbortError = (error: unknown) => getErrorName(error) === 'AbortError';
+
+const isThreadSignalUnsupportedError = (error: unknown) => {
+  if (!isObject(error)) return false;
+
+  const status = error.status;
+  if (status === 404 || status === 405 || status === 501) {
+    return true;
   }
-  return undefined;
+
+  return (
+    status === 400 &&
+    typeof error.message === 'string' &&
+    error.message.includes('No active agent run found for signal target')
+  );
 };
 
-export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProps) => {
+type DataChunk = Extract<ChunkType, DataChunkType>;
+
+const isDataChunk = (chunk: ChunkType): chunk is DataChunk =>
+  typeof chunk.type === 'string' && chunk.type.startsWith('data-');
+
+/**
+ * Convert AI-SDK v5 UIMessages returned by the server (generate mode) into
+ * `MastraDBMessage[]`, stamping the supplied metadata onto each message's
+ * `content.metadata`. Private helper — `useChat` never exposes the AI-SDK
+ * shape to consumers.
+ */
+const dbFromServerUiMessages = (
+  uiMessages: AIV5Type.UIMessage[],
+  metadata: MastraDBMessageMetadata,
+): MastraDBMessage[] =>
+  uiMessages.map(uiMsg => {
+    const dbMsg = AIV5Adapter.fromUIMessage(uiMsg);
+    return {
+      ...dbMsg,
+      content: {
+        ...dbMsg.content,
+        metadata: {
+          ...(dbMsg.content.metadata ?? {}),
+          ...metadata,
+        },
+      },
+    };
+  });
+
+export const useChat = ({
+  agentId,
+  resourceId,
+  threadId,
+  initialMessages,
+  requestContext: propsRequestContext,
+  clientTools: hookClientTools,
+  onSignalSent,
+  onSignalEcho,
+  onThreadSignalsUnsupported,
+  enableThreadSignals = false,
+}: MastraChatProps) => {
+  const threadSignalsDisabled = enableThreadSignals === false;
   const _currentRunId = useRef<string | undefined>(undefined);
   const _onChunk = useRef<((chunk: ChunkType) => Promise<void>) | undefined>(undefined);
   const _networkRunId = useRef<string | undefined>(undefined);
   const _onNetworkChunk = useRef<((chunk: NetworkChunkType) => Promise<void>) | undefined>(undefined);
-  const [messages, setMessages] = useState<MastraUIMessage[]>([]);
+  const _requestContext = useRef<RequestContext | undefined>(propsRequestContext);
+  // Tracks the active stream (untilIdle) request so a subsequent stream() call
+  // can abort the previous one. Without this, a still-open prior stream keeps
+  // its background-task pubsub subscription alive and fans events into a second
+  // concurrent UI consumer, producing duplicate bg-task events and duplicate
+  // continuation turns on the server.
+  const _streamAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionAbortRef = useRef<AbortController | null>(null);
+  const _threadSubscriptionRef = useRef<{ abort?: () => Promise<boolean> | boolean; unsubscribe?: () => void } | null>(
+    null,
+  );
+  const _threadSubscriptionKeyRef = useRef<string | undefined>(undefined);
+  const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
+  const _threadSignalsUnsupportedRef = useRef(false);
+  const [messages, setMessages] = useState<MastraDBMessage[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
   const [networkToolCallApprovals, setNetworkToolCallApprovals] = useState<{
     [toolName: string]: { status: 'approved' | 'declined' };
   }>({});
+  const pendingToolApprovalIdsRef = useRef(new Set<string>());
+  const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
   const [isRunning, setIsRunning] = useState(false);
 
   useEffect(() => {
-    const formattedMessages = resolveInitialMessages(initialMessages || []);
+    const formattedMessages = resolveInitialMessages(initialMessages ?? []);
     setMessages(formattedMessages);
+    setTasks(extractLatestTasksFromMessages(formattedMessages));
+    pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
+    setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
   }, [initialMessages]);
+
+  useEffect(() => {
+    _requestContext.current = propsRequestContext;
+  }, [propsRequestContext]);
+
+  type SignalContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'file'; data: string; mediaType: string; filename?: string };
+  type UserMessageSignalContents = string | SignalContentPart[];
+
+  const normalizeSignalFileData = (data: string | URL | ArrayBuffer | Uint8Array) => {
+    if (data instanceof URL) return data.toString();
+    return convertSignalDataToBase64String(data);
+  };
+
+  const getSignalContents = (coreUserMessages: CoreUserMessage[]): UserMessageSignalContents => {
+    const parts = coreUserMessages.reduce<SignalContentPart[]>((allParts, message) => {
+      if (typeof message.content === 'string') {
+        allParts.push({ type: 'text', text: message.content });
+        return allParts;
+      }
+
+      for (const part of message.content) {
+        if (part.type === 'text') {
+          allParts.push({ type: 'text', text: part.text });
+        } else if (part.type === 'file') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.data),
+            mediaType: part.mimeType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          });
+        } else if (part.type === 'image') {
+          allParts.push({
+            type: 'file',
+            data: normalizeSignalFileData(part.image),
+            mediaType: part.mimeType ?? 'image/png',
+          });
+        }
+      }
+
+      return allParts;
+    }, []);
+
+    return parts.length === 1 && parts[0]?.type === 'text' ? parts[0].text : parts;
+  };
+
+  const markThreadSignalsUnsupported = useCallback(() => {
+    _threadSignalsUnsupportedRef.current = true;
+    onThreadSignalsUnsupported?.();
+  }, [onThreadSignalsUnsupported]);
+
+  const getSignalPreview = (coreUserMessages: CoreUserMessage[]) => {
+    const preview = coreUserMessages
+      .flatMap(message => {
+        if (typeof message.content === 'string') {
+          return [message.content];
+        }
+
+        return message.content.map(part => {
+          if (part.type === 'text') return part.text;
+          if (part.type === 'image') return 'Image';
+          return part.filename ? `File: ${part.filename}` : 'File';
+        });
+      })
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    return preview || 'Attachment';
+  };
+
+  const closeThreadSubscription = useCallback(() => {
+    const subscription = _threadSubscriptionRef.current;
+    if (subscription?.unsubscribe) {
+      subscription.unsubscribe();
+    } else {
+      _threadSubscriptionAbortRef.current?.abort();
+    }
+    _threadSubscriptionRef.current = null;
+    _threadSubscriptionAbortRef.current = null;
+    _threadSubscriptionKeyRef.current = undefined;
+    _threadSubscriptionPromiseRef.current = null;
+  }, []);
+
+  const processStreamChunk = useCallback(
+    async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
+      setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
+
+      const signalTasks = extractTasksFromSignalChunk(chunk);
+      if (signalTasks !== undefined) setTasks(signalTasks);
+      const toolTasks = extractTasksFromToolResultChunk(chunk);
+      if (toolTasks !== undefined) setTasks(toolTasks);
+
+      if (
+        chunk.type === 'data-user-message' &&
+        isDataChunk(chunk) &&
+        (chunk.data?.type === 'user-message' || chunk.data?.type === 'user') &&
+        typeof chunk.data?.id === 'string'
+      ) {
+        onSignalEcho?.(chunk.data.id);
+      }
+
+      if (chunk.type === 'start') {
+        setIsRunning(true);
+        if ('runId' in chunk && typeof chunk.runId === 'string') {
+          _currentRunId.current = chunk.runId;
+        }
+      }
+
+      if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+        const toolCallId = chunk.payload?.toolCallId;
+        if (typeof toolCallId === 'string') {
+          pendingToolApprovalIdsRef.current.add(toolCallId);
+          setIsAwaitingToolApproval(true);
+        }
+        setIsRunning(false);
+      }
+
+      if (chunk.type === 'finish' || chunk.type === 'abort' || chunk.type === 'error') {
+        pendingToolApprovalIdsRef.current.clear();
+        setIsAwaitingToolApproval(false);
+        setIsRunning(false);
+      }
+
+      void (onChunk ?? _onChunk.current)?.(chunk);
+    },
+    [onSignalEcho],
+  );
+
+  const ensureThreadSubscription = useCallback(
+    async ({ threadId, resourceId }: { threadId: string; resourceId?: string }) => {
+      const subscriptionKey = `${agentId}:${resourceId ?? ''}:${threadId}`;
+      if (_threadSubscriptionKeyRef.current === subscriptionKey && _threadSubscriptionPromiseRef.current) {
+        await _threadSubscriptionPromiseRef.current;
+        return;
+      }
+
+      closeThreadSubscription();
+      const subscriptionAbort = new AbortController();
+      _threadSubscriptionAbortRef.current = subscriptionAbort;
+      _threadSubscriptionKeyRef.current = subscriptionKey;
+
+      // Release the cached subscription state, but only while this attempt
+      // still owns it — a newer attempt cleans up after itself.
+      const releaseSubscriptionRefs = () => {
+        if (_threadSubscriptionAbortRef.current !== subscriptionAbort) return;
+        _threadSubscriptionRef.current = null;
+        _threadSubscriptionAbortRef.current = null;
+        _threadSubscriptionKeyRef.current = undefined;
+        _threadSubscriptionPromiseRef.current = null;
+      };
+
+      const clientWithAbort = new MastraClient({
+        ...baseClient!.options,
+        abortSignal: subscriptionAbort.signal,
+      });
+      const subscriptionAgent = clientWithAbort.getAgent(agentId);
+
+      _threadSubscriptionPromiseRef.current = subscriptionAgent
+        .subscribeToThread({ resourceId, threadId })
+        .then(response => {
+          const subscription = response;
+          if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
+            subscription.unsubscribe();
+            return;
+          }
+
+          _threadSubscriptionRef.current = subscription;
+          void subscription
+            .processDataStream({
+              onChunk: chunk => processStreamChunk(chunk),
+            })
+            .catch(error => {
+              if (!isAbortError(error)) {
+                console.error('[useChat] Thread subscription failed', error);
+                setIsRunning(false);
+              }
+            })
+            .finally(() => {
+              if (_threadSubscriptionRef.current === subscription) {
+                _threadSubscriptionRef.current = null;
+              }
+              releaseSubscriptionRefs();
+            });
+        })
+        .catch(error => {
+          // Release on every failure so the next call retries with a fresh
+          // fetch instead of re-awaiting this rejected promise. Without this,
+          // an aborted mount-time subscribe strands the channel and the reply
+          // never arrives until reload (issue #18768).
+          releaseSubscriptionRefs();
+
+          if (isThreadSignalUnsupportedError(error)) {
+            markThreadSignalsUnsupported();
+            return;
+          }
+          if (!isAbortError(error)) {
+            console.error('[useChat] Thread subscription failed', error);
+            setIsRunning(false);
+          }
+          throw error;
+        });
+
+      await _threadSubscriptionPromiseRef.current;
+    },
+    [agentId, baseClient, closeThreadSubscription, markThreadSignalsUnsupported, processStreamChunk],
+  );
+
+  useEffect(() => {
+    _threadSignalsUnsupportedRef.current = false;
+    return closeThreadSubscription;
+  }, [agentId, resourceId, threadId, closeThreadSubscription]);
+
+  useEffect(() => {
+    if (!threadId || threadSignalsDisabled) {
+      closeThreadSubscription();
+      return;
+    }
+
+    void ensureThreadSubscription({ threadId, resourceId: resourceId || agentId }).catch(error => {
+      if (!isAbortError(error)) {
+        console.error('[useChat] Thread subscription failed', error);
+      }
+    });
+  }, [agentId, closeThreadSubscription, ensureThreadSubscription, resourceId, threadId, threadSignalsDisabled]);
 
   const generate = async ({
     coreUserMessages,
@@ -90,6 +552,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     signal,
     onFinish,
     tracingOptions,
+    clientTools,
   }: GenerateArgs) => {
     const {
       frequencyPenalty,
@@ -104,10 +567,11 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
       maxSteps,
       requireToolApproval,
     } = modelSettings || {};
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedClientTools = clientTools ?? hookClientTools;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
       abortSignal: signal,
@@ -131,11 +595,12 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
         topP,
       },
       instructions,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
-      providerOptions: providerOptions as any,
+      providerOptions,
       tracingOptions,
       requireToolApproval,
+      clientTools: resolvedClientTools,
     });
 
     // Check if suspended for tool approval
@@ -144,21 +609,14 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
 
       // Add uiMessages with requireApprovalMetadata so UI shows approval buttons
       if (response.response?.uiMessages) {
-        const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
-          ...message,
-          metadata: {
-            mode: 'generate',
-            requireApprovalMetadata: {
-              [toolName]: {
-                toolCallId,
-                toolName,
-                args,
-              },
-            },
+        const dbMessages = dbFromServerUiMessages(response.response.uiMessages, {
+          mode: 'generate',
+          requireApprovalMetadata: {
+            [toolName]: { toolCallId, toolName, args },
           },
-        }));
+        });
 
-        setMessages(prev => [...prev, ...mastraUIMessages]);
+        setMessages(prev => [...prev, ...dbMessages]);
       }
 
       // Set isRunning to false so approval buttons are enabled
@@ -170,15 +628,9 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setIsRunning(false);
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      void onFinish?.(response.response.uiMessages);
-      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map(message => ({
-        ...message,
-        metadata: {
-          mode: 'generate',
-        },
-      }));
-
-      setMessages(prev => [...prev, ...mastraUIMessages]);
+      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+      void onFinish?.(dbMessages);
+      setMessages(prev => [...prev, ...dbMessages]);
     }
   };
 
@@ -190,6 +642,9 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     modelSettings,
     signal,
     tracingOptions,
+    clientTools,
+    signalId,
+    clientMessageId,
   }: StreamArgs) => {
     const {
       frequencyPenalty,
@@ -205,21 +660,9 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
       requireToolApproval,
     } = modelSettings || {};
 
-    setIsRunning(true);
-
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
-    const clientWithAbort = new MastraClient({
-      ...baseClient!.options,
-      abortSignal: signal,
-    });
-
-    const agent = clientWithAbort.getAgent(agentId);
-
-    const runId = uuid();
-
-    const response = await agent.stream(coreUserMessages, {
-      runId,
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    const resolvedClientTools = clientTools ?? hookClientTools;
+    const signalContinuationOptions: SignalContinuationOptions = {
       maxSteps,
       modelSettings: {
         frequencyPenalty,
@@ -231,27 +674,158 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
         topP,
       },
       instructions,
-      requestContext,
-      ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+      providerOptions,
+      requireToolApproval,
+      tracingOptions,
+    };
+    _requestContext.current = resolvedRequestContext;
+    setIsRunning(true);
+
+    _streamAbortRef.current?.abort();
+    const internalAbort = new AbortController();
+    _streamAbortRef.current = internalAbort;
+
+    if (signal) {
+      if (signal.aborted) internalAbort.abort();
+      else signal.addEventListener('abort', () => internalAbort.abort(), { once: true });
+    }
+
+    const clientWithAbort = new MastraClient({
+      ...baseClient!.options,
+      abortSignal: internalAbort.signal,
+    });
+
+    const agent = clientWithAbort.getAgent(agentId);
+
+    const streamWithLegacyRoute = async () => {
+      const runId = uuid();
+      const response = await agent.stream(coreUserMessages, {
+        runId,
+        maxSteps,
+        untilIdle: true,
+        modelSettings: {
+          frequencyPenalty,
+          presencePenalty,
+          maxRetries,
+          maxOutputTokens: maxTokens,
+          temperature,
+          topK,
+          topP,
+        },
+        instructions,
+        requestContext: resolvedRequestContext,
+        ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
+        providerOptions,
+        requireToolApproval,
+        tracingOptions,
+        clientTools: resolvedClientTools,
+      });
+
+      _onChunk.current = onChunk;
+      _currentRunId.current = runId;
+
+      await response.processDataStream({
+        onChunk: chunk => processStreamChunk(chunk, onChunk),
+      });
+
+      if (_streamAbortRef.current === internalAbort) {
+        _streamAbortRef.current = null;
+      }
+      setIsRunning(false);
+    };
+
+    if (!threadId || _threadSignalsUnsupportedRef.current || threadSignalsDisabled) {
+      await streamWithLegacyRoute();
+      return;
+    }
+
+    _onChunk.current = onChunk;
+
+    await ensureThreadSubscription({ threadId, resourceId: resourceId || agentId });
+
+    if (_threadSignalsUnsupportedRef.current) {
+      await streamWithLegacyRoute();
+      return;
+    }
+
+    const resolvedSignalId = signalId ?? uuid();
+    const messageContents = getSignalContents(coreUserMessages);
+    const streamOptions = {
+      maxSteps,
+      modelSettings: {
+        frequencyPenalty,
+        presencePenalty,
+        maxRetries,
+        maxOutputTokens: maxTokens,
+        temperature,
+        topK,
+        topP,
+      },
+      instructions,
+      requestContext: resolvedRequestContext,
       providerOptions: providerOptions as any,
       requireToolApproval,
       tracingOptions,
-    });
+    };
 
-    _onChunk.current = onChunk;
-    _currentRunId.current = runId;
+    try {
+      const result = await agent.sendMessage({
+        message: clientMessageId
+          ? { contents: messageContents, metadata: { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } }
+          : messageContents,
+        resourceId: resourceId || agentId,
+        threadId,
+        ifIdle: {
+          streamOptions: {
+            ...signalContinuationOptions,
+            requestContext: resolvedRequestContext,
+            clientTools: resolvedClientTools,
+          },
+        },
+      });
+      const echoedSignalId =
+        result.signal &&
+        typeof result.signal === 'object' &&
+        'id' in result.signal &&
+        typeof result.signal.id === 'string'
+          ? result.signal.id
+          : resolvedSignalId;
+      onSignalSent?.(echoedSignalId, getSignalPreview(coreUserMessages));
+      if (pendingToolApprovalIdsRef.current.size > 0) {
+        setIsRunning(false);
+      }
+    } catch (error) {
+      if (isThreadSignalUnsupportedError(error)) {
+        onSignalSent?.(resolvedSignalId, getSignalPreview(coreUserMessages));
+        try {
+          await agent.sendSignal({
+            signal: {
+              id: resolvedSignalId,
+              type: 'user-message',
+              contents: messageContents,
+            },
+            resourceId: resourceId || agentId,
+            threadId,
+            ifIdle: { streamOptions },
+          });
+          return;
+        } catch (signalError) {
+          onSignalEcho?.(resolvedSignalId);
+          if (isThreadSignalUnsupportedError(signalError)) {
+            markThreadSignalsUnsupported();
+            setMessages(prev => [...prev, fromCoreUserMessagesToMastraDBMessage(coreUserMessages)]);
+            await streamWithLegacyRoute();
+            return;
+          }
+          throw signalError;
+        }
+      }
+      throw error;
+    }
 
-    await response.processDataStream({
-      onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void onChunk?.(chunk);
-      },
-    });
-
-    setIsRunning(false);
+    if (_streamAbortRef.current === internalAbort) {
+      _streamAbortRef.current = null;
+    }
   };
 
   const network = async ({
@@ -266,10 +840,10 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     const { frequencyPenalty, presencePenalty, maxRetries, maxTokens, temperature, topK, topP, maxSteps } =
       modelSettings || {};
 
+    const resolvedRequestContext = requestContext ?? propsRequestContext;
+    _requestContext.current = resolvedRequestContext;
     setIsRunning(true);
 
-    // Create a new client instance with the abort signal
-    // We can't use useMastraClient hook here, so we'll create the client directly
     const clientWithAbort = new MastraClient({
       ...baseClient!.options,
       abortSignal: signal,
@@ -291,7 +865,7 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
         topP,
       },
       runId,
-      requestContext,
+      requestContext: resolvedRequestContext,
       ...(threadId ? { memory: { thread: threadId, resource: resourceId || agentId } } : {}),
       tracingOptions,
     });
@@ -299,27 +873,40 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     _onNetworkChunk.current = onNetworkChunk;
     _networkRunId.current = runId;
 
-    const transformer = new AISdkNetworkTransformer();
-
+    // Accumulate network chunks into `messages` as `MastraDBMessage` (temporary
+    // bridge until the next major), while still forwarding chunks to the
+    // consumer for side-effects (OM, working memory, thread list, errors).
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
 
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
   };
 
   const handleCancelRun = () => {
+    _streamAbortRef.current?.abort();
+    _streamAbortRef.current = null;
+    const threadSubscription = _threadSubscriptionRef.current;
+    void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
+      console.error('[useChat] Failed to abort thread subscription', error);
+    });
+    closeThreadSubscription();
+    setMessages(prev => finishStreamingAssistantMessage(prev));
+    pendingToolApprovalIdsRef.current.clear();
+    setIsAwaitingToolApproval(false);
     setIsRunning(false);
     _currentRunId.current = undefined;
     _onChunk.current = undefined;
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
+    _requestContext.current = undefined;
   };
 
-  const approveToolCall = async (toolCallId: string) => {
+  const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
@@ -330,15 +917,40 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCall({ runId: currentRunId, toolCallId });
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      try {
+        await agent.sendToolApproval({
+          resourceId: resourceId || agentId,
+          threadId,
+          toolCallId,
+          approved: true,
+          ...(resumeData !== undefined ? { resumeData } : {}),
+          requestContext: _requestContext.current,
+        });
+        pendingToolApprovalIdsRef.current.delete(toolCallId);
+        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        setIsRunning(false);
+      } catch (error) {
+        setToolCallApprovals(prev => {
+          const next = { ...prev };
+          delete next[toolCallId];
+          return next;
+        });
+        setIsRunning(false);
+        throw error;
+      }
+      return;
+    }
+
+    const response = await agent.approveToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void onChunk?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -354,15 +966,39 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCall({ runId: currentRunId, toolCallId });
+    if (_threadSubscriptionKeyRef.current && threadId) {
+      try {
+        await agent.sendToolApproval({
+          resourceId: resourceId || agentId,
+          threadId,
+          toolCallId,
+          approved: false,
+          requestContext: _requestContext.current,
+        });
+        pendingToolApprovalIdsRef.current.delete(toolCallId);
+        setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
+        setIsRunning(false);
+      } catch (error) {
+        setToolCallApprovals(prev => {
+          const next = { ...prev };
+          delete next[toolCallId];
+          return next;
+        });
+        setIsRunning(false);
+        throw error;
+      }
+      return;
+    }
+
+    const response = await agent.declineToolCall({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: ChunkType) => {
-        // Without this, React might batch intermediate chunks which would break the message reconstruction over time
-
-        setMessages(prev => toUIMessage({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
-
-        void onChunk?.(chunk);
+        await processStreamChunk(chunk, onChunk);
       },
     });
     setIsRunning(false);
@@ -380,17 +1016,15 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveToolCallGenerate({ runId: currentRunId, toolCallId });
+    const response = await agent.approveToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
-        ...message,
-        metadata: {
-          mode: 'generate',
-        },
-      }));
-
-      setMessages(prev => [...prev, ...mastraUIMessages]);
+      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+      setMessages(prev => [...prev, ...dbMessages]);
     }
 
     setIsRunning(false);
@@ -408,17 +1042,15 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineToolCallGenerate({ runId: currentRunId, toolCallId });
+    const response = await agent.declineToolCallGenerate({
+      runId: currentRunId,
+      toolCallId,
+      requestContext: _requestContext.current,
+    });
 
     if (response && 'uiMessages' in response.response && response.response.uiMessages) {
-      const mastraUIMessages: MastraUIMessage[] = (response.response.uiMessages || []).map((message: any) => ({
-        ...message,
-        metadata: {
-          mode: 'generate',
-        },
-      }));
-
-      setMessages(prev => [...prev, ...mastraUIMessages]);
+      const dbMessages = dbFromServerUiMessages(response.response.uiMessages, { mode: 'generate' });
+      setMessages(prev => [...prev, ...dbMessages]);
     }
 
     setIsRunning(false);
@@ -440,17 +1072,19 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.approveNetworkToolCall({ runId: networkRunId });
-
-    const transformer = new AISdkNetworkTransformer();
+    const response = await agent.approveNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
 
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
   };
 
@@ -470,17 +1104,19 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     }));
 
     const agent = baseClient.getAgent(agentId);
-    const response = await agent.declineNetworkToolCall({ runId: networkRunId });
-
-    const transformer = new AISdkNetworkTransformer();
+    const response = await agent.declineNetworkToolCall({
+      runId: networkRunId,
+      requestContext: _requestContext.current,
+    });
 
     await response.processDataStream({
       onChunk: async (chunk: NetworkChunkType) => {
-        setMessages(prev => transformer.transform({ chunk, conversation: prev, metadata: { mode: 'network' } }));
+        setMessages(prev => accumulateNetworkChunk({ chunk, conversation: prev, metadata: { mode: 'network' } }));
         void onNetworkChunk?.(chunk);
       },
     });
 
+    setMessages(prev => finishStreamingAssistantMessage(prev));
     setIsRunning(false);
   };
 
@@ -492,15 +1128,46 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
       coreUserMessages.push(...args.coreUserMessages);
     }
 
-    const uiMessages = coreUserMessages.map(fromCoreUserMessageToUIMessage);
-    setMessages(s => [...s, ...uiMessages] as MastraUIMessage[]);
+    // The whole user turn (text + any attachments) is merged into a single
+    // optimistic message so streaming renders one bubble, matching how
+    // memory/reload resolves the persisted multi-part user message.
+    const dbUserMessage = fromCoreUserMessagesToMastraDBMessage(coreUserMessages);
+    const clientSetId =
+      mode === 'stream' && args.threadId && !_threadSignalsUnsupportedRef.current && !threadSignalsDisabled
+        ? `client-set-${uuid()}`
+        : undefined;
+    const signalId = clientSetId;
+    const clientMessageId = clientSetId;
 
-    if (mode === 'generate') {
-      await generate({ ...args, coreUserMessages });
-    } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages });
-    } else if (mode === 'network') {
-      await network({ ...args, coreUserMessages });
+    if (signalId) {
+      // Signal path: append the user turn optimistically as `pending` with a
+      // visibly client-owned id. The server echo can replace the final message
+      // id while the matching client id reconciles the pending bubble.
+      const metadata: MastraDBMessageMetadata = {
+        ...dbUserMessage.content.metadata,
+        mode: 'stream',
+        status: 'pending',
+        [CLIENT_MESSAGE_ID_KEY]: clientMessageId,
+      };
+      const pendingMessage = { ...dbUserMessage, id: clientSetId, content: { ...dbUserMessage.content, metadata } };
+      setMessages(s => [...s, pendingMessage]);
+    } else {
+      setMessages(s => [...s, dbUserMessage]);
+    }
+
+    try {
+      if (mode === 'generate') {
+        await generate({ ...args, coreUserMessages });
+      } else if (mode === 'stream') {
+        await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+      } else if (mode === 'network') {
+        await network({ ...args, coreUserMessages });
+      }
+    } catch (error) {
+      // A failed send (subscription setup, request, or stream) must not leave
+      // the chat stranded in a "running" state until reload (issue #18768).
+      setIsRunning(false);
+      throw error;
     }
   };
 
@@ -508,7 +1175,9 @@ export const useChat = ({ agentId, resourceId, initialMessages }: MastraChatProp
     setMessages,
     sendMessage,
     isRunning,
+    isAwaitingToolApproval,
     messages,
+    tasks,
     approveToolCall,
     declineToolCall,
     approveToolCallGenerate,

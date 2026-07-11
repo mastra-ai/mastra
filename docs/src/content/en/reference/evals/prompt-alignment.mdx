@@ -108,7 +108,7 @@ You can customize the Prompt Alignment Scorer by adjusting the scale parameter a
 
 ```typescript
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
     evaluationMode: 'both', // 'user', 'system', or 'both' (default)
@@ -124,19 +124,19 @@ Prompt Alignment evaluates responses across four key dimensions with weighted sc
 
 Evaluates alignment with user prompts only:
 
-1. **Intent Alignment** (40% weight) - Whether the response addresses the user's core request
-1. **Requirements Fulfillment** (30% weight) - If all user requirements are met
-1. **Completeness** (20% weight) - Whether the response is comprehensive for user needs
-1. **Response Appropriateness** (10% weight) - If format and tone match user expectations
+1. **Intent Alignment** (40% weight): Whether the response addresses the user's core request
+1. **Requirements Fulfillment** (30% weight): If all user requirements are met
+1. **Completeness** (20% weight): Whether the response is comprehensive for user needs
+1. **Response Appropriateness** (10% weight): If format and tone match user expectations
 
 #### System Mode ('system')
 
 Evaluates compliance with system guidelines only:
 
-1. **Intent Alignment** (35% weight) - Whether the response follows system behavioral guidelines
-1. **Requirements Fulfillment** (35% weight) - If all system constraints are respected
-1. **Completeness** (15% weight) - Whether the response adheres to all system rules
-1. **Response Appropriateness** (15% weight) - If format and tone match system specifications
+1. **Intent Alignment** (35% weight): Whether the response follows system behavioral guidelines
+1. **Requirements Fulfillment** (35% weight): If all system constraints are respected
+1. **Completeness** (15% weight): Whether the response adheres to all system rules
+1. **Response Appropriateness** (15% weight): If format and tone match system specifications
 
 #### Both Mode ('both' - default)
 
@@ -267,26 +267,27 @@ Measure how well your AI agents follow user instructions:
 
 ```typescript
 const agent = new Agent({
+  id: 'coding-assistant',
   name: 'CodingAssistant',
   instructions: 'You are a helpful coding assistant. Always provide working code examples.',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Evaluate comprehensive alignment (default)
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'both' }, // Evaluates both user intent and system guidelines
 })
 
 // Evaluate just user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'user' }, // Focus only on user request fulfillment
 })
 
 // Evaluate system compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'system' }, // Check adherence to system instructions
 })
 
@@ -338,7 +339,7 @@ for (const agent of agents) {
 import { createPromptAlignmentScorerLLM } from '@mastra/evals'
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 // Evaluate a code generation task
@@ -367,7 +368,7 @@ const result = await scorer.run({
 ```typescript
 // Configure scale and evaluation mode
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: {
     scale: 10, // Score from 0-10 instead of 0-1
     evaluationMode: 'both', // 'user', 'system', or 'both' (default)
@@ -376,13 +377,13 @@ const scorer = createPromptAlignmentScorerLLM({
 
 // User-only evaluation - focus on user satisfaction
 const userScorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'user' },
 })
 
 // System-only evaluation - focus on compliance
 const systemScorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'system' },
 })
 
@@ -417,7 +418,7 @@ In this example, the response fully addresses the user's prompt with all require
 import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const inputMessages = [
@@ -465,7 +466,7 @@ In this example, the response addresses the core intent but misses some requirem
 import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const inputMessages = [
@@ -506,7 +507,7 @@ In this example, the response fails to address the user's specific requirements.
 import { createPromptAlignmentScorerLLM } from '@mastra/evals/scorers/prebuilt'
 
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 
 const inputMessages = [
@@ -550,7 +551,7 @@ Evaluates how well the response addresses the user's request, ignoring system in
 
 ```typescript title="src/example-user-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'user' },
 })
 
@@ -582,7 +583,7 @@ Evaluates compliance with system behavioral guidelines and constraints:
 
 ```typescript title="src/example-system-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'system' },
 })
 
@@ -614,7 +615,7 @@ Evaluates both user intent fulfillment and system compliance with weighted scori
 
 ```typescript title="src/example-both-mode.ts"
 const scorer = createPromptAlignmentScorerLLM({
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   options: { evaluationMode: 'both' }, // This is the default
 })
 
@@ -656,7 +657,7 @@ const result = await scorer.run({
 
 ## Related
 
-- [Answer Relevancy Scorer](/reference/evals/answer-relevancy) - Evaluates query-response relevance
-- [Faithfulness Scorer](/reference/evals/faithfulness) - Measures context groundedness
-- [Tool Call Accuracy Scorer](/reference/evals/tool-call-accuracy) - Evaluates tool selection
-- [Custom Scorers](/docs/evals/custom-scorers) - Creating your own evaluation metrics
+- [Answer Relevancy Scorer](/reference/evals/answer-relevancy): Evaluates query-response relevance
+- [Faithfulness Scorer](/reference/evals/faithfulness): Measures context groundedness
+- [Tool Call Accuracy Scorer](/reference/evals/tool-call-accuracy): Evaluates tool selection
+- [Custom Scorers](/docs/evals/custom-scorers): Creating your own evaluation metrics

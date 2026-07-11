@@ -71,8 +71,9 @@ export const isSupportedEmbeddingModel = <T>(
 
 export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
   id: string;
+  disableInit: boolean = false;
 
-  constructor({ id }: { id: string }) {
+  constructor({ id, disableInit }: { id: string; disableInit?: boolean }) {
     if (!id || typeof id !== 'string' || id.trim() === '') {
       throw new MastraError({
         id: 'VECTOR_INVALID_ID',
@@ -83,6 +84,7 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
     }
     super({ name: 'MastraVector', component: 'VECTOR' });
     this.id = id;
+    this.disableInit = disableInit ?? false;
   }
 
   get indexSeparator(): string {
@@ -159,7 +161,6 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
         infoError,
       );
       this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
     const existingDim = info?.dimension;
@@ -182,7 +183,6 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
         details: { indexName, existingDim, requestedDim: dimension },
       });
       this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
       throw mastraError;
     } else {
       const mastraError = new MastraError({
@@ -193,7 +193,6 @@ export abstract class MastraVector<Filter = VectorFilter> extends MastraBase {
         details: { indexName },
       });
       this.logger?.trackException(mastraError);
-      this.logger?.error(mastraError.toString());
       throw mastraError;
     }
   }

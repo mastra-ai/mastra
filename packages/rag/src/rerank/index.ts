@@ -1,4 +1,6 @@
 import type { MastraLanguageModel } from '@mastra/core/agent';
+import type { ObservabilityContext } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
 import type { RelevanceScoreProvider } from '@mastra/core/relevance';
 import type { QueryResult } from '@mastra/core/vector';
 import { Big } from 'big.js';
@@ -44,6 +46,8 @@ export interface RerankerFunctionOptions {
   weights?: WeightConfig;
   queryEmbedding?: number[];
   topK?: number;
+  /** Observability context for tracing the rerank operation */
+  observabilityContext?: ObservabilityContext;
 }
 
 export interface RerankConfig {
@@ -94,7 +98,18 @@ async function executeRerank({
   scorer: RelevanceScoreProvider;
   options: RerankerFunctionOptions;
 }) {
-  const { queryEmbedding, topK = 3 } = options;
+  const { queryEmbedding, topK = 3, observabilityContext } = options;
+  const rerankSpan = observabilityContext?.tracingContext?.currentSpan?.createChildSpan({
+    type: SpanType.RAG_ACTION,
+    name: `rag rerank`,
+    input: { query, candidateCount: results.length },
+    attributes: {
+      action: 'rerank',
+      candidateCount: results.length,
+      topN: topK,
+      scorer: (scorer as any)?.constructor?.name,
+    },
+  });
   const weights = {
     ...DEFAULT_WEIGHTS,
     ...options.weights,
@@ -103,7 +118,9 @@ async function executeRerank({
   //weights must add up to 1
   const sum = Object.values(weights).reduce((acc: Big, w: number) => acc.plus(w.toString()), new Big(0));
   if (!sum.eq(1)) {
-    throw new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+    const err = new Error(`Weights must add up to 1. Got ${sum} from ${weights}`);
+    rerankSpan?.error({ error: err, endSpan: true });
+    throw err;
   }
 
   const resultLength = results.length;
@@ -111,48 +128,56 @@ async function executeRerank({
   const queryAnalysis = queryEmbedding ? analyzeQueryEmbedding(queryEmbedding) : null;
 
   // Get scores for each result
-  const scoredResults = await Promise.all(
-    results.map(async (result, index) => {
-      // Get semantic score from chosen provider
-      let semanticScore = 0;
-      if (result?.metadata?.text) {
-        semanticScore = await scorer.getRelevanceScore(query, result?.metadata?.text);
-      }
+  let scoredResults: RerankResult[];
+  try {
+    scoredResults = await Promise.all(
+      results.map(async (result, index) => {
+        // Get semantic score from chosen provider
+        let semanticScore = 0;
+        if (result?.metadata?.text) {
+          semanticScore = await scorer.getRelevanceScore(query, result?.metadata?.text);
+        }
 
-      // Get existing vector score from result
-      const vectorScore = result.score;
+        // Get existing vector score from result
+        const vectorScore = result.score;
 
-      // Get score of vector based on position in original list
-      const positionScore = calculatePositionScore(index, resultLength);
+        // Get score of vector based on position in original list
+        const positionScore = calculatePositionScore(index, resultLength);
 
-      // Combine scores using weights for each component
-      let finalScore =
-        weights.semantic * semanticScore + weights.vector * vectorScore + weights.position * positionScore;
+        // Combine scores using weights for each component
+        let finalScore =
+          weights.semantic * semanticScore + weights.vector * vectorScore + weights.position * positionScore;
 
-      if (queryAnalysis) {
-        finalScore = adjustScores(finalScore, queryAnalysis);
-      }
+        if (queryAnalysis) {
+          finalScore = adjustScores(finalScore, queryAnalysis);
+        }
 
-      return {
-        result,
-        score: finalScore,
-        details: {
-          semantic: semanticScore,
-          vector: vectorScore,
-          position: positionScore,
-          ...(queryAnalysis && {
-            queryAnalysis: {
-              magnitude: queryAnalysis.magnitude,
-              dominantFeatures: queryAnalysis.dominantFeatures,
-            },
-          }),
-        },
-      };
-    }),
-  );
+        return {
+          result,
+          score: finalScore,
+          details: {
+            semantic: semanticScore,
+            vector: vectorScore,
+            position: positionScore,
+            ...(queryAnalysis && {
+              queryAnalysis: {
+                magnitude: queryAnalysis.magnitude,
+                dominantFeatures: queryAnalysis.dominantFeatures,
+              },
+            }),
+          },
+        };
+      }),
+    );
+  } catch (err) {
+    rerankSpan?.error({ error: err as Error, endSpan: true });
+    throw err;
+  }
 
   // Sort by score and take top K
-  return scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
+  const final = scoredResults.sort((a, b) => b.score - a.score).slice(0, topK);
+  rerankSpan?.end({ output: { returned: final.length } });
+  return final;
 }
 
 export async function rerankWithScorer({

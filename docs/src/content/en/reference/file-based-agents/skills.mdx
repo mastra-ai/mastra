@@ -1,0 +1,61 @@
+---
+title: "Skills | File-based Agents"
+description: Add skills to a file-based agent under skills/ using modules, packaged SKILL.md, or flat markdown.
+packages:
+  - "@mastra/core"
+---
+
+# Skills
+
+A file-based agent discovers skills from its `skills/` directory and bundles them at build time. Skills are reusable procedures or reference material that the agent can load when relevant, instead of putting every detail into the always-on prompt.
+
+Use this page for the file-based convention. For code-defined skills, see [Agent skills](/docs/agents/skills). For the `SKILL.md` package format, see [Workspace skills](/docs/workspace/skills).
+
+## Quickstart
+
+The simplest skill is one markdown file under `skills/`. The filename becomes the skill name, and `description` tells the agent when to load it.
+
+```markdown title="src/mastra/agents/weather/skills/temperature-units.md"
+---
+description: Use when reporting temperatures or comparing forecast units.
+---
+
+Always report temperatures in Celsius and Fahrenheit. Include the user's preferred unit first when known.
+```
+
+## Skills vs tools vs instructions
+
+| Need | Use | Why |
+| - | - | - |
+| Always-on identity, tone, or rules | [`instructions.md`](/reference/file-based-agents/instructions) | The model should see the guidance every turn. |
+| Callable action with inputs and outputs | [`tools/`](/reference/file-based-agents/tools) | The model needs to execute code, call APIs, or perform side effects. |
+| Detailed reference or procedure loaded when relevant | `skills/` | The model only needs the full guidance for specific tasks. |
+
+## Skill formats
+
+Mastra supports three file-based skill formats:
+
+| Format | Use it when |
+| - | - |
+| TypeScript/JavaScript module | You want to default-export a [`createSkill()`](/reference/agents/createSkill) result from code. |
+| Packaged `SKILL.md` directory | The skill has instructions plus supporting files under `references/`. |
+| Flat markdown file | The skill is one markdown file with frontmatter and instructions. |
+
+For packaged skills, `description` is required in `SKILL.md` frontmatter. Flat markdown skills also require `description` in frontmatter. Write when to use the skill, not only what the skill contains.
+
+## What gets loaded
+
+File-based Agents skills are read at build time and added to the generated bundle. The deployed agent doesn't need to read those skill files from disk at runtime.
+
+For packaged skills, Mastra reads:
+
+- `SKILL.md` for metadata and instructions.
+- Files directly under `references/` as supporting reference content.
+
+Reference files are keyed by filename. Symlinked files and directories under `references/` are skipped during discovery.
+
+## Precedence with config
+
+Discovered skills merge with any `skills` in [`config.ts`](/reference/file-based-agents/config). On a name collision, `config.skills` wins and a warning is logged.
+
+If `config.skills` is a function, discovered skills are ignored with a warning because function-valued skills can't be statically merged.

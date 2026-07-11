@@ -1,7 +1,12 @@
 import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { createScorer } from '../evals/base';
+import { RequestContext } from '../request-context';
+import { createStep, createWorkflow } from '../workflows';
+import { DefaultExecutionEngine } from '../workflows/default';
+import { runScorersForStep } from '../workflows/handlers/step';
 import { Mastra } from './index';
 
 /**
@@ -206,5 +211,157 @@ describe('Scorer Registration', () => {
     expect(Object.keys(allScorers || {})).toHaveLength(2);
     expect(allScorers?.['mastra-level-scorer']).toBeDefined();
     expect(allScorers?.['agent-level-scorer']).toBeDefined();
+  });
+
+  it('should register static workflow step scorers before addWorkflow returns', () => {
+    const workflowScorer = createTestScorer('workflow-step-scorer');
+    const step = createStep({
+      id: 'scored-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: {
+        workflowStep: { scorer: workflowScorer },
+      },
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow({
+      id: 'scored-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(step)
+      .commit();
+
+    const mastra = new Mastra({ logger: false });
+    mastra.addWorkflow(workflow);
+
+    expect(mastra.getScorerById('workflow-step-scorer')).toBe(workflowScorer);
+  });
+
+  it('should register a shared workflow step scorer once by id', () => {
+    const workflowScorer = createTestScorer('shared-workflow-step-scorer');
+    const firstStep = createStep({
+      id: 'first-scored-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: {
+        shared: { scorer: workflowScorer },
+      },
+      execute: async ({ inputData }) => inputData,
+    });
+    const secondStep = createStep({
+      id: 'second-scored-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: {
+        shared: { scorer: workflowScorer },
+      },
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow({
+      id: 'shared-scorer-workflow',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(firstStep)
+      .then(secondStep)
+      .commit();
+
+    const mastra = new Mastra({ logger: false });
+    mastra.addWorkflow(workflow);
+
+    const allScorers = mastra.listScorers();
+    expect(Object.keys(allScorers || {})).toEqual(['shared-workflow-step-scorer']);
+    expect(mastra.getScorerById('shared-workflow-step-scorer')).toBe(workflowScorer);
+  });
+
+  it('should register dynamic workflow step scorers before running them', async () => {
+    const workflowScorer = createTestScorer('dynamic-workflow-step-scorer');
+    const mastra = new Mastra({ logger: false });
+    const engine = new DefaultExecutionEngine({
+      mastra,
+      options: {
+        validateInputs: true,
+        shouldPersistSnapshot: () => true,
+      },
+    });
+
+    await runScorersForStep({
+      engine,
+      scorers: async () => ({
+        dynamicWorkflowStep: { scorer: workflowScorer },
+      }),
+      runId: 'run-1',
+      workflowId: 'workflow-1',
+      stepId: 'step-1',
+      input: { value: 'input' },
+      output: { value: 'output' },
+      requestContext: new RequestContext(),
+      disableScorers: false,
+    });
+
+    expect(mastra.getScorerById('dynamic-workflow-step-scorer')).toBe(workflowScorer);
+  });
+
+  it('should emit score events when workflow step scorers run', async () => {
+    const workflowScorer = createTestScorer('workflow-score-event-scorer');
+    const workflowScorers = vi.fn().mockReturnValue({
+      workflowStep: { scorer: workflowScorer },
+    });
+    const step = createStep({
+      id: 'scored-step',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+      scorers: workflowScorers,
+      execute: async ({ inputData }) => inputData,
+    });
+    const workflow = createWorkflow({
+      id: 'workflow-score-event',
+      inputSchema: z.object({ value: z.string() }),
+      outputSchema: z.object({ value: z.string() }),
+    })
+      .then(step)
+      .commit();
+
+    const mastra = new Mastra({
+      logger: false,
+      storage: {
+        init: vi.fn().mockResolvedValue(undefined),
+        getStore: vi.fn(async (domain: string) => {
+          if (domain === 'scores') {
+            return {
+              saveScore: vi.fn().mockResolvedValue({ score: {} }),
+            };
+          }
+          return null;
+        }),
+        __setLogger: vi.fn(),
+      } as any,
+      workflows: { workflow },
+    });
+    const addScoreSpy = vi.spyOn(mastra.observability, 'addScore').mockResolvedValue(undefined);
+    const scorerRunSpy = vi.spyOn(workflowScorer, 'run');
+
+    const run = await workflow.createRun({ disableScorers: false });
+    const result = await run.start({ inputData: { value: 'input' } });
+
+    expect(result.status).toBe('success');
+    expect(workflowScorers).toHaveBeenCalled();
+    await vi.waitFor(() => {
+      expect(scorerRunSpy).toHaveBeenCalled();
+    });
+
+    await vi.waitFor(() => {
+      expect(addScoreSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          score: expect.objectContaining({
+            scorerId: 'workflow-score-event-scorer',
+            scorerName: 'workflow-score-event-scorer-name',
+            targetEntityType: 'workflow_run',
+            score: 1,
+          }),
+        }),
+      );
+    });
   });
 });

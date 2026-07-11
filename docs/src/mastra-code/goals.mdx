@@ -1,0 +1,121 @@
+---
+title: 'Goals'
+description: 'Use /goal to keep Mastra Code working on an objective until a judge model marks it complete, asks it to continue, or waits for user input.'
+packages:
+  - 'mastracode'
+---
+
+# Goals
+
+Goals let Mastra Code keep working toward an objective across multiple assistant turns. Use a goal when a task needs repeated work and checks, such as reviewing every open pull request, completing a checklist, or implementing a plan until verification passes.
+
+Start a goal with the `/goal` slash command:
+
+```text
+/goal Review every open PR, categorize each one, and stop only after all PRs have a concise TL;DR.
+```
+
+Mastra Code saves the objective on the current thread, runs the normal assistant turn, then asks a separate judge model what should happen next.
+
+| Decision | Behavior |
+| - | - |
+| `done` | The goal is complete. Mastra Code records the result and exits goal mode. |
+| `continue` | The goal is not complete. Mastra Code adds the judge feedback as a system reminder and starts another turn. |
+| `waiting` | The goal requires user input or a checkpoint. Mastra Code stays in goal mode and waits for you. |
+
+The status line shows goal progress as `goal attempt N/M`. On narrow terminals, it shortens to `attempt N/M`.
+
+## Configure the judge
+
+The first time you run `/goal`, Mastra Code asks which model should judge progress and how many attempts the goal can use. These defaults are saved for future goals.
+
+Use `/goal judge` to change the defaults later:
+
+```text
+/goal judge
+```
+
+Changing `/goal judge` while a goal is active updates that goal's judge model and attempt limit without resetting progress.
+
+## Manage a goal
+
+Use `/goal` subcommands to inspect or control the current goal:
+
+| Command | Description |
+| - | - |
+| `/goal status` | Show the active goal, judge model, and attempt count. |
+| `/goal pause` | Pause the active goal. |
+| `/goal resume` | Resume a paused goal without resetting its attempt count. |
+| `/goal clear` | Remove the current goal from the thread. |
+
+If the judge is evaluating, Mastra Code temporarily blocks new input so a follow-up message cannot race the judge decision. `/goal pause`, `/goal clear`, and `/exit` still work while the judge is running.
+
+Pressing Escape or Ctrl+C does not pause a goal. Use `/goal pause` when you want to pause it explicitly.
+
+## Multiline goals
+
+Goal objectives can span multiple lines:
+
+```text
+/goal Review the release PRs.
+For each PR, explain the change, whether it needs work, and what should happen next.
+Do not stop until every PR has been categorized.
+```
+
+Mastra Code treats the full multiline body as the goal objective.
+
+## Use an approved plan as a goal
+
+When Mastra Code submits a plan, the inline approval UI includes **Use as /goal**. Select it to start a goal from the plan content instead of approving the plan for one implementation pass.
+
+Use this when you want Mastra Code to continue executing and checking the plan until the judge marks it complete.
+
+## Goal-enabled slash commands
+
+Custom slash commands can opt into goal mode with `goal: true` in their YAML frontmatter. Mastra Code exposes those commands as `/goal/<command-name>`.
+
+```md title=".mastracode/commands/pr-triage.md"
+---
+description: Triage every open PR
+goal: true
+---
+
+Inspect every open PR. For each PR, write a concise TL;DR, note whether it needs work, and prioritize PRs where the user is tagged as a reviewer.
+```
+
+Run it as a goal:
+
+```text
+/goal/pr-triage
+```
+
+The command template is expanded first, including `$ARGUMENTS`, file references, and shell substitutions. The expanded prompt becomes the goal objective.
+
+## Goal-enabled skills
+
+Skills can also opt into goal mode by setting `metadata.goal: true` in `SKILL.md` frontmatter:
+
+```md title=".mastracode/skills/release-check/SKILL.md"
+---
+name: release-check
+description: Check whether a release is ready
+metadata:
+  goal: true
+---
+
+Review the release branch, run the required checks, summarize blockers, and continue until the release is ready or a human decision is required.
+```
+
+Run the skill as a goal:
+
+```text
+/goal/release-check
+```
+
+Mastra Code uses the skill instructions as the goal objective and appends any arguments you provide.
+
+## Persistence
+
+Goals are saved in thread metadata. If you switch threads or restart Mastra Code, the current thread restores its goal state, including the objective, judge model, status, attempt count, and attempt limit.
+
+Goal setup messages and final judge results are stored as system reminders in the conversation so resumed threads keep the goal context visible.

@@ -7,11 +7,13 @@ import { loop } from '../../loop';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
 import { SpanType, resolveObservabilityContext } from '../../observability';
+import { executeWithContextSync } from '../../observability/utils';
 import type { MastraModelOutput } from '../../stream/base/output';
 import type { ModelManagerModelConfig } from '../../stream/types';
 import { delay } from '../../utils';
 
 import type { ModelLoopStreamArgs } from './model.loop.types';
+import { resolveResponseModelId } from './server-side-fallback';
 import type { MastraModelOptions } from './shared.types';
 
 export class MastraLLMVNext extends MastraBase {
@@ -47,7 +49,6 @@ export class MastraLLMVNext extends MastraBase {
         category: ErrorCategory.USER,
       });
       this.logger.trackException(mastraError);
-      this.logger.error(mastraError.toString());
       throw mastraError;
     } else {
       this.#models = models;
@@ -77,6 +78,10 @@ export class MastraLLMVNext extends MastraBase {
     return this.#firstModel.model;
   }
 
+  getProviderOptions() {
+    return this.#firstModel.providerOptions;
+  }
+
   convertToMessages(messages: string | string[] | ModelMessage[]): ModelMessage[] {
     if (Array.isArray(messages)) {
       return messages.map(m => {
@@ -101,7 +106,7 @@ export class MastraLLMVNext extends MastraBase {
   stream<Tools extends ToolSet, OUTPUT = undefined>({
     resumeContext,
     runId,
-    stopWhen = stepCountIs(5),
+    stopWhen,
     maxSteps,
     tools = {} as Tools,
     modelSettings,
@@ -111,7 +116,9 @@ export class MastraLLMVNext extends MastraBase {
     structuredOutput,
     options,
     inputProcessors,
+    llmRequestInputProcessors,
     outputProcessors,
+    errorProcessors,
     returnScorerData,
     providerOptions,
     messageList,
@@ -122,6 +129,7 @@ export class MastraLLMVNext extends MastraBase {
     agentName,
     toolCallId,
     requestContext,
+    actor,
     methodType,
     includeRawChunks,
     autoResumeSuspendedTools,
@@ -129,35 +137,33 @@ export class MastraLLMVNext extends MastraBase {
     processorStates,
     activeTools,
     isTaskComplete,
+    goal,
     onIterationComplete,
     workspace,
     ...rest
   }: ModelLoopStreamArgs<Tools, OUTPUT>): MastraModelOutput<OUTPUT> {
     const observabilityContext = resolveObservabilityContext(rest);
+    // `maxSteps` is sugar for the stop condition `stepCountIs(maxSteps)`. When a
+    // custom `stopWhen` is also provided, compose the two (the loop ORs stop
+    // conditions) instead of letting the maxSteps cap replace the user's
+    // condition. The default cap only applies when neither is set.
     let stopWhenToUse;
-
     if (maxSteps && typeof maxSteps === 'number') {
-      stopWhenToUse = stepCountIs(maxSteps);
+      const userConditions = stopWhen ? (Array.isArray(stopWhen) ? stopWhen : [stopWhen]) : [];
+      stopWhenToUse = [stepCountIs(maxSteps), ...userConditions];
     } else {
-      stopWhenToUse = stopWhen;
+      stopWhenToUse = stopWhen ?? stepCountIs(5);
     }
 
     const messages = messageList.get.all.aiV5.model();
 
     const firstModel = this.#firstModel.model;
-    this.logger.debug(`[LLM] - Streaming text`, {
-      runId,
-      threadId,
-      resourceId,
-      messages,
-      tools: Object.keys(tools || {}),
-    });
 
     const modelSpan = observabilityContext.tracingContext.currentSpan?.createChildSpan({
       name: `llm: '${firstModel.modelId}'`,
       type: SpanType.MODEL_GENERATION,
       input: {
-        messages: [...messageList.getSystemMessages(), ...messages],
+        messages: [...messageList.getAllSystemMessages(), ...messages],
       },
       attributes: {
         model: firstModel.modelId,
@@ -174,7 +180,23 @@ export class MastraLLMVNext extends MastraBase {
       requestContext,
     });
 
-    // Create model span tracker that will be shared across all LLM execution steps
+    if (modelSpan) {
+      executeWithContextSync({
+        span: modelSpan,
+        fn: () =>
+          this.logger.debug('Streaming text', {
+            runId,
+            threadId,
+            resourceId,
+            messages,
+            tools: Object.keys(tools || {}),
+          }),
+      });
+    }
+
+    // Create model span tracker that will be shared across all LLM execution steps.
+    // The agentic loop calls setInferenceContext + startInference per-step so the
+    // MODEL_INFERENCE span reflects the post-processor tool set / parameters.
     const modelSpanTracker = modelSpan?.createTracker();
 
     try {
@@ -194,7 +216,9 @@ export class MastraLLMVNext extends MastraBase {
         _internal,
         structuredOutput,
         inputProcessors,
+        llmRequestInputProcessors,
         outputProcessors,
+        errorProcessors,
         returnScorerData,
         modelSpanTracker,
         requireToolApproval,
@@ -202,6 +226,7 @@ export class MastraLLMVNext extends MastraBase {
         agentId,
         agentName,
         requestContext,
+        actor,
         methodType,
         includeRawChunks,
         autoResumeSuspendedTools,
@@ -209,6 +234,7 @@ export class MastraLLMVNext extends MastraBase {
         processorStates,
         activeTools,
         isTaskComplete,
+        goal,
         onIterationComplete,
         workspace,
         ...observabilityContext,
@@ -242,7 +268,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Step Change:', {
+            this.logger.debug('Stream step change', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,
@@ -253,8 +279,14 @@ export class MastraLLMVNext extends MastraBase {
 
             const remainingTokens = parseInt(props?.response?.headers?.['x-ratelimit-remaining-tokens'] ?? '', 10);
             if (!isNaN(remainingTokens) && remainingTokens > 0 && remainingTokens < 2000) {
-              this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId });
+              this.logger.warn('Rate limit approaching, waiting 10 seconds', { runId, remainingTokens });
+              const rateLimitSpan = modelSpan?.createChildSpan({
+                name: 'rate-limit-sleep',
+                type: SpanType.GENERIC,
+                metadata: { remainingTokens, delayMs: 10_000 },
+              });
               await delay(10 * 1000);
+              rateLimitSpan?.end();
             }
           },
 
@@ -275,7 +307,10 @@ export class MastraLLMVNext extends MastraBase {
               attributes: {
                 finishReason: props?.finishReason,
                 responseId: props?.response.id,
-                responseModel: props?.response.modelId,
+                // Account for Anthropic server-side fallbacks: when the primary
+                // model declines a turn and a fallback serves it, attribute the
+                // response to the model that actually generated it.
+                responseModel: resolveResponseModelId(props?.providerMetadata, props?.response.modelId),
               },
               usage: props?.totalUsage,
               providerMetadata: props?.providerMetadata,
@@ -308,7 +343,7 @@ export class MastraLLMVNext extends MastraBase {
               throw mastraError;
             }
 
-            this.logger.debug('[LLM] - Stream Finished:', {
+            this.logger.debug('Stream finished', {
               text: props?.text,
               toolCalls: props?.toolCalls,
               toolResults: props?.toolResults,

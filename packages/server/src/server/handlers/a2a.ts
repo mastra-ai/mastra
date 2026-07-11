@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { MastraA2AError } from '@mastra/core/a2a';
 import type {
   MessageSendParams,
@@ -6,12 +7,21 @@ import type {
   AgentCard,
   TaskStatus,
   TaskState,
+  Task,
+  TaskPushNotificationConfig,
+  GetTaskPushNotificationConfigParams,
+  ListTaskPushNotificationConfigParams,
+  DeleteTaskPushNotificationConfigParams,
+  Artifact,
 } from '@mastra/core/a2a';
 import type { Agent } from '@mastra/core/agent';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { RequestContext } from '@mastra/core/request-context';
 import { z } from 'zod/v4';
-import { convertToCoreMessage, normalizeError, createSuccessResponse, createErrorResponse } from '../a2a/protocol';
+import { signAgentCard } from '../a2a/agent-card-signing';
+import { convertToCoreMessage, normalizeError, createSuccessResponse } from '../a2a/protocol';
+import { DefaultPushNotificationSender } from '../a2a/push-notification-sender';
+import { InMemoryPushNotificationStore } from '../a2a/push-notification-store';
 import type { InMemoryTaskStore } from '../a2a/store';
 import { applyUpdateToTask, createTaskContext, loadOrCreateTask } from '../a2a/tasks';
 import {
@@ -24,16 +34,49 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 import { convertInstructionsToString } from '../utils';
 import { getAgentFromSystem } from './agents';
+import { getPublicOrigin } from './auth';
+
+// Mirrors @a2a-js/sdk's Part discriminated union (text | file | data) and the
+// part shape already declared in ../schemas/a2a.ts. Before this widening, the
+// schema hard-coded `kind: z.enum(['text'])` which rejected every non-text
+// part before the converter could see it — even though convertToCoreMessagePart
+// at ../a2a/protocol.ts already handles file and data parts. With this change,
+// FilePart (FileWithBytes | FileWithUri) and DataPart parse successfully and
+// reach the converter (data parts then throw a clear "not supported in core
+// messages" message; files convert natively to AI-SDK CoreMessage file parts).
+const messagePartSchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('text'),
+    text: z.string(),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+  z.object({
+    kind: z.literal('file'),
+    file: z.union([
+      z.object({
+        bytes: z.string(),
+        mimeType: z.string().optional(),
+        name: z.string().optional(),
+      }),
+      z.object({
+        uri: z.string(),
+        mimeType: z.string().optional(),
+        name: z.string().optional(),
+      }),
+    ]),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+  z.object({
+    kind: z.literal('data'),
+    data: z.record(z.string(), z.any()),
+    metadata: z.record(z.string(), z.any()).optional(),
+  }),
+]);
 
 const messageSendParamsSchema = z.object({
   message: z.object({
     role: z.enum(['user', 'agent']),
-    parts: z.array(
-      z.object({
-        kind: z.enum(['text']),
-        text: z.string(),
-      }),
-    ),
+    parts: z.array(messagePartSchema),
     kind: z.literal('message'),
     messageId: z.string(),
     contextId: z.string().optional(),
@@ -42,7 +85,62 @@ const messageSendParamsSchema = z.object({
     extensions: z.array(z.string()).optional(),
     metadata: z.record(z.string(), z.any()).optional(),
   }),
+  configuration: z
+    .object({
+      acceptedOutputModes: z.array(z.string()).optional(),
+      blocking: z.boolean().optional(),
+      historyLength: z.number().optional(),
+      pushNotificationConfig: z
+        .object({
+          url: z.string(),
+          id: z.string().optional(),
+          token: z.string().optional(),
+          authentication: z
+            .object({
+              schemes: z.array(z.string()),
+              credentials: z.string().optional(),
+            })
+            .optional(),
+        })
+        .optional(),
+    })
+    .optional(),
 });
+
+const defaultPushNotificationStore = new InMemoryPushNotificationStore();
+const defaultPushNotificationSender = new DefaultPushNotificationSender(defaultPushNotificationStore);
+
+function createAgentCardDefaults({
+  pushNotifications = false,
+}: {
+  pushNotifications?: boolean;
+} = {}): Pick<
+  AgentCard,
+  | 'protocolVersion'
+  | 'additionalInterfaces'
+  | 'supportsAuthenticatedExtendedCard'
+  | 'security'
+  | 'securitySchemes'
+  | 'capabilities'
+  | 'defaultInputModes'
+  | 'defaultOutputModes'
+> {
+  return {
+    protocolVersion: '0.3.0',
+    additionalInterfaces: [],
+    supportsAuthenticatedExtendedCard: false,
+    security: [],
+    securitySchemes: {},
+    capabilities: {
+      streaming: true,
+      pushNotifications,
+      stateTransitionHistory: false,
+      extensions: [],
+    },
+    defaultInputModes: ['text/plain'],
+    defaultOutputModes: ['text/plain'],
+  };
+}
 
 export async function getAgentCardByIdHandler({
   mastra,
@@ -53,6 +151,7 @@ export async function getAgentCardByIdHandler({
     url: 'https://mastra.ai',
   },
   version = '1.0',
+  pushNotifications = false,
   requestContext,
 }: Context & {
   requestContext: RequestContext;
@@ -63,6 +162,7 @@ export async function getAgentCardByIdHandler({
     organization: string;
     url: string;
   };
+  pushNotifications?: boolean;
 }): Promise<AgentCard> {
   const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
 
@@ -78,13 +178,7 @@ export async function getAgentCardByIdHandler({
     url: executionUrl,
     provider,
     version,
-    capabilities: {
-      streaming: true, // All agents support streaming
-      pushNotifications: false,
-      stateTransitionHistory: false,
-    },
-    defaultInputModes: ['text'],
-    defaultOutputModes: ['text'],
+    ...createAgentCardDefaults({ pushNotifications }),
     // Convert agent tools to skills format for A2A protocol
     skills: Object.entries(tools).map(([toolId, tool]) => ({
       id: toolId,
@@ -95,7 +189,33 @@ export async function getAgentCardByIdHandler({
     })),
   };
 
-  return agentCard;
+  const signing = mastra.getServer?.()?.a2a?.agentCardSigning;
+  if (!signing) {
+    return agentCard;
+  }
+
+  return signAgentCard({
+    agentCard,
+    signing,
+  });
+}
+
+function getA2AExecutionUrl({
+  agentId,
+  request,
+  routePrefix,
+}: {
+  agentId: string;
+  request?: Request;
+  routePrefix?: string;
+}) {
+  const executionPath = `${routePrefix ?? ''}/a2a/${agentId}`;
+
+  if (!request) {
+    return executionPath;
+  }
+
+  return `${getPublicOrigin(request)}${executionPath}`;
 }
 
 function validateMessageSendParams(params: MessageSendParams) {
@@ -110,18 +230,350 @@ function validateMessageSendParams(params: MessageSendParams) {
   }
 }
 
+function createArtifactUpdate({
+  taskId,
+  contextId,
+  text,
+  data,
+}: {
+  taskId: string;
+  contextId: string;
+  text?: string;
+  data?: Record<string, unknown>;
+}) {
+  const parts = [
+    ...(text ? [{ kind: 'text' as const, text }] : []),
+    ...(data ? [{ kind: 'data' as const, data }] : []),
+  ];
+
+  if (parts.length === 0) {
+    return undefined;
+  }
+
+  return {
+    kind: 'artifact-update' as const,
+    taskId,
+    contextId,
+    lastChunk: true,
+    artifact: {
+      artifactId: `${taskId}:response`,
+      name: data ? 'response.json' : 'response.txt',
+      parts,
+    },
+  };
+}
+
+function createTextChunkArtifactUpdate({
+  taskId,
+  contextId,
+  text,
+  append,
+  lastChunk,
+}: {
+  taskId: string;
+  contextId: string;
+  text: string;
+  append?: boolean;
+  lastChunk?: boolean;
+}) {
+  return {
+    kind: 'artifact-update' as const,
+    taskId,
+    contextId,
+    ...(append ? { append: true } : {}),
+    ...(lastChunk !== undefined ? { lastChunk } : {}),
+    artifact: {
+      artifactId: `${taskId}:response:text`,
+      name: 'response.txt',
+      parts: [{ kind: 'text' as const, text }],
+    },
+  };
+}
+
+function createDataArtifactUpdate({
+  taskId,
+  contextId,
+  data,
+  lastChunk,
+}: {
+  taskId: string;
+  contextId: string;
+  data: Record<string, unknown>;
+  lastChunk?: boolean;
+}) {
+  return {
+    kind: 'artifact-update' as const,
+    taskId,
+    contextId,
+    ...(lastChunk !== undefined ? { lastChunk } : {}),
+    artifact: {
+      artifactId: `${taskId}:response:data`,
+      name: 'response.json',
+      parts: [{ kind: 'data' as const, data }],
+    },
+  };
+}
+
+function resolvePushNotificationPair({
+  pushNotificationStore,
+  pushNotificationSender,
+}: {
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  pushNotificationSender?: DefaultPushNotificationSender;
+}) {
+  if (pushNotificationSender) {
+    return {
+      pushNotificationStore: pushNotificationSender.getStore(),
+      pushNotificationSender,
+    };
+  }
+
+  if (pushNotificationStore) {
+    return {
+      pushNotificationStore,
+      pushNotificationSender: new DefaultPushNotificationSender(pushNotificationStore),
+    };
+  }
+
+  return {
+    pushNotificationStore: defaultPushNotificationStore,
+    pushNotificationSender: defaultPushNotificationSender,
+  };
+}
+
+function createTaskPushNotificationConfig(
+  taskId: string,
+  pushNotificationConfig: TaskPushNotificationConfig['pushNotificationConfig'],
+): TaskPushNotificationConfig {
+  return {
+    taskId,
+    pushNotificationConfig: {
+      ...pushNotificationConfig,
+      id: pushNotificationConfig.id ?? taskId,
+    },
+  };
+}
+
+function shouldSendPushNotification(previousTask: Task | undefined, nextTask: Task) {
+  const pushTriggerStates: TaskState[] = ['completed', 'failed', 'canceled', 'input-required'];
+
+  if (!pushTriggerStates.includes(nextTask.status.state)) {
+    return false;
+  }
+
+  return previousTask?.status.state !== nextTask.status.state;
+}
+
+async function saveTaskAndMaybeSendPushNotification({
+  taskStore,
+  pushNotificationSender,
+  previousTask,
+  nextTask,
+  agentId,
+  logger,
+}: {
+  taskStore: InMemoryTaskStore;
+  pushNotificationSender: DefaultPushNotificationSender;
+  previousTask?: Task;
+  nextTask: Task;
+  agentId: string;
+  logger?: IMastraLogger;
+}) {
+  await taskStore.save({ agentId, data: nextTask });
+
+  if (!shouldSendPushNotification(previousTask, nextTask)) {
+    return;
+  }
+
+  void pushNotificationSender
+    .sendNotifications({
+      agentId,
+      task: nextTask,
+      logger,
+    })
+    .catch(error => {
+      logger?.error('Failed to schedule A2A push notification', error);
+    });
+}
+
+function extractFullStreamTextDelta(value: unknown): string | null {
+  if (typeof value !== 'object' || value === null || !('type' in value)) {
+    return null;
+  }
+
+  const chunk = value as {
+    type: string;
+    payload?: { text?: string; delta?: string };
+    textDelta?: string;
+    text?: string;
+    delta?: string;
+  };
+
+  switch (chunk.type) {
+    case 'text-delta':
+      if (typeof chunk.payload?.text === 'string') {
+        return chunk.payload.text;
+      }
+
+      if (typeof chunk.payload?.delta === 'string') {
+        return chunk.payload.delta;
+      }
+
+      if (typeof chunk.textDelta === 'string') {
+        return chunk.textDelta;
+      }
+
+      if (typeof chunk.delta === 'string') {
+        return chunk.delta;
+      }
+
+      if (typeof chunk.text === 'string') {
+        return chunk.text;
+      }
+
+      return null;
+    default:
+      return null;
+  }
+}
+
+function extractFinalStructuredObject(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== 'object' || value === null || !('type' in value)) {
+    return undefined;
+  }
+
+  const chunk = value as {
+    type: string;
+    object?: unknown;
+    payload?: { object?: unknown };
+  };
+
+  if (chunk.type !== 'object-result') {
+    return undefined;
+  }
+
+  const objectValue = chunk.payload?.object ?? chunk.object;
+  return objectValue && typeof objectValue === 'object' ? (objectValue as Record<string, unknown>) : undefined;
+}
+
+function isTerminalTaskState(state: TaskState) {
+  return ['completed', 'failed', 'canceled'].includes(state);
+}
+
+function artifactIdentity(artifact: Artifact) {
+  return artifact.artifactId || artifact.name;
+}
+
+function areArtifactPartsEqual(left: Artifact['parts'], right: Artifact['parts']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (left.length !== right.length) {
+    return false;
+  }
+
+  return left.every((part, index) => {
+    const other = right[index];
+    if (!other || part.kind !== other.kind) {
+      return false;
+    }
+
+    if (part.kind === 'text' && other.kind === 'text') {
+      return part.text === other.text;
+    }
+
+    return part === other;
+  });
+}
+
+function areArtifactsEqual(left: Artifact | undefined, right: Artifact | undefined) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.artifactId === right.artifactId &&
+    left.name === right.name &&
+    left.description === right.description &&
+    left.metadata === right.metadata &&
+    areArtifactPartsEqual(left.parts, right.parts)
+  );
+}
+
+function areStatusMessagePartsEqual(
+  left: NonNullable<Task['status']['message']>['parts'],
+  right: NonNullable<Task['status']['message']>['parts'],
+) {
+  return left === right || isDeepStrictEqual(left, right);
+}
+
+function areStatusMessagesEqual(left: Task['status']['message'], right: Task['status']['message']) {
+  if (left === right) {
+    return true;
+  }
+
+  if (!left || !right) {
+    return left === right;
+  }
+
+  return (
+    left.messageId === right.messageId &&
+    left.kind === right.kind &&
+    left.role === right.role &&
+    left.contextId === right.contextId &&
+    left.taskId === right.taskId &&
+    isDeepStrictEqual(left.referenceTaskIds, right.referenceTaskIds) &&
+    isDeepStrictEqual(left.extensions, right.extensions) &&
+    isDeepStrictEqual(left.metadata, right.metadata) &&
+    areStatusMessagePartsEqual(left.parts, right.parts)
+  );
+}
+
+function didTaskStatusChange(previous: Task, next: Task) {
+  return (
+    previous.status.state !== next.status.state ||
+    previous.status.timestamp !== next.status.timestamp ||
+    !areStatusMessagesEqual(previous.status.message, next.status.message)
+  );
+}
+
+function getTaskArtifactUpdates({ previous, next }: { previous: Task; next: Task }) {
+  const previousArtifacts = new Map((previous.artifacts ?? []).map(artifact => [artifactIdentity(artifact), artifact]));
+  const changedArtifacts = (next.artifacts ?? []).filter(artifact => {
+    const priorArtifact = previousArtifacts.get(artifactIdentity(artifact));
+    return !priorArtifact || !areArtifactsEqual(priorArtifact, artifact);
+  });
+
+  return changedArtifacts.map((artifact, index) => ({
+    kind: 'artifact-update' as const,
+    taskId: next.id,
+    contextId: next.contextId,
+    lastChunk: isTerminalTaskState(next.status.state) && index === changedArtifacts.length - 1,
+    artifact: structuredClone(artifact),
+  }));
+}
+
 export async function handleMessageSend({
   requestId,
   params,
   taskStore,
+  pushNotificationStore,
+  pushNotificationSender,
   agent,
   agentId,
   logger,
   requestContext,
 }: {
-  requestId: string;
+  requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  pushNotificationSender?: DefaultPushNotificationSender;
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
@@ -132,6 +584,13 @@ export async function handleMessageSend({
   const { message, metadata } = params;
   const { contextId } = message;
   const taskId = message.taskId || crypto.randomUUID();
+  const {
+    pushNotificationStore: resolvedPushNotificationStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+  } = resolvePushNotificationPair({
+    pushNotificationStore,
+    pushNotificationSender,
+  });
 
   // Load or create task
   let currentData = await loadOrCreateTask({
@@ -142,6 +601,13 @@ export async function handleMessageSend({
     contextId,
     metadata,
   });
+
+  if (params.configuration?.pushNotificationConfig) {
+    resolvedPushNotificationStore.set({
+      agentId,
+      config: createTaskPushNotificationConfig(taskId, params.configuration.pushNotificationConfig),
+    });
+  }
 
   // Use the new TaskContext definition, passing history
   const context = createTaskContext({
@@ -161,19 +627,20 @@ export async function handleMessageSend({
       ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
 
+    const artifactUpdate = createArtifactUpdate({
+      taskId: currentData.id,
+      contextId: currentData.contextId,
+      text: result.text,
+      data: result.object as Record<string, unknown> | undefined,
+    });
+
+    if (artifactUpdate) {
+      currentData = applyUpdateToTask(currentData, artifactUpdate);
+    }
+
     currentData = applyUpdateToTask(currentData, {
       state: 'completed',
-      message: {
-        messageId: crypto.randomUUID(),
-        role: 'agent',
-        parts: [
-          {
-            kind: 'text',
-            text: result.text,
-          },
-        ],
-        kind: 'message',
-      },
+      message: undefined,
     });
 
     // Store execution details in task metadata
@@ -187,7 +654,14 @@ export async function handleMessageSend({
       },
     };
 
-    await taskStore.save({ agentId, data: currentData });
+    await saveTaskAndMaybeSendPushNotification({
+      taskStore,
+      pushNotificationSender: resolvedPushNotificationSender,
+      previousTask: context.task,
+      nextTask: currentData,
+      agentId,
+      logger,
+    });
     context.task = currentData;
   } catch (handlerError) {
     // If handler throws, apply 'failed' status, save, and rethrow
@@ -208,7 +682,14 @@ export async function handleMessageSend({
     currentData = applyUpdateToTask(currentData, failureStatusUpdate);
 
     try {
-      await taskStore.save({ agentId, data: currentData });
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvedPushNotificationSender,
+        previousTask: context.task,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
     } catch (saveError) {
       // @ts-expect-error saveError is an unknown error
       logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
@@ -227,7 +708,7 @@ export async function handleTaskGet({
   agentId,
   taskId,
 }: {
-  requestId: string;
+  requestId: number | string;
   taskStore: InMemoryTaskStore;
   agentId: string;
   taskId: string;
@@ -241,24 +722,205 @@ export async function handleTaskGet({
   return createSuccessResponse(requestId, task);
 }
 
+async function loadTaskOrThrow({
+  taskStore,
+  agentId,
+  taskId,
+}: {
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+}) {
+  const task = await taskStore.load({ agentId, taskId });
+
+  if (!task) {
+    throw MastraA2AError.taskNotFound(taskId);
+  }
+
+  return task;
+}
+
+export async function handleSetTaskPushNotificationConfig({
+  requestId,
+  taskStore,
+  pushNotificationStore,
+  agentId,
+  params,
+}: {
+  requestId: number | string;
+  taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  agentId: string;
+  params: TaskPushNotificationConfig;
+}) {
+  await loadTaskOrThrow({
+    taskStore,
+    agentId,
+    taskId: params.taskId,
+  });
+
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const config = resolvedPushNotificationStore.set({
+    agentId,
+    config: createTaskPushNotificationConfig(params.taskId, params.pushNotificationConfig),
+  });
+
+  return createSuccessResponse(requestId, config);
+}
+
+export async function handleGetTaskPushNotificationConfig({
+  requestId,
+  taskStore,
+  pushNotificationStore,
+  agentId,
+  params,
+}: {
+  requestId: number | string;
+  taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  agentId: string;
+  params: GetTaskPushNotificationConfigParams;
+}) {
+  await loadTaskOrThrow({
+    taskStore,
+    agentId,
+    taskId: params.id,
+  });
+
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const config = resolvedPushNotificationStore.get({
+    agentId,
+    params,
+  });
+
+  if (!config) {
+    throw MastraA2AError.invalidParams(
+      `Push notification config not found: ${params.pushNotificationConfigId ?? params.id}`,
+    );
+  }
+
+  return createSuccessResponse(requestId, config);
+}
+
+export async function handleListTaskPushNotificationConfig({
+  requestId,
+  taskStore,
+  pushNotificationStore,
+  agentId,
+  params,
+}: {
+  requestId: number | string;
+  taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  agentId: string;
+  params: ListTaskPushNotificationConfigParams;
+}) {
+  await loadTaskOrThrow({
+    taskStore,
+    agentId,
+    taskId: params.id,
+  });
+
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const configs = resolvedPushNotificationStore.list({
+    agentId,
+    params,
+  });
+
+  return createSuccessResponse(requestId, configs);
+}
+
+export async function handleDeleteTaskPushNotificationConfig({
+  requestId,
+  taskStore,
+  pushNotificationStore,
+  agentId,
+  params,
+}: {
+  requestId: number | string;
+  taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  agentId: string;
+  params: DeleteTaskPushNotificationConfigParams;
+}) {
+  await loadTaskOrThrow({
+    taskStore,
+    agentId,
+    taskId: params.id,
+  });
+
+  const { pushNotificationStore: resolvedPushNotificationStore } = resolvePushNotificationPair({
+    pushNotificationStore,
+  });
+  const deleted = resolvedPushNotificationStore.delete({
+    agentId,
+    params,
+  });
+
+  if (!deleted) {
+    throw MastraA2AError.invalidParams(`Push notification config not found: ${params.pushNotificationConfigId}`);
+  }
+
+  return createSuccessResponse(requestId, null);
+}
+
 export async function* handleMessageStream({
   requestId,
   params,
   taskStore,
+  pushNotificationStore,
+  pushNotificationSender,
   agent,
   agentId,
   logger,
   requestContext,
 }: {
-  requestId: string;
+  requestId: number | string;
   params: MessageSendParams;
   taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  pushNotificationSender?: DefaultPushNotificationSender;
   agent: Agent;
   agentId: string;
   logger?: IMastraLogger;
   requestContext: RequestContext;
 }) {
-  yield createSuccessResponse(requestId, {
+  validateMessageSendParams(params);
+
+  const { message, metadata } = params;
+  const { contextId } = message;
+  const taskId = message.taskId || crypto.randomUUID();
+  const {
+    pushNotificationStore: resolvedPushNotificationStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+  } = resolvePushNotificationPair({
+    pushNotificationStore,
+    pushNotificationSender,
+  });
+
+  let currentData = await loadOrCreateTask({
+    taskId,
+    taskStore,
+    agentId,
+    message,
+    contextId,
+    metadata,
+  });
+
+  if (params.configuration?.pushNotificationConfig) {
+    resolvedPushNotificationStore.set({
+      agentId,
+      config: createTaskPushNotificationConfig(taskId, params.configuration.pushNotificationConfig),
+    });
+  }
+
+  currentData = applyUpdateToTask(currentData, {
     state: 'working',
     message: {
       messageId: crypto.randomUUID(),
@@ -268,37 +930,312 @@ export async function* handleMessageStream({
     },
   });
 
-  let result;
+  await saveTaskAndMaybeSendPushNotification({
+    taskStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+    nextTask: currentData,
+    agentId,
+    logger,
+  });
+
+  yield createSuccessResponse(requestId, currentData);
+
   try {
-    result = await handleMessageSend({
-      requestId,
-      params,
-      taskStore,
-      agent,
-      agentId,
+    const resourceId = (metadata?.resourceId as string) ?? (message.metadata?.resourceId as string) ?? agentId;
+    const result = await agent.stream([convertToCoreMessage(message)], {
+      runId: taskId,
       requestContext,
-      logger,
+      ...(contextId ? { threadId: contextId, resourceId } : {}),
     });
-  } catch (err) {
-    if (!(err instanceof MastraA2AError)) {
-      throw err;
+    let sawTextArtifact = false;
+    let pendingTextChunk: string | undefined;
+    let structuredData: Record<string, unknown> | undefined;
+
+    for await (const chunk of result.fullStream) {
+      const textDelta = extractFullStreamTextDelta(chunk);
+      if (textDelta !== null) {
+        if (!pendingTextChunk) {
+          pendingTextChunk = textDelta;
+          continue;
+        }
+
+        const textUpdate = createTextChunkArtifactUpdate({
+          taskId: currentData.id,
+          contextId: currentData.contextId,
+          text: pendingTextChunk,
+          append: sawTextArtifact,
+          lastChunk: false,
+        });
+
+        currentData = applyUpdateToTask(currentData, textUpdate);
+        await saveTaskAndMaybeSendPushNotification({
+          taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
+          nextTask: currentData,
+          agentId,
+          logger,
+        });
+        yield createSuccessResponse(requestId, textUpdate);
+
+        sawTextArtifact = true;
+        pendingTextChunk = textDelta;
+        continue;
+      }
+
+      const finalStructuredObject = extractFinalStructuredObject(chunk);
+      if (finalStructuredObject) {
+        structuredData = finalStructuredObject;
+      }
     }
 
-    result = createErrorResponse(requestId, err.toJSONRPCError());
+    structuredData ??= (await result.object) as Record<string, unknown> | undefined;
+
+    if (!pendingTextChunk && !sawTextArtifact) {
+      const finalText = await result.text;
+      if (finalText) {
+        pendingTextChunk = finalText;
+      }
+    }
+
+    if (pendingTextChunk) {
+      const textUpdate = createTextChunkArtifactUpdate({
+        taskId: currentData.id,
+        contextId: currentData.contextId,
+        text: pendingTextChunk,
+        append: sawTextArtifact,
+        lastChunk: !structuredData,
+      });
+
+      currentData = applyUpdateToTask(currentData, textUpdate);
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvedPushNotificationSender,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+      yield createSuccessResponse(requestId, textUpdate);
+
+      sawTextArtifact = true;
+      pendingTextChunk = undefined;
+    }
+
+    if (structuredData) {
+      const dataUpdate = createDataArtifactUpdate({
+        taskId: currentData.id,
+        contextId: currentData.contextId,
+        data: structuredData,
+        lastChunk: true,
+      });
+
+      currentData = applyUpdateToTask(currentData, dataUpdate);
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvedPushNotificationSender,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+      yield createSuccessResponse(requestId, dataUpdate);
+    }
+
+    const previousTask = currentData;
+    const completedTask = applyUpdateToTask(currentData, {
+      state: 'completed',
+      message: undefined,
+    });
+
+    completedTask.metadata = {
+      ...completedTask.metadata,
+      execution: {
+        toolCalls: await result.toolCalls,
+        toolResults: await result.toolResults,
+        usage: await result.usage,
+        finishReason: await result.finishReason,
+      },
+    };
+
+    currentData = completedTask;
+
+    await saveTaskAndMaybeSendPushNotification({
+      taskStore,
+      pushNotificationSender: resolvedPushNotificationSender,
+      previousTask,
+      nextTask: currentData,
+      agentId,
+      logger,
+    });
+  } catch (handlerError) {
+    const previousTask = currentData;
+    currentData = applyUpdateToTask(currentData, {
+      state: 'failed',
+      message: {
+        messageId: crypto.randomUUID(),
+        role: 'agent',
+        parts: [
+          {
+            kind: 'text',
+            text: `Handler failed: ${handlerError instanceof Error ? handlerError.message : String(handlerError)}`,
+          },
+        ],
+        kind: 'message',
+      },
+    });
+
+    try {
+      await saveTaskAndMaybeSendPushNotification({
+        taskStore,
+        pushNotificationSender: resolvedPushNotificationSender,
+        previousTask,
+        nextTask: currentData,
+        agentId,
+        logger,
+      });
+    } catch (saveError) {
+      // @ts-expect-error saveError is an unknown error
+      logger?.error(`Failed to save task ${currentData.id} after handler error:`, saveError?.message);
+    }
   }
 
-  yield result;
+  yield createSuccessResponse(requestId, {
+    kind: 'status-update',
+    taskId: currentData.id,
+    contextId: currentData.contextId,
+    status: currentData.status,
+    final: true,
+  });
+}
+
+export async function* handleTaskResubscribe({
+  requestId,
+  taskStore,
+  agentId,
+  taskId,
+  abortSignal,
+}: {
+  requestId: number | string;
+  taskStore: InMemoryTaskStore;
+  agentId: string;
+  taskId: string;
+  abortSignal?: AbortSignal;
+}) {
+  let snapshot = taskStore.loadWithVersion({ agentId, taskId });
+
+  if (!snapshot) {
+    throw MastraA2AError.taskNotFound(taskId);
+  }
+
+  yield createSuccessResponse(requestId, snapshot.task);
+
+  if (isTerminalTaskState(snapshot.task.status.state)) {
+    return;
+  }
+
+  while (true) {
+    const { task, version } = snapshot;
+    const nextUpdate = await taskStore.waitForNextUpdate({
+      agentId,
+      taskId,
+      afterVersion: version,
+      signal: abortSignal,
+    });
+
+    for (const artifactUpdate of getTaskArtifactUpdates({ previous: task, next: nextUpdate.task })) {
+      yield createSuccessResponse(requestId, artifactUpdate);
+    }
+
+    if (didTaskStatusChange(task, nextUpdate.task)) {
+      yield createSuccessResponse(requestId, {
+        kind: 'status-update',
+        taskId: nextUpdate.task.id,
+        contextId: nextUpdate.task.contextId,
+        status: nextUpdate.task.status,
+        final: isTerminalTaskState(nextUpdate.task.status.state),
+      });
+    }
+
+    if (isTerminalTaskState(nextUpdate.task.status.state)) {
+      return;
+    }
+
+    snapshot = nextUpdate;
+  }
+}
+
+function getTaskIdFromParams(
+  params: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown> | undefined,
+) {
+  if (!params || typeof params !== 'object') {
+    return undefined;
+  }
+
+  if ('id' in params && typeof params.id === 'string') {
+    return params.id;
+  }
+
+  if ('taskId' in params && typeof params.taskId === 'string') {
+    return params.taskId;
+  }
+
+  if ('message' in params && params.message && typeof params.message === 'object' && 'taskId' in params.message) {
+    return typeof params.message.taskId === 'string' ? params.message.taskId : undefined;
+  }
+
+  return undefined;
+}
+
+function isAsyncIterable(value: unknown): value is AsyncIterable<unknown> {
+  return !!value && typeof value === 'object' && Symbol.asyncIterator in value;
+}
+
+function createA2AJsonResponse(payload: unknown): Response {
+  return Response.json(payload);
+}
+
+function createA2ASSEResponse(payload: AsyncIterable<unknown> | unknown): Response {
+  const encoder = new TextEncoder();
+  const iterable = isAsyncIterable(payload)
+    ? payload
+    : (async function* () {
+        yield payload;
+      })();
+
+  const stream = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      try {
+        for await (const chunk of iterable) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+      } catch (error) {
+        controller.error(error);
+        return;
+      }
+
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    },
+  });
 }
 
 export async function handleTaskCancel({
   requestId,
   taskStore,
+  pushNotificationSender,
   agentId,
   taskId,
   logger,
 }: {
-  requestId: string;
+  requestId: number | string;
   taskStore: InMemoryTaskStore;
+  pushNotificationSender?: DefaultPushNotificationSender;
   agentId: string;
   taskId: string;
   logger?: IMastraLogger;
@@ -335,10 +1272,18 @@ export async function handleTaskCancel({
     },
   };
 
+  const previousTask = data;
   data = applyUpdateToTask(data, cancelUpdate);
 
   // Save the updated state
-  await taskStore.save({ agentId, data });
+  await saveTaskAndMaybeSendPushNotification({
+    taskStore,
+    pushNotificationSender: resolvePushNotificationPair({ pushNotificationSender }).pushNotificationSender,
+    previousTask,
+    nextTask: data,
+    agentId,
+    logger,
+  });
 
   // Remove from active cancellations *after* saving
   taskStore.activeCancellations.delete(taskId);
@@ -355,24 +1300,45 @@ export async function getAgentExecutionHandler({
   method,
   params,
   taskStore,
+  pushNotificationStore,
+  pushNotificationSender,
   logger,
+  abortSignal,
 }: Context & {
-  requestId: string;
+  requestId: number | string;
   requestContext: RequestContext;
   agentId: string;
-  method: 'message/send' | 'message/stream' | 'tasks/get' | 'tasks/cancel';
-  params: MessageSendParams | TaskQueryParams | TaskIdParams;
+  method:
+    | 'message/send'
+    | 'message/stream'
+    | 'tasks/get'
+    | 'tasks/cancel'
+    | 'tasks/resubscribe'
+    | 'tasks/pushNotificationConfig/set'
+    | 'tasks/pushNotificationConfig/get'
+    | 'tasks/pushNotificationConfig/list'
+    | 'tasks/pushNotificationConfig/delete'
+    | 'agent/getAuthenticatedExtendedCard';
+  params?: MessageSendParams | TaskQueryParams | TaskIdParams | Record<string, unknown>;
   taskStore: InMemoryTaskStore;
+  pushNotificationStore?: InMemoryPushNotificationStore;
+  pushNotificationSender?: DefaultPushNotificationSender;
   logger?: IMastraLogger;
+  abortSignal?: AbortSignal;
 }): Promise<any> {
   const agent = await getAgentFromSystem({ mastra, agentId });
+  const {
+    pushNotificationStore: resolvedPushNotificationStore,
+    pushNotificationSender: resolvedPushNotificationSender,
+  } = resolvePushNotificationPair({
+    pushNotificationStore,
+    pushNotificationSender,
+  });
 
   let taskId: string | undefined; // For error context
 
   try {
-    // Attempt to get task ID early for error context. Cast params to any to access id.
-    // Proper validation happens within specific handlers.
-    taskId = 'id' in params ? params.id : params.message?.taskId || 'No task ID provided';
+    taskId = getTaskIdFromParams(params);
 
     // 2. Route based on method
     switch (method) {
@@ -381,29 +1347,36 @@ export async function getAgentExecutionHandler({
           requestId,
           params: params as MessageSendParams,
           taskStore,
+          pushNotificationStore: resolvedPushNotificationStore,
+          pushNotificationSender: resolvedPushNotificationSender,
           agent,
           agentId,
+          logger,
           requestContext,
         });
         return result;
       }
-      case 'message/stream':
+      case 'message/stream': {
         const result = await handleMessageStream({
           requestId,
           taskStore,
           params: params as MessageSendParams,
+          pushNotificationStore: resolvedPushNotificationStore,
+          pushNotificationSender: resolvedPushNotificationSender,
           agent,
           agentId,
+          logger,
           requestContext,
         });
         return result;
+      }
 
       case 'tasks/get': {
         const result = await handleTaskGet({
           requestId,
           taskStore,
           agentId,
-          taskId,
+          taskId: taskId || 'No task ID provided',
         });
 
         return result;
@@ -412,12 +1385,56 @@ export async function getAgentExecutionHandler({
         const result = await handleTaskCancel({
           requestId,
           taskStore,
+          pushNotificationSender: resolvedPushNotificationSender,
           agentId,
-          taskId,
+          taskId: taskId || 'No task ID provided',
+          logger,
         });
 
         return result;
       }
+      case 'tasks/resubscribe':
+        return await handleTaskResubscribe({
+          requestId,
+          taskStore,
+          agentId,
+          taskId: taskId || 'No task ID provided',
+          abortSignal,
+        });
+      case 'tasks/pushNotificationConfig/set':
+        return await handleSetTaskPushNotificationConfig({
+          requestId,
+          taskStore,
+          pushNotificationStore: resolvedPushNotificationStore,
+          agentId,
+          params: params as unknown as TaskPushNotificationConfig,
+        });
+      case 'tasks/pushNotificationConfig/get':
+        return await handleGetTaskPushNotificationConfig({
+          requestId,
+          taskStore,
+          pushNotificationStore: resolvedPushNotificationStore,
+          agentId,
+          params: params as GetTaskPushNotificationConfigParams,
+        });
+      case 'tasks/pushNotificationConfig/list':
+        return await handleListTaskPushNotificationConfig({
+          requestId,
+          taskStore,
+          pushNotificationStore: resolvedPushNotificationStore,
+          agentId,
+          params: params as ListTaskPushNotificationConfigParams,
+        });
+      case 'tasks/pushNotificationConfig/delete':
+        return await handleDeleteTaskPushNotificationConfig({
+          requestId,
+          taskStore,
+          pushNotificationStore: resolvedPushNotificationStore,
+          agentId,
+          params: params as DeleteTaskPushNotificationConfigParams,
+        });
+      case 'agent/getAuthenticatedExtendedCard':
+        throw MastraA2AError.extendedAgentCardNotConfigured();
       default:
         throw MastraA2AError.methodNotFound(method);
     }
@@ -444,50 +1461,27 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   description: 'Returns the agent card information for A2A protocol discovery',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext }) => {
-    const executionUrl = `/a2a/${agentId}`;
-    const provider = {
-      organization: 'Mastra',
-      url: 'https://mastra.ai',
-    };
-    const version = '1.0';
+  handler: async ctx => {
+    const executionUrl = getA2AExecutionUrl({
+      agentId: ctx.agentId as string,
+      request: (ctx as typeof ctx & { request?: Request }).request,
+      routePrefix: ctx.routePrefix,
+    });
 
-    const agent = await getAgentFromSystem({ mastra, agentId: agentId as string });
-
-    const [instructions, tools]: [
-      Awaited<ReturnType<typeof agent.getInstructions>>,
-      Awaited<ReturnType<typeof agent.listTools>>,
-    ] = await Promise.all([agent.getInstructions({ requestContext }), agent.listTools({ requestContext })]);
-
-    const agentCard: AgentCard = {
-      name: agent.id || (agentId as string),
-      description: convertInstructionsToString(instructions),
-      url: executionUrl,
-      provider,
-      version,
-      capabilities: {
-        streaming: true,
-        pushNotifications: false,
-        stateTransitionHistory: false,
-      },
-      defaultInputModes: ['text'],
-      defaultOutputModes: ['text'],
-      skills: Object.entries(tools).map(([toolId, tool]) => ({
-        id: toolId,
-        name: toolId,
-        description: tool.description || `Tool: ${toolId}`,
-        tags: ['tool'],
-      })),
-    };
-
-    return agentCard;
+    return getAgentCardByIdHandler({
+      mastra: ctx.mastra,
+      requestContext: ctx.requestContext,
+      agentId: ctx.agentId,
+      executionUrl,
+      pushNotifications: true,
+    });
   },
 });
 
 export const AGENT_EXECUTION_ROUTE = createRoute({
   method: 'POST',
   path: '/a2a/:agentId',
-  responseType: 'json',
+  responseType: 'datastream-response',
   pathParamSchema: a2aAgentIdPathParams,
   bodySchema: agentExecutionBodySchema,
   responseSchema: agentExecutionResponseSchema,
@@ -495,17 +1489,24 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, requestContext, taskStore, ...bodyParams }) => {
-    const { id: requestId, method, params } = bodyParams;
-
-    return await getAgentExecutionHandler({
-      requestId: String(requestId),
+  handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, ...bodyParams }) => {
+    const { id: requestId, method } = bodyParams;
+    const params = 'params' in bodyParams ? bodyParams.params : undefined;
+    const result = await getAgentExecutionHandler({
+      requestId,
       mastra,
       agentId: agentId as string,
       requestContext,
       method,
       params,
       taskStore: taskStore!,
+      abortSignal,
     });
+
+    if (method === 'message/stream' || method === 'tasks/resubscribe') {
+      return createA2ASSEResponse(result);
+    }
+
+    return createA2AJsonResponse(result);
   },
 });

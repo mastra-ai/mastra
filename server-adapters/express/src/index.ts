@@ -3,20 +3,23 @@ import type { ToolsInput } from '@mastra/core/agent';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { InMemoryTaskStore } from '@mastra/server/a2a/store';
-import { isProtectedCustomRoute } from '@mastra/server/auth';
+import { findMatchingCustomRoute, isProtectedCustomRoute } from '@mastra/server/auth';
 import type { MCPHttpTransportResult, MCPSseTransportResult } from '@mastra/server/handlers/mcp';
 import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-adapter';
 import {
   MastraServer as MastraServerBase,
+  checkRouteFGA,
+  isZodError,
   normalizeQueryParams,
   redactStreamChunk,
+  serializeStreamChunk,
 } from '@mastra/server/server-adapter';
 import type { Application, NextFunction, Request, Response } from 'express';
-import { ZodError } from 'zod';
 export { createAuthMiddleware } from './auth-middleware';
 export type { ExpressAuthMiddlewareOptions } from './auth-middleware';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
 function loadHasPermission(): Promise<HasPermissionFn | undefined> {
   if (!_hasPermissionPromise) {
@@ -112,6 +115,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       }
 
       const requestContext = this.mergeRequestContext({ paramsRequestContext, bodyRequestContext });
+      this.applyRequestMetadataToContext({
+        requestContext,
+        getHeader: name => req.get(name),
+      });
 
       // Set context in res.locals
       res.locals.requestContext = requestContext;
@@ -125,7 +132,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Use res.on('close') instead of req.on('close') because the request's 'close' event
       // fires when the request body is fully consumed (e.g., after express.json() parses it),
       // NOT when the client disconnects. The response's 'close' event fires when the underlying
-      // connection is actually closed, which is the correct signal for client disconnection.
+      // connection is actually closed, which is the correct signal for stream cleanup.
       res.on('close', () => {
         // Only abort if the response wasn't successfully completed
         if (!res.writableFinished) {
@@ -150,6 +157,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
     res.setHeader('Transfer-Encoding', 'chunked');
     res.flushHeaders();
 
+    if (streamFormat === 'sse' && route.sseFlushOnConnect) {
+      res.write(': connected\n\n');
+    }
+
     const readableStream = result instanceof ReadableStream ? result : result.fullStream;
     const reader = readableStream.getReader();
 
@@ -159,13 +170,28 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         if (done) break;
 
         if (value) {
+          if (streamFormat === 'sse' && typeof value === 'string' && value.startsWith(':')) {
+            res.write(value);
+            continue;
+          }
+
           // Optionally redact sensitive data (system prompts, tool definitions, API keys) before sending to the client
           const shouldRedact = this.streamOptions?.redact ?? true;
           const outputValue = shouldRedact ? redactStreamChunk(value) : value;
+          // A chunk that can't be serialized must not kill the stream — skip it and keep streaming
+          const serialized = serializeStreamChunk(outputValue);
+          if (!serialized.ok) {
+            this.mastra.getLogger()?.error('Failed to serialize stream chunk, skipping', {
+              path: route.path,
+              chunkType: (outputValue as { type?: string })?.type,
+              error: serialized.error.message,
+            });
+            continue;
+          }
           if (streamFormat === 'sse') {
-            res.write(`data: ${JSON.stringify(outputValue)}\n\n`);
+            res.write(`data: ${serialized.json}\n\n`);
           } else {
-            res.write(JSON.stringify(outputValue) + '\x1E');
+            res.write(serialized.json + '\x1E');
           }
         }
       }
@@ -280,6 +306,15 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
   ): Promise<void> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
+    // Apply refresh headers from transparent session refresh (e.g. Set-Cookie after token refresh)
+    if (result && typeof result === 'object' && '__refreshHeaders' in result) {
+      const refreshHeaders = (result as any).__refreshHeaders as Record<string, string>;
+      for (const [key, value] of Object.entries(refreshHeaders)) {
+        response.setHeader(key, value);
+      }
+      delete (result as any).__refreshHeaders;
+    }
+
     if (route.responseType === 'json') {
       response.json(result);
     } else if (route.responseType === 'stream') {
@@ -291,13 +326,27 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       response.status(fetchResponse.status);
       if (fetchResponse.body) {
         const reader = fetchResponse.body.getReader();
+
+        const onResError = (err: unknown) => {
+          this.mastra.getLogger()?.error('Error writing datastream response', {
+            error: err instanceof Error ? { message: err.message, stack: err.stack } : err,
+          });
+          void reader.cancel('response write error');
+        };
+        response.once('error', onResError);
+
         try {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
             response.write(value);
           }
+        } catch (error) {
+          this.mastra.getLogger()?.error('Error in datastream processing', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+          });
         } finally {
+          response.off('error', onResError);
           response.end();
         }
       } else {
@@ -411,7 +460,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         });
 
         if (authError) {
-          return res.status(authError.status).json({ error: authError.error });
+          const authResult = authError as AuthErrorWithHeaders;
+          // Apply any refresh headers (e.g. Set-Cookie from transparent session refresh)
+          if (authResult.headers) {
+            for (const [key, value] of Object.entries(authResult.headers)) {
+              res.setHeader(key, value);
+            }
+          }
+
+          // If this is an auth error (not just a success-with-headers), return error response
+          if (authResult.error) {
+            return res.status(authResult.status).json({ error: authResult.error });
+          }
         }
 
         const params = await this.getParams(route, req);
@@ -431,7 +491,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             this.mastra.getLogger()?.error('Error parsing query params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'query');
               return res.status(status).json(body);
             }
@@ -449,7 +509,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             this.mastra.getLogger()?.error('Error parsing body', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'body');
               return res.status(status).json(body);
             }
@@ -468,7 +528,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             this.mastra.getLogger()?.error('Error parsing path params', {
               error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
             });
-            if (error instanceof ZodError) {
+            if (isZodError(error)) {
               const { status, body } = this.resolveValidationError(route, error, 'path');
               return res.status(status).json(body);
             }
@@ -489,6 +549,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           taskStore: res.locals.taskStore,
           abortSignal: res.locals.abortSignal,
           routePrefix: prefix,
+          request: toWebRequest(req),
         };
 
         // Check route permission requirement (EE feature)
@@ -498,7 +559,7 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         if (authConfig) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
-            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
+            const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
             const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
 
             if (permissionError) {
@@ -510,15 +571,30 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           }
         }
 
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, route, res.locals.requestContext, {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        });
+        if (fgaError) {
+          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
+        }
+
         try {
           const result = await route.handler(handlerParams);
           await this.sendResponse(route, res, result, req, prefix);
         } catch (error) {
-          this.mastra.getLogger()?.error('Error calling handler', {
-            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-            path: route.path,
-            method: route.method,
-          });
+          const httpStatus =
+            error && typeof error === 'object' && 'status' in error ? (error as any).status : undefined;
+          const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+          if (!isClientError) {
+            this.mastra.getLogger()?.error('Error calling handler', {
+              error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+              path: route.path,
+              method: route.method,
+            });
+          }
           // Check if it's an HTTPException or MastraError with a status code
           let status = 500;
           if (error && typeof error === 'object') {
@@ -549,42 +625,72 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
       // Check if this request matches a protected custom route and run auth
       const path = String(req.path || '/');
       const method = String(req.method || 'GET');
+      const matchedRoute = findMatchingCustomRoute(
+        path,
+        method,
+        this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
+      );
+      const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+      const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
-      if (isProtectedCustomRoute(path, method, this.customRouteAuthConfig)) {
+      if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
         const serverRoute: ServerRoute = {
-          method: method as any,
-          path,
+          method: (matchedRoute?.route.method ?? method) as any,
+          path: matchedRoute?.route.path ?? path,
           responseType: 'json',
           handler: async () => {},
+          requiresAuth: matchedRoute?.route.requiresAuth,
+          requiresPermission: matchedRoute?.route.requiresPermission,
+          fga: matchedRoute?.route.fga,
         };
 
-        const authError = await this.checkRouteAuth(serverRoute, {
-          path,
-          method,
-          getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
-          getQuery: name => req.query[name] as string | undefined,
-          requestContext: res.locals.requestContext,
-          request: toWebRequest(req),
-          buildAuthorizeContext: () => toWebRequest(req),
-        });
+        if (shouldRunCustomRouteAuth) {
+          const authError = await this.checkRouteAuth(serverRoute, {
+            path,
+            method,
+            getHeader: name => req.headers[name.toLowerCase()] as string | undefined,
+            getQuery: name => req.query[name] as string | undefined,
+            requestContext: res.locals.requestContext,
+            request: toWebRequest(req),
+            buildAuthorizeContext: () => toWebRequest(req),
+          });
 
-        if (authError) {
-          return res.status(authError.status).json({ error: authError.error });
-        }
-
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = res.locals.requestContext.get('userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
-            if (permissionError) {
-              return res.status(permissionError.status).json({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
+          if (authError) {
+            const authResult = authError as AuthErrorWithHeaders;
+            if (authResult.headers) {
+              for (const [key, value] of Object.entries(authResult.headers)) {
+                res.setHeader(key, value);
+              }
+            }
+            if (authResult.error) {
+              return res.status(authResult.status).json({ error: authResult.error });
             }
           }
+
+          const authConfig = this.mastra.getServer()?.auth;
+          if (authConfig) {
+            const hasPermission = await loadHasPermission();
+            if (hasPermission) {
+              const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
+              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              if (permissionError) {
+                return res.status(permissionError.status).json({
+                  error: permissionError.error,
+                  message: permissionError.message,
+                });
+              }
+            }
+          }
+        }
+
+        // Check FGA authorization (EE feature)
+        const fgaError = await checkRouteFGA(this.mastra, serverRoute, res.locals.requestContext, {
+          ...(matchedRoute?.params ?? {}),
+          ...(req.query as Record<string, string>),
+          ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
+        });
+        if (fgaError) {
+          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
         }
       }
 
@@ -594,9 +700,10 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         req.headers as Record<string, string | string[] | undefined>,
         req.body,
         res.locals.requestContext,
+        res.locals.abortSignal,
       );
       if (!response) return next();
-      await this.writeCustomRouteResponse(response, res);
+      await this.writeCustomRouteResponse(response, res, res.locals.abortSignal);
     });
   }
 

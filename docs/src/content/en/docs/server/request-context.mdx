@@ -91,11 +91,24 @@ export const mastra = new Mastra({
 })
 ```
 
-:::info
-
 Visit [Middleware](/docs/server/middleware) for how to use server middleware.
 
-:::
+## Studio
+
+When developing locally, you can define named presets in a JSON file and load them into [Studio](/docs/studio/overview) with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
+
+```bash
+mastra dev --request-context-presets ./presets.json
+```
+
+```json title="presets.json"
+{
+  "development": { "userId": "dev-user", "env": "development" },
+  "production": { "userId": "prod-user", "env": "production" }
+}
+```
+
+When you select a preset from the dropdown, the JSON editor populates with that preset's values. Editing the JSON manually switches the dropdown back to **"Custom"**.
 
 ## Accessing values with agents
 
@@ -153,7 +166,7 @@ export const dynamicAgent = new Agent({
 
     return `${basePrompt} ${localeInstructions}`.trim()
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -180,15 +193,11 @@ export const registryAgent = new Agent({
 
     return prompt.content
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
-:::info
-
 Visit [Agent](/reference/agents/agent) for a full list of configuration options.
-
-:::
 
 ## Accessing values from workflow steps
 
@@ -210,11 +219,7 @@ const stepOne = createStep({
 })
 ```
 
-:::info
-
 Visit [createStep()](/reference/workflows/step) for a full list of configuration options.
-
-:::
 
 ## Accessing values with tools
 
@@ -236,15 +241,22 @@ export const weatherTool = createTool({
 })
 ```
 
-:::info
-
 Visit [createTool()](/reference/tools/create-tool) for a full list of configuration options.
-
-:::
 
 ## Reserved keys
 
-Mastra reserves special context keys for security purposes. When set by middleware, these keys take precedence over client-provided values. The server automatically validates ownership and returns 403 errors when users attempt to access resources they don't own.
+Mastra reserves special context keys for security purposes. When set, these keys take precedence over client-provided values. The server automatically validates ownership and returns 403 errors when users attempt to access resources they don't own.
+
+The easiest way to set `MASTRA_RESOURCE_ID_KEY` is via the `mapUserToResourceId` callback in auth config:
+
+```typescript prettier:false
+auth: {
+  authenticateToken: async token => verifyToken(token),
+  mapUserToResourceId: user => user.id,
+}
+```
+
+You can also set these keys manually in middleware:
 
 ```typescript
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context'
@@ -307,7 +319,7 @@ for (const [key, value] of ctx.entries()) {
 
 ## Schema validation
 
-Use `requestContextSchema` to define a Zod schema that validates request context values at runtime. This catches missing or invalid context values early, provides clear error messages, and gives you type inference within your component.
+Use `requestContextSchema` to define a [Standard JSON Schema](https://standardschema.dev/json-schema) ([Zod](https://zod.dev/), [Valibot](https://valibot.dev/), [ArkType](https://arktype.io/), etc.) that validates request context values at runtime. This catches missing or invalid context values early, provides clear error messages, and gives you type inference within your component.
 
 ### Agent schema validation
 
@@ -335,7 +347,7 @@ export const validatedAgent = new Agent({
 
     return `You are helping user ${userId}`
   },
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
 })
 ```
 
@@ -472,23 +484,6 @@ requestContextSchema: z.object({
 ```
 
 **Handle tool validation errors**: Since tools return error objects instead of throwing, check for errors in your agent or workflow logic when tool execution is critical.
-
-## Testing with Studio presets
-
-When developing locally, you can define named presets in a JSON file and load them into Studio with the [`--request-context-presets`](/reference/cli/mastra#--request-context-presets) CLI flag. This adds a dropdown to the request context editor in Studio so you can quickly switch between configurations without manually editing JSON each time.
-
-```bash
-mastra dev --request-context-presets ./presets.json
-```
-
-```json title="presets.json"
-{
-  "development": { "userId": "dev-user", "env": "development" },
-  "production": { "userId": "prod-user", "env": "production" }
-}
-```
-
-When you select a preset from the dropdown, the JSON editor populates with that preset's values. Editing the JSON manually switches the dropdown back to "Custom".
 
 ## Related
 

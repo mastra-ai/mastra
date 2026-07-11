@@ -1,0 +1,108 @@
+---
+title: "Access control | Agent Builder"
+description: Gate the Agent Builder with two roles — admin and member — using Mastra RBAC.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+  - "@mastra/auth-workos"
+---
+
+# Access control
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+The Agent Builder ships with two supported roles: `admin` and `member`. Wire them through `Mastra.server.rbac`. Without an RBAC provider, every authenticated user has full Builder access; without authentication, the Builder is open to anyone who can reach the server.
+
+## Roles
+
+| Role | Permissions | What they can do |
+| - | - | - |
+| `admin` | `*` | Full access. Create, edit, publish, and delete agents and skills. Manage every Builder surface. |
+| `member` | scoped list (below) | Open the Builder, browse agents and skills, populate pickers, and chat with the Builder agent. |
+
+## Minimum permissions
+
+The Builder UI calls several resources on load, so a usable `member` role needs explicit grants on each. The Builder action layer (`/agent-builder/*`) is one resource; the data it reads and writes lives under separate resources.
+
+| Permission | Used for |
+| - | - |
+| `agent-builder:*` | Load Builder actions and run Builder workflows. The derived Builder actions are `agent-builder:read` and `agent-builder:execute`; the wildcard grants both. |
+| `agents:read`, `agents:execute` | List registered agents and chat with the Builder agent |
+| `stored-agents:*` | List, view, create, and edit agents |
+| `stored-skills:*` | List, view, create, and edit stored skills |
+| `stored-workspaces:*` | Pick a workspace when editing an agent |
+| `tools:read`, `tools:execute` | Populate the tool picker and run tools through agents |
+| `workflows:read`, `workflows:execute` | Populate the workflow picker and run workflows through agents |
+| `memory:read` | Preview memory configuration in the picker |
+| `channels:read` | Show Slack/channel chips on agent pages |
+| `infrastructure:read` | Builder diagnostics banner on the shell |
+
+Grant `:write`, `:delete`, and `:publish` on `stored-agents` and `stored-skills` for users who should create or modify agents. The `:*` wildcards in the table above cover those actions. `admin` covers everything through the `*` wildcard.
+
+## Quickstart with WorkOS
+
+`@mastra/auth-workos` provides `MastraAuthWorkos` for SSO and `MastraRBACWorkos` for role-based access. Map WorkOS organization roles to the Builder's `admin` and `member` roles via `roleMapping`:
+
+```typescript title="src/mastra/auth.ts"
+import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos'
+
+export const mastraAuth = new MastraAuthWorkos({
+  redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+})
+
+export const rbacProvider = new MastraRBACWorkos({
+  roleMapping: {
+    admin: ['*'],
+    member: [
+      'agent-builder:*',
+      'agents:read',
+      'agents:execute',
+      'stored-agents:*',
+      'stored-skills:*',
+      'stored-workspaces:*',
+      'tools:read',
+      'tools:execute',
+      'workflows:read',
+      'workflows:execute',
+      'memory:read',
+      'channels:read',
+      'infrastructure:read',
+    ],
+    _default: [],
+  },
+})
+```
+
+Register both providers on the Mastra server:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { mastraAuth, rbacProvider } from './auth'
+
+export const mastra = new Mastra({
+  server: {
+    auth: mastraAuth,
+    rbac: rbacProvider,
+  },
+  // ...storage, agents, editor
+})
+```
+
+`_default` covers WorkOS roles not listed in the mapping. Omit it to deny unmapped users. Set `WORKOS_API_KEY` and `WORKOS_CLIENT_ID` in your environment.
+
+## Permission grammar
+
+Permission patterns follow `resource:action`. Wildcards are supported on either side:
+
+- `*`: Full access (every resource, every action). Used by `admin`.
+- `agent-builder:*`: Every action on the `agent-builder` resource.
+- `*:read`: `read` Across every resource.
+
+Patterns resolve through `matchesPermission()`. The first matching role permission grants the action.
+
+## Related
+
+- [Configuration](/docs/agent-builder/configuration): Wire RBAC alongside the rest of the Builder config.
+- [Deploying](/docs/agent-builder/deploying): Auth, RBAC, and EE license setup for production.

@@ -18,7 +18,7 @@ import type {
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
-import type { DbClient } from '../client';
+import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
 import { buildConstraintName } from './constraint-utils';
 
@@ -366,6 +366,17 @@ export interface PgDBInternalConfig {
 // This prevents race conditions when multiple domains try to create the same schema concurrently
 const schemaSetupRegistry = new Map<string, { promise: Promise<void> | null; complete: boolean }>();
 
+/**
+ * Guard prune batch limits: a non-positive limit deletes nothing while callers'
+ * drain checks (`affected < limit`) never fire, which turns the prune loop into
+ * an infinite spin. Fail loudly instead.
+ */
+function assertPositiveLimit(limit: number): void {
+  if (!Number.isSafeInteger(limit) || limit <= 0) {
+    throw new Error(`prune limit must be a positive integer; received ${limit}`);
+  }
+}
+
 export class PgDB extends MastraBase {
   public client: DbClient;
   public schemaName?: string;
@@ -566,44 +577,51 @@ export class PgDB extends MastraBase {
     }
   }
 
+  private async executeInsert(
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
+    { tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> },
+  ): Promise<void> {
+    this.addTimestampZColumns(record);
+
+    // Filter out columns that don't exist in the actual database table
+    const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
+
+    const schemaName = getSchemaName(this.schemaName);
+    const columns = Object.keys(filteredRecord).map(col => parseSqlIdentifier(col, 'column name'));
+    if (columns.length === 0) return; // No known columns after filtering - skip insert
+    const values = this.prepareValuesForInsert(filteredRecord, tableName);
+    const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
+    const fullTableName = getTableName({ indexName: tableName, schemaName });
+    const columnList = columns.map(c => `"${c}"`).join(', ');
+
+    // For spans table, use ON CONFLICT to handle duplicate (traceId, spanId) gracefully
+    if (tableName === TABLE_SPANS) {
+      // Build update clause for all columns except the primary key columns
+      const updateColumns = columns.filter(c => c !== 'traceId' && c !== 'spanId');
+
+      if (updateColumns.length > 0) {
+        const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
+        await client.none(
+          `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+             ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`,
+          values,
+        );
+      } else {
+        // Only PK columns provided - use DO NOTHING to avoid invalid SQL
+        await client.none(
+          `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
+             ON CONFLICT ("traceId", "spanId") DO NOTHING`,
+          values,
+        );
+      }
+    } else {
+      await client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
+    }
+  }
+
   async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      this.addTimestampZColumns(record);
-
-      // Filter out columns that don't exist in the actual database table
-      const filteredRecord = await this.filterRecordToKnownColumns(tableName, record);
-
-      const schemaName = getSchemaName(this.schemaName);
-      const columns = Object.keys(filteredRecord).map(col => parseSqlIdentifier(col, 'column name'));
-      if (columns.length === 0) return; // No known columns after filtering - skip insert
-      const values = this.prepareValuesForInsert(filteredRecord, tableName);
-      const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-      const fullTableName = getTableName({ indexName: tableName, schemaName });
-      const columnList = columns.map(c => `"${c}"`).join(', ');
-
-      // For spans table, use ON CONFLICT to handle duplicate (traceId, spanId) gracefully
-      if (tableName === TABLE_SPANS) {
-        // Build update clause for all columns except the primary key columns
-        const updateColumns = columns.filter(c => c !== 'traceId' && c !== 'spanId');
-
-        if (updateColumns.length > 0) {
-          const updateClause = updateColumns.map(c => `"${c}" = EXCLUDED."${c}"`).join(', ');
-          await this.client.none(
-            `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
-             ON CONFLICT ("traceId", "spanId") DO UPDATE SET ${updateClause}`,
-            values,
-          );
-        } else {
-          // Only PK columns provided - use DO NOTHING to avoid invalid SQL
-          await this.client.none(
-            `INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})
-             ON CONFLICT ("traceId", "spanId") DO NOTHING`,
-            values,
-          );
-        }
-      } else {
-        await this.client.none(`INSERT INTO ${fullTableName} (${columnList}) VALUES (${placeholders})`, values);
-      }
+      await this.executeInsert(this.client, { tableName, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -1198,13 +1216,12 @@ export class PgDB extends MastraBase {
 
   async batchInsert({ tableName, records }: { tableName: TABLE_NAMES; records: Record<string, any>[] }): Promise<void> {
     try {
-      await this.client.query('BEGIN');
-      for (const record of records) {
-        await this.insert({ tableName, record });
-      }
-      await this.client.query('COMMIT');
+      await this.client.tx(async tx => {
+        for (const record of records) {
+          await this.executeInsert(tx, { tableName, record });
+        }
+      });
     } catch (error) {
-      await this.client.query('ROLLBACK');
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'BATCH_INSERT', 'FAILED'),
@@ -1521,38 +1538,7 @@ export class PgDB extends MastraBase {
     data: Record<string, any>;
   }): Promise<void> {
     try {
-      // Filter out columns that don't exist in the actual database table
-      const filteredData = await this.filterRecordToKnownColumns(tableName, data);
-      if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
-
-      const setColumns: string[] = [];
-      const setValues: any[] = [];
-      let paramIndex = 1;
-
-      Object.entries(filteredData).forEach(([key, value]) => {
-        const parsedKey = parseSqlIdentifier(key, 'column name');
-        setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
-        setValues.push(this.prepareValue(value, key, tableName));
-      });
-
-      const whereConditions: string[] = [];
-      const whereValues: any[] = [];
-
-      Object.entries(keys).forEach(([key, value]) => {
-        const parsedKey = parseSqlIdentifier(key, 'column name');
-        whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
-        whereValues.push(this.prepareValue(value, key, tableName));
-      });
-
-      const tableName_ = getTableName({
-        indexName: tableName,
-        schemaName: getSchemaName(this.schemaName),
-      });
-
-      const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
-      const values = [...setValues, ...whereValues];
-
-      await this.client.none(sql, values);
+      await this.executeUpdate(this.client, { tableName, keys, data });
     } catch (error) {
       throw new MastraError(
         {
@@ -1579,13 +1565,12 @@ export class PgDB extends MastraBase {
     }>;
   }): Promise<void> {
     try {
-      await this.client.query('BEGIN');
-      for (const { keys, data } of updates) {
-        await this.update({ tableName, keys, data });
-      }
-      await this.client.query('COMMIT');
+      await this.client.tx(async tx => {
+        for (const { keys, data } of updates) {
+          await this.executeUpdate(tx, { tableName, keys, data });
+        }
+      });
     } catch (error) {
-      await this.client.query('ROLLBACK');
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'BATCH_UPDATE', 'FAILED'),
@@ -1649,5 +1634,166 @@ export class PgDB extends MastraBase {
    */
   async deleteData({ tableName }: { tableName: TABLE_NAMES }): Promise<void> {
     return this.clearTable({ tableName });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Retention helpers (prune)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Deletes up to `limit` rows from `tableName` whose `column` value is strictly
+   * older than `cutoff`, in a single bounded statement. Returns the number of
+   * rows deleted so the caller's batch loop can decide whether the table is
+   * drained.
+   *
+   * PostgreSQL has no `DELETE ... LIMIT`, so this targets a bounded set of
+   * physical rows via the `ctid` system column (PG's row identity, analogous to
+   * SQLite's `rowid`). `cutoff` is bound as a parameter — a `Date`/ISO-8601
+   * string compared against a `timestamptz` anchor column, or a `number`
+   * compared against a `bigint` epoch-ms anchor column.
+   */
+  async pruneBatch({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: Date | string | number;
+    limit: number;
+  }): Promise<number> {
+    assertPositiveLimit(limit);
+    const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
+    const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
+
+    const sql = `
+      DELETE FROM ${fullTableName}
+      WHERE ctid IN (
+        SELECT ctid FROM ${fullTableName}
+        WHERE ${parsedColumn} < $1
+        LIMIT $2
+      )
+    `;
+
+    const result = await this.client.query(sql, [cutoff, limit]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Deletes up to `limit` aged parent rows *and* their child rows together, in
+   * a single transaction (used by whole-unit pruning such as experiments →
+   * experiment_results). The aged parent IDs are selected first and both
+   * deletes target that exact ID set, so a bound or abort between batches never
+   * leaves a parent hollow (kept, but with its children gone) or children
+   * orphaned.
+   */
+  async pruneUnitsBatch({
+    parentTable,
+    parentKey,
+    parentColumn,
+    childTable,
+    childForeignKey,
+    cutoff,
+    limit,
+  }: {
+    parentTable: TABLE_NAMES;
+    parentKey: string;
+    parentColumn: string;
+    childTable: TABLE_NAMES;
+    childForeignKey: string;
+    cutoff: Date | string | number;
+    limit: number;
+  }): Promise<{ parents: number; children: number }> {
+    assertPositiveLimit(limit);
+    const schemaName = getSchemaName(this.schemaName);
+    const fullChildTable = getTableName({ indexName: childTable, schemaName });
+    const fullParentTable = getTableName({ indexName: parentTable, schemaName });
+    const childFk = `"${parseSqlIdentifier(childForeignKey, 'column name')}"`;
+    const parentPk = `"${parseSqlIdentifier(parentKey, 'column name')}"`;
+    const parentCol = `"${parseSqlIdentifier(parentColumn, 'column name')}"`;
+
+    return this.client.tx(async t => {
+      const rows = await t.manyOrNone<{ id: unknown }>(
+        `SELECT ${parentPk} AS id FROM ${fullParentTable} WHERE ${parentCol} < $1 LIMIT $2 FOR UPDATE SKIP LOCKED`,
+        [cutoff, limit],
+      );
+      const ids = rows.map(r => r.id);
+      if (ids.length === 0) return { parents: 0, children: 0 };
+
+      const childResult = await t.query(`DELETE FROM ${fullChildTable} WHERE ${childFk} = ANY($1)`, [ids]);
+      const parentResult = await t.query(`DELETE FROM ${fullParentTable} WHERE ${parentPk} = ANY($1)`, [ids]);
+      return {
+        parents: parentResult.rowCount ?? 0,
+        children: childResult.rowCount ?? 0,
+      };
+    });
+  }
+
+  /**
+   * Creates a btree index on `column` for `tableName` if it does not already
+   * exist, so age-based prune deletes stay fast. Delegates to {@link createIndex}
+   * (which is a no-op when the index is present).
+   *
+   * The name is lowercased and truncated to Postgres' 63-byte identifier limit
+   * (schema-prefixed names can exceed it), mirroring {@link buildConstraintName}.
+   */
+  async ensureIndex({
+    indexName,
+    tableName,
+    column,
+  }: {
+    indexName: string;
+    tableName: TABLE_NAMES;
+    column: string;
+  }): Promise<void> {
+    const name = buildConstraintName({ baseName: indexName });
+    await this.createIndex({ name, table: tableName, columns: [column] });
+  }
+
+  private async executeUpdate(
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
+    {
+      tableName,
+      keys,
+      data,
+    }: {
+      tableName: TABLE_NAMES;
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    },
+  ): Promise<void> {
+    // Filter out columns that don't exist in the actual database table
+    const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+    if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+
+    const setColumns: string[] = [];
+    const setValues: QueryValues = [];
+    let paramIndex = 1;
+
+    Object.entries(filteredData).forEach(([key, value]) => {
+      const parsedKey = parseSqlIdentifier(key, 'column name');
+      setColumns.push(`"${parsedKey}" = $${paramIndex++}`);
+      setValues.push(this.prepareValue(value, key, tableName));
+    });
+
+    const whereConditions: string[] = [];
+    const whereValues: QueryValues = [];
+
+    Object.entries(keys).forEach(([key, value]) => {
+      const parsedKey = parseSqlIdentifier(key, 'column name');
+      whereConditions.push(`"${parsedKey}" = $${paramIndex++}`);
+      whereValues.push(this.prepareValue(value, key, tableName));
+    });
+
+    const tableName_ = getTableName({
+      indexName: tableName,
+      schemaName: getSchemaName(this.schemaName),
+    });
+
+    const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
+    const values = [...setValues, ...whereValues];
+
+    await client.none(sql, values);
   }
 }

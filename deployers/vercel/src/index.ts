@@ -2,9 +2,11 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import process from 'node:process';
 import { fileURLToPath } from 'node:url';
+import type { Config } from '@mastra/core/mastra';
 import { Deployer } from '@mastra/deployer';
-import { injectStudioHtmlConfig } from '@mastra/deployer/build';
+import { escapeStudioHtmlValue, injectStudioHtmlConfig } from '@mastra/deployer/build';
 import { copy, move } from 'fs-extra/esm';
+import { getVercelRoutes } from './routes';
 import type { VcConfig, VcConfigOverrides, VercelDeployerOptions } from './types';
 
 export class VercelDeployer extends Deployer {
@@ -18,6 +20,25 @@ export class VercelDeployer extends Deployer {
 
     const { studio, ...overrides } = options;
     this.vcConfigOverrides = { ...overrides };
+  }
+
+  protected async getUserBundlerOptions(
+    mastraEntryFile: string,
+    outputDirectory: string,
+  ): Promise<NonNullable<Config['bundler']>> {
+    const bundlerOptions = await super.getUserBundlerOptions(mastraEntryFile, outputDirectory);
+
+    // Always force externals: true for Vercel deployments.
+    // Vercel serverless functions resolve dependencies from node_modules,
+    // so bundling them inline serves no purpose. Bundling inline can also cause
+    // circular module evaluation deadlocks when dynamic imports produce chunks
+    // that depend back on the entry module via static imports, resulting in
+    // "Detected unsettled top-level await" errors (Node.js exit code 13).
+    // See: https://github.com/mastra-ai/mastra/issues/14860
+    return {
+      ...bundlerOptions,
+      externals: true,
+    };
   }
 
   async prepare(outputDirectory: string): Promise<void> {
@@ -88,24 +109,22 @@ export const HEAD = handle(app);
       experimentalFeatures: `'false'`,
       telemetryDisabled: `''`,
       requestContextPresets: `''`,
-      themeToggle: `'false'`,
       experimentalUI: `'false'`,
+      agentSignals: process.env.MASTRA_AGENT_SIGNALS === 'false' ? `'false'` : `'true'`,
+      signalsUI: process.env.MASTRA_SIGNALS_UI === 'true' ? `'true'` : `'false'`,
+      organizationId: `'${escapeStudioHtmlValue(process.env.MASTRA_ORGANIZATION_ID || '')}'`,
+      platformProjectId: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_PROJECT_ID || '')}'`,
+      platformObservabilityEndpoint: `'${escapeStudioHtmlValue(process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || '')}'`,
     });
 
     writeFileSync(indexPath, html);
   }
 
   private writeVercelJSON(outputDirectory: string) {
-    const routes = this.studio
-      ? [
-          { src: '/api/(.*)', dest: '/' },
-          { src: '/health', dest: '/' },
-          { handle: 'filesystem' as const },
-          { src: '/(.*)', dest: '/index.html', check: true },
-        ]
-      : [{ src: '/(.*)', dest: '/' }];
-
-    writeFileSync(join(outputDirectory, 'config.json'), JSON.stringify({ version: 3, routes }));
+    writeFileSync(
+      join(outputDirectory, 'config.json'),
+      JSON.stringify({ version: 3, routes: getVercelRoutes({ studio: this.studio }) }),
+    );
   }
 
   async bundle(

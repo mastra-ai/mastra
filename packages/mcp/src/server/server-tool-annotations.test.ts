@@ -30,6 +30,7 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
     const annotatedTool = createTool({
       id: 'annotated-tool',
       description: 'A tool with MCP annotations for OpenAI Apps SDK compatibility',
+      strict: true,
       inputSchema: z.object({
         query: z.string().describe('The query to process'),
       }),
@@ -127,5 +128,6 @@ describe('MCPServer Tool Annotations (Issue #9859)', () => {
     expect((annotatedTool as any)._meta).toBeDefined();
     expect((annotatedTool as any)._meta?.customField).toBe('custom-value');
     expect((annotatedTool as any)._meta?.version).toBe('1.0.0');
+    expect((annotatedTool as any)._meta?.mastra?.strict).toBe(true);
   });
 });

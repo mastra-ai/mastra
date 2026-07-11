@@ -117,13 +117,13 @@ pnpm install --ignore-workspace
 
 It's important that you use `--ignore-workspace` as otherwise the dependencies won't be installed correctly.
 
-Afterwards you can start the Mastra development server:
+Afterwards, you can start the Mastra development server:
 
 ```shell
 pnpm mastra:dev
 ```
 
-Whenever you make changes to the source code, the `turbo watch` process from step 2 will rebuild the packages. You then can restart the development server to see your changes.
+Whenever you make changes to the source code, the `turbo watch` process from step 2 will rebuild the packages. You can then restart the development server to see your changes.
 
 ## Testing
 
@@ -189,7 +189,7 @@ pnpm run dev:services:up
 
    Follow the prompts to describe your changes.
 
-4. **Open a pull request** with your changes.
+4. **Open a pull request** with your changes. Link the related issue(s) in the PR description (e.g. with `Fixes #1234`) and provide a clear description of the problem and solution. PRs without linked issues may be closed.
 
 5. **Resolve all Coderabbit comments**. Coderabbit is our AI assistant that helps maintainers review code. It will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review.
 

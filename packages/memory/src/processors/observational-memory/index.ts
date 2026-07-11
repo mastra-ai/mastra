@@ -31,15 +31,37 @@ export { getObservationsAsOf } from './observation-utils';
 
 // Types
 export { ModelByInputTokens, type ModelByInputTokensConfig } from './model-by-input-tokens';
+export { Extractor } from './extractor';
+export type {
+  ExtractorConfig,
+  ExtractorOnExtractedContext,
+  ExtractorRuntimeContext,
+  ExtractorSource,
+} from './extractor';
+export { WorkingMemoryExtractor } from './working-memory-extractor';
+
+// Standalone conversation summarization (reuses the Observer + extractor plumbing)
+export { summarizeConversation } from './summarize';
+export type { SummarizeConversationOptions, SummarizeConversationResult, SummarizeModel } from './summarize';
 
 export type {
   ObservationalMemoryConfig,
   ObservationDebugEvent,
   ObserveHooks,
+  ObserveHookUsage,
   ObservationConfig,
   ReflectionConfig,
   ObserverResult,
   ReflectorResult,
+  // Observation marker config
+  ObservationMarkerConfig,
+  // Observation data parts
+  DataOmObservationStartPart,
+  DataOmObservationEndPart,
+  DataOmObservationFailedPart,
+  DataOmStatusPart,
+  DataOmThreadUpdatePart,
+  DataOmObservationPart,
   // Buffering data parts
   DataOmBufferingStartPart,
   DataOmBufferingEndPart,

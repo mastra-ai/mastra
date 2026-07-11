@@ -2,6 +2,7 @@ import type {
   LanguageModelV2FinishReason,
   LanguageModelV2Usage,
   LanguageModelV2CallWarning,
+  LanguageModelV2Prompt,
   LanguageModelV2ResponseMetadata,
   LanguageModelV2StreamPart,
 } from '@ai-sdk/provider-v5';
@@ -11,13 +12,13 @@ import type {
   LanguageModelRequestMetadata,
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
-import type { ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
 import type { StructuredOutputOptions } from '../agent/types';
-import type { MastraLanguageModel } from '../llm/model/shared.types';
+import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { ScorerResult } from '../loop';
-import type { ObservabilityContext } from '../observability';
+import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../workflows/types';
@@ -59,6 +60,24 @@ export type StreamTransport = {
   close: () => void;
   closeOnFinish: boolean;
 };
+
+export const MASTRA_MODEL_STREAM_TRANSPORT = Symbol.for('@mastra/core.modelStreamTransport');
+
+export type StreamTransportCarrier = {
+  [key: symbol]: StreamTransport | undefined;
+};
+
+export function attachModelStreamTransport(target: object, transport?: StreamTransport): void {
+  if (!transport) return;
+  Object.defineProperty(target, MASTRA_MODEL_STREAM_TRANSPORT, {
+    configurable: true,
+    value: transport,
+  });
+}
+
+export function readModelStreamTransport(target: unknown): StreamTransport | undefined {
+  return (target as StreamTransportCarrier | undefined)?.[MASTRA_MODEL_STREAM_TRANSPORT];
+}
 
 export type StreamTransportRef = {
   current?: StreamTransport;
@@ -166,6 +185,16 @@ export interface ToolCallPayload<TArgs = unknown, TOutput = unknown> {
   providerMetadata?: ProviderMetadata;
   output?: TOutput;
   dynamic?: boolean;
+  /**
+   * W3C trace context carrier for client-side tool execution.
+   *
+   * Populated by the server when emitting a tool call that will be
+   * executed in the client (`providerExecuted: false` and the tool has
+   * no server-side execute function). The client SDK extracts the
+   * carrier, parents any child spans/logs underneath it, and echoes it
+   * back in the next request body for cross-request trace correlation.
+   */
+  observability?: ClientObservabilityCarrier;
 }
 
 export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
@@ -188,6 +217,7 @@ interface ToolCallInputStreamingStartPayload {
   providerExecuted?: boolean;
   providerMetadata?: ProviderMetadata;
   dynamic?: boolean;
+  observability?: ClientObservabilityCarrier;
 }
 
 interface ToolCallDeltaPayload {
@@ -220,6 +250,7 @@ interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSc
     request?: LanguageModelRequestMetadata;
     [key: string]: unknown;
   };
+  providerMetadata?: ProviderMetadata;
   messages: {
     all: ModelMessage[];
     user: ModelMessage[];
@@ -248,6 +279,7 @@ export interface StepStartPayload {
     body?: string;
     [key: string]: unknown;
   };
+  inputMessages?: LanguageModelV2Prompt;
   warnings?: LanguageModelV2CallWarning[];
   [key: string]: unknown;
 }
@@ -341,7 +373,7 @@ interface WatchPayload {
   [key: string]: unknown;
 }
 
-interface TripwirePayload<TMetadata = unknown> {
+export interface TripwirePayload<TMetadata = unknown> {
   /** The reason for the tripwire */
   reason: string;
   /** If true, the agent should retry with the tripwire reason as feedback */
@@ -355,7 +387,7 @@ interface TripwirePayload<TMetadata = unknown> {
 /**
  * Payload for is-task-complete events emitted during stream/generate scoring.
  */
-interface IsTaskCompletePayload {
+export interface IsTaskCompletePayload {
   /** Current iteration number */
   iteration: number;
   /** Whether all/any scorers passed based on strategy */
@@ -372,6 +404,148 @@ interface IsTaskCompletePayload {
   maxIterationReached: boolean;
   /** Whether to suppress the completion feedback message */
   suppressFeedback: boolean;
+}
+
+/**
+ * Payload for `goal` events emitted by the in-loop goal scorer. Consumers (TUIs,
+ * `@mastra/client-js`) use this to render judge progress and the result.
+ */
+export interface GoalEvaluationActivity {
+  type: 'tool-call' | 'tool-result' | 'reason';
+  name?: string;
+  message: string;
+}
+
+export interface GoalEvaluationPayload {
+  /** The objective being judged. */
+  objective: string;
+  /** Goal evaluations consumed so far (runsUsed after this evaluation). */
+  iteration: number;
+  /** Max evaluations before the goal stops. */
+  maxRuns: number;
+  /** Whether the goal is judged complete. */
+  passed: boolean;
+  /** The objective status after this evaluation. */
+  status: 'active' | 'paused' | 'done';
+  /** Individual scorer results. */
+  results: ScorerResult[];
+  /** Judge feedback / stop reason. Falls back to the pause reason when parked. */
+  reason?: string;
+  /**
+   * Why the objective is parked (`status === 'paused'`). Set for judge failure
+   * or budget exhaustion. Cleared when `status` is `'active'` or `'done'`.
+   */
+  pausedReason?: string;
+  /**
+   * True when the judge decided the goal is not finished but explicitly wants
+   * the user to provide input before continuing. The record stays `active` (so
+   * the next agent turn is still judged), but `isContinued` is `false` (the
+   * auto-loop stops). Display layers use this to show a "waiting" indicator.
+   */
+  waitingForUser?: boolean;
+  /** True when the scorer/judge itself errored (as opposed to scoring 0). */
+  judgeFailed?: boolean;
+  /** Total duration of the goal scoring check. */
+  duration: number;
+  /** Whether scoring timed out. */
+  timedOut: boolean;
+  /** Whether the run budget (`maxRuns`) was reached. */
+  maxRunsReached: boolean;
+  /** Whether the goal feedback message is suppressed from memory. */
+  suppressFeedback: boolean;
+  /**
+   * True on the "pre-evaluation" chunk emitted before scoring starts. Display
+   * layers use this to show a loading/evaluating indicator while the scorer
+   * runs. A second chunk with `pending: false` (or absent) follows once the
+   * evaluation is complete.
+   */
+  pending?: boolean;
+  /** Judge activity emitted while the evaluation is still running. */
+  activity?: GoalEvaluationActivity[];
+}
+
+export interface BackgroundTaskStartedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+}
+
+export interface BackgroundTaskResultPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  agentId: string;
+  result: unknown;
+  runId: string;
+  completedAt: Date;
+  isError?: boolean;
+}
+
+export interface BackgroundTaskFailedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  error: { message: string };
+  completedAt: Date;
+}
+
+export interface BackgroundTaskProgressPayload {
+  taskIds: string[];
+  runningCount: number;
+  elapsedMs: number;
+}
+
+export interface BackgroundTaskRunningPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
+}
+
+export interface BackgroundTaskCancelledPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  completedAt: Date;
+}
+
+export interface BackgroundTaskOutputPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  payload: Extract<AgentChunkType, { type: 'tool-output' }>;
+}
+
+export interface BackgroundTaskSuspendedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  args: Record<string, unknown>;
+  /** Whatever the tool passed to `suspend(data)`. */
+  suspendPayload?: unknown;
+  /** When the task suspended. */
+  suspendedAt?: Date;
+}
+
+export interface BackgroundTaskResumedPayload {
+  taskId: string;
+  toolName: string;
+  toolCallId: string;
+  runId: string;
+  agentId: string;
+  startedAt: Date;
+  args: Record<string, unknown>;
 }
 
 // Network-specific payload interfaces
@@ -683,7 +857,44 @@ export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'step-output'; payload: StepOutputPayload })
   | (BaseChunkType & { type: 'watch'; payload: WatchPayload })
   | (BaseChunkType & { type: 'tripwire'; payload: TripwirePayload })
-  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload });
+  | (BaseChunkType & { type: 'is-task-complete'; payload: IsTaskCompletePayload })
+  | (BaseChunkType & { type: 'goal'; payload: GoalEvaluationPayload })
+  | (BaseChunkType & {
+      type: 'background-task-started';
+      payload: BackgroundTaskStartedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-completed';
+      payload: BackgroundTaskResultPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-failed';
+      payload: BackgroundTaskFailedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-progress';
+      payload: BackgroundTaskProgressPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-running';
+      payload: BackgroundTaskRunningPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-cancelled';
+      payload: BackgroundTaskCancelledPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-output';
+      payload: BackgroundTaskOutputPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-suspended';
+      payload: BackgroundTaskSuspendedPayload;
+    })
+  | (BaseChunkType & {
+      type: 'background-task-resumed';
+      payload: BackgroundTaskResumedPayload;
+    });
 
 export type WorkflowStreamEvent =
   | (BaseChunkType & {
@@ -795,6 +1006,7 @@ export type TypedChunkType<OUTPUT = undefined> =
 
 // Default ChunkType for backward compatibility using dynamic (any) tool types
 export type ChunkType<OUTPUT = undefined> = TypedChunkType<OUTPUT>;
+export type StreamChunkType<OUTPUT = undefined> = ChunkType<OUTPUT> | DataChunkType;
 
 export interface LanguageModelV2StreamResult {
   stream: ReadableStream<LanguageModelV2StreamPart>;
@@ -804,7 +1016,7 @@ export interface LanguageModelV2StreamResult {
   warnings?: LLMStepResult['warnings'];
 }
 
-export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void;
+export type OnResult = (result: Omit<LanguageModelV2StreamResult, 'stream'>) => void | ChunkType | ChunkType[];
 export type CreateStream = () => Promise<LanguageModelV2StreamResult>;
 
 export type SourceChunk = BaseChunkType & { type: 'source'; payload: SourcePayload };
@@ -812,6 +1024,16 @@ export type FileChunk = BaseChunkType & { type: 'file'; payload: FilePayload };
 export type ToolCallChunk = BaseChunkType & { type: 'tool-call'; payload: ToolCallPayload };
 export type ToolResultChunk = BaseChunkType & { type: 'tool-result'; payload: ToolResultPayload };
 export type ReasoningChunk = BaseChunkType & { type: 'reasoning'; payload: ReasoningDeltaPayload };
+
+export type PendingToolCall = {
+  toolCallId: string;
+  toolName: string;
+  argsText: string;
+  state: 'input-streaming' | 'input-available';
+  providerExecuted?: boolean;
+  providerMetadata?: ProviderMetadata;
+  dynamic?: boolean;
+};
 
 export type ExecuteStreamModelManager<T> = (
   callback: (modelConfig: ModelManagerModelConfig, isLastModel: boolean) => Promise<T>,
@@ -822,6 +1044,8 @@ export type ModelManagerModelConfig = {
   maxRetries: number;
   id: string;
   headers?: Record<string, string>;
+  modelSettings?: Omit<CallSettings, 'abortSignal' | 'maxRetries' | 'headers'>;
+  providerOptions?: SharedProviderOptions;
 };
 
 /**
@@ -831,6 +1055,7 @@ export type ModelManagerModelConfig = {
 export type LanguageModelUsage = LanguageModelV2Usage & {
   reasoningTokens?: number;
   cachedInputTokens?: number;
+  cacheCreationInputTokens?: number;
   /**
    * Raw usage data from the provider, preserved for advanced use cases.
    * For V3 models, contains the full nested structure:
@@ -871,6 +1096,13 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   structuredOutput?: StructuredOutputOptions<OUTPUT>;
   outputProcessors?: OutputProcessorOrWorkflow[];
   isLLMExecutionStep?: boolean;
+  /**
+   * When true, force text/finishReason promise resolution at step-finish even
+   * when `isLLMExecutionStep` is set.  Durable agents have a single
+   * MastraModelOutput for the entire run that needs both per-chunk output
+   * processor processing (isLLMExecutionStep) AND final promise resolution.
+   */
+  resolveFinalPromises?: boolean;
   returnScorerData?: boolean;
   processorStates?: Map<string, any>;
   requestContext?: RequestContext;
@@ -904,6 +1136,7 @@ export type MastraStepResult<Tools extends ToolSet = ToolSet> = StepResult<Tools
 export type LLMStepResult<OUTPUT = undefined> = {
   stepType?: 'initial' | 'tool-result';
   toolCalls: ToolCallChunk[];
+  pendingToolCalls?: PendingToolCall[];
   toolResults: ToolResultChunk[];
   dynamicToolCalls: ToolCallChunk[];
   dynamicToolResults: ToolResultChunk[];

@@ -2,13 +2,39 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import type { CoreMessage } from '@mastra/core/llm';
 
 import { stripEphemeralAnchorIds } from './anchor-ids';
+import { isTemporalGapMarker } from './date-utils';
+import type { Extractor } from './extractor';
+import {
+  buildExtractorOutputSections,
+  buildExtractorPriorLines,
+  parseExtractedValues,
+  stripExtractorSections,
+} from './extractor';
+import { safeSlice } from './string-utils';
 import {
   DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS,
   formatToolResultForObserver,
   resolveToolResultValue,
 } from './tool-result-helpers';
 
-type ObserverFormatOptions = { maxPartLength?: number; maxToolResultTokens?: number };
+/**
+ * Filter controlling which attachment parts (image/file) are forwarded to
+ * the Observer model alongside their placeholder text lines.
+ *
+ * - `true` (or undefined): forward all attachments
+ * - `false`: drop all attachments; placeholders still appear in text
+ * - `string[]`: allowlist of mimeType patterns. Each entry is matched against
+ *   the part's mimeType (case-insensitive), supporting exact matches
+ *   (`application/pdf`), wildcard subtypes (`image/\*`), and bare `*` for all.
+ *   Empty array drops everything.
+ */
+export type ObserverAttachmentFilter = boolean | string[];
+
+type ObserverFormatOptions = {
+  maxPartLength?: number;
+  maxToolResultTokens?: number;
+  attachmentFilter?: ObserverAttachmentFilter;
+};
 
 /**
  * The core extraction instructions for the Observer.
@@ -273,18 +299,24 @@ Prefer concrete resolved outcomes over abstract workflow status so the assistant
  */
 export const OBSERVER_OUTPUT_FORMAT_BASE = buildObserverOutputFormat();
 
-export function buildObserverOutputFormat(includeThreadTitle: boolean = false): string {
-  const threadTitleSection = includeThreadTitle
-    ? `
-<thread-title>
-A short, noun-phrase title for this conversation (2-5 words). Examples:
-- "Auth bug fix" — not "Fixing the auth bug"
-- "Dark mode toggle" — not "User wants dark mode toggle added"
-- "Deployment pipeline setup" — not "Setting up deployment pipeline for project"
-Only update when the topic meaningfully changes.
-</thread-title>`
-    : '';
+export function buildObserverOutputFormat(extractors: readonly Extractor<any>[] = []): string {
+  const extractorSections = buildExtractorOutputSections(extractors);
+  const legacyContinuationSections =
+    extractors.length === 0
+      ? `
+<current-task>
+State the current task(s) explicitly:
+- Primary: What the agent is currently working on
+- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
+</current-task>
 
+<suggested-response>
+Hint for the agent's immediate next message. Examples:
+- "I've updated the navigation model. Let me walk you through the changes..."
+- "The assistant should wait for the user to respond before continuing."
+- Call the view tool on src/example.ts to continue debugging.
+</suggested-response>`
+      : '';
   return `Use priority levels:
 - 🔴 High: explicit user facts, preferences, unresolved goals, critical context
 - 🟡 Medium: project details, learned information, tool results
@@ -310,20 +342,7 @@ Date: Dec 5, 2025
 * 🔴 (09:15) Continued work on feature X
 </observations>
 
-<current-task>
-State the current task(s) explicitly. Can be single or multiple:
-- Primary: What the agent is currently working on
-- Secondary: Other pending tasks (mark as "waiting for user" if appropriate)
-
-If the agent started doing something without user approval, note that it's off-task.
-</current-task>
-
-<suggested-response>
-Hint for the agent's immediate next message. Examples:
-- "I've updated the navigation model. Let me walk you through the changes..."
-- "The assistant should wait for the user to respond before continuing."
-- Call the view tool on src/example.ts to continue debugging.
-</suggested-response>${threadTitleSection}`;
+${extractorSections || legacyContinuationSections}`;
 }
 
 /**
@@ -357,8 +376,9 @@ export function buildObserverSystemPrompt(
   multiThread: boolean = false,
   instruction?: string,
   includeThreadTitle: boolean = false,
+  extractors: readonly Extractor<any>[] = [],
 ): string {
-  const outputFormat = buildObserverOutputFormat(includeThreadTitle);
+  const outputFormat = buildObserverOutputFormat(extractors);
   const multiThreadTitleInstruction = includeThreadTitle
     ? ` Each thread's observations, current-task, suggested-response, and thread-title should be nested inside a <thread id="..."> block within <observations>.`
     : ` Each thread's observations, current-task, and suggested-response should be nested inside a <thread id="..."> block within <observations>.`;
@@ -483,6 +503,12 @@ export interface ObserverResult {
   /** The suggested thread title (short/concise, for thread metadata) */
   threadTitle?: string;
 
+  /** Extracted values keyed by extractor slug */
+  extractedValues?: Record<string, unknown>;
+
+  /** Extractor failures keyed by extractor slug */
+  extractionFailures?: Array<{ slug: string; error: string }>;
+
   /** Raw output from the model (for debugging) */
   rawOutput?: string;
 
@@ -533,14 +559,31 @@ type ObserverInputAttachmentPart =
       experimental_providerMetadata?: unknown;
     };
 
+interface ObserverFormattedLine {
+  date: string;
+  time: string;
+  title: string;
+  body: string;
+}
+
 interface ObserverFormattedMessage {
-  text: string;
+  lines: ObserverFormattedLine[];
   attachments: ObserverInputAttachmentPart[];
 }
 
 interface ObserverAttachmentCounter {
   nextImageId: number;
   nextFileId: number;
+}
+
+interface ObserverFormattingContext {
+  previousDate?: string;
+  previousTime?: string;
+}
+
+interface ObserverFormattedOutput {
+  text: string;
+  context: ObserverFormattingContext;
 }
 
 const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
@@ -557,12 +600,17 @@ const OBSERVER_IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-function formatObserverTimestamp(createdAt: MastraDBMessage['createdAt']): string {
+function formatObserverDate(createdAt?: Date): string {
   return createdAt
-    ? new Date(createdAt).toLocaleString('en-US', {
-        year: 'numeric',
+    ? `${createdAt.toLocaleDateString('en-US', {
         month: 'short',
-        day: 'numeric',
+      })} ${createdAt.getDate()} ${createdAt.getFullYear()}`
+    : '';
+}
+
+function formatObserverTime(createdAt?: Date): string {
+  return createdAt
+    ? createdAt.toLocaleTimeString('en-US', {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
@@ -609,6 +657,41 @@ function isImageLikeObserverFilePart(part: ObserverAttachmentPart): boolean {
   }
 
   return hasObserverImageFilenameExtension(part.filename);
+}
+
+function resolveObserverAttachmentMimeType(part: ObserverAttachmentPart): string {
+  if (typeof part.mimeType === 'string' && part.mimeType.length > 0) {
+    return part.mimeType.toLowerCase();
+  }
+  if (part.type === 'image') {
+    return 'image/*';
+  }
+  if (isImageLikeObserverFilePart(part)) {
+    return 'image/*';
+  }
+  return 'application/octet-stream';
+}
+
+function matchObserverMimePattern(mimeType: string, pattern: string): boolean {
+  const normalized = pattern.trim().toLowerCase();
+  if (!normalized) return false;
+  if (normalized === '*' || normalized === '*/*') return true;
+  if (normalized.endsWith('/*')) {
+    const prefix = normalized.slice(0, normalized.length - 1); // keep trailing '/'
+    return mimeType.startsWith(prefix);
+  }
+  return mimeType === normalized;
+}
+
+function shouldIncludeObserverAttachment(
+  part: ObserverAttachmentPart,
+  filter: ObserverAttachmentFilter | undefined,
+): boolean {
+  if (filter === undefined || filter === true) return true;
+  if (filter === false) return false;
+  if (!Array.isArray(filter) || filter.length === 0) return false;
+  const mimeType = resolveObserverAttachmentMimeType(part);
+  return filter.some(pattern => matchObserverMimePattern(mimeType, pattern));
 }
 
 function toObserverInputAttachmentPart(part: ObserverAttachmentPart): ObserverInputAttachmentPart {
@@ -671,6 +754,173 @@ function formatObserverAttachmentPlaceholder(part: ObserverAttachmentPart, count
   return label ? `[${attachmentType} #${attachmentId}: ${label}]` : `[${attachmentType} #${attachmentId}]`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object';
+}
+
+function mapToolResultBlockToAttachment(block: unknown): ObserverAttachmentPart | undefined {
+  if (!isRecord(block) || typeof block.type !== 'string') {
+    return undefined;
+  }
+
+  const mediaType = typeof block.mediaType === 'string' ? block.mediaType : undefined;
+  const filename = typeof block.filename === 'string' ? block.filename : undefined;
+
+  switch (block.type) {
+    case 'image-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const image = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'image', image, mimeType: mediaType };
+    }
+
+    case 'image-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'image', image: url, mimeType: mediaType };
+    }
+
+    case 'media': {
+      const data = block.data;
+      if (typeof data !== 'string' || !mediaType) return undefined;
+      const dataUri = `data:${mediaType};base64,${data}`;
+      if (mediaType.toLowerCase().startsWith('image/')) {
+        return { type: 'image', image: dataUri, mimeType: mediaType };
+      }
+      return { type: 'file', data: dataUri, mimeType: mediaType };
+    }
+
+    case 'file-data': {
+      const data = block.data;
+      if (typeof data !== 'string') return undefined;
+      const dataUri = mediaType ? `data:${mediaType};base64,${data}` : data;
+      return { type: 'file', data: dataUri, mimeType: mediaType, filename };
+    }
+
+    case 'file-url': {
+      const url = block.url;
+      if (typeof url !== 'string') return undefined;
+      return { type: 'file', data: url, mimeType: mediaType, filename };
+    }
+
+    default:
+      return undefined;
+  }
+}
+
+function extractToolResultAttachments(
+  result: unknown,
+  counter: ObserverAttachmentCounter,
+  attachmentFilter?: ObserverAttachmentFilter,
+): { resultWithoutAttachments: unknown; attachments: ObserverInputAttachmentPart[] } {
+  if (!isRecord(result) || result.type !== 'content' || !Array.isArray(result.value)) {
+    return { resultWithoutAttachments: result, attachments: [] };
+  }
+
+  const record = result;
+
+  const attachments: ObserverInputAttachmentPart[] = [];
+  let hadAttachmentBlocks = false;
+  const newValue = (record.value as unknown[]).map(block => {
+    const attachment = mapToolResultBlockToAttachment(block);
+    if (!attachment) {
+      return block;
+    }
+    hadAttachmentBlocks = true;
+
+    if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
+      attachments.push(toObserverInputAttachmentPart(attachment));
+    }
+    const placeholder = formatObserverAttachmentPlaceholder(attachment, counter);
+    return { type: isRecord(block) ? block.type : undefined, placeholder };
+  });
+
+  if (!hadAttachmentBlocks) {
+    return { resultWithoutAttachments: result, attachments };
+  }
+
+  return { resultWithoutAttachments: { ...record, value: newValue }, attachments };
+}
+
+function formatObserverPartLine(title: string, body: string, time: string, previousTime?: string): string {
+  const timeLabel = time && time !== previousTime ? `(${time})` : '';
+
+  if (!title) {
+    return timeLabel ? `${timeLabel}: ${body}` : body;
+  }
+
+  return `${title}${timeLabel ? ` ${timeLabel}` : ''}: ${body}`;
+}
+
+function normalizeObserverCreatedAt(createdAt: unknown): Date | undefined {
+  if (createdAt instanceof Date) {
+    // Invalid Date objects still satisfy `instanceof Date`, so reject them explicitly.
+    if (Number.isNaN(createdAt.getTime())) {
+      return undefined;
+    }
+    return createdAt;
+  }
+
+  if (typeof createdAt === 'number' || typeof createdAt === 'string') {
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) {
+      return undefined;
+    }
+    return date;
+  }
+
+  return undefined;
+}
+
+function formatObserverLines(
+  lines: ObserverFormattedLine[],
+  context: ObserverFormattingContext = {},
+): ObserverFormattedOutput {
+  const output: string[] = [];
+  let previousDate = context.previousDate;
+  let previousTime = context.previousTime;
+
+  for (const line of lines) {
+    if (line.date && line.date !== previousDate) {
+      output.push(`${line.date}:`);
+      previousDate = line.date;
+      previousTime = undefined;
+    }
+
+    output.push(formatObserverPartLine(line.title, line.body, line.time, previousTime));
+    previousTime = line.time || previousTime;
+  }
+
+  return {
+    text: output.join('\n'),
+    context: { previousDate, previousTime },
+  };
+}
+
+function getTemporalGapMarkerText(msg: MastraDBMessage): string | undefined {
+  const metadata =
+    typeof msg.content === 'object' && msg.content && 'metadata' in msg.content
+      ? (msg.content.metadata as { gapText?: unknown; reminderType?: unknown; systemReminder?: unknown })
+      : undefined;
+
+  if (metadata?.reminderType === 'temporal-gap' && typeof metadata.gapText === 'string') {
+    return metadata.gapText;
+  }
+
+  if (
+    typeof metadata?.systemReminder === 'object' &&
+    metadata.systemReminder &&
+    'type' in metadata.systemReminder &&
+    metadata.systemReminder.type === 'temporal-gap' &&
+    'gapText' in metadata.systemReminder &&
+    typeof metadata.systemReminder.gapText === 'string'
+  ) {
+    return metadata.systemReminder.gapText;
+  }
+
+  return undefined;
+}
+
 function formatObserverMessage(
   msg: MastraDBMessage,
   counter: ObserverAttachmentCounter,
@@ -678,89 +928,156 @@ function formatObserverMessage(
 ): ObserverFormattedMessage {
   const maxLen = options?.maxPartLength;
   const maxToolResultTokens = options?.maxToolResultTokens ?? DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS;
-  const timestamp = formatObserverTimestamp(msg.createdAt);
+  const attachmentFilter = options?.attachmentFilter;
   const role = msg.role.charAt(0).toUpperCase() + msg.role.slice(1);
-  const timestampStr = timestamp ? ` (${timestamp})` : '';
   const attachments: ObserverInputAttachmentPart[] = [];
+  const messageCreatedAt = normalizeObserverCreatedAt(msg.createdAt);
 
-  let content = '';
-  if (typeof msg.content === 'string') {
-    content = maybeTruncate(msg.content, maxLen);
+  let lines: ObserverFormattedLine[] = [];
+
+  const temporalGapText = isTemporalGapMarker(msg) ? getTemporalGapMarkerText(msg) : undefined;
+
+  const pushLine = (title: string, body: string, createdAt?: unknown) => {
+    if (!body) {
+      return;
+    }
+
+    const normalizedCreatedAt = normalizeObserverCreatedAt(createdAt) ?? messageCreatedAt;
+    lines.push({
+      date: formatObserverDate(normalizedCreatedAt),
+      time: formatObserverTime(normalizedCreatedAt),
+      title,
+      body,
+    });
+  };
+
+  if (temporalGapText) {
+    pushLine('', temporalGapText, messageCreatedAt);
+  } else if (typeof msg.content === 'string') {
+    pushLine(role, maybeTruncate(msg.content, maxLen), messageCreatedAt);
   } else if (msg.content?.parts && Array.isArray(msg.content.parts) && msg.content.parts.length > 0) {
-    content = msg.content.parts
-      .map(part => {
-        if (part.type === 'text') return maybeTruncate(part.text, maxLen);
-        if (part.type === 'tool-invocation') {
-          const inv = part.toolInvocation;
-          if (inv.state === 'result') {
-            const { value: resultForObserver } = resolveToolResultValue(
-              part as { providerMetadata?: Record<string, any> },
-              inv.result,
-            );
-            const resultStr = formatToolResultForObserver(resultForObserver, { maxTokens: maxToolResultTokens });
-            return `[Tool Result: ${inv.toolName}]\n${maybeTruncate(resultStr, maxLen)}`;
+    msg.content.parts.forEach(part => {
+      const partCreatedAt = normalizeObserverCreatedAt((part as { createdAt?: unknown }).createdAt) ?? messageCreatedAt;
+
+      if (part.type === 'text') {
+        pushLine(role, maybeTruncate(part.text, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (part.type === 'tool-invocation') {
+        const inv = part.toolInvocation;
+        if (inv.state === 'result') {
+          const { value: resultForObserver } = resolveToolResultValue(
+            part as { providerMetadata?: Record<string, any> },
+            inv.result,
+          );
+          const { resultWithoutAttachments, attachments: extractedAttachments } = extractToolResultAttachments(
+            resultForObserver,
+            counter,
+            attachmentFilter,
+          );
+          if (extractedAttachments.length > 0) {
+            attachments.push(...extractedAttachments);
           }
-          const argsStr = JSON.stringify(inv.args, null, 2);
-          return `[Tool Call: ${inv.toolName}]\n${maybeTruncate(argsStr, maxLen)}`;
+          pushLine(
+            `Tool Result ${inv.toolName}`,
+            maybeTruncate(
+              formatToolResultForObserver(resultWithoutAttachments, { maxTokens: maxToolResultTokens }),
+              maxLen,
+            ),
+            partCreatedAt,
+          );
+          return;
         }
 
-        const partType = (part as { type?: string }).type;
-        if (partType === 'reasoning') {
-          // Include reasoning content only when it's not obscured/encrypted
-          const reasoning = (part as { reasoning?: string }).reasoning;
-          if (reasoning) return maybeTruncate(reasoning, maxLen);
-          return '';
+        pushLine(`Tool Call ${inv.toolName}`, maybeTruncate(JSON.stringify(inv.args, null, 2), maxLen), partCreatedAt);
+        return;
+      }
+
+      const partType = (part as { type?: string }).type;
+      if (partType === 'reasoning') {
+        const reasoning = (part as { reasoning?: string }).reasoning;
+        if (!reasoning) {
+          return;
         }
-        if (partType === 'image' || partType === 'file') {
-          const attachment = part as ObserverAttachmentPart;
+        pushLine('Reasoning', maybeTruncate(reasoning, maxLen), partCreatedAt);
+        return;
+      }
+
+      if (partType === 'image' || partType === 'file') {
+        const attachment = part as ObserverAttachmentPart;
+        if (shouldIncludeObserverAttachment(attachment, attachmentFilter)) {
           const inputAttachment = toObserverInputAttachmentPart(attachment);
           if (inputAttachment) {
             attachments.push(inputAttachment);
           }
-          return formatObserverAttachmentPlaceholder(attachment, counter);
         }
-        if (partType?.startsWith('data-')) return '';
-        return '';
-      })
-      .filter(Boolean)
-      .join('\n');
+        pushLine(
+          partType === 'image' ? 'Image' : 'File',
+          formatObserverAttachmentPlaceholder(attachment, counter),
+          partCreatedAt,
+        );
+      }
+    });
   } else if (msg.content?.content) {
-    content = maybeTruncate(msg.content.content, maxLen);
+    pushLine(role, maybeTruncate(msg.content.content, maxLen), messageCreatedAt);
   }
 
-  // Skip messages that produced no visible content (e.g. only data-* or encrypted reasoning parts)
-  if (!content && attachments.length === 0) {
-    return { text: '', attachments };
+  if (lines.length === 0 && attachments.length === 0) {
+    return { lines: [], attachments };
   }
 
   return {
-    text: `**${role}${timestampStr}:**\n${content}`,
+    lines,
     attachments,
   };
 }
 
 export function formatMessagesForObserver(messages: MastraDBMessage[], options?: ObserverFormatOptions): string {
   const counter = { nextImageId: 1, nextFileId: 1 };
-  return messages
-    .map(msg => formatObserverMessage(msg, counter, options).text)
-    .filter(Boolean)
-    .join('\n\n---\n\n');
+  const sections: string[] = [];
+  let context: ObserverFormattingContext = {};
+
+  for (const message of messages) {
+    const formatted = formatObserverMessage(message, counter, options);
+    if (formatted.lines.length === 0) {
+      continue;
+    }
+
+    const rendered = formatObserverLines(formatted.lines, context);
+    if (!rendered.text) {
+      continue;
+    }
+
+    sections.push(rendered.text);
+    context = rendered.context;
+  }
+
+  return sections.join('\n');
+}
+
+function appendFormattedObserverMessage(
+  content: any[],
+  formatted: ObserverFormattedMessage,
+  context: ObserverFormattingContext,
+): ObserverFormattingContext {
+  const rendered = formatObserverLines(formatted.lines, context);
+  if (rendered.text) {
+    content.push({ type: 'text', text: rendered.text });
+  }
+  content.push(...formatted.attachments);
+  return rendered.context;
 }
 
 export function buildObserverHistoryMessage(messages: MastraDBMessage[], options?: ObserverFormatOptions): CoreMessage {
   const counter = { nextImageId: 1, nextFileId: 1 };
   const content: any[] = [{ type: 'text', text: '## New Message History to Observe\n\n' }];
 
-  let visibleCount = 0;
+  let context: ObserverFormattingContext = {};
   messages.forEach(message => {
     const formatted = formatObserverMessage(message, counter, options);
-    if (!formatted.text && formatted.attachments.length === 0) return;
-    if (visibleCount > 0) {
-      content.push({ type: 'text', text: '\n\n---\n\n' });
-    }
-    content.push({ type: 'text', text: formatted.text });
-    content.push(...formatted.attachments);
-    visibleCount++;
+    if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+    context = appendFormattedObserverMessage(content, formatted, context);
   });
 
   return {
@@ -772,8 +1089,8 @@ export function buildObserverHistoryMessage(messages: MastraDBMessage[], options
 /** Truncate a string to maxLen characters, appending a note if truncated. */
 function maybeTruncate(str: string, maxLen?: number): string {
   if (!maxLen || str.length <= maxLen) return str;
-  const truncated = str.slice(0, maxLen);
-  const remaining = str.length - maxLen;
+  const truncated = safeSlice(str, maxLen);
+  const remaining = str.length - truncated.length;
   return `${truncated}\n... [truncated ${remaining} characters]`;
 }
 
@@ -817,19 +1134,16 @@ export function buildMultiThreadObserverHistoryMessage(
     if (!messages || messages.length === 0) return;
 
     const threadContent: any[] = [];
-    let visibleCount = 0;
+    let context: ObserverFormattingContext = {};
+    let hasVisibleContent = false;
     messages.forEach(message => {
       const formatted = formatObserverMessage(message, counter, options);
-      if (!formatted.text && formatted.attachments.length === 0) return;
-      if (visibleCount > 0) {
-        threadContent.push({ type: 'text', text: '\n\n---\n\n' });
-      }
-      threadContent.push({ type: 'text', text: formatted.text });
-      threadContent.push(...formatted.attachments);
-      visibleCount++;
+      if (formatted.lines.length === 0 && formatted.attachments.length === 0) return;
+      context = appendFormattedObserverMessage(threadContent, formatted, context);
+      hasVisibleContent = true;
     });
 
-    if (visibleCount === 0) return;
+    if (!hasVisibleContent) return;
 
     content.push({ type: 'text', text: `<thread id="${threadId}">\n` });
     content.push(...threadContent);
@@ -848,9 +1162,13 @@ export function buildMultiThreadObserverHistoryMessage(
 export function buildMultiThreadObserverTaskPrompt(
   existingObservations: string | undefined,
   threadOrder?: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
+  >,
   wasTruncated?: boolean,
   includeThreadTitle?: boolean,
+  extractors: readonly Extractor<any>[] = [],
 ): string {
   let prompt = '';
 
@@ -864,9 +1182,13 @@ export function buildMultiThreadObserverTaskPrompt(
   const threadMetadataLines = threadOrder
     ?.map(threadId => {
       const metadata = priorMetadataByThread?.get(threadId);
+      const extractorPriorLines = buildExtractorPriorLines(extractors, metadata?.extracted);
       const hasRelevantMetadata =
-        metadata?.currentTask || metadata?.suggestedResponse || (includeThreadTitle && metadata?.threadTitle);
-      if (!hasRelevantMetadata) {
+        metadata?.currentTask ||
+        metadata?.suggestedResponse ||
+        (includeThreadTitle && metadata?.threadTitle) ||
+        extractorPriorLines.length > 0;
+      if (!hasRelevantMetadata || !metadata) {
         return '';
       }
 
@@ -879,6 +1201,9 @@ export function buildMultiThreadObserverTaskPrompt(
       }
       if (includeThreadTitle && metadata.threadTitle) {
         lines.push(`  - prior thread-title: ${metadata.threadTitle}`);
+      }
+      for (const priorLine of extractorPriorLines) {
+        lines.push(`  - prior ${priorLine.replace(/\n/g, '\n    ')}`);
       }
       return lines.join('\n');
     })
@@ -926,13 +1251,17 @@ export function buildMultiThreadObserverPrompt(
   existingObservations: string | undefined,
   messagesByThread: Map<string, MastraDBMessage[]>,
   threadOrder: string[],
-  priorMetadataByThread?: Map<string, { currentTask?: string; suggestedResponse?: string; threadTitle?: string }>,
+  priorMetadataByThread?: Map<
+    string,
+    { currentTask?: string; suggestedResponse?: string; threadTitle?: string; extracted?: Record<string, unknown> }
+  >,
   wasTruncated?: boolean,
   options?: ObserverFormatOptions,
   includeThreadTitle?: boolean,
+  extractors: readonly Extractor<any>[] = [],
 ): string {
   const formattedMessages = formatMultiThreadMessagesForObserver(messagesByThread, threadOrder, options);
-  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle)}`;
+  return `## New Message History to Observe\n\nThe following messages are from ${threadOrder.length} different conversation threads. Each thread is wrapped in a <thread id="..."> tag.\n\n${formattedMessages}\n\n---\n\n${buildMultiThreadObserverTaskPrompt(existingObservations, threadOrder, priorMetadataByThread, wasTruncated, includeThreadTitle, extractors)}`;
 }
 
 /**
@@ -950,7 +1279,10 @@ export interface MultiThreadObserverResult {
 /**
  * Parse multi-thread Observer output to extract per-thread results.
  */
-export function parseMultiThreadObserverOutput(output: string): MultiThreadObserverResult {
+export function parseMultiThreadObserverOutput(
+  output: string,
+  extractors: readonly Extractor<any>[] = [],
+): MultiThreadObserverResult {
   const threads = new Map<string, ObserverResult>();
 
   // Check for degenerate repetition on the whole output
@@ -971,9 +1303,12 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
     const threadContent = match[2];
     if (!threadId || !threadContent) continue;
 
+    const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
+    const parsedExtractedValues = parseExtractedValues(threadContent, inlineExtractors);
+
     // Parse this thread's content for observations, current-task, suggested-response
     // Extract observations (everything except current-task and suggested-response)
-    let observations = threadContent;
+    let observations = stripExtractorSections(threadContent, inlineExtractors);
 
     // Extract and remove current-task
     let currentTask: string | undefined;
@@ -1004,9 +1339,12 @@ export function parseMultiThreadObserverOutput(output: string): MultiThreadObser
 
     threads.set(threadId, {
       observations,
-      currentTask,
-      suggestedContinuation,
-      threadTitle,
+      currentTask: currentTask || getStringExtractedValue(parsedExtractedValues.values, 'current-task'),
+      suggestedContinuation:
+        suggestedContinuation || getStringExtractedValue(parsedExtractedValues.values, 'suggested-response'),
+      threadTitle: threadTitle || getStringExtractedValue(parsedExtractedValues.values, 'thread-title'),
+      extractedValues: parsedExtractedValues.values,
+      extractionFailures: parsedExtractedValues.failures,
       rawOutput: threadContent,
     });
   }
@@ -1029,6 +1367,8 @@ export function buildObserverTaskPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
+    extractors?: readonly Extractor<any>[];
+    priorExtractedValues?: Record<string, unknown>;
   },
 ): string {
   let prompt = '';
@@ -1050,6 +1390,7 @@ export function buildObserverTaskPrompt(
   if (options?.includeThreadTitle && options?.priorThreadTitle) {
     priorMetadataLines.push(`- prior thread-title: ${options.priorThreadTitle}`);
   }
+  priorMetadataLines.push(...buildExtractorPriorLines(options?.extractors ?? [], options?.priorExtractedValues));
 
   if (priorMetadataLines.length > 0) {
     prompt += `## Prior Thread Metadata\n\n${priorMetadataLines.join('\n')}\n\n`;
@@ -1064,13 +1405,8 @@ export function buildObserverTaskPrompt(
   prompt += `## Your Task\n\n`;
   prompt += `Extract new observations from the message history above. Do not repeat observations that are already in the previous observations. Add your new observations in the format specified in your instructions.`;
 
-  // Add thread title guidance (independent of continuation hints)
-  if (options?.includeThreadTitle) {
-    prompt += `\n\nAlso output a <thread-title> — a short noun-phrase label for this conversation (2-5 words). Write it like a file name or PR title: "Auth bug fix", "Memory config refactor", "RAG pipeline setup". Avoid verbs/sentences ("Fixing the auth bug"), filler ("Working on stuff"), and generic labels ("Code review"). Only change it from the prior title if the topic meaningfully shifted.`;
-  }
-
   if (options?.skipContinuationHints) {
-    prompt += `\n\nIMPORTANT: Do NOT include <current-task> or <suggested-response> sections in your output. Only output <observations>${options?.includeThreadTitle ? ' and <thread-title>' : ''}.`;
+    prompt += `\n\nOutput <observations> every time.`;
   }
 
   return prompt;
@@ -1090,6 +1426,8 @@ export function buildObserverPrompt(
     priorThreadTitle?: string;
     wasTruncated?: boolean;
     includeThreadTitle?: boolean;
+    extractors?: readonly Extractor<any>[];
+    priorExtractedValues?: Record<string, unknown>;
   },
 ): string {
   const formattedMessages = formatMessagesForObserver(messagesToObserve);
@@ -1100,7 +1438,12 @@ export function buildObserverPrompt(
  * Parse the Observer's output to extract observations, current task, and suggested response.
  * Uses XML tag parsing for structured extraction.
  */
-export function parseObserverOutput(output: string): ObserverResult {
+function getStringExtractedValue(values: Record<string, unknown>, slug: string): string | undefined {
+  const value = values[slug];
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+export function parseObserverOutput(output: string, extractors: readonly Extractor<any>[] = []): ObserverResult {
   // Check for degenerate repetition before parsing (operates on raw output)
   if (detectDegenerateRepetition(output)) {
     return {
@@ -1110,7 +1453,10 @@ export function parseObserverOutput(output: string): ObserverResult {
     };
   }
 
-  const parsed = parseMemorySectionXml(output);
+  const inlineExtractors = extractors.filter(extractor => extractor.mode === 'inline');
+  const parsedExtractedValues = parseExtractedValues(output, inlineExtractors);
+  const strippedOutput = stripExtractorSections(output, inlineExtractors);
+  const parsed = parseMemorySectionXml(strippedOutput);
 
   // Return observations WITHOUT current-task/suggested-response tags
   // Those are stored separately in thread metadata and injected dynamically
@@ -1118,9 +1464,12 @@ export function parseObserverOutput(output: string): ObserverResult {
 
   return {
     observations,
-    currentTask: parsed.currentTask || undefined,
-    suggestedContinuation: parsed.suggestedResponse || undefined,
-    threadTitle: parsed.threadTitle || undefined,
+    currentTask: parsed.currentTask || getStringExtractedValue(parsedExtractedValues.values, 'current-task'),
+    suggestedContinuation:
+      parsed.suggestedResponse || getStringExtractedValue(parsedExtractedValues.values, 'suggested-response'),
+    threadTitle: parsed.threadTitle || getStringExtractedValue(parsedExtractedValues.values, 'thread-title'),
+    extractedValues: parsedExtractedValues.values,
+    extractionFailures: parsedExtractedValues.failures,
     rawOutput: output,
   };
 }
@@ -1223,7 +1572,7 @@ export function sanitizeObservationLines(observations: string): string {
   let changed = false;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i]!.length > MAX_OBSERVATION_LINE_CHARS) {
-      lines[i] = lines[i]!.slice(0, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
+      lines[i] = safeSlice(lines[i]!, MAX_OBSERVATION_LINE_CHARS) + ' … [truncated]';
       changed = true;
     }
   }

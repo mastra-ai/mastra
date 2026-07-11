@@ -24,7 +24,7 @@ function isWorkflowStep(step: unknown): step is Workflow {
 
 export function getNestedWorkflow(
   mastra: Mastra,
-  { workflowId, executionPath, parentWorkflow }: ParentWorkflow,
+  { workflowId, executionPath, parentWorkflow, runId }: ParentWorkflow,
 ): Workflow | null {
   let workflow: Workflow | null = null;
 
@@ -37,7 +37,19 @@ export function getNestedWorkflow(
     workflow = nestedWorkflow;
   }
 
-  workflow = workflow ?? mastra.getWorkflow(workflowId);
+  // Internal workflows (registered via `Mastra.__registerInternalWorkflow`)
+  // aren't visible to `Mastra.getWorkflow` — it only sees the public registry.
+  // Prefer the internal registry first so nested-workflow resolution works
+  // for callers like the bg-tasks `__background-task` workflow. When `runId`
+  // is set we hand it to the registry so concurrent invocations sharing the
+  // same workflow id (e.g. parent + sub-agent each owning their own
+  // `agentic-loop` instance with distinct closures) resolve to the right
+  // closure-bound instance instead of whichever one happened to register last.
+  workflow =
+    workflow ??
+    (mastra.__hasInternalWorkflow(workflowId, runId)
+      ? mastra.__getInternalWorkflow(workflowId, runId)
+      : mastra.getWorkflow(workflowId));
   const stepGraph = workflow.stepGraph;
   let parentStep = stepGraph[executionPath[0]!];
   if (parentStep?.type === 'parallel' || parentStep?.type === 'conditional') {

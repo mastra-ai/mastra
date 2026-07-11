@@ -24,14 +24,31 @@ import type {
   GetRootSpanResponse,
   GetTraceArgs,
   GetTraceResponse,
+  GetTraceLightResponse,
+  LightSpanRecord,
   CreateIndexOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
+  TABLE_NAMES,
 } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL, generateTimestampTriggerSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
+import { runPrune, resolveTargets } from '../../retention';
 import { transformFromSqlRow, getTableName, getSchemaName } from '../utils';
 
 export class ObservabilityPG extends ObservabilityStorage {
+  /**
+   * Retention-eligible tables. The observability domain has a single physical
+   * table (`mastra_ai_spans`); spans anchor on the timezone-aware `startedAtZ`
+   * mirror column and are indexed for fast batched deletes.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPANS, column: 'startedAtZ', indexed: true },
+  };
+
   #db: PgDB;
   #schema: string;
   #skipDefaultIndexes?: boolean;
@@ -60,6 +77,31 @@ export class ObservabilityPG extends ObservabilityStorage {
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
+  }
+
+  /**
+   * Lazily ensures a btree index exists on each configured policy's retention
+   * anchor column so age-based `prune()` deletes stay fast on large span tables.
+   * Called from the prune path (not init) so only deployments that configure
+   * retention pay the index's write/disk overhead. Best-effort: failures are
+   * logged and pruning proceeds (correct, just slower).
+   * Created even with `skipDefaultIndexes` — retention is an explicit opt-in,
+   * so its supporting index is not part of the default index set.
+   */
+  private async ensureRetentionIndexes(policies: Record<string, TableRetentionPolicy>): Promise<void> {
+    const prefix = this.#schema !== 'public' ? `${this.#schema}_` : '';
+    for (const [key, entry] of Object.entries(ObservabilityPG.retentionTables)) {
+      if (!entry.indexed || !policies[key]) continue;
+      try {
+        await this.#db.ensureIndex({
+          indexName: `${prefix}mastra_${key}_retention_idx`,
+          tableName: entry.table as TABLE_NAMES,
+          column: entry.column,
+        });
+      } catch (error) {
+        this.logger?.warn?.(`Failed to create retention index for ${entry.table}:`, error);
+      }
+    }
   }
 
   /**
@@ -234,6 +276,20 @@ export class ObservabilityPG extends ObservabilityStorage {
 
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.clearTable({ tableName: TABLE_SPANS });
+  }
+
+  /**
+   * Deletes spans older than the configured `maxAge`, in bounded, batched,
+   * cancellable chunks. Unset = keep forever.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    await this.ensureRetentionIndexes(policies);
+    const targets = resolveTargets({
+      policies,
+      descriptor: ObservabilityPG.retentionTables,
+      order: ['spans'],
+    });
+    return runPrune({ db: this.#db, domain: 'observability', targets, options });
   }
 
   public override get tracingStrategy(): {
@@ -415,6 +471,55 @@ export class ObservabilityPG extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'GET_TRACE', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: {
+            traceId,
+          },
+        },
+        error,
+      );
+    }
+  }
+
+  async getTraceLight(args: GetTraceArgs): Promise<GetTraceLightResponse | null> {
+    const { traceId } = args;
+    try {
+      const tableName = getTableName({
+        indexName: TABLE_SPANS,
+        schemaName: getSchemaName(this.#schema),
+      });
+
+      const spans = await this.#db.client.manyOrNone<LightSpanRecord>(
+        `SELECT
+          "traceId", "spanId", "parentSpanId", "name",
+          "entityType", "entityId", "entityName",
+          "spanType", "error", "isEvent",
+          "startedAtZ" as "startedAt", "endedAtZ" as "endedAt",
+          "createdAtZ" as "createdAt", "updatedAtZ" as "updatedAt"
+        FROM ${tableName}
+        WHERE "traceId" = $1
+        ORDER BY "startedAtZ" ASC`,
+        [traceId],
+      );
+
+      if (!spans || spans.length === 0) {
+        return null;
+      }
+
+      return {
+        traceId,
+        spans: spans.map(span =>
+          transformFromSqlRow<LightSpanRecord>({
+            tableName: TABLE_SPANS,
+            sqlRow: span,
+          }),
+        ),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'GET_TRACE_LIGHT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
           details: {

@@ -12,7 +12,7 @@ npm install @mastra/observability
 
 ```typescript
 import { Mastra } from '@mastra/core';
-import { Observability, DefaultExporter, CloudExporter, SensitiveDataFilter } from '@mastra/observability';
+import { Observability, MastraStorageExporter, MastraPlatformExporter } from '@mastra/observability';
 
 export const mastra = new Mastra({
   observability: new Observability({
@@ -20,20 +20,21 @@ export const mastra = new Mastra({
       default: {
         serviceName: 'my-app',
         exporters: [
-          new DefaultExporter(), // Persists traces for Mastra Studio
-          new CloudExporter(), // Sends to Mastra Cloud
+          new MastraStorageExporter(), // Persists observability events to Mastra Storage
+          new MastraPlatformExporter(), // Sends observability events to Mastra Platform
         ],
-        spanOutputProcessors: [new SensitiveDataFilter()],
       },
     },
   }),
 });
 ```
 
+A `SensitiveDataFilter` span output processor is auto-applied to every configured instance by default, redacting secrets (API keys, tokens, passwords, etc.) before they reach exporters. Set `sensitiveDataFilter: false` on the `Observability` config to opt out, or pass a `SensitiveDataFilterOptions` object to customize it.
+
 ## Features
 
 - **Auto-instrumentation** - Traces agent runs, LLM calls, tool executions, and workflows
-- **Pluggable Exporters** - Exporters for Studio and Cloud, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
+- **Pluggable Exporters** - Exporters for Studio, plus integrations for Arize, Braintrust, Langfuse, LangSmith, and OpenTelemetry
 - **Sampling Strategies** - Always, ratio-based, or custom sampling
 - **Span Processors** - Transform or filter span data before export
 - **OpenTelemetry Compatible** - Standard trace/span ID formats for integration

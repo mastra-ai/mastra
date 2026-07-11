@@ -10,14 +10,35 @@ import type {
 } from '@mastra/core/evals';
 import { RequestContext } from '@mastra/core/request-context';
 
+export type ScorerRunInputForLLMJudge =
+  | ScorerRunInputForAgent
+  | string
+  | {
+      inputMessages?: unknown[];
+      messages?: unknown[];
+      prompt?: string;
+      text?: string;
+      content?: unknown;
+      input?: unknown;
+      user?: unknown;
+      [key: string]: unknown;
+    };
+
+export type ScorerRunOutputForLLMJudge =
+  | ScorerRunOutputForAgent
+  | string
+  | unknown[]
+  | {
+      text?: string;
+      content?: unknown;
+      role?: string;
+      [key: string]: unknown;
+    };
+
 /**
- * Extracts text content from a MastraDBMessage.
+ * Extracts text content from a MastraDBMessage or ModelMessage-like object.
  *
- * This function matches the logic used in `MessageList.mastraDBMessageToAIV4UIMessage`.
- * It first checks for a string `content.content` field, then falls back to extracting
- * text from the `parts` array (returning only the last text part, like AI SDK does).
- *
- * @param message - The MastraDBMessage to extract text from
+ * @param message - The message to extract text from
  * @returns The extracted text content, or an empty string if no text is found
  *
  * @example
@@ -32,16 +53,104 @@ import { RequestContext } from '@mastra/core/request-context';
  * ```
  */
 export function getTextContentFromMastraDBMessage(message: MastraDBMessage): string {
-  if (typeof message.content.content === 'string' && message.content.content !== '') {
-    return message.content.content;
+  const content = message.content as any;
+
+  if (typeof content === 'string') {
+    return content;
   }
-  if (message.content.parts && Array.isArray(message.content.parts)) {
+  if (Array.isArray(content)) {
+    const textParts = content.filter(p => p.type === 'text');
+    return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
+  }
+  if (typeof content?.content === 'string' && content.content !== '') {
+    return content.content;
+  }
+  if (typeof content?.text === 'string' && content.text !== '') {
+    return content.text;
+  }
+  if (content?.parts && Array.isArray(content.parts)) {
     // Return only the last text part like AI SDK does
-    const textParts = message.content.parts.filter(p => p.type === 'text');
+    const textParts = content.parts.filter((p: any) => p.type === 'text');
     return textParts.length > 0 ? textParts[textParts.length - 1]?.text || '' : '';
   }
   return '';
 }
+
+const isRecord = (value: unknown): value is Record<string, any> => {
+  return typeof value === 'object' && value !== null;
+};
+
+const getTextFromValue = (value: unknown): string | undefined => {
+  if (typeof value === 'string') return value === '' ? undefined : value;
+  if (Array.isArray(value)) {
+    const textParts = value
+      .filter(part => isRecord(part) && part.type === 'text' && typeof part.text === 'string')
+      .map(part => part.text);
+    return textParts.length > 0 ? textParts[textParts.length - 1] : undefined;
+  }
+  if (!isRecord(value)) return undefined;
+
+  const fromParts = Array.isArray(value.parts) ? getTextFromValue(value.parts) : undefined;
+
+  return (
+    getTextFromValue(value.content) ??
+    (typeof value.text === 'string' && value.text !== '' ? value.text : undefined) ??
+    (typeof value.body === 'string' && value.body !== '' ? value.body : undefined) ??
+    fromParts
+  );
+};
+
+export const isScorerRunInputForAgent = (input: unknown): input is ScorerRunInputForAgent => {
+  return (
+    isRecord(input) &&
+    Array.isArray(input.inputMessages) &&
+    Array.isArray(input.rememberedMessages) &&
+    Array.isArray(input.systemMessages) &&
+    isRecord(input.taggedSystemMessages)
+  );
+};
+
+const isMastraDBMessageLike = (message: unknown): message is MastraDBMessage => {
+  return (
+    isRecord(message) &&
+    typeof message.id === 'string' &&
+    typeof message.role === 'string' &&
+    'content' in message &&
+    'createdAt' in message
+  );
+};
+
+export const isScorerRunOutputForAgent = (output: unknown): output is ScorerRunOutputForAgent => {
+  return Array.isArray(output) && output.every(isMastraDBMessageLike);
+};
+
+/**
+ * Resolves the effective role of a message, accounting for agent signal messages.
+ *
+ * Messages delivered through the agent subscription / signal API are persisted with
+ * `role: 'signal'` and carry their semantic role (e.g. `user`) on `type` and on
+ * `content.metadata.signal.{type,tagName}`. Treat those as their underlying role so
+ * helpers like `getUserMessageFromRunInput` can find them.
+ */
+const getEffectiveMessageRole = (message: Record<string, any>): string | undefined => {
+  if (message.role !== 'signal') return typeof message.role === 'string' ? message.role : undefined;
+
+  const signalMeta =
+    isRecord(message.content) && isRecord(message.content.metadata) ? message.content.metadata.signal : undefined;
+
+  const tagName = isRecord(signalMeta) && typeof signalMeta.tagName === 'string' ? signalMeta.tagName : undefined;
+  const signalType = isRecord(signalMeta) && typeof signalMeta.type === 'string' ? signalMeta.type : undefined;
+  const topLevelType = typeof message.type === 'string' ? message.type : undefined;
+
+  return tagName ?? signalType ?? topLevelType;
+};
+
+const getTextFromMessages = (messages: unknown, role: string): string | undefined => {
+  if (!Array.isArray(messages)) return undefined;
+
+  const message = messages.find(message => isRecord(message) && getEffectiveMessageRole(message) === role);
+  return message ? getTextFromValue(message) : undefined;
+};
 
 /**
  * Rounds a number to two decimal places.
@@ -139,10 +248,11 @@ export const createTestRun = (
 /**
  * Extracts the user message text from a scorer run input.
  *
- * Finds the first message with role 'user' and extracts its text content.
+ * Accepts the agent shape (`{ inputMessages }`), `ModelMessage[]`
+ * (`{ messages }`), workflow input (`{ prompt }`), and a bare string.
  *
- * @param input - The scorer run input containing input messages
- * @returns The user message text, or `undefined` if no user message is found
+ * @param input - The scorer run input
+ * @returns The user message text, or `undefined` if none can be extracted
  *
  * @example
  * ```ts
@@ -153,9 +263,19 @@ export const createTestRun = (
  *   });
  * ```
  */
-export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): string | undefined => {
-  const message = input?.inputMessages.find(({ role }) => role === 'user');
-  return message ? getTextContentFromMastraDBMessage(message) : undefined;
+export const getUserMessageFromRunInput = (input?: unknown): string | undefined => {
+  if (typeof input === 'string') return input;
+  if (!isRecord(input)) return undefined;
+
+  return (
+    getTextFromMessages(input.inputMessages, 'user') ??
+    getTextFromMessages(input.messages, 'user') ??
+    (typeof input.prompt === 'string' ? input.prompt : undefined) ??
+    (typeof input.text === 'string' ? input.text : undefined) ??
+    getTextFromValue(input.content) ??
+    getTextFromValue(input.input) ??
+    getTextFromValue(input.user)
+  );
 };
 
 /**
@@ -176,11 +296,12 @@ export const getUserMessageFromRunInput = (input?: ScorerRunInputForAgent): stri
  *   });
  * ```
  */
-export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): string[] => {
+export const getSystemMessagesFromRunInput = (input?: unknown): string[] => {
   const systemMessages: string[] = [];
+  if (!isRecord(input)) return systemMessages;
 
   // Add standard system messages
-  if (input?.systemMessages) {
+  if (Array.isArray(input.systemMessages)) {
     systemMessages.push(
       ...input.systemMessages
         .map(msg => {
@@ -200,12 +321,28 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
     );
   }
 
+  const addSystemMessages = (messages: unknown) => {
+    if (!Array.isArray(messages)) return;
+
+    systemMessages.push(
+      ...messages
+        .filter(message => isRecord(message) && message.role === 'system')
+        .map(message => getTextFromValue(message))
+        .filter((content): content is string => Boolean(content)),
+    );
+  };
+
+  addSystemMessages(input.inputMessages);
+  addSystemMessages(input.messages);
+
   // Add tagged system messages (these are specialized system prompts)
-  if (input?.taggedSystemMessages) {
+  if (isRecord(input.taggedSystemMessages)) {
     Object.values(input.taggedSystemMessages).forEach(messages => {
+      if (!Array.isArray(messages)) return;
       messages.forEach(msg => {
-        if (typeof msg.content === 'string') {
-          systemMessages.push(msg.content);
+        const content = getTextFromValue(msg);
+        if (content) {
+          systemMessages.push(content);
         }
       });
     });
@@ -231,7 +368,7 @@ export const getSystemMessagesFromRunInput = (input?: ScorerRunInputForAgent): s
  *   });
  * ```
  */
-export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string => {
+export const getCombinedSystemPrompt = (input?: unknown): string => {
   const systemMessages = getSystemMessagesFromRunInput(input);
   return systemMessages.join('\n\n');
 };
@@ -239,10 +376,12 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
 /**
  * Extracts the assistant message text from a scorer run output.
  *
- * Finds the first message with role 'assistant' and extracts its text content.
+ * Accepts the agent shape (`MastraDBMessage[]` / `ModelMessage[]`), workflow
+ * output (`{ text }`), task output (`{ content }`), a single assistant message
+ * object, and a bare string.
  *
- * @param output - The scorer run output (array of MastraDBMessage)
- * @returns The assistant message text, or `undefined` if no assistant message is found
+ * @param output - The scorer run output
+ * @returns The assistant message text, or `undefined` if none can be extracted
  *
  * @example
  * ```ts
@@ -253,9 +392,25 @@ export const getCombinedSystemPrompt = (input?: ScorerRunInputForAgent): string 
  *   });
  * ```
  */
-export const getAssistantMessageFromRunOutput = (output?: ScorerRunOutputForAgent) => {
-  const message = output?.find(({ role }) => role === 'assistant');
-  return message ? getTextContentFromMastraDBMessage(message) : undefined;
+export const getAssistantMessageFromRunOutput = (output?: unknown) => {
+  if (typeof output === 'string') return output;
+  if (Array.isArray(output)) return getTextFromMessages(output, 'assistant');
+  if (!isRecord(output)) return undefined;
+
+  const isAssistantOutput = output.role === undefined || output.role === 'assistant';
+
+  if (isAssistantOutput && typeof output.text === 'string') return output.text;
+  if (isAssistantOutput && typeof output.content === 'string') return output.content;
+  if (isAssistantOutput && (isRecord(output.content) || Array.isArray(output.content))) {
+    return (
+      getTextContentFromMastraDBMessage(output as MastraDBMessage) ||
+      getTextContentFromMastraDBMessage(output.content as MastraDBMessage) ||
+      undefined
+    );
+  }
+  if (output.role === 'assistant') return getTextContentFromMastraDBMessage(output as MastraDBMessage) || undefined;
+
+  return undefined;
 };
 
 /**
@@ -597,19 +752,28 @@ export function extractToolCalls(output: ScorerRunOutputForAgent): { tools: stri
 
   for (let messageIndex = 0; messageIndex < output.length; messageIndex++) {
     const message = output[messageIndex];
-    // Tool invocations are now nested under content
-    if (message?.content?.toolInvocations) {
-      for (let invocationIndex = 0; invocationIndex < message.content.toolInvocations.length; invocationIndex++) {
-        const invocation = message.content.toolInvocations[invocationIndex];
-        if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
-          toolCalls.push(invocation.toolName);
-          toolCallInfos.push({
-            toolName: invocation.toolName,
-            toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
-            messageIndex,
-            invocationIndex,
-          });
-        }
+    // Prefer the legacy toolInvocations array when present; fall back to
+    // V2 content.parts for messages that only store tool calls there.
+    const legacy = message?.content?.toolInvocations;
+    const fromParts = legacy
+      ? undefined
+      : message?.content?.parts
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
+    const toolInvocations = legacy ?? fromParts;
+
+    if (!toolInvocations?.length) continue;
+
+    for (let invocationIndex = 0; invocationIndex < toolInvocations.length; invocationIndex++) {
+      const invocation = toolInvocations[invocationIndex];
+      if (invocation && invocation.toolName && (invocation.state === 'result' || invocation.state === 'call')) {
+        toolCalls.push(invocation.toolName);
+        toolCallInfos.push({
+          toolName: invocation.toolName,
+          toolCallId: invocation.toolCallId || `${messageIndex}-${invocationIndex}`,
+          messageIndex,
+          invocationIndex,
+        });
       }
     }
   }
@@ -700,8 +864,17 @@ export function extractToolResults(output: ScorerRunOutputForAgent): ToolResultI
   const results: ToolResultInfo[] = [];
 
   for (const message of output) {
-    const toolInvocations = message?.content?.toolInvocations;
-    if (!toolInvocations) continue;
+    // Prefer the legacy toolInvocations array when present; fall back to
+    // V2 content.parts for messages that only store tool calls there.
+    const legacy = message?.content?.toolInvocations;
+    const fromParts = legacy
+      ? undefined
+      : message?.content?.parts
+          ?.filter((p): p is Extract<typeof p, { type: 'tool-invocation' }> => p.type === 'tool-invocation')
+          .map(p => p.toolInvocation);
+    const toolInvocations = legacy ?? fromParts;
+
+    if (!toolInvocations?.length) continue;
 
     for (const invocation of toolInvocations) {
       if (invocation.state === 'result' && invocation.result !== undefined) {

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Table, Thead, Th, Tbody, Row } from './Table';
-import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
-import { Badge } from '../Badge';
 import { Bot, Workflow } from 'lucide-react';
+import { Badge } from '../Badge';
+import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
+import { Table, Thead, Th, Tbody, Row } from './Table';
 
 const meta: Meta<typeof Table> = {
   title: 'DataDisplay/Table',
@@ -10,7 +10,6 @@ const meta: Meta<typeof Table> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
   argTypes: {
     size: {
       control: { type: 'select' },

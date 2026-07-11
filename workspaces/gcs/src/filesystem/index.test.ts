@@ -199,6 +199,36 @@ describe('GCSFilesystem', () => {
 
       expect(config.serviceAccountKey).toBeUndefined();
     });
+
+    it('includes prefix if set (without trailing slash)', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        prefix: 'workspace/user1/agents/abc',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('workspace/user1/agents/abc');
+    });
+
+    it('strips trailing slash from prefix in mount config', () => {
+      const fs = new GCSFilesystem({
+        bucket: 'test',
+        prefix: '/foo/bar/',
+      });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBe('foo/bar');
+    });
+
+    it('excludes prefix if not set', () => {
+      const fs = new GCSFilesystem({ bucket: 'test' });
+
+      const config = fs.getMountConfig();
+
+      expect(config.prefix).toBeUndefined();
+    });
   });
 
   describe('getInfo()', () => {
@@ -793,6 +823,46 @@ describe('GCSFilesystem SDK Operations', () => {
       const result = await fs.isDirectory('/');
       expect(result).toBe(true);
     });
+
+    it('exists(".") resolves to root and returns true', async () => {
+      const result = await fs.exists('.');
+      expect(result).toBe(true);
+      expect(mockBucket.file).not.toHaveBeenCalled();
+    });
+
+    it('stat(".") returns directory stat', async () => {
+      const stat = await fs.stat('.');
+      expect(stat.type).toBe('directory');
+    });
+
+    it('isDirectory(".") returns true', async () => {
+      const result = await fs.isDirectory('.');
+      expect(result).toBe(true);
+    });
+
+    it('isFile(".") returns false', async () => {
+      const result = await fs.isFile('.');
+      expect(result).toBe(false);
+    });
+
+    it('readdir(".") lists entries the same as readdir("/")', async () => {
+      const files = [
+        { name: 'file1.txt', metadata: { size: 100 } },
+        { name: 'subdir/nested.txt', metadata: { size: 50 } },
+      ];
+      mockBucket.getFiles.mockResolvedValueOnce([files]).mockResolvedValueOnce([files]);
+
+      const dotEntries = await fs.readdir('.');
+      const slashEntries = await fs.readdir('/');
+
+      expect(dotEntries).toEqual(slashEntries);
+    });
+
+    it('exists("./") resolves to root and returns true', async () => {
+      const result = await fs.exists('./');
+      expect(result).toBe(true);
+      expect(mockBucket.file).not.toHaveBeenCalled();
+    });
   });
 
   describe('exists()', () => {
@@ -833,6 +903,7 @@ describe('GCSFilesystem SDK Operations', () => {
       mockFile.getMetadata.mockResolvedValueOnce([
         {
           size: 1024,
+          contentType: 'text/plain',
           timeCreated: '2024-01-15T10:30:00Z',
           updated: '2024-01-16T12:00:00Z',
         },
@@ -845,9 +916,43 @@ describe('GCSFilesystem SDK Operations', () => {
         path: '/docs/readme.txt',
         type: 'file',
         size: 1024,
+        mimeType: 'text/plain',
         createdAt: new Date('2024-01-15T10:30:00Z'),
         modifiedAt: new Date('2024-01-16T12:00:00Z'),
       });
+    });
+
+    it('surfaces Content-Type metadata as mimeType for image objects', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([true]);
+      mockFile.getMetadata.mockResolvedValueOnce([
+        {
+          size: 2048,
+          contentType: 'image/png',
+          timeCreated: '2024-01-15T10:30:00Z',
+          updated: '2024-01-15T10:30:00Z',
+        },
+      ]);
+
+      const stat = await fs.stat('/images/screenshot.png');
+
+      expect(stat.mimeType).toBe('image/png');
+    });
+
+    it('falls back to extension-based mimeType when Content-Type is missing', async () => {
+      const mockFile = mockBucket.file();
+      mockFile.exists.mockResolvedValueOnce([true]);
+      mockFile.getMetadata.mockResolvedValueOnce([
+        {
+          size: 2048,
+          timeCreated: '2024-01-15T10:30:00Z',
+          updated: '2024-01-15T10:30:00Z',
+        },
+      ]);
+
+      const stat = await fs.stat('/images/no-content-type.png');
+
+      expect(stat.mimeType).toBe('image/png');
     });
 
     it('returns directory stat when file not found but prefix exists', async () => {

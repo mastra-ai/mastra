@@ -7,11 +7,13 @@ import type {
   ToolsInput,
   UIMessageWithMetadata,
   AgentInstructions,
+  AgentEditorConfig,
 } from '@mastra/core/agent';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
+import type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry } from '@mastra/core/agent-builder/ee';
 import type { MastraScorerEntry, ScoreRowData } from '@mastra/core/evals';
-import type { CoreMessage } from '@mastra/core/llm';
-import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
+import type { CoreMessage, Provider as ModelProviderId } from '@mastra/core/llm';
+import type { LogLevel } from '@mastra/core/logger';
 import type { MCPToolType, ServerInfo } from '@mastra/core/mcp';
 import type {
   AiMessageType,
@@ -28,14 +30,13 @@ import type {
   PaginationInfo,
   WorkflowRuns,
   StorageListMessagesInput,
-  ObservationalMemoryRecord,
   Rule,
   RuleGroup,
   StorageConditionalVariant,
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-
+import type { ChunkType } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type {
   TimeTravelContext,
@@ -50,7 +51,42 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
+import type { Body, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
+
+type OptionalizeUndefined<T> = T extends Date
+  ? Date
+  : T extends (...args: any[]) => any
+    ? T
+    : T extends readonly (infer U)[]
+      ? OptionalizeUndefined<U>[]
+      : T extends object
+        ? Simplify<
+            {
+              [K in keyof T as undefined extends T[K] ? never : K]: OptionalizeUndefined<T[K]>;
+            } & {
+              [K in keyof T as undefined extends T[K] ? K : never]?: OptionalizeUndefined<Exclude<T[K], undefined>>;
+            }
+          >
+        : T;
+
+type Serialized<T> = T extends Date
+  ? string
+  : T extends readonly (infer U)[]
+    ? Serialized<U>[]
+    : T extends object
+      ? {
+          [K in keyof T]: Serialized<T[K]>;
+        }
+      : T;
+
+type RequestContextOptions = {
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+type GeneratedRequest<T> = OptionalizeUndefined<T>;
+type GeneratedResponse<T extends RouteKey> = Serialized<RouteResponse<T>>;
 
 export interface ClientOptions {
   /** Base URL for API requests */
@@ -75,6 +111,67 @@ export interface ClientOptions {
 
 export type AgentVersionIdentifier = { versionId: string } | { status: 'draft' | 'published' };
 
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalActiveBehavior = 'deliver' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type AgentSignalIdleBehavior = 'wake' | 'persist' | 'discard';
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/signals'>>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
+
+/**
+ * @experimental Agent message APIs are experimental and may change in a future release.
+ */
+export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface SubscribeAgentThreadParams {
+  resourceId?: string;
+  threadId: string;
+}
+
+export type ListAgentSuspendedRunsParams = GeneratedRequest<QueryParams<'GET /agents/:agentId/suspended-runs'>>;
+
+/**
+ * Listed suspended runs as returned by `agent.listSuspendedRuns()`.
+ * Date fields (e.g. `suspendedAt`) are ISO strings over the wire, matching
+ * the rest of the client SDK.
+ */
+export type ListAgentSuspendedRunsResponse = GeneratedResponse<'GET /agents/:agentId/suspended-runs'>;
+
+export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
+
+export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
+
+/**
+ * @experimental Agent signals are experimental and may change in a future release.
+ */
+export interface ProcessAgentThreadStreamOptions {
+  onChunk: (chunk: ChunkType) => void | Promise<void>;
+  reconnect?:
+    | boolean
+    | {
+        /** Maximum reconnect attempts after the initial stream ends or errors. Defaults to Infinity. */
+        maxRetries?: number;
+        /** Delay between reconnect attempts in milliseconds. Defaults to 1000. */
+        delayMs?: number;
+      };
+}
+
 export interface RequestOptions {
   method?: string;
   headers?: Record<string, string>;
@@ -83,6 +180,283 @@ export interface RequestOptions {
   /** Credentials mode for requests. See https://developer.mozilla.org/en-US/docs/Web/API/Request/credentials for more info. */
   credentials?: 'omit' | 'same-origin' | 'include';
 }
+
+export type ResponseInputTextPart = {
+  type: 'input_text' | 'text' | 'output_text';
+  text: string;
+};
+
+export type ResponseInputMessage = {
+  role: 'system' | 'developer' | 'user' | 'assistant';
+  content: string | ResponseInputTextPart[];
+};
+
+export type ResponseTextFormat =
+  | {
+      type: 'json_object';
+    }
+  | {
+      type: 'json_schema';
+      name: string;
+      description?: string;
+      schema: Record<string, unknown>;
+      strict?: boolean;
+    };
+
+export type ResponseTextConfig = {
+  format: ResponseTextFormat;
+};
+
+export type ResponseOutputText = {
+  type: 'output_text';
+  text: string;
+  annotations?: unknown[];
+  logprobs?: unknown[];
+};
+
+export type ResponseOutputMessage = {
+  id: string;
+  type: 'message';
+  role: 'assistant';
+  status: 'in_progress' | 'completed' | 'incomplete';
+  content: ResponseOutputText[];
+};
+
+export type ResponseOutputFunctionCall = {
+  id: string;
+  type: 'function_call';
+  call_id: string;
+  name: string;
+  arguments: string;
+  status?: 'in_progress' | 'completed' | 'incomplete';
+};
+
+export type ResponseOutputFunctionCallOutput = {
+  id: string;
+  type: 'function_call_output';
+  call_id: string;
+  output: string;
+};
+
+export type ResponseUsage = {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  input_tokens_details?: {
+    cached_tokens: number;
+  };
+  output_tokens_details?: {
+    reasoning_tokens: number;
+  };
+};
+
+export type ResponseTool = {
+  type: 'function';
+  name: string;
+  description?: string;
+  parameters?: unknown;
+};
+
+export type ResponseOutputItem = ResponseOutputMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemInputText = {
+  type: 'input_text';
+  text: string;
+};
+
+export type ConversationItemMessage = {
+  id: string;
+  type: 'message';
+  role: 'system' | 'user' | 'assistant';
+  status: 'completed';
+  content: Array<ConversationItemInputText | ResponseOutputText>;
+};
+
+export type ConversationItem = ConversationItemMessage | ResponseOutputFunctionCall | ResponseOutputFunctionCallOutput;
+
+export type ConversationItemsPage = {
+  object: 'list';
+  data: ConversationItem[];
+  first_id: string | null;
+  last_id: string | null;
+  has_more: boolean;
+};
+
+export type ResponsesResponse = {
+  id: string;
+  object: 'response';
+  created_at: number;
+  completed_at?: number | null;
+  model: string;
+  status: 'in_progress' | 'completed' | 'incomplete';
+  output: ResponseOutputItem[];
+  usage: ResponseUsage | null;
+  error?: {
+    code?: string;
+    message?: string;
+  } | null;
+  incomplete_details?: {
+    reason?: string;
+  } | null;
+  instructions?: string | null;
+  text?: ResponseTextConfig | null;
+  previous_response_id?: string | null;
+  conversation_id?: string | null;
+  /** Provider-returned response state, such as `openai.responseId`, for provider-native continuation. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  tools?: ResponseTool[];
+  store?: boolean;
+  output_text: string;
+};
+
+export type ResponsesDeleteResponse = {
+  id: string;
+  object: 'response';
+  deleted: true;
+};
+
+export type CreateResponseParams = {
+  /** Optional model override, such as `openai/gpt-5`. When omitted, the agent default model is used. */
+  model?: string;
+  /** Mastra agent ID for the request. Required on initial requests; stored follow-ups can omit it when using `previous_response_id`. */
+  agent_id?: string;
+  /** Input text or message history for the current turn. */
+  input: string | ResponseInputMessage[];
+  /** Request-scoped instructions for the current response. */
+  instructions?: string;
+  /** Optional text output format. Supports `json_object` and `json_schema`. */
+  text?: ResponseTextConfig;
+  /** Optional conversation ID. In Mastra this is the raw threadId. */
+  conversation_id?: string;
+  /** Optional provider-specific options passed through to the underlying model call. */
+  providerOptions?: Record<string, Record<string, unknown> | undefined>;
+  /** When true, returns a streaming Responses API event stream. */
+  stream?: boolean;
+  /** Persists the response through the selected agent's memory. Requires a memory-backed agent. */
+  store?: boolean;
+  /** Continues a previously stored response chain. */
+  previous_response_id?: string;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type Conversation = {
+  id: string;
+  object: 'conversation';
+  thread: StorageThreadType;
+};
+
+export type ConversationDeleted = {
+  id: string;
+  object: 'conversation.deleted';
+  deleted: true;
+};
+
+export type CreateConversationParams = {
+  agent_id: string;
+  conversation_id?: string;
+  resource_id?: string;
+  title?: string;
+  metadata?: Record<string, unknown>;
+  requestContext?: RequestContext | Record<string, any>;
+};
+
+export type ResponsesCreatedEvent = {
+  type: 'response.created';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesInProgressEvent = {
+  type: 'response.in_progress';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemAddedEvent = {
+  type: 'response.output_item.added';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartAddedEvent = {
+  type: 'response.content_part.added';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDeltaEvent = {
+  type: 'response.output_text.delta';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputTextDoneEvent = {
+  type: 'response.output_text.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  text: string;
+  sequence_number?: number;
+};
+
+export type ResponsesContentPartDoneEvent = {
+  type: 'response.content_part.done';
+  output_index: number;
+  content_index: number;
+  item_id: string;
+  part: ResponseOutputText;
+  sequence_number?: number;
+};
+
+export type ResponsesOutputItemDoneEvent = {
+  type: 'response.output_item.done';
+  output_index: number;
+  item: ResponseOutputItem;
+  sequence_number?: number;
+};
+
+export type ResponsesFunctionCallArgumentsDeltaEvent = {
+  type: 'response.function_call_arguments.delta';
+  output_index: number;
+  item_id: string;
+  delta: string;
+  sequence_number?: number;
+};
+
+export type ResponsesFunctionCallArgumentsDoneEvent = {
+  type: 'response.function_call_arguments.done';
+  output_index: number;
+  item_id: string;
+  name: string;
+  arguments: string;
+  sequence_number?: number;
+};
+
+export type ResponsesCompletedEvent = {
+  type: 'response.completed';
+  response: ResponsesResponse;
+  sequence_number?: number;
+};
+
+export type ResponsesStreamEvent =
+  | ResponsesCreatedEvent
+  | ResponsesInProgressEvent
+  | ResponsesOutputItemAddedEvent
+  | ResponsesContentPartAddedEvent
+  | ResponsesOutputTextDeltaEvent
+  | ResponsesOutputTextDoneEvent
+  | ResponsesContentPartDoneEvent
+  | ResponsesOutputItemDoneEvent
+  | ResponsesFunctionCallArgumentsDeltaEvent
+  | ResponsesFunctionCallArgumentsDoneEvent
+  | ResponsesCompletedEvent;
 
 type WithoutMethods<T> = {
   [K in keyof T as T[K] extends (...args: any[]) => any
@@ -103,17 +477,21 @@ export interface GetAgentResponse {
   id: string;
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   instructions: AgentInstructions;
   tools: Record<string, GetToolResponse>;
   workflows: Record<string, GetWorkflowResponse>;
   agents: Record<string, { id: string; name: string }>;
   skills?: SkillMetadata[];
   workspaceTools?: string[];
+  /** Browser tool names available to this agent (if browser is configured) */
+  browserTools?: string[];
   /** ID of the agent's workspace (if configured) */
   workspaceId?: string;
   provider: string;
   modelId: string;
   modelVersion: string;
+  supportsMemory?: boolean;
   modelList:
     | Array<{
         id: string;
@@ -137,6 +515,21 @@ export interface GetAgentResponse {
   status?: 'draft' | 'published' | 'archived';
   activeVersionId?: string;
   hasDraft?: boolean;
+  editor?: AgentEditorConfig;
+}
+
+/**
+ * Response from the browser session probe endpoint.
+ *
+ * Use this to decide whether to open a screencast WebSocket for an agent/thread:
+ * - `screencastAvailable`: server has the `ws` / `@hono/node-ws` packages installed.
+ *   When false, opening a WS will fail and trigger a reconnect loop — skip it.
+ * - `hasSession`: the agent has an active browser session for this thread. When
+ *   false, the WS would just sit idle waiting for the agent to invoke a tool.
+ */
+export interface GetAgentBrowserSessionResponse {
+  hasSession: boolean;
+  screencastAvailable: boolean;
 }
 
 export type GenerateLegacyParams<T extends JSONSchema7 | ZodSchema | undefined = undefined> = {
@@ -179,16 +572,25 @@ export type StreamParams<OUTPUT = undefined> = StreamParamsBase<OUTPUT> & {
   messages: MessageListInput;
 } & (OUTPUT extends undefined ? { structuredOutput?: never } : { structuredOutput: StructuredOutputOptions<OUTPUT> });
 
+/**
+ * Provider id widened to accept admin-configured custom gateway providers.
+ * Closed unions over the five hard-coded providers are removed in favor of the
+ * generated `ModelProviderId` union plus a `(string & {})` escape hatch — this
+ * preserves IDE autocomplete on known providers while letting custom gateway
+ * ids flow through (see Phase 1 of the admin model configuration plan).
+ */
+export type AdminProviderId = ModelProviderId | (string & {});
+
 export type UpdateModelParams = {
   modelId: string;
-  provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+  provider: AdminProviderId;
 };
 
 export type UpdateModelInModelListParams = {
   modelConfigId: string;
   model?: {
     modelId: string;
-    provider: 'openai' | 'anthropic' | 'groq' | 'xai' | 'google';
+    provider: AdminProviderId;
   };
   maxRetries?: number;
   enabled?: boolean;
@@ -226,6 +628,7 @@ export type GetWorkflowRunByIdResponse = WorkflowState;
 export interface GetWorkflowResponse {
   name: string;
   description?: string;
+  metadata?: Record<string, unknown>;
   steps: {
     [key: string]: {
       id: string;
@@ -262,17 +665,8 @@ export interface GetWorkflowResponse {
 }
 
 export type WorkflowRunResult = WorkflowResult<any, any, any, any>;
-export interface UpsertVectorParams {
-  indexName: string;
-  vectors: number[][];
-  metadata?: Record<string, any>[];
-  ids?: string[];
-}
-export interface CreateIndexParams {
-  indexName: string;
-  dimension: number;
-  metric?: 'cosine' | 'euclidean' | 'dotproduct';
-}
+export type UpsertVectorParams = GeneratedRequest<Body<'POST /vector/:vectorName/upsert'>>;
+export type CreateIndexParams = GeneratedRequest<Body<'POST /vector/:vectorName/create-index'>>;
 
 export interface QueryVectorParams {
   indexName: string;
@@ -282,15 +676,9 @@ export interface QueryVectorParams {
   includeVector?: boolean;
 }
 
-export interface QueryVectorResponse {
-  results: QueryResult[];
-}
+export type QueryVectorResponse = QueryResult[];
 
-export interface GetVectorIndexResponse {
-  dimension: number;
-  metric: 'cosine' | 'euclidean' | 'dotproduct';
-  count: number;
-}
+export type GetVectorIndexResponse = GeneratedResponse<'GET /vector/:vectorName/indexes/:indexName'>;
 
 export interface SaveMessageToMemoryParams {
   messages: (MastraMessageV1 | MastraDBMessage)[];
@@ -307,16 +695,12 @@ export type SaveMessageToMemoryResponse = {
   messages: (MastraMessageV1 | MastraDBMessage)[];
 };
 
-export interface CreateMemoryThreadParams {
-  title?: string;
-  metadata?: Record<string, any>;
-  resourceId: string;
-  threadId?: string;
-  agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type CreateMemoryThreadParams = GeneratedRequest<
+  Body<'POST /memory/threads'> & QueryParams<'POST /memory/threads'>
+> &
+  RequestContextOptions;
 
-export type CreateMemoryThreadResponse = StorageThreadType;
+export type CreateMemoryThreadResponse = GeneratedResponse<'POST /memory/threads'>;
 
 export interface ListMemoryThreadsParams {
   /**
@@ -334,30 +718,34 @@ export interface ListMemoryThreadsParams {
   agentId?: string;
   page?: number;
   perPage?: number;
-  orderBy?: 'createdAt' | 'updatedAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadsResponse = PaginationInfo & {
-  threads: StorageThreadType[];
-};
+export type ListMemoryThreadsResponse = GeneratedResponse<'GET /memory/threads'>;
 
-export interface GetMemoryConfigParams {
-  agentId: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type GetMemoryConfigParams = GeneratedRequest<QueryParams<'GET /memory/config'>> & RequestContextOptions;
 
-export type GetMemoryConfigResponse = { config: MemoryConfig };
+export type GetMemoryConfigResponse = GeneratedResponse<'GET /memory/config'>;
 
 export interface UpdateMemoryThreadParams {
   title: string;
   metadata: Record<string, any>;
   resourceId: string;
+  /**
+   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
+   * to `getMemoryThread({ threadId, agentId })` is used.
+   */
+  agentId?: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
-export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'>;
+export type ListMemoryThreadMessagesParams = Omit<StorageListMessagesInput, 'threadId'> & {
+  includeSystemReminders?: boolean;
+};
 
 export type ListMemoryThreadMessagesResponse = {
   messages: MastraDBMessage[];
@@ -376,6 +764,11 @@ export interface CloneMemoryThreadParams {
       messageIds?: string[];
     };
   };
+  /**
+   * Agent ID. Required by the server for write operations. If omitted, the agentId provided
+   * to `getMemoryThread({ threadId, agentId })` is used.
+   */
+  agentId?: string;
   requestContext?: RequestContext | Record<string, any>;
 }
 
@@ -384,15 +777,7 @@ export type CloneMemoryThreadResponse = {
   clonedMessages: MastraDBMessage[];
 };
 
-export interface GetLogsParams {
-  transportId: string;
-  fromDate?: Date;
-  toDate?: Date;
-  logLevel?: LogLevel;
-  filters?: Record<string, string>;
-  page?: number;
-  perPage?: number;
-}
+export type GetLogsParams = GeneratedRequest<QueryParams<'GET /logs'>>;
 
 export interface GetLogParams {
   runId: string;
@@ -405,13 +790,7 @@ export interface GetLogParams {
   perPage?: number;
 }
 
-export type GetLogsResponse = {
-  logs: BaseLogMessage[];
-  total: number;
-  page: number;
-  perPage: number;
-  hasMore: boolean;
-};
+export type GetLogsResponse = GeneratedResponse<'GET /logs'>;
 
 export type RequestFunction = (path: string, options?: RequestOptions) => Promise<any>;
 export interface GetVNextNetworkResponse {
@@ -491,6 +870,7 @@ export interface McpToolInfo {
   description?: string;
   inputSchema: string;
   toolType?: MCPToolType;
+  _meta?: Record<string, unknown>;
 }
 
 export interface McpServerToolListResponse {
@@ -766,6 +1146,64 @@ export interface StoredMCPClientToolsConfig {
 }
 
 /**
+ * One pinned connection on a `toolProviders[providerId].connections[toolkit]` bucket.
+ * Part of the Agent Builder / CMS tool-providers shape
+ * (`StoredAgentSnapshot.toolProviders`).
+ */
+export interface StoredToolProviderConnection {
+  /**
+   * Identity binding kind.
+   *
+   * - `'author'` — uses the agent author's connection (v1 default).
+   * - `'invoker'` — uses the end-user's connection (v1.5, reserved).
+   * - `'platform'` — uses a shared platform account (v2, reserved).
+   */
+  kind: 'author' | 'invoker' | 'platform';
+  /** Parent toolkit slug. Denormalized for callsite clarity. */
+  toolkit: string;
+  /**
+   * Provider-opaque identifier for the OAuth bucket.
+   *
+   * Required for `'author'` and `'platform'`; reserved (empty) for `'invoker'`.
+   */
+  connectionId: string;
+  /**
+   * Display label and LLM disambiguator. Optional when this is the only
+   * connection on a `toolkit`; required (non-empty, ≤ 32 chars,
+   * `[A-Za-z0-9 _-]+`, case-insensitively unique) once ≥ 2 connections share
+   * the same `toolkit`.
+   */
+  label?: string;
+  /**
+   * Ownership scope of the underlying OAuth bucket.
+   *
+   * - `'per-author'` (default) — bucketed under the agent author's id.
+   * - `'shared'` — bucketed under a constant shared id; visible to and
+   *   usable by anyone with edit access.
+   * - `'caller-supplied'` — bucketed under the request-context
+   *   `MASTRA_RESOURCE_ID_KEY` value at runtime. Used for multi-tenant
+   *   deployments where the host app sets the user id per request.
+   */
+  scope?: 'per-author' | 'shared' | 'caller-supplied';
+}
+
+/** Per-tool override stored alongside the selected tool slug. */
+export interface StoredToolProviderToolMeta {
+  /**
+   * Toolkit this slug belongs to. The runtime groups selected slugs
+   * by this field when fanning out across connections.
+   */
+  toolkit?: string;
+  description?: string;
+}
+
+/** Stored shape for one tool provider's configuration on one agent. */
+export interface StoredToolProviderConfig {
+  tools: Record<string, StoredToolProviderToolMeta>;
+  connections: Record<string, StoredToolProviderConnection[]>;
+}
+
+/**
  * Scorer config for stored agents
  */
 export interface StoredAgentScorerConfig {
@@ -795,6 +1233,22 @@ export type StoredWorkspaceRef =
   | { type: 'id'; workspaceId: string }
   | { type: 'inline'; config: Record<string, unknown> };
 
+export interface StoredBrowserConfig {
+  provider: string;
+  headless?: boolean;
+  viewport?: { width: number; height: number };
+  timeout?: number;
+  screencast?: {
+    format?: 'jpeg' | 'png';
+    quality?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    everyNthFrame?: number;
+  };
+}
+
+export type StoredBrowserRef = { type: 'inline'; config: StoredBrowserConfig };
+
 // ============================================================================
 // Conditional Field Types (for rule-based dynamic agent configuration)
 // Re-exported from @mastra/core/storage for convenience
@@ -806,6 +1260,18 @@ export type ConditionalVariant<T> = StorageConditionalVariant<T>;
 export type ConditionalField<T> = StorageConditionalField<T>;
 
 /**
+ * Resolved author identity. Returned by the server when an auth provider is
+ * configured and the agent's `authorId` could be looked up. All fields except
+ * `id` are optional — providers may not expose every field.
+ */
+export interface ResolvedAuthor {
+  id: string;
+  name?: string;
+  email?: string;
+  avatarUrl?: string;
+}
+
+/**
  * Stored agent data returned from API
  */
 export interface StoredAgentResponse {
@@ -814,6 +1280,8 @@ export interface StoredAgentResponse {
   status: string;
   activeVersionId?: string;
   authorId?: string;
+  author?: ResolvedAuthor;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -831,6 +1299,7 @@ export interface StoredAgentResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -838,7 +1307,11 @@ export interface StoredAgentResponse {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
+  // Favorites (EE feature, present when `favorites` feature is enabled)
+  isFavorited?: boolean;
+  favoriteCount?: number;
 }
 
 /**
@@ -851,8 +1324,27 @@ export interface ListStoredAgentsParams {
     field?: 'createdAt' | 'updatedAt';
     direction?: 'ASC' | 'DESC';
   };
+  status?: 'draft' | 'published' | 'archived';
   authorId?: string;
+  /**
+   * Restrict the list to public records. Only `'public'` is accepted by the
+   * server filter; private records are surfaced via the default scope-aware
+   * filter (caller's own rows + legacy unowned).
+   */
+  visibility?: 'public';
   metadata?: Record<string, unknown>;
+  /** When true, only return agents favorited by the caller (or by `pinFavoritedFor`). */
+  favoritedOnly?: boolean;
+  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
+  pinFavoritedFor?: string;
+}
+
+/**
+ * Response from favorite / unfavorite mutations.
+ */
+export interface FavoriteToggleResponse {
+  favorited: boolean;
+  favoriteCount: number;
 }
 
 /**
@@ -878,6 +1370,8 @@ export interface CloneAgentParams {
   metadata?: Record<string, unknown>;
   /** Author identifier for the cloned agent. */
   authorId?: string;
+  /** Visibility of the cloned agent. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   /** Request context for resolving dynamic agent configuration (instructions, model, tools, etc.) */
   requestContext?: RequestContext | Record<string, any>;
 }
@@ -890,6 +1384,8 @@ export interface CreateStoredAgentParams {
   /** Unique identifier for the agent. If not provided, derived from name via slugify. */
   id?: string;
   authorId?: string;
+  /** Visibility of the agent. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
   description?: string;
@@ -904,6 +1400,7 @@ export interface CreateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -911,14 +1408,41 @@ export interface CreateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
 }
 
 /**
  * Parameters for updating a stored agent
  */
+export type ExportStoredAgentParams = Partial<
+  Omit<CreateStoredAgentParams, 'id' | 'authorId' | 'visibility' | 'metadata'>
+>;
+
+export type OpenStoredAgentChangeRequestParams = ExportStoredAgentParams & {
+  changeMessage?: string;
+  userName?: string;
+  inspectOnly?: boolean;
+};
+
+export interface ExportStoredAgentResponse {
+  agentId: string;
+  fileName: string;
+  content: string;
+  config: Record<string, unknown>;
+}
+
+export interface OpenStoredAgentChangeRequestResponse {
+  id?: string | number;
+  url: string;
+  ref?: string;
+}
+
 export interface UpdateStoredAgentParams {
   authorId?: string;
+  /** Visibility of the agent. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
@@ -933,6 +1457,7 @@ export interface UpdateStoredAgentParams {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -940,6 +1465,8 @@ export interface UpdateStoredAgentParams {
   scorers?: ConditionalField<Record<string, StoredAgentScorerConfig>>;
   skills?: ConditionalField<Record<string, StoredAgentSkillConfig>>;
   workspace?: ConditionalField<StoredWorkspaceRef>;
+  /** Browser config. `true` = use admin default, `false` = no browser. */
+  browser?: ConditionalField<StoredBrowserRef> | boolean | null;
   requestContextSchema?: Record<string, unknown>;
   /** Optional message describing the changes for the auto-created version */
   changeMessage?: string;
@@ -951,6 +1478,26 @@ export interface UpdateStoredAgentParams {
 export interface DeleteStoredAgentResponse {
   success: boolean;
   message: string;
+}
+
+/**
+ * A single agent that references another agent as a sub-agent. Includes both
+ * public and the caller's own private agents — anything the caller can read.
+ */
+export interface StoredAgentDependent {
+  id: string;
+  name: string;
+}
+
+/**
+ * Response for listing dependents of a stored agent.
+ * `dependents` lists caller-readable references (with names).
+ * `hiddenCount` aggregates dependents the caller cannot read; it is only
+ * non-zero when the target agent is public.
+ */
+export interface StoredAgentDependentsResponse {
+  dependents: StoredAgentDependent[];
+  hiddenCount: number;
 }
 
 // ============================================================================
@@ -1196,6 +1743,7 @@ export interface AgentVersionResponse {
   workflows?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   agents?: ConditionalField<Record<string, StoredAgentToolConfig>>;
   integrationTools?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
+  toolProviders?: ConditionalField<Record<string, StoredToolProviderConfig>>;
   mcpClients?: ConditionalField<Record<string, StoredMCPClientToolsConfig>>;
   inputProcessors?: ConditionalField<StoredProcessorGraph>;
   outputProcessors?: ConditionalField<StoredProcessorGraph>;
@@ -1210,8 +1758,10 @@ export interface AgentVersionResponse {
 export interface ListAgentVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListAgentVersionsResponse {
@@ -1299,8 +1849,10 @@ export interface ScorerVersionResponse {
 export interface ListScorerVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListScorerVersionsResponse {
@@ -1332,14 +1884,12 @@ export interface CompareScorerVersionsResponse {
   diffs: VersionDiff[];
 }
 
-export interface ListAgentsModelProvidersResponse {
-  providers: Provider[];
-}
+export type ListAgentsModelProvidersResponse = GeneratedResponse<'GET /agents/providers'>;
 
 export interface Provider {
   id: string;
   name: string;
-  envVar: string;
+  envVar: string | string[];
   connected: boolean;
   docUrl?: string;
   models: string[];
@@ -1354,13 +1904,7 @@ export interface MastraPackage {
   version: string;
 }
 
-export interface GetSystemPackagesResponse {
-  packages: MastraPackage[];
-  isDev: boolean;
-  cmsEnabled: boolean;
-  storageType?: string;
-  observabilityStorageType?: string;
-}
+export type GetSystemPackagesResponse = GeneratedResponse<'GET /system/packages'>;
 
 // ============================================================================
 // Workspace Types
@@ -1369,54 +1913,27 @@ export interface GetSystemPackagesResponse {
 /**
  * Workspace capabilities
  */
-export interface WorkspaceCapabilities {
-  hasFilesystem: boolean;
-  hasSandbox: boolean;
-  canBM25: boolean;
-  canVector: boolean;
-  canHybrid: boolean;
-  hasSkills: boolean;
-}
+export type WorkspaceCapabilities = ListWorkspacesResponse['workspaces'][number]['capabilities'];
 
 /**
  * Workspace safety configuration
  */
-export interface WorkspaceSafety {
-  readOnly: boolean;
-}
+export type WorkspaceSafety = ListWorkspacesResponse['workspaces'][number]['safety'];
 
 /**
  * Response for getting workspace info
  */
-export interface WorkspaceInfoResponse {
-  isWorkspaceConfigured: boolean;
-  id?: string;
-  name?: string;
-  status?: string;
-  capabilities?: WorkspaceCapabilities;
-  safety?: WorkspaceSafety;
-}
+export type WorkspaceInfoResponse = GeneratedResponse<'GET /workspaces/:workspaceId'>;
 
 /**
  * Workspace item in list response
  */
-export interface WorkspaceItem {
-  id: string;
-  name: string;
-  status: string;
-  source: 'mastra' | 'agent';
-  agentId?: string;
-  agentName?: string;
-  capabilities: WorkspaceCapabilities;
-  safety: WorkspaceSafety;
-}
+export type WorkspaceItem = ListWorkspacesResponse['workspaces'][number];
 
 /**
  * Response for listing all workspaces
  */
-export interface ListWorkspacesResponse {
-  workspaces: WorkspaceItem[];
-}
+export type ListWorkspacesResponse = GeneratedResponse<'GET /workspaces'>;
 
 /**
  * File entry in directory listing
@@ -1430,57 +1947,32 @@ export interface WorkspaceFileEntry {
 /**
  * Response for reading a file
  */
-export interface WorkspaceFsReadResponse {
-  path: string;
-  content: string;
-  type: 'file' | 'directory';
-  size?: number;
-  mimeType?: string;
-}
+export type WorkspaceFsReadResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/read'>;
 
 /**
  * Response for writing a file
  */
-export interface WorkspaceFsWriteResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsWriteResponse = GeneratedResponse<'POST /workspaces/:workspaceId/fs/write'>;
 
 /**
  * Response for listing files
  */
-export interface WorkspaceFsListResponse {
-  path: string;
-  entries: WorkspaceFileEntry[];
-}
+export type WorkspaceFsListResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/list'>;
 
 /**
  * Response for deleting a file
  */
-export interface WorkspaceFsDeleteResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsDeleteResponse = GeneratedResponse<'DELETE /workspaces/:workspaceId/fs/delete'>;
 
 /**
  * Response for creating a directory
  */
-export interface WorkspaceFsMkdirResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceFsMkdirResponse = GeneratedResponse<'POST /workspaces/:workspaceId/fs/mkdir'>;
 
 /**
  * Response for getting file stats
  */
-export interface WorkspaceFsStatResponse {
-  path: string;
-  type: 'file' | 'directory';
-  size?: number;
-  createdAt?: string;
-  modifiedAt?: string;
-  mimeType?: string;
-}
+export type WorkspaceFsStatResponse = GeneratedResponse<'GET /workspaces/:workspaceId/fs/stat'>;
 
 /**
  * Workspace search result
@@ -1503,38 +1995,22 @@ export interface WorkspaceSearchResult {
 /**
  * Parameters for searching workspace content
  */
-export interface WorkspaceSearchParams {
-  query: string;
-  topK?: number;
-  mode?: 'bm25' | 'vector' | 'hybrid';
-  minScore?: number;
-}
+export type WorkspaceSearchParams = GeneratedRequest<QueryParams<'GET /workspaces/:workspaceId/search'>>;
 
 /**
  * Response for searching workspace
  */
-export interface WorkspaceSearchResponse {
-  results: WorkspaceSearchResult[];
-  query: string;
-  mode: 'bm25' | 'vector' | 'hybrid';
-}
+export type WorkspaceSearchResponse = GeneratedResponse<'GET /workspaces/:workspaceId/search'>;
 
 /**
  * Parameters for indexing content
  */
-export interface WorkspaceIndexParams {
-  path: string;
-  content: string;
-  metadata?: Record<string, unknown>;
-}
+export type WorkspaceIndexParams = GeneratedRequest<Body<'POST /workspaces/:workspaceId/index'>>;
 
 /**
  * Response for indexing content
  */
-export interface WorkspaceIndexResponse {
-  success: boolean;
-  path: string;
-}
+export type WorkspaceIndexResponse = GeneratedResponse<'POST /workspaces/:workspaceId/index'>;
 
 // ============================================================================
 // Skills Types
@@ -1655,6 +2131,7 @@ export interface StoredSkillResponse {
   id: string;
   status: string;
   authorId?: string;
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   createdAt: string;
   updatedAt: string;
@@ -1663,6 +2140,9 @@ export interface StoredSkillResponse {
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
+  // Favorites (EE feature, present when `favorites` feature is enabled)
+  isFavorited?: boolean;
+  favoriteCount?: number;
 }
 
 /**
@@ -1676,7 +2156,17 @@ export interface ListStoredSkillsParams {
     direction?: 'ASC' | 'DESC';
   };
   authorId?: string;
+  /**
+   * Restrict the list to public records. Only `'public'` is accepted by the
+   * server filter; private records are surfaced via the default scope-aware
+   * filter (caller's own rows + legacy unowned).
+   */
+  visibility?: 'public';
   metadata?: Record<string, unknown>;
+  /** When true, only return skills favorited by the caller (or by `pinFavoritedFor`). */
+  favoritedOnly?: boolean;
+  /** When set, sort favorited-first for this user id. Required for `favoritedOnly`. */
+  pinFavoritedFor?: string;
 }
 
 /**
@@ -1696,9 +2186,12 @@ export interface ListStoredSkillsResponse {
 export interface CreateStoredSkillParams {
   id?: string;
   authorId?: string;
+  /** Visibility of the skill. Defaults to 'private'. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name: string;
-  description?: string;
+  /** Required by the server: description of what the skill does and when to use it. */
+  description: string;
   instructions: string;
   license?: string;
   files?: StoredSkillFileNode[];
@@ -1709,6 +2202,8 @@ export interface CreateStoredSkillParams {
  */
 export interface UpdateStoredSkillParams {
   authorId?: string;
+  /** Visibility of the skill. */
+  visibility?: 'private' | 'public';
   metadata?: Record<string, unknown>;
   name?: string;
   description?: string;
@@ -1723,6 +2218,80 @@ export interface UpdateStoredSkillParams {
 export interface DeleteStoredSkillResponse {
   success: boolean;
   message: string;
+}
+
+// ============================================================================
+// Stored Workspace Types
+// ============================================================================
+
+/**
+ * Filesystem configuration in a stored workspace
+ */
+export interface StoredFilesystemConfig {
+  provider: string;
+  config: Record<string, unknown>;
+  readOnly?: boolean;
+}
+
+/**
+ * Sandbox configuration in a stored workspace
+ */
+export interface StoredSandboxConfig {
+  provider: string;
+  config: Record<string, unknown>;
+}
+
+/**
+ * Stored workspace data returned from API
+ */
+export interface StoredWorkspaceResponse {
+  id: string;
+  status: string;
+  activeVersionId?: string;
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+  name: string;
+  description?: string;
+  filesystem?: StoredFilesystemConfig;
+  sandbox?: StoredSandboxConfig;
+  mounts?: Record<string, StoredFilesystemConfig>;
+  skills?: string[];
+  tools?: {
+    enabled?: boolean;
+    requireApproval?: boolean;
+    tools?: Record<string, { enabled?: boolean; requireApproval?: boolean }>;
+  };
+  autoSync?: boolean;
+  operationTimeout?: number;
+  /** Whether this workspace is registered at runtime (only present in list responses) */
+  runtimeRegistered?: boolean;
+}
+
+/**
+ * Parameters for listing stored workspaces
+ */
+export interface ListStoredWorkspacesParams {
+  page?: number;
+  perPage?: number;
+  orderBy?: {
+    field?: 'createdAt' | 'updatedAt';
+    direction?: 'ASC' | 'DESC';
+  };
+  authorId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Response for listing stored workspaces
+ */
+export interface ListStoredWorkspacesResponse {
+  workspaces: StoredWorkspaceResponse[];
+  total: number;
+  page: number;
+  perPage: number | false;
+  hasMore: boolean;
 }
 
 // ============================================================================
@@ -1807,59 +2376,40 @@ export interface ExecuteProcessorResponse {
 /**
  * Parameters for getting observational memory
  */
-export interface GetObservationalMemoryParams {
-  agentId: string;
-  resourceId?: string;
-  threadId?: string;
-  requestContext?: RequestContext | Record<string, any>;
-}
+export type GetObservationalMemoryParams = Omit<
+  GeneratedRequest<QueryParams<'GET /memory/observational-memory'>>,
+  'from' | 'to'
+> & {
+  from?: Date | string;
+  to?: Date | string;
+} & RequestContextOptions;
 
 /**
  * Response for observational memory endpoint
  */
-export interface GetObservationalMemoryResponse {
-  record: ObservationalMemoryRecord | null;
-  history?: ObservationalMemoryRecord[];
-}
+export type GetObservationalMemoryResponse = GeneratedResponse<'GET /memory/observational-memory'>;
 
 /**
  * Parameters for awaiting buffer status
  */
-export interface AwaitBufferStatusParams {
-  agentId: string;
-  resourceId?: string;
-  threadId?: string;
-  requestContext?: RequestContext;
-}
+export type AwaitBufferStatusParams = GeneratedRequest<Body<'POST /memory/observational-memory/buffer-status'>> &
+  RequestContextOptions;
 
 /**
  * Response for buffer status endpoint
  */
-export interface AwaitBufferStatusResponse {
-  record: ObservationalMemoryRecord | null;
-}
+export type AwaitBufferStatusResponse = GeneratedResponse<'POST /memory/observational-memory/buffer-status'>;
 
 /**
  * Extended memory status response with OM info
  */
-export interface GetMemoryStatusResponse {
-  result: boolean;
-  observationalMemory?: {
-    enabled: boolean;
-    hasRecord?: boolean;
-    originType?: string;
-    lastObservedAt?: Date | null;
-    tokenCount?: number;
-    observationTokenCount?: number;
-    isObserving?: boolean;
-    isReflecting?: boolean;
-  };
-}
+export type GetMemoryStatusResponse = GeneratedResponse<'GET /memory/status'>;
 
 /**
  * Extended memory config response with OM config
  */
 export interface GetMemoryConfigResponseExtended {
+  memoryType?: 'local' | 'gateway';
   config: MemoryConfig & {
     observationalMemory?: {
       enabled: boolean;
@@ -1879,81 +2429,88 @@ export interface GetMemoryConfigResponseExtended {
 /**
  * Response for listing available vector stores
  */
-export interface ListVectorsResponse {
-  vectors: Array<{
-    name: string;
-    id: string;
-    type: string;
-  }>;
-}
+export type ListVectorsResponse = GeneratedResponse<'GET /vectors'>;
 
 /**
  * Response for listing available embedding models
  */
-export interface ListEmbeddersResponse {
-  embedders: Array<{
-    id: string;
-    provider: string;
-    name: string;
-    description: string;
-    dimensions: number;
-    maxInputTokens: number;
-  }>;
-}
+export type ListEmbeddersResponse = GeneratedResponse<'GET /embedders'>;
 
 // ============================================================================
 // Tool Provider Types
 // ============================================================================
 
-export interface ToolProviderInfo {
-  id: string;
-  name: string;
-  description?: string;
-}
+export type ToolProviderInfo = GeneratedResponse<'GET /tool-providers'>['providers'][number];
 
-export interface ToolProviderToolkit {
-  slug: string;
-  name: string;
-  description?: string;
-  icon?: string;
-}
+export type ToolProviderToolkit = GeneratedResponse<'GET /tool-providers/:providerId/toolkits'>['data'][number];
 
-export interface ToolProviderToolInfo {
-  slug: string;
-  name: string;
-  description?: string;
-  toolkit?: string;
-}
+export type ToolProviderToolInfo = GeneratedResponse<'GET /tool-providers/:providerId/tools'>['data'][number];
 
-export interface ToolProviderPagination {
-  total?: number;
-  page?: number;
-  perPage?: number;
-  hasMore: boolean;
-}
+export type ToolProviderPagination = NonNullable<
+  GeneratedResponse<'GET /tool-providers/:providerId/toolkits'>['pagination']
+>;
 
-export interface ListToolProvidersResponse {
-  providers: ToolProviderInfo[];
-}
+export type ListToolProvidersResponse = GeneratedResponse<'GET /tool-providers'>;
 
-export interface ListToolProviderToolkitsResponse {
-  data: ToolProviderToolkit[];
-  pagination?: ToolProviderPagination;
-}
+export type ListToolProviderToolkitsResponse = GeneratedResponse<'GET /tool-providers/:providerId/toolkits'>;
 
-export interface ListToolProviderToolsParams {
-  toolkit?: string;
-  search?: string;
-  page?: number;
-  perPage?: number;
-}
+export type ListToolProviderToolsParams = GeneratedRequest<QueryParams<'GET /tool-providers/:providerId/tools'>>;
 
-export interface ListToolProviderToolsResponse {
-  data: ToolProviderToolInfo[];
-  pagination?: ToolProviderPagination;
-}
+export type ListToolProviderToolsResponse = GeneratedResponse<'GET /tool-providers/:providerId/tools'>;
 
-export type GetToolProviderToolSchemaResponse = Record<string, unknown>;
+export type GetToolProviderToolSchemaResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/tools/:toolSlug/schema'>;
+
+// ── v2 surface: authorize / connections / fields / status / health ──────────
+
+export type AuthorizeToolProviderParams = GeneratedRequest<Body<'POST /tool-providers/:providerId/authorize'>>;
+
+export type AuthorizeToolProviderResponse = GeneratedResponse<'POST /tool-providers/:providerId/authorize'>;
+
+export type ToolProviderAuthStatusResponse = GeneratedResponse<'GET /tool-providers/:providerId/auth-status/:authId'>;
+
+export type ToolProviderConnectionStatusParams = GeneratedRequest<
+  Body<'POST /tool-providers/:providerId/connection-status'>
+>;
+
+export type ToolProviderConnectionStatusResponse =
+  GeneratedResponse<'POST /tool-providers/:providerId/connection-status'>;
+
+export type ListToolProviderConnectionsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections'>
+>;
+
+export type ListToolProviderConnectionsResponse = GeneratedResponse<'GET /tool-providers/:providerId/connections'>;
+
+export type ListToolProviderConnectionFieldsParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connection-fields'>
+>;
+
+export type ListToolProviderConnectionFieldsResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connection-fields'>;
+
+export type DisconnectToolProviderConnectionParams = GeneratedRequest<
+  QueryParams<'DELETE /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type DisconnectToolProviderConnectionResponse =
+  GeneratedResponse<'DELETE /tool-providers/:providerId/connections/:connectionId'>;
+
+export type UpdateToolProviderConnectionParams = GeneratedRequest<
+  Body<'PATCH /tool-providers/:providerId/connections/:connectionId'>
+>;
+
+export type UpdateToolProviderConnectionResponse =
+  GeneratedResponse<'PATCH /tool-providers/:providerId/connections/:connectionId'>;
+
+export type GetToolProviderConnectionUsageParams = GeneratedRequest<
+  QueryParams<'GET /tool-providers/:providerId/connections/:connectionId/usage'>
+>;
+
+export type GetToolProviderConnectionUsageResponse =
+  GeneratedResponse<'GET /tool-providers/:providerId/connections/:connectionId/usage'>;
+
+export type ToolProviderHealthResponse = GeneratedResponse<'GET /tool-providers/:providerId/health'>;
 
 // ============================================================================
 // Processor Provider Types
@@ -2035,8 +2592,28 @@ export class MastraClientError extends Error {
 // ============================================
 
 export interface DatasetItemSource {
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result';
+  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   referenceId?: string;
+}
+
+/** A single item-level static tool mock (agent targets only). */
+export interface DatasetItemToolMock {
+  /** Name of the tool this mock applies to. */
+  toolName: string;
+  /** Arguments to match against the tool call (deep equality when matchArgs is 'strict'). */
+  args: Record<string, unknown>;
+  /** Output served to the agent when this mock is matched and consumed. */
+  output: unknown;
+  /** Argument matching mode. 'strict' (default) deep-equals args; 'ignore' matches on toolName only. */
+  matchArgs?: 'strict' | 'ignore';
+}
+
+/** Diagnostic receipt for item-level tool mocks, returned on experiment results. */
+export interface ToolMockReport {
+  served: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  unconsumed: Array<{ mockIndex: number; toolName: string; args: unknown }>;
+  liveCalls: Array<{ toolName: string; args: unknown }>;
+  failure?: { code: 'TOOL_MOCK_MISMATCH' | 'TOOL_MOCK_EXHAUSTED'; toolName: string; args: unknown };
 }
 
 export interface DatasetItem {
@@ -2045,6 +2622,8 @@ export interface DatasetItem {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: unknown;
   source?: DatasetItemSource;
@@ -2063,6 +2642,7 @@ export interface DatasetRecord {
   tags?: string[] | null;
   targetType?: string | null;
   targetIds?: string[] | null;
+  scorerIds?: string[] | null;
   version: number;
   createdAt: string | Date;
   updatedAt: string | Date;
@@ -2100,6 +2680,7 @@ export interface DatasetExperimentResult {
   traceId: string | null;
   status: 'needs-review' | 'reviewed' | 'complete' | null;
   tags: string[] | null;
+  toolMockReport?: ToolMockReport | null;
   scores: Array<{
     scorerId: string;
     scorerName: string;
@@ -2127,6 +2708,7 @@ export interface CreateDatasetParams {
   requestContextSchema?: Record<string, unknown> | null;
   targetType?: string;
   targetIds?: string[];
+  scorerIds?: string[];
 }
 
 export interface UpdateDatasetParams {
@@ -2140,12 +2722,19 @@ export interface UpdateDatasetParams {
   tags?: string[];
   targetType?: string;
   targetIds?: string[];
+  scorerIds?: string[] | null;
+  /** Restrict the lookup to a specific tenant organization. */
+  organizationId?: string;
+  /** Restrict the lookup to a specific tenant project. */
+  projectId?: string;
 }
 
 export interface AddDatasetItemParams {
   datasetId: string;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2156,6 +2745,8 @@ export interface UpdateDatasetItemParams {
   itemId: string;
   input?: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   requestContext?: Record<string, unknown>;
   metadata?: Record<string, unknown>;
   source?: DatasetItemSource;
@@ -2166,6 +2757,8 @@ export interface BatchInsertDatasetItemsParams {
   items: Array<{
     input: unknown;
     groundTruth?: unknown;
+    expectedTrajectory?: unknown;
+    toolMocks?: DatasetItemToolMock[];
     requestContext?: Record<string, unknown>;
     metadata?: Record<string, unknown>;
     source?: DatasetItemSource;
@@ -2224,6 +2817,8 @@ export interface DatasetItemVersionResponse {
   datasetVersion: number;
   input: unknown;
   groundTruth?: unknown;
+  expectedTrajectory?: unknown;
+  toolMocks?: DatasetItemToolMock[];
   metadata?: Record<string, unknown>;
   validTo: number | null;
   isDeleted: boolean;
@@ -2360,8 +2955,10 @@ export interface PromptBlockVersionResponse {
 export interface ListPromptBlockVersionsParams {
   page?: number;
   perPage?: number;
-  orderBy?: 'versionNumber' | 'createdAt';
-  sortDirection?: 'ASC' | 'DESC';
+  orderBy?: {
+    field?: 'versionNumber' | 'createdAt';
+    direction?: 'ASC' | 'DESC';
+  };
 }
 
 export interface ListPromptBlockVersionsResponse {
@@ -2387,10 +2984,486 @@ export interface DeletePromptBlockVersionResponse {
   message: string;
 }
 
+export type BackgroundTaskStatus =
+  | 'pending'
+  | 'running'
+  | 'suspended'
+  | 'completed'
+  | 'failed'
+  | 'cancelled'
+  | 'timed_out';
+
+export type BackgroundTaskDateColumn = 'createdAt' | 'startedAt' | 'completedAt';
+
+export type BackgroundTaskResponse = GeneratedResponse<'GET /background-tasks'>['tasks'][number];
+
+export type ListBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /background-tasks'>>;
+
+export type ListBackgroundTasksResponse = GeneratedResponse<'GET /background-tasks'>;
+
+export type StreamBackgroundTasksParams = GeneratedRequest<QueryParams<'GET /background-tasks/stream'>>;
+
+export type ScheduleStatus = 'active' | 'paused';
+
+export interface ScheduleRunSummary {
+  status: WorkflowRunStatus;
+  startedAt?: number;
+  completedAt?: number;
+  durationMs?: number;
+  error?: string;
+}
+
+/** Attributes rendered onto the signal's XML tag. */
+export type ScheduleSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+
+/** Mirrors the core `AgentSignalType` union. */
+export type ScheduleSignalType = 'user' | 'state' | 'reactive' | 'notification' | 'user-message' | 'system-reminder';
+
+/** Behavior applied when the thread is already streaming. */
+export interface ScheduleIfActive {
+  behavior?: 'deliver' | 'persist' | 'discard';
+  attributes?: ScheduleSignalAttributes;
+}
+
+/**
+ * Behavior applied when the thread is idle, plus a serializable subset of
+ * stream options forwarded to the woken run.
+ */
+export interface ScheduleIfIdle {
+  behavior?: 'wake' | 'persist' | 'discard';
+  attributes?: ScheduleSignalAttributes;
+  streamOptions?: {
+    requestContext?: Record<string, unknown>;
+  };
+}
+
+/**
+ * Flat agent-schedule view returned by the unified `/schedules` surface.
+ * Discriminate from workflow schedules by the presence of `agentId`.
+ */
+export interface AgentSchedule {
+  id: string;
+  agentId: string;
+  /** Mirror of the workflow-schedule discriminator — always absent on agent schedules. */
+  workflowId?: undefined;
+  /** Workflow-run summary — never hydrated for agent schedules. */
+  lastRun?: undefined;
+  name?: string;
+  threadId?: string;
+  resourceId?: string;
+  prompt: string;
+  cron: string;
+  timezone?: string;
+  status: ScheduleStatus;
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Flat workflow-schedule view returned by the unified `/schedules` surface.
+ * Discriminate from agent schedules by the presence of `workflowId`.
+ */
+export interface WorkflowSchedule {
+  id: string;
+  workflowId: string;
+  /** Mirror of the agent-schedule discriminator — always absent on workflow schedules. */
+  agentId?: undefined;
+  cron: string;
+  timezone?: string;
+  status: ScheduleStatus;
+  nextFireAt: number;
+  lastFireAt?: number;
+  lastRunId?: string;
+  lastRun?: ScheduleRunSummary;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/** Union of the flat views returned by the unified `/schedules` surface. */
+export type ScheduleResponse = AgentSchedule | WorkflowSchedule;
+
+export type ScheduleTriggerOutcome =
+  | 'published'
+  | 'succeeded'
+  | 'delivered'
+  | 'persisted'
+  | 'discarded'
+  | 'skipped'
+  | 'aborted'
+  | 'failed';
+
+export type ScheduleTriggerKind = 'schedule-fire' | 'queue-drain' | 'manual';
+
+export interface ScheduleTriggerResponse {
+  id?: string;
+  scheduleId: string;
+  runId: string | null;
+  scheduledFireAt: number;
+  actualFireAt: number;
+  outcome: ScheduleTriggerOutcome;
+  error?: string;
+  triggerKind?: ScheduleTriggerKind;
+  parentTriggerId?: string;
+  metadata?: Record<string, unknown>;
+  run?: ScheduleRunSummary;
+}
+
+export interface ListSchedulesParams {
+  /** Scope the list to a single agent's schedules. */
+  agentId?: string;
+  /** Scope the list to a single workflow's schedules. */
+  workflowId?: string;
+  status?: ScheduleStatus;
+  /** Agent-schedule only: match the target threadId. */
+  threadId?: string;
+  /** Agent-schedule only: match the target resourceId. */
+  resourceId?: string;
+  /** Agent-schedule only: match the free-form target name. */
+  name?: string;
+}
+
+export interface ListSchedulesResponse {
+  schedules: ScheduleResponse[];
+}
+
+export interface ListScheduleTriggersParams {
+  limit?: number;
+  fromActualFireAt?: number;
+  toActualFireAt?: number;
+}
+
+export interface ListScheduleTriggersResponse {
+  triggers: ScheduleTriggerResponse[];
+}
+
+/**
+ * Agent variant of the `client.createSchedule(...)` body — targets an agent
+ * by `agentId`. Mirrors `CreateAgentScheduleInput` on the core Schedules
+ * service.
+ */
+export interface CreateAgentScheduleInput {
+  /** Optional stable id; normalized to `agent_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  agentId: string;
+  cron: string;
+  prompt: string;
+  name?: string;
+  timezone?: string;
+  threadId?: string;
+  resourceId?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Workflow variant of the `client.createSchedule(...)` body — targets a
+ * workflow by `workflowId`. Mirrors `CreateWorkflowScheduleInput` on the
+ * core Schedules service.
+ */
+export interface CreateWorkflowScheduleInput {
+  /** Optional stable id; normalized to `schedule_<slug>`. A random id is generated when omitted. */
+  id?: string;
+  workflowId: string;
+  cron: string;
+  timezone?: string;
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+  metadata?: Record<string, unknown>;
+}
+
+/**
+ * Body for `client.createSchedule(...)`. Discriminated by which target id is
+ * present: `agentId` creates an agent schedule, `workflowId` a workflow
+ * schedule.
+ */
+export type CreateScheduleInput = CreateAgentScheduleInput | CreateWorkflowScheduleInput;
+
+/**
+ * Patch body for `client.updateSchedule(...)`. Fields apply to the matching
+ * target type; agent-only fields on a workflow schedule are rejected by the
+ * server. `threadId` / `resourceId` are part of an agent schedule's identity
+ * and cannot be changed — to retarget, delete and recreate.
+ */
+export interface UpdateScheduleInput {
+  cron?: string;
+  timezone?: string;
+  status?: ScheduleStatus;
+  metadata?: Record<string, unknown>;
+  // Agent-schedule fields
+  prompt?: string;
+  name?: string;
+  signalType?: ScheduleSignalType;
+  tagName?: string;
+  attributes?: ScheduleSignalAttributes;
+  ifActive?: ScheduleIfActive;
+  ifIdle?: ScheduleIfIdle;
+  providerOptions?: Record<string, unknown>;
+  // Workflow-schedule fields
+  inputData?: unknown;
+  initialState?: unknown;
+  requestContext?: Record<string, unknown>;
+}
+
+/**
+ * Response for POST /schedules/:scheduleId/run.
+ *
+ * The fire runs asynchronously through the same worker pipeline as scheduled
+ * fires. `claimId` is the trigger row's `runId` (used to look up the
+ * resulting trigger row via `listScheduleTriggers`).
+ */
+export interface RunScheduleResponse {
+  scheduleId: string;
+  claimId: string;
+  scheduledFireAt: number;
+}
+
 export interface ExperimentReviewCounts {
   experimentId: string;
   total: number;
   needsReview: number;
   reviewed: number;
   complete: number;
+}
+
+/**
+ * Agent feature flags for the builder.
+ *
+ * The `GET /editor/builder/settings` response always carries a fully-resolved
+ * object. On admin input, omitted keys default to `true` (default-on / allowlist
+ * model — admins opt out by setting a key to `false`). Special case: `browser`
+ * is only `true` when `configuration.agent.browser` is provided.
+ *
+ * Clients should still use strict `=== true` checks.
+ */
+export interface BuilderAgentFeatures {
+  tools?: boolean;
+  agents?: boolean;
+  workflows?: boolean;
+  scorers?: boolean;
+  skills?: boolean;
+  memory?: boolean;
+  variables?: boolean;
+  favorites?: boolean;
+  avatarUpload?: boolean;
+  browser?: boolean;
+  /**
+   * Whether the model picker is visible in the Agent Builder.
+   * Omitted/`false` ⇒ picker hidden (locked mode); admin's `models.default` is applied.
+   */
+  model?: boolean;
+}
+
+/**
+ * Re-exported from `@mastra/core/agent-builder/ee` so SDK consumers don't need
+ * a second import for admin model configuration types. Owned by core.
+ */
+export type { BuilderModelPolicy, DefaultModelEntry, ProviderModelEntry, ModelProviderId };
+
+/**
+ * Response from GET /editor/builder/settings
+ */
+export interface BuilderSettingsResponse {
+  enabled: boolean;
+  features?: {
+    agent?: BuilderAgentFeatures;
+  };
+  configuration?: {
+    agent?: Record<string, unknown>;
+  };
+  /**
+   * Server-derived model policy. Always present; `{ active: false }` when no
+   * builder is configured. UI consumers should read this directly rather than
+   * re-deriving from `features` / `configuration`.
+   */
+  modelPolicy?: BuilderModelPolicy;
+  /**
+   * Resolved picker visibility for tools, agents, and workflows. Present when
+   * the builder is enabled. Each `visible*` field is `null` when unrestricted
+   * (show all registered entries) and `string[]` otherwise — making the
+   * empty-vs-unrestricted distinction explicit so the UI never has to
+   * disambiguate.
+   */
+  picker?: BuilderPickerResponse;
+  /**
+   * Non-fatal warnings produced by builder config validation (e.g. allowlist
+   * entries with unknown providers that aren't tagged `kind: 'custom'`, or
+   * picker allowlist entries that don't match a registered ID).
+   * Only present when there is at least one warning.
+   */
+  modelPolicyWarnings?: string[];
+}
+
+/**
+ * Response from GET /editor/builder/models/available.
+ *
+ * Same provider shape as {@link ListAgentsModelProvidersResponse}, but each
+ * provider's `models` list is already filtered by the active builder model
+ * policy (the server applies the EE allowlist). Providers with no allowed
+ * models are omitted, so the picker can render this verbatim.
+ */
+export type BuilderAvailableModelsResponse = GeneratedResponse<'GET /editor/builder/models/available'>;
+
+/**
+ * A valid permission-pattern string (e.g. `agents:read`, `*`).
+ *
+ * Kept as a string alias so the Playground can name the type while the
+ * authoritative set is fetched from the server at runtime.
+ */
+export type PermissionPattern = string;
+
+/**
+ * Response from GET /auth/permission-patterns.
+ */
+export type PermissionPatternsResponse = GeneratedResponse<'GET /auth/permission-patterns'>;
+
+/**
+ * Resolved picker visibility section returned in {@link BuilderSettingsResponse}.
+ *
+ * Per kind:
+ * - `null` ⇒ unrestricted (show all registered entries).
+ * - `string[]` ⇒ explicit allowlist (may be empty to show none).
+ */
+export interface BuilderPickerResponse {
+  visibleTools: string[] | null;
+  visibleAgents: string[] | null;
+  visibleWorkflows: string[] | null;
+}
+
+/**
+ * Response from GET /editor/builder/infrastructure
+ *
+ * Agent Builder infrastructure configuration plus lightweight runtime resolution state.
+ */
+export interface InfrastructureStatusResponse {
+  channels: {
+    providers: Array<{
+      id: string;
+      name: string;
+      isConfigured: boolean;
+      routeCount: number;
+    }>;
+  };
+  browser: {
+    type: string | null;
+    provider: string | null;
+    env: string | null;
+    registered: boolean;
+    availableProviders: string[];
+    config: Array<{ key: string; value: string }>;
+  };
+  workspace: {
+    type: string | null;
+    workspaceId: string | null;
+    name: string | null;
+    source: string | null;
+    registered: boolean;
+    hasFilesystem: boolean;
+    hasSandbox: boolean;
+    filesystemProvider: string | null;
+    sandboxProvider: string | null;
+    config: Array<{ key: string; value: string }>;
+  };
+  registries: {
+    skillsSh: {
+      enabled: boolean;
+    };
+  };
+}
+
+// ============================================================================
+// Builder registries (skills.sh and other external skill catalogs)
+// ============================================================================
+
+/**
+ * One known skill registry surfaced from the Agent Builder config.
+ */
+export interface BuilderRegistryDescriptor {
+  id: string;
+  enabled: boolean;
+  label: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries`.
+ */
+export interface ListBuilderRegistriesResponse {
+  registries: BuilderRegistryDescriptor[];
+}
+
+/**
+ * Single skill summary returned from a registry search/popular endpoint.
+ * Wire shape matches the upstream skills.sh proxy.
+ */
+export interface BuilderRegistrySkillSummary {
+  id: string;
+  name: string;
+  installs: number;
+  /** Repository identifier in `owner/repo` or `owner/repo/path` form. */
+  topSource: string;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/search`.
+ */
+export interface BuilderRegistrySearchResponse {
+  query: string;
+  searchType: string;
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/popular`.
+ */
+export interface BuilderRegistryPopularResponse {
+  skills: BuilderRegistrySkillSummary[];
+  count: number;
+  limit: number;
+  offset: number;
+}
+
+/**
+ * Response from `GET /editor/builder/registries/:registryId/preview`.
+ */
+export interface BuilderRegistryPreviewResponse {
+  content: string;
+}
+
+/**
+ * Body for `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallBody {
+  owner: string;
+  repo: string;
+  skillName: string;
+  visibility?: 'private' | 'public';
+}
+
+/**
+ * Response from `POST /editor/builder/registries/:registryId/install`.
+ */
+export interface BuilderRegistryInstallResponse {
+  storedSkillId: string;
+  name: string;
+  filesWritten: number;
 }

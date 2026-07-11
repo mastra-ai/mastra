@@ -80,6 +80,131 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.toolInvocation.args).toEqual({ topic: 'TypeScript history', detail: true });
   });
 
+  it('should update message metadata by toolCallId without changing the tool invocation', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage(
+      [
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'tc-background',
+            toolName: 'research',
+            args: { query: 'background task' },
+            result: 'Background task started. Task ID: task-1.',
+          },
+        },
+      ],
+      'memory-msg',
+    );
+    msg.content.metadata = {
+      backgroundTasks: {
+        'tc-existing': {
+          taskId: 'task-existing',
+        },
+        'tc-background': {
+          taskId: 'task-1',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+        },
+      },
+    };
+    messageList.add(msg, 'memory');
+    messageList.drainUnsavedMessages();
+
+    const updated = messageList.updateMessageMetadataByToolCallId('tc-background', {
+      backgroundTasks: {
+        'tc-background': {
+          taskId: 'task-1',
+          startedAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    });
+
+    expect(updated).toBe(true);
+
+    const part = msg.content.parts[0] as any;
+    expect(part.toolInvocation).toEqual({
+      state: 'result',
+      toolCallId: 'tc-background',
+      toolName: 'research',
+      args: { query: 'background task' },
+      result: 'Background task started. Task ID: task-1.',
+    });
+    expect(msg.content.metadata).toEqual({
+      backgroundTasks: {
+        'tc-existing': {
+          taskId: 'task-existing',
+        },
+        'tc-background': {
+          taskId: 'task-1',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+          startedAt: '2026-06-27T00:00:00.000Z',
+        },
+      },
+    });
+    expect(messageList.drainUnsavedMessages()).toEqual([msg]);
+  });
+
+  it('should deep-merge background task metadata when updating a tool invocation', () => {
+    const messageList = new MessageList();
+
+    const msg = makeAssistantMessage([
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'call',
+          toolCallId: 'tc-background',
+          toolName: 'research',
+          args: { query: 'background task' },
+        },
+      },
+    ]);
+    msg.content.metadata = {
+      backgroundTasks: {
+        'tc-background': {
+          taskId: 'task-1',
+          startedAt: '2026-06-27T00:00:00.000Z',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+        },
+      },
+    };
+    messageList.add(msg, 'response');
+
+    const updated = messageList.updateToolInvocation(
+      {
+        type: 'tool-invocation',
+        toolInvocation: {
+          state: 'result',
+          toolCallId: 'tc-background',
+          toolName: 'research',
+          args: {},
+          result: { summary: 'done' },
+        },
+      },
+      {
+        backgroundTasks: {
+          'tc-background': {
+            taskId: 'task-1',
+            completedAt: '2026-06-27T00:10:00.000Z',
+          },
+        },
+      },
+    );
+
+    expect(updated).toBe(true);
+    expect(msg.content.metadata).toEqual({
+      backgroundTasks: {
+        'tc-background': {
+          taskId: 'task-1',
+          startedAt: '2026-06-27T00:00:00.000Z',
+          suspendedAt: '2026-06-27T00:05:00.000Z',
+          completedAt: '2026-06-27T00:10:00.000Z',
+        },
+      },
+    });
+  });
+
   it('should move a memory message to response source for re-saving', () => {
     const messageList = new MessageList();
 
@@ -122,6 +247,70 @@ describe('MessageList.updateToolInvocation', () => {
     const unsaved = messageList.drainUnsavedMessages();
     expect(unsaved).toHaveLength(1);
     expect(unsaved[0]?.id).toBe(msg.id);
+  });
+
+  it('should re-save a sealed memory message when its tool invocation completes after response-id rotation', () => {
+    const messageList = new MessageList();
+
+    const sealedMessage = makeAssistantMessage(
+      [
+        {
+          type: 'data-om-status',
+          data: { windows: {} },
+        } as any,
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'call',
+            toolCallId: 'tc-sealed',
+            toolName: 'web_search',
+            args: { query: 'hello' },
+          },
+        },
+      ],
+      'sealed-assistant-id',
+    );
+
+    sealedMessage.content.metadata = { mastra: { sealed: true } } as any;
+
+    messageList.add(sealedMessage, 'memory');
+    messageList.drainUnsavedMessages();
+
+    const rotatedMessage = makeAssistantMessage(
+      [
+        {
+          type: 'text',
+          text: 'post-seal continuation',
+        },
+      ],
+      'rotated-assistant-id',
+    );
+    messageList.add(rotatedMessage, 'response');
+
+    const updated = messageList.updateToolInvocation({
+      type: 'tool-invocation',
+      toolInvocation: {
+        state: 'result',
+        toolCallId: 'tc-sealed',
+        toolName: 'web_search',
+        args: {},
+        result: { content: 'search results' },
+      },
+    });
+
+    expect(updated).toBe(true);
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.state).toBe('result');
+    expect((sealedMessage.content.parts[1] as any).toolInvocation.args).toEqual({ query: 'hello' });
+
+    const unsaved = messageList.drainUnsavedMessages();
+    expect(unsaved.map(message => message.id)).toEqual(['sealed-assistant-id', 'rotated-assistant-id']);
+
+    const persistedSealed = unsaved.find(message => message.id === 'sealed-assistant-id');
+    expect((persistedSealed?.content.parts[1] as any).toolInvocation.state).toBe('result');
+
+    const allMessages = messageList.get.all.db();
+    expect(allMessages.map(message => message.id)).toEqual(['sealed-assistant-id', 'rotated-assistant-id']);
+    expect((allMessages[1]?.content.parts[0] as any).text).toBe('post-seal continuation');
   });
 
   it('should not move a response message (already in response source)', () => {
@@ -478,7 +667,7 @@ describe('MessageList.updateToolInvocation', () => {
     expect(part.providerExecuted).toBe(false);
   });
 
-  it('should allow result to override providerMetadata from original call', () => {
+  it('should merge providerMetadata from original call and result', () => {
     const messageList = new MessageList();
 
     const msg = makeAssistantMessage([
@@ -509,6 +698,9 @@ describe('MessageList.updateToolInvocation', () => {
     } as any);
 
     const part = msg.content.parts[0] as any;
-    expect(part.providerMetadata).toEqual({ mastra: { modelOutput: true } });
+    expect(part.providerMetadata).toEqual({
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+      mastra: { modelOutput: true },
+    });
   });
 });

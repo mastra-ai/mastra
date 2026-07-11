@@ -1,4 +1,4 @@
-import { globby } from 'globby';
+import { glob as globby } from 'tinyglobby';
 import { it, describe, expect } from 'vitest';
 import * as customResolve from 'resolve.exports';
 import { resolve } from 'node:path';
@@ -32,10 +32,12 @@ describe.for(
     expect(pkgJson.private).toBe(true);
   });
 
-  describe.concurrent.for(imports.filter(x => !x.endsWith('.css')).map(x => [x]))('%s', async ([importPath]) => {
-    it.skipIf(pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/'))(
-      'should use .js and .d.ts extensions when using import',
-      async () => {
+  describe.concurrent.for(imports.filter(x => !x.endsWith('.css') && pkgJson.exports[x] !== null).map(x => [x]))(
+    '%s',
+    async ([importPath]) => {
+      it.skipIf(
+        pkgJson.name === 'mastra' || pkgJson.name.startsWith('@internal/') || pkgJson.name === '@mastra/temporal',
+      )('should use .js and .d.ts extensions when using import', async () => {
         if (importPath === './package.json') {
           return;
         }
@@ -53,12 +55,14 @@ describe.for(
         for (const pathOnDisk of pathsOnDisk) {
           await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
         }
-      },
-    );
+      });
 
-    it.skipIf(pkgName === '@mastra/playground-ui' || pkgName === 'mastra' || pkgName.startsWith('@internal/'))(
-      'should use .cjs and .d.ts extensions when using require',
-      async () => {
+      it.skipIf(
+        pkgName === '@mastra/playground-ui' ||
+          pkgName === '@mastra/code-sdk' ||
+          pkgName === 'mastra' ||
+          pkgName.startsWith('@internal/'),
+      )('should use .cjs and .d.ts extensions when using require', async () => {
         if (importPath === './package.json') {
           return;
         }
@@ -78,16 +82,16 @@ describe.for(
         for (const pathOnDisk of pathsOnDisk) {
           await expect(stat(pathOnDisk), `${pathOnDisk} does not exist`).resolves.toBeDefined();
         }
-      },
-    );
-  });
+      });
+    },
+  );
 
   it.skipIf(
     pkgJson.name === 'mastra' ||
       pkgJson.name === 'create-mastra' ||
       pkgJson.name === '@mastra/client-js' ||
       pkgJson.name === '@mastra/opencode' ||
-      pkgJson.name === 'mastracode' ||
+      pkgJson.name === '@mastra/code-sdk' ||
       !pkgJson.name.startsWith('@mastra/'),
   )('should have @mastra/core as a peer dependency if used', async () => {
     const hasMastraCoreAsDependency = pkgJson?.dependencies?.['@mastra/core'];
@@ -136,5 +140,47 @@ describe('@mastra/core native optional deps', () => {
   it('should not contain native binary files (.node) in dist', async () => {
     const nativeFiles = await globby(join(coreDistDir, '**/*.node'));
     expect(nativeFiles).toHaveLength(0);
+  });
+});
+
+describe('@mastra/core export allowlist validation', () => {
+  const corePkg = allPackages.find(pkg => pkg.packageJson.name === '@mastra/core');
+  if (!corePkg) throw new Error('@mastra/core not found in workspace packages');
+  const coreDistDir = join(corePkg.dir, 'dist');
+  const exports = corePkg.packageJson.exports as Record<string, unknown>;
+
+  it('should not use wildcard exports', () => {
+    const wildcards = Object.keys(exports).filter(k => k.includes('*'));
+    if (wildcards.length > 0) {
+      throw new Error(
+        `Found wildcard export(s) in @mastra/core package.json:\n` +
+          wildcards.map(p => `  ${p}`).join('\n') +
+          '\n\nUse explicit subpath entries instead of wildcards to prevent phantom exports. ' +
+          'See https://github.com/mastra-ai/mastra/issues/15758',
+      );
+    }
+  });
+
+  it('should have explicit exports for all subpaths with runtime JS', async () => {
+    const dtsFiles = await globby(join(coreDistDir, '**/index.js'));
+    const missing: string[] = [];
+
+    for (const jsFile of dtsFiles) {
+      const dir = dirname(jsFile);
+      const rel = relative(coreDistDir, dir);
+      if (rel === '' || rel.startsWith('_types') || rel.startsWith('node_modules')) continue;
+      const subpath = `./${rel}`;
+      if (!exports[subpath]) {
+        missing.push(subpath);
+      }
+    }
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Found ${missing.length} subpath(s) with runtime JS but no export in @mastra/core package.json:\n` +
+          missing.map(p => `  ${p}`).join('\n') +
+          '\n\nAdd explicit export entries for these subpaths.',
+      );
+    }
   });
 });

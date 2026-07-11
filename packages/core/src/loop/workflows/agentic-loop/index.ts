@@ -5,10 +5,14 @@ import { InternalSpans } from '../../../observability';
 import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import { createWorkflow } from '../../../workflows';
-import type { OutputWriter } from '../../../workflows';
+import { createWorkflow as createDirectWorkflow, createEventedWorkflow } from '../../../workflows/create';
+import type { OutputWriter } from '../../../workflows/types';
+import type { RunScopeContext } from '../../run-scope-access';
+import { readScoped, writeScoped } from '../../run-scope-access';
+import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
+import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 
@@ -33,6 +37,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     ...rest
   } = params;
 
+  const scopeCtx: RunScopeContext = { mastra: rest.mastra, runId, _internal };
+
   // Track accumulated steps across iterations to pass to stopWhen
   const accumulatedSteps: StepResult<Tools>[] = [];
   // Track previous content to determine what's new in each step
@@ -53,6 +59,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
     ...rest,
   });
 
+  const createWorkflow = process.env.MASTRA_EVENTED_EXECUTION === 'true' ? createEventedWorkflow : createDirectWorkflow;
+
   return createWorkflow({
     id: 'agentic-loop',
     inputSchema: llmIterationOutputSchema,
@@ -64,14 +72,47 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
         internal: InternalSpans.WORKFLOW,
       },
       shouldPersistSnapshot: params => {
-        return params.workflowStatus === 'suspended';
+        // We need a persisted snapshot record to support `resumeStream()`.
+        // - Create the initial record early ("pending")
+        // - Update it when execution is suspended ("paused"/"suspended")
+        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        return (
+          params.workflowStatus === 'pending' ||
+          params.workflowStatus === 'paused' ||
+          params.workflowStatus === 'suspended'
+        );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads (stale suspend payloads, duplicated message
+      // arrays, AI SDK step history) before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
     },
   })
     .dowhile(agenticExecutionWorkflow, async ({ inputData }) => {
       const typedInputData = inputData as LLMIterationData<Tools, OUTPUT>;
       let hasFinishedSteps = false;
+
+      const pendingSignals = readScoped(scopeCtx, DRAIN_PENDING_SIGNALS_KEY, 'drainPendingSignals')?.(runId) ?? [];
+      if (pendingSignals.length > 0) {
+        messageList.markResponseMessageBoundary(typedInputData.stepResult?.messageId ?? typedInputData.messageId);
+
+        const nextMessageId = rest.rotateResponseMessageId();
+        typedInputData.messageId = nextMessageId;
+        for (const pendingSignal of pendingSignals) {
+          const signalForTranscript = messageList.addSignal(pendingSignal);
+          safeEnqueue(controller, signalForTranscript.toDataPart() as any);
+        }
+        if (typedInputData.stepResult) {
+          typedInputData.stepResult.messageId = nextMessageId;
+          typedInputData.stepResult.isContinued = true;
+        }
+        typedInputData.messages = {
+          all: messageList.get.all.aiV5.model(),
+          user: messageList.get.input.aiV5.model(),
+          nonUser: messageList.get.response.aiV5.model(),
+        };
+      }
 
       if (pendingFeedbackStop) {
         hasFinishedSteps = true;
@@ -137,7 +178,7 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       // Call onIterationComplete hook if provided (call for every iteration, not just continued ones)
-      if (rest.onIterationComplete) {
+      if (rest.onIterationComplete && !typedInputData.backgroundTaskPending) {
         const isFinal = !typedInputData.stepResult?.isContinued || hasFinishedSteps;
         const iterationContext = {
           iteration: accumulatedSteps.length,
@@ -157,8 +198,8 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           isFinal,
           finishReason: typedInputData.stepResult?.reason || 'unknown',
           runId: runId,
-          threadId: _internal?.threadId,
-          resourceId: _internal?.resourceId,
+          threadId: readScoped(scopeCtx, THREAD_ID_KEY, 'threadId'),
+          resourceId: readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId'),
           agentId: rest.agentId,
           agentName: rest.agentName || rest.agentId,
           messages: messageList.get.all.db(),
@@ -221,9 +262,9 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       }
 
       // Check if a delegation hook called ctx.bail() — stop the loop after this iteration
-      if (!hasFinishedSteps && _internal?._delegationBailed) {
+      if (!hasFinishedSteps && readScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed')) {
         hasFinishedSteps = true;
-        _internal._delegationBailed = false;
+        writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', false);
       }
 
       if (typedInputData.stepResult) {
@@ -237,12 +278,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
       const shouldEmitStepFinish = typedInputData.stepResult?.reason !== 'tripwire' || hasSteps;
 
       if (shouldEmitStepFinish) {
-        // Only enqueue if controller is still open
-        safeEnqueue(controller, {
+        await outputWriter({
           type: 'step-finish',
           runId,
           from: ChunkFrom.AGENT,
-          // @ts-expect-error TODO: Look into the proper types for this
           payload: typedInputData,
         });
       }

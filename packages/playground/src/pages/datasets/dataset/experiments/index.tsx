@@ -1,26 +1,30 @@
-import {
-  Header,
-  MainContentLayout,
-  MainContentContent,
-  Icon,
-  Button,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  DatasetExperimentsComparison,
-  useDataset,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import { Database, GitCompare, ArrowLeft } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { GitCompare, ArrowLeft } from 'lucide-react';
 import { useParams, useSearchParams, Link } from 'react-router';
+import { DatasetExperimentsComparison } from '@/domains/datasets';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
 
 function CompareDatasetExperimentsPage() {
   const { datasetId } = useParams<{ datasetId: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { data: dataset, error } = useDataset(datasetId ?? '');
+  const { error } = useDataset(datasetId ?? '');
   const experimentIdA = searchParams.get('baseline') ?? '';
   const experimentIdB = searchParams.get('contender') ?? '';
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (
@@ -35,22 +39,6 @@ function CompareDatasetExperimentsPage() {
   if (!datasetId || !experimentIdA || !experimentIdB) {
     return (
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
-              <Icon>
-                <Database />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb isCurrent as="span">
-              <Icon>
-                <GitCompare />
-              </Icon>
-              Compare Experiments
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <MainContentContent>
           <div className="text-neutral4 text-center py-8">
             <p>Select two experiments to compare.</p>
@@ -66,26 +54,6 @@ function CompareDatasetExperimentsPage() {
 
   return (
     <MainContentLayout>
-      <Header>
-        <Breadcrumb>
-          <Crumb as={Link} to="/evaluation?tab=datasets">
-            <Icon>
-              <Database />
-            </Icon>
-            Datasets
-          </Crumb>
-          <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
-            {dataset?.name ?? datasetId?.slice(0, 8)}
-          </Crumb>
-          <Crumb isCurrent as="span">
-            <Icon>
-              <GitCompare />
-            </Icon>
-            Experiments Comparison
-          </Crumb>
-        </Breadcrumb>
-      </Header>
-
       <MainContentContent>
         <div className="max-w-[100rem] w-full px-12 mx-auto grid content-start ">
           <MainHeader>
@@ -100,7 +68,7 @@ function CompareDatasetExperimentsPage() {
               </MainHeader.Description>
             </MainHeader.Column>
             <MainHeader.Column>
-              <Button as={Link} to={`/evaluation/datasets/${datasetId}`}>
+              <Button as={Link} to={`/datasets/${datasetId}`}>
                 <ArrowLeft />
                 Back to Dataset
               </Button>

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/agentfs",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AgentFS (Turso/SQLite-backed) filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -37,11 +37,11 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.19.15",
+    "@types/node": "22.19.21",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.3.1",
-    "eslint": "^9.39.4",
+    "dotenv": "^17.4.2",
+    "eslint": "^10.4.1",
     "tsup": "^8.5.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

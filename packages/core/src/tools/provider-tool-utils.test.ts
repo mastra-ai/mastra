@@ -7,9 +7,23 @@ describe('inferProviderExecuted', () => {
     expect(inferProviderExecuted(false, { type: 'provider', id: 'openai.web_search' })).toBe(false);
   });
 
-  it('should infer true for provider-defined tools when providerExecuted is undefined', () => {
+  it('should infer true for provider tools without a custom execute', () => {
     expect(inferProviderExecuted(undefined, { type: 'provider', id: 'openai.web_search' })).toBe(true);
     expect(inferProviderExecuted(undefined, { type: 'provider-defined', id: 'openai.web_search' })).toBe(true);
+  });
+
+  it('should infer false for provider tools with a custom execute', () => {
+    const toolWithExecute = { type: 'provider-defined', id: 'openai.apply_patch', execute: async () => ({}) };
+    expect(inferProviderExecuted(undefined, toolWithExecute)).toBe(false);
+
+    const v6ToolWithExecute = { type: 'provider', id: 'openai.apply_patch', execute: async () => ({}) };
+    expect(inferProviderExecuted(undefined, v6ToolWithExecute)).toBe(false);
+  });
+
+  it('should respect explicit providerExecuted even when execute is present', () => {
+    const toolWithExecute = { type: 'provider-defined', id: 'openai.apply_patch', execute: async () => ({}) };
+    expect(inferProviderExecuted(true, toolWithExecute)).toBe(true);
+    expect(inferProviderExecuted(false, toolWithExecute)).toBe(false);
   });
 
   it('should return undefined for regular tools or missing tools when providerExecuted is undefined', () => {
@@ -43,5 +57,20 @@ describe('findProviderToolByName', () => {
   it('should not match by the full qualified provider id', () => {
     // The LLM reports just the suffix (e.g. 'web_search'), not the full id ('openai.web_search')
     expect(findProviderToolByName(tools, 'openai.web_search')).toBeUndefined();
+  });
+
+  it('should match versioned Anthropic tools by their name property', () => {
+    const toolsWithAnthropic = {
+      anthropicSearch: {
+        type: 'provider-defined' as const,
+        id: 'anthropic.web_search_20250305',
+        name: 'web_search',
+        args: {},
+      },
+    } as any;
+    // The model returns 'web_search' but getProviderToolName would return 'web_search_20250305'
+    expect(findProviderToolByName(toolsWithAnthropic, 'web_search')).toBe(toolsWithAnthropic.anthropicSearch);
+    // The versioned name should still match via getProviderToolName
+    expect(findProviderToolByName(toolsWithAnthropic, 'web_search_20250305')).toBe(toolsWithAnthropic.anthropicSearch);
   });
 });

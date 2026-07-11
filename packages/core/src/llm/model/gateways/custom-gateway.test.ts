@@ -1,11 +1,11 @@
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { Agent } from '../../../agent';
 import { Mastra } from '../../../mastra';
 import { ModelRouterLanguageModel } from '../router';
 import { MastraModelGateway } from './base';
-import type { ProviderConfig } from './base';
+import type { MastraModelGatewayInterface, ProviderConfig } from './base';
 
 // Mock custom gateway implementation for testing
 class TestCustomGateway extends MastraModelGateway {
@@ -109,11 +109,41 @@ class AnotherCustomGateway extends MastraModelGateway {
   }
 }
 
+function createPlainObjectGateway(): MastraModelGatewayInterface {
+  return {
+    id: 'plain',
+    name: 'plain-object-gateway',
+    fetchProviders: vi.fn(async () => ({
+      provider: {
+        name: 'Plain Provider',
+        models: ['model-1'],
+        apiKeyEnvVar: 'PLAIN_API_KEY',
+        gateway: 'plain',
+        url: 'https://api.plain.example/v1',
+      },
+    })),
+    buildUrl: vi.fn(() => 'https://api.plain.example/v1'),
+    getApiKey: vi.fn(async () => 'plain-key'),
+    resolveLanguageModel: vi.fn(
+      ({ providerId, modelId }) =>
+        ({
+          specificationVersion: 'v2',
+          provider: providerId,
+          modelId,
+          supportedUrls: {},
+          doGenerate: vi.fn(),
+          doStream: vi.fn(async () => ({ stream: new ReadableStream() })),
+        }) as unknown as LanguageModelV2,
+    ),
+  };
+}
+
 describe('Custom Gateway Integration', () => {
   beforeEach(() => {
     // Set up test environment variables
     process.env.CUSTOM_API_KEY = 'test-custom-key';
     process.env.ANOTHER_API_KEY = 'test-another-key';
+    (ModelRouterLanguageModel as unknown as { _clearCachesForTests: () => void })._clearCachesForTests();
   });
 
   describe('Mastra Gateway Configuration', () => {
@@ -127,8 +157,19 @@ describe('Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.custom).toBe(customGateway);
+    });
+
+    it('should accept plain object gateways in Mastra config', () => {
+      const plainGateway = createPlainObjectGateway();
+      const mastra = new Mastra({
+        gateways: {
+          plain: plainGateway,
+        },
+      });
+
+      expect(mastra.listGateways()?.plain).toBe(plainGateway);
+      expect(mastra.getGatewayById('plain')).toBe(plainGateway);
     });
 
     it('should accept multiple custom gateways', () => {
@@ -143,7 +184,6 @@ describe('Custom Gateway Integration', () => {
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(2);
       expect(gateways?.custom).toBe(gateway1);
       expect(gateways?.another).toBe(gateway2);
     });
@@ -151,14 +191,12 @@ describe('Custom Gateway Integration', () => {
     it('should allow adding gateways after initialization', () => {
       const mastra = new Mastra();
       expect(mastra.listGateways()).toBeDefined();
-      expect(Object.keys(mastra.listGateways() ?? {})).toHaveLength(0);
 
       const customGateway = new TestCustomGateway();
       mastra.addGateway(customGateway, 'custom');
 
       const gateways = mastra.listGateways();
       expect(gateways).toBeDefined();
-      expect(Object.keys(gateways ?? {})).toHaveLength(1);
       expect(gateways?.custom).toBe(customGateway);
     });
 
@@ -190,6 +228,36 @@ describe('Custom Gateway Integration', () => {
       expect(model).toBeDefined();
       expect(model.modelId).toBe('model-1');
       expect(model.provider).toBe('my-provider');
+    });
+
+    it('should use plain object gateways without extending MastraModelGateway', async () => {
+      const plainGateway = createPlainObjectGateway();
+      const model = new ModelRouterLanguageModel('plain/provider/model-1', [plainGateway]);
+
+      expect(model.modelId).toBe('model-1');
+      expect(model.provider).toBe('provider');
+
+      await model.doStream({} as any);
+      expect(plainGateway.getApiKey).toHaveBeenCalledWith('plain/provider/model-1');
+      expect(plainGateway.resolveLanguageModel).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'plain-key', providerId: 'provider', modelId: 'model-1' }),
+      );
+    });
+
+    it('should call plain object gateway resolveAuth before resolveLanguageModel', async () => {
+      const plainGateway = createPlainObjectGateway();
+      plainGateway.resolveAuth = vi.fn(() => ({ apiKey: 'hook-key', source: 'gateway' as const }));
+      const model = new ModelRouterLanguageModel('plain/provider/model-1', [plainGateway]);
+
+      await model.doStream({} as any);
+
+      expect(plainGateway.resolveAuth).toHaveBeenCalledWith(
+        expect.objectContaining({ gatewayId: 'plain', providerId: 'provider', modelId: 'model-1' }),
+      );
+      expect(plainGateway.getApiKey).not.toHaveBeenCalled();
+      expect(plainGateway.resolveLanguageModel).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'hook-key', providerId: 'provider', modelId: 'model-1' }),
+      );
     });
 
     it('should fall back to default gateways when custom gateways array is empty', () => {
@@ -231,6 +299,7 @@ describe('Custom Gateway Integration', () => {
       });
 
       const agent = new Agent({
+        id: 'test-agent',
         name: 'test-agent',
         instructions: 'You are a test agent',
         model: 'custom/my-provider/model-1',
@@ -254,12 +323,14 @@ describe('Custom Gateway Integration', () => {
       });
 
       const agent1 = new Agent({
+        id: 'agent-1',
         name: 'agent-1',
         instructions: 'Agent using custom gateway',
         model: 'custom/my-provider/model-1',
       });
 
       const agent2 = new Agent({
+        id: 'agent-2',
         name: 'agent-2',
         instructions: 'Agent using another gateway',
         model: 'another/another-provider/model-a',
@@ -333,9 +404,9 @@ describe('Custom Gateway Integration', () => {
     it('should handle gateway resolution errors gracefully', () => {
       const customGateway = new TestCustomGateway();
 
-      // Invalid model ID format (missing parts)
+      // Invalid model ID format (missing model part)
       expect(() => {
-        new ModelRouterLanguageModel('custom/invalid', [customGateway]);
+        new ModelRouterLanguageModel('custom/', [customGateway]);
       }).toThrow();
     });
 
@@ -380,6 +451,92 @@ describe('Custom Gateway Integration', () => {
       expect(model).toBeDefined();
       expect(model.provider).toBe('my-provider');
       expect(model.modelId).toBe('model-1');
+    });
+  });
+
+  describe('Custom gateway dedup regression', () => {
+    it('uses the custom gateway when it shadows a default gateway id (first-wins)', () => {
+      // A custom gateway with the same id as the default Netlify gateway.
+      // Before the GatewayManager dedup fix, the default would override the
+      // custom gateway, losing the user's override. Now first-wins dedup keeps
+      // the custom gateway.
+      const shadowGateway: MastraModelGatewayInterface = {
+        id: 'netlify',
+        name: 'custom-netlify-override',
+        shouldEnable: () => true,
+        fetchProviders: vi.fn(async () => ({
+          'shadow-provider': {
+            name: 'Shadow',
+            models: ['shadow-model'],
+            apiKeyEnvVar: 'SHADOW_KEY',
+            gateway: 'netlify',
+            url: 'https://shadow.example/v1',
+          },
+        })),
+        buildUrl: () => 'https://shadow.example/v1',
+        getApiKey: vi.fn(async () => 'shadow-key'),
+        resolveAuth: vi.fn(() => ({ apiKey: 'shadow-auth-key', source: 'gateway' as const })),
+        resolveLanguageModel: vi.fn(
+          () =>
+            ({
+              specificationVersion: 'v2',
+              doGenerate: vi.fn(),
+              doStream: vi.fn(),
+            }) as any,
+        ),
+      };
+
+      const model = new ModelRouterLanguageModel('netlify/shadow-provider/shadow-model', [shadowGateway]);
+
+      // The custom gateway wins over the default Netlify gateway.
+      expect(model.gatewayId).toBe('netlify');
+      expect(model.provider).toBe('shadow-provider');
+      expect(model.modelId).toBe('shadow-model');
+      expect(shadowGateway.resolveAuth).not.toHaveBeenCalled(); // not called at construction time
+    });
+
+    it('does not reserve a gateway id from a disabled custom gateway before an enabled default', async () => {
+      // A disabled custom gateway with the same id as a default should not
+      // block the enabled default from being used. Use a netlify-prefixed id
+      // so resolution depends on the netlify gateway (openai/gpt-4o would
+      // fall back to models.dev and hide a regression here).
+      const disabledGateway: MastraModelGatewayInterface = {
+        id: 'netlify',
+        name: 'disabled-netlify-override',
+        shouldEnable: () => false,
+        fetchProviders: vi.fn(async () => ({})),
+        buildUrl: () => '',
+        getApiKey: vi.fn(async () => 'should-not-be-used'),
+        resolveLanguageModel: vi.fn(() => ({}) as any),
+      };
+
+      // Ensure the default Netlify gateway's getApiKey throws predictably
+      // (missing token) instead of attempting a network token exchange.
+      const prevToken = process.env['NETLIFY_TOKEN'];
+      const prevSiteId = process.env['NETLIFY_SITE_ID'];
+      delete process.env['NETLIFY_TOKEN'];
+      delete process.env['NETLIFY_SITE_ID'];
+
+      try {
+        const model = new ModelRouterLanguageModel('netlify/openai/gpt-4o', [disabledGateway]);
+
+        expect(model).toBeDefined();
+        expect(model.gatewayId).toBe('netlify');
+
+        // Driving resolution: the default Netlify gateway is retained (its
+        // getApiKey throws on the missing token), so resolveLanguageModel is
+        // never reached. If the disabled gateway were incorrectly retained,
+        // its getApiKey would return 'should-not-be-used' and
+        // resolveLanguageModel would be called — failing this assertion.
+        await model.supportedUrls;
+        expect(disabledGateway.resolveLanguageModel).not.toHaveBeenCalled();
+        expect(disabledGateway.getApiKey).not.toHaveBeenCalled();
+      } finally {
+        if (prevToken !== undefined) process.env['NETLIFY_TOKEN'] = prevToken;
+        else delete process.env['NETLIFY_TOKEN'];
+        if (prevSiteId !== undefined) process.env['NETLIFY_SITE_ID'] = prevSiteId;
+        else delete process.env['NETLIFY_SITE_ID'];
+      }
     });
   });
 });

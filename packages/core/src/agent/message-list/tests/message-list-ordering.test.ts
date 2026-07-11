@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { createSignal, mastraDBMessageToSignal } from '../../signals';
 import type { MastraDBMessage } from '../../types';
 import type { MessageListInput } from '../index';
 import { MessageList } from '../index';
@@ -410,6 +411,188 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       expect(texts).toEqual(['Message with timestamp', 'Message without timestamp 1', 'Message without timestamp 2']);
     });
 
+    it('should not let signal prompt conversion advance generated timestamp state', () => {
+      const signalTime = new Date('2999-01-01T09:00:00.000Z');
+      const latestTime = new Date('2999-01-01T10:00:00.000Z');
+      const list = new MessageList();
+
+      list.add(
+        [
+          createSignal({
+            id: 'signal-1',
+            type: 'user-message',
+            contents: 'Signal message',
+            createdAt: signalTime,
+          }).toDBMessage(),
+          {
+            id: 'assistant-latest',
+            role: 'assistant' as const,
+            content: { format: 2 as const, parts: [{ type: 'text' as const, text: 'Latest assistant' }] },
+            createdAt: latestTime,
+          },
+        ],
+        'memory',
+      );
+
+      list.get.all.aiV5.prompt();
+      list.add({ role: 'user', content: 'Generated timestamp after prompt conversion' }, 'input');
+
+      const generatedMessage = list.get.all.db().at(-1);
+      expect(generatedMessage?.createdAt.getTime()).toBe(latestTime.getTime() + 1);
+    });
+
+    it('should add signals after the current response while preserving acceptedAt', () => {
+      const responseTime = new Date('2024-01-01T10:00:00.000Z');
+      const signalTime = new Date('2024-01-01T09:00:00.000Z');
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'signal-1',
+        type: 'user-message',
+        contents: 'Signal message',
+        createdAt: signalTime,
+      });
+
+      list.add(
+        {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: { format: 2, parts: [{ type: 'text', text: 'Response' }] },
+          createdAt: responseTime,
+        },
+        'response',
+      );
+
+      const signalForTranscript = list.addSignal(signal);
+
+      const storedSignal = list.get.all.db().at(-1)!;
+      expect(signalForTranscript.createdAt.getTime()).toBeGreaterThan(responseTime.getTime());
+      expect(signalForTranscript.acceptedAt).toEqual(signalTime);
+      expect(storedSignal.createdAt).toEqual(signalForTranscript.createdAt);
+      expect(storedSignal.content.metadata?.signal).toMatchObject({
+        createdAt: signalForTranscript.createdAt.toISOString(),
+        acceptedAt: signalTime.toISOString(),
+      });
+    });
+
+    it('should normalize regular input signals using transcript timestamps', () => {
+      const baseTime = Date.now() + 60_000;
+      const responseTime = new Date(baseTime);
+      const toolPartTime = baseTime + 5_000;
+      const signalTime = new Date(baseTime + 2_000);
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'regular-signal-after-tool-part',
+        type: 'user-message',
+        contents: 'Regular signal after tool output',
+        createdAt: signalTime,
+      });
+
+      list.add(
+        {
+          id: 'assistant-with-tool-part-before-regular-signal',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Before tool output' },
+              {
+                type: 'tool-invocation',
+                createdAt: toolPartTime,
+                toolInvocation: {
+                  state: 'result',
+                  toolCallId: 'call-1',
+                  toolName: 'gitStatus',
+                  args: {},
+                  result: '(no output)',
+                },
+              },
+            ],
+          },
+          createdAt: responseTime,
+        },
+        'response',
+      );
+      list.add(signal, 'input');
+
+      const storedSignal = list.get.all.db().at(-1)!;
+      const recalledSignal = mastraDBMessageToSignal(storedSignal);
+      expect(storedSignal.id).toBe(signal.id);
+      expect(storedSignal.createdAt.getTime()).toBe(responseTime.getTime() + 1);
+      expect(storedSignal.createdAt.getTime()).toBeLessThan(toolPartTime);
+      expect(recalledSignal.createdAt).toEqual(storedSignal.createdAt);
+      expect(recalledSignal.acceptedAt).toEqual(signalTime);
+      expect(storedSignal.content.metadata?.signal).toMatchObject({
+        createdAt: storedSignal.createdAt.toISOString(),
+        acceptedAt: signalTime.toISOString(),
+      });
+    });
+
+    it('should add signals after tool invocation updates', () => {
+      const baseTime = Date.now() + 60_000;
+      const responseTime = new Date(baseTime);
+      const toolCallPartTime = baseTime + 1_000;
+      const toolResultPartTime = baseTime + 5_000;
+      const signalTime = new Date(baseTime + 2_000);
+      const list = new MessageList();
+      const signal = createSignal({
+        id: 'signal-after-tool-part',
+        type: 'user-message',
+        contents: 'Signal after tool output',
+        createdAt: signalTime,
+      });
+
+      list.add(
+        {
+          id: 'assistant-with-late-tool-part',
+          role: 'assistant',
+          content: {
+            format: 2,
+            parts: [
+              { type: 'text', text: 'Before tool output' },
+              {
+                type: 'tool-invocation',
+                createdAt: toolCallPartTime,
+                toolInvocation: {
+                  state: 'call',
+                  toolCallId: 'call-1',
+                  toolName: 'gitStatus',
+                  args: {},
+                },
+              },
+            ],
+          },
+          createdAt: responseTime,
+        },
+        'response',
+      );
+
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(toolResultPartTime);
+        list.updateToolInvocation({
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-1',
+            toolName: 'gitStatus',
+            args: {},
+            result: '(no output)',
+          },
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+
+      const signalForTranscript = list.addSignal(signal);
+
+      expect(signalForTranscript.createdAt.getTime()).toBe(toolResultPartTime + 1);
+      expect(signalForTranscript.acceptedAt).toEqual(signalTime);
+      expect(list.get.all.db().map(message => message.id)).toEqual([
+        'assistant-with-late-tool-part',
+        'signal-after-tool-part',
+      ]);
+    });
+
     it('should preserve createdAt for V5 UI messages', () => {
       const time1 = new Date('2024-01-01T10:00:00.000Z');
       const time2 = new Date('2024-01-01T10:01:00.000Z');
@@ -441,6 +624,66 @@ describe('Message ordering with identical timestamps (Issue #10683)', () => {
       const createdAt2 = (result[1].metadata as { createdAt?: string | Date })?.createdAt;
       expect(new Date(createdAt1!).getTime()).toEqual(time1.getTime());
       expect(new Date(createdAt2!).getTime()).toEqual(time2.getTime());
+    });
+
+    it('should preserve historical response timestamps when part timestamps advance the watermark', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'));
+
+        const list = new MessageList();
+        list.add(
+          {
+            id: 'user-1',
+            role: 'user',
+            content: { format: 2, content: 'Hello', parts: [{ type: 'text', text: 'Hello' }] },
+            createdAt: new Date('2023-01-01T00:00:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'assistant-1',
+            role: 'assistant',
+            content: { format: 2, content: 'Hi', parts: [{ type: 'text', text: 'Hi' }] },
+            createdAt: new Date('2023-01-01T00:01:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'user-2',
+            role: 'user',
+            content: {
+              format: 2,
+              content: 'Next',
+              parts: [{ type: 'text', text: 'Next', createdAt: new Date('2024-01-01T00:00:00.000Z').getTime() }],
+            },
+            createdAt: new Date('2023-01-01T00:02:00.000Z'),
+          },
+          'memory',
+        );
+        list.add(
+          {
+            id: 'assistant-2',
+            role: 'assistant',
+            content: { format: 2, content: 'Answer', parts: [{ type: 'text', text: 'Answer' }] },
+            createdAt: new Date('2023-01-01T00:03:00.000Z'),
+          },
+          'response',
+        );
+
+        const messages = list.get.all.db();
+        expect(messages.map(message => message.id)).toEqual(['user-1', 'assistant-1', 'user-2', 'assistant-2']);
+        expect(messages.map(message => message.createdAt.toISOString())).toEqual([
+          '2023-01-01T00:00:00.000Z',
+          '2023-01-01T00:01:00.000Z',
+          '2023-01-01T00:02:00.000Z',
+          '2023-01-01T00:03:00.000Z',
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('should preserve order for V5 Core messages without timestamps', () => {

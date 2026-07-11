@@ -19,10 +19,17 @@ Mastra agents can be configured to store [message history](/docs/memory/message-
 - [Observational Memory](../memory/observational-memory) (Recommended): Uses background agents to maintain a dense observation log that replaces raw message history as it grows. This keeps the context window small while preserving long-term memory.
 - [Working memory](../memory/working-memory): Stores persistent, structured user data such as names, preferences, and goals.
 - [Semantic recall](../memory/semantic-recall): Retrieves relevant past messages based on semantic meaning rather than exact keywords.
+- [Multi-user threads](../memory/multi-user-threads): Share one thread between multiple users.
 
 If the combined memory exceeds the model's context limit, [memory processors](/docs/memory/memory-processors) can filter, trim, or prioritize content so the most relevant information is preserved.
 
-Memory results will be stored in one or more of your configured [storage providers](/docs/memory/storage).
+Memory results will be stored in one or more of your configured [storage providers](/docs/storage/overview).
+
+:::tip[📹 Watch]
+
+Watch [Mastra memory concepts](https://www.youtube.com/watch?v=18iIHQtIPmc) for a conceptual overview of the memory layers agents can use.
+
+:::
 
 ## When to use memory
 
@@ -48,11 +55,7 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
     npm install @mastra/libsql@latest
     ```
 
-    :::note
-
-    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/memory/storage) documentation.
-
-    :::
+    For more details on available providers and how storage works in Mastra, visit the [storage](/docs/storage/overview) documentation.
   </StepItem>
 
   <StepItem>
@@ -89,15 +92,11 @@ Use memory when your agent needs to maintain multi-turn conversations that refer
     })
     ```
 
-    :::note
-
     Visit [Memory Class](/reference/memory/memory-class) for a full list of configuration options.
-
-    :::
   </StepItem>
 
   <StepItem>
-    Call your agent, for example in [Mastra Studio](/docs/getting-started/studio). Inside Studio, start a new chat with your agent and take a look at the right sidebar. It'll now display various memory-related information.
+    Call your agent, for example in [Studio](/docs/studio/overview). Inside Studio, start a new chat with your agent and take a look at the right sidebar. It'll now display various memory-related information.
   </StepItem>
 </Steps>
 
@@ -158,15 +157,11 @@ export const memoryAgent = new Agent({
 })
 ```
 
-:::note
-
 See [Observational Memory](../memory/observational-memory) for details on how observations and reflections work, and [the reference](/reference/memory/observational-memory) for all configuration options.
-
-:::
 
 ## Memory in multi-agent systems
 
-When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. There is no flag to enable this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
+When a [supervisor agent](/docs/agents/supervisor-agents) delegates to a subagent, Mastra isolates subagent memory automatically. No flag enables this as it happens on every delegation. Understanding how this scoping works lets you decide what stays private and what to share intentionally.
 
 ### How delegation scopes memory
 
@@ -174,9 +169,15 @@ Each delegation creates a fresh `threadId` and a deterministic `resourceId` for 
 
 - **Thread ID**: Unique per delegation. The subagent starts with a clean message history every time it's called.
 - **Resource ID**: Derived as `{parentResourceId}-{agentName}`. Because the resource ID is stable across delegations, resource-scoped memory persists between calls. A subagent remembers facts from previous delegations by the same user.
-- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance. If the subagent defines its own, that takes precedence.
+- **Memory instance**: If a subagent has no memory configured, it inherits the supervisor's `Memory` instance, including all of its options. If the subagent defines its own, that takes precedence.
 
-The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation is not stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
+:::note
+
+Title generation (`generateTitle`) is a top-level thread concern and **isn't** applied to inherited subagent threads. Because each delegation creates an ephemeral thread that no one sees, running title generation for it would waste an LLM call per delegation. To generate titles for a subagent's own threads, give that subagent its own memory configuration.
+
+:::
+
+The supervisor forwards its conversation context to the subagent so it has enough background to complete the task. Only the delegation prompt and the subagent's response are saved — the full parent conversation isn't stored. You can control which messages reach the subagent with the [`messageFilter`](/docs/agents/supervisor-agents#message-filtering) callback.
 
 :::note
 
@@ -211,7 +212,7 @@ Because both calls use `resource: 'project-42'`, the writer can access the resea
 
 Enable [Tracing](/docs/observability/tracing/overview) to monitor and debug memory in action. Traces show you exactly which messages and observations the agent included in its context for each request, helping you understand agent behavior and verify that memory retrieval is working as expected.
 
-Open [Mastra Studio](/docs/getting-started/studio) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request, then look for spans of LLMs calls.
+Open [Studio](/docs/studio/overview) and select the **Observability** tab in the sidebar. Open the trace of a recent agent request, then look for spans of LLMs calls.
 
 ## Switch memory per request
 
@@ -236,14 +237,11 @@ export const memoryAgent = new Agent({
 })
 ```
 
-:::note
-
 Visit [Request Context](/docs/server/request-context) for more information.
-
-:::
 
 ## Related
 
 - [`Memory` reference](/reference/memory/memory-class)
 - [Tracing](/docs/observability/tracing/overview)
 - [Request Context](/docs/server/request-context)
+- [Mastra Code](https://code.mastra.ai/): A coding agent using Mastra's memory system

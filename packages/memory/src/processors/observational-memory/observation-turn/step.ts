@@ -1,9 +1,8 @@
-import type { MastraDBMessage } from '@mastra/core/agent';
 import { getThreadOMMetadata } from '@mastra/core/memory';
 
 import { omDebug } from '../debug';
 import { filterObservedMessages } from '../message-utils';
-import { getLatestStepParts } from '../observational-memory';
+import { getLastActivityFromMessages, getLatestStepParts } from '../observational-memory';
 import { resolveRetentionFloor } from '../thresholds';
 
 import type { ObservationTurn } from './turn';
@@ -30,6 +29,19 @@ export class ObservationStep {
     return this._prepared;
   }
 
+  /**
+   * Serialize to a minimal, acyclic snapshot.
+   *
+   * The `turn` back-reference exists only so a step can read context off its parent turn at
+   * runtime. It closes the `ObservationTurn._currentStep -> ObservationStep.turn` cycle, so
+   * serializing it throws "Converting circular structure to JSON" (e.g. when a turn is stashed
+   * in processor state that flows into a processor-workflow snapshot). The parent turn fully
+   * owns the step, so omitting the back-reference is lossless.
+   */
+  toJSON() {
+    return { stepNumber: this.stepNumber, prepared: this._prepared };
+  }
+
   /** Step context from prepare(). Throws if prepare() hasn't been called. */
   get context(): StepContext {
     if (!this._context) throw new Error('Step not prepared yet — call prepare() first');
@@ -54,6 +66,7 @@ export class ObservationStep {
     let buffered = false;
     let reflected = false;
     let didThresholdCleanup = false;
+    let observerExchange: StepContext['observerExchange'];
 
     // ── Step 0: Activate buffered chunks ──────────────────────
     if (this.stepNumber === 0) {
@@ -63,6 +76,7 @@ export class ObservationStep {
         resourceId,
         checkThreshold: true,
         messages: step0Messages,
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
@@ -91,8 +105,11 @@ export class ObservationStep {
         observationTokens: obsTokens,
         threadId,
         writer: this.turn.writer,
+        messageList,
+        currentModel: this.turn.actorModelContext,
         requestContext: this.turn.requestContext,
         observabilityContext: this.turn.observabilityContext,
+        lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
       });
       await this.turn.refreshRecord();
       if (this.turn.record.generationCount > preReflectGeneration) {
@@ -105,7 +122,11 @@ export class ObservationStep {
     // while the agent loop continues. We must not observe/buffer until they complete.
     const allMsgsForToolCheck = messageList.get.all.db();
     const lastMessage = allMsgsForToolCheck[allMsgsForToolCheck.length - 1];
-    const latestStepParts = getLatestStepParts(lastMessage?.content?.parts ?? []);
+    const pendingStepMessages = [...messageList.get.input.db(), ...messageList.get.response.db()];
+    const latestStepParts = [
+      ...getLatestStepParts(lastMessage?.content?.parts ?? []),
+      ...pendingStepMessages.flatMap(msg => getLatestStepParts(msg.content?.parts ?? [])),
+    ];
     const hasIncompleteToolCalls = latestStepParts.some(
       part => part?.type === 'tool-invocation' && (part as any).toolInvocation?.state === 'call',
     );
@@ -125,6 +146,40 @@ export class ObservationStep {
       const allMessages = messageList.get.all.db();
       const unobservedMessages = om.getUnobservedMessages(allMessages, statusSnapshot.record);
 
+      // Seal, rotate, and persist candidates SYNCHRONOUSLY before the fire-and-forget
+      // buffer call. The beforeBuffer callback inside buffer() only runs deep in its
+      // async chain (after multiple awaits). Meanwhile, the step > 0 save below drains
+      // response messages synchronously. If sealing/rotation happens after that drain,
+      // the sealed messages get re-added as memory (unsealed) and all new content keeps
+      // appending to the same assistant message — producing the "mega-message" bug.
+      const candidates = om.getUnobservedMessages(unobservedMessages, statusSnapshot.record, {
+        excludeBuffered: true,
+      });
+      if (candidates.length > 0) {
+        om.sealMessagesForBuffering(candidates);
+
+        try {
+          await this.turn.hooks?.onBufferChunkSealed?.();
+        } catch (error) {
+          omDebug(
+            `[OM:buffer] onBufferChunkSealed hook failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        }
+
+        if (this.turn.memory) {
+          await this.turn.memory.persistMessages(candidates);
+        }
+
+        // Once a buffered chunk has been sealed and persisted, it should no longer
+        // remain in the live response/input buckets. Move the exact same messages
+        // into memory so later step-save drains don't pull them back out and grow
+        // them again under the old response id.
+        messageList.removeByIds(candidates.map(msg => msg.id));
+        for (const msg of candidates) {
+          messageList.add(msg, 'memory');
+        }
+      }
+
       void om
         .buffer({
           threadId,
@@ -135,25 +190,6 @@ export class ObservationStep {
           writer: this.turn.writer,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
-          beforeBuffer: async (candidates: MastraDBMessage[]) => {
-            if (candidates.length === 0) {
-              return;
-            }
-
-            om.sealMessagesForBuffering(candidates);
-
-            try {
-              await this.turn.hooks?.onBufferChunkSealed?.();
-            } catch (error) {
-              omDebug(
-                `[OM:buffer] onBufferChunkSealed hook failed: ${error instanceof Error ? error.message : String(error)}`,
-              );
-            }
-
-            if (this.turn.memory) {
-              await this.turn.memory.persistMessages(candidates);
-            }
-          },
         })
         .catch((err: Error) => {
           omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
@@ -178,6 +214,7 @@ export class ObservationStep {
       if (statusSnapshot.shouldObserve && !hasIncompleteToolCalls) {
         const preObsGeneration = this.turn.record.generationCount;
         const obsResult = await this.runThresholdObservation();
+        observerExchange = obsResult.observerExchange;
         if (obsResult.succeeded) {
           observed = true;
           didThresholdCleanup = true;
@@ -239,16 +276,22 @@ export class ObservationStep {
             ?.lastObservedMessageCursor
         : undefined;
 
+      const pendingMessageIds = new Set(
+        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+      );
+
       filterObservedMessages({
         messageList,
         record: this.turn.record,
         useMarkerBoundaryPruning: this.stepNumber === 0,
         fallbackCursor,
+        preserveMessageIds: pendingMessageIds,
       });
     }
 
     this._context = {
       systemMessage,
+      observerExchange,
       activated,
       observed,
       buffered,
@@ -275,6 +318,7 @@ export class ObservationStep {
     succeeded: boolean;
     record: any;
     activatedMessageIds?: string[];
+    observerExchange?: StepContext['observerExchange'];
   }> {
     const { threadId, resourceId, messageList } = this.turn;
     const om = this.turn.om;
@@ -299,6 +343,7 @@ export class ObservationStep {
         threadId,
         resourceId,
         messages: messageList.get.all.db(),
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         messageList,
       });
@@ -314,8 +359,10 @@ export class ObservationStep {
           threadId,
           writer: this.turn.writer,
           messageList,
+          currentModel: this.turn.actorModelContext,
           requestContext: this.turn.requestContext,
           observabilityContext: this.turn.observabilityContext,
+          lastActivityAt: getLastActivityFromMessages(messageList.get.all.db()),
         });
 
         return {
@@ -337,6 +384,40 @@ export class ObservationStep {
       observabilityContext: this.turn.observabilityContext,
     });
 
-    return { succeeded: obsResult.observed, record: obsResult.record };
+    if (obsResult.observed) {
+      const observedMessageIds = new Set(obsResult.record.observedMessageIds ?? []);
+      const liveMessages = messageList.get.all.db();
+      let latestObservedIndex = -1;
+
+      for (let i = liveMessages.length - 1; i >= 0; i--) {
+        const message = liveMessages[i];
+        if (message && observedMessageIds.has(message.id)) {
+          latestObservedIndex = i;
+          break;
+        }
+      }
+
+      const messageToSeal = latestObservedIndex >= 0 ? liveMessages[latestObservedIndex] : undefined;
+      const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      om.sealMessagesForBuffering(messagesToSeal);
+
+      try {
+        await this.turn.hooks?.onSyncObservationComplete?.();
+      } catch (error) {
+        omDebug(
+          `[OM:observe] onSyncObservationComplete hook failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+
+      if (messagesToSeal.length > 0) {
+        await om.persistMessages(messagesToSeal, threadId, resourceId);
+      }
+    }
+
+    return {
+      succeeded: obsResult.observed,
+      record: obsResult.record,
+      observerExchange: om.observer.lastExchange,
+    };
   }
 }

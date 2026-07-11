@@ -1,0 +1,83 @@
+---
+title: "Telegram | Channels"
+description: "Configure a Mastra agent to receive Telegram messages through a channel adapter."
+packages:
+  - "@mastra/core"
+---
+
+# Telegram
+
+Telegram channels let a Mastra agent receive direct messages, group messages, and bot mentions from Telegram. Mastra handles the agent wiring and webhook route; the Chat SDK Telegram adapter docs cover bot setup, webhook registration, and polling behavior.
+
+## Install the adapter
+
+Install the Telegram adapter from the Chat SDK:
+
+```bash npm2yarn
+npm install @chat-adapter/telegram
+```
+
+## Agent configuration
+
+Add `createTelegramAdapter()` to the agent's `channels.adapters` object:
+
+```typescript title="src/mastra/agents/telegram-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { createTelegramAdapter } from '@chat-adapter/telegram'
+
+export const telegramAgent = new Agent({
+  id: 'telegram-agent',
+  name: 'Telegram Agent',
+  instructions: 'Answer questions and help with tasks in Telegram.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  channels: {
+    adapters: {
+      telegram: createTelegramAdapter(),
+    },
+  },
+})
+```
+
+Register the agent on the Mastra instance:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { telegramAgent } from './agents/telegram-agent'
+
+export const mastra = new Mastra({
+  agents: { telegramAgent },
+})
+```
+
+## Adapter setup
+
+Follow the [Chat SDK Telegram adapter docs](https://chat-sdk.dev/adapters/official/telegram) for Telegram-specific setup, including BotFather, webhook registration, secret tokens, and polling mode.
+
+The adapter reads Telegram credentials from environment variables such as:
+
+```bash title=".env"
+TELEGRAM_BOT_TOKEN=your-telegram-bot-token
+TELEGRAM_WEBHOOK_SECRET_TOKEN=your-webhook-secret-token
+TELEGRAM_BOT_USERNAME=your_bot_username
+```
+
+## Webhook URL
+
+Mastra generates the Telegram webhook route from the agent ID and adapter key:
+
+```text
+/api/agents/telegram-agent/channels/telegram/webhook
+```
+
+Use your public Mastra server URL as the base URL:
+
+```text
+https://your-app.example.com/api/agents/telegram-agent/channels/telegram/webhook
+```
+
+Use this URL anywhere the Telegram adapter docs ask for the webhook URL. Telegram also supports polling mode; follow the Chat SDK adapter docs if you want to use polling for local development.
+
+## Related
+
+- [Channels overview](/docs/capabilities/channels/overview)
+- [More](/docs/capabilities/channels/other-adapters)

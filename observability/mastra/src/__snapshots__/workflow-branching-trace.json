@@ -26,7 +26,8 @@
           "resourceId": "test-resource-id",
           "runId": "<runId-1>",
           "id1": 123,
-          "id2": "tacos"
+          "id2": "tacos",
+          "environment": "test"
         },
         "input": {
           "value": 15
@@ -57,7 +58,8 @@
               "resourceId": "test-resource-id",
               "runId": "<runId-1>",
               "id1": 123,
-              "id2": "tacos"
+              "id2": "tacos",
+              "environment": "test"
             },
             "input": {
               "value": 15
@@ -88,7 +90,8 @@
               "resourceId": "test-resource-id",
               "runId": "<runId-1>",
               "id1": 123,
-              "id2": "tacos"
+              "id2": "tacos",
+              "environment": "test"
             },
             "input": {
               "branch": "high"
@@ -120,7 +123,8 @@
                   "resourceId": "test-resource-id",
                   "runId": "<runId-1>",
                   "id1": 123,
-                  "id2": "tacos"
+                  "id2": "tacos",
+                  "environment": "test"
                 },
                 "input": {
                   "branch": "high"
@@ -148,7 +152,8 @@
                   "resourceId": "test-resource-id",
                   "runId": "<runId-1>",
                   "id1": 123,
-                  "id2": "tacos"
+                  "id2": "tacos",
+                  "environment": "test"
                 },
                 "input": {
                   "branch": "high"
@@ -175,7 +180,8 @@
                   "resourceId": "test-resource-id",
                   "runId": "<runId-1>",
                   "id1": 123,
-                  "id2": "tacos"
+                  "id2": "tacos",
+                  "environment": "test"
                 },
                 "input": {
                   "branch": "high"

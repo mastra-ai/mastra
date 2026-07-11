@@ -1,4 +1,4 @@
-import type { StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
+import type { DatasetTenancyFilters, ExperimentTenancyFilters, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
 import { TABLE_SCHEMAS } from '@mastra/core/storage';
 import { parseSqlIdentifier } from '@mastra/core/utils';
 
@@ -51,6 +51,34 @@ export function prepareWhereClause(
 }
 
 /**
+ * Resilient JSON parser for values read from PostgreSQL jsonb columns.
+ *
+ * The `pg` driver auto-deserialises jsonb columns, so:
+ *   - jsonb object → JS object  (already parsed, just return it)
+ *   - jsonb array  → JS array   (already parsed, just return it)
+ *   - jsonb scalar string `"x"` → bare JS string `"x"` (NOT valid JSON to re-parse)
+ *   - jsonb null   → JS null
+ *
+ * Calling `JSON.parse` on a bare scalar like `"google/gemini-3-flash"` throws,
+ * which combined with fail-fast `.map(parseRow)` in list methods crashes the
+ * entire listing endpoint when a single row contains a jsonb scalar. This
+ * helper falls back to returning the raw value so callers get the same scalar
+ * the driver materialised.
+ *
+ * See https://github.com/mastra-ai/mastra/issues/16224.
+ */
+export function parseJsonResilient(value: any, _fieldName?: string): any {
+  if (value == null) return undefined;
+  if (typeof value !== 'string') return value;
+
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/**
  * Transform SQL row to record format, handling JSON columns
  */
 export function transformFromSqlRow<T>({
@@ -90,4 +118,37 @@ export function transformFromSqlRow<T>({
   });
 
   return result as T;
+}
+
+/**
+ * Tenancy scope shape shared by domains that carry `organizationId` / `projectId`
+ * columns (datasets, experiments, ...). Aliases the core tenancy filter types so
+ * this helper stays in sync if the core shape ever changes.
+ */
+export type TenancyScope = DatasetTenancyFilters | ExperimentTenancyFilters;
+
+/**
+ * Build additional `AND "col" = $N` conditions for a tenancy read-scope filter.
+ * Uses double-quoted PG identifiers and continues numbering from `startIndex`.
+ * Returns empty arrays and unchanged `nextIndex` when no filters apply.
+ *
+ * Shared across domains (datasets, experiments, ...) so tenancy predicates stay
+ * consistent and cross-tenant reads/deletes do not leak.
+ */
+export function tenancyWhere(
+  filters: TenancyScope | undefined,
+  startIndex: number,
+): { conditions: string[]; params: any[]; nextIndex: number } {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  let idx = startIndex;
+  if (filters?.organizationId !== undefined) {
+    conditions.push(`"organizationId" = $${idx++}`);
+    params.push(filters.organizationId);
+  }
+  if (filters?.projectId !== undefined) {
+    conditions.push(`"projectId" = $${idx++}`);
+    params.push(filters.projectId);
+  }
+  return { conditions, params, nextIndex: idx };
 }

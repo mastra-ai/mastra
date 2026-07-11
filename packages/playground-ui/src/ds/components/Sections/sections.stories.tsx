@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Sections } from './sections';
-import { Section } from '../Section';
 import { Button } from '../Button';
+import { Section } from '../Section';
+import { Sections } from './sections';
 
 const meta: Meta<typeof Sections> = {
   title: 'Layout/Sections',
@@ -9,7 +9,6 @@ const meta: Meta<typeof Sections> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;

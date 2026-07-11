@@ -4,9 +4,11 @@ import type { StorageThreadType } from '../../../memory/types';
 import type { Span, SpanType } from '../../../observability';
 import { createObservabilityContext } from '../../../observability';
 import type { RequestContext } from '../../../request-context';
-import { createStep } from '../../../workflows';
+import { createStep } from '../../../workflows/workflow';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { AgentMethodType } from '../../types';
+import type { PrepareStreamRunScope } from './run-scope';
+import { CONVERTED_TOOLS_KEY } from './run-scope-keys';
 import type { AgentCapabilities } from './schema';
 import { prepareToolsStepOutputSchema } from './schema';
 
@@ -20,6 +22,8 @@ interface PrepareToolsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   methodType: AgentMethodType;
   memory?: MastraMemory;
+  backgroundTaskEnabled?: boolean;
+  runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
 export function createPrepareToolsStep<OUTPUT = undefined>({
@@ -31,30 +35,15 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
   requestContext,
   agentSpan,
   methodType,
-  memory,
+  memory: _memory,
+  backgroundTaskEnabled,
+  runScope,
 }: PrepareToolsStepOptions<OUTPUT>) {
   return createStep({
     id: 'prepare-tools-step',
     inputSchema: z.object({}),
     outputSchema: prepareToolsStepOutputSchema,
     execute: async () => {
-      const toolEnhancements = [
-        options?.toolsets && Object.keys(options?.toolsets || {}).length > 0
-          ? `toolsets present (${Object.keys(options?.toolsets || {}).length} tools)`
-          : undefined,
-        memory && resourceId ? 'memory and resourceId available' : undefined,
-      ]
-        .filter(Boolean)
-        .join(', ');
-
-      capabilities.logger.debug(`[Agent:${capabilities.agentName}] - Enhancing tools: ${toolEnhancements}`, {
-        runId,
-        toolsets: options?.toolsets ? Object.keys(options?.toolsets) : undefined,
-        clientTools: options?.clientTools ? Object.keys(options?.clientTools) : undefined,
-        hasMemory: !!memory,
-        hasResourceId: !!resourceId,
-      });
-
       const threadId = threadFromArgs?.id;
 
       const convertedTools = await capabilities.convertTools({
@@ -70,6 +59,9 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         memoryConfig: options.memory?.options,
         autoResumeSuspendedTools: options.autoResumeSuspendedTools,
         delegation: options.delegation,
+        backgroundTaskEnabled,
+        inputProcessors: options.inputProcessors,
+        hooks: options.hooks,
       });
 
       // Update the agent span with available tool names for observability
@@ -82,9 +74,10 @@ export function createPrepareToolsStep<OUTPUT = undefined>({
         });
       }
 
-      return {
-        convertedTools,
-      };
+      // Tool records contain `execute` functions and are not JSON-serializable.
+      // Park them on the factory closure's runScope; map-results-step reads them.
+      runScope.set(CONVERTED_TOOLS_KEY, convertedTools);
+      return {};
     },
   });
 }

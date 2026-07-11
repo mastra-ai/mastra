@@ -1,6 +1,11 @@
-import { differenceInDays, format } from 'date-fns';
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import { format } from 'date-fns';
+import { createContext, useContext, useMemo } from 'react';
 import type { ReactNode } from 'react';
+
+import { buildMetricsDimensionalFilter } from '../metrics-filters';
+import type { MetricsDimensionalFilter } from '../metrics-filters';
+import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 const DATE_PRESETS = [
   { label: 'Last 24 hours', value: '24h' },
@@ -20,59 +25,41 @@ export function isValidPreset(value: string | null | undefined): value is DatePr
   return typeof value === 'string' && (VALID_PRESETS.has(value) || value === 'custom');
 }
 
-const PRESET_DAYS: Record<string, number> = {
-  '24h': 1,
-  '3d': 3,
-  '7d': 7,
-  '14d': 14,
-  '30d': 30,
-};
-
 export type DateRange = { from?: Date; to?: Date };
-export type Comparator = 'is' | 'is not';
-export type FilterGroup = { id: string; field: string; comparator: Comparator; values: string[] };
 
-const ENV_PCTS: Record<string, number> = {
-  'Studio Cloud': 42,
-  Production: 31,
-  Staging: 18,
-  Dev: 7,
-  'CI / Preview': 2,
-};
-
-function getMultiplier(preset: DatePreset, customRange: DateRange | undefined, filterGroups: FilterGroup[]): number {
-  let dateMul = 1;
-  if (preset !== 'custom') {
-    dateMul = PRESET_DAYS[preset] ?? 1;
-  } else if (customRange?.from && customRange?.to) {
-    dateMul = Math.max(1, differenceInDays(customRange.to, customRange.from) + 1);
-  }
-
-  const envGroups = filterGroups.filter(g => g.field === 'Environment' && g.comparator === 'is');
-  const envPct =
-    envGroups.length === 0 ? 100 : envGroups.flatMap(g => g.values).reduce((s, v) => s + (ENV_PCTS[v] ?? 0), 0);
-
-  return dateMul * (envPct / 100);
-}
-
-export const MetricsContext = createContext<{
+/** Internal — all state is derived from the URL-backed props the owner passes.
+ *  There is intentionally no local mirror; keeping a mirror caused URL ↔ state
+ *  feedback loops that re-rendered the entire metrics tree on every keystroke.
+ */
+type MetricsContextValue = {
   datePreset: DatePreset;
   setDatePreset: (v: DatePreset) => void;
   customRange: DateRange | undefined;
   setCustomRange: (v: DateRange | undefined) => void;
   dateRangeLabel: string;
-  filterGroups: FilterGroup[];
-  setFilterGroups: React.Dispatch<React.SetStateAction<FilterGroup[]>>;
-  multiplier: number;
-}>({
+  filterTokens: PropertyFilterToken[];
+  setFilterTokens: (tokens: PropertyFilterToken[]) => void;
+  dimensionalFilter: MetricsDimensionalFilter;
+  /** Stable JSON representation of `dimensionalFilter`, safe for query keys. */
+  dimensionalFilterKey: string;
+  /** Base path drilldown links should target for the Traces page. */
+  tracesBasePath: string | undefined;
+  /** Base path drilldown links should target for the Logs page. */
+  logsBasePath: string | undefined;
+};
+
+export const MetricsContext = createContext<MetricsContextValue>({
   datePreset: '24h',
   setDatePreset: () => {},
   customRange: undefined,
   setCustomRange: () => {},
   dateRangeLabel: 'Last 24 hours',
-  filterGroups: [],
-  setFilterGroups: () => {},
-  multiplier: 1,
+  filterTokens: [],
+  setFilterTokens: () => {},
+  dimensionalFilter: {},
+  dimensionalFilterKey: '{}',
+  tracesBasePath: undefined,
+  logsBasePath: undefined,
 });
 
 export function useMetrics() {
@@ -81,61 +68,95 @@ export function useMetrics() {
 
 function getDateRangeLabel(preset: DatePreset, customRange: DateRange | undefined) {
   if (preset !== 'custom') {
-    return DATE_PRESETS.find(p => p.value === preset)!.label;
+    return DATE_PRESETS.find(p => p.value === preset)?.label ?? preset;
   }
   if (customRange?.from) {
     if (customRange.to) {
-      return `${format(customRange.from, 'MMM d, yyyy')} \u2013 ${format(customRange.to, 'MMM d, yyyy')}`;
+      return `${format(customRange.from, 'MMM d, yyyy')} – ${format(customRange.to, 'MMM d, yyyy')}`;
     }
     return format(customRange.from, 'MMM d, yyyy');
   }
   return 'Custom range';
 }
 
+/**
+ * URL-driven metrics provider.
+ *
+ * The owner (page) is expected to:
+ *   - pass the current `preset` / `filterTokens` derived from `useSearchParams`
+ *   - pass `onPresetChange` / `onFilterTokensChange` that update the URL
+ *
+ * The provider never stores its own copies — changes round-trip through the URL
+ * exactly once, which keeps re-renders bounded no matter how much data is on
+ * screen.
+ */
 export function MetricsProvider({
   children,
-  initialPreset,
+  preset,
+  filterTokens,
   onPresetChange,
+  onFilterTokensChange,
+  customRange,
+  onCustomRangeChange,
+  tracesBasePath,
+  logsBasePath,
 }: {
   children: ReactNode;
-  initialPreset?: DatePreset;
-  onPresetChange?: (preset: DatePreset) => void;
+  preset: DatePreset;
+  filterTokens: PropertyFilterToken[];
+  onPresetChange: (preset: DatePreset) => void;
+  onFilterTokensChange: (tokens: PropertyFilterToken[]) => void;
+  customRange?: DateRange;
+  onCustomRangeChange?: (range: DateRange | undefined) => void;
+  /** Base path for drilldown links to the Traces page. Defaults to `/observability` when omitted. */
+  tracesBasePath?: string;
+  /** Base path for drilldown links to the Logs page. Defaults to `/logs` when omitted. */
+  logsBasePath?: string;
 }) {
-  const [datePreset, setDatePresetState] = useState<DatePreset>(initialPreset ?? '24h');
-  const [customRange, setCustomRange] = useState<DateRange | undefined>(undefined);
-  const [filterGroups, setFilterGroups] = useState<FilterGroup[]>([]);
-  const dateRangeLabel = getDateRangeLabel(datePreset, customRange);
-  const multiplier = getMultiplier(datePreset, customRange, filterGroups);
+  // Stable key for memo dependencies — the parent may re-create the tokens
+  // array on every render (e.g. from `useMemo(... , [searchParams])`), but the
+  // *content* usually doesn't change.
+  const filterTokensKey = useMemo(() => JSON.stringify(filterTokens), [filterTokens]);
 
-  // Sync from external source (e.g. URL) when initialPreset changes
-  useEffect(() => {
-    if (initialPreset && initialPreset !== datePreset) {
-      setDatePresetState(initialPreset);
-    }
-  }, [initialPreset]);
+  // Intentional: re-pin only when the serialized content changes, not on every
+  // parent render that allocates a new array.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableFilterTokens = useMemo(() => filterTokens, [filterTokensKey]);
 
-  const setDatePreset = useCallback(
-    (v: DatePreset) => {
-      setDatePresetState(v);
-      onPresetChange?.(v);
-    },
-    [onPresetChange],
+  const dimensionalFilter = useMemo(() => buildMetricsDimensionalFilter(stableFilterTokens), [stableFilterTokens]);
+
+  const dimensionalFilterKey = useMemo(() => JSON.stringify(dimensionalFilter), [dimensionalFilter]);
+
+  const dateRangeLabel = getDateRangeLabel(preset, customRange);
+
+  const value = useMemo<MetricsContextValue>(
+    () => ({
+      datePreset: preset,
+      setDatePreset: onPresetChange,
+      customRange,
+      setCustomRange: onCustomRangeChange ?? (() => {}),
+      dateRangeLabel,
+      filterTokens: stableFilterTokens,
+      setFilterTokens: onFilterTokensChange,
+      dimensionalFilter,
+      dimensionalFilterKey,
+      tracesBasePath,
+      logsBasePath,
+    }),
+    [
+      preset,
+      onPresetChange,
+      customRange,
+      onCustomRangeChange,
+      dateRangeLabel,
+      stableFilterTokens,
+      onFilterTokensChange,
+      dimensionalFilter,
+      dimensionalFilterKey,
+      tracesBasePath,
+      logsBasePath,
+    ],
   );
 
-  return (
-    <MetricsContext.Provider
-      value={{
-        datePreset,
-        setDatePreset,
-        customRange,
-        setCustomRange,
-        dateRangeLabel,
-        filterGroups,
-        setFilterGroups,
-        multiplier,
-      }}
-    >
-      {children}
-    </MetricsContext.Provider>
-  );
+  return <MetricsContext.Provider value={value}>{children}</MetricsContext.Provider>;
 }

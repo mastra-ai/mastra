@@ -7,11 +7,15 @@ import { TripWire } from '../../agent/trip-wire';
 import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { ObservabilityContext } from '../../observability';
-import { resolveObservabilityContext } from '../../observability';
+import { InternalSpans, resolveObservabilityContext } from '../../observability';
 import type { PublicSchema } from '../../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { ChunkType } from '../../stream';
+import { ChunkFrom } from '../../stream/types';
 import type { Processor } from '../index';
+import { REPROCESS_PART_KEY } from '../stream-reprocess';
+import { selectMessagesToCheck } from './message-selection';
+import type { LastMessageOnlyOption } from './message-selection';
 
 /**
  * PII categories for detection and redaction
@@ -67,7 +71,7 @@ export interface PIIDetectionResult {
 /**
  * Configuration options for PIIDetector
  */
-export interface PIIDetectorOptions {
+export interface PIIDetectorOptions extends LastMessageOnlyOption {
   /**
    * Model configuration for the detection agent
    * Supports magic strings like "openai/gpt-4o", config objects, or direct LanguageModel instances
@@ -144,6 +148,14 @@ export interface PIIDetectorOptions {
    * ```
    */
   providerOptions?: ProviderOptions;
+
+  /**
+   * Character threshold for flushing the LLM buffer during streaming (default: 200).
+   * Only applies when LLM-only detection types (name, address, date-of-birth) are configured.
+   * Higher values give the LLM more context but add more stream latency.
+   * Lower values reduce latency but may miss PII that spans multiple chunks.
+   */
+  bufferSize?: number;
 }
 
 /**
@@ -164,8 +176,10 @@ export class PIIDetector implements Processor<'pii-detector'> {
   private redactionMethod: 'mask' | 'hash' | 'remove' | 'placeholder';
   private includeDetections: boolean;
   private preserveFormat: boolean;
+  private lastMessageOnly: boolean;
   private structuredOutputOptions?: PIIDetectorOptions['structuredOutputOptions'];
   private providerOptions?: ProviderOptions;
+  private bufferSize: number;
 
   // Default PII types based on common privacy regulations and comprehensive PII detection
   private static readonly DEFAULT_DETECTION_TYPES = [
@@ -184,6 +198,37 @@ export class PIIDetector implements Processor<'pii-detector'> {
     'iban', // International Bank Account Numbers
   ];
 
+  /**
+   * Regex patterns for local (zero-cost) PII detection during streaming.
+   * These run instead of LLM calls in processOutputStream to eliminate
+   * per-chunk API costs and latency.
+   */
+  private static readonly PII_PATTERNS: Record<string, RegExp> = {
+    email: /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,
+    phone: /(?:\+?\d{1,3}[-.\ ]?)?\(?\d{3}\)?[-.\ ]?\d{3}[-.\ ]?\d{4}/g,
+    'credit-card': /\b(?:\d{4}[-\s]?){3}\d{4}\b/g,
+    ssn: /\b\d{3}-\d{2}-\d{4}\b/g,
+    'api-key':
+      /(?:(?:sk|pk)[-_](?:live|test|proj)[-_][A-Za-z0-9]{16,}|(?:api[_-]?key|apikey|api[_-]?secret)\s*[:=]\s*["']?[a-zA-Z0-9_\-]{20,}["']?)/gi,
+    'ip-address': /\b(?:(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\.){3}(?:25[0-5]|2[0-4]\d|[01]?\d\d?)\b/g,
+    url: /https?:\/\/[^\s<>"']+/gi,
+    uuid: /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi,
+    'crypto-wallet': /\b(?:0x[a-fA-F0-9]{40}|[13][a-km-zA-HJ-NP-Z1-9]{25,34}|bc1[a-zA-HJ-NP-Z0-9]{39,59})\b/g,
+    iban: /\b[A-Z]{2}\d{2}[A-Z0-9]{4}\d{7}(?:[A-Z0-9]?){0,16}\b/g,
+  };
+
+  /** PII types that require LLM context and cannot be detected by regex */
+  private static readonly LLM_ONLY_TYPES = new Set(['name', 'address', 'date-of-birth']);
+
+  /** Default character threshold for flushing the LLM buffer during streaming. */
+  private static readonly DEFAULT_BUFFER_SIZE = 200;
+
+  /**
+   * Number of characters to carry over between chunks for regex detection.
+   * Ensures PII split across chunk boundaries (e.g. "test@" + "example.com") is caught.
+   */
+  private static readonly REGEX_CARRYOVER_SIZE = 128;
+
   constructor(options: PIIDetectorOptions) {
     this.detectionTypes = options.detectionTypes || PIIDetector.DEFAULT_DETECTION_TYPES;
     this.threshold = options.threshold ?? 0.6;
@@ -191,8 +236,10 @@ export class PIIDetector implements Processor<'pii-detector'> {
     this.redactionMethod = options.redactionMethod || 'mask';
     this.includeDetections = options.includeDetections ?? false;
     this.preserveFormat = options.preserveFormat ?? true;
+    this.lastMessageOnly = options.lastMessageOnly ?? false;
     this.structuredOutputOptions = options.structuredOutputOptions;
     this.providerOptions = options.providerOptions;
+    this.bufferSize = options.bufferSize ?? PIIDetector.DEFAULT_BUFFER_SIZE;
 
     // Create internal detection agent
     this.detectionAgent = new Agent({
@@ -200,6 +247,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
       name: 'PII Detector',
       instructions: options.instructions || this.createDefaultInstructions(),
       model: options.model,
+      options: {
+        tracingPolicy: { internal: InternalSpans.ALL },
+      },
     });
   }
 
@@ -218,9 +268,15 @@ export class PIIDetector implements Processor<'pii-detector'> {
       }
 
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to analyze
@@ -367,9 +423,9 @@ export class PIIDetector implements Processor<'pii-detector'> {
    * Determine if PII is flagged based on detections or category scores above threshold
    */
   private isPIIFlagged(result: PIIDetectionResult): boolean {
-    // Check if we have any detections
+    // Check if we have any detections above confidence threshold
     if (result.detections && result.detections.length > 0) {
-      return true;
+      return result.detections.some(d => d.confidence >= this.threshold);
     }
 
     // Check if any category scores exceed the threshold
@@ -399,6 +455,7 @@ export class PIIDetector implements Processor<'pii-detector'> {
     switch (strategy) {
       case 'block':
         abort(alertMessage);
+        return null;
 
       case 'warn':
         console.warn(`[PIIDetector] ${alertMessage}`);
@@ -584,7 +641,159 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
   }
 
   /**
-   * Process streaming output chunks for PII detection and redaction
+   * Detect PII using local regex patterns (zero-cost, no LLM calls).
+   * Used during streaming to avoid per-chunk LLM API calls.
+   * Context-dependent types (name, address, date-of-birth) are skipped
+   * here and handled by the LLM-based detectPII in processOutputResult.
+   */
+  private detectPIILocal(content: string): PIIDetectionResult {
+    const categories: PIICategoryScores = [];
+    const detections: PIIDetection[] = [];
+
+    for (const type of this.detectionTypes) {
+      if (PIIDetector.LLM_ONLY_TYPES.has(type)) continue;
+
+      const pattern = PIIDetector.PII_PATTERNS[type];
+      if (!pattern) continue;
+
+      // Reset lastIndex for /g patterns
+      pattern.lastIndex = 0;
+      let match;
+      while ((match = pattern.exec(content)) !== null) {
+        detections.push({
+          type,
+          value: match[0],
+          confidence: 1.0,
+          start: match.index,
+          end: match.index + match[0].length,
+          ...(this.strategy === 'redact' ? { redacted_value: this.redactValue(match[0], type) } : {}),
+        });
+      }
+    }
+
+    const detectedTypes = new Set(detections.map(d => d.type));
+    for (const type of detectedTypes) {
+      categories.push({ type, score: 1.0 });
+    }
+
+    let redacted_content: string | null | undefined;
+    if (this.strategy === 'redact' && detections.length > 0) {
+      redacted_content = this.applyRedactionMethod(content, detections);
+    } else if (this.strategy === 'redact') {
+      redacted_content = null;
+    }
+
+    return {
+      categories: categories.length > 0 ? categories : null,
+      detections: detections.length > 0 ? detections : null,
+      ...(this.strategy === 'redact' ? { redacted_content } : {}),
+    };
+  }
+
+  /** Whether any of the configured detection types require LLM-based analysis */
+  private get hasLLMOnlyTypes(): boolean {
+    return this.detectionTypes.some(t => PIIDetector.LLM_ONLY_TYPES.has(t));
+  }
+
+  /**
+   * Apply the configured strategy to a detection result.
+   * Returns the (possibly redacted) chunk, or null if filtered/blocked.
+   */
+  private applyStreamStrategy(
+    part: ChunkType & { type: 'text-delta' },
+    detectionResult: PIIDetectionResult,
+    abort: (reason?: string) => never,
+  ): ChunkType | null {
+    switch (this.strategy) {
+      case 'block':
+        abort(`PII detected in streaming content. Types: ${this.getDetectedTypes(detectionResult).join(', ')}`);
+        return null;
+
+      case 'warn':
+        console.warn(
+          `[PIIDetector] PII detected in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+        );
+        return part;
+
+      case 'filter':
+        console.info(
+          `[PIIDetector] Filtered streaming part with PII: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+        );
+        return null;
+
+      case 'redact':
+        if (detectionResult.redacted_content) {
+          console.info(
+            `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
+          );
+          return {
+            ...part,
+            payload: {
+              ...part.payload,
+              text: detectionResult.redacted_content,
+            },
+          };
+        } else {
+          console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
+          return null;
+        }
+
+      default:
+        return part;
+    }
+  }
+
+  /**
+   * Flush the LLM buffer: call the LLM once on accumulated text to detect
+   * context-dependent PII (names, addresses, DOB).
+   * Returns a combined text-delta chunk (possibly redacted), or null if filtered/blocked.
+   */
+  private async flushLLMBuffer(
+    state: Record<string, any>,
+    abort: (reason?: string) => never,
+    observabilityContext?: ObservabilityContext,
+  ): Promise<ChunkType | null> {
+    const buffer: string = state._piiBuffer || '';
+    const firstPayloadId: string = state._piiFirstPayloadId || 'text-0';
+    const firstRunId: string = state._piiFirstRunId || '';
+
+    state._piiBuffer = '';
+    state._piiFirstPayloadId = undefined;
+    state._piiFirstRunId = undefined;
+
+    if (!buffer) return null;
+
+    const detectionResult = await this.detectPII(buffer, observabilityContext);
+
+    const combinedPart: ChunkType = {
+      type: 'text-delta',
+      payload: { text: buffer, id: firstPayloadId },
+      runId: firstRunId,
+      from: ChunkFrom.AGENT,
+    };
+
+    if (this.isPIIFlagged(detectionResult)) {
+      return this.applyStreamStrategy(combinedPart, detectionResult, abort);
+    }
+
+    return combinedPart;
+  }
+
+  /**
+   * Process streaming output chunks for PII detection and redaction.
+   *
+   * Two modes based on configured detection types:
+   *
+   * 1. **Regex-only** (no LLM-only types like name/address/DOB configured):
+   *    Each chunk is checked with zero-cost regex patterns and emitted
+   *    immediately. No LLM calls, no buffering, no latency.
+   *
+   * 2. **Regex + LLM buffering** (LLM-only types configured):
+   *    Each chunk is first checked with regex. Chunks are then buffered and
+   *    flushed through the LLM at sentence boundaries or size thresholds.
+   *    This ensures context-dependent PII (names, addresses) is caught
+   *    before reaching the user, while limiting LLM calls to ~3-5 per
+   *    response instead of 50-100.
    */
   async processOutputStream(
     args: {
@@ -592,69 +801,134 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       streamParts: ChunkType[];
       state: Record<string, any>;
       abort: (reason?: string) => never;
+      writer?: { custom: (data: ChunkType) => Promise<void> };
     } & Partial<ObservabilityContext>,
   ): Promise<ChunkType | null> {
-    const { part, abort, ...rest } = args;
+    const { part, abort, state, writer, ...rest } = args;
     const observabilityContext = resolveObservabilityContext(rest);
     try {
-      // Only process text-delta chunks
+      // Handle non-text chunks: flush any pending LLM buffer first
       if (part.type !== 'text-delta') {
-        return part;
-      }
-
-      const textContent = part.payload.text;
-      if (!textContent.trim()) {
-        return part;
-      }
-
-      const detectionResult = await this.detectPII(textContent, observabilityContext);
-
-      if (this.isPIIFlagged(detectionResult)) {
-        switch (this.strategy) {
-          case 'block':
-            abort(`PII detected in streaming content. Types: ${this.getDetectedTypes(detectionResult).join(', ')}`);
-
-          case 'warn':
-            console.warn(
-              `[PIIDetector] PII detected in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
-            );
-            return part; // Allow content through with warning
-
-          case 'filter':
-            console.info(
-              `[PIIDetector] Filtered streaming part with PII: ${this.getDetectedTypes(detectionResult).join(', ')}`,
-            );
-            return null; // Don't emit this part
-
-          case 'redact':
-            if (detectionResult.redacted_content) {
-              console.info(
-                `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(detectionResult).join(', ')}`,
-              );
-              return {
-                ...part,
-                payload: {
-                  ...part.payload,
-                  text: detectionResult.redacted_content,
-                },
-              };
-            } else {
-              console.warn(`[PIIDetector] No redaction available for streaming part, filtering`);
-              return null; // Fallback to filtering if no redaction available
+        if (this.hasLLMOnlyTypes && state._piiBuffer) {
+          const flushed = await this.flushLLMBuffer(state, abort, observabilityContext);
+          if (flushed) {
+            // Two parts to emit: flushed buffer + this non-text part.
+            // Use REPROCESS_PART_KEY so the runner re-drives the non-text part.
+            if (writer) {
+              state[REPROCESS_PART_KEY] = part;
+              return flushed;
             }
-
-          default:
-            return part;
+            // No writer (unit tests): queue non-text for next call
+            if (!state._piiPendingNonText) state._piiPendingNonText = [];
+            state._piiPendingNonText.push(part);
+            return flushed;
+          }
         }
+        return part;
       }
 
-      return part;
+      // At this point we know part.type === 'text-delta'
+      const textPart = part as ChunkType & { type: 'text-delta' };
+
+      // Drain queued non-text parts (FIFO) stashed from previous flush
+      if (state._piiPendingNonText && state._piiPendingNonText.length > 0) {
+        const pending = state._piiPendingNonText.shift();
+        if (state._piiPendingNonText.length === 0) {
+          state._piiPendingNonText = undefined;
+        }
+        // Re-queue current text part for the next call
+        if (!state._piiBuffer) state._piiBuffer = '';
+        state._piiBuffer += textPart.payload.text;
+        if (!state._piiFirstPayloadId) {
+          state._piiFirstPayloadId = textPart.payload.id;
+          state._piiFirstRunId = textPart.runId;
+        }
+        return pending;
+      }
+      const textContent = textPart.payload.text;
+      if (!textContent.trim()) {
+        return textPart;
+      }
+
+      // Step 1: Regex-based detection with carryover for split PII
+      const tail: string = state._piiRegexTail || '';
+      const combined = tail + textContent;
+      const regexResult = this.detectPIILocal(combined);
+      // Update tail for next chunk
+      state._piiRegexTail = combined.slice(-PIIDetector.REGEX_CARRYOVER_SIZE);
+
+      // Only flag if PII overlaps with the new chunk (not just the carryover tail)
+      const hasNewPII =
+        this.isPIIFlagged(regexResult) && (regexResult.detections?.some(d => d.end > tail.length) ?? false);
+
+      if (hasNewPII) {
+        // Regex caught pattern-based PII — apply strategy to original chunk
+        // (redaction is applied to `combined` then we extract the new portion)
+        const combinedRedacted = regexResult.redacted_content;
+        let effectiveResult: ChunkType | null;
+        if (this.strategy === 'redact' && combinedRedacted) {
+          // Extract only the portion corresponding to the new chunk
+          const redactedNew = combinedRedacted.slice(tail.length);
+          const redactedPart: ChunkType & { type: 'text-delta' } = {
+            ...textPart,
+            payload: { ...textPart.payload, text: redactedNew },
+          };
+          console.info(
+            `[PIIDetector] Redacted PII in streaming content: ${this.getDetectedTypes(regexResult).join(', ')}`,
+          );
+          effectiveResult = redactedPart;
+        } else {
+          effectiveResult = this.applyStreamStrategy(textPart, regexResult, abort);
+        }
+        // If block/filter returned null or threw, no need to buffer
+        if (!effectiveResult) return null;
+        // For warn/redact, the chunk passes through (possibly redacted)
+        // If we're in buffered mode, buffer the processed text
+        if (this.hasLLMOnlyTypes) {
+          if (!state._piiBuffer) state._piiBuffer = '';
+          if (!state._piiFirstPayloadId) {
+            state._piiFirstPayloadId = textPart.payload.id;
+            state._piiFirstRunId = textPart.runId;
+          }
+          state._piiBuffer +=
+            effectiveResult.type === 'text-delta'
+              ? (effectiveResult as ChunkType & { type: 'text-delta' }).payload.text
+              : textContent;
+          // Check flush threshold
+          if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
+            return this.flushLLMBuffer(state, abort, observabilityContext);
+          }
+          return null; // Hold back until flush
+        }
+        return effectiveResult;
+      }
+
+      // Step 2: No regex PII found
+      if (!this.hasLLMOnlyTypes) {
+        // Pure regex mode — emit immediately
+        return textPart;
+      }
+
+      // Step 3: LLM-only types configured — buffer for periodic LLM check
+      if (!state._piiBuffer) state._piiBuffer = '';
+      if (!state._piiFirstPayloadId) {
+        state._piiFirstPayloadId = textPart.payload.id;
+        state._piiFirstRunId = textPart.runId;
+      }
+      state._piiBuffer += textContent;
+
+      // Flush on sentence boundary or size threshold
+      if (state._piiBuffer.length >= this.bufferSize || /[.!?]\s*$/.test(state._piiBuffer)) {
+        return this.flushLLMBuffer(state, abort, observabilityContext);
+      }
+
+      return null; // Hold back until flush
     } catch (error) {
       if (error instanceof TripWire) {
-        throw error; // Re-throw tripwire errors
+        throw error;
       }
       console.warn('[PIIDetector] Streaming detection failed, allowing content:', error);
-      return part; // Fail open - allow content if detection fails
+      return part;
     }
   }
 
@@ -676,9 +950,15 @@ IMPORTANT: Only include PII types that are actually detected. If no PII is found
       }
 
       const processedMessages: MastraDBMessage[] = [];
+      const messagesToCheck = selectMessagesToCheck(messages, this.lastMessageOnly);
+      const checkedMessageIds = new Set(messagesToCheck.map(message => message.id));
 
       // Evaluate each message
       for (const message of messages) {
+        if (!checkedMessageIds.has(message.id)) {
+          processedMessages.push(message);
+          continue;
+        }
         const textContent = this.extractTextContent(message);
         if (!textContent.trim()) {
           // No text content to analyze

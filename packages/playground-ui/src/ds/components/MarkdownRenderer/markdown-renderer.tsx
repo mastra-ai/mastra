@@ -1,9 +1,9 @@
-import React, { Suspense, useState, useEffect } from 'react';
+import React from 'react';
 import Markdown from 'react-markdown';
 import type { Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-import { highlight } from '@/ds/components/CodeEditor';
+import { Code } from '@/ds/components/Code';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { cn } from '@/lib/utils';
 
@@ -21,53 +21,6 @@ export function MarkdownRenderer({ children }: MarkdownRendererProps) {
   );
 }
 
-interface HighlightedPre extends React.HTMLAttributes<HTMLPreElement> {
-  children: string;
-  language: string;
-}
-
-const HighlightedPre = React.memo(({ children, language, ...props }: HighlightedPre) => {
-  const [tokens, setTokens] = useState<any[]>([]);
-
-  useEffect(() => {
-    void highlight(children, language).then(tokens => {
-      if (tokens) setTokens(tokens);
-    });
-  }, [children, language]);
-
-  if (!tokens.length) {
-    return <pre {...props}>{children}</pre>;
-  }
-
-  return (
-    <pre {...props}>
-      <code>
-        {tokens.map((line, lineIndex) => (
-          <>
-            <span key={lineIndex}>
-              {line.map((token: any, tokenIndex: number) => {
-                const style = typeof token.htmlStyle === 'string' ? undefined : token.htmlStyle;
-
-                return (
-                  <span
-                    key={tokenIndex}
-                    className="text-shiki-light bg-shiki-light-bg dark:text-shiki-dark dark:bg-shiki-dark-bg"
-                    style={style}
-                  >
-                    {token.content}
-                  </span>
-                );
-              })}
-            </span>
-            {lineIndex !== tokens.length - 1 && '\n'}
-          </>
-        ))}
-      </code>
-    </pre>
-  );
-});
-HighlightedPre.displayName = 'HighlightedCode';
-
 interface CodeBlockProps extends React.HTMLAttributes<HTMLPreElement> {
   children: React.ReactNode;
   className?: string;
@@ -84,19 +37,9 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
 
   return (
     <div className="group/code relative mb-4">
-      <Suspense
-        fallback={
-          <pre className={preClass} {...restProps}>
-            {children}
-          </pre>
-        }
-      >
-        <HighlightedPre language={language} className={preClass}>
-          {code}
-        </HighlightedPre>
-      </Suspense>
+      <Code code={code} lang={language} className={preClass} {...restProps} />
 
-      <div className="invisible absolute right-2 top-2 flex space-x-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
+      <div className="invisible absolute right-2 top-2 flex gap-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
         <CopyButton content={code} copyMessage="Copied code to clipboard" />
       </div>
     </div>
@@ -203,7 +146,7 @@ const COMPONENTS: Components = {
   ),
   th: ({ children, ...props }) => (
     <th
-      className="border border-neutral6/20 px-4 py-2 text-left font-bold [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left font-bold [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}
@@ -211,7 +154,7 @@ const COMPONENTS: Components = {
   ),
   td: ({ children, ...props }) => (
     <td
-      className="border border-neutral6/20 px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+      className="border border-neutral6/20 px-4 py-2 text-left [[align=center]]:text-center [[align=right]]:text-right"
       {...props}
     >
       {children}

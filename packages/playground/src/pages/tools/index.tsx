@@ -1,106 +1,64 @@
-import {
-  MainContentLayout,
-  Header,
-  HeaderTitle,
-  MainContentContent,
-  ToolsIcon,
-  Icon,
-  HeaderAction,
-  DocsIcon,
-  Button,
-  ButtonWithTooltip,
-  ToolTable,
-  ToolsList,
-  ListSearch,
-  MainHeader,
-  EntityListPageLayout,
-  useAgents,
-  useTools,
-} from '@mastra/playground-ui';
-import { useExperimentalUI } from '@/domains/experimental-ui/experimental-ui-context';
-import { BookIcon } from 'lucide-react';
+import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
+import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
+import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useState } from 'react';
-import { Link } from 'react-router';
+import { useAgents } from '@/domains/agents/hooks/use-agents';
+import { NoToolsInfo } from '@/domains/tools/components/tools-list/no-tools-info';
+import { ToolsList } from '@/domains/tools/components/tools-list/tools-list';
+import { useTools } from '@/domains/tools/hooks/use-all-tools';
 
 export default function Tools() {
-  const { data: agentsRecord = {}, isLoading: isLoadingAgents } = useAgents();
-  const { data: tools = {}, isLoading: isLoadingTools, error } = useTools();
-  const { variant } = useExperimentalUI('entity-list-page');
+  const { data: agentsRecord = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
+  const { data: tools = {}, isLoading: isLoadingTools, error: toolsError } = useTools();
   const [search, setSearch] = useState('');
 
   const isLoading = isLoadingAgents || isLoadingTools;
-  const hasDirectTools = Object.keys(tools).length > 0;
-  const hasToolsFromAgents = Object.values(agentsRecord).some(
-    agent => agent.tools && Object.keys(agent.tools).length > 0,
-  );
-  const isEmpty = !isLoading && !hasDirectTools && !hasToolsFromAgents;
+  const error = toolsError || agentsError;
 
-  if (variant === 'new-proposal') {
+  if (error && is401UnauthorizedError(error)) {
     return (
-      <EntityListPageLayout>
-        <EntityListPageLayout.Top>
-          <MainHeader withMargins={false}>
-            <MainHeader.Column>
-              <MainHeader.Title isLoading={isLoading}>
-                <ToolsIcon /> Tools
-              </MainHeader.Title>
-            </MainHeader.Column>
-            <MainHeader.Column className="flex justify-end gap-2">
-              <ButtonWithTooltip
-                as="a"
-                href="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-                target="_blank"
-                rel="noopener noreferrer"
-                tooltipContent="Go to Tools documentation"
-              >
-                <BookIcon />
-              </ButtonWithTooltip>
-            </MainHeader.Column>
-          </MainHeader>
-          <div className="max-w-[30rem]">
-            <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
-          </div>
-        </EntityListPageLayout.Top>
+      <NoDataPageLayout>
+        <SessionExpired />
+      </NoDataPageLayout>
+    );
+  }
 
-        <ToolsList
-          tools={tools}
-          agents={agentsRecord}
-          isLoading={isLoading}
-          error={error}
-          search={search}
-          onSearch={setSearch}
-        />
-      </EntityListPageLayout>
+  if (error && is403ForbiddenError(error)) {
+    return (
+      <NoDataPageLayout>
+        <PermissionDenied resource="tools" />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (error) {
+    return (
+      <NoDataPageLayout>
+        <ErrorState title="Failed to load tools" message={error.message} />
+      </NoDataPageLayout>
+    );
+  }
+
+  if (Object.keys(tools).length === 0 && !isLoading) {
+    return (
+      <NoDataPageLayout>
+        <NoToolsInfo />
+      </NoDataPageLayout>
     );
   }
 
   return (
-    <MainContentLayout>
-      <Header>
-        <HeaderTitle>
-          <Icon>
-            <ToolsIcon />
-          </Icon>
-          Tools
-        </HeaderTitle>
+    <PageLayout>
+      <PageLayout.TopArea>
+        <div className="max-w-120">
+          <ListSearch onSearch={setSearch} label="Filter tools" placeholder="Filter by name" />
+        </div>
+      </PageLayout.TopArea>
 
-        <HeaderAction>
-          <Button
-            as={Link}
-            to="https://mastra.ai/en/docs/agents/using-tools-and-mcp"
-            target="_blank"
-            variant="ghost"
-            size="md"
-          >
-            <DocsIcon />
-            Tools documentation
-          </Button>
-        </HeaderAction>
-      </Header>
-
-      <MainContentContent isCentered={isEmpty}>
-        <ToolTable tools={tools} agents={agentsRecord} isLoading={isLoading} error={error} />
-      </MainContentContent>
-    </MainContentLayout>
+      <ToolsList tools={tools} agents={agentsRecord} isLoading={isLoading} search={search} />
+    </PageLayout>
   );
 }

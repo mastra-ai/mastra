@@ -96,9 +96,10 @@ const storage = new PostgresStorage({
 })
 
 export const agent = new Agent({
+  id: 'memory-agent',
   name: 'memory-agent',
   instructions: 'You are a helpful assistant with conversation memory',
-  model: 'openai/gpt-5.4',
+  model: '__GATEWAY_OPENAI_MODEL__',
   inputProcessors: [
     new MessageHistory({
       storage,

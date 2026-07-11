@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { z } from 'zod';
 import type { MastraScorer } from '../../../evals/base';
 import type { Mastra } from '../../../mastra';
 import { RequestContext } from '../../../request-context';
@@ -6,6 +7,7 @@ import type { MastraCompositeStore, StorageDomains } from '../../../storage/base
 import { DatasetsInMemory } from '../../../storage/domains/datasets/inmemory';
 import { ExperimentsInMemory } from '../../../storage/domains/experiments/inmemory';
 import { InMemoryDB } from '../../../storage/domains/inmemory-db';
+import { createStep, createWorkflow } from '../../../workflows';
 import { runExperiment } from '../index';
 
 // Mock agent that returns predictable output
@@ -403,6 +405,46 @@ describe('runExperiment', () => {
       expect(result.succeededCount).toBe(2);
       expect(mockWorkflow.createRun).toHaveBeenCalledTimes(2);
     });
+
+    // Regression test for issue #15453: a real Workflow is thenable (has a `.then`
+    // builder method). Returning one from an async resolver caused Promise
+    // unwrapping to hang forever. Uses a real createWorkflow instance rather than
+    // a plain mock so the thenable behaviour is exercised.
+    it('runs against a real workflow instance without hanging', async () => {
+      const inputSchema = z.object({ prompt: z.string() });
+      const outputSchema = z.object({ text: z.string() });
+
+      const echoStep = createStep({
+        id: 'echo',
+        inputSchema,
+        outputSchema,
+        execute: async ({ inputData }) => ({ text: `echo:${inputData.prompt}` }),
+      });
+
+      const workflow = createWorkflow({
+        id: 'real-echo-wf',
+        inputSchema,
+        outputSchema,
+      })
+        .then(echoStep)
+        .commit();
+
+      (mastra.getWorkflowById as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+      (mastra.getWorkflow as ReturnType<typeof vi.fn>).mockReturnValue(workflow);
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'workflow',
+        targetId: 'real-echo-wf',
+        itemTimeout: 5_000,
+      });
+
+      expect(result.status).toBe('completed');
+      expect(result.succeededCount).toBe(2);
+      expect(result.failedCount).toBe(0);
+      const outputs = result.results.map(r => r.output);
+      expect(outputs).toEqual(expect.arrayContaining([{ text: 'echo:Hello' }, { text: 'echo:Goodbye' }]));
+    }, 10_000);
   });
 
   describe('scorer target', () => {
@@ -509,6 +551,32 @@ describe('runExperiment', () => {
       expect(factory).toHaveBeenCalledTimes(1);
       expect(result.totalItems).toBe(1);
       expect(result.results[0].input).toEqual({ prompt: 'from-factory' });
+    });
+
+    // Test 2b — Per-item requestContext on inline data reaches agent.generate
+    it('forwards per-item requestContext from inline data, merged over the global context', async () => {
+      const mockAgent = createMockAgent('Response');
+      const localMastra = {
+        ...mastra,
+        getAgent: vi.fn().mockReturnValue(mockAgent),
+        getAgentById: vi.fn().mockReturnValue(mockAgent),
+      } as unknown as Mastra;
+
+      await runExperiment(localMastra, {
+        datasetId,
+        data: [{ input: { prompt: 'Hello' }, requestContext: { clinicId: 'clinic-1' } }],
+        targetType: 'agent',
+        targetId: 'test-agent',
+        // Global context — per-item value should win on key collision
+        requestContext: { clinicId: 'global-clinic', environment: 'development' },
+      });
+
+      const callOptions = (mockAgent.generate as ReturnType<typeof vi.fn>).mock.calls[0][1];
+      expect(callOptions.requestContext).toBeInstanceOf(RequestContext);
+      expect(callOptions.requestContext.all).toEqual({
+        clinicId: 'clinic-1',
+        environment: 'development',
+      });
     });
 
     // Test 3 — Inline task function
@@ -748,6 +816,70 @@ describe('runExperiment', () => {
         pagination: { page: 0, perPage: 10 },
       });
       expect(result.experiments.length).toBe(0);
+    });
+  });
+
+  describe('tenancy hydration', () => {
+    it('hydrates organizationId and projectId from the parent dataset onto experiment + results', async () => {
+      // Create a tenancy-scoped dataset with items
+      const tenantDs = await datasetsStorage.createDataset({
+        name: 'Tenant Dataset',
+        organizationId: 'org_tenant',
+        projectId: 'proj_tenant',
+      });
+      await datasetsStorage.addItem({
+        datasetId: tenantDs.id,
+        input: { prompt: 'A' },
+        groundTruth: { text: 'a' },
+      });
+      await datasetsStorage.addItem({
+        datasetId: tenantDs.id,
+        input: { prompt: 'B' },
+        groundTruth: { text: 'b' },
+      });
+
+      const result = await runExperiment(mastra, {
+        datasetId: tenantDs.id,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(storedRun?.organizationId).toBe('org_tenant');
+      expect(storedRun?.projectId).toBe('proj_tenant');
+
+      const persisted = await experimentsStorage.listExperimentResults({
+        experimentId: result.experimentId,
+        pagination: { page: 0, perPage: 50 },
+      });
+      expect(persisted.results).toHaveLength(2);
+      for (const r of persisted.results) {
+        expect(r.organizationId).toBe('org_tenant');
+        expect(r.projectId).toBe('proj_tenant');
+      }
+    });
+
+    it('defaults tenancy to null when the parent dataset has no tenancy bucket', async () => {
+      // The default test dataset (set up in beforeEach) has no tenancy
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+      });
+
+      const storedRun = await experimentsStorage.getExperimentById({ id: result.experimentId });
+      expect(storedRun?.organizationId).toBeNull();
+      expect(storedRun?.projectId).toBeNull();
+
+      const persisted = await experimentsStorage.listExperimentResults({
+        experimentId: result.experimentId,
+        pagination: { page: 0, perPage: 50 },
+      });
+      expect(persisted.results.length).toBeGreaterThan(0);
+      for (const r of persisted.results) {
+        expect(r.organizationId).toBeNull();
+        expect(r.projectId).toBeNull();
+      }
     });
   });
 });

@@ -1,7 +1,7 @@
 import type { MastraDBMessage, MessageList } from '../../agent/message-list';
 import type { RequestContext } from '../../request-context';
 
-import type { Processor } from '../index';
+import type { ProcessInputStepArgs, ProcessInputStepResult, Processor } from '../index';
 
 /**
  * Type definition for tool invocation parts in MastraDBMessage format 2
@@ -15,24 +15,39 @@ type V2ToolInvocationPart = {
     result?: unknown;
     state: 'call' | 'result';
   };
+  providerMetadata?: {
+    mastra?: Record<string, unknown>;
+  };
+};
+
+export type ToolCallFilterOptions = {
+  exclude?: string[];
+  filterAfterToolSteps?: number;
+  preserveModelOutput?: boolean;
 };
 
 /**
  * Filters out tool calls and results from messages.
  * By default (with no arguments), excludes all tool calls and their results.
  * Can be configured to exclude only specific tools by name.
+ *
+ * Runs on initial input (processInput). Step filtering is opt-in via filterAfterToolSteps.
  */
 export class ToolCallFilter implements Processor {
   readonly id = 'tool-call-filter';
   name = 'ToolCallFilter';
   private exclude: string[] | 'all';
+  private filterAfterToolSteps: number | undefined;
+  private preserveModelOutput: boolean;
 
   /**
    * Create a filter for tool calls and results.
    * @param options Configuration options
    * @param options.exclude List of specific tool names to exclude. If not provided, all tool calls are excluded.
+   * @param options.filterAfterToolSteps Enable agentic loop step filtering and preserve tool calls/results from this many recent tool-producing steps.
+   * @param options.preserveModelOutput Preserve sanitized model-facing output from completed filtered tool results with providerMetadata.mastra.modelOutput.
    */
-  constructor(options: { exclude?: string[] } = {}) {
+  constructor(options: ToolCallFilterOptions = {}) {
     // If no options or exclude is provided, exclude all tools
     if (!options || !options.exclude) {
       this.exclude = 'all'; // Exclude all tools
@@ -40,6 +55,9 @@ export class ToolCallFilter implements Processor {
       // Exclude specific tools
       this.exclude = Array.isArray(options.exclude) ? options.exclude : [];
     }
+
+    this.filterAfterToolSteps = options.filterAfterToolSteps;
+    this.preserveModelOutput = options.preserveModelOutput ?? false;
   }
 
   async processInput(args: {
@@ -49,178 +67,324 @@ export class ToolCallFilter implements Processor {
     requestContext?: RequestContext;
   }): Promise<MessageList | MastraDBMessage[]> {
     const { messageList } = args;
-    // Use messages from messageList to respect consolidation
     const messages = messageList.get.all.db();
+    return this.filterMessages(messages);
+  }
 
-    // Helper to check if a message has tool invocations
-    const hasToolInvocations = (message: MastraDBMessage): boolean => {
-      if (typeof message.content === 'string') return false;
-      if (!message.content?.parts) return false;
-      return message.content.parts.some(part => part.type === 'tool-invocation');
-    };
-
-    // Helper to get tool invocations from a message
-    const getToolInvocations = (message: MastraDBMessage) => {
-      if (typeof message.content === 'string') return [];
-      if (!message.content?.parts) return [];
-      return message.content.parts.filter((part: any) => part.type === 'tool-invocation');
-    };
-
-    // Case 1: Exclude all tool calls and tool results
-    if (this.exclude === 'all') {
-      const result = messages
-        .map(message => {
-          // Skip messages with tool invocations - they'll be filtered by sanitizeAIV4UIMessages
-          if (!hasToolInvocations(message)) {
-            return message;
-          }
-
-          // For messages with tool invocations, strip the tool invocation parts
-          // but keep other content (like text)
-          if (typeof message.content === 'string') {
-            return message;
-          }
-
-          if (!message.content?.parts) {
-            return message;
-          }
-
-          // Filter out tool invocation parts
-          const nonToolParts = message.content.parts.filter((part: any) => part.type !== 'tool-invocation');
-
-          // If no parts remain after filtering, remove the message
-          if (nonToolParts.length === 0) {
-            return null;
-          }
-
-          // Return message with filtered parts
-          // Also filter toolInvocations if present
-          const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
-          const updatedContent: any = {
-            ...contentWithoutToolInvocations,
-            parts: nonToolParts,
-          };
-
-          // Don't include toolInvocations since we're excluding all tools
-          // (already excluded by destructuring above)
-
-          return {
-            ...message,
-            content: updatedContent,
-          };
-        })
-        .filter((message): message is MastraDBMessage => message !== null);
-      return result;
+  async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
+    if (this.filterAfterToolSteps === undefined) {
+      return {};
     }
 
-    // Case 2: Exclude specific tools by name
+    const { messageList } = args;
+    const messages = messageList.get.all.db();
+    return { messages: this.filterMessages(messages, this.getRecentToolStepToolCallIds(args)) };
+  }
+
+  private getRecentToolStepToolCallIds(args: ProcessInputStepArgs): Set<string> {
+    const state = args.state as {
+      toolCallFilterSeenToolCallIds?: string[];
+      toolCallFilterStepToolCallIds?: string[][];
+    };
+    const seenToolCallIds = new Set(state.toolCallFilterSeenToolCallIds ?? []);
+    const responseToolCallIds = this.getMessageToolCallIds(args.messageList.get.response.db());
+    const newToolCallIds = [...responseToolCallIds].filter(toolCallId => !seenToolCallIds.has(toolCallId));
+
+    state.toolCallFilterSeenToolCallIds = [...new Set([...seenToolCallIds, ...newToolCallIds])];
+    state.toolCallFilterStepToolCallIds = [...(state.toolCallFilterStepToolCallIds ?? []), newToolCallIds];
+
+    const preserveStepCount = Math.max(0, this.filterAfterToolSteps ?? 0);
+    const recentStepToolCallIds =
+      preserveStepCount === 0 ? [] : state.toolCallFilterStepToolCallIds.slice(-preserveStepCount).flat();
+
+    return new Set(recentStepToolCallIds);
+  }
+
+  private getMessageToolCallIds(messages: MastraDBMessage[]): Set<string> {
+    const toolCallIds = new Set<string>();
+
+    for (const message of messages) {
+      for (const part of this.getToolInvocations(message)) {
+        const invocationPart = part as unknown as V2ToolInvocationPart;
+        const toolCallId =
+          invocationPart.toolInvocation.toolCallId ?? (invocationPart.toolInvocation as any).toolCall?.id;
+        if (toolCallId) {
+          toolCallIds.add(toolCallId);
+        }
+      }
+    }
+
+    return toolCallIds;
+  }
+
+  private filterMessages(messages: MastraDBMessage[], preserveToolCallIds = new Set<string>()): MastraDBMessage[] {
+    if (this.exclude === 'all') {
+      return this.filterAllToolCalls(messages, preserveToolCallIds);
+    }
+
     if (this.exclude.length > 0) {
-      // Track excluded tool call IDs to also filter their results
-      const excludedToolCallIds = new Set<string>();
+      return this.filterSpecificToolCalls(messages, preserveToolCallIds);
+    }
 
-      // First pass: identify excluded tool call IDs
-      for (const message of messages) {
-        const toolInvocations = getToolInvocations(message);
-        for (const part of toolInvocations) {
-          const invocationPart = part as unknown as V2ToolInvocationPart;
-          const invocation = invocationPart.toolInvocation;
+    return messages;
+  }
 
-          // Track tool call IDs from both calls and results for excluded tools
-          // This handles cases where only results exist (e.g., in test data)
-          if (this.exclude.includes(invocation.toolName)) {
-            excludedToolCallIds.add(invocation.toolCallId);
-          }
+  private hasToolInvocations(message: MastraDBMessage): boolean {
+    if (typeof message.content === 'string') return false;
+    if (!message.content?.parts) return false;
+    return message.content.parts.some(part => part.type === 'tool-invocation');
+  }
+
+  private getToolInvocations(message: MastraDBMessage) {
+    if (typeof message.content === 'string') return [];
+    if (!message.content?.parts) return [];
+    return message.content.parts.filter((part: any) => part.type === 'tool-invocation');
+  }
+
+  private hasTopLevelTextContent(message: MastraDBMessage): boolean {
+    const content = message.content as unknown;
+    if (typeof content === 'string') {
+      return content.trim().length > 0;
+    }
+
+    if (!content || typeof content !== 'object') {
+      return false;
+    }
+
+    const topLevelContent = (content as { content?: unknown }).content;
+    return typeof topLevelContent === 'string' && topLevelContent.trim().length > 0;
+  }
+
+  private getToolCallId(invocation: V2ToolInvocationPart['toolInvocation']): string | undefined {
+    return invocation.toolCallId ?? (invocation as any).toolCall?.id;
+  }
+
+  private getPreservedModelOutputPart(part: V2ToolInvocationPart): { type: 'text'; text: string } | null {
+    if (!this.preserveModelOutput || part.toolInvocation.state !== 'result') {
+      return null;
+    }
+
+    const mastraMetadata = part.providerMetadata?.mastra;
+    if (!mastraMetadata || !Object.hasOwn(mastraMetadata, 'modelOutput')) {
+      return null;
+    }
+
+    const modelOutput = mastraMetadata.modelOutput;
+    if (modelOutput == null) {
+      return null;
+    }
+
+    const text = this.modelOutputToText(modelOutput);
+    if (!text) {
+      return null;
+    }
+
+    return {
+      type: 'text',
+      text: `${part.toolInvocation.toolName} result:\n${text}`,
+    };
+  }
+
+  private modelOutputToText(modelOutput: unknown): string | null {
+    if (typeof modelOutput === 'string') {
+      return modelOutput;
+    }
+
+    if (typeof modelOutput === 'number' || typeof modelOutput === 'boolean' || typeof modelOutput === 'bigint') {
+      return String(modelOutput);
+    }
+
+    if (Array.isArray(modelOutput)) {
+      const text = modelOutput
+        .map(part => this.modelOutputToText(part))
+        .filter((part): part is string => Boolean(part))
+        .join('\n');
+      return text || this.safeStringify(modelOutput);
+    }
+
+    if (modelOutput && typeof modelOutput === 'object') {
+      const output = modelOutput as Record<string, unknown>;
+      if (output.type === 'text') {
+        if (typeof output.value === 'string') {
+          return output.value;
+        }
+        if (typeof output.text === 'string') {
+          return output.text;
         }
       }
 
-      // Second pass: filter out excluded tool invocation parts
-      const filteredMessages = messages
-        .map(message => {
-          if (!hasToolInvocations(message)) {
-            return message;
-          }
+      if ('value' in output) {
+        return this.modelOutputToText(output.value);
+      }
 
-          if (typeof message.content === 'string') {
-            return message;
-          }
+      if ('text' in output && typeof output.text === 'string') {
+        return output.text;
+      }
 
-          if (!message.content?.parts) {
-            return message;
-          }
-
-          // Filter out excluded tool invocation parts
-          const filteredParts = message.content.parts.filter((part: any) => {
-            if (part.type !== 'tool-invocation') {
-              return true; // Keep non-tool parts
-            }
-
-            const invocationPart = part as unknown as V2ToolInvocationPart;
-            const invocation = invocationPart.toolInvocation;
-
-            // Exclude if it's a call for an excluded tool
-            if (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) {
-              return false;
-            }
-
-            // Exclude if it's a result for an excluded tool call
-            // This handles both cases: when there's a matching call, and when only results exist
-            if (invocation.state === 'result' && excludedToolCallIds.has(invocation.toolCallId)) {
-              return false;
-            }
-
-            // Also exclude results by tool name if no corresponding call exists (edge case in test data)
-            if (invocation.state === 'result' && this.exclude.includes(invocation.toolName)) {
-              return false;
-            }
-
-            return true; // Keep other tool invocations
-          });
-
-          // If no parts remain, remove the message entirely
-          if (filteredParts.length === 0) {
-            return null;
-          }
-
-          // Return message with filtered parts
-          // Also filter toolInvocations if present
-          const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
-          const updatedContent: any = {
-            ...contentWithoutToolInvocations,
-            parts: filteredParts,
-          };
-
-          // Filter toolInvocations array if it exists
-          if ('toolInvocations' in message.content && Array.isArray((message.content as any).toolInvocations)) {
-            const filteredToolInvocations = (message.content as any).toolInvocations.filter(
-              (inv: any) => !this.exclude.includes(inv.toolName),
-            );
-            if (filteredToolInvocations.length > 0) {
-              updatedContent.toolInvocations = filteredToolInvocations;
-            }
-            // If no tool invocations remain, don't include the field (already excluded by destructuring)
-          }
-
-          // Check if message has no parts and no text content
-          // Note: For V2 messages, parts is the source of truth, not toolInvocations
-          const hasNoToolParts = filteredParts.length === 0;
-          const hasNoTextContent = !updatedContent.content || updatedContent.content.trim() === '';
-
-          // Only remove the message if it has no parts at all and no text content
-          if (hasNoToolParts && hasNoTextContent) {
-            return null;
-          }
-
-          return {
-            ...message,
-            content: updatedContent,
-          };
-        })
-        .filter((message): message is MastraDBMessage => message !== null);
-
-      return filteredMessages;
+      return this.safeStringify(modelOutput);
     }
 
-    // Case 3: Empty exclude array, return original messages
-    return messages;
+    return null;
+  }
+
+  private safeStringify(value: unknown): string | null {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return null;
+    }
+  }
+
+  private filterAllToolCalls(messages: MastraDBMessage[], preserveToolCallIds = new Set<string>()): MastraDBMessage[] {
+    return messages
+      .map(message => {
+        if (!this.hasToolInvocations(message)) {
+          return message;
+        }
+
+        if (typeof message.content === 'string') {
+          return message;
+        }
+
+        if (!message.content?.parts) {
+          return message;
+        }
+
+        const nonToolParts = message.content.parts.flatMap((part: any) => {
+          if (part.type !== 'tool-invocation') {
+            return [part];
+          }
+
+          const toolCallId = this.getToolCallId(part.toolInvocation);
+          if (toolCallId && preserveToolCallIds.has(toolCallId)) {
+            return [part];
+          }
+
+          const modelOutputPart = this.getPreservedModelOutputPart(part);
+          return modelOutputPart ? [modelOutputPart] : [];
+        });
+
+        if (nonToolParts.length === 0 && !this.hasTopLevelTextContent(message)) {
+          return null;
+        }
+
+        const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
+        const updatedContent: any = {
+          ...contentWithoutToolInvocations,
+          parts: nonToolParts,
+        };
+
+        if (Array.isArray(originalToolInvocations)) {
+          const preservedToolInvocations = originalToolInvocations.filter((inv: any) =>
+            preserveToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id),
+          );
+          if (preservedToolInvocations.length > 0) {
+            updatedContent.toolInvocations = preservedToolInvocations;
+          }
+        }
+
+        return {
+          ...message,
+          content: updatedContent,
+        };
+      })
+      .filter((message): message is MastraDBMessage => message !== null);
+  }
+
+  private filterSpecificToolCalls(
+    messages: MastraDBMessage[],
+    preserveToolCallIds = new Set<string>(),
+  ): MastraDBMessage[] {
+    const excludedToolCallIds = new Set<string>();
+
+    for (const message of messages) {
+      const toolInvocations = this.getToolInvocations(message);
+      for (const part of toolInvocations) {
+        const invocationPart = part as unknown as V2ToolInvocationPart;
+        const invocation = invocationPart.toolInvocation;
+
+        if (this.exclude.includes(invocation.toolName)) {
+          const toolCallId = this.getToolCallId(invocation);
+          if (toolCallId) {
+            excludedToolCallIds.add(toolCallId);
+          }
+        }
+      }
+    }
+
+    return messages
+      .map(message => {
+        if (!this.hasToolInvocations(message)) {
+          return message;
+        }
+
+        if (typeof message.content === 'string') {
+          return message;
+        }
+
+        if (!message.content?.parts) {
+          return message;
+        }
+
+        const filteredParts = message.content.parts.flatMap((part: any) => {
+          if (part.type !== 'tool-invocation') {
+            return [part];
+          }
+
+          const invocationPart = part as unknown as V2ToolInvocationPart;
+          const invocation = invocationPart.toolInvocation;
+          const toolCallId = this.getToolCallId(invocation);
+
+          if (toolCallId && preserveToolCallIds.has(toolCallId)) {
+            return [part];
+          }
+
+          const shouldExclude =
+            (invocation.state === 'call' && this.exclude.includes(invocation.toolName)) ||
+            (invocation.state === 'result' && toolCallId !== undefined && excludedToolCallIds.has(toolCallId)) ||
+            (invocation.state === 'result' && this.exclude.includes(invocation.toolName));
+
+          if (!shouldExclude) {
+            return [part];
+          }
+
+          const modelOutputPart = this.getPreservedModelOutputPart(invocationPart);
+          return modelOutputPart ? [modelOutputPart] : [];
+        });
+
+        if (filteredParts.length === 0 && !this.hasTopLevelTextContent(message)) {
+          return null;
+        }
+
+        const { toolInvocations: originalToolInvocations, ...contentWithoutToolInvocations } = message.content as any;
+        const updatedContent: any = {
+          ...contentWithoutToolInvocations,
+          parts: filteredParts,
+        };
+
+        if (Array.isArray(originalToolInvocations)) {
+          const filteredToolInvocations = originalToolInvocations.filter(
+            (inv: any) =>
+              preserveToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id) ||
+              (!this.exclude.includes(inv.toolName) && !excludedToolCallIds.has(inv.toolCallId ?? inv.toolCall?.id)),
+          );
+          if (filteredToolInvocations.length > 0) {
+            updatedContent.toolInvocations = filteredToolInvocations;
+          }
+        }
+
+        const hasNoToolParts = filteredParts.length === 0;
+        const hasNoTextContent = !updatedContent.content || updatedContent.content.trim() === '';
+
+        if (hasNoToolParts && hasNoTextContent) {
+          return null;
+        }
+
+        return {
+          ...message,
+          content: updatedContent,
+        };
+      })
+      .filter((message): message is MastraDBMessage => message !== null);
   }
 }

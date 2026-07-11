@@ -14,7 +14,7 @@ export async function processWorkflowLoop(
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     resumeData,
     parentWorkflow,
@@ -60,91 +60,65 @@ export async function processWorkflowLoop(
     iterationCount,
   });
 
+  // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
+  // resume metadata. Otherwise the body would keep receiving the same resumeData on every
+  // iteration (and e.g. never re-suspend).
+  const loopAgainData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps: [] as string[],
+    // Carry the iteration count forward on the loop body's stepResults entry. The
+    // loop-again path does not merge the body result back into stepResults[bodyStepId]
+    // (only prevResult carries it), and the evented step executor never writes
+    // iterationCount, so without this the next processWorkflowLoop re-reads 0 and the
+    // condition is always evaluated with iterationCount === 1 (an infinite loop when
+    // termination depends on the count). Mirrors the default engine, which stamps
+    // metadata.iterationCount onto the step result. See handlers/step.ts.
+    stepResults: {
+      ...stepResults,
+      [step.step.id]: {
+        ...stepResults[step.step.id],
+        metadata: { ...stepResults[step.step.id]?.metadata, iterationCount },
+      },
+    },
+    prevResult: stepResult,
+    resumeData: undefined,
+    activeStepsPath,
+    requestContext,
+    retryCount,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+  const loopEndData = {
+    parentWorkflow,
+    workflowId,
+    runId,
+    executionPath,
+    resumeSteps,
+    stepResults,
+    prevResult: stepResult,
+    resumeData,
+    activeStepsPath,
+    requestContext,
+    perStep,
+    state: currentState,
+    outputOptions,
+  };
+
   if (step.loopType === 'dountil') {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          state: currentState,
-          outputOptions,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     }
   } else {
     if (loopCondition) {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.run',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          retryCount,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     } else {
-      await pubsub.publish('workflows', {
-        type: 'workflow.step.end',
-        runId,
-        data: {
-          parentWorkflow,
-          workflowId,
-          runId,
-          executionPath,
-          resumeSteps,
-          stepResults,
-          prevResult: stepResult,
-          resumeData,
-          activeSteps,
-          requestContext,
-          perStep,
-          state: currentState,
-          outputOptions,
-        },
-      });
+      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
     }
   }
 }
@@ -156,9 +130,10 @@ export async function processWorkflowForEach(
     runId,
     executionPath,
     stepResults,
-    activeSteps,
+    activeStepsPath,
     resumeSteps,
     timeTravel,
+    restart,
     resumeData,
     parentWorkflow,
     requestContext,
@@ -207,7 +182,7 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           prevResult: { status: 'failed', error },
-          activeSteps,
+          activeStepsPath,
           requestContext,
           state: currentState,
           outputOptions,
@@ -237,10 +212,11 @@ export async function processWorkflowForEach(
           executionPath: [executionPath[0]!, forEachIndex],
           resumeSteps,
           timeTravel,
+          restart,
           stepResults,
           prevResult: iterationPrevResult,
           resumeData,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
           state: currentState,
@@ -255,12 +231,20 @@ export async function processWorkflowForEach(
     // If so, re-suspend the workflow to wait for those to be resumed.
     const pendingIterations = currentResult.output.filter((r: any) => r === null || r?.status === 'suspended');
     if (pendingIterations.length > 0) {
-      // Collect resumeLabels from all suspended iterations
+      // Collect resumeLabels from all suspended iterations and capture the first
+      // suspended iteration's full suspendPayload so non-__workflow_meta keys
+      // (e.g. __streamState stashed by the agent loop) survive aggregation.
       const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
+      let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
       for (let i = 0; i < currentResult.output.length; i++) {
         const iterResult = currentResult.output[i];
-        if (iterResult?.status === 'suspended' && iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
-          Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+        if (iterResult?.status === 'suspended') {
+          if (iterResult.suspendPayload?.__workflow_meta?.resumeLabels) {
+            Object.assign(collectedResumeLabels, iterResult.suspendPayload.__workflow_meta.resumeLabels);
+          }
+          if (firstSuspendedIterationPayload === undefined) {
+            firstSuspendedIterationPayload = iterResult.suspendPayload;
+          }
         }
       }
 
@@ -274,6 +258,11 @@ export async function processWorkflowForEach(
       if (Object.keys(collectedResumeLabels).length > 0) {
         suspendMeta.resumeLabels = collectedResumeLabels;
       }
+
+      const aggregatedSuspendPayload = {
+        ...firstSuspendedIterationPayload,
+        __workflow_meta: suspendMeta,
+      };
 
       // Re-suspend the workflow - there are still pending iterations
       // Use workflow.step.end with suspended status to update storage
@@ -292,18 +281,18 @@ export async function processWorkflowForEach(
               ...currentResult,
               status: 'suspended',
               suspendedAt: Date.now(),
-              suspendPayload: { __workflow_meta: suspendMeta },
+              suspendPayload: aggregatedSuspendPayload,
             },
           },
           prevResult: {
             status: 'suspended',
             output: currentResult.output,
-            suspendPayload: { __workflow_meta: suspendMeta },
+            suspendPayload: aggregatedSuspendPayload,
             payload: currentResult.payload,
             startedAt: currentResult.startedAt,
             suspendedAt: Date.now(),
           },
-          activeSteps,
+          activeStepsPath,
           requestContext,
           state: currentState,
           outputOptions,
@@ -385,10 +374,11 @@ export async function processWorkflowForEach(
               executionPath: [executionPath[0]!, suspIdx],
               resumeSteps,
               timeTravel,
+              restart,
               stepResults,
               prevResult: iterationPrevResult,
               resumeData,
-              activeSteps,
+              activeStepsPath,
               requestContext,
               perStep,
               state: currentState,
@@ -404,8 +394,33 @@ export async function processWorkflowForEach(
     }
   }
 
-  if (idx >= targetLen && currentResult.output.filter((r: any) => r !== null).length >= targetLen) {
-    // Foreach completed all iterations - advance to next step
+  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
+
+  if (
+    (idx >= targetLen && currentResult?.output?.filter((r: any) => r !== null)?.length >= targetLen) ||
+    (prevResult as any)?.output?.length === 0
+  ) {
+    // Foreach completed all iterations or the previous result is an empty array - advance to next step
+    // If the previous result is an empty array, we need to create a new result with an empty array output, save to stroage and stepResults
+    let result = currentResult;
+    if ((prevResult as any)?.output?.length === 0) {
+      result = {
+        status: 'success',
+        output: [],
+        startedAt: Date.now(),
+        endedAt: Date.now(),
+        payload: (prevResult as any)?.output,
+      };
+      await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: step.step.id,
+        result,
+        requestContext,
+      });
+      stepResults[step.step.id] = result as any;
+    }
+
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',
       runId,
@@ -417,9 +432,10 @@ export async function processWorkflowForEach(
         resumeSteps,
         stepResults,
         timeTravel,
-        prevResult: currentResult,
+        restart,
+        prevResult: result,
         resumeData: undefined, // No resumeData when advancing past foreach
-        activeSteps,
+        activeStepsPath,
         requestContext,
         perStep,
         state: currentState,
@@ -432,8 +448,6 @@ export async function processWorkflowForEach(
     // wait for the 'null' values to be filled from the concurrent run
     return;
   }
-
-  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
@@ -476,9 +490,10 @@ export async function processWorkflowForEach(
           resumeSteps,
           stepResults,
           timeTravel,
+          restart,
           prevResult: iterationPrevResult,
           resumeData,
-          activeSteps,
+          activeStepsPath,
           requestContext,
           perStep,
           state: currentState,
@@ -523,10 +538,11 @@ export async function processWorkflowForEach(
       executionPath: [executionPath[0]!, idx],
       resumeSteps,
       timeTravel,
+      restart,
       stepResults,
       prevResult: iterationPrevResult,
       resumeData,
-      activeSteps,
+      activeStepsPath,
       requestContext,
       perStep,
       state: currentState,

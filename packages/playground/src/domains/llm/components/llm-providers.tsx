@@ -1,0 +1,109 @@
+import { Combobox } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxProps } from '@mastra/playground-ui/components/Combobox';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { Info } from 'lucide-react';
+import type { MouseEvent } from 'react';
+import { useMemo } from 'react';
+import { useFilteredProviders } from '../hooks/use-filtered-providers';
+import { useLLMProviders } from '../hooks/use-llm-providers';
+import { cleanProviderId, findProviderById } from '../utils';
+import { ProviderLogo } from './provider-logo';
+import { useBuilderFilteredProviders, useBuilderModelPolicy } from '@/domains/agent-builder';
+
+export interface LLMProvidersProps {
+  value: string;
+  onValueChange: (value: string) => void;
+  variant?: ComboboxProps['variant'];
+  size?: ComboboxProps['size'];
+  className?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  container?: HTMLElement | ShadowRoot | null | React.RefObject<HTMLElement | ShadowRoot | null>;
+  disabled?: boolean;
+}
+
+export const LLMProviders = ({
+  value,
+  onValueChange,
+  variant,
+  size = 'md',
+  className,
+  open,
+  onOpenChange,
+  container,
+  disabled,
+}: LLMProvidersProps) => {
+  const { data: dataProviders, isLoading: providersLoading } = useLLMProviders();
+  const allProviders = dataProviders?.providers || [];
+
+  // Apply admin model policy first (drops disallowed providers entirely),
+  // then sort: connected -> popular -> alphabetical
+  const policy = useBuilderModelPolicy();
+  const providers = useBuilderFilteredProviders(allProviders, policy);
+  const sortedProviders = useFilteredProviders(providers, '', false);
+
+  // Create provider options with icons
+  const providerOptions: ComboboxOption[] = useMemo(() => {
+    return sortedProviders.map(provider => ({
+      label: provider.name,
+      value: provider.id,
+      start: (
+        <div className="relative shrink-0">
+          <ProviderLogo providerId={provider.id} size={16} />
+          <div
+            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+              provider.connected ? 'bg-accent1' : 'bg-accent2'
+            }`}
+            title={provider.connected ? 'Connected' : 'Not connected'}
+          />
+        </div>
+      ),
+      end: provider.docUrl ? (
+        <Info
+          className={cn(
+            'size-3.5 text-neutral2 opacity-0 transition-opacity duration-100 cursor-pointer',
+            'hover:text-neutral4 hover:opacity-100',
+            'group-data-[highlighted]/item:opacity-100',
+          )}
+          onClick={(e: MouseEvent<SVGSVGElement>) => {
+            e.stopPropagation();
+            window.open(provider.docUrl, '_blank', 'noopener,noreferrer');
+          }}
+        />
+      ) : null,
+    }));
+  }, [sortedProviders]);
+
+  const handleValueChange = (providerId: string) => {
+    const cleanedId = cleanProviderId(providerId);
+    onValueChange(cleanedId);
+  };
+
+  if (providersLoading) {
+    return <Skeleton className="w-full h-8" />;
+  }
+
+  // Find the matching provider, handling gateway prefix fallback
+  // (e.g., value='custom' should match provider with id='acme/custom')
+  const matchedProvider = findProviderById(providers, value);
+  const currentModelProvider = matchedProvider?.id || cleanProviderId(value);
+
+  return (
+    <Combobox
+      options={providerOptions}
+      value={currentModelProvider}
+      onValueChange={handleValueChange}
+      placeholder="Select provider..."
+      searchPlaceholder="Search providers..."
+      emptyText="No providers found"
+      variant={variant}
+      size={size}
+      className={className}
+      open={open}
+      onOpenChange={onOpenChange}
+      container={container}
+      disabled={disabled}
+    />
+  );
+};

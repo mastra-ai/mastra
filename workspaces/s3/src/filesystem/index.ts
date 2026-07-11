@@ -10,6 +10,8 @@ import {
   HeadBucketCommand,
 } from '@aws-sdk/client-s3';
 
+import type { AwsCredentialIdentity, AwsCredentialIdentityProvider } from '@aws-sdk/types';
+
 import type {
   FileContent,
   FileStat,
@@ -45,6 +47,12 @@ export interface S3MountConfig extends FilesystemMountConfig {
   secretAccessKey?: string;
   /** AWS session token for temporary credentials (SSO, AssumeRole, container credentials, etc.) */
   sessionToken?: string;
+  /**
+   * Optional prefix (subdirectory) to mount instead of the entire bucket.
+   * Uses s3fs `bucket:/prefix` syntax to scope the mount to a specific path.
+   * Leading/trailing slashes are normalized automatically.
+   */
+  prefix?: string;
   /** Mount as read-only */
   readOnly?: boolean;
 }
@@ -130,13 +138,22 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
   /** AWS region (use 'auto' for R2) */
   region: string;
   /**
+   * AWS credentials or credential provider function.
+   * Accepts static credentials or a provider that auto-refreshes
+   * (e.g. fromNodeProviderChain() from @aws-sdk/credential-providers).
+   * When set, takes precedence over accessKeyId/secretAccessKey/sessionToken.
+   * When ALL credential options are omitted, the SDK default credential
+   * provider chain is used (env vars, ~/.aws, IMDS, ECS container credentials).
+   */
+  credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
+  /**
    * AWS access key ID.
-   * Optional - omit for public buckets (read-only access).
+   * Optional - omit to use the SDK default credential provider chain.
    */
   accessKeyId?: string;
   /**
    * AWS secret access key.
-   * Optional - omit for public buckets (read-only access).
+   * Optional - omit to use the SDK default credential provider chain.
    */
   secretAccessKey?: string;
   /**
@@ -231,6 +248,7 @@ export class S3Filesystem extends MastraFilesystem {
 
   private readonly bucket: string;
   private readonly region: string;
+  private readonly credentials?: AwsCredentialIdentity | AwsCredentialIdentityProvider;
   private readonly accessKeyId?: string;
   private readonly secretAccessKey?: string;
   private readonly sessionToken?: string;
@@ -245,13 +263,15 @@ export class S3Filesystem extends MastraFilesystem {
     this.id = options.id ?? `s3-fs-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     this.bucket = options.bucket;
     this.region = options.region;
+    this.credentials = options.credentials;
     this.accessKeyId = options.accessKeyId;
     this.secretAccessKey = options.secretAccessKey;
     this.sessionToken = options.sessionToken;
     this.endpoint = options.endpoint;
     this.forcePathStyle = options.forcePathStyle ?? !!options.endpoint; // Default true for custom endpoints
     // Trim leading/trailing slashes from prefix using iterative approach (avoids polynomial regex)
-    this.prefix = options.prefix ? trimSlashes(options.prefix) + '/' : '';
+    const trimmedPrefix = options.prefix ? trimSlashes(options.prefix) : '';
+    this.prefix = trimmedPrefix ? trimmedPrefix + '/' : '';
 
     // Display metadata - detect icon first, then derive displayName from it
     this.icon = options.icon ?? this.detectIconFromEndpoint(options.endpoint);
@@ -286,6 +306,12 @@ export class S3Filesystem extends MastraFilesystem {
   /**
    * Get mount configuration for E2B sandbox.
    * Returns S3-compatible config that works with s3fs-fuse.
+   *
+   * Only static `accessKeyId`/`secretAccessKey`/`sessionToken` are included in the
+   * returned config. If credentials are provided only via the `credentials` option
+   * (provider function), the returned config will have no credentials because FUSE
+   * mounts cannot call a provider function. Use static credentials for sandbox
+   * mount compatibility.
    */
   getMountConfig(): S3MountConfig {
     const config: S3MountConfig = {
@@ -301,6 +327,10 @@ export class S3Filesystem extends MastraFilesystem {
       if (this.sessionToken) {
         config.sessionToken = this.sessionToken;
       }
+    }
+
+    if (this.prefix) {
+      config.prefix = this.prefix;
     }
 
     if (this.readOnly) {
@@ -441,26 +471,25 @@ export class S3Filesystem extends MastraFilesystem {
   private getClient(): S3Client {
     if (this._client) return this._client;
 
-    const hasCredentials = this.accessKeyId && this.secretAccessKey;
+    const hasStaticCredentials = this.accessKeyId && this.secretAccessKey;
+
+    let credentials: AwsCredentialIdentity | AwsCredentialIdentityProvider | undefined;
+    if (this.credentials) {
+      credentials = this.credentials;
+    } else if (hasStaticCredentials) {
+      credentials = {
+        accessKeyId: this.accessKeyId!,
+        secretAccessKey: this.secretAccessKey!,
+        ...(this.sessionToken && { sessionToken: this.sessionToken }),
+      };
+    }
+    // When credentials is undefined, SDK uses its default provider chain
 
     this._client = new S3Client({
       region: this.region,
-      credentials: hasCredentials
-        ? {
-            accessKeyId: this.accessKeyId!,
-            secretAccessKey: this.secretAccessKey!,
-            ...(this.sessionToken && { sessionToken: this.sessionToken }),
-          }
-        : // Anonymous access for public buckets - use empty credentials
-          // to prevent SDK from trying to find credentials elsewhere
-          { accessKeyId: '', secretAccessKey: '' },
+      ...(credentials !== undefined && { credentials }),
       endpoint: this.endpoint,
       forcePathStyle: this.forcePathStyle,
-      // Skip signing for anonymous access (public buckets).
-      // No-op signer passes the request through unsigned. Uses `any` because
-      // the correct type (HttpRequest from @smithy/types) is not a direct dependency.
-
-      ...(hasCredentials ? {} : { signer: { sign: async (request: any) => request } }),
     });
 
     return this._client;
@@ -476,8 +505,8 @@ export class S3Filesystem extends MastraFilesystem {
   }
 
   private toKey(path: string): string {
-    // Remove leading slash and add prefix
-    const cleanPath = path.replace(/^\/+/, '');
+    // Remove leading slashes, then resolve "." and "./" to empty string (root)
+    const cleanPath = path.replace(/^\/+/, '').replace(/^\.(?:\/|$)/, '');
     return this.prefix + cleanPath;
   }
 

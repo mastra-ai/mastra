@@ -25,7 +25,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
-import { getTableName, getSchemaName } from '../utils';
+import { getTableName, getSchemaName, parseJsonResilient } from '../utils';
 
 const SNAPSHOT_FIELDS = [
   'name',
@@ -124,6 +124,12 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       tableName: TABLE_SCORER_DEFINITIONS,
       schema: TABLE_SCHEMAS[TABLE_SCORER_DEFINITIONS],
     });
+    // Add tenancy columns for backwards compatibility (pre-tenancy installs)
+    await this.#db.alterTable({
+      tableName: TABLE_SCORER_DEFINITIONS,
+      schema: TABLE_SCHEMAS[TABLE_SCORER_DEFINITIONS],
+      ifNotExists: ['organizationId', 'projectId'],
+    });
     await this.#db.createTable({
       tableName: TABLE_SCORER_DEFINITION_VERSIONS,
       schema: TABLE_SCHEMAS[TABLE_SCORER_DEFINITION_VERSIONS],
@@ -188,14 +194,16 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       // 1. Create the thin scorer definition record
       await this.#db.client.none(
         `INSERT INTO ${tableName} (
-          id, status, "activeVersionId", "authorId", metadata,
+          id, status, "activeVersionId", "authorId", "organizationId", "projectId", metadata,
           "createdAt", "createdAtZ", "updatedAt", "updatedAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
         [
           scorerDefinition.id,
           'draft',
           null,
           scorerDefinition.authorId ?? null,
+          scorerDefinition.organizationId ?? null,
+          scorerDefinition.projectId ?? null,
           scorerDefinition.metadata ? JSON.stringify(scorerDefinition.metadata) : null,
           nowIso,
           nowIso,
@@ -205,7 +213,14 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       );
 
       // 2. Extract snapshot fields and create version 1
-      const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = scorerDefinition;
+      const {
+        id: _id,
+        authorId: _authorId,
+        organizationId: _organizationId,
+        projectId: _projectId,
+        metadata: _metadata,
+        ...snapshotConfig
+      } = scorerDefinition;
       const versionId = crypto.randomUUID();
       await this.createVersion({
         id: versionId,
@@ -221,6 +236,8 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         status: 'draft',
         activeVersionId: undefined,
         authorId: scorerDefinition.authorId,
+        organizationId: scorerDefinition.organizationId,
+        projectId: scorerDefinition.projectId,
         metadata: scorerDefinition.metadata,
         createdAt: now,
         updatedAt: now,
@@ -354,7 +371,16 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   }
 
   async list(args?: StorageListScorerDefinitionsInput): Promise<StorageListScorerDefinitionsOutput> {
-    const { page = 0, perPage: perPageInput, orderBy, authorId, metadata, status } = args || {};
+    const {
+      page = 0,
+      perPage: perPageInput,
+      orderBy,
+      authorId,
+      organizationId,
+      projectId,
+      metadata,
+      status,
+    } = args || {};
     const { field, direction } = this.parseOrderBy(orderBy);
 
     if (page < 0) {
@@ -390,6 +416,16 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         queryParams.push(authorId);
       }
 
+      if (organizationId !== undefined) {
+        conditions.push(`"organizationId" = $${paramIdx++}`);
+        queryParams.push(organizationId);
+      }
+
+      if (projectId !== undefined) {
+        conditions.push(`"projectId" = $${paramIdx++}`);
+        queryParams.push(projectId);
+      }
+
       if (metadata && Object.keys(metadata).length > 0) {
         conditions.push(`metadata @> $${paramIdx++}::jsonb`);
         queryParams.push(JSON.stringify(metadata));
@@ -420,7 +456,14 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         [...queryParams, limitValue, offset],
       );
 
-      const scorerDefinitions = (dataResult || []).map(row => this.parseScorerRow(row));
+      const scorerDefinitions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseScorerRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map scorer definition row, skipping', { id: row?.id, error: err });
+          return [];
+        }
+      });
 
       return {
         scorerDefinitions,
@@ -633,7 +676,17 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
         [scorerDefinitionId, limitValue, offset],
       );
 
-      const versions = (dataResult || []).map(row => this.parseVersionRow(row));
+      const versions = (dataResult || []).flatMap(row => {
+        try {
+          return [this.parseVersionRow(row)];
+        } catch (err) {
+          this.logger?.warn?.('[PG] Failed to map scorer definition version row, skipping', {
+            id: row?.id,
+            error: err,
+          });
+          return [];
+        }
+      });
 
       return {
         versions,
@@ -727,41 +780,15 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
   // Private Helper Methods
   // ==========================================================================
 
-  private parseJson(value: any, fieldName?: string): any {
-    if (!value) return undefined;
-    if (typeof value !== 'string') return value;
-
-    try {
-      return JSON.parse(value);
-    } catch (error) {
-      if (error instanceof MastraError) throw error;
-      const details: Record<string, string> = {
-        value: value.length > 100 ? value.substring(0, 100) + '...' : value,
-      };
-      if (fieldName) {
-        details.field = fieldName;
-      }
-
-      throw new MastraError(
-        {
-          id: createStorageErrorId('PG', 'PARSE_JSON', 'INVALID_JSON'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.SYSTEM,
-          text: `Failed to parse JSON${fieldName ? ` for field "${fieldName}"` : ''}: ${error instanceof Error ? error.message : 'Unknown error'}`,
-          details,
-        },
-        error,
-      );
-    }
-  }
-
   private parseScorerRow(row: any): StorageScorerDefinitionType {
     return {
       id: row.id as string,
       status: row.status as StorageScorerDefinitionType['status'],
       activeVersionId: row.activeVersionId as string | undefined,
       authorId: row.authorId as string | undefined,
-      metadata: this.parseJson(row.metadata, 'metadata'),
+      organizationId: row.organizationId as string | undefined,
+      projectId: row.projectId as string | undefined,
+      metadata: parseJsonResilient(row.metadata, 'metadata'),
       createdAt: new Date(row.createdAtZ || row.createdAt),
       updatedAt: new Date(row.updatedAtZ || row.updatedAt),
     };
@@ -775,12 +802,12 @@ export class ScorerDefinitionsPG extends ScorerDefinitionsStorage {
       name: row.name as string,
       description: row.description as string | undefined,
       type: row.type as ScorerDefinitionVersion['type'],
-      model: this.parseJson(row.model, 'model'),
+      model: parseJsonResilient(row.model, 'model'),
       instructions: row.instructions as string | undefined,
-      scoreRange: this.parseJson(row.scoreRange, 'scoreRange'),
-      presetConfig: this.parseJson(row.presetConfig, 'presetConfig'),
-      defaultSampling: this.parseJson(row.defaultSampling, 'defaultSampling'),
-      changedFields: this.parseJson(row.changedFields, 'changedFields'),
+      scoreRange: parseJsonResilient(row.scoreRange, 'scoreRange'),
+      presetConfig: parseJsonResilient(row.presetConfig, 'presetConfig'),
+      defaultSampling: parseJsonResilient(row.defaultSampling, 'defaultSampling'),
+      changedFields: parseJsonResilient(row.changedFields, 'changedFields'),
       changeMessage: row.changeMessage as string | undefined,
       createdAt: new Date(row.createdAtZ || row.createdAt),
     };

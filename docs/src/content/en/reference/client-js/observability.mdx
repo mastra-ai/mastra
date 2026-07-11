@@ -1,13 +1,13 @@
 ---
 title: "Reference: Observability API | Client SDK"
-description: Learn how to retrieve traces, monitor application performance, and score traces using the client-js SDK.
+description: Learn how to retrieve traces, monitor application performance, score traces, and record feedback using the client-js SDK.
 packages:
   - "@mastra/client-js"
 ---
 
 # Observability API
 
-The Observability API provides methods to retrieve traces, monitor your application's performance, and score traces for evaluation. This helps you understand how your AI agents and workflows are performing.
+The Observability API provides methods to retrieve traces, monitor application performance, score traces for evaluation, and record feedback linked to traces and spans.
 
 ## Getting a specific trace
 
@@ -73,7 +73,94 @@ const scores = await mastraClient.listScoresBySpan({
 })
 ```
 
+## Feedback
+
+Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
+
+### Creating feedback
+
+Create a feedback record linked to a trace or span:
+
+```typescript
+const response = await mastraClient.createFeedback({
+  feedback: {
+    traceId: 'trace-123',
+    spanId: 'span-456',
+    feedbackSource: 'user',
+    feedbackType: 'rating',
+    value: 1,
+    comment: 'Helpful answer.',
+  },
+})
+```
+
+### Listing feedback
+
+Retrieve paginated feedback records with optional filters:
+
+```typescript
+const feedback = await mastraClient.listFeedback({
+  filters: {
+    feedbackType: 'rating',
+    feedbackSource: 'studio',
+  },
+  pagination: { page: 0, perPage: 20 },
+  orderBy: { field: 'timestamp', direction: 'DESC' },
+})
+```
+
+### Aggregating feedback
+
+Aggregate numeric feedback values, such as ratings or thumbs encoded as `1` and `-1`:
+
+```typescript
+const averageRating = await mastraClient.getFeedbackAggregate({
+  feedbackType: 'rating',
+  aggregation: 'avg',
+  comparePeriod: 'previous_day',
+})
+```
+
+### Grouping feedback
+
+Group numeric feedback by observability dimensions:
+
+```typescript
+const ratingsByAgent = await mastraClient.getFeedbackBreakdown({
+  feedbackType: 'rating',
+  groupBy: ['entityName'],
+  aggregation: 'avg',
+})
+```
+
+### Querying feedback over time
+
+Bucket numeric feedback by interval:
+
+```typescript
+const ratingsOverTime = await mastraClient.getFeedbackTimeSeries({
+  feedbackType: 'rating',
+  interval: '1h',
+  aggregation: 'avg',
+  groupBy: ['feedbackSource'],
+})
+```
+
+### Querying feedback percentiles
+
+Return percentile series for numeric feedback values:
+
+```typescript
+const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
+  feedbackType: 'rating',
+  percentiles: [0.5, 0.95],
+  interval: '1d',
+})
+```
+
 ## Related
 
-- [Agents API](./agents) - Learn about agent interactions that generate traces
-- [Workflows API](./workflows) - Understand workflow execution monitoring
+- [Feedback guide](/docs/observability/feedback): Learn how to create, list, and query feedback
+- [Feedback reference](/reference/observability/feedback): Review feedback schemas and HTTP routes
+- [Agents API](./agents): Learn about agent interactions that generate traces
+- [Workflows API](./workflows): Understand workflow execution monitoring

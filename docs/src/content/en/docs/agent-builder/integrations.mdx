@@ -1,0 +1,129 @@
+---
+title: "Tool providers | Agent Builder"
+description: Connect Builder-created agents to third-party apps by setting up connections on registered tool providers.
+packages:
+  - "@mastra/core"
+  - "@mastra/editor"
+---
+
+# Tool providers
+
+:::note
+The Agent Builder is part of the Mastra Enterprise Edition. Production deployments require a valid EE license. [Contact sales](https://mastra.ai/contact) for more information.
+:::
+
+Tool providers let Builder-created agents call tools from third-party apps such as Gmail, Slack, or GitHub. The Builder reuses the same tool providers as the editor, so any provider registered on `MastraEditor` is available in the Builder.
+
+This page covers what's specific to the Builder: setting up connections, choosing a connection scope, and managing connections. To register a provider and enable its toolkits, see [Tools](/docs/editor/tools).
+
+## Setup at a glance
+
+To connect a toolkit like Gmail and use it from a Builder agent:
+
+1. [Register a tool provider](#register-a-tool-provider) on `MastraEditor` with your Composio API key.
+1. [Set up a Composio auth config](#set-up-a-composio-auth-config) for the toolkit and enable it.
+1. [Connect the toolkit](#connect-a-toolkit) from the Builder and complete the OAuth flow.
+1. [Choose a connection scope](#connection-scope) if the default author-owned account isn't what you want.
+
+The rest of this page covers each step in detail.
+
+## Prerequisites
+
+Before agents can use integration tools in the Builder:
+
+- Register a tool provider on the `toolProviders` map of `MastraEditor` (see below).
+- Set up a Composio auth config for each toolkit you want to use (see below).
+- Configure a storage adapter on the `Mastra` instance. Connection state persists through `Mastra.storage`.
+
+## Register a tool provider
+
+The Builder reuses the editor's tool providers. Register each provider you want to expose on the `toolProviders` map of `MastraEditor`. Mastra ships providers for [Composio](https://composio.dev) and [Arcade](https://arcade.dev); add a provider by giving it a key and an instance.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MastraEditor } from '@mastra/editor'
+import { ComposioToolProvider } from '@mastra/editor/composio'
+
+export const mastra = new Mastra({
+  agents: {
+    /* your agents */
+  },
+  editor: new MastraEditor({
+    toolProviders: {
+      composio: new ComposioToolProvider({
+        apiKey: process.env.COMPOSIO_API_KEY!,
+        allowedToolkits: ['gmail', 'googlecalendar'],
+      }),
+    },
+  }),
+})
+```
+
+Each provider's toolkits become available in the Builder once it's registered. Use `allowedToolkits` to restrict which toolkits the provider exposes — by slug, such as `gmail` or `googlecalendar`. Omit it to expose every toolkit the provider offers. To add another provider, import it and add another entry to `toolProviders`. For the full list of providers and their options, see [Tools — Integration providers](/docs/editor/tools#integration-providers).
+
+`ComposioToolProvider` needs a Composio **project** API key (the `x-api-key` type from a project's settings in the [Composio dashboard](https://dashboard.composio.dev)). Store it in an environment variable, as shown with `COMPOSIO_API_KEY` above.
+
+## Set up a Composio auth config
+
+Each toolkit a user can connect needs its own auth config in the [Composio dashboard](https://dashboard.composio.dev). An auth config defines how Composio authenticates with an app — its OAuth client, scopes, and credentials. Each toolkit needs its own because requirements vary by app: some share common OAuth methods, while others need extra setup. Without an enabled config, the connection flow fails.
+
+1. Open the [Composio dashboard](https://dashboard.composio.dev) and select the toolkit you want to enable, for example **Gmail** or **GitHub**.
+1. Create an auth config for the toolkit and complete the app-specific setup. Composio's [auth config docs](https://docs.composio.dev/docs/authenticating-tools) cover the fields each app requires.
+1. Enable the auth config.
+
+Keep exactly one auth config enabled per toolkit. When a user connects the toolkit, the provider resolves the single enabled config for that toolkit and starts the OAuth flow against it.
+
+:::warning
+The provider throws if a toolkit has zero enabled auth configs or more than one. With no enabled config, the connection flow fails with an error like `No ENABLED auth config for toolkit "github"` — enable one in the Composio dashboard to fix it. Enable exactly one auth config per toolkit you expose in the Builder.
+:::
+
+## Connect a toolkit
+
+Once a provider is registered and its auth config is enabled, the toolkit can be connected from the Builder:
+
+1. Open the agent and add the toolkit's tools.
+1. Click **Connect** on the toolkit and complete the OAuth flow for the account you want to use.
+
+The connected account is bound to the agent, and its tools are ready to use on the next run.
+
+## Connection scope
+
+Each connection determines which account a tool call uses at runtime, and its _scope_ controls who shares that credential. A scope maps each call to a _bucket_ — the identity partition that a connected account is stored under. Scope is a tenancy decision made by you, the app author, not by the end user connecting an account — so you set it on the provider, not in the Builder UI.
+
+- `per-author` (default): the connection belongs to the agent's author. Any invoker runs the agent with the author's account. Use this for personal agents or a single shared team account.
+- `shared`: every caller uses one shared bucket, regardless of who invokes the agent. Use this for a platform-owned account that all users should share.
+- `caller-supplied`: each call is bucketed by the caller's `resourceId`, read from the request context. Use this for multi-tenant SaaS, where the host app authenticates the end user upstream and each tenant should use their own connected account.
+
+Set `defaultScope` on the provider to apply a scope to every connection authorized against it:
+
+```typescript title="src/mastra/index.ts"
+const composio = new ComposioToolProvider({
+  apiKey: process.env.COMPOSIO_API_KEY!,
+  allowedToolkits: ['github'],
+  defaultScope: 'caller-supplied',
+})
+```
+
+With `caller-supplied`, the host app must forward a `resourceId` on every request so each tenant lands in its own bucket. Set `mapUserToResourceId` on the server's auth config to derive the `resourceId` from the authenticated user, so every request carries it automatically:
+
+```typescript title="src/mastra/index.ts"
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+      mapUserToResourceId: user => user.id,
+    },
+  },
+})
+```
+
+:::warning
+When a `caller-supplied` connection runs without a `resourceId`, every tenant falls back to a single shared `default` bucket. All callers then share one set of credentials, which can expose one tenant's connected account to another. Always wire `mapUserToResourceId` (or otherwise set `resourceId` on the request context) for multi-tenant deployments.
+:::
+
+## Related
+
+- [Tools](/docs/editor/tools): Register providers and browse toolkits in the editor.
+- [ToolProvider reference](/reference/editor/tool-provider): Provider API details.
+- [Agent Builder API reference](/reference/client-js/agent-builder): Manage connections programmatically with the `@mastra/client-js` SDK.
+- [Agent Builder overview](/docs/agent-builder/overview)

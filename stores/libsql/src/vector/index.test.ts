@@ -1,3 +1,7 @@
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+
 import { createVectorTestSuite } from '@internal/storage-test-utils';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 
@@ -71,6 +75,141 @@ describe('LibSQLVector - Store Specific', () => {
     } catch {
       // Ignore cleanup errors
     }
+  });
+
+  describe('DiskANN vector_top_k optimization', () => {
+    const diskannIndexName = 'diskann_test';
+    const tmpDir = path.join(os.tmpdir(), `libsql-diskann-test-${Date.now()}`);
+    let fileDb: LibSQLVector;
+
+    beforeAll(async () => {
+      fs.mkdirSync(tmpDir, { recursive: true });
+      fileDb = new LibSQLVector({
+        url: `file:${path.join(tmpDir, 'test.db')}`,
+        id: 'libsql-diskann-test',
+      });
+
+      await fileDb.createIndex({ indexName: diskannIndexName, dimension: 1536, metric: 'cosine' });
+
+      await fileDb.upsert({
+        indexName: diskannIndexName,
+        vectors: [createVector(0), createVector(100), createVector(500), createVector(1000)],
+        metadata: [
+          { name: 'vec1', category: 'a' },
+          { name: 'vec2', category: 'b' },
+          { name: 'vec3', category: 'a' },
+          { name: 'vec4', category: 'b' },
+        ],
+      });
+    });
+
+    afterAll(async () => {
+      try {
+        await fileDb.deleteIndex({ indexName: diskannIndexName });
+      } catch {
+        // Ignore cleanup errors
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('should return correct results using indexed query', async () => {
+      const results = await fileDb.query({
+        indexName: diskannIndexName,
+        queryVector: createVector(0),
+        topK: 10,
+      });
+
+      expect(results.length).toBe(4);
+      expect(results[0]!.metadata.name).toBe('vec1');
+      expect(results[0]!.score).toBeCloseTo(1, 5);
+      for (let i = 1; i < results.length; i++) {
+        expect(results[i]!.score).toBeLessThanOrEqual(results[i - 1]!.score);
+      }
+    });
+
+    it('should respect topK limit with indexed query', async () => {
+      const results = await fileDb.query({
+        indexName: diskannIndexName,
+        queryVector: createVector(0),
+        topK: 2,
+      });
+
+      expect(results.length).toBe(2);
+    });
+
+    it('should filter by metadata with indexed query', async () => {
+      const results = await fileDb.query({
+        indexName: diskannIndexName,
+        queryVector: createVector(0),
+        topK: 10,
+        filter: { category: { $eq: 'a' } },
+      });
+
+      expect(results.length).toBe(2);
+      results.forEach(r => {
+        expect(r.metadata.category).toBe('a');
+      });
+    });
+
+    it('should respect minScore with indexed query', async () => {
+      const allResults = await fileDb.query({
+        indexName: diskannIndexName,
+        queryVector: createVector(0),
+        topK: 10,
+      });
+
+      const scores = allResults.map(r => r.score).sort((a, b) => b - a);
+      const threshold = (scores[0]! + scores[1]!) / 2;
+
+      const filtered = await fileDb.query({
+        indexName: diskannIndexName,
+        queryVector: createVector(0),
+        topK: 10,
+        minScore: threshold,
+      });
+
+      expect(filtered.length).toBeLessThan(allResults.length);
+      filtered.forEach(r => {
+        expect(r.score).toBeGreaterThan(threshold);
+      });
+    });
+
+    it('should include vectors when requested with indexed query', async () => {
+      const results = await fileDb.query({
+        indexName: diskannIndexName,
+        queryVector: createVector(0),
+        topK: 1,
+        includeVector: true,
+      });
+
+      expect(results.length).toBe(1);
+      expect(results[0]!.vector).toBeDefined();
+      expect(Array.isArray(results[0]!.vector)).toBe(true);
+      expect(results[0]!.vector!.length).toBe(1536);
+    });
+
+    it('should actually use vector_top_k in the query', async () => {
+      const turso = (fileDb as any).turso;
+      const originalExecute = turso.execute.bind(turso);
+      const executedQueries: string[] = [];
+      turso.execute = async (arg: any) => {
+        if (typeof arg === 'object' && arg.sql) executedQueries.push(arg.sql);
+        return originalExecute(arg);
+      };
+
+      try {
+        await fileDb.query({
+          indexName: diskannIndexName,
+          queryVector: createVector(0),
+          topK: 5,
+        });
+      } finally {
+        turso.execute = originalExecute;
+      }
+
+      const usedVectorTopK = executedQueries.some(sql => sql.includes('vector_top_k'));
+      expect(usedVectorTopK).toBe(true);
+    });
   });
 
   describe('minScore parameter', () => {

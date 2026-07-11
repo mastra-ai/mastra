@@ -50,6 +50,9 @@ npm install @mastra/core
 - **Voice** (`/voice`) - Voice interaction capabilities with text-to-speech and speech-to-text integration. Supports multiple voice providers and real-time voice
   communication for agents. [Learn more about Voice](https://mastra.ai/docs/voice/overview)
 
+- **Browser** (`/browser`) - Base classes and utilities for browser automation. Provides the `MastraBrowser` abstract class, thread management, and screencast streaming
+  for building browser providers. Use with `@mastra/agent-browser` or `@mastra/stagehand` for complete browser automation. [Learn more about Browser](https://mastra.ai/docs/browser/overview)
+
 ## Additional Resources
 
 - [Getting Started Guide](https://mastra.ai/docs/getting-started/installation)

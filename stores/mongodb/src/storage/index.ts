@@ -4,14 +4,17 @@ import { createStorageErrorId, MastraCompositeStore } from '@mastra/core/storage
 import type { MongoDBConnector } from './connectors/MongoDBConnector';
 import { resolveMongoDBConfig } from './db';
 import { MongoDBAgentsStorage } from './domains/agents';
+import { BackgroundTasksStorageMongoDB } from './domains/background-tasks';
 import { MongoDBBlobStore } from './domains/blobs';
 import { MongoDBDatasetsStorage } from './domains/datasets';
 import { MongoDBExperimentsStorage } from './domains/experiments';
 import { MongoDBMCPClientsStorage } from './domains/mcp-clients';
 import { MongoDBMCPServersStorage } from './domains/mcp-servers';
 import { MemoryStorageMongoDB } from './domains/memory';
+import { NotificationsMongoDB } from './domains/notifications';
 import { ObservabilityMongoDB } from './domains/observability';
 import { MongoDBPromptBlocksStorage } from './domains/prompt-blocks';
+import { SchedulesMongoDB } from './domains/schedules';
 import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
 import { MongoDBSkillsStorage } from './domains/skills';
@@ -21,6 +24,7 @@ import type { MongoDBConfig } from './types';
 
 // Export domain classes for direct use with MastraStorage composition
 export {
+  BackgroundTasksStorageMongoDB,
   MongoDBAgentsStorage,
   MongoDBBlobStore,
   MongoDBDatasetsStorage,
@@ -28,7 +32,9 @@ export {
   MongoDBMCPClientsStorage,
   MongoDBMCPServersStorage,
   MemoryStorageMongoDB,
+  NotificationsMongoDB,
   MongoDBPromptBlocksStorage,
+  SchedulesMongoDB,
   MongoDBScorerDefinitionsStorage,
   MongoDBSkillsStorage,
   MongoDBWorkspacesStorage,
@@ -62,7 +68,7 @@ export class MongoDBStore extends MastraCompositeStore {
   stores: StorageDomains;
 
   constructor(config: MongoDBConfig) {
-    super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit });
+    super({ id: config.id, name: 'MongoDBStore', disableInit: config.disableInit, retention: config.retention });
 
     this.#connector = resolveMongoDBConfig(config);
 
@@ -73,6 +79,8 @@ export class MongoDBStore extends MastraCompositeStore {
     };
 
     const memory = new MemoryStorageMongoDB(domainConfig);
+
+    const notifications = new NotificationsMongoDB(domainConfig);
 
     const scores = new ScoresStorageMongoDB(domainConfig);
 
@@ -100,8 +108,13 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const experiments = new MongoDBExperimentsStorage(domainConfig);
 
+    const backgroundTasks = new BackgroundTasksStorageMongoDB(domainConfig);
+
+    const schedules = new SchedulesMongoDB(domainConfig);
+
     this.stores = {
       memory,
+      notifications,
       scores,
       workflows,
       observability,
@@ -113,8 +126,10 @@ export class MongoDBStore extends MastraCompositeStore {
       workspaces,
       skills,
       blobs,
+      backgroundTasks,
       datasets,
       experiments,
+      schedules,
     };
   }
 

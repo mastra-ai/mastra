@@ -7,17 +7,62 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
-import type { ProviderConfig, MastraModelGateway } from './gateways/base.js';
-import staticRegistry from './provider-registry.json';
+import type { ProviderConfig, MastraModelGatewayInterface } from './gateways/base.js';
+import { getGatewayId, shouldEnableGateway } from './gateways/gateway-helpers.js';
+import { MastraGateway } from './gateways/mastra.js';
+import { ModelsDevGateway } from './gateways/models-dev.js';
+import { NetlifyGateway } from './gateways/netlify.js';
+import staticRegistryJson from './provider-registry.json';
 import type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels } from './provider-types.generated.js';
 
 // Re-export types for convenience
 export type { Provider, ModelForProvider, ModelRouterModelId, ProviderModels };
+export type { AttachmentCapabilities } from './gateways/base.js';
 
 interface RegistryData {
   providers: Record<string, ProviderConfig>;
   models: Record<string, string[]>;
   version: string;
+}
+
+// JSON imports widen string literals to `string`, so fields like
+// `modelOverrides[*].shape` don't match their literal-union types.
+const staticRegistry = staticRegistryJson as RegistryData;
+
+/**
+ * Check if running in offline/air-gapped mode.
+ * When MASTRA_OFFLINE is set to 'true' or '1', all network fetches for provider data are skipped.
+ */
+export function isOfflineMode(): boolean {
+  const value = process.env.MASTRA_OFFLINE;
+  return value === 'true' || value === '1';
+}
+
+function getEnabledGatewayIds(gateways: MastraModelGatewayInterface[]): Set<string> {
+  const enabledGatewayIds = new Set<string>();
+
+  for (const gateway of gateways) {
+    const enabled = shouldEnableGateway(gateway);
+    if (enabled) {
+      enabledGatewayIds.add(getGatewayId(gateway));
+    }
+  }
+
+  return enabledGatewayIds;
+}
+
+function sanitizeRegistryDataForRuntime(data: RegistryData, enabledGatewayIds: Set<string>): RegistryData {
+  const providers = Object.fromEntries(
+    Object.entries(data.providers).filter(([, config]) => enabledGatewayIds.has(config.gateway)),
+  );
+
+  const models = Object.fromEntries(Object.entries(data.models).filter(([providerId]) => providerId in providers));
+
+  return {
+    ...data,
+    providers,
+    models,
+  };
 }
 
 // In-memory cache for dynamic loading mode
@@ -32,6 +77,7 @@ const CACHE_DIR = () => path.join(os.homedir(), '.cache', 'mastra');
 const CACHE_FILE = () => path.join(CACHE_DIR(), 'gateway-refresh-time');
 const GLOBAL_PROVIDER_REGISTRY_JSON = () => path.join(CACHE_DIR(), 'provider-registry.json');
 const GLOBAL_PROVIDER_TYPES_DTS = () => path.join(CACHE_DIR(), 'provider-types.generated.d.ts');
+const GLOBAL_CAPABILITIES_DIR = () => path.join(CACHE_DIR(), 'capabilities');
 
 let modelRouterCacheFailed = false;
 
@@ -90,20 +136,19 @@ function syncGlobalCacheToLocal(): void {
     if (globalJsonExists) {
       const globalJsonContent = fs.readFileSync(GLOBAL_PROVIDER_REGISTRY_JSON(), 'utf-8');
 
-      // Validate JSON before copying to prevent propagating corrupted files
+      // Validate JSON before copying to prevent propagating corrupted files.
+      // Silently delete on corruption — the next gateway sync will rewrite a
+      // valid file, so logging here just creates noise when an older mastra
+      // version (without the digit-quoting fix) shares the global cache.
       try {
         JSON.parse(globalJsonContent);
       } catch {
-        console.warn(
-          `[GatewayRegistry] Detected corrupted global cache at ${GLOBAL_PROVIDER_REGISTRY_JSON()}. ` +
-            `Deleting corrupted file.`,
-        );
         try {
           fs.unlinkSync(GLOBAL_PROVIDER_REGISTRY_JSON());
         } catch {
           // Ignore deletion errors
         }
-        return; // Don't sync corrupted file
+        return;
       }
 
       let shouldCopyJson = true;
@@ -119,6 +164,9 @@ function syncGlobalCacheToLocal(): void {
       }
     }
 
+    // Capabilities are loaded lazily per-provider by loadProviderAttachmentModels().
+    // The global cache dir is included in findCapabilitiesDirs() so no bulk sync is needed.
+
     // Sync .d.ts file if global exists and differs from local
     if (globalDtsExists) {
       const globalDtsContent = fs.readFileSync(GLOBAL_PROVIDER_TYPES_DTS(), 'utf-8');
@@ -126,11 +174,8 @@ function syncGlobalCacheToLocal(): void {
       // Validate .d.ts content: check for unquoted provider names that start with a digit
       // (e.g. "readonly 302ai:" instead of "readonly '302ai':"), which produces invalid TypeScript.
       // This can happen if the global cache was written by an older version without the quoting fix.
+      // Silently delete on corruption — the next gateway sync will rewrite a valid file.
       if (/readonly\s+\d/.test(globalDtsContent)) {
-        console.warn(
-          `[GatewayRegistry] Detected invalid provider-types in global cache at ${GLOBAL_PROVIDER_TYPES_DTS()}. ` +
-            `Deleting corrupted file.`,
-        );
         try {
           fs.unlinkSync(GLOBAL_PROVIDER_TYPES_DTS());
         } catch {
@@ -151,9 +196,9 @@ function syncGlobalCacheToLocal(): void {
         }
       }
     }
-  } catch (error) {
-    // Silent fail - fall back to existing files
-    console.warn('Failed to sync global cache to local:', error);
+  } catch {
+    // Silent fail - fall back to existing files. Sync errors are recoverable
+    // on the next call and don't need to be surfaced to users.
   }
 }
 
@@ -195,10 +240,17 @@ function getPackageRoot(): string {
   }
 }
 
-function loadRegistry(useDynamicLoading: boolean): RegistryData {
+function loadRegistry(useDynamicLoading: boolean, customGateways: MastraModelGatewayInterface[] = []): RegistryData {
+  const enabledGatewayIds = getEnabledGatewayIds([
+    new ModelsDevGateway({}),
+    new NetlifyGateway(),
+    new MastraGateway(),
+    ...customGateways,
+  ]);
+
   // Production: use static import (bundled at build time)
   if (!useDynamicLoading) {
-    return staticRegistry;
+    return sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   }
 
   // Dynamic loading mode: sync global cache to local before loading
@@ -226,7 +278,8 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
   for (const jsonPath of possiblePaths) {
     try {
       const content = fs.readFileSync(jsonPath, 'utf-8');
-      registryData = JSON.parse(content);
+      const parsed = JSON.parse(content) as RegistryData;
+      registryData = sanitizeRegistryDataForRuntime(parsed, enabledGatewayIds);
       return registryData!;
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -248,7 +301,7 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
           // Ignore deletion errors
         }
         // Fall back to static registry (bundled at build time)
-        registryData = staticRegistry;
+        registryData = sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
         return registryData;
       }
 
@@ -262,7 +315,7 @@ function loadRegistry(useDynamicLoading: boolean): RegistryData {
     `[GatewayRegistry] Could not load provider registry from any path. Falling back to static registry.\n` +
       `Tried paths:\n${errors.join('\n')}`,
   );
-  registryData = staticRegistry;
+  registryData = sanitizeRegistryDataForRuntime(staticRegistry, enabledGatewayIds);
   return registryData;
 }
 
@@ -380,6 +433,163 @@ export function getRegisteredProviders(): string[] {
   return Object.keys(providers);
 }
 
+// ---------------------------------------------------------------------------
+// Provider capabilities (per-model attachment / modality metadata)
+// ---------------------------------------------------------------------------
+
+interface ProviderCapabilityFile {
+  attachment?: string[];
+  temperature?: string[];
+}
+
+type CapabilityDimension = keyof ProviderCapabilityFile;
+
+const providerCapCaches: Record<CapabilityDimension, Map<string, string[] | null>> = {
+  attachment: new Map(),
+  temperature: new Map(),
+};
+
+function isDirectory(dir: string): boolean {
+  try {
+    return fs.existsSync(dir) && fs.statSync(dir).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+function findCapabilitiesDirs(useDynamicLoading: boolean): string[] {
+  const packageRoot = getPackageRoot();
+  const distCapabilitiesDir = path.join(packageRoot, 'dist', 'capabilities');
+  const sourceCapabilitiesDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+  const workspaceSourceCapabilitiesDir = path.join(process.cwd(), 'packages/core/src/llm/model/capabilities');
+
+  const dirs: string[] = [];
+
+  // In dynamic mode, prefer the global cache so fresher gateway-synced data wins.
+  if (useDynamicLoading) {
+    const globalCapDir = GLOBAL_CAPABILITIES_DIR();
+    if (isDirectory(globalCapDir)) dirs.push(globalCapDir);
+  }
+
+  if (isDirectory(distCapabilitiesDir)) dirs.push(distCapabilitiesDir);
+
+  // Published packages only include dist/. Source fallbacks are for local workspace/dev
+  // runs where @mastra/core may resolve through a stale partial dist while checked-in
+  // source capability files are available.
+  if (isDirectory(sourceCapabilitiesDir)) dirs.push(sourceCapabilitiesDir);
+  if (workspaceSourceCapabilitiesDir !== sourceCapabilitiesDir && isDirectory(workspaceSourceCapabilitiesDir)) {
+    dirs.push(workspaceSourceCapabilitiesDir);
+  }
+
+  return dirs;
+}
+
+let capabilitiesDirCache: string[] | undefined;
+
+/** Parsed capability file cache — avoids re-reading JSON per dimension. */
+const parsedCapFileCache = new Map<string, ProviderCapabilityFile | null>();
+
+function loadProviderCapabilityFile(provider: string, useDynamicLoading: boolean): ProviderCapabilityFile | null {
+  if (parsedCapFileCache.has(provider)) return parsedCapFileCache.get(provider)!;
+
+  if (capabilitiesDirCache === undefined) {
+    capabilitiesDirCache = findCapabilitiesDirs(useDynamicLoading);
+  }
+
+  for (const capabilitiesDir of capabilitiesDirCache) {
+    const filePath = path.join(capabilitiesDir, `${provider}.json`);
+    try {
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const data = JSON.parse(content) as ProviderCapabilityFile;
+      parsedCapFileCache.set(provider, data);
+      return data;
+    } catch {
+      continue;
+    }
+  }
+
+  parsedCapFileCache.set(provider, null);
+  return null;
+}
+
+function loadProviderCapability(
+  provider: string,
+  dimension: CapabilityDimension,
+  useDynamicLoading: boolean,
+): string[] | null {
+  const cache = providerCapCaches[dimension];
+  if (cache.has(provider)) return cache.get(provider)!;
+
+  const file = loadProviderCapabilityFile(provider, useDynamicLoading);
+  const models = file?.[dimension] ?? null;
+  cache.set(provider, models);
+  return models;
+}
+
+function getProviderCapabilitySupport(
+  provider: string,
+  modelId: string,
+  dimension: CapabilityDimension,
+  useDynamicLoading: boolean,
+): boolean | undefined {
+  const models = loadProviderCapability(provider, dimension, useDynamicLoading);
+  if (!models) return undefined;
+  return models.includes(modelId);
+}
+
+function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
+  const { provider, modelId } = parseModelString(modelRouterId);
+  if (!provider) return undefined;
+
+  const registry = GatewayRegistry.getInstance();
+  const useDynamicLoading = registry['useDynamicLoading'];
+  const directSupport = getProviderCapabilitySupport(provider, modelId, dimension, useDynamicLoading);
+
+  // Positive direct match wins immediately.
+  if (directSupport === true) return true;
+
+  // For nested model IDs (e.g. `openrouter/anthropic/claude-sonnet-4-6`), the
+  // outer gateway's capability list may not enumerate every nested model. Fall
+  // back to the underlying provider's authoritative capability file before
+  // trusting a `false` from the gateway.
+  const nestedProviderDelimiter = modelId.indexOf('/');
+  if (nestedProviderDelimiter !== -1) {
+    const nestedProvider = modelId.substring(0, nestedProviderDelimiter);
+    const nestedModelId = modelId.substring(nestedProviderDelimiter + 1);
+    if (nestedProvider && nestedModelId) {
+      const nestedSupport = getProviderCapabilitySupport(nestedProvider, nestedModelId, dimension, useDynamicLoading);
+      if (nestedSupport !== undefined) return nestedSupport;
+    }
+  }
+
+  return directSupport;
+}
+
+/** @internal Reset capability caches. For testing only. */
+export function _resetCapabilityCaches(): void {
+  for (const cache of Object.values(providerCapCaches)) cache.clear();
+  parsedCapFileCache.clear();
+  capabilitiesDirCache = undefined;
+}
+
+/**
+ * Check whether a model supports image/file attachments.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
+ */
+export function modelSupportsAttachments(modelRouterId: string): boolean | undefined {
+  return modelSupportsCapability(modelRouterId, 'attachment');
+}
+
+/**
+ * Check whether a model supports the `temperature` sampling parameter.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
+ */
+export function modelSupportsTemperature(modelRouterId: string): boolean | undefined {
+  return modelSupportsCapability(modelRouterId, 'temperature');
+}
+
 /**
  * Type guard to check if a string is a valid OpenAI-compatible model ID
  */
@@ -407,7 +617,7 @@ export class GatewayRegistry {
   private refreshInterval: NodeJS.Timeout | null = null;
   private isRefreshing = false;
   private useDynamicLoading: boolean;
-  private customGateways: MastraModelGateway[] = [];
+  private customGateways: MastraModelGatewayInterface[] = [];
 
   private constructor(options: GatewayRegistryOptions = {}) {
     const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
@@ -420,7 +630,13 @@ export class GatewayRegistry {
   static getInstance(options?: GatewayRegistryOptions): GatewayRegistry {
     if (!GatewayRegistry.instance) {
       GatewayRegistry.instance = new GatewayRegistry(options);
+      return GatewayRegistry.instance;
     }
+
+    if (options?.useDynamicLoading === true) {
+      GatewayRegistry.instance.useDynamicLoading = true;
+    }
+
     return GatewayRegistry.instance;
   }
 
@@ -428,14 +644,14 @@ export class GatewayRegistry {
    * Register custom gateways for type generation
    * @param gateways - Array of custom gateway instances
    */
-  registerCustomGateways(gateways: MastraModelGateway[]): void {
+  registerCustomGateways(gateways: MastraModelGatewayInterface[]): void {
     this.customGateways = gateways;
   }
 
   /**
    * Get all registered custom gateways
    */
-  getCustomGateways(): MastraModelGateway[] {
+  getCustomGateways(): MastraModelGatewayInterface[] {
     return this.customGateways;
   }
 
@@ -452,6 +668,11 @@ export class GatewayRegistry {
       return;
     }
 
+    // Skip all network fetches when running in offline/air-gapped mode
+    if (isOfflineMode()) {
+      return;
+    }
+
     if (this.isRefreshing && !forceRefresh) {
       // console.debug('[GatewayRegistry] Sync already in progress, skipping...');
       return;
@@ -465,16 +686,31 @@ export class GatewayRegistry {
       // Import gateway classes and generation functions
       const { ModelsDevGateway } = await import('./gateways/models-dev.js');
       const { NetlifyGateway } = await import('./gateways/netlify.js');
+      const { MastraGateway } = await import('./gateways/mastra.js');
       const { fetchProvidersFromGateways, writeRegistryFiles } = await import('./registry-generator.js');
 
-      // Initialize default gateways
-      const defaultGateways = [new ModelsDevGateway({}), new NetlifyGateway()];
+      // Initialize default gateways. Mastra Gateway is dynamic-only and should not be written into checked-in static artifacts.
+      const defaultGateways = [
+        new ModelsDevGateway({}),
+        new NetlifyGateway(),
+        ...(writeToSrc ? [] : [new MastraGateway()]),
+      ];
 
       // Combine default and custom gateways
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models } = await fetchProvidersFromGateways(gateways);
+      const { providers, models, attachmentCapabilities, temperatureCapabilities, failedGateways } =
+        await fetchProvidersFromGateways(gateways);
+
+      // If any gateway failed, skip writing to prevent partial results from
+      // overwriting the complete bundled registry. The existing static registry
+      // already contains all provider data, so a partial write would only
+      // remove providers (e.g. writing only Netlify providers when models.dev
+      // is down strips all direct providers like openai, anthropic, etc.).
+      if (failedGateways.length > 0) {
+        return;
+      }
 
       // Get package root for file paths
       const packageRoot = getPackageRoot();
@@ -482,7 +718,14 @@ export class GatewayRegistry {
       // Write to global cache first (so all projects can benefit)
       try {
         fs.mkdirSync(CACHE_DIR(), { recursive: true });
-        await writeRegistryFiles(GLOBAL_PROVIDER_REGISTRY_JSON(), GLOBAL_PROVIDER_TYPES_DTS(), providers, models);
+        await writeRegistryFiles(
+          GLOBAL_PROVIDER_REGISTRY_JSON(),
+          GLOBAL_PROVIDER_TYPES_DTS(),
+          providers,
+          models,
+          attachmentCapabilities,
+          temperatureCapabilities,
+        );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
         console.warn('[GatewayRegistry] Failed to write to global cache:', error);
@@ -492,7 +735,14 @@ export class GatewayRegistry {
       const distJsonPath = path.join(packageRoot, 'dist', 'provider-registry.json');
       const distTypesPath = path.join(packageRoot, 'dist', 'llm', 'model', 'provider-types.generated.d.ts');
 
-      await writeRegistryFiles(distJsonPath, distTypesPath, providers, models);
+      await writeRegistryFiles(
+        distJsonPath,
+        distTypesPath,
+        providers,
+        models,
+        attachmentCapabilities,
+        temperatureCapabilities,
+      );
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 
       // Copy to src/ only when explicitly requested (e.g., running the generation script)
@@ -504,20 +754,33 @@ export class GatewayRegistry {
         // Copy the already-generated files
         await fs.promises.copyFile(distJsonPath, srcJsonPath);
         await fs.promises.copyFile(distTypesPath, srcTypesPath);
+
+        const distCapDir = path.join(packageRoot, 'dist', 'capabilities');
+        const srcCapDir = path.join(packageRoot, 'src', 'llm', 'model', 'capabilities');
+        if (fs.existsSync(distCapDir)) {
+          await fs.promises.mkdir(srcCapDir, { recursive: true });
+          const capFiles = fs.readdirSync(distCapDir).filter(f => f.endsWith('.json'));
+          for (const file of capFiles) {
+            await fs.promises.copyFile(path.join(distCapDir, file), path.join(srcCapDir, file));
+          }
+        }
         // console.debug(`[GatewayRegistry] ✅ Copied registry files to src/ (${writeToSrc ? 'manual' : 'dynamic loading'})`);
       }
 
       // Clear the in-memory cache to force reload (dynamic loading only)
       if (this.useDynamicLoading) {
         registryData = null;
+        for (const cache of Object.values(providerCapCaches)) cache.clear();
+        parsedCapFileCache.clear();
+        capabilitiesDirCache = undefined;
       }
 
       this.lastRefreshTime = new Date();
       saveLastRefreshTimeToDisk(this.lastRefreshTime);
       // console.debug(`[GatewayRegistry] ✅ Gateway sync completed at ${this.lastRefreshTime.toISOString()}`);
-    } catch (error) {
-      console.error('[GatewayRegistry] ❌ Gateway sync failed:', error);
-      throw error;
+    } catch {
+      // Silently ignore — the bundled registry already contains all
+      // model data so a failed sync is non-critical.
     } finally {
       this.isRefreshing = false;
     }
@@ -542,6 +805,11 @@ export class GatewayRegistry {
       return;
     }
 
+    // Skip auto-refresh when running in offline/air-gapped mode
+    if (isOfflineMode()) {
+      return;
+    }
+
     if (this.refreshInterval) {
       // console.debug('[GatewayRegistry] Auto-refresh already running');
       return;
@@ -555,15 +823,7 @@ export class GatewayRegistry {
     const shouldRefresh = !modelRouterCacheFailed && (!lastRefresh || now - lastRefresh.getTime() > intervalMs);
 
     if (shouldRefresh) {
-      // console.debug(
-      //   `[GatewayRegistry] Running immediate sync (last refresh: ${lastRefresh ? lastRefresh.toISOString() : 'never'})`,
-      // );
-      this.syncGateways().catch(err => {
-        console.error('[GatewayRegistry] Initial auto-refresh failed:', err);
-      });
-    } else {
-      // console.debug( `[GatewayRegistry] Skipping immediate sync (last refresh: ${lastRefresh.toISOString()}, next in ${Math.round((intervalMs - (now - lastRefresh.getTime())) / 1000)}s)`,
-      // );
+      this.syncGateways().catch(() => {});
     }
 
     this.refreshInterval = setInterval(() => {
@@ -572,9 +832,7 @@ export class GatewayRegistry {
         this.refreshInterval = null;
         return;
       }
-      this.syncGateways().catch(err => {
-        console.error('[GatewayRegistry] Auto-refresh failed:', err);
-      });
+      this.syncGateways().catch(() => {});
     }, intervalMs);
 
     // Prevent the interval from keeping the process alive
@@ -598,7 +856,7 @@ export class GatewayRegistry {
    * Get provider configuration by ID
    */
   getProviderConfig(providerId: string): ProviderConfig | undefined {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return data.providers[providerId];
   }
 
@@ -606,7 +864,7 @@ export class GatewayRegistry {
    * Check if a provider is registered
    */
   isProviderRegistered(providerId: string): boolean {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return providerId in data.providers;
   }
 
@@ -614,7 +872,7 @@ export class GatewayRegistry {
    * Get all registered providers
    */
   getProviders(): Record<string, ProviderConfig> {
-    const data = loadRegistry(this.useDynamicLoading);
+    const data = loadRegistry(this.useDynamicLoading, this.customGateways);
     return data.providers;
   }
 
@@ -622,16 +880,18 @@ export class GatewayRegistry {
    * Get all models
    */
   getModels(): Record<string, string[]> {
-    return loadRegistry(this.useDynamicLoading).models;
+    return loadRegistry(this.useDynamicLoading, this.customGateways).models;
   }
 }
 
 // Auto-start refresh if enabled
 // Defaults to enabled when MASTRA_DEV=true (which enables dynamic loading by default)
+// Disabled entirely when MASTRA_OFFLINE is set (air-gapped/offline environments)
 const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';
 const autoRefreshEnabled =
-  process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
-  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev);
+  !isOfflineMode() &&
+  (process.env.MASTRA_AUTO_REFRESH_PROVIDERS === 'true' ||
+    (process.env.MASTRA_AUTO_REFRESH_PROVIDERS !== 'false' && isDev));
 
 if (autoRefreshEnabled) {
   // console.debug('[GatewayRegistry] Auto-refresh enabled');

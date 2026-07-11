@@ -195,6 +195,32 @@ The `suspended` array contains the IDs of any suspended workflows and steps from
 ['nested-workflow', 'step-1']
 ```
 
+## Recovering suspended runs
+
+Use `workflow.getWorkflowRunById()` with `createWorkflowStateReader()` when your application needs to recover a suspended run from storage. The reader exposes suspended steps, resume labels, step payloads, and step outputs without reading the raw snapshot shape.
+
+```typescript title="src/mastra/workflows/recover-run.ts"
+import { createWorkflowStateReader } from '@mastra/core/workflows'
+
+const workflow = mastra.getWorkflow('testWorkflow')
+const state = await workflow.getWorkflowRunById('run-123')
+
+if (state?.status === 'suspended') {
+  const reader = createWorkflowStateReader(state)
+  const suspendedStep = reader.getSuspendedStep()
+  const approvalLabel = reader.getResumeLabel('approve')
+  const run = await workflow.createRun({ runId: state.runId })
+
+  await run.resume({
+    step: approvalLabel?.stepId ?? suspendedStep?.path,
+    resumeData: { approved: true },
+    forEachIndex: approvalLabel?.foreachIndex,
+  })
+}
+```
+
+For nested workflows, `suspendedStep.path` contains the resume path. For `foreach` suspensions, matching resume labels include `foreachIndex` when the label points to a specific iteration.
+
 ## Sleep
 
 Sleep methods can be used to pause execution at the workflow level, which sets the status to `waiting`. By comparison, `suspend()` pauses execution within a specific step and sets the status to `suspended`.
@@ -210,3 +236,4 @@ Sleep methods can be used to pause execution at the workflow level, which sets t
 - [Human-in-the-loop](/docs/workflows/human-in-the-loop)
 - [Snapshots](/docs/workflows/snapshots)
 - [Time Travel](/docs/workflows/time-travel)
+- [Workflow state reader](/reference/workflows/workflow-state-reader)

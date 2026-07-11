@@ -4,6 +4,12 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const execAsync = promisify(exec);
+const gitIdentityEnv = {
+  GIT_AUTHOR_NAME: 'GitHub Action',
+  GIT_AUTHOR_EMAIL: 'action@github.com',
+  GIT_COMMITTER_NAME: 'GitHub Action',
+  GIT_COMMITTER_EMAIL: 'action@github.com',
+};
 
 // 10 minutes timeout for changeset operations - CI can be slow
 const defaultTimeout = 10 * 60 * 1000;
@@ -78,7 +84,7 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
   });
 }
 
-function cleanup(monorepoDir, resetChanges = false) {
+async function cleanup(monorepoDir, resetChanges = false) {
   execSync('git checkout .', {
     cwd: monorepoDir,
     stdio: ['inherit', 'inherit', 'pipe'],
@@ -96,10 +102,37 @@ function cleanup(monorepoDir, resetChanges = false) {
   }
 }
 
+function stripWorkspaceTrustPolicy(monorepoDir) {
+  const workspacePath = join(monorepoDir, 'pnpm-workspace.yaml');
+  const localRegistryIncompatibleSettings = [
+    'blockExoticSubdeps',
+    'trustPolicy',
+    'trustPolicyIgnoreAfter',
+    'minimumReleaseAge',
+  ];
+
+  try {
+    const content = readFileSync(workspacePath, 'utf8');
+    const nextContent = content
+      .split('\n')
+      .filter(line => !localRegistryIncompatibleSettings.some(setting => line.startsWith(`${setting}:`)))
+      .join('\n');
+
+    if (nextContent !== content) {
+      console.log('Removing pnpm registry policy settings for local registry tests');
+      writeFileSync(workspacePath, nextContent);
+    }
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+}
+
 /**
  *
  * @param {string} monorepoDir
- * @param {typeof import('globby').globby} glob
+ * @param {typeof import('tinyglobby').glob} glob
  * @param {string} tag
  * @returns
  */
@@ -123,11 +156,18 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
         stdio: ['inherit', 'inherit', 'inherit'],
         env: {
           ...process.env,
+          ...gitIdentityEnv,
           HUSKY: '0',
+          GIT_AUTHOR_NAME: process.env.GIT_AUTHOR_NAME || 'Mastra CI',
+          GIT_AUTHOR_EMAIL: process.env.GIT_AUTHOR_EMAIL || 'ci@mastra.ai',
+          GIT_COMMITTER_NAME: process.env.GIT_COMMITTER_NAME || 'Mastra CI',
+          GIT_COMMITTER_EMAIL: process.env.GIT_COMMITTER_EMAIL || 'ci@mastra.ai',
         },
       });
       shelvedChanges = true;
     }
+
+    stripWorkspaceTrustPolicy(monorepoDir);
 
     console.log('Updating workspace dependencies to use * instead of ^');
     await (async function updateWorkspaceDependencies() {
@@ -215,7 +255,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       `pnpm changeset-cli version --snapshot ${tag}`,
     );
   } catch (error) {
-    cleanup(monorepoDir, false);
+    await cleanup(monorepoDir, false);
     throw error;
   }
 

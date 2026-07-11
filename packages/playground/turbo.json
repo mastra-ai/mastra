@@ -1,11 +1,15 @@
 {
-  "$schema": "https://turbo.build/schema.json",
+  "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
-    "build": {
+    "build:lib": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "!dist/docs/**"],
       "inputs": ["$TURBO_DEFAULT$", "./vite.config.ts"]
+    },
+    "build": {
+      "dependsOn": ["^build", "build:lib", "typecheck"],
+      "outputs": ["dist/**"]
     }
   }
 }

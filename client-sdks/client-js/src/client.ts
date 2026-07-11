@@ -1,11 +1,17 @@
-import type { ListScoresResponse } from '@mastra/core/evals';
+import type { ListScoresResponse, Trajectory } from '@mastra/core/evals';
 import type { ServerDetailInfo } from '@mastra/core/mcp';
 import type { RequestContext } from '@mastra/core/request-context';
 import type {
   PaginationInfo,
   TraceRecord,
+  GetTraceLightResponse,
+  GetSpanResponse,
   ListTracesArgs,
   ListTracesResponse,
+  ListBranchesArgs,
+  ListBranchesResponse,
+  GetBranchArgs,
+  GetBranchResponse,
   // Logs
   ListLogsArgs,
   ListLogsResponse,
@@ -14,11 +20,27 @@ import type {
   ListScoresResponse as ListScoresResponseNew,
   CreateScoreBody,
   CreateScoreResponse,
+  GetScoreAggregateArgs,
+  GetScoreAggregateResponse,
+  GetScoreBreakdownArgs,
+  GetScoreBreakdownResponse,
+  GetScoreTimeSeriesArgs,
+  GetScoreTimeSeriesResponse,
+  GetScorePercentilesArgs,
+  GetScorePercentilesResponse,
   // Feedback
   ListFeedbackArgs,
   ListFeedbackResponse,
   CreateFeedbackBody,
   CreateFeedbackResponse,
+  GetFeedbackAggregateArgs,
+  GetFeedbackAggregateResponse,
+  GetFeedbackBreakdownArgs,
+  GetFeedbackBreakdownResponse,
+  GetFeedbackTimeSeriesArgs,
+  GetFeedbackTimeSeriesResponse,
+  GetFeedbackPercentilesArgs,
+  GetFeedbackPercentilesResponse,
   // Metrics OLAP
   GetMetricAggregateArgs,
   GetMetricAggregateResponse,
@@ -55,6 +77,7 @@ import {
   A2A,
   MCPTool,
   AgentBuilder,
+  Conversations,
   Observability,
   StoredAgent,
   StoredPromptBlock,
@@ -64,6 +87,9 @@ import {
   ToolProvider,
   ProcessorProvider,
   Workspace,
+  Responses,
+  Channels,
+  AgentController,
 } from './resources';
 import type {
   ListScoresBySpanParams,
@@ -120,6 +146,16 @@ import type {
   CreateStoredSkillParams,
   StoredSkillResponse,
   GetSystemPackagesResponse,
+  BuilderSettingsResponse,
+  BuilderAvailableModelsResponse,
+  PermissionPatternsResponse,
+  InfrastructureStatusResponse,
+  ListBuilderRegistriesResponse,
+  BuilderRegistrySearchResponse,
+  BuilderRegistryPopularResponse,
+  BuilderRegistryPreviewResponse,
+  BuilderRegistryInstallBody,
+  BuilderRegistryInstallResponse,
   ListScoresResponse as ListScoresResponseOld,
   GetObservationalMemoryParams,
   GetObservationalMemoryResponse,
@@ -127,6 +163,9 @@ import type {
   AwaitBufferStatusResponse,
   GetMemoryStatusResponse,
   ListWorkspacesResponse,
+  ListStoredWorkspacesParams,
+  ListStoredWorkspacesResponse,
+  StoredWorkspaceResponse,
   ListVectorsResponse,
   ListEmbeddersResponse,
   DatasetRecord,
@@ -150,14 +189,32 @@ import type {
   DatasetVersionResponse,
   ListToolProvidersResponse,
   GetProcessorProvidersResponse,
+  ListBackgroundTasksParams,
+  ListBackgroundTasksResponse,
+  BackgroundTaskResponse,
+  StreamBackgroundTasksParams,
+  ListSchedulesParams,
+  ListSchedulesResponse,
+  ScheduleResponse,
+  ListScheduleTriggersParams,
+  ListScheduleTriggersResponse,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+  RunScheduleResponse,
 } from './types';
-import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
+import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
+  public readonly conversations: Conversations;
+  public readonly responses: Responses;
+  public readonly channels: Channels;
   constructor(options: ClientOptions) {
     super(options);
     this.observability = new Observability(options);
+    this.conversations = new Conversations(options);
+    this.responses = new Responses(options);
+    this.channels = new Channels(options);
   }
 
   /**
@@ -200,6 +257,25 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists the agent controllers hosted on the connected Mastra instance.
+   * @returns Promise containing an array of agent controller identifiers
+   */
+  public async listAgentControllers(): Promise<{ id: string }[]> {
+    const body = await this.request<{ agentControllers: { id: string }[] }>('/agent-controller');
+    return body.agentControllers;
+  }
+
+  /**
+   * Scopes to an agent controller hosted on the connected Mastra instance. Use
+   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * stream its events, and send messages.
+   * @param controllerId - The id the agent controller is registered under on Mastra
+   */
+  public getAgentController(controllerId: string) {
+    return new AgentController(this.options, controllerId);
+  }
+
+  /**
    * Lists memory threads with optional filtering by resourceId and/or metadata
    * @param params - Parameters containing optional filters, pagination options, and request context
    * @returns Promise containing paginated array of memory threads with metadata
@@ -220,8 +296,14 @@ export class MastraClient extends BaseResource {
     if (params.agentId) queryParams.set('agentId', params.agentId);
     if (params.page !== undefined) queryParams.set('page', params.page.toString());
     if (params.perPage !== undefined) queryParams.set('perPage', params.perPage.toString());
-    if (params.orderBy) queryParams.set('orderBy', params.orderBy);
-    if (params.sortDirection) queryParams.set('sortDirection', params.sortDirection);
+    if (params.orderBy) {
+      if (params.orderBy.field) {
+        queryParams.set('orderBy[field]', params.orderBy.field);
+      }
+      if (params.orderBy.direction) {
+        queryParams.set('orderBy[direction]', params.orderBy.direction);
+      }
+    }
 
     const queryString = queryParams.toString();
     const response: ListMemoryThreadsResponse | ListMemoryThreadsResponse['threads'] = await this.request(
@@ -286,30 +368,45 @@ export class MastraClient extends BaseResource {
    */
   public listThreadMessages(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts: {
+      agentId?: string;
+      networkId?: string;
+      requestContext?: RequestContext | Record<string, any>;
+      includeSystemReminders?: boolean;
+    } = {},
   ): Promise<ListMemoryThreadMessagesResponse> {
     let url = '';
+    const includeSystemRemindersQuery =
+      opts.includeSystemReminders === undefined ? '' : `includeSystemReminders=${opts.includeSystemReminders}`;
+
     if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/network/threads/${threadId}/messages?networkId=${opts.networkId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '&')}`;
     } else if (opts.agentId) {
-      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
+      url = `/memory/threads/${threadId}/messages?agentId=${opts.agentId}${includeSystemRemindersQuery ? `&${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, '&')}`;
     } else {
-      url = `/memory/threads/${threadId}/messages${requestContextQueryString(opts.requestContext, '?')}`;
+      url = `/memory/threads/${threadId}/messages${includeSystemRemindersQuery ? `?${includeSystemRemindersQuery}` : ''}${requestContextQueryString(opts.requestContext, includeSystemRemindersQuery ? '&' : '?')}`;
     }
     return this.request(url);
   }
 
   public deleteThread(
     threadId: string,
-    opts: { agentId?: string; networkId?: string; requestContext?: RequestContext | Record<string, any> } = {},
+    opts:
+      | { agentId: string; networkId?: never; requestContext?: RequestContext | Record<string, any> }
+      | { networkId: string; agentId?: never; requestContext?: RequestContext | Record<string, any> },
   ): Promise<{ success: boolean; message: string }> {
-    let url = '';
-
-    if (opts.agentId) {
-      url = `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`;
-    } else if (opts.networkId) {
-      url = `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+    if (!opts || !!opts.agentId === !!opts.networkId) {
+      throw new Error(
+        'MastraClient.deleteThread() requires exactly one of agentId or networkId. ' +
+          'The server cannot resolve which memory store owns the thread without one, ' +
+          'and passing both is ambiguous.',
+      );
     }
+
+    const url = opts.agentId
+      ? `/memory/threads/${threadId}?agentId=${opts.agentId}${requestContextQueryString(opts.requestContext, '&')}`
+      : `/memory/network/threads/${threadId}?networkId=${opts.networkId}${requestContextQueryString(opts.requestContext, '&')}`;
+
     return this.request(url, { method: 'DELETE' });
   }
 
@@ -358,6 +455,14 @@ export class MastraClient extends BaseResource {
     const queryParams = new URLSearchParams({ agentId: params.agentId });
     if (params.resourceId) queryParams.set('resourceId', params.resourceId);
     if (params.threadId) queryParams.set('threadId', params.threadId);
+    if (params.from) {
+      queryParams.set('from', params.from instanceof Date ? params.from.toISOString() : params.from);
+    }
+    if (params.to) {
+      queryParams.set('to', params.to instanceof Date ? params.to.toISOString() : params.to);
+    }
+    if (params.offset != null) queryParams.set('offset', String(params.offset));
+    if (params.limit != null) queryParams.set('limit', String(params.limit));
     const queryString = queryParams.toString();
     return this.request(
       `/memory/observational-memory?${queryString}${requestContextQueryString(params.requestContext, '&')}`,
@@ -478,7 +583,7 @@ export class MastraClient extends BaseResource {
    * @returns Promise containing map of action IDs to action details
    */
   public getAgentBuilderActions(): Promise<Record<string, WorkflowInfo>> {
-    return this.request('/agent-builder/');
+    return this.request('/agent-builder');
   }
 
   /**
@@ -520,10 +625,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
     if (_filters) {
@@ -568,10 +673,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
 
@@ -664,6 +769,40 @@ export class MastraClient extends BaseResource {
    */
   public getMcpServerTool(serverId: string, toolId: string): MCPTool {
     return new MCPTool(this.options, serverId, toolId);
+  }
+
+  /**
+   * Lists resources available on an MCP server.
+   * @param serverId - The ID of the MCP server.
+   * @returns Promise containing the list of resources.
+   */
+  public getMcpServerResources(serverId: string): Promise<{
+    resources: Array<{
+      uri: string;
+      name: string;
+      description?: string;
+      mimeType?: string;
+      _meta?: Record<string, unknown>;
+    }>;
+  }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources`);
+  }
+
+  /**
+   * Reads the content of a resource from an MCP server.
+   * Used for fetching ui:// MCP App HTML content.
+   * @param serverId - The ID of the MCP server.
+   * @param uri - The resource URI to read.
+   * @returns Promise containing the resource content.
+   */
+  public readMcpServerResource(
+    serverId: string,
+    uri: string,
+  ): Promise<{ contents: Array<{ uri: string; text?: string; blob?: string }> }> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/resources/read`, {
+      method: 'POST',
+      body: { uri },
+    });
   }
 
   /**
@@ -862,6 +1001,21 @@ export class MastraClient extends BaseResource {
     return this.observability.getTrace(traceId);
   }
 
+  /** Retrieves a lightweight trace by ID (timeline fields only, excludes heavy fields). */
+  getTraceLight(traceId: string): Promise<GetTraceLightResponse> {
+    return this.observability.getTraceLight(traceId);
+  }
+
+  /** Retrieves a single span with full details by trace ID and span ID. */
+  getSpan(traceId: string, spanId: string): Promise<GetSpanResponse> {
+    return this.observability.getSpan(traceId, spanId);
+  }
+
+  /** Extracts a structured trajectory from a trace's spans. */
+  getTraceTrajectory(traceId: string): Promise<Trajectory> {
+    return this.observability.getTraceTrajectory(traceId);
+  }
+
   /**
    * Retrieves paginated list of traces with optional filtering.
    * This is the legacy API preserved for backward compatibility.
@@ -883,6 +1037,24 @@ export class MastraClient extends BaseResource {
    */
   listTraces(params: ListTracesArgs = {}): Promise<ListTracesResponse> {
     return this.observability.listTraces(params);
+  }
+
+  /**
+   * Retrieves a paginated list of trace branches with optional filtering and sorting.
+   * Each row is a branch-anchor span (AGENT_RUN, WORKFLOW_RUN, TOOL_CALL, etc.) including
+   * ones nested under a different root entity. Pairs with {@link getBranch} to expand
+   * a single branch into its subtree.
+   */
+  listBranches(params: ListBranchesArgs = {}): Promise<ListBranchesResponse> {
+    return this.observability.listBranches(params);
+  }
+
+  /**
+   * Retrieves the subtree of spans rooted at a given span. The optional `depth` field
+   * bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).
+   */
+  getBranch(params: GetBranchArgs): Promise<GetBranchResponse> {
+    return this.observability.getBranch(params);
   }
 
   listScoresBySpan(params: ListScoresBySpanParams): Promise<ListScoresResponse> {
@@ -920,6 +1092,26 @@ export class MastraClient extends BaseResource {
     return this.observability.createScore(params);
   }
 
+  /** Returns an aggregated score value with optional period-over-period comparison. */
+  getScoreAggregate(params: GetScoreAggregateArgs): Promise<GetScoreAggregateResponse> {
+    return this.observability.getScoreAggregate(params);
+  }
+
+  /** Returns score values grouped by specified dimensions. */
+  getScoreBreakdown(params: GetScoreBreakdownArgs): Promise<GetScoreBreakdownResponse> {
+    return this.observability.getScoreBreakdown(params);
+  }
+
+  /** Returns score values bucketed by time interval with optional grouping. */
+  getScoreTimeSeries(params: GetScoreTimeSeriesArgs): Promise<GetScoreTimeSeriesResponse> {
+    return this.observability.getScoreTimeSeries(params);
+  }
+
+  /** Returns percentile values for scores bucketed by time interval. */
+  getScorePercentiles(params: GetScorePercentilesArgs): Promise<GetScorePercentilesResponse> {
+    return this.observability.getScorePercentiles(params);
+  }
+
   // --------------------------------------------------------------------------
   // Feedback
   // --------------------------------------------------------------------------
@@ -932,6 +1124,26 @@ export class MastraClient extends BaseResource {
   /** Creates a single feedback record in the observability store. */
   createFeedback(params: CreateFeedbackBody): Promise<CreateFeedbackResponse> {
     return this.observability.createFeedback(params);
+  }
+
+  /** Returns an aggregated feedback value with optional period-over-period comparison. */
+  getFeedbackAggregate(params: GetFeedbackAggregateArgs): Promise<GetFeedbackAggregateResponse> {
+    return this.observability.getFeedbackAggregate(params);
+  }
+
+  /** Returns feedback values grouped by specified dimensions. */
+  getFeedbackBreakdown(params: GetFeedbackBreakdownArgs): Promise<GetFeedbackBreakdownResponse> {
+    return this.observability.getFeedbackBreakdown(params);
+  }
+
+  /** Returns feedback values bucketed by time interval with optional grouping. */
+  getFeedbackTimeSeries(params: GetFeedbackTimeSeriesArgs): Promise<GetFeedbackTimeSeriesResponse> {
+    return this.observability.getFeedbackTimeSeries(params);
+  }
+
+  /** Returns percentile values for feedback bucketed by time interval. */
+  getFeedbackPercentiles(params: GetFeedbackPercentilesArgs): Promise<GetFeedbackPercentilesResponse> {
+    return this.observability.getFeedbackPercentiles(params);
   }
 
   // --------------------------------------------------------------------------
@@ -1028,11 +1240,23 @@ export class MastraClient extends BaseResource {
         searchParams.set('orderBy[direction]', params.orderBy.direction);
       }
     }
+    if (params?.status) {
+      searchParams.set('status', params.status);
+    }
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
     }
+    if (params?.visibility) {
+      searchParams.set('visibility', params.visibility);
+    }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+    if (params?.favoritedOnly) {
+      searchParams.set('favoritedOnly', 'true');
+    }
+    if (params?.pinFavoritedFor) {
+      searchParams.set('pinFavoritedFor', params.pinFavoritedFor);
     }
 
     const queryString = searchParams.toString();
@@ -1266,8 +1490,17 @@ export class MastraClient extends BaseResource {
     if (params?.authorId) {
       searchParams.set('authorId', params.authorId);
     }
+    if (params?.visibility) {
+      searchParams.set('visibility', params.visibility);
+    }
     if (params?.metadata) {
       searchParams.set('metadata', JSON.stringify(params.metadata));
+    }
+    if (params?.favoritedOnly) {
+      searchParams.set('favoritedOnly', 'true');
+    }
+    if (params?.pinFavoritedFor) {
+      searchParams.set('pinFavoritedFor', params.pinFavoritedFor);
     }
 
     const queryString = searchParams.toString();
@@ -1350,6 +1583,119 @@ export class MastraClient extends BaseResource {
   }
 
   // ============================================================================
+  // Editor / Builder
+  // ============================================================================
+
+  /**
+   * Retrieves agent builder settings for UI gating.
+   * Returns feature flags and configuration set by admin.
+   * @returns Promise containing builder settings
+   */
+  public getBuilderSettings(): Promise<BuilderSettingsResponse> {
+    return this.request('/editor/builder/settings');
+  }
+
+  /**
+   * Retrieves the AI providers/models available under the active builder model
+   * policy. The server applies the EE allowlist, so the result can be rendered
+   * directly in the model picker.
+   * @returns Promise containing the policy-filtered providers/models
+   */
+  public getBuilderAvailableModels(): Promise<BuilderAvailableModelsResponse> {
+    return this.request('/editor/builder/models/available');
+  }
+
+  /**
+   * Retrieves the authoritative list of valid permission-pattern strings.
+   * Used by Studio to validate route→permission literals and gate the sidebar.
+   * @returns Promise containing the permission patterns
+   */
+  public getPermissionPatterns(): Promise<PermissionPatternsResponse> {
+    return this.request('/auth/permission-patterns');
+  }
+
+  /**
+   * Retrieves Agent Builder infrastructure configuration and resolution status.
+   * Requires `infrastructure:read` permission.
+   * @returns Promise containing infrastructure status
+   */
+  public getInfrastructureStatus(): Promise<InfrastructureStatusResponse> {
+    return this.request('/editor/builder/infrastructure');
+  }
+
+  /**
+   * Lists known skill registries surfaced by the Agent Builder config.
+   * Each entry reports whether the registry is enabled. Disabled or unknown
+   * registries return 404 from registry-scoped routes.
+   * Requires `stored-skills:read` permission.
+   */
+  public listBuilderRegistries(): Promise<ListBuilderRegistriesResponse> {
+    return this.request('/editor/builder/registries');
+  }
+
+  /**
+   * Search a builder skill registry. The registry must be enabled or the
+   * server returns 404.
+   * Requires `stored-skills:read` permission.
+   */
+  public searchBuilderRegistry(
+    registryId: string,
+    params: { q: string; limit?: number },
+  ): Promise<BuilderRegistrySearchResponse> {
+    const search = new URLSearchParams({ q: params.q });
+    if (params.limit !== undefined) search.set('limit', String(params.limit));
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/search?${search.toString()}`);
+  }
+
+  /**
+   * Fetch the popular skills feed from a builder skill registry.
+   * Requires `stored-skills:read` permission.
+   */
+  public getBuilderRegistryPopular(
+    registryId: string,
+    params?: { limit?: number; offset?: number },
+  ): Promise<BuilderRegistryPopularResponse> {
+    const search = new URLSearchParams();
+    if (params?.limit !== undefined) search.set('limit', String(params.limit));
+    if (params?.offset !== undefined) search.set('offset', String(params.offset));
+    const query = search.toString();
+    return this.request(
+      `/editor/builder/registries/${encodeURIComponent(registryId)}/popular${query ? `?${query}` : ''}`,
+    );
+  }
+
+  /**
+   * Fetch the rendered preview content for a single registry skill.
+   * Requires `stored-skills:read` permission.
+   */
+  public getBuilderRegistryPreview(
+    registryId: string,
+    params: { owner: string; repo: string; path: string },
+  ): Promise<BuilderRegistryPreviewResponse> {
+    const search = new URLSearchParams({
+      owner: params.owner,
+      repo: params.repo,
+      path: params.path,
+    });
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/preview?${search.toString()}`);
+  }
+
+  /**
+   * Install a registry skill into the builder's stored-skills DB.
+   * Returns 409 when a stored skill with the derived id already exists.
+   * Requires `stored-skills:write` permission.
+   */
+  public installBuilderRegistrySkill(
+    registryId: string,
+    body: BuilderRegistryInstallBody,
+  ): Promise<BuilderRegistryInstallResponse> {
+    return this.request(`/editor/builder/registries/${encodeURIComponent(registryId)}/install`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  // ============================================================================
   // Workspace
   // ============================================================================
 
@@ -1368,6 +1714,35 @@ export class MastraClient extends BaseResource {
    */
   public getWorkspace(workspaceId: string): Workspace {
     return new Workspace(this.options, workspaceId);
+  }
+
+  // ============================================================================
+  // Stored Workspaces
+  // ============================================================================
+
+  /**
+   * Lists stored workspace configurations from the database
+   * @param params - Optional filter and pagination parameters
+   * @returns Promise containing paginated list of stored workspaces
+   */
+  public listStoredWorkspaces(params?: ListStoredWorkspacesParams): Promise<ListStoredWorkspacesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params?.page !== undefined) searchParams.set('page', String(params.page));
+    if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    if (params?.authorId) searchParams.set('authorId', params.authorId);
+    if (params?.orderBy?.field) searchParams.set('orderBy[field]', params.orderBy.field);
+    if (params?.orderBy?.direction) searchParams.set('orderBy[direction]', params.orderBy.direction);
+    const qs = searchParams.toString();
+    return this.request(`/stored/workspaces${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a specific stored workspace by ID
+   * @param id - The workspace ID
+   * @returns Promise containing the stored workspace
+   */
+  public getStoredWorkspace(id: string): Promise<StoredWorkspaceResponse> {
+    return this.request(`/stored/workspaces/${encodeURIComponent(id)}`);
   }
 
   // ============================================================================
@@ -1409,10 +1784,16 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets a single dataset by ID
+   * Gets a single dataset by ID. Optionally scope the lookup to a specific
+   * tenant organization/project — the server returns 404 if the dataset does
+   * not belong to the given tenant.
    */
-  public getDataset(datasetId: string): Promise<DatasetRecord> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  public getDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<DatasetRecord> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`);
   }
 
   /**
@@ -1423,21 +1804,30 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates a dataset
+   * Updates a dataset. Tenancy fields, when provided, scope the existence
+   * check on the server side so that a caller can only update datasets that
+   * belong to the given tenant.
    */
   public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
-    const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+    const { datasetId, organizationId, projectId, ...body } = params;
+    const qs = buildTenancyQuery({ organizationId, projectId });
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'PATCH',
       body,
     });
   }
 
   /**
-   * Deletes a dataset
+   * Deletes a dataset. When tenancy fields are supplied, the server only
+   * deletes the dataset if it belongs to the given tenant (silent no-op
+   * otherwise).
    */
-  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+  public deleteDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'DELETE',
     });
   }
@@ -1743,5 +2133,203 @@ export class MastraClient extends BaseResource {
       method: 'POST',
       body,
     });
+  }
+
+  // ============================================================================
+  // Background Tasks
+  // ============================================================================
+
+  /**
+   * Lists background tasks with optional filtering and pagination.
+   */
+  public listBackgroundTasks(params: ListBackgroundTasksParams = {}): Promise<ListBackgroundTasksResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.toolName) searchParams.set('toolName', params.toolName);
+    if (params.toolCallId) searchParams.set('toolCallId', params.toolCallId);
+    if (params.fromDate) searchParams.set('fromDate', params.fromDate.toISOString());
+    if (params.toDate) searchParams.set('toDate', params.toDate.toISOString());
+    if (params.dateFilterBy) searchParams.set('dateFilterBy', params.dateFilterBy);
+    if (params.orderBy) searchParams.set('orderBy', params.orderBy);
+    if (params.orderDirection) searchParams.set('orderDirection', params.orderDirection);
+    if (params.page !== undefined) searchParams.set('page', String(params.page));
+    if (params.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
+    const qs = searchParams.toString();
+    return this.request(`/background-tasks${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single background task by ID.
+   */
+  public getBackgroundTask(backgroundTaskId: string): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}`);
+  }
+
+  /**
+   * Opens an SSE stream of background task events (completed/failed).
+   * Returns a Response that can be consumed as a ReadableStream.
+   */
+  public async streamBackgroundTasks(params: StreamBackgroundTasksParams = {}) {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.runId) searchParams.set('runId', params.runId);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.taskId) searchParams.set('taskId', params.taskId);
+    const qs = searchParams.toString();
+    const response: Response = await this.request(`/background-tasks/stream${qs ? `?${qs}` : ''}`, { stream: true });
+
+    if (!response.ok) {
+      throw new Error(`Failed to stream background tasks: ${response.statusText}`);
+    }
+
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    //using undefined instead of empty string to avoid parsing errors
+    let failedChunk: string | undefined = undefined;
+
+    return response.body.pipeThrough(
+      new TransformStream({
+        async transform(chunk, controller) {
+          try {
+            // Decode binary data to text
+            const decoded = new TextDecoder().decode(chunk);
+
+            // Split by record separator
+            const chunks = decoded.split('\n\n');
+
+            // Process each chunk
+            for (const chunk of chunks) {
+              if (chunk) {
+                const cleanChunk = chunk.substring('data: '.length);
+                const newChunk: string = failedChunk ? failedChunk + cleanChunk : cleanChunk;
+                try {
+                  const parsedChunk = JSON.parse(newChunk);
+                  controller.enqueue(parsedChunk);
+                  failedChunk = undefined;
+                } catch {
+                  failedChunk = newChunk;
+                }
+              }
+            }
+          } catch {
+            // Silently ignore processing errors
+          }
+        },
+      }),
+    );
+  }
+
+  /**
+   * Lists schedules — agent schedules and workflow schedules — with optional
+   * filtering by agentId, workflowId, or status. Agent schedules can
+   * additionally be filtered by threadId, resourceId, or name.
+   */
+  public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
+    if (params.workflowId) searchParams.set('workflowId', params.workflowId);
+    if (params.status) searchParams.set('status', params.status);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
+    const qs = searchParams.toString();
+    return this.request(`/schedules${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single schedule by ID.
+   */
+  public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Creates a schedule. Pass `agentId` (plus `prompt`) to schedule an agent,
+   * or `workflowId` (plus optional `inputData`) to schedule a workflow.
+   * By default each call creates a new schedule with a random id
+   * (`agent_<uuid>` for agents, `schedule_<uuid>` for workflows) — pass `id`
+   * to choose a stable id instead; creating one with an id that already
+   * exists throws.
+   *
+   * Trigger (fire) history is read through `listScheduleTriggers(schedule.id)`.
+   */
+  public createSchedule(options: CreateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing schedule. Fields apply to the matching target type;
+   * agent-only fields on a workflow schedule are rejected. `threadId` /
+   * `resourceId` are immutable — to retarget, delete and recreate.
+   */
+  public updateSchedule(scheduleId: string, patch: UpdateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a schedule.
+   */
+  public deleteSchedule(scheduleId: string): Promise<{ message: string }> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Fires a schedule manually, out-of-band from the cron schedule. Behaves
+   * like a scheduled fire but does not advance `nextFireAt`. The returned
+   * `claimId` is the trigger row's runId — look it up via
+   * `listScheduleTriggers(scheduleId)`.
+   */
+  public runSchedule(scheduleId: string): Promise<RunScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/run`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Lists trigger history for a schedule, ordered by actualFireAt descending.
+   */
+  public listScheduleTriggers(
+    scheduleId: string,
+    params: ListScheduleTriggersParams = {},
+  ): Promise<ListScheduleTriggersResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.limit !== undefined) searchParams.set('limit', String(params.limit));
+    if (params.fromActualFireAt !== undefined) searchParams.set('fromActualFireAt', String(params.fromActualFireAt));
+    if (params.toActualFireAt !== undefined) searchParams.set('toActualFireAt', String(params.toActualFireAt));
+    const qs = searchParams.toString();
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/triggers${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Pauses a schedule. The scheduler tick loop will skip paused schedules.
+   * Idempotent — pausing an already-paused schedule returns the current state unchanged.
+   * Pause status survives redeploys.
+   */
+  public pauseSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/pause`, { method: 'POST' });
+  }
+
+  /**
+   * Resumes a paused schedule. Recomputes nextFireAt from "now" so a long-paused schedule
+   * does not fire a backlog. Idempotent — resuming an already-active schedule returns
+   * the current state unchanged.
+   */
+  public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
   }
 }

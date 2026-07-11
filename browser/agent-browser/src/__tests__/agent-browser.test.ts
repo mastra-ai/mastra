@@ -1,0 +1,753 @@
+import type { BrowserConfig } from '@mastra/core/browser';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+// Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
+const { mockPage, mockLocator, mockContext, mockManager } = vi.hoisted(() => {
+  const mockContext = {
+    on: vi.fn(),
+    off: vi.fn(),
+    pages: vi.fn().mockReturnValue([]),
+  };
+
+  const mockPage = {
+    url: vi.fn().mockReturnValue('https://example.com'),
+    title: vi.fn().mockResolvedValue('Example'),
+    goto: vi.fn(),
+    goBack: vi.fn(),
+    goForward: vi.fn(),
+    reload: vi.fn(),
+    close: vi.fn(),
+    screenshot: vi.fn().mockResolvedValue(Buffer.from('fake-png')),
+    evaluate: vi.fn(),
+    viewportSize: () => ({ width: 1280, height: 720 }),
+    content: vi.fn().mockResolvedValue('<html></html>'),
+    waitForTimeout: vi.fn(),
+    waitForNavigation: vi.fn(),
+    keyboard: {
+      press: vi.fn(),
+      type: vi.fn(),
+      down: vi.fn(),
+      up: vi.fn(),
+    },
+    mouse: {
+      click: vi.fn(),
+      dblclick: vi.fn(),
+      move: vi.fn(),
+    },
+    locator: vi.fn().mockReturnValue({
+      click: vi.fn(),
+      fill: vi.fn(),
+      selectOption: vi.fn(),
+      check: vi.fn(),
+      uncheck: vi.fn(),
+      isVisible: vi.fn().mockResolvedValue(true),
+      isEnabled: vi.fn().mockResolvedValue(true),
+      textContent: vi.fn().mockResolvedValue('text'),
+      inputValue: vi.fn().mockResolvedValue('value'),
+    }),
+    frames: vi.fn().mockReturnValue([]),
+    context: vi.fn().mockReturnValue({
+      pages: vi.fn().mockReturnValue([]),
+      newPage: vi.fn(),
+      cookies: vi.fn().mockResolvedValue([]),
+      addCookies: vi.fn(),
+      clearCookies: vi.fn(),
+      storageState: vi.fn().mockResolvedValue({}),
+      newCDPSession: vi.fn().mockResolvedValue({
+        send: vi.fn(),
+        on: vi.fn(),
+        off: vi.fn(),
+      }),
+    }),
+    on: vi.fn(),
+    off: vi.fn(),
+    once: vi.fn(),
+  };
+
+  const mockLocator = {
+    click: vi.fn(),
+    dblclick: vi.fn(),
+    fill: vi.fn(),
+    focus: vi.fn(),
+    hover: vi.fn(),
+    press: vi.fn(),
+    selectOption: vi.fn().mockResolvedValue(['value1']),
+    check: vi.fn(),
+    uncheck: vi.fn(),
+    isVisible: vi.fn().mockResolvedValue(true),
+    isEnabled: vi.fn().mockResolvedValue(true),
+    textContent: vi.fn().mockResolvedValue('text'),
+    inputValue: vi.fn().mockResolvedValue('value'),
+    scrollIntoViewIfNeeded: vi.fn(),
+    setInputFiles: vi.fn(),
+    screenshot: vi.fn().mockResolvedValue(Buffer.from('fake-png')),
+    dragTo: vi.fn(),
+    waitFor: vi.fn(),
+  };
+
+  const mockManager = {
+    launch: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+    isLaunched: vi.fn().mockReturnValue(true),
+    getPage: vi.fn().mockReturnValue(mockPage),
+    getActiveIndex: vi.fn().mockReturnValue(0),
+    getLocatorFromRef: vi.fn().mockReturnValue(mockLocator),
+    getRefMap: vi.fn().mockResolvedValue(
+      new Map([
+        ['@e1', mockLocator],
+        ['@e2', mockLocator],
+      ]),
+    ),
+    getCDPSession: vi.fn().mockResolvedValue({
+      send: vi.fn(),
+      on: vi.fn(),
+      off: vi.fn(),
+    }),
+    getSnapshot: vi.fn().mockResolvedValue({ snapshot: '- @e1 button "Click"', tree: '- @e1 button "Click"' }),
+    startScreencast: vi.fn().mockResolvedValue(undefined),
+    stopScreencast: vi.fn().mockResolvedValue(undefined),
+    injectMouseEvent: vi.fn().mockResolvedValue(undefined),
+    injectKeyboardEvent: vi.fn().mockResolvedValue(undefined),
+    getContext: vi.fn().mockReturnValue(mockContext),
+    getPages: vi.fn().mockReturnValue([mockPage]),
+  };
+
+  return { mockPage, mockLocator, mockContext, mockManager };
+});
+
+vi.mock('agent-browser', () => ({
+  BrowserManager: class {
+    launch = mockManager.launch;
+    close = mockManager.close;
+    isLaunched = mockManager.isLaunched;
+    getPage = mockManager.getPage;
+    getActiveIndex = mockManager.getActiveIndex;
+    getLocatorFromRef = mockManager.getLocatorFromRef;
+    getRefMap = mockManager.getRefMap;
+    getCDPSession = mockManager.getCDPSession;
+    getSnapshot = mockManager.getSnapshot;
+    startScreencast = mockManager.startScreencast;
+    stopScreencast = mockManager.stopScreencast;
+    injectMouseEvent = mockManager.injectMouseEvent;
+    injectKeyboardEvent = mockManager.injectKeyboardEvent;
+    newTab = vi.fn().mockResolvedValue({ index: 0, total: 1 });
+    newWindow = vi.fn().mockResolvedValue({ index: 0, total: 1 });
+    switchTo = vi.fn().mockResolvedValue({ index: 0, url: 'https://example.com', title: 'Example' });
+    closeTab = vi.fn().mockResolvedValue({ closed: 1, remaining: 0 });
+    listTabs = vi.fn().mockResolvedValue([{ index: 0, url: 'https://example.com', title: 'Example', active: true }]);
+    getContext = mockManager.getContext;
+    getPages = mockManager.getPages;
+  },
+}));
+
+// Import AFTER vi.mock
+import { AgentBrowser } from '../agent-browser';
+import { BROWSER_TOOLS } from '../tools/constants';
+
+describe('AgentBrowser', () => {
+  let browser: AgentBrowser;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPage.url.mockReturnValue('https://example.com');
+    mockManager.getPages.mockReturnValue([mockPage]);
+    // Use 'shared' scope to get simpler shared browser behavior for unit tests
+    browser = new AgentBrowser({ scope: 'shared' });
+  });
+
+  afterEach(async () => {
+    await browser.close();
+    vi.restoreAllMocks();
+  });
+
+  describe('constructor', () => {
+    it('sets id starting with agent-browser', () => {
+      expect(browser.id).toMatch(/^agent-browser-/);
+    });
+
+    it('sets name to AgentBrowser', () => {
+      expect(browser.name).toBe('AgentBrowser');
+    });
+
+    it('sets provider to vercel-labs/agent-browser', () => {
+      expect(browser.provider).toBe('vercel-labs/agent-browser');
+    });
+
+    it('starts in pending status', () => {
+      expect(browser.status).toBe('pending');
+    });
+
+    it('defaults headless to true', () => {
+      expect(browser.headless).toBe(true);
+    });
+
+    it('respects headless: false', () => {
+      const visible = new AgentBrowser({ headless: false });
+      expect(visible.headless).toBe(false);
+    });
+
+    it('accepts custom config', () => {
+      const custom = new AgentBrowser({ headless: false, timeout: 5000 });
+      expect(custom.status).toBe('pending');
+    });
+
+    it('throws error when cdpUrl and scope: "thread" are both provided', () => {
+      // cdpUrl and scope: 'thread' are mutually exclusive
+      // TypeScript prevents this at compile time, but we test runtime validation
+      expect(() => {
+        new AgentBrowser({
+          cdpUrl: 'ws://localhost:9222',
+          scope: 'thread',
+        } as BrowserConfig);
+      }).toThrow('Invalid browser configuration: "cdpUrl" and "scope: \'thread\'" cannot be used together');
+    });
+
+    it('allows cdpUrl with scope: "shared"', () => {
+      // This should not throw
+      const browserWithCdp = new AgentBrowser({
+        cdpUrl: 'ws://localhost:9222',
+        scope: 'shared',
+      });
+
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
+    });
+
+    it('respects scope when no cdpUrl is provided', () => {
+      const browserWithIsolation = new AgentBrowser({
+        scope: 'thread',
+      });
+
+      expect(browserWithIsolation['threadManager'].getScope()).toBe('thread');
+    });
+
+    it('defaults to shared scope when cdpUrl is provided without explicit scope', () => {
+      // When cdpUrl is provided without scope, it should default to 'shared'
+      // since cdpUrl connects to an existing browser that can't be isolated
+      const browserWithCdp = new AgentBrowser({
+        cdpUrl: 'ws://localhost:9222',
+      });
+
+      expect(browserWithCdp['threadManager'].getScope()).toBe('shared');
+    });
+  });
+
+  describe('getTools', () => {
+    it('returns provider tools without recording tools by default', () => {
+      const tools = browser.getTools();
+
+      expect(Object.keys(tools)).toHaveLength(16);
+      expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
+      expect(tools.browser_record).toBeUndefined();
+      expect(tools.browser_record_caption).toBeUndefined();
+    });
+
+    it('includes recording tools when opted in', () => {
+      const recordingBrowser = new AgentBrowser({ scope: 'shared', recording: { outputDir: '/tmp/recordings' } });
+      const tools = recordingBrowser.getTools();
+
+      expect(tools[BROWSER_TOOLS.GOTO]).toBeDefined();
+      expect(tools.browser_record).toBeDefined();
+      expect(tools.browser_record_caption).toBeDefined();
+      expect(Object.keys(tools)).toHaveLength(18);
+    });
+  });
+
+  describe('status lifecycle', () => {
+    it('starts in pending state', () => {
+      expect(browser.status).toBe('pending');
+    });
+
+    it('transitions to ready after ensureReady', async () => {
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+    });
+
+    it('transitions to closed after close', async () => {
+      await browser.ensureReady();
+      await browser.close();
+      expect(browser.status).toBe('closed');
+    });
+  });
+
+  describe('ensureReady', () => {
+    it('launches browser if not running', async () => {
+      expect(browser.status).toBe('pending');
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+      expect(mockManager.launch).toHaveBeenCalledOnce();
+    });
+
+    it('does not relaunch if already ready', async () => {
+      await browser.ensureReady();
+      await browser.ensureReady();
+      expect(mockManager.launch).toHaveBeenCalledOnce();
+    });
+
+    it('detects externally closed browser and re-launches', async () => {
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+      expect(mockManager.launch).toHaveBeenCalledOnce();
+
+      // Simulate browser being externally closed
+      mockPage.url.mockImplementationOnce(() => {
+        throw new Error('Target page, context or browser has been closed');
+      });
+
+      // ensureReady should detect disconnection and re-launch
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+      expect(mockManager.launch).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles "Target closed" error during status check', async () => {
+      await browser.ensureReady();
+
+      // Simulate disconnect error
+      mockPage.url.mockImplementationOnce(() => {
+        throw new Error('Target closed');
+      });
+
+      await browser.ensureReady();
+      // Should have re-launched
+      expect(mockManager.launch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('isBrowserRunning', () => {
+    it('returns false before any operations', () => {
+      expect(browser.isBrowserRunning()).toBe(false);
+    });
+
+    it('returns true after browser is launched', async () => {
+      await browser.ensureReady();
+      expect(browser.isBrowserRunning()).toBe(true);
+    });
+  });
+
+  describe('close', () => {
+    it('is a no-op when browser has not been launched', async () => {
+      await browser.close();
+      expect(mockManager.close).not.toHaveBeenCalled();
+    });
+
+    it('closes the browser and updates status', async () => {
+      await browser.ensureReady();
+      expect(browser.status).toBe('ready');
+
+      await browser.close();
+      expect(mockManager.close).toHaveBeenCalledOnce();
+      expect(browser.status).toBe('closed');
+    });
+
+    it('is safe to call multiple times', async () => {
+      await browser.ensureReady();
+      await browser.close();
+      await browser.close();
+      // close on the manager should only be called once
+      expect(mockManager.close).toHaveBeenCalledOnce();
+    });
+
+    it('preserves agent close reason in the last browser state', async () => {
+      await browser.ensureReady();
+      browser.markBrowserCloseReason('agent');
+
+      await browser.close();
+
+      expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'agent' }));
+    });
+
+    it('preserves user close reason when the browser disconnects externally', async () => {
+      await browser.ensureReady();
+      const closeHandler = mockContext.on.mock.calls.find(([event]) => event === 'close')?.[1];
+
+      closeHandler?.();
+
+      expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+    });
+
+    it('does not reuse stale close reasons after relaunch', async () => {
+      await browser.ensureReady();
+      browser.markBrowserCloseReason('agent');
+      await browser.close();
+      await browser.ensureReady();
+      const closeHandler = mockContext.on.mock.calls.findLast(([event]) => event === 'close')?.[1];
+
+      closeHandler?.();
+
+      expect(browser.getLastBrowserState()).toEqual(expect.objectContaining({ closeReason: 'user' }));
+    });
+  });
+
+  // =============================================================================
+  // Core Tools (9)
+  // =============================================================================
+
+  describe('goto', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+    });
+
+    it('navigates to a URL', async () => {
+      const result = await browser.goto({ url: 'https://example.com' });
+
+      expect(result.success).toBe(true);
+      expect(result.url).toBe('https://example.com');
+      expect(mockPage.goto).toHaveBeenCalled();
+    });
+
+    it('supports waitUntil option', async () => {
+      await browser.goto({ url: 'https://example.com', waitUntil: 'networkidle' });
+
+      expect(mockPage.goto).toHaveBeenCalledWith(
+        'https://example.com',
+        expect.objectContaining({ waitUntil: 'networkidle' }),
+      );
+    });
+
+    it('marks tool-driven navigation as agent initiated', async () => {
+      await browser.goto({ url: 'https://example.com' });
+
+      await expect(browser.getBrowserState()).resolves.toEqual(
+        expect.objectContaining({ activeUrlChangeSource: 'agent' }),
+      );
+    });
+
+    it('does not reuse a stale agent navigation source for user URL changes', async () => {
+      await browser.goto({ url: 'https://example.com' });
+      await browser.getBrowserState();
+      mockPage.url.mockReturnValue('https://www.google.com/');
+
+      await expect(browser.getBrowserState()).resolves.toEqual(
+        expect.objectContaining({ activeUrlChangeSource: 'user' }),
+      );
+    });
+  });
+
+  describe('snapshot', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+    });
+
+    it('returns accessibility tree snapshot', async () => {
+      const result = await browser.snapshot({});
+
+      expect(result.success).toBe(true);
+      expect(result.snapshot).toContain('@e1');
+      expect(result.title).toBe('Example');
+      expect(result.url).toBe('https://example.com');
+    });
+  });
+
+  describe('click', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      // Populate refMap by calling snapshot first
+      await browser.snapshot({});
+    });
+
+    it('clicks an element by ref', async () => {
+      const result = await browser.click({ ref: '@e1' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.click).toHaveBeenCalled();
+    });
+
+    it('supports double-click via clickCount', async () => {
+      await browser.click({ ref: '@e1', clickCount: 2 });
+
+      expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ clickCount: 2 }));
+    });
+
+    it('supports button option', async () => {
+      await browser.click({ ref: '@e1', button: 'right' });
+
+      expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ button: 'right' }));
+    });
+
+    it('waits for load state when waitUntil is set', async () => {
+      await browser.click({ ref: '@e1', waitUntil: 'networkidle', timeout: 1234 });
+
+      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(
+        expect.objectContaining({ waitUntil: 'networkidle', timeout: 1234 }),
+      );
+      expect(mockLocator.click).toHaveBeenCalledWith(expect.objectContaining({ timeout: 1234 }));
+    });
+
+    it('does not wait for load state when waitUntil is omitted', async () => {
+      await browser.click({ ref: '@e1' });
+
+      expect(mockPage.waitForNavigation).not.toHaveBeenCalled();
+    });
+
+    it('does not leave an unhandled rejection when the navigation wait rejects while the click is still pending', async () => {
+      // The navigation wait is started before the click and shares its timeout,
+      // so when the click is slow or blocked the navigation timer always fires
+      // first — while `await navigation` has not been reached yet. Without a
+      // pre-attached handler that rejection is unhandled and kills the process.
+      //
+      // Note: waitForNavigation must be a plain function here, not a vi.fn() —
+      // vitest attaches handlers to promises returned from mocks (to track
+      // `mock.settledResults`), which would mask the unhandled rejection.
+      let rejectNavigation!: (error: Error) => void;
+      const navigationPromise = new Promise((_resolve, reject) => {
+        rejectNavigation = reject;
+      });
+      const originalWaitForNavigation = mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+
+      mockLocator.click.mockImplementation(async () => {
+        rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
+        // Let the navigation rejection settle while the click is still pending
+        await new Promise(resolve => setTimeout(resolve, 20));
+        throw new Error('locator.click: Timeout 100ms exceeded.');
+      });
+
+      const onUnhandledRejection = vi.fn();
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        const result = await browser.click({ ref: '@e1', waitUntil: 'domcontentloaded' });
+
+        expect(result.success).toBe(false);
+        // unhandledRejection fires on a later macrotask — flush before asserting
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(onUnhandledRejection).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+        mockPage.waitForNavigation = originalWaitForNavigation;
+      }
+    });
+  });
+
+  describe('type', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('types text into an element', async () => {
+      const result = await browser.type({ ref: '@e1', text: 'Hello World' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.fill).toHaveBeenCalledWith('Hello World', expect.any(Object));
+    });
+
+    it('clears before typing when clear option is set', async () => {
+      await browser.type({ ref: '@e1', text: 'New text', clear: true });
+
+      // Should fill with empty string first to clear
+      expect(mockLocator.fill).toHaveBeenCalledWith('', expect.any(Object));
+      expect(mockLocator.fill).toHaveBeenCalledWith('New text', expect.any(Object));
+    });
+  });
+
+  describe('press', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+    });
+
+    it('presses a keyboard key', async () => {
+      const result = await browser.press({ key: 'Enter' });
+
+      expect(result.success).toBe(true);
+      expect(mockPage.keyboard.press).toHaveBeenCalledWith('Enter');
+    });
+
+    it('supports key combinations', async () => {
+      await browser.press({ key: 'Control+a' });
+
+      expect(mockPage.keyboard.press).toHaveBeenCalledWith('Control+a');
+    });
+
+    it('waits for load state when waitUntil is set', async () => {
+      await browser.press({ key: 'Enter', waitUntil: 'load', timeout: 1234 });
+
+      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(
+        expect.objectContaining({ waitUntil: 'load', timeout: 1234 }),
+      );
+    });
+
+    it('does not wait for load state when waitUntil is omitted', async () => {
+      await browser.press({ key: 'Enter' });
+
+      expect(mockPage.waitForNavigation).not.toHaveBeenCalled();
+    });
+
+    it('does not leave an unhandled rejection when the navigation wait rejects while the key press is still pending', async () => {
+      // Same dangling-navigation pattern as the click regression test.
+      let rejectNavigation!: (error: Error) => void;
+      const navigationPromise = new Promise((_resolve, reject) => {
+        rejectNavigation = reject;
+      });
+      const originalWaitForNavigation = mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+
+      mockPage.keyboard.press.mockImplementation(async () => {
+        rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
+        await new Promise(resolve => setTimeout(resolve, 20));
+        throw new Error('keyboard.press: Timeout 100ms exceeded.');
+      });
+
+      const onUnhandledRejection = vi.fn();
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        const result = await browser.press({ key: 'Enter', waitUntil: 'domcontentloaded' });
+
+        expect(result.success).toBe(false);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(onUnhandledRejection).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+        mockPage.waitForNavigation = originalWaitForNavigation;
+      }
+    });
+  });
+
+  describe('select', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('selects a dropdown option by value', async () => {
+      const result = await browser.select({ ref: '@e1', value: 'option1' });
+
+      expect(result.success).toBe(true);
+      expect(result.selected).toEqual(['value1']);
+      expect(mockLocator.selectOption).toHaveBeenCalled();
+    });
+
+    it('waits for load state when waitUntil is set', async () => {
+      await browser.select({ ref: '@e1', value: 'option1', waitUntil: 'domcontentloaded', timeout: 1234 });
+
+      expect(mockPage.waitForNavigation).toHaveBeenCalledWith(
+        expect.objectContaining({ waitUntil: 'domcontentloaded', timeout: 1234 }),
+      );
+      expect(mockLocator.selectOption).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.objectContaining({ timeout: 1234 }),
+      );
+    });
+
+    it('does not wait for load state when waitUntil is omitted', async () => {
+      await browser.select({ ref: '@e1', value: 'option1' });
+
+      expect(mockPage.waitForNavigation).not.toHaveBeenCalled();
+    });
+
+    it('does not leave an unhandled rejection when the navigation wait rejects while the selection is still pending', async () => {
+      // Same dangling-navigation pattern as the click regression test.
+      let rejectNavigation!: (error: Error) => void;
+      const navigationPromise = new Promise((_resolve, reject) => {
+        rejectNavigation = reject;
+      });
+      const originalWaitForNavigation = mockPage.waitForNavigation;
+      mockPage.waitForNavigation = (() => navigationPromise) as unknown as typeof mockPage.waitForNavigation;
+
+      mockLocator.selectOption.mockImplementation(async () => {
+        rejectNavigation(new Error('page.waitForNavigation: Timeout 100ms exceeded.'));
+        await new Promise(resolve => setTimeout(resolve, 20));
+        throw new Error('locator.selectOption: Timeout 100ms exceeded.');
+      });
+
+      const onUnhandledRejection = vi.fn();
+      process.on('unhandledRejection', onUnhandledRejection);
+      try {
+        const result = await browser.select({ ref: '@e1', value: 'option1', waitUntil: 'domcontentloaded' });
+
+        expect(result.success).toBe(false);
+        await new Promise(resolve => setTimeout(resolve, 20));
+        expect(onUnhandledRejection).not.toHaveBeenCalled();
+      } finally {
+        process.off('unhandledRejection', onUnhandledRejection);
+        mockPage.waitForNavigation = originalWaitForNavigation;
+      }
+    });
+  });
+
+  describe('scroll', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('scrolls down', async () => {
+      const result = await browser.scroll({ direction: 'down' });
+
+      expect(result.success).toBe(true);
+      expect(mockPage.evaluate).toHaveBeenCalled();
+    });
+
+    it('scrolls element into view by ref', async () => {
+      const result = await browser.scroll({ direction: 'down', ref: '@e1' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.scrollIntoViewIfNeeded).toHaveBeenCalled();
+    });
+  });
+
+  // =============================================================================
+  // Extended Tools
+  // =============================================================================
+
+  describe('hover', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+      await browser.snapshot({});
+    });
+
+    it('hovers over an element', async () => {
+      const result = await browser.hover({ ref: '@e1' });
+
+      expect(result.success).toBe(true);
+      expect(mockLocator.hover).toHaveBeenCalled();
+    });
+  });
+
+  describe('back', () => {
+    beforeEach(async () => {
+      await browser.ensureReady();
+    });
+
+    it('navigates back', async () => {
+      const result = await browser.back();
+
+      expect(result.success).toBe(true);
+      expect(mockPage.goBack).toHaveBeenCalled();
+    });
+  });
+
+  // Tool tests (dialog, drag, evaluate) are in __tests__/*.test.ts
+
+  // =============================================================================
+  // Screencast
+  // =============================================================================
+
+  describe('screencast', () => {
+    it('starts screencast when browser is ready', async () => {
+      await browser.ensureReady();
+      const stream = await browser.startScreencast();
+
+      expect(stream).toBeDefined();
+    });
+
+    it('returns null when starting screencast if browser is not active', async () => {
+      const stream = await browser.startScreencastIfBrowserActive();
+      expect(stream).toBeNull();
+    });
+  });
+
+  // =============================================================================
+  // Lazy Initialization
+  // =============================================================================
+
+  describe('lazy initialization', () => {
+    it('does not launch browser at construction time', () => {
+      expect(mockManager.launch).not.toHaveBeenCalled();
+    });
+
+    it('launches browser only once for concurrent ensureReady calls', async () => {
+      await Promise.all([browser.ensureReady(), browser.ensureReady()]);
+      expect(mockManager.launch).toHaveBeenCalledOnce();
+    });
+  });
+});

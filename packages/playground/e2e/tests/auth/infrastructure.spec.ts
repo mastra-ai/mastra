@@ -23,13 +23,14 @@ import {
   buildAuthCapabilities,
 } from '../__utils__/auth';
 import { resetStorage } from '../__utils__/reset-storage';
+import { expectCurrentBreadcrumb } from '../__utils__/route-header';
 
 test.describe('Auth Infrastructure', () => {
   test.afterEach(async () => {
     await resetStorage();
   });
 
-  test.describe('Auth Capabilities Mocking', () => {
+  test.describe('when auth capabilities are mocked', () => {
     test('can mock admin user capabilities', async ({ page }) => {
       await setupAdminAuth(page);
 
@@ -96,7 +97,7 @@ test.describe('Auth Infrastructure', () => {
     });
   });
 
-  test.describe('Custom Auth Configuration', () => {
+  test.describe('when a custom auth configuration is applied', () => {
     test('can mock custom user data', async ({ page }) => {
       await setupMockAuth(page, {
         role: 'member',
@@ -153,7 +154,7 @@ test.describe('Auth Infrastructure', () => {
       });
 
       await page.goto('/agents');
-      await expect(page.locator('h1')).toHaveText('Agents');
+      await expectCurrentBreadcrumb(page, 'Agents');
 
       // With RBAC off, permission-gated links are visible again.
       await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
@@ -174,7 +175,7 @@ test.describe('Auth Infrastructure', () => {
     });
   });
 
-  test.describe('Auth Me Endpoint Mocking', () => {
+  test.describe('when the auth me endpoint is mocked', () => {
     test('returns user for authenticated state when called from browser', async ({ page }) => {
       await setupAdminAuth(page);
 
@@ -214,7 +215,7 @@ test.describe('Auth Infrastructure', () => {
     });
   });
 
-  test.describe('buildAuthCapabilities Helper', () => {
+  test.describe('when using the buildAuthCapabilities helper', () => {
     test('builds correct admin capabilities', () => {
       const capabilities = buildAuthCapabilities({ role: 'admin' });
 
@@ -240,25 +241,29 @@ test.describe('Auth Infrastructure', () => {
 });
 
 test.describe('Auth Fixtures', () => {
-  test('ROLE_PERMISSIONS matches PRD specification', () => {
-    // Verify role permissions match the PRD
-    expect(ROLE_PERMISSIONS.admin).toEqual(['*']);
-    expect(ROLE_PERMISSIONS.member).toEqual(['agents:read', 'workflows:*', 'tools:read', 'tools:execute']);
-    expect(ROLE_PERMISSIONS.viewer).toEqual(['agents:read', 'workflows:read']);
-    expect(ROLE_PERMISSIONS._default).toEqual([]);
+  test.describe('when reading the ROLE_PERMISSIONS fixture', () => {
+    test('ROLE_PERMISSIONS matches PRD specification', () => {
+      // Verify role permissions match the PRD
+      expect(ROLE_PERMISSIONS.admin).toEqual(['*']);
+      expect(ROLE_PERMISSIONS.member).toEqual(['agents:read', 'workflows:*', 'tools:read', 'tools:execute']);
+      expect(ROLE_PERMISSIONS.viewer).toEqual(['agents:read', 'workflows:read']);
+      expect(ROLE_PERMISSIONS._default).toEqual([]);
+    });
   });
 
-  test('MOCK_USERS has all required roles', () => {
-    expect(MOCK_USERS.admin).toBeDefined();
-    expect(MOCK_USERS.member).toBeDefined();
-    expect(MOCK_USERS.viewer).toBeDefined();
-    expect(MOCK_USERS._default).toBeDefined();
+  test.describe('when reading the MOCK_USERS fixture', () => {
+    test('MOCK_USERS has all required roles', () => {
+      expect(MOCK_USERS.admin).toBeDefined();
+      expect(MOCK_USERS.member).toBeDefined();
+      expect(MOCK_USERS.viewer).toBeDefined();
+      expect(MOCK_USERS._default).toBeDefined();
 
-    // Verify each user has required fields
-    for (const [, user] of Object.entries(MOCK_USERS)) {
-      expect(user.id).toBeTruthy();
-      expect(user.email).toBeTruthy();
-      expect(user.name).toBeTruthy();
-    }
+      // Verify each user has required fields
+      for (const [, user] of Object.entries(MOCK_USERS)) {
+        expect(user.id).toBeTruthy();
+        expect(user.email).toBeTruthy();
+        expect(user.name).toBeTruthy();
+      }
+    });
   });
 });

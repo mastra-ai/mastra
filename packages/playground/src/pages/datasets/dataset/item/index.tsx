@@ -1,34 +1,19 @@
-import {
-  MainContentLayout,
-  MainContentContent,
-  useDatasetItemVersions,
-  useDatasetMutations,
-  useLinkComponent,
-  DatasetItemContent,
-  DatasetItemVersionsPanel,
-  EditModeContent,
-  AlertDialog,
-  Button,
-  Icon,
-  Header,
-  Breadcrumb,
-  Crumb,
-  MainHeader,
-  ButtonsGroup,
-  toast,
-  TextAndIcon,
-  useDataset,
-  CopyButton,
-  Columns,
-  Column,
-  Notice,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import type { DatasetItemVersion } from '@mastra/playground-ui';
+import type { DatasetItemToolMock } from '@mastra/client-js';
+import { AlertDialog } from '@mastra/playground-ui/components/AlertDialog';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
+import { Column, Columns } from '@mastra/playground-ui/components/Columns';
+import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
+import { MainContentContent, MainContentLayout } from '@mastra/playground-ui/components/MainContent';
+import { MainHeader } from '@mastra/playground-ui/components/MainHeader';
+import { Notice } from '@mastra/playground-ui/components/Notice';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { TextAndIcon } from '@mastra/playground-ui/components/Text';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { format } from 'date-fns';
 import {
-  AlertTriangleIcon,
   ArrowRightToLineIcon,
   Calendar1Icon,
   DatabaseIcon,
@@ -38,7 +23,13 @@ import {
   Trash2Icon,
 } from 'lucide-react';
 import { useState, useMemo } from 'react';
-import { useParams, useNavigate, Link } from 'react-router';
+import { useParams, useNavigate } from 'react-router';
+import { DatasetItemContent, DatasetItemVersionsPanel, EditModeContent } from '@/domains/datasets';
+import { useDatasetItemVersions } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import type { DatasetItemVersion } from '@/domains/datasets/hooks/use-dataset-item-versions';
+import { useDatasetMutations } from '@/domains/datasets/hooks/use-dataset-mutations';
+import { useDataset } from '@/domains/datasets/hooks/use-datasets';
+import { useLinkComponent } from '@/lib/framework';
 
 function DatasetItemPage() {
   const { datasetId, itemId } = useParams<{ datasetId: string; itemId: string }>();
@@ -59,11 +50,16 @@ function DatasetItemPage() {
 
   // Derive form defaults from latest version (recomputes when version changes)
   const formDefaults = useMemo(() => {
-    if (!latestVersion || isDeleted) return { input: '', groundTruth: '', metadata: '' };
+    if (!latestVersion || isDeleted)
+      return { input: '', groundTruth: '', metadata: '', trajectory: '', toolMocks: '', requestContext: '' };
     return {
       input: JSON.stringify(latestVersion.input, null, 2),
       groundTruth: latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '',
       metadata: latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '',
+      trajectory:
+        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
+      toolMocks: latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '',
+      requestContext: latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '',
     };
   }, [latestVersion, isDeleted]);
 
@@ -75,6 +71,9 @@ function DatasetItemPage() {
   const [inputValue, setInputValue] = useState(formDefaults.input);
   const [groundTruthValue, setGroundTruthValue] = useState(formDefaults.groundTruth);
   const [metadataValue, setMetadataValue] = useState(formDefaults.metadata);
+  const [trajectoryValue, setTrajectoryValue] = useState(formDefaults.trajectory);
+  const [toolMocksValue, setToolMocksValue] = useState(formDefaults.toolMocks);
+  const [requestContextValue, setRequestContextValue] = useState(formDefaults.requestContext);
 
   // Reset form values when version changes (key-based reset pattern)
   const [prevVersionKey, setPrevVersionKey] = useState(versionKey);
@@ -83,6 +82,9 @@ function DatasetItemPage() {
     setInputValue(formDefaults.input);
     setGroundTruthValue(formDefaults.groundTruth);
     setMetadataValue(formDefaults.metadata);
+    setTrajectoryValue(formDefaults.trajectory);
+    setToolMocksValue(formDefaults.toolMocks);
+    setRequestContextValue(formDefaults.requestContext);
   }
 
   // Delete dialog state
@@ -151,6 +153,44 @@ function DatasetItemPage() {
       }
     }
 
+    let parsedTrajectory: unknown | undefined;
+    const trajectoryChanged = trajectoryValue !== formDefaults.trajectory;
+    if (trajectoryChanged && trajectoryValue.trim()) {
+      try {
+        parsedTrajectory = JSON.parse(trajectoryValue);
+      } catch {
+        toast.error('Expected Trajectory must be valid JSON');
+        return;
+      }
+    }
+
+    let parsedToolMocks: DatasetItemToolMock[] | undefined;
+    const toolMocksChanged = toolMocksValue !== formDefaults.toolMocks;
+    if (toolMocksChanged && toolMocksValue.trim()) {
+      try {
+        const parsed = JSON.parse(toolMocksValue);
+        if (!Array.isArray(parsed)) {
+          toast.error('Tool Mocks must be a JSON array');
+          return;
+        }
+        parsedToolMocks = parsed as DatasetItemToolMock[];
+      } catch {
+        toast.error('Tool Mocks must be valid JSON');
+        return;
+      }
+    }
+
+    let parsedRequestContext: Record<string, unknown> | undefined;
+    const requestContextChanged = requestContextValue !== formDefaults.requestContext;
+    if (requestContextChanged && requestContextValue.trim()) {
+      try {
+        parsedRequestContext = JSON.parse(requestContextValue);
+      } catch {
+        toast.error('Request Context must be valid JSON');
+        return;
+      }
+    }
+
     try {
       await updateItem.mutateAsync({
         datasetId,
@@ -158,6 +198,9 @@ function DatasetItemPage() {
         input: parsedInput,
         groundTruth: parsedGroundTruth,
         metadata: parsedMetadata,
+        ...(trajectoryChanged ? { expectedTrajectory: parsedTrajectory ?? null } : {}),
+        ...(toolMocksChanged ? { toolMocks: parsedToolMocks ?? [] } : {}),
+        ...(requestContextChanged ? { requestContext: parsedRequestContext } : {}),
       });
       toast.success('Item updated successfully');
       setIsEditing(false);
@@ -172,6 +215,11 @@ function DatasetItemPage() {
       setInputValue(JSON.stringify(latestVersion.input, null, 2));
       setGroundTruthValue(latestVersion.groundTruth ? JSON.stringify(latestVersion.groundTruth, null, 2) : '');
       setMetadataValue(latestVersion.metadata ? JSON.stringify(latestVersion.metadata, null, 2) : '');
+      setTrajectoryValue(
+        latestVersion.expectedTrajectory != null ? JSON.stringify(latestVersion.expectedTrajectory, null, 2) : '',
+      );
+      setToolMocksValue(latestVersion.toolMocks?.length ? JSON.stringify(latestVersion.toolMocks, null, 2) : '');
+      setRequestContextValue(latestVersion.requestContext ? JSON.stringify(latestVersion.requestContext, null, 2) : '');
     }
     setIsEditing(false);
   };
@@ -182,7 +230,7 @@ function DatasetItemPage() {
       await deleteItem.mutateAsync({ datasetId, itemId });
       toast.success('Item deleted successfully');
       setDeleteDialogOpen(false);
-      void navigate(`/evaluation/datasets/${datasetId}`);
+      void navigate(`/datasets/${datasetId}`);
     } catch (error) {
       toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -199,11 +247,22 @@ function DatasetItemPage() {
         datasetVersion: versionToDisplay.datasetVersion,
         input: versionToDisplay.input,
         groundTruth: versionToDisplay.groundTruth,
+        expectedTrajectory: versionToDisplay.expectedTrajectory,
         metadata: versionToDisplay.metadata,
         createdAt: versionToDisplay.createdAt,
         updatedAt: versionToDisplay.updatedAt,
       }
     : null;
+
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <MainContentLayout>
+        <div className="flex h-full items-center justify-center">
+          <SessionExpired />
+        </div>
+      </MainContentLayout>
+    );
+  }
 
   if (error && is403ForbiddenError(error)) {
     return (
@@ -234,22 +293,6 @@ function DatasetItemPage() {
   return (
     <>
       <MainContentLayout>
-        <Header>
-          <Breadcrumb>
-            <Crumb as={Link} to="/evaluation?tab=datasets">
-              <Icon>
-                <DatabaseIcon />
-              </Icon>
-              Datasets
-            </Crumb>
-            <Crumb as={Link} to={`/evaluation/datasets/${datasetId}`}>
-              {dataset?.name}
-            </Crumb>
-            <Crumb isCurrent as="span">
-              Item
-            </Crumb>
-          </Breadcrumb>
-        </Header>
         <div className="h-full overflow-hidden px-6 pb-4">
           <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
             <MainHeader>
@@ -298,22 +341,23 @@ function DatasetItemPage() {
             <Columns className={isEditing ? 'grid-cols-1' : 'grid-cols-[1fr_auto]'}>
               <Column withRightSeparator={!isEditing}>
                 {isDeleted && latestVersion && (
-                  <Notice variant="destructive">
-                    <AlertTriangleIcon />
+                  <Notice variant="destructive" title="Item deleted">
                     <Notice.Message>This item was deleted at version v{latestVersion.datasetVersion}</Notice.Message>
                   </Notice>
                 )}
 
                 {!isDeleted && isViewingOldVersion && selectedVersion && (
-                  <>
-                    <Notice variant="warning">
-                      <AlertTriangleIcon />
-                      <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  <Notice
+                    variant="warning"
+                    title="Previous version"
+                    action={
                       <Notice.Button onClick={handleReturnToLatest}>
                         <ArrowRightToLineIcon /> Return to the latest version
                       </Notice.Button>
-                    </Notice>
-                  </>
+                    }
+                  >
+                    <Notice.Message>Viewing version v{selectedVersion.datasetVersion}</Notice.Message>
+                  </Notice>
                 )}
 
                 {isEditing ? (
@@ -324,6 +368,12 @@ function DatasetItemPage() {
                     setGroundTruthValue={setGroundTruthValue}
                     metadataValue={metadataValue}
                     setMetadataValue={setMetadataValue}
+                    trajectoryValue={trajectoryValue}
+                    setTrajectoryValue={setTrajectoryValue}
+                    toolMocksValue={toolMocksValue}
+                    setToolMocksValue={setToolMocksValue}
+                    requestContextValue={requestContextValue}
+                    setRequestContextValue={setRequestContextValue}
                     validationErrors={null}
                     onSave={handleSave}
                     onCancel={handleCancel}
@@ -343,9 +393,7 @@ function DatasetItemPage() {
                     onClose={() => {}}
                     onVersionSelect={handleVersionSelect}
                     onCompareVersionsClick={(versionIds: string[]) => {
-                      void navigate(
-                        `/evaluation/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`,
-                      );
+                      void navigate(`/datasets/${datasetId}/items/${itemId}/versions?ids=${versionIds.join(',')}`);
                     }}
                     activeVersion={selectedVersion?.datasetVersion ?? null}
                   />

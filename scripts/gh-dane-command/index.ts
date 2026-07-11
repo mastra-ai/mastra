@@ -3,18 +3,18 @@
  *
  * Reads a command name and PR number from environment variables,
  * loads the corresponding .claude/commands/ template, processes it,
- * and sends it to a headless MastraCode harness for execution.
+ * and sends it to a headless MastraCode agent controller for execution.
  */
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-import { createMastraCode } from '../../mastracode/src/index.js';
-import { runHeadless } from '../../mastracode/src/headless.js';
-import { processSlashCommand } from '../../mastracode/src/utils/slash-command-processor.js';
-import type { SlashCommandMetadata } from '../../mastracode/src/utils/slash-command-loader.js';
-import { releaseAllThreadLocks } from '../../mastracode/src/utils/thread-lock.js';
-import { setupDebugLogging } from '../../mastracode/src/utils/debug-log.js';
+import { createMastraCode } from '../../mastracode/sdk/src/index.js';
+import { runMC, createHumanFormatState, formatHuman } from '../../mastracode/sdk/src/headless/index.js';
+import { processSlashCommand } from '../../mastracode/sdk/src/utils/slash-command-processor.js';
+import type { SlashCommandMetadata } from '../../mastracode/sdk/src/utils/slash-command-loader.js';
+import { releaseAllThreadLocks } from '../../mastracode/sdk/src/utils/thread-lock.js';
+import { setupDebugLogging } from '../../mastracode/sdk/src/utils/debug-log.js';
 
 // Supported commands and their corresponding .claude/commands/ file names
 const SUPPORTED_COMMANDS: Record<string, string> = {
@@ -97,8 +97,10 @@ async function main(): Promise<never> {
   // Initialize MastraCode with yolo mode (auto-approve everything)
   // cwd points to the PR workspace so the AI agent operates on the PR branch,
   // while this script and all imports come from the trusted default branch.
+  // createMastraCode (bootLocalAgentController) inits the controller and mints the
+  // single session this process runs through, so no separate init() call is needed here.
   const result = await createMastraCode({ cwd: prWorkspace, initialState: { yolo: true } });
-  const { harness, mcpManager, authStorage } = result;
+  const { controller, session, mcpManager, authStorage } = result;
 
   // Inject the Anthropic API key into auth storage
   authStorage.set('anthropic', { type: 'api_key', key: apiKey });
@@ -108,19 +110,28 @@ async function main(): Promise<never> {
   }
 
   setupDebugLogging();
-  await harness.init();
 
-  // Run headless with a 10 minute timeout
-  const exitCode = await runHeadless(harness, {
-    prompt,
-    format: 'default',
-    continue_: false,
-    timeout: 600,
-  });
+  // Run headless with a 10 minute timeout, streaming human-readable output
+  const run = runMC({ controller, session, prompt, timeoutMs: 600_000 });
+
+  const humanState = createHumanFormatState();
+  for await (const event of run) {
+    const out = formatHuman(event, humanState);
+    if (out.stdout) process.stdout.write(out.stdout);
+    if (out.stderr) process.stderr.write(out.stderr);
+  }
+
+  const runResult = await run.result;
+  if (runResult.status === 'timeout') {
+    process.stderr.write('\nTimeout elapsed. Aborted.\n');
+  } else if (runResult.error) {
+    process.stderr.write(`Error: ${runResult.error.message}\n`);
+  }
+  const exitCode = runResult.exitCode;
 
   // Cleanup
   releaseAllThreadLocks();
-  await Promise.allSettled([mcpManager?.disconnect(), harness?.stopHeartbeats()]);
+  await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
 
   process.exit(exitCode);
 }

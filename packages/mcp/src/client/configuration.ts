@@ -1,6 +1,8 @@
+import { createHash } from 'node:crypto';
 import type { Stream } from 'node:stream';
 import { MastraBase } from '@mastra/core/base';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import type { MCPServerBase } from '@mastra/core/mcp';
 import type { Tool } from '@mastra/core/tools';
 import { DEFAULT_REQUEST_TIMEOUT_MSEC } from '@modelcontextprotocol/sdk/shared/protocol.js';
 import type {
@@ -12,11 +14,13 @@ import type {
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
-import { v5 as uuidv5 } from 'uuid';
 import { InternalMastraMCPClient } from './client';
 import type { MastraMCPServerDefinition } from './client';
+import { isReconnectableMCPError } from './error-utils';
+import { MCPClientServerProxy } from './server-proxy';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
+const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
 
 /**
  * Configuration options for creating an MCPClient instance.
@@ -229,7 +233,7 @@ To fix this you have three different options:
        */
       onRequest: async (serverName: string, handler: (request: ElicitRequest['params']) => Promise<ElicitResult>) => {
         try {
-          const internalClient = await this.getConnectedClientForServer(serverName);
+          const internalClient = await this.getClientForServer(serverName);
           return internalClient.elicitation.onRequest(handler);
         } catch (err) {
           throw new MastraError(
@@ -657,6 +661,59 @@ To fix this you have three different options:
     };
   }
 
+  /**
+   * Provides access to tool-related notification operations across all configured servers.
+   *
+   * To fetch tools, use `listTools()` or `listToolsets()`.
+   *
+   * @example
+   * ```typescript
+   * // React to tool list changes on a server
+   * await mcp.tools.onListChanged('weatherServer', async () => {
+   *   console.log('Tool list changed, re-fetching...');
+   *   const tools = await mcp.listTools();
+   * });
+   * ```
+   */
+  public get tools() {
+    this.addToInstanceCache();
+    return {
+      /**
+       * Sets a notification handler for when the tool list changes on a server.
+       *
+       * @param serverName - Name of the server to monitor
+       * @param handler - Callback function invoked when tools are added/removed/modified
+       * @returns Promise resolving when handler is registered
+       * @throws {MastraError} If setting up the handler fails
+       *
+       * @example
+       * ```typescript
+       * await mcp.tools.onListChanged('weatherServer', async () => {
+       *   const tools = await mcp.listTools();
+       * });
+       * ```
+       */
+      onListChanged: async (serverName: string, handler: () => void) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.setToolListChangedNotificationHandler(handler);
+        } catch (error) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_LIST_CHANGED_TOOLS_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            error,
+          );
+        }
+      },
+    };
+  }
+
   private addToInstanceCache() {
     if (!mcpClientInstances.has(this.id)) {
       mcpClientInstances.set(this.id, this);
@@ -665,9 +722,7 @@ To fix this you have three different options:
 
   private makeId() {
     const text = JSON.stringify(this.serverConfigs).normalize('NFKC');
-    const idNamespace = uuidv5(`MCPClient`, uuidv5.DNS);
-
-    return uuidv5(text, idNamespace);
+    return createHash('sha256').update('MCPClient').update(text).digest('hex');
   }
 
   /**
@@ -732,6 +787,22 @@ To fix this you have three different options:
   }
 
   /**
+   * Returns instructions advertised by connected MCP servers during initialize.
+   *
+   * Servers that have not connected yet, or did not advertise instructions,
+   * return `undefined`.
+   */
+  public getServerInstructions(): Record<string, string | undefined> {
+    const instructions: Record<string, string | undefined> = {};
+
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      instructions[serverName] = this.mcpClientsById.get(serverName)?.instructions;
+    }
+
+    return instructions;
+  }
+
+  /**
    * Retrieves all tools from all configured servers with namespaced names.
    *
    * Tool names are namespaced as `serverName_toolName` to prevent conflicts between servers.
@@ -739,6 +810,7 @@ To fix this you have three different options:
    *
    * @returns Object mapping namespaced tool names to tool implementations.
    * Errors for individual servers are logged but don't throw - failed servers are skipped.
+   * Transient connection failures are retried once after reconnecting the affected server.
    *
    * @example
    * ```typescript
@@ -752,13 +824,39 @@ To fix this you have three different options:
    * ```
    */
   public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
+    const result = await this.listToolsWithErrors();
+    return result.tools;
+  }
+
+  /**
+   * Retrieves all tools from all configured servers with namespaced names,
+   * along with any per-server errors.
+   *
+   * Like listTools(), but also returns errors for servers that failed to connect
+   * or list tools. This allows callers to report specific failure reasons per server.
+   *
+   * @returns Object with `tools` (successful tools) and `errors` (failed servers with error messages).
+   * Transient connection failures are retried once after reconnecting the affected server.
+   *
+   * @example
+   * ```typescript
+   * const { tools, errors } = await mcp.listToolsWithErrors();
+   * for (const [name, err] of Object.entries(errors)) {
+   *   console.error(`Server ${name} failed: ${err}`);
+   * }
+   * ```
+   */
+  public async listToolsWithErrors(): Promise<{
+    tools: Record<string, Tool<any, any, any, any>>;
+    errors: Record<string, string>;
+  }> {
     this.addToInstanceCache();
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
+    const errors: Record<string, string> = {};
 
     for (const serverName of Object.keys(this.serverConfigs)) {
       try {
-        const client = await this.getConnectedClientForServer(serverName);
-        const tools = await client.tools();
+        const tools = await this.getToolsForServer(serverName);
         for (const [toolName, toolConfig] of Object.entries(tools)) {
           connectedTools[`${serverName}_${toolName}`] = toolConfig;
         }
@@ -776,10 +874,11 @@ To fix this you have three different options:
         );
         this.logger.trackException(mastraError);
         this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
+        errors[serverName] = error instanceof Error ? error.message : String(error);
       }
     }
 
-    return connectedTools;
+    return { tools: connectedTools, errors };
   }
 
   /**
@@ -817,6 +916,7 @@ To fix this you have three different options:
    * or list tools. This allows callers to report specific failure reasons per server.
    *
    * @returns Object with `toolsets` (successful servers) and `errors` (failed servers with error messages).
+   * Transient connection failures are retried once after reconnecting the affected server.
    *
    * @example
    * ```typescript
@@ -836,8 +936,7 @@ To fix this you have three different options:
 
     for (const serverName of Object.keys(this.serverConfigs)) {
       try {
-        const client = await this.getConnectedClientForServer(serverName);
-        const tools = await client.tools();
+        const tools = await this.getToolsForServer(serverName);
         if (tools) {
           connectedToolsets[serverName] = tools;
         }
@@ -860,6 +959,39 @@ To fix this you have three different options:
     }
 
     return { toolsets: connectedToolsets, errors };
+  }
+
+  /**
+   * Creates MCPServerBase-compatible proxy objects for each server connection
+   * in this MCPClient.  The returned record can be spread directly into
+   * Mastra's `mcpServers` config so that external (non-Mastra) servers
+   * appear in Studio alongside native MCPServer instances.
+   *
+   * @returns Record mapping server names to MCPServerBase proxy instances
+   *
+   * @example
+   * ```typescript
+   * const mcp = new MCPClient({
+   *   servers: {
+   *     trailhead: { command: 'npx', args: ['trailhead-server'] },
+   *   },
+   * });
+   *
+   * const mastra = new Mastra({
+   *   mcpServers: {
+   *     ...mcp.toMCPServerProxies(),
+   *   },
+   * });
+   * ```
+   */
+  public toMCPServerProxies(): Record<string, MCPServerBase> {
+    const proxies: Record<string, MCPServerBase> = {};
+    for (const serverName of Object.keys(this.serverConfigs)) {
+      proxies[serverName] = new MCPClientServerProxy({ name: serverName, id: serverName }, () =>
+        this.getConnectedClientForServer(serverName),
+      );
+    }
+    return proxies;
   }
 
   /**
@@ -902,7 +1034,15 @@ To fix this you have three different options:
     return client.stderr;
   }
 
-  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
+  private getServerConfig(serverName: string): MastraMCPServerDefinition {
+    const serverConfig = this.serverConfigs[serverName];
+    if (!serverConfig) {
+      throw new Error(`Server configuration not found for name: ${serverName}`);
+    }
+    return serverConfig;
+  }
+
+  private async getOrCreateClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
     if (this.disconnectPromise) {
       await this.disconnectPromise;
     }
@@ -910,7 +1050,7 @@ To fix this you have three different options:
     const exists = this.mcpClientsById.has(name);
     const existingClient = this.mcpClientsById.get(name);
 
-    this.logger.debug(`getConnectedClient ${name} exists: ${exists}`);
+    this.logger.debug('Checking connected client', { name, exists });
 
     if (exists) {
       // This is just to satisfy Typescript since technically you could have this.mcpClientsById.set('someKey', undefined);
@@ -918,52 +1058,87 @@ To fix this you have three different options:
       if (!existingClient) {
         throw new Error(`Client ${name} exists but is undefined`);
       }
-      await existingClient.connect();
       return existingClient;
     }
 
-    this.logger.debug(`Connecting to ${name} MCP server`);
-
-    // Create client with server configuration including log handler
     const mcpClient = new InternalMastraMCPClient({
       name,
       server: config,
       timeout: config.timeout ?? this.defaultTimeout,
+      capabilities: config.capabilities,
     });
 
     mcpClient.__setLogger(this.logger);
 
     this.mcpClientsById.set(name, mcpClient);
 
-    try {
-      await mcpClient.connect();
-    } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_CLIENT_CONNECT_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
-          details: {
-            name,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
-      this.mcpClientsById.delete(name);
-      throw mastraError;
-    }
-    this.logger.debug(`Connected to ${name} MCP server`);
     return mcpClient;
   }
 
-  private async getConnectedClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
-    const serverConfig = this.serverConfigs[serverName];
-    if (!serverConfig) {
-      throw new Error(`Server configuration not found for name: ${serverName}`);
+  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
+    this.logger.debug('Connecting to MCP server', { name });
+
+    const mcpClient = await this.getOrCreateClient(name, config);
+
+    try {
+      await mcpClient.connect();
+    } catch (e) {
+      throw this.handleConnectError(name, e);
     }
-    return this.getConnectedClient(serverName, serverConfig);
+    this.logger.debug('Connected to MCP server', { name });
+    return mcpClient;
+  }
+
+  private handleConnectError(name: string, error: unknown): MastraError {
+    const mastraError = new MastraError(
+      {
+        id: 'MCP_CLIENT_CONNECT_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Failed to connect to MCP server ${name}: ${
+          error instanceof Error ? error.stack || error.message : String(error)
+        }`,
+        details: {
+          name,
+        },
+      },
+      error,
+    );
+    this.logger.trackException(mastraError);
+    this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
+    this.mcpClientsById.delete(name);
+    return mastraError;
+  }
+
+  private async getConnectedClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
+    return this.getConnectedClient(serverName, this.getServerConfig(serverName));
+  }
+
+  private async getClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
+    return this.getOrCreateClient(serverName, this.getServerConfig(serverName));
+  }
+
+  private async getToolsForServer(serverName: string): Promise<Record<string, Tool<any, any, any, any>>> {
+    for (let attempt = 1; attempt <= TOOL_DISCOVERY_MAX_ATTEMPTS; attempt++) {
+      try {
+        const client = await this.getConnectedClientForServer(serverName);
+        return await client.tools();
+      } catch (error) {
+        if (attempt === TOOL_DISCOVERY_MAX_ATTEMPTS || !isReconnectableMCPError(error)) {
+          throw error;
+        }
+
+        this.logger.debug('Retrying MCP tool discovery after reconnect', {
+          serverName,
+          attempt,
+          maxAttempts: TOOL_DISCOVERY_MAX_ATTEMPTS,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        await this.reconnectServer(serverName);
+      }
+    }
+
+    return {};
   }
 }

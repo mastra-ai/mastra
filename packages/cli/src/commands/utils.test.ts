@@ -17,6 +17,7 @@ vi.mock('node:url', () => ({
 describe('getVersionTag', () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.resetModules();
   });
 
   test('returns "beta" when CLI version matches beta dist-tag', async () => {

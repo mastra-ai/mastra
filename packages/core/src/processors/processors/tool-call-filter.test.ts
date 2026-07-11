@@ -1,9 +1,36 @@
-import { describe, it, expect } from 'vitest';
+import { stepCountIs } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, mockValues, mockId } from '@internal/ai-sdk-v5/test';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { z } from 'zod/v4';
 
+import { Mastra } from '../..';
 import { MessageList } from '../../agent/message-list';
+import { EventEmitterPubSub } from '../../events';
+import { loop } from '../../loop/loop';
+import { MastraLanguageModelV2Mock } from '../../loop/test-utils/MastraLanguageModelV2Mock';
 import type { MastraDBMessage } from '../../memory/types';
+import { toolCallFilterProvider } from '../../processor-provider/providers';
+import { InMemoryStore } from '../../storage';
+import type { ProcessInputStepArgs } from '../index';
 
 import { ToolCallFilter } from './tool-call-filter';
+
+function mockStepArgs(messageList: MessageList, overrides: Partial<ProcessInputStepArgs> = {}): ProcessInputStepArgs {
+  return {
+    messages: messageList.get.all.db(),
+    messageList,
+    abort: ((reason?: string) => {
+      throw new Error(reason || 'Aborted');
+    }) as (reason?: string) => never,
+    stepNumber: 1,
+    steps: [],
+    systemMessages: [],
+    state: {},
+    model: 'test-model' as any,
+    retryCount: 0,
+    ...overrides,
+  };
+}
 
 describe('ToolCallFilter', () => {
   const mockAbort = ((reason?: string) => {
@@ -142,6 +169,52 @@ describe('ToolCallFilter', () => {
       expect(resultMessages).toHaveLength(2);
       expect(resultMessages[0]!.id).toBe('msg-1');
       expect(resultMessages[1]!.id).toBe('msg-2');
+    });
+
+    it('should preserve top-level text content when all tool parts are filtered', async () => {
+      const filter = new ToolCallFilter();
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'assistant-with-text-fallback',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I found three relevant papers.',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'search_papers',
+                  args: { query: 'attention mechanisms' },
+                  result: { papers: ['paper-1', 'paper-2', 'paper-3'] },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+
+      const resultContent = resultMessages[0]!.content;
+      if (typeof resultContent === 'string') {
+        throw new Error('Expected format 2 content');
+      }
+      expect(resultContent.content).toBe('I found three relevant papers.');
+      expect(resultContent.parts).toEqual([]);
     });
 
     it('should handle empty messages array', async () => {
@@ -600,6 +673,52 @@ describe('ToolCallFilter', () => {
       }
     });
 
+    it('should preserve top-level text content when all excluded tool parts are filtered', async () => {
+      const filter = new ToolCallFilter({ exclude: ['search_papers'] });
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'assistant-with-text-fallback',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: 'I found three relevant papers.',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'search_papers',
+                  args: { query: 'attention mechanisms' },
+                  result: { papers: ['paper-1', 'paper-2', 'paper-3'] },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(resultMessages).toHaveLength(1);
+
+      const resultContent = resultMessages[0]!.content;
+      if (typeof resultContent === 'string') {
+        throw new Error('Expected format 2 content');
+      }
+      expect(resultContent.content).toBe('I found three relevant papers.');
+      expect(resultContent.parts).toEqual([]);
+    });
+
     it('should handle empty exclude array (keep all messages)', async () => {
       const filter = new ToolCallFilter({ exclude: [] });
 
@@ -890,6 +1009,1000 @@ describe('ToolCallFilter', () => {
       const resultMessages = Array.isArray(result) ? result : result.get.all.db();
       expect(resultMessages).toHaveLength(1);
       expect(resultMessages[0]!.id).toBe('msg-1');
+    });
+  });
+
+  describe('preserveModelOutput', () => {
+    const createMessageList = (messages: MastraDBMessage[]) => {
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+      return messageList;
+    };
+
+    const toolMessages: MastraDBMessage[] = [
+      {
+        id: 'msg-user',
+        role: 'user',
+        content: {
+          format: 2,
+          content: 'Search and summarize',
+          parts: [{ type: 'text' as const, text: 'Search and summarize' }],
+        },
+        createdAt: new Date(),
+      },
+      {
+        id: 'msg-tools',
+        role: 'assistant',
+        content: {
+          format: 2,
+          content: '',
+          parts: [
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'call' as const,
+                toolCallId: 'call-search',
+                toolName: 'search',
+                args: { query: 'SECRET_QUERY' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Call metadata must not be preserved' },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-search',
+                toolName: 'search',
+                args: { query: 'SECRET_QUERY' },
+                result: { raw: 'SECRET_RAW_RESULT' },
+              },
+              providerMetadata: {
+                mastra: {
+                  modelOutput: { type: 'text', value: 'Compact search summary' },
+                },
+              },
+            },
+            {
+              type: 'tool-invocation' as const,
+              toolInvocation: {
+                state: 'result' as const,
+                toolCallId: 'call-without-model-output',
+                toolName: 'raw-search',
+                args: { query: 'UNSAFE_ARGS' },
+                result: { raw: 'UNSAFE_RESULT' },
+              },
+            },
+          ],
+        },
+        createdAt: new Date(),
+      },
+    ];
+
+    it('keeps default filtering unchanged when model output is present', async () => {
+      const filter = new ToolCallFilter();
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInput({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      expect(JSON.stringify(resultMessages)).not.toContain('Compact search summary');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_RAW_RESULT');
+    });
+
+    it('preserves only compact model output for excluded completed tool results', async () => {
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInput({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const serialized = JSON.stringify(resultMessages);
+      expect(serialized).toContain('Compact search summary');
+      expect(serialized).not.toContain('Call metadata must not be preserved');
+      expect(serialized).not.toContain('SECRET_RAW_RESULT');
+      expect(serialized).not.toContain('SECRET_QUERY');
+      expect(serialized).not.toContain('UNSAFE_RESULT');
+      expect(serialized).not.toContain('UNSAFE_ARGS');
+
+      const assistantParts = resultMessages.flatMap(message =>
+        typeof message.content === 'string' ? [] : message.content.parts,
+      );
+      expect(assistantParts.some((part: any) => part.type === 'tool-invocation')).toBe(false);
+      expect(assistantParts.filter((part: any) => part.type === 'text').map((part: any) => part.text)).toContain(
+        'search result:\nCompact search summary',
+      );
+    });
+
+    it('preserves model output while filtering only matching specific tools', async () => {
+      const filter = new ToolCallFilter({ exclude: ['search'], preserveModelOutput: true });
+      const messages: MastraDBMessage[] = [
+        ...toolMessages,
+        {
+          id: 'msg-calculator',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-calculator',
+                  toolName: 'calculator',
+                  args: { expression: '2+2' },
+                  result: 4,
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = createMessageList(messages);
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const parts = resultMessages.flatMap(message =>
+        typeof message.content === 'string' ? [] : message.content.parts,
+      );
+      expect(
+        parts.some((part: any) => part.type === 'text' && part.text === 'search result:\nCompact search summary'),
+      ).toBe(true);
+      expect(
+        parts.some((part: any) => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'search'),
+      ).toBe(false);
+      expect(
+        parts.some((part: any) => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'calculator'),
+      ).toBe(true);
+    });
+
+    it('uses the compact representation for filtered step history without dangling tool results', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 0, preserveModelOutput: true });
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const filteredMessages = result.messages!;
+      expect(JSON.stringify(filteredMessages)).toContain('Compact search summary');
+
+      const promptList = new MessageList();
+      promptList.add(filteredMessages, 'input');
+      const prompt = await promptList.get.all.aiV5.llmPrompt();
+      expect(prompt.some(message => message.role === 'tool')).toBe(false);
+      expect(JSON.stringify(prompt)).toContain('Compact search summary');
+    });
+
+    it('leaves recent step tool results intact when filterAfterToolSteps preserves them', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 1, preserveModelOutput: true });
+      const messageList = new MessageList();
+      messageList.add(toolMessages[0]!, 'input');
+      messageList.add(toolMessages[1]!, 'response');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const serialized = JSON.stringify(result.messages);
+      expect(serialized).toContain('SECRET_QUERY');
+      expect(serialized).toContain('SECRET_RAW_RESULT');
+      expect(serialized).not.toContain('search result:\\nCompact search summary');
+
+      const parts = result.messages!.flatMap(message =>
+        typeof message.content === 'string' ? [] : message.content.parts,
+      );
+      expect(parts.some((part: any) => part.type === 'tool-invocation')).toBe(true);
+    });
+
+    it('supports text, primitive, array, and json-like model output shapes', async () => {
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+      const messages: MastraDBMessage[] = [
+        toolMessages[0]!,
+        {
+          id: 'msg-output-shapes',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-text',
+                  toolName: 'textTool',
+                  args: { secret: 'TEXT_ARGS' },
+                  result: 'TEXT_RAW',
+                },
+                providerMetadata: { mastra: { modelOutput: { type: 'text', text: 'Text from text field' } } },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-number',
+                  toolName: 'numberTool',
+                  args: { secret: 'NUMBER_ARGS' },
+                  result: 'NUMBER_RAW',
+                },
+                providerMetadata: { mastra: { modelOutput: 42 } },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-array',
+                  toolName: 'arrayTool',
+                  args: { secret: 'ARRAY_ARGS' },
+                  result: 'ARRAY_RAW',
+                },
+                providerMetadata: {
+                  mastra: {
+                    modelOutput: [
+                      { type: 'text', value: 'First line' },
+                      { type: 'json', value: { safe: true } },
+                    ],
+                  },
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = createMessageList(messages);
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const preservedTexts = resultMessages.flatMap(message =>
+        typeof message.content === 'string'
+          ? []
+          : message.content.parts.filter((part: any) => part.type === 'text').map((part: any) => part.text),
+      );
+      const serialized = JSON.stringify(resultMessages);
+      expect(preservedTexts).toContain('textTool result:\nText from text field');
+      expect(preservedTexts).toContain('numberTool result:\n42');
+      expect(preservedTexts).toContain('arrayTool result:\nFirst line\n{"safe":true}');
+      expect(serialized).not.toContain('TEXT_ARGS');
+      expect(serialized).not.toContain('NUMBER_RAW');
+      expect(serialized).not.toContain('ARRAY_RAW');
+    });
+
+    it('drops model output that cannot be represented as text', async () => {
+      const circular: Record<string, unknown> = {};
+      circular.self = circular;
+      const filter = new ToolCallFilter({ preserveModelOutput: true });
+      const messages: MastraDBMessage[] = [
+        toolMessages[0]!,
+        {
+          id: 'msg-circular-output',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-circular',
+                  toolName: 'circularTool',
+                  args: { secret: 'CIRCULAR_ARGS' },
+                  result: 'CIRCULAR_RAW',
+                },
+                providerMetadata: { mastra: { modelOutput: circular } },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+      const messageList = createMessageList(messages);
+
+      const result = await filter.processInput({
+        messages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const serialized = JSON.stringify(resultMessages);
+      expect(serialized).not.toContain('circularTool result');
+      expect(serialized).not.toContain('CIRCULAR_ARGS');
+      expect(serialized).not.toContain('CIRCULAR_RAW');
+    });
+
+    it('does not transform messages when exclude is empty', async () => {
+      const filter = new ToolCallFilter({ exclude: [], preserveModelOutput: true });
+      const messageList = createMessageList(toolMessages);
+
+      const result = await filter.processInput({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result.get.all.db();
+      const serialized = JSON.stringify(resultMessages);
+      expect(serialized).toContain('SECRET_QUERY');
+      expect(serialized).toContain('SECRET_RAW_RESULT');
+      expect(serialized).toContain('Compact search summary');
+      expect(serialized).not.toContain('search result:\\nCompact search summary');
+    });
+
+    it('exposes filterAfterToolSteps and preserveModelOutput through the processor provider config', async () => {
+      const parsedConfig = toolCallFilterProvider.configSchema.parse({
+        filterAfterToolSteps: 0,
+        preserveModelOutput: true,
+      });
+      const processor = toolCallFilterProvider.createProcessor(parsedConfig);
+      const messageList = createMessageList(toolMessages);
+
+      const result = await processor.processInputStep?.(mockStepArgs(messageList));
+
+      expect(result?.messages).toBeDefined();
+      const resultMessages = result?.messages;
+      expect(JSON.stringify(resultMessages)).toContain('Compact search summary');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_QUERY');
+      expect(JSON.stringify(resultMessages)).not.toContain('SECRET_RAW_RESULT');
+    });
+
+    it('exposes preserveModelOutput through the processor provider config', async () => {
+      const parsedConfig = toolCallFilterProvider.configSchema.parse({ preserveModelOutput: true });
+      const processor = toolCallFilterProvider.createProcessor(parsedConfig);
+      const messageList = createMessageList(toolMessages);
+
+      const result = await processor.processInput?.({
+        messages: toolMessages,
+        messageList,
+        abort: mockAbort,
+      });
+
+      const resultMessages = Array.isArray(result) ? result : result?.get.all.db();
+      expect(JSON.stringify(resultMessages)).toContain('Compact search summary');
+    });
+  });
+
+  describe('processInputStep (per-step filtering)', () => {
+    it('should not filter tool calls by default', async () => {
+      const filter = new ToolCallFilter();
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Get the weather and then book a flight',
+            parts: [{ type: 'text' as const, text: 'Get the weather and then book a flight' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                  result: 'Sunny, 72°F',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeUndefined();
+    });
+
+    it('should filter tool calls from tool steps older than filterAfterToolSteps', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 1 });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-user',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Do tasks',
+            parts: [{ type: 'text' as const, text: 'Do tasks' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-old',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-old',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Old weather result',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-recent',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-recent',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Recent weather result',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      const state = {};
+      messageList.add(messages[0]!, 'input');
+      messageList.add(messages[1]!, 'response');
+
+      await filter.processInputStep(mockStepArgs(messageList, { stepNumber: 1, state }));
+
+      messageList.add(messages[2]!, 'response');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList, { stepNumber: 2, state }));
+
+      expect(result.messages).toBeDefined();
+      const toolParts = result.messages!.flatMap(message =>
+        typeof message.content === 'string'
+          ? []
+          : message.content.parts.filter((part: any) => part.type === 'tool-invocation'),
+      );
+      expect(toolParts.some((part: any) => part.toolInvocation.toolCallId === 'call-old')).toBe(false);
+      expect(toolParts.some((part: any) => part.toolInvocation.toolCallId === 'call-recent')).toBe(true);
+    });
+
+    it('should filter all previous step tool calls when filterAfterToolSteps is 0', async () => {
+      const filter = new ToolCallFilter({ filterAfterToolSteps: 0 });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Get the weather and then book a flight',
+            parts: [{ type: 'text' as const, text: 'Get the weather and then book a flight' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                  result: 'Sunny, 72°F',
+                },
+              },
+              { type: 'text' as const, text: 'The weather is sunny. Now booking a flight...' },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const filteredMessages = result.messages!;
+      expect(filteredMessages).toHaveLength(2);
+      expect(filteredMessages[0]!.id).toBe('msg-1');
+
+      const assistantMsg = filteredMessages[1]!;
+      if (typeof assistantMsg.content !== 'string') {
+        const hasToolInvocation = assistantMsg.content.parts.some((p: any) => p.type === 'tool-invocation');
+        expect(hasToolInvocation).toBe(false);
+        const textParts = assistantMsg.content.parts.filter((p: any) => p.type === 'text');
+        expect(textParts.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('should filter specific tools per step when enabled', async () => {
+      const filter = new ToolCallFilter({ exclude: ['weather'], filterAfterToolSteps: 0 });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Do tasks',
+            parts: [{ type: 'text' as const, text: 'Do tasks' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-weather',
+                  toolName: 'weather',
+                  args: { location: 'NYC' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-weather',
+                  toolName: 'weather',
+                  args: {},
+                  result: 'Sunny',
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-booking',
+                  toolName: 'book-flight',
+                  args: { destination: 'LAX' },
+                },
+              },
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'result' as const,
+                  toolCallId: 'call-booking',
+                  toolName: 'book-flight',
+                  args: {},
+                  result: 'Booked',
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      const filteredMessages = result.messages!;
+      expect(filteredMessages).toHaveLength(2);
+
+      const assistantMsg = filteredMessages[1]!;
+      if (typeof assistantMsg.content !== 'string') {
+        const toolParts = assistantMsg.content.parts.filter((p: any) => p.type === 'tool-invocation');
+        expect(toolParts.length).toBe(2);
+        expect(toolParts.every((p: any) => p.toolInvocation.toolName === 'book-flight')).toBe(true);
+      }
+    });
+
+    it('should return all messages when exclude list is empty and step filtering is enabled', async () => {
+      const filter = new ToolCallFilter({ exclude: [], filterAfterToolSteps: 0 });
+
+      const messages: MastraDBMessage[] = [
+        {
+          id: 'msg-1',
+          role: 'user',
+          content: {
+            format: 2,
+            content: 'Hello',
+            parts: [{ type: 'text' as const, text: 'Hello' }],
+          },
+          createdAt: new Date(),
+        },
+        {
+          id: 'msg-2',
+          role: 'assistant',
+          content: {
+            format: 2,
+            content: '',
+            parts: [
+              {
+                type: 'tool-invocation' as const,
+                toolInvocation: {
+                  state: 'call' as const,
+                  toolCallId: 'call-1',
+                  toolName: 'weather',
+                  args: {},
+                },
+              },
+            ],
+          },
+          createdAt: new Date(),
+        },
+      ];
+
+      const messageList = new MessageList();
+      messageList.add(messages, 'input');
+
+      const result = await filter.processInputStep(mockStepArgs(messageList));
+
+      expect(result.messages).toBeDefined();
+      expect(result.messages!).toHaveLength(2);
+    });
+  });
+
+  describe('integration: multi-step agent loop with ToolCallFilter', () => {
+    let mastra: Mastra;
+    beforeEach(async () => {
+      mastra = new Mastra({
+        logger: false,
+        storage: new InMemoryStore(),
+        pubsub: new EventEmitterPubSub(),
+      });
+      await mastra.startWorkers();
+    });
+    afterEach(async () => {
+      await mastra.stopWorkers();
+    });
+    it('should filter tool calls older than filterAfterToolSteps in a real agent loop while preserving recent tool results and text', async () => {
+      const stepInputs: any[] = [];
+      let responseCount = 0;
+
+      const messageList = new MessageList();
+      messageList.add(
+        {
+          id: 'msg-user',
+          role: 'user',
+          content: [{ type: 'text', text: 'What is the weather in NYC?' }],
+        },
+        'input',
+      );
+
+      const result = await loop({
+        methodType: 'stream',
+        runId: 'test-toolcallfilter-integration',
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MastraLanguageModelV2Mock({
+              doStream: async ({ prompt }: { prompt: unknown }) => {
+                stepInputs.push(prompt);
+
+                switch (responseCount++) {
+                  case 0:
+                    // Step 1: LLM calls the weather tool
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'resp-0',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(0),
+                        },
+                        {
+                          type: 'tool-call',
+                          id: 'call-weather-1',
+                          toolCallId: 'call-weather-1',
+                          toolName: 'weather',
+                          input: '{ "city": "NYC" }',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                        },
+                      ]),
+                    };
+                  case 1:
+                    // Step 2: LLM calls another tool; step 1 tool data should still be available.
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'resp-1',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(1000),
+                        },
+                        {
+                          type: 'tool-call',
+                          id: 'call-weather-2',
+                          toolCallId: 'call-weather-2',
+                          toolName: 'weather',
+                          input: '{ "city": "Brooklyn" }',
+                        },
+                        {
+                          type: 'finish',
+                          finishReason: 'tool-calls',
+                          usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
+                        },
+                      ]),
+                    };
+                  case 2:
+                    // Step 3: LLM responds with text; step 1 tool data is old enough to filter.
+                    return {
+                      stream: convertArrayToReadableStream([
+                        {
+                          type: 'response-metadata',
+                          id: 'resp-2',
+                          modelId: 'mock-model-id',
+                          timestamp: new Date(2000),
+                        },
+                        { type: 'text-start', id: 'text-1' },
+                        { type: 'text-delta', id: 'text-1', delta: 'The weather in NYC is sunny.' },
+                        { type: 'text-end', id: 'text-1' },
+                        {
+                          type: 'finish',
+                          finishReason: 'stop',
+                          usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
+                        },
+                      ]),
+                    };
+                  default:
+                    throw new Error(`Unexpected response count: ${responseCount}`);
+                }
+              },
+            }),
+          },
+        ],
+        inputProcessors: [new ToolCallFilter({ filterAfterToolSteps: 1 })],
+        tools: {
+          weather: {
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }: { city: string }) => `Sunny, 72°F in ${city}`,
+          },
+        },
+        messageList,
+        stopWhen: stepCountIs(4),
+        _internal: {
+          now: mockValues(0, 100, 500, 600, 1000),
+          generateId: mockId({ prefix: 'id' }),
+        },
+        agentId: 'test-agent',
+        mastra,
+      });
+
+      await result.consumeStream();
+
+      expect(stepInputs).toHaveLength(3);
+
+      const step1Prompt = stepInputs[0] as any[];
+      const step1UserMsg = step1Prompt.find((m: any) => m.role === 'user');
+      expect(step1UserMsg).toBeDefined();
+      expect(step1UserMsg.content.some((p: any) => p.type === 'text' && p.text.includes('NYC'))).toBe(true);
+
+      const step2Prompt = stepInputs[1] as any[];
+      const step2UserMsg = step2Prompt.find((m: any) => m.role === 'user');
+      expect(step2UserMsg).toBeDefined();
+      expect(step2UserMsg.content.some((p: any) => p.type === 'text' && p.text.includes('NYC'))).toBe(true);
+      expect(
+        step2Prompt.some(
+          (msg: any) =>
+            msg.role === 'assistant' &&
+            msg.content?.some((p: any) => p.type === 'tool-call' && p.toolCallId === 'call-weather-1'),
+        ),
+      ).toBe(true);
+      expect(
+        step2Prompt.some(
+          (msg: any) =>
+            msg.role === 'tool' &&
+            msg.content?.some((p: any) => p.type === 'tool-result' && p.toolCallId === 'call-weather-1'),
+        ),
+      ).toBe(true);
+
+      const step3Prompt = stepInputs[2] as any[];
+      const step3UserMsg = step3Prompt.find((m: any) => m.role === 'user');
+      expect(step3UserMsg).toBeDefined();
+      expect(step3UserMsg.content.some((p: any) => p.type === 'text' && p.text.includes('NYC'))).toBe(true);
+      expect(
+        step3Prompt.some((msg: any) =>
+          msg.content?.some((p: any) => p.toolCallId === 'call-weather-1' || p.toolCallId === 'call-weather-2'),
+        ),
+      ).toBe(true);
+      expect(step3Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-1'))).toBe(
+        false,
+      );
+      expect(step3Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-2'))).toBe(
+        true,
+      );
+    });
+
+    it('should preserve the last two tool-call steps with filterAfterToolSteps 2', async () => {
+      const stepInputs: any[] = [];
+      let responseCount = 0;
+
+      const messageList = new MessageList();
+      messageList.add(
+        {
+          id: 'msg-user-filter-after-two',
+          role: 'user',
+          content: [{ type: 'text', text: 'Check weather in NYC, Brooklyn, and Queens.' }],
+        },
+        'input',
+      );
+
+      const result = await loop({
+        methodType: 'stream',
+        runId: 'test-toolcallfilter-after-two-integration',
+        models: [
+          {
+            id: 'test-model',
+            maxRetries: 0,
+            model: new MastraLanguageModelV2Mock({
+              doStream: async ({ prompt }: { prompt: unknown }) => {
+                stepInputs.push(prompt);
+                const currentResponse = responseCount++;
+                const toolCallId = `call-weather-${currentResponse + 1}`;
+                const cities = ['NYC', 'Brooklyn', 'Queens'];
+
+                if (currentResponse < 3) {
+                  return {
+                    stream: convertArrayToReadableStream([
+                      {
+                        type: 'response-metadata',
+                        id: `resp-${currentResponse}`,
+                        modelId: 'mock-model-id',
+                        timestamp: new Date(currentResponse * 1000),
+                      },
+                      {
+                        type: 'tool-call',
+                        id: toolCallId,
+                        toolCallId,
+                        toolName: 'weather',
+                        input: `{ "city": "${cities[currentResponse]}" }`,
+                      },
+                      {
+                        type: 'finish',
+                        finishReason: 'tool-calls',
+                        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+                      },
+                    ]),
+                  };
+                }
+
+                return {
+                  stream: convertArrayToReadableStream([
+                    {
+                      type: 'response-metadata',
+                      id: 'resp-3',
+                      modelId: 'mock-model-id',
+                      timestamp: new Date(3000),
+                    },
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: 'Done checking weather.' },
+                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 10, outputTokens: 8, totalTokens: 18 },
+                    },
+                  ]),
+                };
+              },
+            }),
+          },
+        ],
+        inputProcessors: [new ToolCallFilter({ filterAfterToolSteps: 2 })],
+        tools: {
+          weather: {
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }: { city: string }) => `Sunny in ${city}`,
+          },
+        },
+        messageList,
+        stopWhen: stepCountIs(5),
+        _internal: {
+          now: mockValues(0, 100, 500, 600, 1000, 1100, 1500, 1600, 2000, 2100),
+          generateId: mockId({ prefix: 'id' }),
+        },
+        agentId: 'test-agent',
+        mastra,
+      });
+
+      await result.consumeStream();
+
+      expect(stepInputs).toHaveLength(4);
+
+      const step3Prompt = stepInputs[2] as any[];
+      expect(step3Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-1'))).toBe(
+        true,
+      );
+      expect(step3Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-2'))).toBe(
+        true,
+      );
+
+      const step4Prompt = stepInputs[3] as any[];
+      expect(step4Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-1'))).toBe(
+        false,
+      );
+      expect(step4Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-2'))).toBe(
+        true,
+      );
+      expect(step4Prompt.some((msg: any) => msg.content?.some((p: any) => p.toolCallId === 'call-weather-3'))).toBe(
+        true,
+      );
     });
   });
 });

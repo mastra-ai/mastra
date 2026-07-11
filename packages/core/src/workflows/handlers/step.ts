@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
 import type { MastraScorers } from '../../evals';
@@ -8,11 +9,11 @@ import {
   EntityType,
   SpanType,
   wrapMastra,
-  executeWithContext,
   createObservabilityContext,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, Span } from '../../observability';
+import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -57,6 +58,7 @@ export interface ExecuteStepParams extends ObservabilityContext {
   pubsub: PubSub;
   abortController: AbortController;
   requestContext: RequestContext;
+  actor?: ActorSignal;
   skipEmits?: boolean;
   outputWriter?: OutputWriter;
   disableScorers?: boolean;
@@ -83,6 +85,7 @@ export async function executeStep(
     pubsub,
     abortController,
     requestContext,
+    actor,
     skipEmits = false,
     outputWriter,
     disableScorers,
@@ -192,6 +195,7 @@ export async function executeStep(
     executionContext,
     workflowStatus: 'running',
     requestContext,
+    phase: 'start',
   });
 
   // Check if this is a nested workflow that requires special handling
@@ -208,6 +212,7 @@ export async function executeStep(
       startedAt: startTime ?? Date.now(),
       abortController,
       requestContext,
+      actor,
       ...observabilityContext,
       outputWriter,
       stepSpan: stepSpan as Span<SpanType.WORKFLOW_STEP> | undefined,
@@ -318,6 +323,7 @@ export async function executeStep(
         workflowId,
         mastra: mastraForStep,
         requestContext,
+        actor,
         inputData,
         state: executionContext.state,
         setState: async (state: any) => {
@@ -572,8 +578,12 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
 
   if (!disableScorers && scorersToUse && Object.keys(scorersToUse || {}).length > 0) {
     for (const [_id, scorerObject] of Object.entries(scorersToUse || {})) {
+      if (engine.mastra) {
+        scorerObject.scorer.__registerMastra(engine.mastra);
+        engine.mastra.addScorer(scorerObject.scorer, undefined, { source: 'code' });
+      }
       runScorer({
-        scorerId: scorerObject.name,
+        scorerId: scorerObject.scorer.id,
         scorerObject: scorerObject,
         runId: runId,
         input: input,

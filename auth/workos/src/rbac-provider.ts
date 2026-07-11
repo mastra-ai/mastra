@@ -5,8 +5,8 @@
  * permission-based access control system.
  */
 
-import type { IRBACProvider, RoleMapping } from '@mastra/core/auth/ee';
-import { resolvePermissionsFromMapping, matchesPermission } from '@mastra/core/auth/ee';
+import type { IRBACProvider, RoleMapping } from '@internal/auth/ee';
+import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
 import { WorkOS } from '@workos-inc/node';
 import { LRUCache } from 'lru-cache';
 
@@ -225,6 +225,27 @@ export class MastraRBACWorkos implements IRBACProvider<WorkOSUser> {
   async hasAnyPermission(user: WorkOSUser, permissions: string[]): Promise<boolean> {
     const userPermissions = await this.getPermissions(user);
     return permissions.some(required => userPermissions.some(p => matchesPermission(p, required)));
+  }
+
+  /**
+   * Get all available roles defined in the role mapping.
+   *
+   * Returns role IDs and names derived from the roleMapping keys,
+   * excluding the `_default` fallback entry.
+   */
+  async getAvailableRoles(): Promise<{ id: string; name: string }[]> {
+    return Object.keys(this.options.roleMapping)
+      .filter(key => key !== '_default')
+      .map(key => ({ id: key, name: key.charAt(0).toUpperCase() + key.slice(1) }));
+  }
+
+  /**
+   * Get resolved permissions for a specific role.
+   *
+   * Looks up the role in the roleMapping and returns its permissions.
+   */
+  async getPermissionsForRole(roleId: string): Promise<string[]> {
+    return resolvePermissionsFromMapping([roleId], this.options.roleMapping);
   }
 
   /**

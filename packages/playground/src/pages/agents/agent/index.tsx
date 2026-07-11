@@ -1,32 +1,45 @@
 import { v4 as uuid } from '@lukeed/uuid';
-import {
-  AgentChat,
-  AgentLayout,
-  AgentSettingsProvider,
-  WorkingMemoryProvider,
-  ThreadInputProvider,
-  useAgent,
-  useMemory,
-  useThreads,
-  AgentInformation,
-  TracingSettingsProvider,
-  ObservationalMemoryProvider,
-  ActivatedSkillsProvider,
-  PermissionDenied,
-  is403ForbiddenError,
-} from '@mastra/playground-ui';
-import type { AgentSettingsType } from '@mastra/playground-ui';
+import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
+import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
+import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
 import { useEffect, useMemo } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
-
 import { AgentSidebar } from '@/domains/agents/agent-sidebar';
+import { AgentChat } from '@/domains/agents/components/agent-chat';
+import { AgentChatShell } from '@/domains/agents/components/agent-chat-shell';
+import {
+  AgentSidebarLoadingSkeleton,
+  AgentViewLoadingSkeleton,
+} from '@/domains/agents/components/agent-loading-skeletons';
+import { AgentSettingsView } from '@/domains/agents/components/agent-settings/agent-settings-view';
+import { BrowserViewPanel } from '@/domains/agents/components/browser-view';
+import { ComposerRunOptions } from '@/domains/agents/components/composer-run-options';
+import '@/domains/agents/components/agent-view-transition.css';
+import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
+import { AgentSettingsProvider } from '@/domains/agents/context/agent-context';
+import { ObservationalMemoryProvider } from '@/domains/agents/context/agent-observational-memory-context';
+import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
+import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
+import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
+import { MemoryTimelineProvider } from '@/domains/agents/context/memory-timeline-context';
+import { useAgent } from '@/domains/agents/hooks/use-agent';
+import { buildAgentDefaultSettings } from '@/domains/agents/utils/agent-default-settings';
+import { ThreadInputProvider } from '@/domains/conversation/context/ThreadInputContext';
+import { useMemory, useThreads } from '@/domains/memory/hooks/use-memory';
+import { SchemaRequestContextProvider } from '@/domains/request-context/context/schema-request-context';
 
-function Agent() {
+// With View Transitions support the chat/settings switch is choreographed in
+// agent-view-transition.css; the in-DOM enter animation would replay inside the
+// captured snapshot and double the motion, so it only serves as a fallback.
+const supportsViewTransitions = typeof document !== 'undefined' && 'startViewTransition' in document;
+
+function Agent({ view = 'chat' }: { view?: 'chat' | 'settings' }) {
   const { agentId, threadId } = useParams();
   const [searchParams] = useSearchParams();
   const { data: agent, isLoading: isAgentLoading, error } = useAgent(agentId!);
   const { data: memory } = useMemory(agentId!);
   const navigate = useNavigate();
+  const isSettingsView = view === 'settings';
   const isNewThread = threadId === 'new';
 
   // Generate a stable thread ID for new threads. Regenerate when threadId
@@ -42,46 +55,35 @@ function Agent() {
     refetch: refreshThreads,
   } = useThreads({ agentId: agentId!, isMemoryEnabled: hasMemory, resourceId: agentId! });
 
+  const sidebarThreads = useMemo(
+    () =>
+      (threads || []).map(thread => ({
+        ...thread,
+        createdAt: new Date(thread.createdAt),
+        updatedAt: new Date(thread.updatedAt),
+      })),
+    [threads],
+  );
+
   useEffect(() => {
-    if (threadId) return;
+    if (isSettingsView || threadId) return;
 
     // Normalize /agents/:agentId to /agents/:agentId/chat/new
     void navigate(`/agents/${agentId}/chat/new`);
-  }, [threadId, agentId, navigate]);
+  }, [isSettingsView, threadId, agentId, navigate]);
 
   const messageId = searchParams.get('messageId') ?? undefined;
 
-  const defaultSettings = useMemo((): AgentSettingsType => {
-    if (!agent) {
-      return { modelSettings: {} };
-    }
+  const defaultSettings = useMemo(() => buildAgentDefaultSettings(agent), [agent]);
 
-    const agentDefaultOptions = agent.defaultOptions as
-      | {
-          maxSteps?: number;
-          modelSettings?: Record<string, unknown>;
-          providerOptions?: AgentSettingsType['modelSettings']['providerOptions'];
-        }
-      | undefined;
-
-    // Map AI SDK v5 names back to UI names (maxOutputTokens -> maxTokens)
-    const { maxOutputTokens, ...restModelSettings } = (agentDefaultOptions?.modelSettings ?? {}) as {
-      maxOutputTokens?: number;
-      [key: string]: unknown;
-    };
-
-    return {
-      modelSettings: {
-        ...(restModelSettings as AgentSettingsType['modelSettings']),
-        // Only include properties if they have actual values (to not override fallback defaults)
-        ...(maxOutputTokens !== undefined && { maxTokens: maxOutputTokens }),
-        ...(agentDefaultOptions?.maxSteps !== undefined && { maxSteps: agentDefaultOptions.maxSteps }),
-        ...(agentDefaultOptions?.providerOptions !== undefined && {
-          providerOptions: agentDefaultOptions.providerOptions,
-        }),
-      },
-    };
-  }, [agent]);
+  // 401 check - session expired, needs re-authentication
+  if (error && is401UnauthorizedError(error)) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <SessionExpired />
+      </div>
+    );
+  }
 
   // 403 check - permission denied for agents
   if (error && is403ForbiddenError(error)) {
@@ -93,18 +95,18 @@ function Agent() {
   }
 
   if (isAgentLoading) {
-    return null;
+    return <AgentViewLoadingSkeleton agentId={agentId!} view={view} />;
   }
 
   if (!agent) {
     return <div className="text-center py-4">Agent not found</div>;
   }
 
-  if (!threadId) {
+  if (!isSettingsView && !threadId) {
     return null;
   }
 
-  const actualThreadId = isNewThread ? newThreadId : threadId;
+  const actualThreadId = isNewThread ? newThreadId : (threadId ?? newThreadId);
 
   const handleRefreshThreadList = async () => {
     await refreshThreads();
@@ -115,45 +117,70 @@ function Agent() {
   };
 
   return (
-    <TracingSettingsProvider entityId={agentId!} entityType="agent">
-      <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+    <AgentSettingsProvider agentId={agentId!} defaultSettings={defaultSettings}>
+      <SchemaRequestContextProvider>
         <WorkingMemoryProvider agentId={agentId!} threadId={actualThreadId!} resourceId={agentId!}>
-          <ThreadInputProvider>
-            <ObservationalMemoryProvider>
-              <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
-                <AgentLayout
-                  agentId={agentId!}
-                  leftSlot={
-                    hasMemory && (
-                      <AgentSidebar
+          <BrowserToolCallsProvider key={`browser-${agentId}-${actualThreadId}`}>
+            <BrowserSessionProvider
+              key={`session-${agentId}-${actualThreadId}`}
+              agentId={agentId!}
+              threadId={actualThreadId!}
+              enabled={Boolean(agent?.browserTools?.length)}
+            >
+              <ThreadInputProvider>
+                <ObservationalMemoryProvider>
+                  <MemoryTimelineProvider key={`memory-timeline-${agentId}-${actualThreadId}`}>
+                    <ActivatedSkillsProvider key={`${agentId}-${actualThreadId}`}>
+                      <AgentChatShell
                         agentId={agentId!}
-                        threadId={actualThreadId!}
-                        threads={threads || []}
-                        isLoading={isThreadsLoading}
-                      />
-                    )
-                  }
-                  rightSlot={<AgentInformation agentId={agentId!} threadId={actualThreadId!} />}
-                >
-                  <AgentChat
-                    key={actualThreadId!}
-                    agentId={agentId!}
-                    agentName={agent?.name}
-                    modelVersion={agent?.modelVersion}
-                    threadId={actualThreadId!}
-                    memory={hasMemory}
-                    refreshThreadList={handleRefreshThreadList}
-                    modelList={agent?.modelList}
-                    messageId={messageId}
-                    isNewThread={isNewThread}
-                  />
-                </AgentLayout>
-              </ActivatedSkillsProvider>
-            </ObservationalMemoryProvider>
-          </ThreadInputProvider>
+                        view={view}
+                        leftDrawerLabel="Open threads and memory"
+                        leftSlot={
+                          isThreadsLoading ? (
+                            <AgentSidebarLoadingSkeleton />
+                          ) : (
+                            <AgentSidebar agentId={agentId!} threadId={actualThreadId!} threads={sidebarThreads} />
+                          )
+                        }
+                        browserOverlay={<BrowserViewPanel />}
+                      >
+                        <div
+                          key={view}
+                          className={
+                            supportsViewTransitions
+                              ? 'min-h-0 overflow-hidden'
+                              : 'agent-view-enter min-h-0 overflow-hidden'
+                          }
+                        >
+                          {isSettingsView ? (
+                            <AgentSettingsView agentId={agentId!} />
+                          ) : (
+                            <AgentChat
+                              key={actualThreadId!}
+                              agentId={agentId!}
+                              agentName={agent?.name}
+                              modelVersion={agent?.modelVersion}
+                              supportsMemory={agent?.supportsMemory}
+                              threadId={actualThreadId!}
+                              memory={hasMemory}
+                              refreshThreadList={handleRefreshThreadList}
+                              modelList={agent?.modelList}
+                              messageId={messageId}
+                              isNewThread={isNewThread}
+                              runOptionsSlot={<ComposerRunOptions requestContextSchema={agent?.requestContextSchema} />}
+                            />
+                          )}
+                        </div>
+                      </AgentChatShell>
+                    </ActivatedSkillsProvider>
+                  </MemoryTimelineProvider>
+                </ObservationalMemoryProvider>
+              </ThreadInputProvider>
+            </BrowserSessionProvider>
+          </BrowserToolCallsProvider>
         </WorkingMemoryProvider>
-      </AgentSettingsProvider>
-    </TracingSettingsProvider>
+      </SchemaRequestContextProvider>
+    </AgentSettingsProvider>
   );
 }
 

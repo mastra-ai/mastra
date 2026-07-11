@@ -1,19 +1,19 @@
+import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { stat, writeFile } from 'node:fs/promises';
+import { rm, stat, writeFile } from 'node:fs/promises';
 import { dirname, join, posix } from 'node:path';
 import { MastraBundler } from '@mastra/core/bundler';
 import { MastraError, ErrorDomain, ErrorCategory } from '@mastra/core/error';
 import type { Config } from '@mastra/core/mastra';
 import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
-import fsExtra, { copy, ensureDir, readJSON, emptyDir } from 'fs-extra/esm';
+import fsExtra, { copy, ensureDir, emptyDir } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rollup';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
-import { getPackageRootPath } from '../build/package-info';
-import type { BundlerOptions } from '../build/types';
+import type { BundlerOptions, ExternalDependencyInfo } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import { isBareModuleSpecifier, slash } from '../build/utils';
 import { DepsService } from '../services/deps';
@@ -44,24 +44,25 @@ export abstract class Bundler extends MastraBundler {
 
   async writePackageJson(
     outputDirectory: string,
-    dependencies: Map<string, string>,
+    dependencies: Map<string, string | ExternalDependencyInfo>,
     resolutions?: Record<string, string>,
   ) {
-    this.logger.debug(`Writing project's package.json`);
+    this.logger.debug("Writing project's package.json");
 
     await ensureDir(outputDirectory);
     const pkgPath = join(outputDirectory, 'package.json');
 
     const dependenciesMap = new Map();
     for (const [key, value] of dependencies.entries()) {
+      const dependencyValue = typeof value === 'string' ? value : (value.packageSpec ?? value.version ?? 'latest');
       if (key.startsWith('@')) {
         // Handle scoped packages (e.g. @org/package)
         const pkgChunks = key.split('/');
-        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, value);
+        dependenciesMap.set(`${pkgChunks[0]}/${pkgChunks[1]}`, dependencyValue);
       } else {
         // For non-scoped packages, take only the first part before any slash
         const pkgName = key.split('/')[0] || key;
-        dependenciesMap.set(pkgName, value);
+        dependenciesMap.set(pkgName, dependencyValue);
       }
     }
 
@@ -71,19 +72,14 @@ export abstract class Bundler extends MastraBundler {
         {
           name: 'server',
           version: '1.0.0',
-          description: '',
+          private: true,
           type: 'module',
           main: 'index.mjs',
           scripts: {
             start: 'node ./index.mjs',
           },
-          author: 'Mastra',
-          license: 'ISC',
           dependencies: Object.fromEntries(dependenciesMap.entries()),
           ...(Object.keys(resolutions ?? {}).length > 0 && { resolutions }),
-          pnpm: {
-            neverBuiltDependencies: [],
-          },
         },
         null,
         2,
@@ -137,6 +133,41 @@ export abstract class Bundler extends MastraBundler {
     await deps.install({ dir: join(outputDirectory, this.outputDir) });
   }
 
+  /**
+   * Generate a package-lock.json for the output directory so that deploy targets
+   * can use `npm ci` instead of `npm install`, skipping version resolution entirely.
+   * This is a lockfile-only operation — no packages are downloaded.
+   *
+   * Temporarily moves node_modules out of the way because pnpm's symlink-based
+   * layout confuses npm's arborist, then restores it afterwards so that
+   * `mastra start` (or wrangler) can still resolve dependencies at runtime.
+   */
+  private async generateNpmLockfile(outputDir: string): Promise<void> {
+    const nodeModules = join(outputDir, 'node_modules');
+    const nodeModulesTmp = join(outputDir, 'node_modules.__tmp');
+    let movedNodeModules = false;
+    try {
+      // Move node_modules aside — pnpm's symlink layout confuses npm's arborist
+      if (await fsExtra.pathExists(nodeModules)) {
+        await fsExtra.move(nodeModules, nodeModulesTmp, { overwrite: true });
+        movedNodeModules = true;
+      }
+      execSync('npm install --package-lock-only --force', {
+        cwd: outputDir,
+        stdio: 'pipe',
+        timeout: 60_000,
+      });
+    } catch {
+      this.logger.warn('Failed to generate package-lock.json — deploy will fall back to npm install');
+    } finally {
+      // Restore node_modules so runtime resolution works
+      if (movedNodeModules) {
+        await rm(nodeModules, { recursive: true, force: true });
+        await fsExtra.move(nodeModulesTmp, nodeModules, { overwrite: true });
+      }
+    }
+  }
+
   protected async copyPublic(mastraDir: string, outputDirectory: string) {
     const publicDir = join(mastraDir, 'public');
 
@@ -187,8 +218,7 @@ export abstract class Bundler extends MastraBundler {
       },
       { sourcemap: enableSourcemap, workspaceRoot, projectRoot, enableEsmShim, externalsPreset: externals === true },
     );
-    const isVirtual = serverFile.includes('\n') || existsSync(serverFile);
-
+    const isVirtual = serverFile.includes('\n') || !existsSync(serverFile);
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     if (isVirtual) {
@@ -249,7 +279,7 @@ export abstract class Bundler extends MastraBundler {
 
           // if it doesn't exist or is a dir skip it. using a dir as a tool will crash the process
           if (!entryFile || (await stat(entryFile)).isDirectory()) {
-            this.logger.warn(`No entry file found in ${path}, skipping...`);
+            this.logger.warn('No entry file found, skipping', { path });
             continue;
           }
 
@@ -258,7 +288,7 @@ export abstract class Bundler extends MastraBundler {
           const normalizedEntryFile = entryFile.replaceAll('\\', '/');
           inputs[`tools/${uniqueToolID}`] = normalizedEntryFile;
         } else {
-          this.logger.warn(`Tool path ${path} does not exist, skipping...`);
+          this.logger.warn('Tool path does not exist, skipping', { path });
         }
       }
     }
@@ -323,52 +353,13 @@ export abstract class Bundler extends MastraBundler {
       );
     }
 
-    const dependenciesToInstall = new Map<string, string>();
+    const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
     for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
       if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
         continue;
       }
 
-      let version = depInfo.version;
-      let actualPackageName: string | undefined;
-
-      // Read package.json to get actual package name (for alias detection) and version if not pre-resolved
-      try {
-        // First try to resolve from the project root (provides correct context for monorepos)
-        let rootPath = await getPackageRootPath(dep, projectRoot);
-
-        // If not found in user's project, try resolving from deployer's location
-        // This handles packages like hono that are provided by @mastra/deployer
-        if (!rootPath) {
-          rootPath = await getPackageRootPath(dep, import.meta.dirname);
-        }
-
-        if (rootPath) {
-          const pkg = await readJSON(`${rootPath}/package.json`);
-          actualPackageName = pkg.name;
-          // Use pre-resolved version if available, otherwise use from package.json
-          if (!version) {
-            version = pkg.version;
-          }
-        }
-      } catch {
-        // Resolution failed, will use 'latest' for version
-      }
-
-      // Default to 'latest' if still no version
-      version = version || 'latest';
-
-      // Check if this is an npm alias (import name differs from actual package name)
-      // e.g., importing "ai-v5" which resolves to package "ai"
-      // or importing "@ai-sdk/openai-v5" which resolves to "@ai-sdk/openai"
-      // In this case, write npm alias syntax: "ai-v5": "npm:ai@5.0.93"
-      const isAlias = actualPackageName && dep !== actualPackageName;
-
-      if (isAlias) {
-        dependenciesToInstall.set(dep, `npm:${actualPackageName}@${version}`);
-      } else {
-        dependenciesToInstall.set(dep, version);
-      }
+      dependenciesToInstall.set(dep, depInfo);
     }
 
     try {
@@ -394,8 +385,9 @@ export abstract class Bundler extends MastraBundler {
                 return;
               }
 
-              this.logger.warn(`Circular dependency found:
-\t${warning.message.replace('Circular dependency: ', '')}`);
+              this.logger.warn('Circular dependency found', {
+                dependency: warning.message.replace('Circular dependency: ', ''),
+              });
             }
           },
         },
@@ -438,8 +430,11 @@ export const tools = [${toolsExports.join(', ')}]`,
 
       this.logger.info('Installing dependencies');
       await this.installDependencies(outputDirectory, projectRoot);
-
       this.logger.info('Done installing dependencies');
+
+      this.logger.info('Generating package-lock.json for deploy');
+      await this.generateNpmLockfile(join(outputDirectory, this.outputDir));
+      this.logger.info('Done generating package-lock.json');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new MastraError(
@@ -458,7 +453,7 @@ export const tools = [${toolsExports.join(', ')}]`,
     const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
     const toolsLength = Object.keys(toolsInputOptions).length;
     if (toolsLength > 0) {
-      this.logger.info(`Found ${toolsLength} ${toolsLength === 1 ? 'tool' : 'tools'}`);
+      this.logger.info('Found tools', { count: toolsLength });
     }
   }
 }

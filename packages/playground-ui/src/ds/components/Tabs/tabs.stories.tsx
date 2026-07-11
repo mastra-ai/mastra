@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Tabs } from './tabs-root';
-import { TabList } from './tabs-list';
-import { Tab } from './tabs-tab';
 import { TabContent } from './tabs-content';
+import { TabList } from './tabs-list';
+import { Tabs } from './tabs-root';
+import { Tab } from './tabs-tab';
 
 const meta: Meta<typeof Tabs> = {
   title: 'Navigation/Tabs',
@@ -10,16 +10,15 @@ const meta: Meta<typeof Tabs> = {
   parameters: {
     layout: 'centered',
   },
-  tags: ['autodocs'],
 };
 
 export default meta;
 type Story = StoryObj<typeof Tabs>;
 
-export const Default: Story = {
+export const Recommended: Story = {
   render: () => (
     <Tabs defaultTab="tab1" className="w-[400px]">
-      <TabList>
+      <TabList variant="pill">
         <Tab value="tab1">Overview</Tab>
         <Tab value="tab2">Details</Tab>
         <Tab value="tab3">Settings</Tab>
@@ -37,22 +36,22 @@ export const Default: Story = {
   ),
 };
 
-export const ButtonsVariant: Story = {
+export const LegacyLineFallback: Story = {
   render: () => (
-    <Tabs defaultTab="code" className="w-[400px]">
-      <TabList variant="buttons">
-        <Tab value="code">Code</Tab>
-        <Tab value="preview">Preview</Tab>
-        <Tab value="output">Output</Tab>
+    <Tabs defaultTab="tab1" className="w-[400px]">
+      <TabList>
+        <Tab value="tab1">Overview</Tab>
+        <Tab value="tab2">Details</Tab>
+        <Tab value="tab3">Settings</Tab>
       </TabList>
-      <TabContent value="code">
-        <div className="p-4 text-neutral5 font-mono text-sm">const hello = world;</div>
+      <TabContent value="tab1">
+        <div className="p-4 text-neutral5">Line fallback content goes here</div>
       </TabContent>
-      <TabContent value="preview">
-        <div className="p-4 text-neutral5">Preview content</div>
+      <TabContent value="tab2">
+        <div className="p-4 text-neutral5">Details content goes here</div>
       </TabContent>
-      <TabContent value="output">
-        <div className="p-4 text-neutral5">Output content</div>
+      <TabContent value="tab3">
+        <div className="p-4 text-neutral5">Settings content goes here</div>
       </TabContent>
     </Tabs>
   ),
@@ -60,7 +59,7 @@ export const ButtonsVariant: Story = {
 
 export const TwoTabs: Story = {
   render: () => (
-    <Tabs defaultTab="input" className="w-[300px]">
+    <Tabs defaultTab="input" className="w-dropdown-max-height">
       <TabList>
         <Tab value="input">Input</Tab>
         <Tab value="output">Output</Tab>
@@ -79,11 +78,11 @@ export const ManyTabs: Story = {
   render: () => (
     <Tabs defaultTab="tab1" className="w-[500px]">
       <TabList>
-        <Tab value="tab1">Tab 1</Tab>
-        <Tab value="tab2">Tab 2</Tab>
-        <Tab value="tab3">Tab 3</Tab>
-        <Tab value="tab4">Tab 4</Tab>
-        <Tab value="tab5">Tab 5</Tab>
+        <Tab value="tab1">Overview</Tab>
+        <Tab value="tab2">Usage Metrics</Tab>
+        <Tab value="tab3">Connected Tools</Tab>
+        <Tab value="tab4">Tracing Options</Tab>
+        <Tab value="tab5">Advanced Settings</Tab>
       </TabList>
       <TabContent value="tab1">
         <div className="p-4 text-neutral5">Content 1</div>
@@ -101,6 +100,88 @@ export const ManyTabs: Story = {
         <div className="p-4 text-neutral5">Content 5</div>
       </TabContent>
     </Tabs>
+  ),
+};
+
+export const PillVariant: Story = {
+  render: () => (
+    <Tabs defaultTab="overview" className="w-[500px]">
+      <TabList variant="pill">
+        <Tab value="overview">Overview</Tab>
+        <Tab value="projects">Projects</Tab>
+        <Tab value="account">Account</Tab>
+      </TabList>
+      <TabContent value="overview">
+        <div className="p-4 text-neutral5">Overview content</div>
+      </TabContent>
+      <TabContent value="projects">
+        <div className="p-4 text-neutral5">Projects content</div>
+      </TabContent>
+      <TabContent value="account">
+        <div className="p-4 text-neutral5">Account content</div>
+      </TabContent>
+    </Tabs>
+  ),
+};
+
+export const PillGhostVariant: Story = {
+  render: () => (
+    <Tabs defaultTab="overview" className="w-[500px]">
+      <TabList variant="pill-ghost">
+        <Tab value="overview">Overview</Tab>
+        <Tab value="projects">Projects</Tab>
+        <Tab value="account">Account</Tab>
+      </TabList>
+      <TabContent value="overview">
+        <div className="p-4 text-neutral5">Overview content</div>
+      </TabContent>
+      <TabContent value="projects">
+        <div className="p-4 text-neutral5">Projects content</div>
+      </TabContent>
+      <TabContent value="account">
+        <div className="p-4 text-neutral5">Account content</div>
+      </TabContent>
+    </Tabs>
+  ),
+};
+
+export const CustomIndicatorColor: Story = {
+  render: () => (
+    <div className="flex flex-col gap-8">
+      <Tabs defaultTab="tab1" className="w-[400px]">
+        <TabList style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
+          <Tab value="tab1">Overview</Tab>
+          <Tab value="tab2">Details</Tab>
+          <Tab value="tab3">Settings</Tab>
+        </TabList>
+        <TabContent value="tab1">
+          <div className="p-4 text-neutral5">Line variant with accent indicator</div>
+        </TabContent>
+        <TabContent value="tab2">
+          <div className="p-4 text-neutral5">Details content</div>
+        </TabContent>
+        <TabContent value="tab3">
+          <div className="p-4 text-neutral5">Settings content</div>
+        </TabContent>
+      </Tabs>
+
+      <Tabs defaultTab="overview" className="w-[400px]">
+        <TabList variant="pill" style={{ '--tab-indicator-color': 'var(--accent5)' } as React.CSSProperties}>
+          <Tab value="overview">Overview</Tab>
+          <Tab value="projects">Projects</Tab>
+          <Tab value="account">Account</Tab>
+        </TabList>
+        <TabContent value="overview">
+          <div className="p-4 text-neutral5">Pill variant with accent indicator</div>
+        </TabContent>
+        <TabContent value="projects">
+          <div className="p-4 text-neutral5">Projects content</div>
+        </TabContent>
+        <TabContent value="account">
+          <div className="p-4 text-neutral5">Account content</div>
+        </TabContent>
+      </Tabs>
+    </div>
   ),
 };
 

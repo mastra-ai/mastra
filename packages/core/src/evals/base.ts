@@ -1,17 +1,43 @@
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod/v4';
 import { Agent, isSupportedLanguageModel } from '../agent';
-import { tryGenerateWithJsonFallback } from '../agent/utils';
+import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } from '../agent/message-list';
+import type { AgentMemoryOption, ToolsInput } from '../agent/types';
+import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import { InternalSpans, resolveObservabilityContext } from '../observability';
-import type { ObservabilityContext } from '../observability';
+import type { MastraMemory } from '../memory/memory';
+import {
+  createObservabilityContext,
+  EntityType,
+  getOrCreateSpan,
+  InternalSpans,
+  resolveObservabilityContext,
+  SpanType,
+} from '../observability';
+import type {
+  CorrelationContext,
+  DefinitionSource,
+  ObservabilityContext,
+  ScorerScoreSource,
+  ScorerStepType,
+  ScorerTargetScope,
+  Span,
+} from '../observability';
+import { executeWithContext } from '../observability/utils';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
+import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
-import { createWorkflow, createStep } from '../workflows';
+import { createWorkflow } from '../workflows/create';
+import { createStep } from '../workflows/workflow';
 import type {
   ScoringSamplingConfig,
   ScorerRunInputForAgent,
@@ -38,6 +64,64 @@ type ScorerTypeShortcuts = {
   };
 };
 
+/**
+ * LLM-as-judge configuration for a scorer (or an individual scorer step).
+ *
+ * When `tools` is provided, the internal judge agent can call them before
+ * producing its score/output — e.g. a goal judge that inspects the workspace
+ * with readonly tools to independently verify the agent's claims, rather than
+ * grading text alone. Tools run in the judge agent's own tool-call loop and the
+ * judge still returns the step's structured output at the end.
+ */
+export interface ScorerJudgeConfig {
+  model: MastraModelConfig;
+  instructions: string;
+  jsonPromptInjection?: boolean;
+  /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
+  tools?: ToolsInput;
+  /** Optional memory instance for the internal judge agent. */
+  memory?: MastraMemory;
+  /** Default memory options passed to the internal judge agent run. */
+  defaultMemoryOptions?: AgentMemoryOption;
+  /** Optional callback for observing the internal judge agent stream as soon as it starts. */
+  onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
+  /** Optional maximum number of agentic loop iterations for the internal judge agent. */
+  maxSteps?: number;
+  /**
+   * Optional input processors for the internal judge agent. Run before the judge's
+   * messages reach the model (e.g. redaction, validation).
+   */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Optional output processors for the internal judge agent. Run on the judge's
+   * output before it is returned (e.g. moderation, transformation).
+   */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Optional error processors for the internal judge agent. These implement
+   * `processAPIError` and can inspect LLM API rejections and signal a retry,
+   * e.g. `StreamErrorRetryProcessor`.
+   */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry per judge generation.
+   * Required for retry-based error processors (e.g. `StreamErrorRetryProcessor`) to take effect.
+   */
+  maxProcessorRetries?: number;
+  /**
+   * Optional request context forwarded to the judge agent execution. When the judge
+   * agent has memory with OM observers that read dynamic model config from controller
+   * state (e.g. mastracode's `getObserverModel`), this lets the OM system resolve the
+   * correct observer model and provider credentials.
+   */
+  requestContext?: RequestContext<any>;
+}
+
+export type ScorerStepJudgeConfig = Omit<ScorerJudgeConfig, 'memory' | 'defaultMemoryOptions'> & {
+  /** Per-step memory options merged onto scorer-level `judge.defaultMemoryOptions`. */
+  memory?: AgentMemoryOption;
+};
+
 // Pipeline scorer
 // TInput and TRunOutput establish the type contract for the entire scorer pipeline,
 // ensuring type safety flows through all steps and contexts
@@ -45,10 +129,7 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
   id: TID;
   name?: string;
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerJudgeConfig;
   // Optional type specification - can be enum shortcut or explicit schemas
   type?:
     | keyof ScorerTypeShortcuts
@@ -56,17 +137,65 @@ interface ScorerConfig<TID extends string, TInput = any, TRunOutput = any> {
         input: z.ZodSchema<TInput>;
         output: z.ZodSchema<TRunOutput>;
       };
+
+  /**
+   * Transform the scorer run data before the SCORER_RUN span is created.
+   * Use this to strip unnecessary data from `input` and `output`, reducing
+   * what flows into both the scorer pipeline and the observability span.
+   *
+   * Runs synchronously before any span creation or pipeline execution.
+   */
+  prepareRun?: (
+    run: ScorerRun<TInput, TRunOutput>,
+  ) => ScorerRun<TInput, TRunOutput> | Promise<ScorerRun<TInput, TRunOutput>>;
 }
 
-// Standardized input type for all pipelines
-interface ScorerRun<TInput = any, TOutput = any> extends Partial<ObservabilityContext> {
+// Standardized input type for all scorer runs.
+// This captures both the scorer's evaluation inputs and the optional target
+// identity/context used for tracing and score emission.
+interface ScorerRun<TInput = any, TOutput = any> {
+  /** Unique ID for this scorer execution. Generated by scorer.run() when omitted. */
   runId?: string;
+
+  /** Primary scorer input. This is often model input/messages, but can be any structured value. */
   input?: TInput;
+
+  /** Primary scorer target output. This is the required value the scorer evaluates. */
   output: TOutput;
+
+  /** Optional expected label/reference value for judged or supervised evaluations. */
   groundTruth?: any;
+
   /** Expected trajectory config for trajectory scorers. Flows from dataset items or scorer constructor. */
   expectedTrajectory?: TrajectoryExpectation;
-  requestContext?: Record<string, any>;
+
+  /** Optional request context forwarded to scorers and judge prompts. */
+  requestContext?: Record<string, any> | RequestContext;
+
+  /** What kind of scoring flow produced this score, such as live runs, trace scoring, or experiments. */
+  scoreSource?: ScorerScoreSource;
+
+  /**
+   * How the scorer interpreted the target data.
+   * `span` means a single span's input/output was scored.
+   * `trajectory` means a trajectory/path was scored.
+   */
+  targetScope?: ScorerTargetScope;
+
+  /** Entity type of the scored target when known. */
+  targetEntityType?: EntityType;
+
+  /** Trace anchor for the target being scored when available. */
+  targetTraceId?: string;
+
+  /** Optional span anchor for the target being scored. */
+  targetSpanId?: string;
+
+  /** Live correlation snapshot for the target span/trace when available. */
+  targetCorrelationContext?: CorrelationContext;
+
+  /** Live target metadata to merge into emitted score metadata when available. */
+  targetMetadata?: Record<string, unknown>;
 }
 
 // Prompt object definition with conditional typing
@@ -86,10 +215,7 @@ interface PromptObject<
    * The TOutput generic is inferred from this schema's output type.
    */
   outputSchema: PublicSchema<TOutput>;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerStepJudgeConfig;
 
   // Support both sync and async createPrompt
   createPrompt: (context: PromptObjectContext<TAccumulated, TStepName, TInput, TRunOutput>) => string | Promise<string>;
@@ -102,7 +228,7 @@ type StepResultKey<T extends string> = `${T}StepResult`;
 type Awaited<T> = T extends Promise<infer U> ? U : T;
 
 // Simplified context type
-type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = {
+type StepContext<TAccumulated extends Record<string, any>, TInput, TRunOutput> = Partial<ObservabilityContext> & {
   run: ScorerRun<TInput, TRunOutput>;
   results: TAccumulated;
 };
@@ -121,6 +247,7 @@ type GenerateReasonContext<TAccumulated extends Record<string, any>, TInput, TRu
 
 type ScorerRunResult<TAccumulatedResults extends Record<string, any>, TInput, TRunOutput> = Promise<
   ScorerRun<TInput, TRunOutput> & {
+    scoreTraceId?: string;
     score: TAccumulatedResults extends Record<'generateScoreStepResult', infer TScore> ? TScore : never;
     reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
 
@@ -164,10 +291,7 @@ type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput,
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerStepJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: StepContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -175,10 +299,7 @@ interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TI
 // Special prompt object type for generateReason that always returns a string
 interface GenerateReasonPromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
   description: string;
-  judge?: {
-    model: MastraModelConfig;
-    instructions: string;
-  };
+  judge?: ScorerStepJudgeConfig;
   // Support both sync and async createPrompt
   createPrompt: (context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => string | Promise<string>;
 }
@@ -219,7 +340,7 @@ class MastraScorer<
    * Tracks whether this scorer was defined in code or loaded from storage.
    * Set by `Mastra.addScorer()` when the `source` option is provided.
    */
-  public source?: 'code' | 'stored';
+  public source?: DefinitionSource;
 
   constructor(
     public config: ScorerConfig<TID, TInput, TRunOutput>,
@@ -418,6 +539,20 @@ class MastraScorer<
     return this.steps.some(step => step.name === 'generateScore');
   }
 
+  private normalizeRunRequestContext(
+    requestContext?: Record<string, any> | RequestContext,
+  ): RequestContext | undefined {
+    if (!requestContext) {
+      return undefined;
+    }
+
+    if (requestContext instanceof RequestContext) {
+      return requestContext;
+    }
+
+    return new RequestContext(Object.entries(requestContext));
+  }
+
   async run(input: ScorerRun<TInput, TRunOutput>): ScorerRunResult<TAccumulatedResults, TInput, TRunOutput> {
     // Runtime check: execute only allowed after generateScore
     if (!this.hasGenerateScore) {
@@ -433,25 +568,81 @@ class MastraScorer<
       });
     }
 
-    const observabilityContext = resolveObservabilityContext(input);
+    // Apply prepareRun transformation before span creation to reduce data
+    // flowing into both the observability span and the scorer pipeline.
+    const prepared = this.config.prepareRun ? await this.config.prepareRun(input) : input;
 
-    let runId = input.runId;
+    let runId = prepared.runId;
     if (!runId) {
       runId = randomUUID();
     }
 
-    const run = { ...input, runId };
-
-    const workflow = this.toMastraWorkflow();
-    const workflowRun = await workflow.createRun();
-    const workflowResult = await workflowRun.start({
-      inputData: {
-        run,
+    const normalizedRequestContext = this.normalizeRunRequestContext(prepared.requestContext);
+    const evalSpan = getOrCreateSpan({
+      type: SpanType.SCORER_RUN,
+      name: `scorer run: '${this.id}'`,
+      entityType: EntityType.SCORER,
+      entityId: this.id,
+      input: {
+        input: prepared.input,
+        output: prepared.output,
+        groundTruth: prepared.groundTruth,
+        expectedTrajectory: prepared.expectedTrajectory,
+        requestContext: normalizedRequestContext?.serializeForSpan(),
       },
-      ...observabilityContext,
+      attributes: {
+        scorerId: this.id,
+        scorerName: this.name,
+        ...(prepared.scoreSource ? { scoreSource: prepared.scoreSource } : {}),
+        ...(prepared.targetScope ? { targetScope: prepared.targetScope } : {}),
+        ...(prepared.targetEntityType ? { targetEntityType: prepared.targetEntityType } : {}),
+        ...(this.source ? { scorerDefinition: this.source } : {}),
+      },
+      metadata: {
+        ...(prepared.targetTraceId ? { targetTraceId: prepared.targetTraceId } : {}),
+        ...(prepared.targetSpanId ? { targetSpanId: prepared.targetSpanId } : {}),
+      },
+      mastra: this.#mastra,
     });
+    const run: ScorerRun<TInput, TRunOutput> & { runId: string; scoreTraceId?: string } = {
+      ...prepared,
+      runId,
+      ...(evalSpan?.traceId ? { scoreTraceId: evalSpan.traceId } : {}),
+    };
+    const scorerObservabilityContext = createObservabilityContext({ currentSpan: evalSpan });
+
+    let workflow;
+    let workflowRun;
+    try {
+      workflow = this.toMastraWorkflow();
+      workflowRun = await workflow.createRun();
+    } catch (error) {
+      evalSpan?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
+    let workflowResult;
+    try {
+      workflowResult = await executeWithContext({
+        span: evalSpan,
+        fn: () =>
+          workflowRun.start({
+            inputData: {
+              run,
+            },
+            ...scorerObservabilityContext,
+          }),
+      });
+    } catch (error) {
+      evalSpan?.error({ error: error as Error, endSpan: true });
+      throw error;
+    }
 
     if (workflowResult.status === 'failed') {
+      const workflowFailure =
+        workflowResult.error instanceof Error
+          ? workflowResult.error
+          : new Error(typeof workflowResult.error === 'string' ? workflowResult.error : 'Scorer workflow failed');
+      evalSpan?.error({ error: workflowFailure, endSpan: true });
       throw new MastraError(
         {
           id: 'MASTR_SCORER_FAILED_TO_RUN_WORKFLOW_FAILED',
@@ -467,7 +658,50 @@ class MastraScorer<
       );
     }
 
-    return this.transformToScorerResult({ workflowResult, originalInput: run });
+    const scorerResult = this.transformToScorerResult({ workflowResult, originalInput: run });
+    evalSpan?.end({
+      output: {
+        success: true,
+        score: typeof scorerResult.score === 'number' ? scorerResult.score : null,
+        reason: typeof scorerResult.reason === 'string' ? scorerResult.reason : null,
+      },
+    });
+
+    if (this.#mastra?.observability.addScore && typeof scorerResult.score === 'number') {
+      try {
+        const targetTraceId = input.targetTraceId ?? input.targetCorrelationContext?.traceId;
+        const targetSpanId = input.targetSpanId ?? input.targetCorrelationContext?.spanId;
+
+        await this.#mastra.observability.addScore({
+          ...(targetTraceId ? { traceId: targetTraceId } : {}),
+          ...(targetSpanId ? { spanId: targetSpanId } : {}),
+          ...(input.targetCorrelationContext ? { correlationContext: input.targetCorrelationContext } : {}),
+          score: {
+            scorerId: this.id,
+            scorerName: this.name,
+            ...(input.scoreSource ? { scoreSource: input.scoreSource } : {}),
+            score: scorerResult.score,
+            ...(typeof scorerResult.reason === 'string' ? { reason: scorerResult.reason } : {}),
+            ...(typeof scorerResult.scoreTraceId === 'string' ? { scoreTraceId: scorerResult.scoreTraceId } : {}),
+            ...(input.targetEntityType ? { targetEntityType: input.targetEntityType } : {}),
+            metadata: {
+              ...(input.targetMetadata ?? {}),
+              hasGroundTruth: input.groundTruth !== undefined,
+              ...(input.targetScope ? { targetScope: input.targetScope } : {}),
+              ...(this.source ? { scorerDefinition: this.source } : {}),
+            },
+            // TODO: Add targetEntityId / targetEntityName once the score event/storage
+            // contract has first-class fields for unanchored score target identity.
+            // TODO: Add any remaining correlation context that is useful when a
+            // score is emitted without a target trace/span anchor.
+          },
+        });
+      } catch (error) {
+        this.#mastra.getLogger()?.warn?.(`Failed to emit score to observability for scorer ${this.id}:`, error);
+      }
+    }
+
+    return scorerResult;
   }
 
   private isPromptObject(stepDef: any): boolean {
@@ -488,12 +722,18 @@ class MastraScorer<
     return isOtherPromptObject;
   }
 
-  getSteps(): Array<{ name: string; type: 'function' | 'prompt'; description?: string }> {
-    return this.steps.map(step => ({
-      name: step.name,
-      type: step.isPromptObject ? 'prompt' : 'function',
-      description: step.definition.description,
-    }));
+  getSteps(): Array<{ name: string; type: ScorerStepType; description?: string }> {
+    return this.steps.map(step => {
+      const description = step.isPromptObject
+        ? this.originalPromptObjects.get(step.name)?.description
+        : step.definition?.description;
+
+      return {
+        name: step.name,
+        type: step.isPromptObject ? 'prompt' : 'function',
+        description,
+      };
+    });
   }
 
   private toMastraWorkflow() {
@@ -510,19 +750,73 @@ class MastraScorer<
           const { run } = getInitData<{ run: ScorerRun<TInput, TRunOutput> }>();
 
           const context = this.createScorerContext(scorerStep.name, run, accumulatedResults);
+          const currentSpan = observabilityContext.tracingContext.currentSpan;
+          const scorerRunSpan =
+            currentSpan?.type === SpanType.SCORER_RUN
+              ? (currentSpan as Span<SpanType.SCORER_RUN>)
+              : (currentSpan?.findParent(SpanType.SCORER_RUN) as Span<SpanType.SCORER_RUN> | undefined);
+          const stepSpan = scorerRunSpan?.createChildSpan({
+            type: SpanType.SCORER_STEP,
+            name: `scorer step: '${scorerStep.name}'`,
+            entityType: EntityType.SCORER,
+            entityId: this.config.id ?? this.config.name,
+            input: context,
+            attributes: {
+              step: scorerStep.name,
+              stepType: scorerStep.isPromptObject ? 'prompt' : 'function',
+            },
+          });
+          const stepObservabilityContext = createObservabilityContext({ currentSpan: stepSpan });
+          const executionContext = {
+            ...context,
+            ...stepObservabilityContext,
+          };
 
-          let stepResult;
-          let newGeneratedPrompts = generatedPrompts;
-          if (scorerStep.isPromptObject) {
-            const { result, prompt } = await this.executePromptStep(scorerStep, observabilityContext, context);
-            stepResult = result;
-            newGeneratedPrompts = {
-              ...generatedPrompts,
-              [`${scorerStep.name}Prompt`]: prompt,
-            };
-          } else {
-            stepResult = await this.executeFunctionStep(scorerStep, context);
+          let stepResult: unknown;
+          let prompt: string | undefined;
+          let judgeModel: string | undefined;
+
+          try {
+            await executeWithContext({
+              span: stepSpan,
+              fn: async () => {
+                if (scorerStep.isPromptObject) {
+                  const promptStepResult = await this.executePromptStep(
+                    scorerStep,
+                    stepObservabilityContext,
+                    executionContext,
+                  );
+                  stepResult = promptStepResult.result;
+                  prompt = promptStepResult.prompt;
+                  judgeModel = promptStepResult.judgeModel;
+                } else {
+                  stepResult = await this.executeFunctionStep(scorerStep, executionContext);
+                }
+              },
+            });
+          } catch (error) {
+            stepSpan?.error({ error: error as Error, endSpan: true });
+            throw error;
           }
+
+          if (prompt !== undefined || judgeModel !== undefined) {
+            stepSpan?.update({
+              attributes: {
+                ...(prompt !== undefined ? { prompt } : {}),
+                ...(judgeModel !== undefined ? { judgeModel } : {}),
+              },
+            });
+          }
+
+          stepSpan?.end({ output: stepResult });
+
+          const newGeneratedPrompts =
+            prompt !== undefined
+              ? {
+                  ...generatedPrompts,
+                  [`${scorerStep.name}Prompt`]: prompt,
+                }
+              : generatedPrompts;
 
           const newAccumulatedResults = {
             ...accumulatedResults,
@@ -556,11 +850,15 @@ class MastraScorer<
         generateReasonPrompt: z.string().optional(),
       }),
       options: {
-        // mark all spans generated as part of the scorer workflow internal
-        tracingPolicy: {
-          internal: InternalSpans.ALL,
-        },
         validateInputs: false,
+        // The scorer pipeline is mastra-owned plumbing — only the SCORER_RUN
+        // span (created in run()) is user-facing. Mark all workflow spans as
+        // internal so they're hidden from exported traces by default. Any
+        // user-defined agents/tools/models invoked from a scorer step keep
+        // their own tracing policy and stay visible.
+        tracingPolicy: {
+          internal: InternalSpans.WORKFLOW,
+        },
       },
     });
 
@@ -596,7 +894,7 @@ class MastraScorer<
     scorerStep: ScorerStepDefinition,
     observabilityContext: ObservabilityContext,
     context: any,
-  ) {
+  ): Promise<{ result: unknown; prompt: string; judgeModel?: string }> {
     const originalStep = this.originalPromptObjects.get(scorerStep.name);
     if (!originalStep) {
       throw new Error(`Step "${scorerStep.name}" is not a prompt object`);
@@ -605,6 +903,29 @@ class MastraScorer<
     const prompt = await originalStep.createPrompt(context);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
+    const jsonPromptInjection = originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection;
+    // Step-level tools override scorer-level tools. When present, the judge agent
+    // can call them (in its own tool-call loop) before producing the step output.
+    const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
+    const memory = this.config.judge?.memory;
+    const defaultMemoryOptions = this.config.judge?.defaultMemoryOptions;
+    const stepMemoryOptions = originalStep.judge?.memory;
+    const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
+    const maxSteps = originalStep.judge?.maxSteps ?? this.config.judge?.maxSteps;
+    const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
+    const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
+    const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
+    const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
+    const memoryOptions = stepMemoryOptions
+      ? {
+          ...defaultMemoryOptions,
+          ...stepMemoryOptions,
+          options:
+            defaultMemoryOptions?.options || stepMemoryOptions.options
+              ? { ...defaultMemoryOptions?.options, ...stepMemoryOptions.options }
+              : undefined,
+        }
+      : defaultMemoryOptions;
 
     if (!modelConfig || !instructions) {
       throw new MastraError({
@@ -621,26 +942,49 @@ class MastraScorer<
 
     // Resolve the model configuration to a LanguageModel instance
     // Pass the Mastra instance to enable custom gateway resolution
-    const resolvedModel = await resolveModelConfig(modelConfig, undefined, this.#mastra);
+    const resolvedModel = await resolveModelConfig(
+      modelConfig,
+      this.config.judge?.requestContext ?? undefined,
+      this.#mastra,
+    );
+    const judgeModel = resolvedModel.modelId;
 
     const judge = new Agent({
       id: 'judge',
       name: 'judge',
       model: resolvedModel,
       instructions,
-      options: { tracingPolicy: { internal: InternalSpans.ALL } },
+      ...(tools ? { tools } : {}),
+      ...(memory ? { memory } : {}),
+      ...(inputProcessors ? { inputProcessors } : {}),
+      ...(outputProcessors ? { outputProcessors } : {}),
+      ...(errorProcessors ? { errorProcessors } : {}),
+      ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     });
+    if (this.#mastra) {
+      judge.__registerMastra(this.#mastra);
+    }
+    const judgeRunOptions = {
+      ...observabilityContext,
+      ...(memoryOptions ? { memory: memoryOptions } : {}),
+      ...(maxSteps ? { maxSteps } : {}),
+      ...(this.config.judge?.requestContext ? { requestContext: this.config.judge.requestContext } : {}),
+    };
 
     // GenerateScore output must be a number
     if (scorerStep.name === 'generateScore') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await tryGenerateWithJsonFallback(judge, prompt, {
+        result = await tryStreamWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: z.object({ score: z.number() }),
+            jsonPromptInjection,
           },
-          ...observabilityContext,
+          ...judgeRunOptions,
+          ...(onStream ? { onStream } : {}),
         });
+        const object = await result.object;
+        return { result: (object as { score: number }).score, prompt, judgeModel };
       } else {
         const schema = z.object({
           score: z.number(),
@@ -648,20 +992,21 @@ class MastraScorer<
         const standardSchema = toStandardSchema(schema as PublicSchema);
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
+        return { result: (result.object as { score: number }).score, prompt, judgeModel };
       }
-      return { result: (result.object as { score: number }).score, prompt };
 
       // GenerateReason output must be a string
     } else if (scorerStep.name === 'generateReason') {
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
-        result = await judge.generate(prompt, { ...observabilityContext });
+        result = await judge.stream(prompt, judgeRunOptions);
+        void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
       } else {
-        result = await judge.generateLegacy(prompt, { ...observabilityContext });
+        result = await judge.generateLegacy(prompt, judgeRunOptions);
       }
-      return { result: result.text, prompt };
+      return { result: await result.text, prompt, judgeModel };
     } else {
       const promptStep = originalStep as PromptObject<any, any, any, TInput, TRunOutput>;
       // Convert to StandardSchemaWithJSON at runtime to ensure ~standard.jsonSchema is available
@@ -670,19 +1015,23 @@ class MastraScorer<
       let result;
       if (isSupportedLanguageModel(resolvedModel)) {
         // Use type assertion to any to bypass complex type checking - runtime schema is validated by toStandardSchema
-        result = await tryGenerateWithJsonFallback(judge, prompt, {
+        result = await tryStreamWithJsonFallback(judge, prompt, {
           structuredOutput: {
             schema: standardSchema as any,
+            jsonPromptInjection,
           },
-          ...observabilityContext,
+          ...judgeRunOptions,
+          ...(onStream ? { onStream } : {}),
         });
+        const object = await result.object;
+        return { result: object, prompt, judgeModel };
       } else {
         result = await judge.generateLegacy(prompt, {
           output: standardSchemaToJSONSchema(standardSchema),
-          ...observabilityContext,
+          ...judgeRunOptions,
         });
+        return { result: result.object, prompt, judgeModel };
       }
-      return { result: result.object, prompt };
     }
   }
 
@@ -691,7 +1040,7 @@ class MastraScorer<
     originalInput,
   }: {
     workflowResult: any;
-    originalInput: ScorerRun<TInput, TRunOutput> & { runId: string };
+    originalInput: ScorerRun<TInput, TRunOutput> & { runId: string; scoreTraceId?: string };
   }) {
     const finalStepResult = workflowResult.result;
     const accumulatedResults = finalStepResult?.accumulatedResults || {};
@@ -738,6 +1087,7 @@ export function createScorer(config: any): any {
     description: config.description,
     judge: config.judge,
     type: config.type,
+    prepareRun: config.prepareRun,
   });
 }
 
@@ -747,6 +1097,254 @@ export type MastraScorerEntry = {
 };
 
 export type MastraScorers = Record<string, MastraScorerEntry>;
+
+// ============================================================================
+// filterRun — declarative utility for prepareRun
+// ============================================================================
+
+/**
+ * Known MastraMessagePart type values. Provides autocomplete for common types
+ * while still allowing arbitrary `data-*` strings via the `string & {}` escape hatch.
+ */
+export type MastraPartType =
+  // Core part types
+  | 'text'
+  | 'tool-invocation'
+  | 'step-start'
+  | 'reasoning'
+  | 'image'
+  | 'file'
+  | 'source'
+  | 'source-document'
+  // Data part prefixes (prefix-matched)
+  | 'data-'
+  | 'data-om-'
+  | 'data-om-status'
+  | 'data-om-observation-start'
+  | 'data-om-observation-end'
+  | 'data-om-observation-failed'
+  | 'data-om-buffering-start'
+  | 'data-om-buffering-end'
+  | 'data-om-buffering-failed'
+  | 'data-om-activation'
+  | 'data-om-thread-update'
+  | 'data-workspace-'
+  | 'data-workspace-metadata'
+  | 'data-sandbox-'
+  | 'data-sandbox-stdout'
+  | 'data-sandbox-stderr'
+  | 'data-sandbox-exit'
+  | 'data-sandbox-command'
+  | 'data-tool-'
+  | 'data-tool-call-approval'
+  | 'data-tool-call-suspended'
+  | 'data-system-reminder'
+  | 'data-signal'
+  | 'data-user-message'
+  | 'data-tripwire'
+  | 'data-structured-output'
+  // Allow arbitrary strings for custom data-* types
+  | (string & {});
+
+export interface FilterRunOptions {
+  /**
+   * Keep only messages whose parts match these MastraMessagePart type patterns.
+   * Applied to both `input.rememberedMessages` and `output` when they contain
+   * MastraDBMessage arrays (the `type: 'agent'` scorer shape).
+   *
+   * Each entry is prefix-matched against `MastraMessagePart.type`:
+   * - `'text'` — text parts
+   * - `'tool-invocation'` — tool invocation parts
+   * - `'step-start'` — step markers
+   * - `'data-'` — all data parts (OM, workspace, sandbox, etc.)
+   * - `'data-om-'` — only observational memory data parts
+   *
+   * Messages where no part matches are dropped. Plain text messages (user text,
+   * assistant text without tool parts) are always kept regardless of this filter.
+   *
+   * To filter by specific tool names, use `toolNames` instead.
+   */
+  partTypes?: MastraPartType[];
+
+  /**
+   * Keep only tool-invocation messages for these specific tools.
+   * Each entry is prefix-matched against `toolInvocation.toolName`.
+   * Non-tool messages (text, data) are unaffected by this filter.
+   *
+   * @example `['execute_command', 'write_file', 'string_replace']`
+   */
+  toolNames?: string[];
+
+  /**
+   * Maximum number of messages to keep in `input.rememberedMessages`.
+   * Taken from the end (most recent messages). Useful for limiting context window.
+   */
+  maxRememberedMessages?: number;
+
+  /**
+   * Maximum number of messages to keep in `output` (response messages).
+   * Taken from the end.
+   */
+  maxOutputMessages?: number;
+
+  /**
+   * Drop `requestContext` entirely from the run.
+   */
+  dropRequestContext?: boolean;
+
+  /**
+   * Drop `expectedTrajectory` from the run.
+   */
+  dropExpectedTrajectory?: boolean;
+
+  /**
+   * Drop `groundTruth` from the run.
+   */
+  dropGroundTruth?: boolean;
+}
+
+/**
+ * Creates a `prepareRun` function from declarative options.
+ * Use this with `createScorer({ prepareRun: filterRun({ ... }) })`.
+ *
+ * @example
+ * ```ts
+ * createScorer({
+ *   id: 'my-scorer',
+ *   description: '...',
+ *   type: 'agent',
+ *   prepareRun: filterRun({
+ *     toolNames: ['execute_command', 'write_file', 'string_replace_lsp'],
+ *     maxRememberedMessages: 20,
+ *   }),
+ * })
+ * ```
+ */
+export function filterRun<TInput = unknown, TOutput = unknown>(
+  options: FilterRunOptions,
+): (run: ScorerRun<TInput, TOutput>) => ScorerRun<TInput, TOutput> {
+  return (run: ScorerRun<TInput, TOutput>): ScorerRun<TInput, TOutput> => {
+    const result = { ...run };
+
+    if (options.dropRequestContext) {
+      result.requestContext = undefined;
+    }
+    if (options.dropExpectedTrajectory) {
+      result.expectedTrajectory = undefined;
+    }
+    if (options.dropGroundTruth) {
+      result.groundTruth = undefined;
+    }
+
+    const hasMessageFilters = options.partTypes || options.toolNames;
+
+    // Filter input (ScorerRunInputForAgent shape)
+    if (result.input && typeof result.input === 'object' && 'rememberedMessages' in (result.input as object)) {
+      const agentInput = result.input as unknown as ScorerRunInputForAgent;
+
+      let remembered = agentInput.rememberedMessages ?? [];
+      if (hasMessageFilters) {
+        remembered = filterMessages(remembered, options);
+      }
+      if (options.maxRememberedMessages && remembered.length > options.maxRememberedMessages) {
+        remembered = remembered.slice(-options.maxRememberedMessages);
+      }
+
+      result.input = {
+        ...agentInput,
+        rememberedMessages: remembered,
+      } as unknown as TInput;
+    }
+
+    // Filter output (MastraDBMessage[] shape)
+    if (Array.isArray(result.output)) {
+      let output: MastraDBMessage[] = result.output as unknown as MastraDBMessage[];
+      if (hasMessageFilters) {
+        output = filterMessages(output, options);
+      }
+      if (options.maxOutputMessages && output.length > options.maxOutputMessages) {
+        output = output.slice(-options.maxOutputMessages);
+      }
+      result.output = output as unknown as TOutput;
+    }
+
+    return result;
+  };
+}
+
+/**
+ * Get the tool name from a MastraMessagePart if it's a tool-invocation.
+ * Handles the Mastra `tool-invocation` shape: `{ type: 'tool-invocation', toolInvocation: { toolName } }`.
+ */
+function getToolName(part: MastraMessagePart): string | undefined {
+  if (part.type === 'tool-invocation') {
+    return (part as MastraToolInvocationPart).toolInvocation?.toolName;
+  }
+  return undefined;
+}
+
+/**
+ * Check if a message part is a tool-invocation.
+ */
+function isToolPart(part: MastraMessagePart): boolean {
+  return part.type === 'tool-invocation';
+}
+
+/**
+ * Get the `type` string from a MastraMessagePart.
+ * All part types in the union have a `type` discriminator.
+ */
+function getPartType(part: MastraMessagePart): string {
+  return part.type;
+}
+
+/**
+ * Filter messages by part type patterns and/or tool names.
+ *
+ * - `partTypes` prefix-matches against `MastraMessagePart.type`
+ * - `toolNames` prefix-matches against `toolInvocation.toolName` for tool-invocation parts
+ * - Plain text messages (no tool-invocation parts) are always kept
+ */
+function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions): MastraDBMessage[] {
+  return messages.filter(msg => {
+    const parts = msg?.content?.parts;
+    if (!Array.isArray(parts)) return true; // Keep non-structured messages (plain string content)
+
+    const typedParts = parts as MastraMessagePart[];
+    const hasToolInvocations = typedParts.some(isToolPart);
+
+    // Plain text messages — no tool invocations — always kept (unless partTypes explicitly excludes them)
+    if (!hasToolInvocations) {
+      if (!options.partTypes) return true;
+      // If partTypes is set, keep only if at least one part type matches
+      return typedParts.some(p => {
+        const type = getPartType(p);
+        return options.partTypes!.some(pattern => type.startsWith(pattern));
+      });
+    }
+
+    // Message has tool invocations — apply filters
+    if (options.toolNames) {
+      // Keep if any tool-invocation matches a tool name prefix
+      const hasMatchingTool = typedParts.some(p => {
+        const name = getToolName(p);
+        return name != null && options.toolNames!.some(pattern => name.startsWith(pattern));
+      });
+      if (!hasMatchingTool) return false;
+    }
+
+    if (options.partTypes) {
+      // Keep if any part type matches
+      const hasMatchingType = typedParts.some(p => {
+        const type = getPartType(p);
+        return options.partTypes!.some(pattern => type.startsWith(pattern));
+      });
+      if (!hasMatchingType) return false;
+    }
+
+    return true;
+  });
+}
 
 // Export types and interfaces for use in test files
 export type { ScorerConfig, ScorerRun, PromptObject };

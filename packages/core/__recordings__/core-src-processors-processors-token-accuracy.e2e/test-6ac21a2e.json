@@ -1,0 +1,692 @@
+{
+  "meta": {
+    "name": "test-6ac21a2e",
+    "testFile": "packages/core/src/processors/processors/token-accuracy.e2e.test.ts",
+    "testName": "TokenLimiterProcessor > 98% accuracy > 100 messages, 24 tool messages",
+    "model": "gpt-4o-mini",
+    "createdAt": "2026-05-18T10:50:56.667Z"
+  },
+  "recordings": [
+    {
+      "hash": "e613a244d58fbd7b",
+      "request": {
+        "url": "https://api.openai.com/v1/chat/completions",
+        "method": "POST",
+        "body": {
+          "model": "gpt-4o-mini",
+          "temperature": 0,
+          "messages": [
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-4",
+                  "type": "function",
+                  "function": {
+                    "name": "calculator",
+                    "arguments": "{\"expression\":\"2+2\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-4",
+              "content": "\"4\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-8",
+                  "type": "function",
+                  "function": {
+                    "name": "search",
+                    "arguments": "{\"query\":\"latest AI developments\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-8",
+              "content": "\"Anthropic blah blah blah\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-12",
+                  "type": "function",
+                  "function": {
+                    "name": "weather",
+                    "arguments": "{\"location\":\"New York\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-12",
+              "content": "\"Pretty hot\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-16",
+                  "type": "function",
+                  "function": {
+                    "name": "calculator",
+                    "arguments": "{\"expression\":\"2+2\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-16",
+              "content": "\"4\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-20",
+                  "type": "function",
+                  "function": {
+                    "name": "search",
+                    "arguments": "{\"query\":\"latest AI developments\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-20",
+              "content": "\"Anthropic blah blah blah\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-24",
+                  "type": "function",
+                  "function": {
+                    "name": "weather",
+                    "arguments": "{\"location\":\"New York\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-24",
+              "content": "\"Pretty hot\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-28",
+                  "type": "function",
+                  "function": {
+                    "name": "calculator",
+                    "arguments": "{\"expression\":\"2+2\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-28",
+              "content": "\"4\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-32",
+                  "type": "function",
+                  "function": {
+                    "name": "search",
+                    "arguments": "{\"query\":\"latest AI developments\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-32",
+              "content": "\"Anthropic blah blah blah\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-36",
+                  "type": "function",
+                  "function": {
+                    "name": "weather",
+                    "arguments": "{\"location\":\"New York\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-36",
+              "content": "\"Pretty hot\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-40",
+                  "type": "function",
+                  "function": {
+                    "name": "calculator",
+                    "arguments": "{\"expression\":\"2+2\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-40",
+              "content": "\"4\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-44",
+                  "type": "function",
+                  "function": {
+                    "name": "search",
+                    "arguments": "{\"query\":\"latest AI developments\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-44",
+              "content": "\"Anthropic blah blah blah\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "",
+              "tool_calls": [
+                {
+                  "id": "tool-48",
+                  "type": "function",
+                  "function": {
+                    "name": "weather",
+                    "arguments": "{\"location\":\"New York\"}"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "tool",
+              "tool_call_id": "tool-48",
+              "content": "\"Pretty hot\""
+            },
+            {
+              "role": "user",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            },
+            {
+              "role": "assistant",
+              "content": "apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape apple banana orange grape"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "function": {
+                "name": "calculatorTool",
+                "description": "Perform a simple calculation",
+                "parameters": {
+                  "$schema": "http://json-schema.org/draft-07/schema#",
+                  "type": "object",
+                  "properties": {
+                    "expression": {
+                      "type": "string",
+                      "description": "The mathematical expression to calculate"
+                    }
+                  },
+                  "required": ["expression"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1779101455004
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "9fda4dbe3d71ba76-BRU",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Mon, 18 May 2026 10:50:56 GMT",
+          "openai-organization": "personal-zxkt1f",
+          "openai-processing-ms": "1131",
+          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-openai-proxy-wasm": "v0.1",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "200000",
+          "x-ratelimit-remaining-requests": "9951",
+          "x-ratelimit-remaining-tokens": "187020",
+          "x-ratelimit-reset-requests": "6m56.057s",
+          "x-ratelimit-reset-tokens": "3.893s",
+          "x-request-id": "req_408549b9b331478789e0f7c68695b058"
+        },
+        "body": {
+          "id": "chatcmpl-Dgpqh6nVs6GYNGEOrYu3w9JZirlzK",
+          "object": "chat.completion",
+          "created": 1779101455,
+          "model": "gpt-4o-mini-2024-07-18",
+          "choices": [
+            {
+              "index": 0,
+              "message": {
+                "role": "assistant",
+                "content": "It seems like you're repeating the phrase \"apple banana orange grape.\" If you have a specific question or topic you'd like to discuss, feel free to let me know!",
+                "refusal": null,
+                "annotations": []
+              },
+              "logprobs": null,
+              "finish_reason": "stop"
+            }
+          ],
+          "usage": {
+            "prompt_tokens": 7997,
+            "completion_tokens": 34,
+            "total_tokens": 8031,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "audio_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "audio_tokens": 0,
+              "accepted_prediction_tokens": 0,
+              "rejected_prediction_tokens": 0
+            }
+          },
+          "service_tier": "default",
+          "system_fingerprint": "fp_bf1f66ac25"
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}
