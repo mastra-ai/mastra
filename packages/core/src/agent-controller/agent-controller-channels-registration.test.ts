@@ -54,11 +54,11 @@ describe('AgentController channels ↔ Mastra registration', () => {
     const mastra = new Mastra({ logger: false, agentControllers: { code: controller } });
 
     await controller.init();
-    // Mode agents are never mutated with the controller's channels — the
-    // instance is carried per-run on the request context instead.
+    // Mode agents carry the controller's channels on the instance (propagated
+    // via setChannels, mirroring setBrowser) — not on the per-run request context.
     const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
     const modeAgent = controller.getCurrentAgent(session);
-    expect(modeAgent.getChannels()).toBeNull();
+    expect(modeAgent.getChannels()).toBe(controller.getChannels());
 
     const channels = mastra.getChannels();
     expect(channels.code).toBe(controller.getChannels());
