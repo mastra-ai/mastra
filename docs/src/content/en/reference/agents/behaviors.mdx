@@ -133,6 +133,42 @@ The provider also exposes stable `behavior_select`, `behavior_intent`, `behavior
 
 Governed host tools receive one required `intent` input. `BehaviorIntentPolicyProcessor` memoizes wrappers by original tool identity and checks authorization both before and during execution.
 
+### Provider options
+
+- `definition`: Normalized behavior graph.
+- `store`: Authoritative runtime store.
+- `resolveThreadId`: Reads the host thread ID from `RequestContext`.
+- `judgeIntent`: Optionally approves free-form intent.
+- `resolveModel`: Resolves a state model through the host.
+- `resolveSkillInstructions`: Loads instructions for the active state's skills.
+- `unavailableModel`: Uses the host fallback or fails with an error.
+- `scheduler`: Configures periodic recovery or disables provider-owned scheduling with `false`.
+
+## `BehaviorScheduler`
+
+Processes records returned by `BehaviorRuntimeStore.listDue()`. One scheduler instance polls for all threads belonging to a behavior runtime.
+
+```typescript
+import { BehaviorScheduler } from '@mastra/behaviors'
+
+const scheduler = new BehaviorScheduler({
+  behaviorId: definition.id,
+  definition,
+  store,
+  engine,
+  intervalMs: 1000,
+  leaseMs: 30000,
+  retryBackoffMs: 5000,
+  onAudit: event => logger.info(event),
+})
+
+scheduler.start()
+// Stop before replacing the runtime.
+scheduler.stop()
+```
+
+`tick()` can be called directly by an external scheduler. It returns the number of completed transitions. Claims are persisted in `checkpoints.schedulerLease`; successful checkpoints use `checkpoints.schedulerCheckpoint`. `BehaviorAuditEvent` is a typed, read-only operational export boundary.
+
 ## Errors
 
 Definition failures throw `BehaviorDefinitionError` with path-specific diagnostics. Transition failures throw `BehaviorTransitionError`, including missing guards, unavailable transitions, rejected judges, and stale results.

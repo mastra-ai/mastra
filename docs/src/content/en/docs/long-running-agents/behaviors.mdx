@@ -8,7 +8,7 @@ packages:
 
 # Behaviors
 
-Behaviors guide an agent through a durable state tree. Each state provides acting instructions and explicit transitions. A transition can require deterministic guards and a separate judge.
+Behaviors guide an agent through a durable state tree. Each state supplies acting instructions, allowed tools, optional skills and models, and explicit transitions. A transition can require deterministic guards and a separate judge.
 
 ## Install the package
 
@@ -32,6 +32,9 @@ export const debugBehavior = defineBehavior({
       id: 'understand',
       instructions: 'Identify and prove the root cause.',
       judgeInstructions: 'Approve only when the evidence proves one root cause.',
+      model: '__GATEWAY_OPENAI_MODEL__',
+      tools: ['readFile'],
+      skills: ['./skills/research'],
       transitions: [
         {
           id: 'write-test',
@@ -86,7 +89,11 @@ states:
         exit: true
 ```
 
-Load and register the behavior with an agent:
+Filesystem paths must stay inside the behavior directory. The loader rejects absolute paths, traversal, and symbolic links that escape the directory.
+
+## Register the provider
+
+Use the same provider with an ordinary agent and Mastra Code.
 
 ```typescript title="src/mastra/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -100,6 +107,9 @@ const definition = await loadBehaviorDirectory('./behaviors/debug')
 const behavior = new BehaviorSignalProvider({
   definition,
   store: new InMemoryBehaviorRuntimeStore(),
+  resolveThreadId: requestContext => requestContext?.get('threadId'),
+  resolveModel: model => model,
+  resolveSkillInstructions: async skills => loadSkillInstructions(skills),
 })
 
 export const agent = new Agent({
@@ -111,25 +121,61 @@ export const agent = new Agent({
 })
 ```
 
-Filesystem paths must stay inside the behavior directory. The loader rejects absolute paths, traversal, and symbolic links that escape the directory.
-
-## Persist behavior state
-
-`InMemoryBehaviorRuntimeStore` is suitable for local and single-process use. Use `LibSQLBehaviorRuntimeStore` when state must survive restarts or multiple processes need revision-checked compare-and-swap updates.
-
-The behavior store is authoritative. The provider can mirror committed records into Mastra thread state for interoperability, but transitions never use that mirror as their source of truth.
-
-## Judge transitions
-
-Deterministic guards run before the optional judge. A failed guard prevents the judge call. The engine commits a judged transition only when the runtime revision still matches the revision that the judge reviewed.
-
-`JUDGE.md` and `judgeInstructions` are sent only to the judge. They aren't included in the acting agent's state signal.
+Run `mastra dev`, open Studio, and select `debug-agent`. Studio displays the state signal as `<current-behavior>`. State model IDs continue through the host's normal model resolution and authentication path.
 
 ## Require intent for tools
 
 The provider adds an `intent` field to each governed tool once when it attaches to the agent. Tool names, schemas, and wrapper identities stay stable when the behavior changes state, preserving prompt-cache compatibility.
 
-Set `intent` to the active state ID for automatic approval. A free-form value uses `judgeIntent`. Calls without approved intent are rejected before execution and checked again against current durable state inside the wrapper.
+Set `intent` to the active state ID for automatic approval. A free-form value uses `judgeIntent`. Calls without approved intent are rejected before execution and checked again against current durable state inside the wrapper. The provider's `behavior_intent` tool persists an approved intent, while every governed call still carries its own intent.
+
+The control tools remain available in every state:
+
+- `behavior_select` starts or resumes the behavior.
+- `behavior_intent` approves and records intent.
+- `behavior_transition` evaluates an available transition.
+- `behavior_exit` follows the current state's required exit transition.
+
+## Judge transitions
+
+Deterministic guards run before the optional judge. A failed guard prevents the judge call. The engine commits a judged transition only when the runtime revision still matches the revision the judge reviewed.
+
+`JUDGE.md` and `judgeInstructions` are sent only to the judge. They aren't included in the acting agent's state signal, instructions, or skill resolution.
+
+## Recover periodic transitions
+
+Add `periodic` to a state to run a transition on an interval:
+
+```yaml
+periodic:
+  intervalMs: 60000
+  transition: refresh
+```
+
+`BehaviorSignalProvider` starts one `BehaviorScheduler` for the behavior runtime and stops it when the provider is replaced. The scheduler uses `listDue(now)` to recover persisted work after restart. Durable leases, deterministic attempt IDs, and revision checks prevent duplicate or stale commits. Failures back off and fail closed.
+
+Set `scheduler: false` when another process owns scheduling. You can also configure `intervalMs`, `leaseMs`, `retryBackoffMs`, and `onAudit` through the provider's `scheduler` option.
+
+## Persist and migrate state
+
+`InMemoryBehaviorRuntimeStore` is suitable for local and single-process use. Use `LibSQLBehaviorRuntimeStore` when state must survive restarts or multiple processes need atomic transactions.
+
+The behavior store is authoritative. The provider can mirror committed records into Mastra thread state for interoperability, but transitions and recovery never use that mirror as their source of truth.
+
+Increment `version` after changing a definition. If the active state still exists, initialization reconciles the version. Use `migrations` to map removed state IDs to replacements. A removed active state without a mapping pauses safely instead of choosing a state automatically.
+
+## Diagnose behavior runs
+
+Inspect `BehaviorRuntimeRecord` for status, revision, transition history, checkpoints, judge results, and the latest scheduler error. `BehaviorScheduler` emits typed `BehaviorAuditEvent` records through `onAudit`; this export boundary can feed logs or future analysis without generating or mutating behavior trees.
+
+Common failures:
+
+- **Behavior isn't active:** call `behavior_select` for the current thread.
+- **Intent is rejected:** use the current state ID or adjust `judgeIntent`.
+- **Tool isn't allowed:** add its stable tool name to the state's `tools` list.
+- **Model is unavailable:** ensure the host resolver recognizes the state's model ID.
+- **Behavior is paused:** add a migration for the removed active state, then initialize again.
+- **Periodic work retries:** inspect `audit.lastSchedulerError`, guards, and judge availability.
 
 ## Use behaviors in Mastra Code
 
@@ -144,4 +190,4 @@ export default createMastraCodeBehaviorPlugin({
 })
 ```
 
-State model IDs are returned to Mastra Code's normal model resolver, so the active session's gateway and authentication configuration continue to apply.
+Mastra Code resolves state model IDs through the active session, preserving gateway and authentication configuration. Reloading the plugin stops the old provider scheduler before the stable provider bridge installs its replacement.

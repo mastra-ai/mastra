@@ -59,3 +59,18 @@ class WatchedSignals extends SignalProvider<'watched-signals'> {
 ```
 
 Cleanup runs once for each provider instance. If a replacement plugin fails to load, Mastra Code retains the previous provider snapshot and does not dispose it.
+
+## Add a behavior
+
+`createMastraCodeBehaviorPlugin()` is a thin adapter around `@mastra/behaviors`. Pass a normalized definition or a behavior-directory path:
+
+```typescript title="src/index.ts"
+import { createMastraCodeBehaviorPlugin } from '@mastra/code-sdk/plugins/behavior-plugin'
+
+export default createMastraCodeBehaviorPlugin({
+  id: 'debug-behavior',
+  definition: './behaviors/debug',
+})
+```
+
+The shared provider contributes stable behavior control tools, intent enforcement, state instructions, model routing, and periodic recovery. Mastra Code resolves state model IDs through the current session. A reload stops the previous provider and scheduler before installing the replacement.
