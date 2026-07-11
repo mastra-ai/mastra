@@ -748,7 +748,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const toolDef = resolveToolDef(toolName);
               const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
               if (!inferredProviderExecuted) return;
-              if (providerToolSpansByToolCallId.has(toolCallId)) return;
+              const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+              if (existingEntry) {
+                if (args !== undefined && existingEntry.span.input === undefined) {
+                  (existingEntry.span as any).update?.({ input: args });
+                }
+                return;
+              }
 
               try {
                 const parentSpan =

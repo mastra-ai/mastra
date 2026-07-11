@@ -299,7 +299,7 @@ export class BraintrustExporter extends TrackingExporter<
     // Handle thread data accumulation for MODEL_STEP and TOOL_CALL spans
     if (span.type === SpanType.MODEL_STEP) {
       this.accumulateModelStepData(span, traceData);
-    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.PROVIDER_TOOL_CALL) {
+    } else if (span.type === SpanType.TOOL_CALL) {
       this.accumulateToolCallResult(span, traceData);
     }
 

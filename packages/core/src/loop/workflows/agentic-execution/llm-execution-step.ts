@@ -576,7 +576,13 @@ async function processOutputStream<OUTPUT = undefined>({
       return;
     }
 
-    if (providerToolSpansByToolCallId.has(toolCallId)) {
+    const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+    if (existingEntry) {
+      // If args are now available and the span was created without them (e.g. from
+      // tool-call-input-streaming-start), update the span input.
+      if (args !== undefined && existingEntry.span.input === undefined) {
+        existingEntry.span.update({ input: args });
+      }
       return;
     }
 
@@ -1738,6 +1744,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
+            cleanupServerToolSpans(true);
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
