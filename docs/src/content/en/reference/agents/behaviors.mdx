@@ -1,0 +1,130 @@
+---
+title: "Reference: Behaviors | Agents"
+description: "API reference for defining, loading, storing, and transitioning agent behaviors."
+packages:
+  - "@mastra/behaviors"
+---
+
+# Behaviors
+
+`@mastra/behaviors` provides validated behavior graphs, transactional runtime stores, a transition engine, and a signal provider.
+
+## Definition functions
+
+### `defineBehavior(input)`
+
+Validates a TypeScript definition and returns an immutable `NormalizedBehaviorDefinition`.
+
+```typescript
+import { defineBehavior } from '@mastra/behaviors'
+
+const definition = defineBehavior({
+  id: 'review',
+  version: '1',
+  initialState: 'inspect',
+  states: [
+    {
+      id: 'inspect',
+      transitions: [{ id: 'exit', target: 'exit', exit: true }],
+    },
+  ],
+})
+```
+
+### `loadBehaviorDirectory(directory)`
+
+Loads `behavior.yaml` and its referenced state assets from a directory.
+
+```typescript
+import { loadBehaviorDirectory } from '@mastra/behaviors'
+
+const definition = await loadBehaviorDirectory('./behaviors/review')
+```
+
+Returns: `Promise<NormalizedBehaviorDefinition>`
+
+## Runtime stores
+
+### `InMemoryBehaviorRuntimeStore`
+
+Stores records in memory and serializes transactions for each thread and behavior pair.
+
+```typescript
+import { InMemoryBehaviorRuntimeStore } from '@mastra/behaviors'
+
+const store = new InMemoryBehaviorRuntimeStore()
+await store.init()
+```
+
+### `LibSQLBehaviorRuntimeStore`
+
+Stores records in LibSQL write transactions. The table is created by `init()`.
+
+```typescript
+import { createClient } from '@libsql/client'
+import { LibSQLBehaviorRuntimeStore } from '@mastra/behaviors'
+
+const store = new LibSQLBehaviorRuntimeStore(createClient({ url: 'file:behaviors.db' }))
+await store.init()
+```
+
+Both stores implement `BehaviorRuntimeStore`:
+
+```typescript
+interface BehaviorRuntimeStore {
+  init(): Promise<void>
+  readThread(key: BehaviorThreadKey): Promise<BehaviorRuntimeRecord | undefined>
+  transactThread<T>(
+    key: BehaviorThreadKey,
+    operation: BehaviorTransaction<T>,
+  ): Promise<{
+    runtime: BehaviorRuntimeRecord
+    result: T
+  }>
+  listDue(before: Date, limit?: number): Promise<BehaviorDueWork[]>
+}
+```
+
+## `BehaviorTransitionEngine`
+
+Initializes records, reconciles definition versions, and commits guarded transitions.
+
+```typescript
+import { BehaviorTransitionEngine, InMemoryBehaviorRuntimeStore } from '@mastra/behaviors'
+
+const engine = new BehaviorTransitionEngine({
+  definition,
+  store: new InMemoryBehaviorRuntimeStore(),
+  guards: {
+    complete: ({ conditionState }) => conditionState.complete === true,
+  },
+  judge: async ({ judgeInstructions }) => ({
+    approved: judgeInstructions !== undefined,
+  }),
+})
+
+await engine.initialize('thread-id')
+await engine.transition({
+  threadId: 'thread-id',
+  transitionId: 'exit',
+  attemptId: crypto.randomUUID(),
+})
+```
+
+The `attemptId` makes a completed transition idempotent. A judge result can't commit after another transition changes the record revision.
+
+## `BehaviorSignalProvider`
+
+Registers `BehaviorStateProcessor` through the standard Mastra signal-provider API.
+
+```typescript
+import { BehaviorSignalProvider } from '@mastra/behaviors'
+
+const provider = new BehaviorSignalProvider({ definition, store })
+```
+
+The projected `<current-behavior>` state includes acting instructions, transition IDs, intent, and status. It excludes judge instructions.
+
+## Errors
+
+Definition failures throw `BehaviorDefinitionError` with path-specific diagnostics. Transition failures throw `BehaviorTransitionError`, including missing guards, unavailable transitions, rejected judges, and stale results.

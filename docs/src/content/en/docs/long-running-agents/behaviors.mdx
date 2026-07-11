@@ -1,0 +1,126 @@
+---
+title: "Behaviors | Long-running agents"
+description: "Define durable state trees that guide a Mastra agent through explicit states and judged transitions."
+packages:
+  - "@mastra/behaviors"
+  - "@mastra/core"
+---
+
+# Behaviors
+
+Behaviors guide an agent through a durable state tree. Each state provides acting instructions and explicit transitions. A transition can require deterministic guards and a separate judge.
+
+## Install the package
+
+```bash npm2yarn
+npm install @mastra/behaviors
+```
+
+## Define a behavior in TypeScript
+
+Use `defineBehavior()` to create an immutable, validated graph.
+
+```typescript title="src/mastra/debug-behavior.ts"
+import { defineBehavior } from '@mastra/behaviors'
+
+export const debugBehavior = defineBehavior({
+  id: 'debug',
+  version: '1',
+  initialState: 'understand',
+  states: [
+    {
+      id: 'understand',
+      instructions: 'Identify and prove the root cause.',
+      judgeInstructions: 'Approve only when the evidence proves one root cause.',
+      transitions: [
+        {
+          id: 'write-test',
+          target: 'test',
+          guards: [{ id: 'cause-proven' }],
+          judge: true,
+        },
+        { id: 'exit', target: 'exit', exit: true },
+      ],
+    },
+    {
+      id: 'test',
+      instructions: 'Write a failing regression test.',
+      transitions: [{ id: 'exit', target: 'exit', exit: true }],
+    },
+  ],
+})
+```
+
+Every state requires an exit transition. Mastra rejects duplicate IDs, missing targets, unreachable states, invalid schedules, and states without an exit.
+
+## Load a behavior directory
+
+A filesystem behavior uses `behavior.yaml` as its manifest. State assets can contain acting instructions, judge-only instructions, and skills.
+
+```text
+behaviors/debug/
+├── behavior.yaml
+└── states/
+    └── understand/
+        ├── AGENTS.md
+        ├── JUDGE.md
+        └── skills/
+            └── research/
+```
+
+Reference the assets from `behavior.yaml`:
+
+```yaml title="behaviors/debug/behavior.yaml"
+id: debug
+version: '1'
+initialState: understand
+states:
+  - id: understand
+    agentsFile: states/understand/AGENTS.md
+    judgeFile: states/understand/JUDGE.md
+    skills:
+      - skills/research
+    transitions:
+      - id: exit
+        target: exit
+        exit: true
+```
+
+Load and register the behavior with an agent:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import {
+  BehaviorSignalProvider,
+  InMemoryBehaviorRuntimeStore,
+  loadBehaviorDirectory,
+} from '@mastra/behaviors'
+
+const definition = await loadBehaviorDirectory('./behaviors/debug')
+const behavior = new BehaviorSignalProvider({
+  definition,
+  store: new InMemoryBehaviorRuntimeStore(),
+})
+
+export const agent = new Agent({
+  id: 'debug-agent',
+  name: 'Debug agent',
+  instructions: 'Follow the active behavior state.',
+  model: 'openai/gpt-5.5',
+  signals: [behavior],
+})
+```
+
+Filesystem paths must stay inside the behavior directory. The loader rejects absolute paths, traversal, and symbolic links that escape the directory.
+
+## Persist behavior state
+
+`InMemoryBehaviorRuntimeStore` is suitable for local and single-process use. Use `LibSQLBehaviorRuntimeStore` when state must survive restarts or multiple processes need database-level transaction locking.
+
+The behavior store is authoritative. The provider can mirror committed records into Mastra thread state for interoperability, but transitions never use that mirror as their source of truth.
+
+## Judge transitions
+
+Deterministic guards run before the optional judge. A failed guard prevents the judge call. The engine commits a judged transition only when the runtime revision still matches the revision that the judge reviewed.
+
+`JUDGE.md` and `judgeInstructions` are sent only to the judge. They aren't included in the acting agent's state signal.

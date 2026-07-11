@@ -530,6 +530,14 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'long-running-agents/behaviors',
+          label: 'Behaviors',
+          customProps: {
+            tags: ['beta'],
+          },
+        },
+        {
+          type: 'doc',
           id: 'long-running-agents/goals',
           label: 'Goals',
           customProps: {

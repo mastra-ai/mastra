@@ -44,6 +44,7 @@ const sidebars = {
       collapsed: true,
       items: [
         { type: 'doc', id: 'agents/agent', label: 'Agent Class' },
+        { type: 'doc', id: 'agents/behaviors', label: 'Behaviors' },
         { type: 'doc', id: 'agents/channels', label: 'Channels' },
         { type: 'doc', id: 'agents/inngest-agent', label: 'createInngestAgent()' },
         { type: 'doc', id: 'agents/createSkill', label: 'createSkill()' },
