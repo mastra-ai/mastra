@@ -1,0 +1,30 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "userMessage": "Activate the coding behavior.",
+        "hasToolResult": false
+      },
+      "response": {
+        "toolCalls": [
+          {
+            "id": "call_behavior_select",
+            "name": "behavior_select",
+            "arguments": {}
+          }
+        ]
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "toolCallId": "call_behavior_select",
+        "hasToolResult": true
+      },
+      "response": {
+        "content": "Behavior provider active."
+      }
+    }
+  ]
+}

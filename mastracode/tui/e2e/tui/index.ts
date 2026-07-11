@@ -76,6 +76,7 @@ import { planApprovalGoalHandoffScenario } from './plan-approval-goal-handoff.js
 import { planApprovalHandoffScenario } from './plan-approval-handoff.js';
 import { planApprovalRequestChangesScenario } from './plan-approval-request-changes.js';
 import {
+  behaviorsScenario,
   pluginsAssetsLoadingScenario,
   pluginsBlockedConfigScenario,
   pluginsCommandUiScenario,
@@ -228,6 +229,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'plan-approval-goal-handoff': planApprovalGoalHandoffScenario,
   'plan-approval-handoff': planApprovalHandoffScenario,
   'plan-approval-request-changes': planApprovalRequestChangesScenario,
+  behaviors: behaviorsScenario,
   'plugins-local-tool': pluginsLocalToolScenario,
   'plugins-local-hot-reload': pluginsLocalHotReloadScenario,
   'plugins-github-install-gh-cli': pluginsGithubInstallGhCliScenario,

@@ -66,6 +66,34 @@ export default defineMastraCodePlugin({
   return pluginDir;
 }
 
+function writeBehaviorPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
+  const pluginDir = join(projectDir, 'fixtures', 'plugins', 'behavior-plugin');
+  const pluginSrcDir = join(pluginDir, 'src');
+  mkdirSync(pluginSrcDir, { recursive: true });
+  writePluginPackageLink(pluginDir);
+  writeFileSync(
+    join(pluginSrcDir, 'index.ts'),
+    `import { createMastraCodeBehaviorPlugin } from 'mastracode';
+
+export default createMastraCodeBehaviorPlugin({
+  id: '${PLUGIN_ID}',
+  definition: {
+    id: 'coding',
+    version: '1',
+    initialState: 'understand',
+    states: [{
+      id: 'understand',
+      instructions: 'Understand before editing.',
+      tools: ['view'],
+      transitions: [{ id: 'exit', target: 'exit', exit: true }],
+    }],
+  },
+});
+`,
+  );
+  return pluginDir;
+}
+
 function writeAssetPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectDir'>): string {
   const pluginDir = join(projectDir, 'fixtures', 'plugins', 'asset-plugin');
   const pluginSrcDir = join(pluginDir, 'src');
@@ -457,6 +485,37 @@ export const pluginsLocalToolScenario: McE2eScenario = {
     const names = getToolNames(requests);
     if (!names.includes(TOOL_NAME)) {
       throw new Error(`Expected provider request to expose plugin tool ${TOOL_NAME}. Names: ${names.join(', ')}`);
+    }
+  },
+};
+
+export const behaviorsScenario: McE2eScenario = {
+  name: 'behaviors',
+  description: 'Loads a behavior plugin into the real coding agent and exposes its stable control tools.',
+  testName: 'governs the coding agent with a behavior signal provider',
+  useOpenAIModel: true,
+  aimockFixture: 'behaviors.json',
+  prepare({ projectDir }) {
+    resetPluginScenarioState();
+    writePluginRegistry(projectDir, writeBehaviorPlugin({ projectDir }));
+  },
+  async inProcessApp({ homeDir, projectDir, startMastraCodeApp }) {
+    const { PluginManager } = await import('@mastra/code-sdk/plugins/manager');
+    return startMastraCodeApp({
+      config: { pluginManager: new PluginManager({ projectRoot: projectDir, configDir: '.mastracode', homeDir }) },
+    });
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+    await runtime.waitForScreenText(/Resource ID:/i, terminal);
+    terminal.submit('Activate the coding behavior.');
+    await runtime.waitForScreenText(/Behavior provider active/i, terminal);
+    terminal.keyCtrlC();
+  },
+  verifyAimockRequests(requests) {
+    const names = getToolNames(requests);
+    for (const name of ['behavior_select', 'behavior_intent', 'behavior_transition', 'behavior_exit']) {
+      if (!names.includes(name)) throw new Error(`Expected behavior tool ${name}. Names: ${names.join(', ')}`);
     }
   },
 };
