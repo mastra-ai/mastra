@@ -258,7 +258,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (
-          <div className="h-6 pt-4 flex gap-2 items-center">
+          <div className="h-8 pt-2 flex gap-2 items-center">
             <AssistantActionBar
               text={getTextFromParts(message)}
               modelMetadata={modelMetadata}
