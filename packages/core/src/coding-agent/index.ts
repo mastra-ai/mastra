@@ -51,7 +51,7 @@ function isECONNRESETError(error: unknown): boolean {
 function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
   return [
     new StreamErrorRetryProcessor({
-      retryAllErrors: true,
+      retryUnknownErrors: true,
       maxRetries: 2,
       delayMs: 3000,
       matchers: [

@@ -40,9 +40,9 @@ When the error is retryable, the processor returns `{ retry: true }`. It doesn't
 
 When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
 
-## Retry unmatched errors
+## Retry unknown errors
 
-Set `retryAllErrors` to retry errors that don't match provider metadata, the built-in OpenAI matcher, or a custom matcher. Catch-all retries use the processor-level `maxRetries` and `delayMs` values:
+Set `retryUnknownErrors` to retry errors that don't match provider metadata, the built-in OpenAI matcher, or a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
 
 ```typescript title="src/mastra/agents/resilient-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -55,7 +55,7 @@ export const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
   errorProcessors: [
     new StreamErrorRetryProcessor({
-      retryAllErrors: true,
+      retryUnknownErrors: true,
       maxRetries: 2,
       delayMs: 3000,
     }),
@@ -63,7 +63,7 @@ export const agent = new Agent({
 })
 ```
 
-Specific matcher policies still take precedence over the catch-all values. The option defaults to `false`, so unmatched errors aren't retried unless you enable it.
+Specific matcher policies still take precedence over the unknown-error values. The option defaults to `false`, so unknown errors aren't retried unless you enable it.
 
 ## Delaying retries
 
@@ -127,10 +127,10 @@ export const agent = new Agent({
         defaultValue: '[]',
       },
       {
-        name: 'retryAllErrors',
+        name: 'retryUnknownErrors',
         type: 'boolean',
         description:
-          'Whether to retry errors left unmatched by provider metadata, built-in matchers, and custom matchers. Catch-all retries use the processor-level maxRetries and delayMs values.',
+          'Whether to retry unknown errors left unmatched by provider metadata, built-in matchers, and custom matchers. Known authorization failures are excluded. Uses the processor-level maxRetries and delayMs values.',
         isOptional: true,
         defaultValue: 'false',
       },

@@ -229,7 +229,7 @@ describe('StreamErrorRetryProcessor', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
   });
 
-  describe('retryAllErrors', () => {
+  describe('retryUnknownErrors', () => {
     afterEach(() => {
       vi.useRealTimers();
     });
@@ -239,12 +239,12 @@ describe('StreamErrorRetryProcessor', () => {
 
       await expect(new StreamErrorRetryProcessor().processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
       await expect(
-        new StreamErrorRetryProcessor({ retryAllErrors: false }).processAPIError(makeArgs({ error })),
+        new StreamErrorRetryProcessor({ retryUnknownErrors: false }).processAPIError(makeArgs({ error })),
       ).resolves.toBeUndefined();
     });
 
     it('retries unmatched errors up to the processor maxRetries', async () => {
-      const processor = new StreamErrorRetryProcessor({ retryAllErrors: true, maxRetries: 2 });
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, maxRetries: 2 });
       const error = new Error('unmatched stream error');
 
       await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
@@ -252,9 +252,27 @@ describe('StreamErrorRetryProcessor', () => {
       await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
     });
 
+    it.each([401, 403])('does not retry terminal HTTP %s authorization errors', async statusCode => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+
+      await expect(processor.processAPIError(makeArgs({ error: { statusCode } }))).resolves.toBeUndefined();
+      await expect(
+        processor.processAPIError(makeArgs({ error: new Error('wrapped', { cause: { status: statusCode } }) })),
+      ).resolves.toBeUndefined();
+    });
+
+    it.each(['access_denied', 'authentication_error', 'forbidden', 'invalid_api_key', 'permission_denied'])(
+      'does not retry terminal authorization code %s',
+      async code => {
+        const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+
+        await expect(processor.processAPIError(makeArgs({ error: { error: { code } } }))).resolves.toBeUndefined();
+      },
+    );
+
     it('uses the processor delayMs for unmatched errors', async () => {
       vi.useFakeTimers();
-      const processor = new StreamErrorRetryProcessor({ retryAllErrors: true, delayMs: 1000 });
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, delayMs: 1000 });
       const promise = processor.processAPIError(makeArgs({ error: new Error('unmatched stream error') }));
 
       let resolved = false;
@@ -269,7 +287,7 @@ describe('StreamErrorRetryProcessor', () => {
 
     it('preserves specific matcher policies before the catch-all fallback', async () => {
       const processor = new StreamErrorRetryProcessor({
-        retryAllErrors: true,
+        retryUnknownErrors: true,
         maxRetries: 3,
         matchers: [{ match: isBadRequestError, maxRetries: 1 }],
       });
@@ -284,7 +302,7 @@ describe('StreamErrorRetryProcessor', () => {
 
     it('resolves a specific policy in the cause chain before falling back', async () => {
       const processor = new StreamErrorRetryProcessor({
-        retryAllErrors: true,
+        retryUnknownErrors: true,
         maxRetries: 3,
         matchers: [{ match: isBadRequestError, maxRetries: 1 }],
       });
@@ -297,7 +315,7 @@ describe('StreamErrorRetryProcessor', () => {
       vi.useFakeTimers();
       const controller = new AbortController();
       const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
-      const processor = new StreamErrorRetryProcessor({ retryAllErrors: true, delayMs: 60_000 });
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, delayMs: 60_000 });
       const promise = processor.processAPIError(
         makeArgs({ error: new Error('unmatched stream error'), abortSignal: controller.signal }),
       );

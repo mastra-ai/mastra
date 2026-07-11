@@ -14,6 +14,15 @@ const UNMATCHED_ERROR = {
   status: 422,
 } as const;
 
+const AUTHORIZATION_ERROR = {
+  error: {
+    message: 'AIMOCK_PERMISSION_DENIED',
+    type: 'permission_denied',
+    code: 'permission_denied',
+  },
+  status: 403,
+} as const;
+
 describe('AIMock coding-agent scenario: retry unmatched stream errors', () => {
   let llm: LLMock;
 
@@ -61,6 +70,15 @@ describe('AIMock coding-agent scenario: retry unmatched stream errors', () => {
     await expect(output.text).resolves.toBe('recovered after unmatched stream errors');
     expect(llm.getRequests()).toHaveLength(3);
   }, 15_000);
+
+  it('does not retry known authorization failures', async () => {
+    llm.onMessage(/.*/, AUTHORIZATION_ERROR);
+
+    const output = await createAgent().stream('Surface the scripted authorization failure.');
+
+    await expect(output.finishReason).rejects.toThrow('AIMOCK_PERMISSION_DENIED');
+    expect(llm.getRequests()).toHaveLength(1);
+  });
 
   it('delivers the non-retryable provider error to caller processors without provider-level retries', async () => {
     llm.onMessage(/.*/, UNMATCHED_ERROR);
