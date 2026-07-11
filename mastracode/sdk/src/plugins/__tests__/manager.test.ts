@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { SignalProvider } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const execaMock = vi.hoisted(() => vi.fn());
@@ -11,6 +12,7 @@ vi.mock('execa', () => ({ execa: execaMock }));
 import { PluginManager } from '../manager.js';
 import { findMastraCodePackageRoot } from '../package-link.js';
 import { loadPluginRegistry } from '../registry.js';
+import { PluginSignalProviderBridge } from '../signal-provider-bridge.js';
 
 const mastracodePackageRoot = findMastraCodePackageRoot(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -40,6 +42,39 @@ async function waitUntil(assertion: () => boolean, timeoutMs = 3000): Promise<vo
   }
   expect(assertion()).toBe(true);
 }
+
+describe('PluginSignalProviderBridge', () => {
+  it('atomically replaces processor delegates and disposes removed providers once', async () => {
+    const bridge = new PluginSignalProviderBridge();
+    const firstProcessor = { id: 'first', processInputStep: vi.fn() };
+    const secondProcessor = { id: 'second', processInputStep: vi.fn() };
+    const first = new (class extends SignalProvider {
+      readonly id = 'first-provider';
+      readonly dispose = vi.fn();
+      getInputProcessors() {
+        return [firstProcessor];
+      }
+    })();
+    const second = new (class extends SignalProvider {
+      readonly id = 'second-provider';
+      readonly dispose = vi.fn();
+      getInputProcessors() {
+        return [secondProcessor];
+      }
+    })();
+
+    await bridge.replace([first]);
+    expect(bridge.getCurrentInputProcessors()).toEqual([firstProcessor]);
+
+    await bridge.replace([second]);
+    expect(bridge.getCurrentInputProcessors()).toEqual([secondProcessor]);
+    expect(first.dispose).toHaveBeenCalledOnce();
+
+    await bridge.replace([]);
+    await bridge.replace([]);
+    expect(second.dispose).toHaveBeenCalledOnce();
+  });
+});
 
 describe('PluginManager', () => {
   it('installs, lists, disables, enables, and uninstalls local plugins', async () => {

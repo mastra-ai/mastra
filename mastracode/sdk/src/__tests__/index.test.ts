@@ -520,10 +520,13 @@ describe('createMastraCode', () => {
   it('registers plugin signal providers before constructing the code agent', async () => {
     const { createMastraCode } = await import('../index.js');
     const provider = { id: 'plugin-signals' };
+    const pluginProcessor = { id: 'plugin-processor' };
     const pluginManager = {
       reload: vi.fn(async () => []),
       getPluginTools: vi.fn(() => ({})),
       getPluginSignalProviders: vi.fn(() => [provider]),
+      getPluginInputProcessors: vi.fn(() => [pluginProcessor]),
+      getPluginOutputProcessors: vi.fn(() => []),
     };
 
     await createMastraCode({ pluginManager: pluginManager as any });
@@ -532,6 +535,8 @@ describe('createMastraCode', () => {
       .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
       .find(config => config?.id === 'code-agent');
     expect(codeAgentConfig?.signals).toContain(provider);
+    const inputProcessors = await (codeAgentConfig as { inputProcessors: () => Promise<unknown[]> }).inputProcessors();
+    expect(inputProcessors).toContain(pluginProcessor);
   });
 
   it('registers the TaskSignalProvider on the code agent so task tools persist via state signals', async () => {
@@ -810,9 +815,16 @@ describe('createMastraCode', () => {
 
     expect(agentConstructorMock).toHaveBeenCalled();
     const agentConfig = agentConstructorMock.mock.calls[0]?.[0] as
-      | { inputProcessors?: Array<{ id?: string }>; errorProcessors?: Array<{ id?: string }> }
+      | {
+          inputProcessors?: Array<{ id?: string }> | (() => Promise<Array<{ id?: string }>>);
+          errorProcessors?: Array<{ id?: string }>;
+        }
       | undefined;
-    expect(agentConfig?.inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
+    const inputProcessors =
+      typeof agentConfig?.inputProcessors === 'function'
+        ? await agentConfig.inputProcessors()
+        : agentConfig?.inputProcessors;
+    expect(inputProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
     expect(agentConfig?.errorProcessors?.map(processor => processor.id)).toContain('provider-history-compat');
   });
 

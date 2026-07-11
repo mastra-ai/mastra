@@ -613,7 +613,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // per-request from the active workspace (mirrors `judge`).
       tools: getGoalJudgeTools,
     },
-    inputProcessors: [
+    inputProcessors: async () => [
+      ...(pluginManager?.getPluginInputProcessors() ?? []),
       new PlanRejectionAbortProcessor(),
       new AgentsMDInjector({
         getIgnoredInstructionPaths: ({ requestContext }) => {
@@ -626,6 +627,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       }),
       new ProviderHistoryCompat(),
     ],
+    outputProcessors: async () => pluginManager?.getPluginOutputProcessors() ?? [],
     errorProcessors: [
       new StreamErrorRetryProcessor({
         matchers: [
