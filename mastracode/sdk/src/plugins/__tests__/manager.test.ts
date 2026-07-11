@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Agent } from '@mastra/core/agent';
 import { SignalProvider } from '@mastra/core/signals';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -73,6 +74,27 @@ describe('PluginSignalProviderBridge', () => {
     await bridge.replace([]);
     await bridge.replace([]);
     expect(second.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('retains the previous providers when a replacement fails to start', async () => {
+    const bridge = new PluginSignalProviderBridge();
+    bridge.connect({} as Agent<any, any, any, any>);
+    const previous = new (class extends SignalProvider {
+      readonly id = 'previous-provider';
+    })();
+    const failing = new (class extends SignalProvider {
+      readonly id = 'failing-provider';
+      readonly dispose = vi.fn();
+      start() {
+        throw new Error('start failed');
+      }
+    })();
+
+    await bridge.replace([previous]);
+    await expect(bridge.replace([failing])).rejects.toThrow('start failed');
+
+    expect(bridge.currentProviders).toEqual([previous]);
+    expect(failing.dispose).toHaveBeenCalledOnce();
   });
 });
 

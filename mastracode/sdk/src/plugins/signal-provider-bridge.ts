@@ -38,6 +38,10 @@ export class PluginSignalProviderBridge extends SignalProvider<'mastracode-plugi
     for (const provider of this.providers) this.connectProvider(provider);
   }
 
+  async start(): Promise<void> {
+    await Promise.all(this.providers.map(provider => provider.start?.()));
+  }
+
   __registerMastra(...args: Parameters<SignalProvider['__registerMastra']>): void {
     super.__registerMastra(...args);
     for (const provider of this.providers) provider.__registerMastra(...args);
@@ -45,13 +49,23 @@ export class PluginSignalProviderBridge extends SignalProvider<'mastracode-plugi
 
   async replace(nextProviders: DisposableMastraCodePluginSignalProvider[]): Promise<void> {
     const previousProviders = this.providers;
-    this.providers = nextProviders;
 
-    for (const provider of nextProviders) {
-      if (this.mastra) provider.__registerMastra(this.mastra);
-      if (this.connectedAgent) this.connectProvider(provider);
+    try {
+      for (const provider of nextProviders) {
+        if (this.mastra) provider.__registerMastra(this.mastra);
+        if (this.connectedAgent) {
+          this.connectProvider(provider);
+          await provider.start?.();
+        }
+      }
+    } catch (error) {
+      await Promise.all(
+        nextProviders.filter(provider => !previousProviders.includes(provider)).map(provider => this.dispose(provider)),
+      );
+      throw error;
     }
 
+    this.providers = nextProviders;
     await Promise.all(
       previousProviders.filter(provider => !nextProviders.includes(provider)).map(provider => this.dispose(provider)),
     );
@@ -66,7 +80,6 @@ export class PluginSignalProviderBridge extends SignalProvider<'mastracode-plugi
   private connectProvider(provider: DisposableMastraCodePluginSignalProvider): void {
     if (!this.connectedAgent || provider.isConnected) return;
     provider.connect(this.connectedAgent);
-    void provider.start?.();
   }
 
   private async dispose(provider: DisposableMastraCodePluginSignalProvider): Promise<void> {
