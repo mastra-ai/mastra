@@ -215,13 +215,26 @@ export function createDurableToolCallStep() {
     inputSchema: durableToolCallInputSchema,
     outputSchema: durableToolCallOutputSchema,
     execute: async params => {
-      const { inputData, mastra, suspend, resumeData, requestContext, getInitData } = params;
+      const { inputData, mastra, suspend, resumeData: workflowResumeData, requestContext, getInitData } = params;
 
       // Access pubsub via symbol
       const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
 
       const typedInput = inputData as DurableToolCallInput;
-      const { toolCallId, toolName, args, providerExecuted, output, activeTools } = typedInput;
+      const { toolCallId, toolName, args: rawArgs, providerExecuted, output, activeTools } = typedInput;
+
+      // Extract resumeData from tool call arguments (autoResumeSuspendedTools path)
+      // When the LLM auto-resumes a suspended tool, it injects `resumeData` into the
+      // tool call arguments. We extract it here to skip re-suspending for approval.
+      // Mirrors the regular agent's tool-call-step.ts logic.
+      let resumeDataFromArgs: any = undefined;
+      let args: any = rawArgs;
+      if (typeof rawArgs === 'object' && rawArgs !== null) {
+        const { resumeData: resumeDataFromInput, ...argsFromInput } = rawArgs as Record<string, any>;
+        args = argsFromInput;
+        resumeDataFromArgs = resumeDataFromInput;
+      }
+      const resumeData = resumeDataFromArgs ?? workflowResumeData;
 
       // Get context from init data (the parent workflow input)
       const initData = getInitData<{
@@ -371,8 +384,8 @@ export function createDurableToolCallStep() {
         messageList = extendedEntry.messageList;
       }
 
-      const doFlush = () =>
-        flushMessagesBeforeSuspension({
+      const doFlush = async () => {
+        await flushMessagesBeforeSuspension({
           saveQueueManager,
           messageList,
           memory,
@@ -384,6 +397,7 @@ export function createDurableToolCallStep() {
             threadExists = true;
           },
         });
+      };
 
       // 2. Check if tool requires approval. Prefer the live policy on the
       //    in-process registry (which preserves the function form with real
@@ -401,6 +415,87 @@ export function createDurableToolCallStep() {
           : undefined,
         workspace: registryEntry?.workspace,
       });
+
+      // Add suspended-tool / pending-approval metadata to the last assistant
+      // message so `extractSuspendedToolsFromMessages` can detect it on the
+      // next turn (autoResumeSuspendedTools) or on page-refresh resume.
+      // Mirrors the regular agent's `addToolMetadata()`.
+      const addToolMetadata = (opts: {
+        type: 'approval' | 'suspension';
+        resumeSchema?: string;
+        suspendPayload?: unknown;
+      }) => {
+        if (!messageList) return;
+        const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
+        const responseMessages = messageList.get.response.db();
+        const lastAssistantMessage = [...responseMessages].reverse().find(msg => msg.role === 'assistant');
+        if (!lastAssistantMessage?.content) return;
+
+        let metadata: Record<string, any>;
+        if (
+          typeof lastAssistantMessage.content.metadata === 'object' &&
+          lastAssistantMessage.content.metadata !== null
+        ) {
+          metadata = lastAssistantMessage.content.metadata as Record<string, any>;
+        } else {
+          metadata = {};
+          lastAssistantMessage.content.metadata = metadata;
+        }
+        metadata[metadataKey] = metadata[metadataKey] || {};
+        metadata[metadataKey][toolCallId] = {
+          toolCallId,
+          toolName,
+          args,
+          type: opts.type,
+          runId,
+          ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
+          ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
+        };
+      };
+
+      // Remove suspended-tool / pending-approval metadata from the last
+      // assistant message when a tool is being resumed. This mirrors the
+      // regular agent's `removeToolMetadata()`.
+      const removeToolMetadata = async (type: 'suspension' | 'approval') => {
+        if (!messageList) return;
+        const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
+        const allMessages = messageList.get.all.db();
+        const lastAssistantMessage = [...allMessages].reverse().find(msg => {
+          const content = msg.content;
+          if (!content) return false;
+          const meta =
+            typeof content.metadata === 'object' && content.metadata !== null
+              ? (content.metadata as Record<string, any>)
+              : undefined;
+          return (
+            !!meta?.[metadataKey]?.[toolCallId] ||
+            Object.values(meta?.[metadataKey] ?? {}).some(
+              (e: any) => e?.toolCallId === toolCallId || e?.toolName === toolName,
+            )
+          );
+        });
+        if (!lastAssistantMessage?.content) return;
+        const meta =
+          typeof lastAssistantMessage.content.metadata === 'object' && lastAssistantMessage.content.metadata !== null
+            ? (lastAssistantMessage.content.metadata as Record<string, any>)
+            : undefined;
+        if (!meta?.[metadataKey]) return;
+        // Resolve key: exact toolCallId, then by entry toolCallId, then by toolName
+        const entries = meta[metadataKey] as Record<string, any>;
+        const key = entries[toolCallId]
+          ? toolCallId
+          : (Object.keys(entries).find(k => entries[k]?.toolCallId === toolCallId) ??
+            Object.keys(entries).find(k => entries[k]?.toolName === toolName) ??
+            (entries[toolName] ? toolName : undefined));
+        if (key) {
+          delete entries[key];
+          if (Object.keys(entries).length === 0) {
+            delete meta[metadataKey];
+          }
+        }
+        // Flush to persist the metadata removal
+        await doFlush();
+      };
 
       if (requiresApproval && !resumeData) {
         const resumeSchema = JSON.stringify({
@@ -431,6 +526,9 @@ export function createDurableToolCallStep() {
             resumeSchema,
           });
         }
+
+        // Add approval metadata to message before persisting
+        addToolMetadata({ type: 'approval', resumeSchema });
 
         // Flush messages before suspension
         await doFlush();
@@ -463,6 +561,9 @@ export function createDurableToolCallStep() {
         resumeData !== null &&
         'approved' in resumeData
       ) {
+        // Remove approval metadata since we're resuming (either approved or declined)
+        await removeToolMetadata('approval');
+
         if (!(resumeData as { approved: boolean }).approved) {
           // Return the approval decision (not a `result` string) so it persists as
           // `state: 'output-denied'` with `approval`. The denial reason carries the
@@ -499,6 +600,12 @@ export function createDurableToolCallStep() {
         typeof resumeData === 'object' &&
         resumeData !== null &&
         (requiresApproval ? !('approved' in resumeData) : true);
+
+      // Remove suspension metadata when resuming from an in-execution (non-approval-decision) suspension.
+      // `isResumingFromSuspension` already excludes the approval-decision case above.
+      if (isResumingFromSuspension) {
+        await removeToolMetadata('suspension');
+      }
 
       // 3. Check for background task execution
       const bgManager = registryEntry?.backgroundTaskManager;
@@ -550,6 +657,10 @@ export function createDurableToolCallStep() {
       // so execution continues past the suspend call).
       let wasSuspended = false;
 
+      // Forward abort signal from the run registry so tools can observe
+      // cancellation (mirrors the non-durable tool-call-step).
+      const toolAbortSignal = registryEntry?.abortSignal;
+
       const toolOptions = {
         toolCallId,
         messages: [],
@@ -560,6 +671,7 @@ export function createDurableToolCallStep() {
         // see the same actor as the non-durable Agent path.
         actor: agentOptions?.actor,
         resumeData: isResumingFromSuspension ? resumeData : undefined,
+        ...(toolAbortSignal ? { abortSignal: toolAbortSignal } : {}),
         // Provide outputWriter so context.writer.write() / context.writer.custom()
         // emit chunks through pubsub (matching the regular agent's tool streaming).
         outputWriter: pubsub
@@ -600,6 +712,9 @@ export function createDurableToolCallStep() {
               });
             }
 
+            // Add approval metadata to message before persisting
+            addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
+
             await doFlush();
 
             endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
@@ -638,6 +753,13 @@ export function createDurableToolCallStep() {
 
               await emitSuspendedEvent(pubsub, runId, suspendedEventData);
             }
+
+            // Add suspension metadata to message before persisting
+            addToolMetadata({
+              type: 'suspension',
+              suspendPayload,
+              resumeSchema: suspendOptions?.resumeSchema,
+            });
 
             await doFlush();
 
@@ -688,6 +810,10 @@ export function createDurableToolCallStep() {
                       suspend: async (data?: unknown, options?: SuspendOptions) => {
                         await toolOptions.suspend?.(data, options);
                         return taskContext?.suspend?.(data, options);
+                      },
+                      outputWriter: async (chunk: any) => {
+                        await taskContext?.onProgress?.(chunk);
+                        return toolOptions.outputWriter?.(chunk);
                       },
                     });
                   },
@@ -763,6 +889,7 @@ export function createDurableToolCallStep() {
                       },
                     },
                     {
+                      mode: 'stream',
                       backgroundTasks: {
                         [params.toolCallId]: {
                           startedAt: params.startedAt,
@@ -823,6 +950,7 @@ export function createDurableToolCallStep() {
                   if (!messageList) return;
 
                   messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+                    mode: 'stream',
                     backgroundTasks: {
                       [params.toolCallId]: {
                         startedAt: params.startedAt,
@@ -831,6 +959,14 @@ export function createDurableToolCallStep() {
                       },
                     },
                   });
+
+                  // Flush to storage so the metadata update (especially suspendedAt)
+                  // is persisted. Unlike the regular agent which has a single long-lived
+                  // messageList, the durable agent's workflow state is serialized before
+                  // this async callback fires, so we must flush directly.
+                  if (saveQueueManager && state?.threadId) {
+                    await saveQueueManager.flushMessages(messageList, state.threadId, state.memoryConfig);
+                  }
                 },
 
                 onComplete: toolBgConfig?.onComplete ?? bgConfig?.onTaskComplete,

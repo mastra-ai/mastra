@@ -32,6 +32,10 @@
 @import 'tailwindcss' source('./src/');
 @import 'tw-animate-css';
 
+/* Scan the Algolia search plugin's compiled output so its Tailwind utility classes are generated.
+   The plugin's index.css contains `@source "./dist/"` resolved relative to the package. */
+@import '@mastra/docusaurus-plugin-algolia';
+
 @custom-variant dark (&:is([data-theme="dark"] *));
 
 @theme {
@@ -231,6 +235,248 @@
   --ifm-menu-color-active: var(--mastra-text-primary);
 }
 
+/* ==================================================================== */
+/* Ported design tokens from @mastra/docusaurus-theme                    */
+/* These make the new theme's CSS variables available here so plugins    */
+/* (Algolia, Kapa chat, Shiki) can be ported without redefining tokens.  */
+/* New variables only — existing ifm / mastra-text values above are      */
+/* intentionally left untouched. Font vars are remapped to the fonts     */
+/* this repo actually ships (Inter / Geist Mono).                        */
+/* ==================================================================== */
+
+/* Palette: raw dark values */
+:root {
+  --mastra-color-dark-surface-bg: #020202;
+  --mastra-color-dark-surface-antigrid: #0d0d0d;
+  --mastra-color-dark-surface-elevation-sm: #171717;
+  --mastra-color-dark-surface-elevation-lg: #141414;
+  --mastra-color-dark-surface-hover: #262626;
+
+  --mastra-color-dark-border-antigrid: #191919;
+  --mastra-color-dark-border-elevation: #1a1a1a;
+
+  --mastra-color-dark-main-white: #f0f0f0;
+  --mastra-color-dark-special-gray: #cccccc;
+  --mastra-color-dark-main-gray: #939393;
+  --mastra-color-dark-dark-gray: #424242;
+
+  --mastra-color-dark-green: #72ff70;
+  --mastra-color-dark-orange: #ffa94b;
+  --mastra-color-dark-pink: #ff69cc;
+  --mastra-color-dark-purple: #be96ff;
+  --mastra-color-dark-blue: #6ccdfb;
+  --mastra-color-dark-red: #ff4758;
+  --mastra-color-dark-yellow: #e7e67b;
+
+  /* Palette: raw light values */
+  --mastra-color-light-surface-bg: #f8f8f8;
+  --mastra-color-light-surface-antigrid: #f4f4f4;
+  --mastra-color-light-surface-elevation-sm: #ebebeb;
+  --mastra-color-light-surface-elevation-lg: #f0f0f0;
+  --mastra-color-light-surface-hover: #e6e6e6;
+
+  --mastra-color-light-border-antigrid: #e5e2e2;
+  --mastra-color-light-border-elevation: #dfdfdf;
+
+  --mastra-color-light-main-white: #0f0f0f;
+  --mastra-color-light-special-gray: #272727;
+  --mastra-color-light-main-gray: #4b4b4b;
+  --mastra-color-light-dark-gray: #424242;
+
+  --mastra-color-light-green: #028300;
+  --mastra-color-light-orange: #9d5200;
+  --mastra-color-light-pink: #dd48ad;
+  --mastra-color-light-purple: #8c45ff;
+  --mastra-color-light-blue: #238db9;
+  --mastra-color-light-red: #f43c4f;
+  --mastra-color-light-yellow: #8a8806;
+
+  /* Themed aliases (light default, dark override below) */
+  --mastra-color-surface-bg: var(--mastra-color-light-surface-bg);
+  --mastra-color-surface-antigrid: var(--mastra-color-light-surface-antigrid);
+  --mastra-color-surface-elevation-sm: var(--mastra-color-light-surface-elevation-sm);
+  --mastra-color-surface-elevation-lg: var(--mastra-color-light-surface-elevation-lg);
+  --mastra-color-surface-hover: var(--mastra-color-light-surface-hover);
+
+  --mastra-color-border-antigrid: var(--mastra-color-light-border-antigrid);
+  --mastra-color-border-elevation: var(--mastra-color-light-border-elevation);
+
+  --mastra-shadow-dropdown: 0 4px 54px 0 rgba(0, 0, 0, 0.12);
+
+  --mastra-color-main-white: var(--mastra-color-light-main-white);
+  --mastra-color-special-gray: var(--mastra-color-light-special-gray);
+  --mastra-color-main-gray: var(--mastra-color-light-main-gray);
+  --mastra-color-dark-gray: var(--mastra-color-light-dark-gray);
+
+  --mastra-color-green: var(--mastra-color-light-green);
+  --mastra-color-orange: var(--mastra-color-light-orange);
+  --mastra-color-pink: var(--mastra-color-light-pink);
+  --mastra-color-purple: var(--mastra-color-light-purple);
+  --mastra-color-blue: var(--mastra-color-light-blue);
+  --mastra-color-red: var(--mastra-color-light-red);
+  --mastra-color-yellow: var(--mastra-color-light-yellow);
+
+  /* Sizings — radius + spacing */
+  --mastra-radius: 1.875rem;
+  --mastra-radius-sm: 1.25rem;
+  --mastra-radius-md: 2rem;
+  --mastra-radius-lg: 2.625rem;
+  --mastra-radius-elevation: 1rem;
+
+  --mastra-spacing: 0.25rem;
+
+  --mastra-button-padding-vertical: 0.375rem;
+  --mastra-button-padding-horizontal: 0.625rem;
+
+  /* Fonts — remapped to the fonts this repo ships */
+  --mastra-font-sans: var(--font-sans);
+  --mastra-font-heading: var(--font-sans);
+  --mastra-font-mono: var(--font-mono);
+  --mastra-font-mono-weight: 550;
+  --mastra-font-feature-settings: 'ss01', 'ss02';
+
+  /* Heading sizes */
+  --mastra-text-h1: 2.5rem;
+  --mastra-text-h1-leading: 110%;
+  --mastra-text-h1-weight: 520;
+  --mastra-text-h1-tracking: 0.015em;
+
+  --mastra-text-h2: 2rem;
+  --mastra-text-h2-leading: 110%;
+  --mastra-text-h2-weight: 520;
+  --mastra-text-h2-tracking: 0.015em;
+
+  --mastra-text-h3: 1.5rem;
+  --mastra-text-h3-leading: 110%;
+  --mastra-text-h3-weight: 520;
+  --mastra-text-h3-tracking: 0.015em;
+
+  --mastra-text-h4: 1.25rem;
+  --mastra-text-h4-leading: 110%;
+  --mastra-text-h4-weight: 520;
+  --mastra-text-h4-tracking: 0.015em;
+
+  /* Body sizes */
+  --mastra-text-body: 1rem;
+  --mastra-text-body-lg: 1.125rem;
+  --mastra-text-body-leading: 1.6;
+
+  --mastra-text-body-sm: 0.9375rem;
+  --mastra-text-body-sm-lg: 1.0625rem;
+
+  /* Plugin: Algolia search */
+  --algolia-bg: var(--mastra-color-surface-antigrid);
+  --algolia-bg-selected: var(--mastra-color-surface-elevation-sm);
+  --algolia-border: var(--mastra-color-border-elevation);
+  --algolia-text-primary: var(--ifm-color-content);
+  --algolia-text-secondary: var(--mastra-color-main-gray);
+  --algolia-text-icon: var(--ifm-color-emphasis-600);
+  --algolia-highlight: var(--ifm-color-primary);
+  --algolia-caret: var(--ifm-color-primary);
+
+  /* Plugin: Kapa chat */
+  --chat-bg-primary: var(--mastra-color-surface-bg);
+  --chat-bg-secondary: var(--mastra-color-surface-elevation-sm);
+  --chat-bg-elevated: var(--mastra-color-surface-elevation-lg);
+  --chat-bg-input: var(--mastra-color-surface-hover);
+  --chat-text-primary: var(--mastra-color-main-white);
+  --chat-text-muted: var(--mastra-color-main-gray);
+  --chat-accent-primary: var(--mastra-color-green);
+  --chat-border: var(--mastra-color-border-elevation);
+  --chat-feedback-positive: var(--mastra-color-green);
+  --chat-feedback-negative: var(--mastra-color-red);
+
+  --doc-chat-sidebar-width: clamp(20rem, 25vw, 34rem);
+  --doc-chat-sidebar-outer-gap: 1rem;
+  --doc-chat-sidebar-inner-gap: 0.6rem;
+
+  /* Shiki syntax highlighter */
+  --shiki-foreground: var(--mastra-color-main-white);
+  --shiki-background: var(--mastra-color-surface-antigrid);
+  --shiki-token-constant: var(--mastra-color-main-white);
+  --shiki-token-string: var(--mastra-color-green);
+  --shiki-token-string-expression: var(--mastra-color-green);
+  --shiki-token-comment: var(--mastra-color-main-gray);
+  --shiki-token-keyword: var(--mastra-color-orange);
+  --shiki-token-parameter: var(--mastra-color-main-white);
+  --shiki-token-function: var(--mastra-color-red);
+  --shiki-token-import: var(--mastra-color-red);
+  --shiki-token-punctuation: var(--mastra-color-purple);
+  --shiki-token-link: var(--mastra-color-main-white);
+
+  @media (min-width: 40rem) {
+    --mastra-radius: 2.625rem;
+    --mastra-radius-lg: 3.875rem;
+    --mastra-radius-elevation: 1.3125rem;
+  }
+}
+
+/* Themed aliases + plugin overrides for dark mode */
+[data-theme='dark'] {
+  --mastra-color-surface-bg: var(--mastra-color-dark-surface-bg);
+  --mastra-color-surface-antigrid: var(--mastra-color-dark-surface-antigrid);
+  --mastra-color-surface-elevation-sm: var(--mastra-color-dark-surface-elevation-sm);
+  --mastra-color-surface-elevation-lg: var(--mastra-color-dark-surface-elevation-lg);
+  --mastra-color-surface-hover: var(--mastra-color-dark-surface-hover);
+
+  --mastra-color-border-antigrid: var(--mastra-color-dark-border-antigrid);
+  --mastra-color-border-elevation: var(--mastra-color-dark-border-elevation);
+
+  --mastra-shadow-dropdown: 0 4px 54px 0 rgba(0, 0, 0, 0.8);
+
+  --mastra-color-main-white: var(--mastra-color-dark-main-white);
+  --mastra-color-special-gray: var(--mastra-color-dark-special-gray);
+  --mastra-color-main-gray: var(--mastra-color-dark-main-gray);
+  --mastra-color-dark-gray: var(--mastra-color-dark-dark-gray);
+
+  --mastra-color-green: var(--mastra-color-dark-green);
+  --mastra-color-orange: var(--mastra-color-dark-orange);
+  --mastra-color-pink: var(--mastra-color-dark-pink);
+  --mastra-color-purple: var(--mastra-color-dark-purple);
+  --mastra-color-blue: var(--mastra-color-dark-blue);
+  --mastra-color-red: var(--mastra-color-dark-red);
+  --mastra-color-yellow: var(--mastra-color-dark-yellow);
+
+  --mastra-font-mono-weight: 500;
+
+  /* Algolia (dark overrides) */
+  --algolia-text-icon: var(--ifm-color-emphasis-500);
+
+  /* Kapa chat (dark overrides) */
+  --kapa-text-icon: var(--ifm-color-emphasis-500);
+  --kapa-bg-user: var(--ifm-color-emphasis-200);
+  --kapa-bg-ai: var(--ifm-color-emphasis-100);
+}
+
+/* Tailwind @theme mappings for the ported palette + radius */
+@theme {
+  --color-mastra-surface-bg: var(--mastra-color-surface-bg);
+  --color-mastra-surface-antigrid: var(--mastra-color-surface-antigrid);
+  --color-mastra-surface-elevation-sm: var(--mastra-color-surface-elevation-sm);
+  --color-mastra-surface-elevation-lg: var(--mastra-color-surface-elevation-lg);
+  --color-mastra-surface-hover: var(--mastra-color-surface-hover);
+
+  --color-mastra-border-antigrid: var(--mastra-color-border-antigrid);
+  --color-mastra-border-elevation: var(--mastra-color-border-elevation);
+
+  --color-mastra-main-white: var(--mastra-color-main-white);
+  --color-mastra-special-gray: var(--mastra-color-special-gray);
+  --color-mastra-main-gray: var(--mastra-color-main-gray);
+  --color-mastra-dark-gray: var(--mastra-color-dark-gray);
+
+  --color-mastra-green: var(--mastra-color-green);
+  --color-mastra-orange: var(--mastra-color-orange);
+  --color-mastra-pink: var(--mastra-color-pink);
+  --color-mastra-purple: var(--mastra-color-purple);
+  --color-mastra-blue: var(--mastra-color-blue);
+  --color-mastra-red: var(--mastra-color-red);
+  --color-mastra-yellow: var(--mastra-color-yellow);
+
+  --radius-mastra: var(--mastra-radius);
+  --radius-mastra-lg: var(--mastra-radius-lg);
+  --radius-mastra-elevation: var(--mastra-radius-elevation);
+}
+
 body,
 html {
   overscroll-behavior: none;
@@ -260,9 +506,21 @@ html {
   height: auto;
   padding-inline: 0;
   padding-block: 0;
-  border-bottom: transparent;
-  box-shadow: none;
+  /* Render the bottom hairline via box-shadow instead of border-bottom so it
+     doesn't add 1px to the navbar's occupied height. The navbar height is
+     driven by --ifm-navbar-height (47px), and a real border would push the
+     layout to 48px, desyncing the sidebar's sticky offset and causing a 1px
+     scroll jump. The second layer is the soft drop shadow. */
+  box-shadow:
+    0 1px 0 0 var(--border),
+    0 0 37.7px 0 #eaeaea;
   background-color: var(--ifm-navbar-background-color);
+}
+
+[data-theme='dark'] .theme-layout-navbar {
+  box-shadow:
+    0 1px 0 0 var(--border),
+    0 8px 60px 0 rgba(2, 2, 2, 0.5);
 }
 
 .theme-layout-navbar a {
@@ -303,10 +561,6 @@ html {
 .dialog-panel ul {
   padding-left: 0;
   margin-bottom: 0;
-}
-
-[data-theme='dark'] .navbar {
-  border-bottom-color: var(--mastra-border);
 }
 
 .navbar__link {
@@ -1010,7 +1264,7 @@ article p {
 
   /* ==================== SIDEBAR ==================== */
   .theme-doc-sidebar-container {
-    border-right: 0.5px solid var(--border);
+    border-right: 1px solid var(--border);
   }
 
   [data-theme='dark'] .theme-doc-sidebar-container {
@@ -1332,7 +1586,7 @@ article p {
   .menu__link--active:not(.menu__link--sublist)::before {
     content: '';
     position: absolute;
-    left: calc(0.25rem * -2.5);
+    left: calc(0.25rem * -3);
     top: calc(0.25rem * 1);
     bottom: 0;
     width: 1.5px;
@@ -1370,7 +1624,11 @@ article p {
 
   .theme-doc-sidebar-container.theme-doc-sidebar-container {
     padding-inline-start: 0rem;
-    border-right: var(--border-sm) solid var(--border);
+    border-right: 1px solid var(--border);
+    /* Docusaurus's sidebar container module sets clip-path: inset(0), which
+       clips the inverse corner that intentionally overflows the right edge.
+       Override it here with matching-or-higher specificity. */
+    clip-path: none;
   }
 
   [class*='sidebar']:has(> .menu) {
@@ -1694,4 +1952,89 @@ a.learn-sidebar-item.is-active {
 [data-theme='dark'] .learn-tab-badge {
   background-color: color-mix(in srgb, var(--mastra-green-accent) 15%, transparent);
   color: var(--mastra-green-accent);
+}
+
+/* ==================== ALGOLIA SEARCH PLUGIN ==================== */
+/*
+ * Helper classes consumed by @mastra/docusaurus-plugin-algolia. The plugin's
+ * UI references the `.mastra-card`, `.mastra-search-button`, `.dialog-panel`
+ * classes, which are normally provided by @mastra/docusaurus-theme. This site
+ * does not use that theme, so they are mapped here onto the docs' own design
+ * tokens. The `--algolia-*` / `--mastra-*` variables the plugin reads are
+ * defined alongside the rest of the site's design tokens above.
+ */
+
+/* Search trigger button in the navbar (button.clean-btn.mastra-search-button). */
+.mastra-search-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 36px;
+  padding: 0 12px;
+  border: 0.5px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--mastra-surface-4);
+  color: var(--mastra-icons-2);
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.mastra-search-button:hover {
+  background: var(--mastra-color-surface-hover);
+}
+
+.mastra-search-button svg {
+  width: 16px;
+  height: 16px;
+}
+
+/* Collapse to an icon-only trigger below the large breakpoint. */
+.mastra-search-button > span {
+  display: none;
+}
+
+@media (width >= 62.25rem) {
+  .mastra-search-button {
+    width: auto;
+  }
+
+  .mastra-search-button > span {
+    display: inline;
+  }
+}
+
+/* Card shell wrapping the search dialog contents. */
+.mastra-card {
+  color: var(--mastra-text-tertiary);
+}
+
+.mastra-card :is(h1, h2, h3, h4, h5, h6) {
+  color: var(--ifm-heading-color);
+}
+
+/* Matched-term highlight inside results: weight + primary color, no yellow. */
+.mastra-card mark {
+  background: transparent;
+  color: var(--algolia-highlight);
+  font-weight: 600;
+  padding: 0;
+}
+
+/* Reset the search input rendered inside the dialog. */
+.dialog-panel input[type='search'] {
+  border: none;
+  background: transparent;
+}
+
+/*
+ * Child result rows (in-page heading hits) render their title with Tailwind's
+ * `truncate` (overflow: hidden), which sets the flex item's automatic minimum
+ * size to 0. As a direct child of the flex-column row — sibling to the excerpt —
+ * the flex algorithm then collapses the title to height: 0, hiding the heading
+ * so every sub-result looks like a duplicate of its excerpt. Pin the title so it
+ * keeps its line box and can't be shrunk away.
+ */
+#docs-search-results .group > span.truncate {
+  flex-shrink: 0;
 }

@@ -11,6 +11,7 @@ describe('CohereRelevanceScorer', () => {
   let scorer: RelevanceScoreProvider;
   let lastRequest: { body: any; headers: any; url: string } | null = null;
   let originalFetch: typeof fetch;
+  let originalCohereApiKey: string | undefined;
 
   const invalidResponseCases = [
     {
@@ -25,6 +26,8 @@ describe('CohereRelevanceScorer', () => {
 
   beforeEach(() => {
     lastRequest = null;
+    originalCohereApiKey = process.env.COHERE_API_KEY;
+    delete process.env.COHERE_API_KEY;
     scorer = new CohereRelevanceScorer(TEST_MODEL, TEST_API_KEY);
 
     originalFetch = global.fetch;
@@ -47,6 +50,11 @@ describe('CohereRelevanceScorer', () => {
     vi.restoreAllMocks();
     if (originalFetch) {
       global.fetch = originalFetch;
+    }
+    if (originalCohereApiKey === undefined) {
+      delete process.env.COHERE_API_KEY;
+    } else {
+      process.env.COHERE_API_KEY = originalCohereApiKey;
     }
   });
 
@@ -76,6 +84,39 @@ describe('CohereRelevanceScorer', () => {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${TEST_API_KEY}`,
     });
+  });
+
+  it('should use COHERE_API_KEY when no API key is passed to the constructor', async () => {
+    process.env.COHERE_API_KEY = 'env-api-key';
+    const scorer = new CohereRelevanceScorer(TEST_MODEL);
+
+    await scorer.getRelevanceScore(TEST_QUERY, TEST_TEXT);
+
+    expect(lastRequest?.headers).toMatchObject({
+      Authorization: 'Bearer env-api-key',
+    });
+  });
+
+  it('should prefer the constructor API key over COHERE_API_KEY', async () => {
+    process.env.COHERE_API_KEY = 'env-api-key';
+    const scorer = new CohereRelevanceScorer(TEST_MODEL, TEST_API_KEY);
+
+    await scorer.getRelevanceScore(TEST_QUERY, TEST_TEXT);
+
+    expect(lastRequest?.headers).toMatchObject({
+      Authorization: `Bearer ${TEST_API_KEY}`,
+    });
+  });
+
+  it('should throw before calling Cohere when no API key is available', async () => {
+    const mockFetch = vi.fn();
+    vi.stubGlobal('fetch', mockFetch);
+    const scorer = new CohereRelevanceScorer(TEST_MODEL);
+
+    await expect(scorer.getRelevanceScore(TEST_QUERY, TEST_TEXT)).rejects.toThrow(
+      'Cohere API key is required. Pass an apiKey or set COHERE_API_KEY.',
+    );
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it('should return the relevance score from a successful API response', async () => {
@@ -114,6 +155,26 @@ describe('CohereRelevanceScorer', () => {
         top_n: 1,
       }),
     });
+  });
+
+  it('should return zero when Cohere returns a zero relevance score', async () => {
+    const mockResponse = {
+      ok: true,
+      status: 200,
+      json: vi.fn().mockResolvedValue({
+        results: [
+          {
+            relevance_score: 0,
+          },
+        ],
+      }),
+      text: vi.fn().mockResolvedValue(''),
+    };
+
+    const mockFetch = vi.fn().mockResolvedValue(mockResponse);
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(scorer.getRelevanceScore(TEST_QUERY, TEST_TEXT)).resolves.toBe(0);
   });
 
   it('should throw an error when the API returns a non-ok response', async () => {

@@ -6,7 +6,6 @@ import type {
   EntityLearningTopicsResponse,
   EntityLearningTopicResponse,
   EntityLearningTopicExamplesResponse,
-  EntityLearningPointsResponse,
   EntityLearningOutliersResponse,
 } from './entity-learning-types';
 
@@ -24,13 +23,6 @@ export type EntityLearningServiceConfig = {
 export type EntityLearningTopicExamplesParams = {
   signalName: string;
   runId: string;
-  limit?: number;
-};
-
-export type EntityLearningPointsParams = {
-  signalName: string;
-  runId: string;
-  includeOutliers?: boolean;
   limit?: number;
 };
 
@@ -126,17 +118,6 @@ export function createEntityLearningService(config: EntityLearningServiceConfig)
         buildUrl(`/entities/${encode(entityId)}/topics/${encode(topicId)}/examples`, {
           signalName: params.signalName,
           runId: params.runId,
-          limit: params.limit,
-        }),
-      );
-    },
-
-    getEntityPoints(entityId: string, params: EntityLearningPointsParams) {
-      return getJson<EntityLearningPointsResponse>(
-        buildUrl(`/entities/${encode(entityId)}/points`, {
-          signalName: params.signalName,
-          runId: params.runId,
-          includeOutliers: params.includeOutliers,
           limit: params.limit,
         }),
       );

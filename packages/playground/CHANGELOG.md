@@ -1,5 +1,102 @@
 # @internal/playground
 
+## 1.19.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`faa2037`](https://github.com/mastra-ai/mastra/commit/faa20375a1bd9bc6d16943ee5d30d179c3abc08b), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+  - @mastra/ai-sdk@1.6.2-alpha.0
+  - @mastra/client-js@1.31.2-alpha.5
+  - @mastra/react@1.2.5-alpha.5
+  - @mastra/playground-ui@40.1.0-alpha.5
+
+## 1.19.0-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`ea1b9a3`](https://github.com/mastra-ai/mastra/commit/ea1b9a3e1cb9b4b43e953f231f7e079409bd1a6a), [`5a3dce1`](https://github.com/mastra-ai/mastra/commit/5a3dce154dc81293ed74670554a5b96f36dcc18a), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+  - @mastra/playground-ui@40.1.0-alpha.4
+  - @mastra/client-js@1.31.2-alpha.4
+  - @mastra/react@1.2.5-alpha.4
+
+## 1.18.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7)]:
+  - @mastra/core@1.51.0-alpha.3
+  - @mastra/client-js@1.31.2-alpha.3
+  - @mastra/react@1.2.5-alpha.3
+  - @mastra/playground-ui@40.0.2-alpha.3
+
+## 1.18.3-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`1b18bff`](https://github.com/mastra-ai/mastra/commit/1b18bff4ad78b527182d5c2958a8335d81562649), [`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`bc1121a`](https://github.com/mastra-ai/mastra/commit/bc1121a7bb98f7cd73e82e3a7913a667a9fa9911), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2), [`83928c2`](https://github.com/mastra-ai/mastra/commit/83928c226a78907e7272960fa9d1d5df9241856d)]:
+  - @mastra/playground-ui@40.0.2-alpha.2
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/schema-compat@1.3.4-alpha.1
+  - @mastra/client-js@1.31.2-alpha.2
+  - @mastra/react@1.2.5-alpha.2
+
+## 1.18.3-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`6789ab4`](https://github.com/mastra-ai/mastra/commit/6789ab4191ddcd32a932898b360b191e80cee1a9)]:
+  - @mastra/schema-compat@1.3.4-alpha.0
+  - @mastra/client-js@1.31.2-alpha.1
+  - @mastra/core@1.50.2-alpha.1
+  - @mastra/react@1.2.5-alpha.1
+  - @mastra/playground-ui@40.0.2-alpha.1
+
+## 1.18.3-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fe1bda0`](https://github.com/mastra-ai/mastra/commit/fe1bda06f6af92a694a51712db747cda1e7185f0)]:
+  - @mastra/core@1.50.2-alpha.0
+  - @mastra/client-js@1.31.2-alpha.0
+  - @mastra/react@1.2.5-alpha.0
+  - @mastra/playground-ui@40.0.2-alpha.0
+
+## 1.18.2
+
+### Patch Changes
+
+- Fixed signal details pages so their sidebars can scroll within the Studio route, removed the scatter plot tab, and cleaned up unused signal points APIs. ([#19005](https://github.com/mastra-ai/mastra/pull/19005))
+
+- Updated dependencies [[`e900f25`](https://github.com/mastra-ai/mastra/commit/e900f25dfe2c9237f15b26cb109ac55aa9de3000), [`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`189200a`](https://github.com/mastra-ai/mastra/commit/189200a325314505f45590dabd6c4c02790baa29), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92), [`a223279`](https://github.com/mastra-ai/mastra/commit/a223279c8658cc6cc40c554d6d3569c04823806c)]:
+  - @mastra/core@1.50.1
+  - @mastra/playground-ui@40.0.1
+  - @mastra/client-js@1.31.1
+  - @mastra/react@1.2.4
+
+## 1.18.2-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`189200a`](https://github.com/mastra-ai/mastra/commit/189200a325314505f45590dabd6c4c02790baa29), [`a940148`](https://github.com/mastra-ai/mastra/commit/a9401483e1bfe85c18a6e73d33c5949239d65a92)]:
+  - @mastra/playground-ui@40.0.1-alpha.2
+  - @mastra/core@1.50.1-alpha.2
+  - @mastra/client-js@1.31.1-alpha.2
+  - @mastra/react@1.2.4-alpha.2
+
+## 1.18.2-alpha.1
+
+### Patch Changes
+
+- Fixed signal details pages so their sidebars can scroll within the Studio route, removed the scatter plot tab, and cleaned up unused signal points APIs. ([#19005](https://github.com/mastra-ai/mastra/pull/19005))
+
+- Updated dependencies [[`e8eaf3a`](https://github.com/mastra-ai/mastra/commit/e8eaf3aea09d51c131b5d369aee459442f416efc), [`d1c930f`](https://github.com/mastra-ai/mastra/commit/d1c930f713d1de09d5f3cd665cb79a8b7ebd7ec7), [`02634f7`](https://github.com/mastra-ai/mastra/commit/02634f700051e014a125d0d10165e3c9b8414e95), [`a223279`](https://github.com/mastra-ai/mastra/commit/a223279c8658cc6cc40c554d6d3569c04823806c)]:
+  - @mastra/core@1.50.1-alpha.1
+  - @mastra/playground-ui@40.0.1-alpha.1
+  - @mastra/client-js@1.31.1-alpha.1
+  - @mastra/react@1.2.4-alpha.1
+
 ## 1.18.2-alpha.0
 
 ### Patch Changes

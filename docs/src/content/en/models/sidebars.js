@@ -248,6 +248,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/crossmodel',
+          label: 'CrossModel',
+        },
+        {
+          type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
         },
@@ -270,6 +275,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/empiriolabs',
+          label: 'EmpirioLabs AI',
         },
         {
           type: 'doc',
@@ -423,6 +433,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/meta',
+          label: 'Meta',
+        },
+        {
+          type: 'doc',
           id: 'providers/minimax',
           label: 'MiniMax (minimax.io)',
         },
@@ -450,6 +465,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/model-oracle-ai',
+          label: 'Model Oracle AI',
         },
         {
           type: 'doc',
@@ -550,6 +570,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/perplexity-agent',
           label: 'Perplexity Agent',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pioneer',
+          label: 'Pioneer',
         },
         {
           type: 'doc',
@@ -698,6 +723,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/unorouter',
+          label: 'UnoRouter',
+        },
+        {
+          type: 'doc',
           id: 'providers/upstage',
           label: 'Upstage',
         },
@@ -760,6 +790,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/zeldoc',
           label: 'Zeldoc',
+        },
+        {
+          type: 'doc',
+          id: 'providers/zenifra',
+          label: 'Zenifra',
         },
         {
           type: 'doc',

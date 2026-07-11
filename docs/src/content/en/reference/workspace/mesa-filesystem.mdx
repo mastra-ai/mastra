@@ -15,7 +15,7 @@ Use `MesaFilesystem` when agents need versioned file storage. For a local direct
 
 `MesaFilesystem` runs in the Mastra process.
 
-[Mesa's POSIX mount](https://docs.mesa.dev/content/mesafs/posix-mount) (for using a Mesa filesystem within a sandbox) is not yet part of the `@mastra/mesa` package. Support is coming soon.
+[Mesa's POSIX mount](https://docs.mesa.dev/content/mesafs/posix-mount) (for using a Mesa filesystem within a sandbox) isn't yet part of the `@mastra/mesa` package. Support is coming soon.
 
 :::
 
@@ -299,14 +299,14 @@ Methods expect absolute paths. For `MesaFilesystem`, paths are rooted at the Mes
 await filesystem.readFile('/acme/docs/README.md')
 ```
 
-Do not omit the leading slash:
+Don't omit the leading slash:
 
 ```typescript
 await filesystem.readFile('acme/docs/README.md') // Incorrect
 await filesystem.readFile('/acme/docs/README.md') // Correct
 ```
 
-The org comes from `org` in the constructor, or from the Mesa SDK's default org inference when `org` is omitted. It still appears as the first path segment.
+The org comes from `org` in the constructor, or from the Mesa SDK's default org inference when `org` is omitted. It remains the first path segment.
 
 When you mount multiple repos, each repo is available under the org segment:
 
@@ -358,7 +358,7 @@ Read operations still work. Write operations throw `WorkspaceReadOnlyError`.
 
 ## Concurrency
 
-`overwrite: false` and `expectedMtime` use preflight checks before writing. These checks are not atomic unless Mesa adds native conditional writes for app mounts.
+`overwrite: false` and `expectedMtime` use preflight checks before writing. These checks aren't atomic unless Mesa adds native conditional writes for app mounts.
 
 ## Related
 

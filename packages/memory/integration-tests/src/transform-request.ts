@@ -9,6 +9,25 @@ function replaceField(stringifiedBody: string, field: string, replacement: strin
   return str;
 }
 
+function normalizeOpenAIResponseFunctionCalls(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeOpenAIResponseFunctionCalls);
+  }
+
+  if (!value || typeof value !== 'object') {
+    return value;
+  }
+
+  const object = value as Record<string, unknown>;
+  if (object.type === 'function_call') {
+    return { type: 'item_reference', id: 'REDACTED' };
+  }
+
+  return Object.fromEntries(
+    Object.entries(object).map(([key, entry]) => [key, normalizeOpenAIResponseFunctionCalls(entry)]),
+  );
+}
+
 function normalizeNetworkFinalResultMessages(value: unknown): unknown {
   if (typeof value === 'string') {
     try {
@@ -56,7 +75,7 @@ function normalizeNetworkFinalResultMessages(value: unknown): unknown {
 }
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
-  let stringifiedBody = JSON.stringify(normalizeNetworkFinalResultMessages(body));
+  let stringifiedBody = JSON.stringify(normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body)));
 
   // Normalize dynamic fields that change between test runs
   // These regexes match JSON property patterns like "id":"value" in stringified JSON

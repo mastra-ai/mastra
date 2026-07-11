@@ -30,7 +30,11 @@ import type { IMastraLogger } from '../logger';
 import type { MCPServerBase } from '../mcp';
 import type { MastraMemory } from '../memory';
 import type { NotificationDispatchConfig } from '../notifications/workflow';
-import { createNotificationDispatchWorkflow } from '../notifications/workflow';
+import {
+  buildNotificationDispatchSchedule,
+  createNotificationDispatchWorkflow,
+  NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
+} from '../notifications/workflow';
 import type {
   DefinitionSource,
   ObservabilityEntrypoint,
@@ -616,6 +620,7 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #loggerExplicit = false;
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
@@ -688,6 +693,12 @@ export class Mastra<
    * `scheduler: { enabled: false }`.
    */
   #schedulerRequested = false;
+  /**
+   * Set once `__ensureNotificationDispatchReady()` has upserted the dispatcher
+   * schedule row and requested the scheduler. Makes repeated deferred
+   * notification creates free after the first one.
+   */
+  #notificationDispatchReady = false;
   /**
    * In-flight promise for `#ensureSchedulingWorkersStarted()`. Serializes
    * concurrent startup requests so two callers can't both pass the
@@ -793,10 +804,13 @@ export class Mastra<
                     depth++;
                   }
                   // Scheduler-spawned background workflows: runId carries the
-                  // workflow id prefix `sched_wf_<workflowId>_<timestamp>`. These
-                  // ticks fire on every instance independently — events are
-                  // only meaningful to the publishing process.
+                  // schedule row id prefix — `sched_wf_<workflowId>_<timestamp>`
+                  // for declarative schedules, or the imperative notification
+                  // dispatcher row id. These ticks fire on every instance
+                  // independently — events are only meaningful to the
+                  // publishing process.
                   if (rId && rId.startsWith('sched_wf_')) return true;
+                  if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
                   return false;
                 })();
                 if (isOwnedHere) {
@@ -1280,9 +1294,11 @@ export class Mastra<
     let logger: TLogger;
     if (config?.logger === false) {
       logger = noopLogger as unknown as TLogger;
+      this.#loggerExplicit = true;
     } else {
       if (config?.logger) {
         logger = config.logger;
+        this.#loggerExplicit = true;
       } else {
         const levelOnEnv =
           process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
@@ -2373,6 +2389,34 @@ export class Mastra<
       }
       this.addWorkflow(workflow, key);
     }
+  }
+
+  /**
+   * Registers a file-system routed logger (discovered from `logger.ts`) into
+   * this Mastra instance.
+   *
+   * Code-registered loggers win: if the user already passed `logger` to the
+   * `new Mastra({logger})` constructor (including `logger: false`), the
+   * file-system logger is skipped and a warning is logged. Otherwise the
+   * fs-provided logger replaces the default ConsoleLogger via {@link setLogger}.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsLogger(fsLogger: TLogger): void {
+    if (!fsLogger) {
+      return;
+    }
+
+    if (this.#loggerExplicit) {
+      this.getLogger().warn(
+        `File-system routed logger conflicts with a code-registered logger. Keeping the code-registered logger.`,
+      );
+      return;
+    }
+
+    this.setLogger({ logger: fsLogger });
   }
 
   /**
@@ -3704,6 +3748,29 @@ export class Mastra<
   }
 
   /**
+   * Removes a tool from the Mastra instance by its registration key.
+   *
+   * Also unregisters the tool's static executor from the background task
+   * manager, if one was registered.
+   *
+   * @returns `true` if a tool was removed, `false` if no tool was registered under the key
+   *
+   * @example
+   * ```typescript
+   * mastra.removeTool('calculator-tool');
+   * ```
+   */
+  public removeTool(key: string): boolean {
+    const tools = this.#tools as Record<string, ToolAction<any, any, any, any>>;
+    if (!tools[key]) {
+      return false;
+    }
+    delete tools[key];
+    this.#backgroundTaskManager?.unregisterStaticExecutor(key);
+    return true;
+  }
+
+  /**
    * Retrieves a specific processor by registration key.
    *
    * @throws {MastraError} When the specified processor is not found
@@ -4172,6 +4239,63 @@ export class Mastra<
   }
 
   /**
+   * Signal that a deferred notification exists and the dispatcher schedule is
+   * needed. Lazily upserts the dispatcher schedule row (imperative, non-`wf_`
+   * id so declarative orphan-cleanup leaves it alone) and requests the
+   * scheduler — mirroring `__ensureScheduleRuntimeReady()`. Idle apps that
+   * never defer a notification never start the scheduler (see #18864).
+   *
+   * @internal
+   */
+  async __ensureNotificationDispatchReady(): Promise<void> {
+    if (this.#notificationDispatchReady) return;
+    if (this.#notificationDispatchConfig?.enabled === false) return;
+    if (this.#workersDisabled) return;
+    if (this.#schedulerConfig?.enabled === false) return;
+    if (!this.#storage) return;
+
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+
+      const desired = buildNotificationDispatchSchedule(this.#notificationDispatchConfig);
+      const existing = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      if (!existing) {
+        try {
+          await schedulesStore.createSchedule(desired);
+        } catch (err) {
+          // Another instance may have created the row concurrently — only
+          // rethrow if it's still missing.
+          const raced = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+          if (!raced) throw err;
+        }
+      } else {
+        // Patch the row if the dispatch config changed across deploys.
+        const patch: ScheduleUpdate = {};
+        if (existing.cron !== desired.cron) {
+          patch.cron = desired.cron;
+          patch.nextFireAt = desired.nextFireAt;
+        }
+        if (!targetsEqual(existing.target, desired.target)) patch.target = desired.target;
+        if (Object.keys(patch).length > 0) {
+          await schedulesStore.updateSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID, patch);
+        }
+      }
+    } catch (err) {
+      // Leave #notificationDispatchReady unset so the next deferred
+      // notification retries the upsert.
+      this.#logger?.warn?.('Failed to ensure notification dispatch schedule', err as any);
+      return;
+    }
+
+    this.#notificationDispatchReady = true;
+    this.#schedulerRequested = true;
+    if (this.#workersStarted) {
+      await this.#ensureSchedulingWorkersStarted();
+    }
+  }
+
+  /**
    * Lazily inject and start the SchedulerWorker (and AgentScheduleWorker when
    * needed) after `startWorkers()` has already run. Used by features that
    * surface a need for the scheduler at runtime (e.g.
@@ -4241,6 +4365,30 @@ export class Mastra<
       this.#schedulerRequested = true;
     } catch (err) {
       this.#logger?.warn?.('Failed to detect existing agent schedules on boot', err as any);
+    }
+  }
+
+  /**
+   * Detect the lazily-created notification dispatcher schedule row on boot.
+   * A previous process upserts the row via `__ensureNotificationDispatchReady()`
+   * when a deferred notification is created; a fresh boot must then start the
+   * scheduler so pending deferred notifications still get dispatched.
+   * Mirrors `#detectExistingAgentSchedules`.
+   *
+   * @internal
+   */
+  async #detectExistingNotificationDispatch(): Promise<void> {
+    if (this.#schedulerRequested) return;
+    if (this.#notificationDispatchConfig?.enabled === false) return;
+    if (!this.#storage) return;
+    try {
+      const schedulesStore = await this.#storage.getStore('schedules');
+      if (!schedulesStore) return;
+      const existing = await schedulesStore.getSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      if (!existing) return;
+      this.#schedulerRequested = true;
+    } catch (err) {
+      this.#logger?.warn?.('Failed to detect existing notification dispatch schedule on boot', err as any);
     }
   }
 
@@ -4921,6 +5069,10 @@ export class Mastra<
     // reads the schedules store, so it must run after storage.init() above.
     if (!name) {
       await this.#detectExistingAgentSchedules();
+      // Same idea for the notification dispatcher: a previous process may
+      // have lazily created the dispatcher schedule row because deferred
+      // notifications were in play.
+      await this.#detectExistingNotificationDispatch();
     }
 
     // Lazily inject the SchedulerWorker + AgentScheduleWorker if the

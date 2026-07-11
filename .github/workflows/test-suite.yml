@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
@@ -62,7 +62,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -85,7 +85,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: vitest-blob-unit-${{ matrix.shard }}
           path: .vitest-reports/
@@ -106,7 +106,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
           fetch-depth: 2
@@ -116,7 +116,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -142,7 +142,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: vitest-blob-unit-affected
           path: .vitest-reports/
@@ -167,7 +167,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout PR code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 2
           ref: ${{ inputs.head_sha }}
@@ -177,7 +177,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -216,7 +216,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
           path: .vitest-reports/
@@ -239,7 +239,7 @@ jobs:
 
       - name: Checkout repo
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 1
           ref: ${{ inputs.head_sha }}
@@ -250,7 +250,7 @@ jobs:
 
       - name: Download test results
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/download-artifact@v6
+        uses: actions/download-artifact@v8
         with:
           pattern: vitest-blob-*
           path: .vitest-reports

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/spanner",
-  "version": "1.2.3",
+  "version": "1.2.4-alpha.0",
   "description": "Google Cloud Spanner provider for Mastra - db storage capabilities (GoogleSQL dialect)",
   "type": "module",
   "main": "dist/index.js",

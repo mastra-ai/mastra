@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/docs/agents/channels",
+      "destination": "/docs/capabilities/channels/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -362,7 +367,7 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -547,7 +552,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -572,7 +577,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -918,6 +923,21 @@
     {
       "source": "/docs/getting-started/model-providers",
       "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/getting-started/file-based-agents",
       "permanent": true
     }
   ]

@@ -380,7 +380,7 @@ describe('mastra.pubsub proxy localOnly tagging', () => {
     const pubsub = new RecordingPushOnlyPubSub();
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workflows: {} as any, pubsub });
 
-    const schedRunId = 'sched_wf___mastra_notification_dispatcher__dispatch_1781099940000';
+    const schedRunId = 'sched___mastra_notification_dispatch_1781099940000';
     await mastra.pubsub.publish('workflows', makeStartEvent('__mastra_notification_dispatcher', schedRunId));
 
     expect(pubsub.calls[0]!.localOnly).toBe(true);
