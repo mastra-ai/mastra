@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { useQueryClient } from '@tanstack/react-query';
 import { ArrowUp, Square } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
@@ -68,6 +68,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     applyCommandDraft(name);
     clearComposerCommand();
   };
+  const applyComposerCommand = useEffectEvent((name: string) => {
+    applyCommandDraft(name);
+    clearComposerCommand();
+  });
 
   useEffect(() => {
     if (!composerCommandName) {
@@ -76,9 +80,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (appliedCommandNameRef.current === composerCommandName) return;
     appliedCommandNameRef.current = composerCommandName;
-    applyCommandDraft(composerCommandName);
-    clearComposerCommand();
-  }, [composerCommandName, clearComposerCommand]);
+    applyComposerCommand(composerCommandName);
+  }, [composerCommandName]);
 
   const createThread = async () => {
     const thread = await createThreadMutation.mutateAsync(undefined);

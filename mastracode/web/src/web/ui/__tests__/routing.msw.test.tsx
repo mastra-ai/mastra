@@ -16,6 +16,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/web-ui/render';
+import type { DesktopAppInfo } from '../../../shared/desktop-host';
 import { loginUrl, redirectToLogin } from '../domains/auth';
 import type * as AuthService from '../domains/auth/services/auth';
 import type { Project } from '../domains/workspaces';
@@ -36,6 +37,7 @@ const THREAD_ID = 'thread-test';
 
 afterEach(() => {
   localStorage.clear();
+  delete window.mastracodeDesktop;
   vi.mocked(redirectToLogin).mockClear();
 });
 
@@ -74,7 +76,7 @@ function emptySse(): Response {
   );
 }
 
-function useAgentControllerHandlers() {
+function installAgentControllerHandlers() {
   server.use(
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
@@ -97,7 +99,7 @@ const AUTHENTICATED = () =>
 
 function renderRoutes(initialEntry: string, authMe: () => Response | Promise<Response>) {
   seedProject();
-  useAgentControllerHandlers();
+  installAgentControllerHandlers();
   server.use(http.get(`${TEST_BASE_URL}/auth/me`, authMe));
 
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -111,7 +113,30 @@ async function expectPathname(router: ReturnType<typeof createMemoryRouter>, pat
 }
 
 describe('MastraCode web routing', () => {
-  it('given the auth check is pending, when visiting /new, then the startup HUD renders instead of a blank screen', async () => {
+  it('given the web auth check is pending, when visiting /new, then the web loading skeleton renders', async () => {
+    renderRoutes('/new', async () => {
+      await delay(150);
+      return new Response(null, { status: 404 });
+    });
+
+    expect(await screen.findByRole('status', { name: 'Checking sign-in' })).toBeInTheDocument();
+    expect(screen.queryByText('Opening your workspace')).not.toBeInTheDocument();
+
+    expect(await screen.findByText('What do you want to work on?')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Checking sign-in' })).not.toBeInTheDocument();
+  });
+
+  it('given the desktop auth check is pending, when visiting /new, then the branded startup HUD renders', async () => {
+    window.mastracodeDesktop = {
+      getAppInfo: vi.fn(
+        async (): Promise<DesktopAppInfo> => ({
+          name: 'MastraCode Desktop Alpha',
+          version: 'test',
+          platform: 'darwin',
+        }),
+      ),
+      selectProjectDirectory: vi.fn(async () => ({ canceled: true })),
+    };
     renderRoutes('/new', async () => {
       await delay(150);
       return new Response(null, { status: 404 });

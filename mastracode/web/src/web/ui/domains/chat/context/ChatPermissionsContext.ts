@@ -1,5 +1,5 @@
-import { createContext } from 'react';
 import type { PermissionPolicy, PermissionRules, ToolCategory } from '@mastra/client-js';
+import { createContext } from 'react';
 
 export interface ChatPermissionsApi {
   permissions: PermissionRules | undefined;

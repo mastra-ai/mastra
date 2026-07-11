@@ -14,10 +14,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
-import {
-  MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE,
-  type DesktopAppInfo,
-} from '../../../../../../shared/desktop-host';
+import { MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE } from '../../../../../../shared/desktop-host';
+import type { DesktopAppInfo } from '../../../../../../shared/desktop-host';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
@@ -127,7 +125,7 @@ describe('ChatMessageList', () => {
     useAgentControllerHandlers();
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
     expect(screen.getByText('Project')).toBeInTheDocument();
     expect(screen.getByText('MastraCode Test')).toBeInTheDocument();
     expect(screen.getByText('Resource ID')).toBeInTheDocument();
@@ -150,7 +148,7 @@ describe('ChatMessageList', () => {
     ]);
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('Hello from the agent')).toBeInTheDocument());
+    expect(await screen.findByText('Hello from the agent')).toBeInTheDocument();
   });
 
   it('given a running turn without streamed assistant text, then it shows the working indicator', async () => {
@@ -158,7 +156,7 @@ describe('ChatMessageList', () => {
     useAgentControllerHandlers([{ type: 'agent_start' }]);
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByLabelText('Agent is working')).toBeInTheDocument());
+    expect(await screen.findByLabelText('Agent is working')).toBeInTheDocument();
     expect(screen.getByText('Thinking…')).toBeInTheDocument();
   });
 
@@ -193,7 +191,7 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     // The status part with text renders as a notice…
-    await waitFor(() => expect(screen.getByText('Memory updated')).toBeInTheDocument());
+    expect(await screen.findByText('Memory updated')).toBeInTheDocument();
     // …the text-less one renders nothing instead of an empty bubble.
     const notices = document.querySelectorAll('.bg-notice-info\\/20');
     expect(notices).toHaveLength(1);
@@ -205,7 +203,7 @@ describe('ChatMessageList', () => {
     server.use(http.post(`${API}/sessions`, () => HttpResponse.json({ error: 'boom' }, { status: 500 })));
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('boom')).toBeInTheDocument());
+    expect(await screen.findByText('boom')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 
@@ -252,7 +250,7 @@ describe('ChatMessageList', () => {
     renderMessageList();
 
     await user.click(await screen.findByRole('button', { name: 'Allow folder access' }));
-    await waitFor(() => expect(screen.getByText('Ready for new conversation')).toBeInTheDocument());
+    expect(await screen.findByText('Ready for new conversation')).toBeInTheDocument();
 
     expect(selectProjectDirectory).toHaveBeenCalledWith({ defaultPath: '/tmp/mastracode-test' });
     expect(loadProjects()).toHaveLength(1);
@@ -268,7 +266,7 @@ describe('ChatMessageList', () => {
     ]);
     renderMessageList();
 
-    await waitFor(() => expect(screen.getByText('Ship the refactor')).toBeInTheDocument());
+    expect(await screen.findByText('Ship the refactor')).toBeInTheDocument();
     expect(screen.getByText('1/5')).toBeInTheDocument();
   });
 
@@ -279,7 +277,7 @@ describe('ChatMessageList', () => {
 
     // Wait for the stream to be consumed, then assert no goal UI is present —
     // goals are started via the /goal slash command, not an always-on form.
-    await waitFor(() => expect(screen.getByLabelText('Agent is working')).toBeInTheDocument());
+    expect(await screen.findByLabelText('Agent is working')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('Set a goal objective…')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Set Goal' })).not.toBeInTheDocument();
   });

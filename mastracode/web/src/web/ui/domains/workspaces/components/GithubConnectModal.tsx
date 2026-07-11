@@ -63,6 +63,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
             <span>{connected ? 'Open a GitHub repo' : 'Connect GitHub'}</span>
           </div>
           <button
+            type="button"
             className="inline-flex size-8 items-center justify-center rounded-lg text-icon3 hover:bg-surface4 hover:text-icon6"
             onClick={onClose}
             aria-label="Close"
@@ -83,6 +84,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
             {/* Hide the connect button when the feature is disabled — /auth/github/connect won't exist */}
             {status.reason !== 'missing_config' && status.reason !== 'organization_required' && (
               <button
+                type="button"
                 className="inline-flex items-center justify-center rounded-lg bg-accent1 px-4 py-2 text-ui-sm font-medium text-black hover:bg-accent1/90"
                 onClick={() => connectGithub(baseUrl)}
               >
@@ -117,6 +119,7 @@ export function GithubConnectModal({ status, onProjectCreated, onClose }: Github
               ) : (
                 repos.map(repo => (
                   <button
+                    type="button"
                     key={repo.id}
                     className="flex items-center gap-3 rounded-xl border border-border1 bg-surface2 px-3 py-2 text-left hover:border-border2 hover:bg-surface4 disabled:cursor-not-allowed disabled:opacity-60"
                     disabled={busyRepoId !== null}

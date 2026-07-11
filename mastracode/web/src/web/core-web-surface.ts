@@ -1,6 +1,5 @@
-import type { ApiRoute } from '@mastra/core/server';
-
 import type { MountedMastraCode } from '@mastra/code-sdk';
+import type { ApiRoute } from '@mastra/core/server';
 
 import { buildConfigRoutes } from './config-routes.js';
 import { buildFsRoutes } from './fs-routes.js';

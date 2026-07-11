@@ -3,14 +3,21 @@ import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useApiConfig } from '../../../../../shared/api/config';
-import { useToast } from '../../../ui';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { useToast } from '../../../ui/toast';
 import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../factory/hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearStatusQuery } from '../../factory/hooks/useLinearData';
+import type { IntakeConfig } from '../../factory/services/intake';
 import { connectLinear } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
-import type { IntakeConfig } from '../../factory/services/intake';
 import { useProjectsQuery } from '../../workspaces/hooks/useProjects';
+import type { Project } from '../../workspaces/services/projects';
+
+const INTAKE_HEADING = (
+  <Txt variant="ui-lg" className="text-icon6 font-medium">
+    Intake sources
+  </Txt>
+);
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing
@@ -21,6 +28,10 @@ function toggleId(ids: string[] | null, id: string): string[] | null {
   const current = ids ?? [];
   const next = current.includes(id) ? current.filter(v => v !== id) : [...current, id];
   return next.length ? next : null;
+}
+
+function isGithubProject(project: Project): project is Project & { githubProjectId: string } {
+  return project.source === 'github' && typeof project.githubProjectId === 'string';
 }
 
 function SourceHeader({
@@ -101,18 +112,12 @@ export function IntakeSection() {
   const linearProjectsQuery = useLinearProjectsQuery(linearConnected);
 
   const config = configQuery.data;
-  const githubProjects = (projectsQuery.data ?? []).filter(p => p.source === 'github' && p.githubProjectId);
-
-  const heading = (
-    <Txt variant="ui-lg" className="text-icon6 font-medium">
-      Intake sources
-    </Txt>
-  );
+  const githubProjects = (projectsQuery.data ?? []).filter(isGithubProject);
 
   if (configQuery.isPending) {
     return (
       <div className="mt-6 pt-4 border-t border-border1/40">
-        {heading}
+        {INTAKE_HEADING}
         <SkeletonRows label="Loading intake sources" rows={4} />
       </div>
     );
@@ -120,7 +125,7 @@ export function IntakeSection() {
   if (configQuery.isError || !config) {
     return (
       <div className="mt-6 pt-4 border-t border-border1/40">
-        {heading}
+        {INTAKE_HEADING}
         <Txt as="p" variant="ui-sm" className="text-icon3 py-4">
           Intake configuration is unavailable. Connect GitHub or Linear first.
         </Txt>
@@ -135,10 +140,12 @@ export function IntakeSection() {
     });
   };
   const busy = saveMutation.isPending;
+  const selectedGithubProjectIds = new Set(config.github.projectIds ?? []);
+  const selectedLinearProjectIds = new Set(config.linear.projectIds ?? []);
 
   return (
     <div className="mt-6 pt-4 border-t border-border1/40 flex flex-col gap-6">
-      {heading}
+      {INTAKE_HEADING}
       <section className="flex flex-col gap-2" aria-label="GitHub intake">
         <SourceHeader
           title="GitHub"
@@ -158,14 +165,14 @@ export function IntakeSection() {
                 <SourceCheckbox
                   key={project.githubProjectId}
                   label={project.name}
-                  checked={config.github.projectIds?.includes(project.githubProjectId!) ?? false}
+                  checked={selectedGithubProjectIds.has(project.githubProjectId)}
                   disabled={busy}
                   onChange={() =>
                     update({
                       ...config,
                       github: {
                         ...config.github,
-                        projectIds: toggleId(config.github.projectIds, project.githubProjectId!),
+                        projectIds: toggleId(config.github.projectIds, project.githubProjectId),
                       },
                     })
                   }
@@ -206,14 +213,14 @@ export function IntakeSection() {
                     <Txt as="span" variant="ui-xs" className="font-medium uppercase tracking-wide text-icon3">
                       {group.label}
                     </Txt>
-                    <SelectedCount ids={config.linear.projectIds} projects={group.projects} />
+                    <SelectedCount ids={selectedLinearProjectIds} projects={group.projects} />
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {group.projects.map(project => (
                       <SourceCheckbox
                         key={project.id}
                         label={project.name}
-                        checked={config.linear.projectIds?.includes(project.id) ?? false}
+                        checked={selectedLinearProjectIds.has(project.id)}
                         disabled={busy}
                         onChange={() =>
                           update({
@@ -235,8 +242,8 @@ export function IntakeSection() {
 }
 
 /** Tiny "n selected" hint next to a team header; hidden when nothing is picked. */
-function SelectedCount({ ids, projects }: { ids: string[] | null; projects: LinearProject[] }) {
-  const count = projects.filter(p => ids?.includes(p.id)).length;
+function SelectedCount({ ids, projects }: { ids: ReadonlySet<string>; projects: LinearProject[] }) {
+  const count = projects.filter(project => ids.has(project.id)).length;
   if (!count) return null;
   return (
     <Txt as="span" variant="ui-xs" className="text-accent1">

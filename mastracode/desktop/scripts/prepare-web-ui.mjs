@@ -4,6 +4,10 @@ const packageRoot = new URL('../', import.meta.url);
 const source = new URL('../web/src/mastra/public/ui/', packageRoot);
 const target = new URL('dist/web-ui/', packageRoot);
 
+/**
+ * @param {URL} url
+ * @param {string} label
+ */
 async function assertFile(url, label) {
   try {
     const info = await stat(url);

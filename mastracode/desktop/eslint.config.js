@@ -1,32 +1,23 @@
-import js from '@eslint/js';
-import globals from 'globals';
+import { createConfig } from '@internal/lint/eslint';
 import tseslint from 'typescript-eslint';
 
-const strictTypeCheckedRules = {
-  ...tseslint.configs.strictTypeChecked.at(-1).rules,
-  ...tseslint.configs.stylisticTypeChecked.at(-1).rules,
-};
-const typedConfigs = [...tseslint.configs.strictTypeChecked, ...tseslint.configs.stylisticTypeChecked].map(config => ({
-  ...config,
-  files: ['**/*.ts'],
-}));
+const sharedConfig = await createConfig();
+const strictTypeCheckedRules = Object.assign(
+  {},
+  ...tseslint.configs.strictTypeChecked.map(config => config.rules ?? {}),
+  ...tseslint.configs.stylisticTypeChecked.map(config => config.rules ?? {}),
+);
 
 export default [
   {
     ignores: ['dist/**', 'release/**', 'playwright-report/**', 'test-results/**'],
   },
-  {
-    ...js.configs.recommended,
-    files: ['scripts/**/*.mjs'],
-    languageOptions: {
-      globals: globals.node,
-    },
-  },
-  ...typedConfigs,
+  ...sharedConfig,
   {
     files: ['**/*.ts'],
     languageOptions: {
       parserOptions: {
+        projectService: false,
         project: ['./tsconfig.json', './tsconfig.e2e.json'],
         tsconfigRootDir: import.meta.dirname,
       },

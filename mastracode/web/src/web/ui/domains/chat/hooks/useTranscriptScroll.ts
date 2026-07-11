@@ -41,8 +41,10 @@ export function useTranscriptScroll(transcript: TranscriptState) {
 
   // Thread changes require imperative DOM scrolling after the new transcript has rendered.
   useEffect(() => {
-    setShowScrollDown(false);
-    const raf = requestAnimationFrame(() => scrollToBottomOnThreadChange('auto'));
+    const raf = requestAnimationFrame(() => {
+      setShowScrollDown(false);
+      scrollToBottomOnThreadChange('auto');
+    });
     return () => cancelAnimationFrame(raf);
   }, [transcript.threadId]);
 

@@ -46,8 +46,13 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
   const { transcript } = useChatTranscript();
   const location = useLocation();
   const navigate = useNavigate();
-  const locationState = location.state as { routeErrorNotice?: string } | null;
-  const routeErrorNotice = locationState?.routeErrorNotice ?? null;
+  const routeErrorNotice =
+    location.state &&
+    typeof location.state === 'object' &&
+    'routeErrorNotice' in location.state &&
+    typeof location.state.routeErrorNotice === 'string'
+      ? location.state.routeErrorNotice
+      : undefined;
   const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
 
@@ -67,7 +72,7 @@ function NewPageContent({ activeProject }: { activeProject: Project }) {
                   variant="primary"
                   size="sm"
                   className="mt-3 self-start"
-                  onClick={() => void navigate('/new', { replace: true, state: null })}
+                  onClick={() => void navigate('/new', { replace: true })}
                 >
                   <MessageSquarePlus size={15} />
                   <span>Continue in new thread</span>

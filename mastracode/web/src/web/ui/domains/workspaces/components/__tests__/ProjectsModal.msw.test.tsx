@@ -5,11 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/web-ui/render';
+import type { DirectoryListing } from '../../../../../../shared/api/types';
 import {
   OverlayTestProviders,
   useOverlayControllerHandlers,
 } from '../../../chat/components/__tests__/overlay-test-utils';
-import type { DirectoryListing } from '../../../../../../shared/api/types';
 import type { Project } from '../../index';
 import { ProjectsModal } from '../../index';
 import type { GithubStatus } from '../../services/github';
@@ -112,7 +112,7 @@ describe('ProjectsModal', () => {
       );
       renderProjects();
       // Wait for the status query to settle before asserting absence.
-      await waitFor(() => expect(screen.getByRole('button', { name: /Add a project/ })).toBeInTheDocument());
+      expect(await screen.findByRole('button', { name: /Add a project/ })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: /Open from GitHub/ })).not.toBeInTheDocument();
     });
   });

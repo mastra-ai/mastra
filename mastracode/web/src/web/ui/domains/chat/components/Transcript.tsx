@@ -11,9 +11,10 @@ import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
 import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 import { highlightCode, languageForPath } from '../../../ui/highlight';
+import { Markdown } from '../../../ui/Markdown';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import {
@@ -37,8 +38,6 @@ function ToolIcon({ name, size = 14, className }: { name: string; size?: number;
     return <Globe {...props} />;
   return <Wrench {...props} />;
 }
-import { Markdown } from '../../../ui/Markdown';
-
 import type {
   ApprovalPrompt,
   MessageEntry,
@@ -210,11 +209,7 @@ function ToolCard({
   forceExpanded?: boolean;
   groupPosition?: ToolGroupPosition;
 }) {
-  const [expanded, setExpanded] = useState(false);
-  // When the parent toggles "expand/collapse all", follow that signal.
-  useEffect(() => {
-    if (forceExpanded !== undefined) setExpanded(forceExpanded);
-  }, [forceExpanded]);
+  const [expanded, setExpanded] = useState(forceExpanded ?? false);
   const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
   const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
   const resultText = tool.status !== 'running' && tool.result !== undefined ? stringify(tool.result) : undefined;
@@ -709,7 +704,14 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       const runtime = entry.runtimeTools?.[part.toolInvocation.toolCallId];
       const tool = toolFromInvocationPart(part, runtime);
       const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
-      return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
+      return (
+        <ToolCard
+          key={`${part.toolInvocation.toolCallId}:${allExpanded ?? 'individual'}`}
+          tool={tool}
+          forceExpanded={allExpanded}
+          groupPosition={groupPosition}
+        />
+      );
     },
     File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
   };

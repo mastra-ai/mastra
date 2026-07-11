@@ -12,7 +12,8 @@ import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../
 const connectGithubMock = vi.hoisted(() => vi.fn());
 const manageGithubConnectionMock = vi.hoisted(() => vi.fn());
 vi.mock('../../services/github', async importOriginal => {
-  const actual = await importOriginal<typeof import('../../services/github')>();
+  const actual: unknown = await importOriginal();
+  if (!actual || typeof actual !== 'object') throw new Error('Expected the GitHub services module');
   return { ...actual, connectGithub: connectGithubMock, manageGithubConnection: manageGithubConnectionMock };
 });
 import { useProjectsQuery } from '../../hooks/useProjects';

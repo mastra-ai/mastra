@@ -27,8 +27,8 @@
  * proxies API paths here instead.
  */
 
-import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { Mastra } from '@mastra/core/mastra';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';

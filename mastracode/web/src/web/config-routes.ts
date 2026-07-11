@@ -1,8 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { registerApiRoute } from '@mastra/core/server';
-import type { ApiRoute } from '@mastra/core/server';
-
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import {
@@ -19,6 +16,8 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
 
 type ConfigAuthStorage = Pick<
   AuthStorage,

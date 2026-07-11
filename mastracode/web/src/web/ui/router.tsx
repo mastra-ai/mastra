@@ -8,6 +8,7 @@
  * mirrors the guard: signed-in (or auth-disabled) visitors are sent back to
  * `/` so the app can render the draft composer.
  */
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { createBrowserRouter, Navigate, Outlet } from 'react-router';
 import type { RouteObject } from 'react-router';
 
@@ -25,7 +26,23 @@ import { AppBootScreen } from './ui/AppBootScreen';
  * matching launch HUD while its local server starts, keeping the handoff calm.
  */
 function AuthPendingScreen() {
-  return <AppBootScreen accessibleLabel="Checking sign-in" />;
+  if (typeof window !== 'undefined' && window.mastracodeDesktop) {
+    return <AppBootScreen accessibleLabel="Checking sign-in" />;
+  }
+
+  return (
+    <div
+      role="status"
+      aria-label="Checking sign-in"
+      className="flex h-dvh w-full items-center justify-center bg-surface1"
+    >
+      <div className="flex w-64 flex-col gap-3">
+        <Skeleton className="h-8 w-full" />
+        <Skeleton className="h-4 w-3/4" />
+        <Skeleton className="h-4 w-1/2" />
+      </div>
+    </div>
+  );
 }
 
 /**

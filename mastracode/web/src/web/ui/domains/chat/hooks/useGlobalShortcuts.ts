@@ -1,8 +1,8 @@
 import { useKeyDown } from '../../../lib/hooks';
 import { useOverlays } from '../../../lib/overlays';
 import { useActiveProjectContext } from '../../workspaces';
-import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useAbortAgentControllerMutation } from './useAgentControllerRunMutations';
 

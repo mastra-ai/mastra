@@ -1,6 +1,11 @@
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
 import type * as AuthModule from '../auth';
+import { mountApiRoutes } from '../test-utils';
+import { listInstallationRepos, listUserInstallations } from './client';
+import { buildGithubRoutes } from './routes';
+import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 // Mock drizzle's `eq`/`and` so the fake DB below can honour `where` predicates.
@@ -220,9 +225,6 @@ vi.mock('../auth', async () => {
   };
 });
 
-import { mountApiRoutes } from '../test-utils';
-import { buildGithubRoutes } from './routes';
-
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
@@ -298,8 +300,6 @@ function deleteRows(table: any, cond?: any): void {
 }
 
 // Resolve schema refs after import.
-import { listInstallationRepos, listUserInstallations } from './client';
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;

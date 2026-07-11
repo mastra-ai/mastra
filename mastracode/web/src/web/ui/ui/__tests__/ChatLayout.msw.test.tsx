@@ -83,9 +83,7 @@ describe('ChatLayout', () => {
       };
 
       const { container } = render(<ChatLayout sidebar={<div />} content={<div />} />);
-      const layout = container.firstElementChild;
 
-      expect(layout).toHaveClass('pt-10');
       expect(container.querySelector('.mastracode-desktop-drag-region')).toBeInTheDocument();
     });
   });

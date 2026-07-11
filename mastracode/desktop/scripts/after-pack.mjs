@@ -8,6 +8,7 @@ const execFileAsync = promisify(execFile);
 // Ad-hoc alpha builds use only a random session cookie and cannot rely on macOS Keychain-backed cookie encryption.
 const enableCookieEncryption = process.env.MASTRACODE_DESKTOP_LOCAL_ALPHA_BUILD !== '1';
 
+/** @param {import('electron-builder').AfterPackContext} context */
 export default async function afterPack(context) {
   if (context.electronPlatformName !== 'darwin') return;
   const appPath = join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);

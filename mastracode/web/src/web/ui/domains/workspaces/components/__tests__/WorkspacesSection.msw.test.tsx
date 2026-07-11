@@ -26,6 +26,7 @@ const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
 const RESOURCE_ID = 'resource-workspaces-section';
 const API = `${ORIGIN}/api/agent-controller/code`;
+const renderedSections: Array<ReturnType<typeof renderWithProviders>> = [];
 
 const githubProject: Project = {
   id: 'project-gh',
@@ -51,7 +52,16 @@ const localProject: Project = {
   createdAt: 1,
 };
 
-afterEach(() => {
+afterEach(async () => {
+  for (const rendered of renderedSections) rendered.unmount();
+  await Promise.all(renderedSections.map(({ client }) => client.cancelQueries()));
+  await waitFor(() => {
+    if (renderedSections.some(({ client }) => client.isMutating() > 0)) {
+      throw new Error('Workspace mutations are still pending');
+    }
+  });
+  for (const { client } of renderedSections) client.clear();
+  renderedSections.length = 0;
   localStorage.clear();
 });
 
@@ -80,22 +90,29 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
   server.use(
     http.post(`${API}/sessions`, async ({ request }) => {
       const body: unknown = await request.clone().json();
-      if (body === null || typeof body !== 'object' || !('resourceId' in body) || body.resourceId !== RESOURCE_ID) {
+      if (body === null || typeof body !== 'object' || !('resourceId' in body) || typeof body.resourceId !== 'string') {
         return undefined;
       }
-      return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: 'thread-test' });
+      return HttpResponse.json({ controllerId: 'code', resourceId: body.resourceId, threadId: 'thread-test' });
     }),
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(`${API}/sessions/${RESOURCE_ID}`, () => HttpResponse.json(sessionState(RESOURCE_ID))),
-    http.put(`${API}/sessions/${RESOURCE_ID}/state`, async ({ request }) => {
+    http.get(`${API}/sessions/:resourceId`, ({ params }) => HttpResponse.json(sessionState(String(params.resourceId)))),
+    http.put(`${API}/sessions/:resourceId/state`, async ({ params, request }) => {
       stateUpdates.push((await request.json()) as Record<string, unknown>);
-      return HttpResponse.json(sessionState(RESOURCE_ID));
+      return HttpResponse.json(sessionState(String(params.resourceId)));
     }),
-    http.get(`${API}/sessions/${RESOURCE_ID}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
-    http.get(`${API}/sessions/${RESOURCE_ID}/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${API}/sessions/${RESOURCE_ID}/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${API}/sessions/${RESOURCE_ID}/stream`, () => sse()),
+    http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
+    http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
+    http.post(`${API}/sessions/:resourceId/threads`, ({ params }) =>
+      HttpResponse.json({
+        id: 'thread-default',
+        title: 'New thread',
+        resourceId: String(params.resourceId),
+      }),
+    ),
+    http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
   );
 
   return { stateUpdates };
@@ -112,7 +129,7 @@ function LocationProbe() {
 }
 
 function renderSection(children?: ReactNode, initialPath = '/') {
-  return renderWithProviders(
+  const rendered = renderWithProviders(
     <MemoryRouter initialEntries={[initialPath]}>
       <ToastProvider>
         <ActiveProjectProvider>
@@ -124,6 +141,8 @@ function renderSection(children?: ReactNode, initialPath = '/') {
       </ToastProvider>
     </MemoryRouter>,
   );
+  renderedSections.push(rendered);
+  return rendered;
 }
 
 describe('WorkspacesSection', () => {

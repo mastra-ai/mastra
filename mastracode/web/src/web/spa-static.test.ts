@@ -45,10 +45,7 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
     const middleware = createSpaStaticMiddleware('/app/ui');
     const c = mockContext('GET', '/..%2fui.key');
-    let calledNext = false;
-    await middleware(c, async () => {
-      calledNext = true;
-    });
+    await middleware(c, async () => {});
 
     // readFile must not be called with a path outside uiDist.
     const readPath = vi.mocked(readFile).mock.calls[0]?.[0] as string | undefined;

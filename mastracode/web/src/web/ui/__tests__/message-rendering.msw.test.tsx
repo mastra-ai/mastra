@@ -109,7 +109,7 @@ function delayedSse(event: AgentControllerEvent) {
   return { response, emit: () => ready.then(() => emit()) };
 }
 
-function useAgentControllerHandlers({
+function installAgentControllerHandlers({
   messages = [],
   events = [],
 }: {
@@ -125,6 +125,7 @@ function useAgentControllerHandlers({
     http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () => HttpResponse.json({ models: [] })),
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json({ enabled: false, connected: false })),
     http.get(SESSION, () => HttpResponse.json(sessionState())),
     http.put(`${SESSION}/state`, async ({ request }) => {
       onState(await request.json());
@@ -154,7 +155,9 @@ function useAgentControllerHandlers({
   return { onState, onMode };
 }
 
-function useAuthMe(state: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null) {
+function installAuthMe(
+  state: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null,
+) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       state ? HttpResponse.json(state) : HttpResponse.json({}, { status: 404 }),
@@ -166,9 +169,9 @@ function renderSeededApp(
   authState: { authenticated?: boolean; user?: { name?: string; email?: string } | null } | null = null,
 ) {
   seedProject();
-  useAgentControllerHandlers();
+  installAgentControllerHandlers();
   if (authState) window.__MASTRACODE_CONFIG__ = { authEnabled: true };
-  useAuthMe(authState);
+  installAuthMe(authState);
   return renderChat();
 }
 
@@ -242,7 +245,7 @@ describe('MastraCode empty thread state', () => {
 describe('MastraCode message rendering', () => {
   it('renders hydrated persisted text, thinking, and tool content through Mastra message parts', async () => {
     seedProject();
-    useAgentControllerHandlers({
+    installAgentControllerHandlers({
       messages: [
         {
           id: 'assistant-1',
@@ -269,7 +272,7 @@ describe('MastraCode message rendering', () => {
 
   it('composes consecutive tool cards into a single bordered container', async () => {
     seedProject();
-    useAgentControllerHandlers({
+    installAgentControllerHandlers({
       messages: [
         {
           id: 'assistant-tools',
@@ -307,7 +310,7 @@ describe('MastraCode message rendering', () => {
       type: 'message_update',
       message: { id: 'assistant-stream', role: 'assistant', content: [{ type: 'text', text: 'Streaming now' }] },
     });
-    useAgentControllerHandlers();
+    installAgentControllerHandlers();
     server.use(http.get(`${SESSION}/stream`, () => stream.response));
 
     renderChat();
@@ -320,7 +323,7 @@ describe('MastraCode message rendering', () => {
 
   it('renders tool lifecycle events inline before a later message update re-emits the tool part', async () => {
     seedProject();
-    useAgentControllerHandlers({
+    installAgentControllerHandlers({
       events: [
         { type: 'tool_input_start', toolCallId: 'tool-live', toolName: 'execute_command' },
         {
@@ -344,7 +347,7 @@ describe('MastraCode message rendering', () => {
 
   it('renders status metadata as status UI instead of raw JSON', async () => {
     seedProject();
-    useAgentControllerHandlers({
+    installAgentControllerHandlers({
       messages: [
         {
           id: 'assistant-status',
@@ -363,7 +366,7 @@ describe('MastraCode message rendering', () => {
   describe('when a tool has JSON arguments', () => {
     it('shows the argument values when the card is expanded', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         messages: [
           {
             id: 'assistant-args',
@@ -388,7 +391,7 @@ describe('MastraCode message rendering', () => {
   describe('when a tool approval is required', () => {
     it('renders an approval prompt with approve and decline controls', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           { type: 'tool_approval_required', toolCallId: 'tool-1', toolName: 'edit', args: { path: 'src/index.ts' } },
         ],
@@ -405,7 +408,7 @@ describe('MastraCode message rendering', () => {
   describe('when a plan approval is suspended', () => {
     it('renders the plan title with approve and reject controls', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           {
             type: 'tool_suspended',
@@ -429,7 +432,7 @@ describe('MastraCode message rendering', () => {
   describe('when an access request is suspended', () => {
     it('renders allow and deny controls for the requested path', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           {
             type: 'tool_suspended',
@@ -452,7 +455,7 @@ describe('MastraCode message rendering', () => {
   describe('when the agent asks the user a question', () => {
     it('renders the question with selectable answer options', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           {
             type: 'tool_suspended',
@@ -476,7 +479,7 @@ describe('MastraCode message rendering', () => {
   describe('when a subagent is delegated work', () => {
     it('renders a subagent entry with its task', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           {
             type: 'subagent_start',
@@ -497,7 +500,7 @@ describe('MastraCode message rendering', () => {
   describe('when a goal evaluation arrives', () => {
     it('renders the goal panel with its objective and controls', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           {
             type: 'goal_evaluation',
@@ -516,7 +519,7 @@ describe('MastraCode message rendering', () => {
   describe('when a notice contains markdown', () => {
     it('renders the notice text as formatted markdown instead of raw syntax', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [{ type: 'info', message: "I'm in **plan mode** — run `/mode build`" }],
       });
 
@@ -533,7 +536,7 @@ describe('MastraCode message rendering', () => {
 
     it('renders fenced code blocks through Shiki while keeping raw HTML escaped', async () => {
       seedProject();
-      useAgentControllerHandlers({
+      installAgentControllerHandlers({
         events: [
           {
             type: 'info',
@@ -560,7 +563,7 @@ describe('MastraCode message rendering', () => {
 
   it('renders edit diffs without highlight.js classes', async () => {
     seedProject();
-    useAgentControllerHandlers({
+    installAgentControllerHandlers({
       messages: [
         {
           id: 'assistant-edit',
@@ -597,7 +600,7 @@ describe('App mode + theme controls', () => {
   describe('when a project with multiple modes is active', () => {
     function seedMultiMode() {
       seedProject();
-      const handlers = useAgentControllerHandlers();
+      const handlers = installAgentControllerHandlers();
       server.use(
         http.get(`${API}/modes`, () =>
           HttpResponse.json({

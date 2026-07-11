@@ -1,5 +1,5 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 
 import type { AgentControllerSession } from '../services/agentControllerClient';
 
@@ -22,11 +22,8 @@ export function useAgentControllerEvents({
 }: UseAgentControllerEventsArgs) {
   const [connectionState, setConnectionStateSnapshot] = useState<SseConnectionState>('never');
   const connectedSnapshotRef = useRef<SseConnectionState>('never');
-  const onEventRef = useRef(onEvent);
-  const onConnectedChangeRef = useRef(onConnectedChange);
-
-  onEventRef.current = onEvent;
-  onConnectedChangeRef.current = onConnectedChange;
+  const emitEvent = useEffectEvent(onEvent);
+  const emitConnectedChange = useEffectEvent(onConnectedChange);
 
   useEffect(() => {
     if (!enabled || !session || !epoch) return;
@@ -37,7 +34,7 @@ export function useAgentControllerEvents({
     const setConnectionState = (state: SseConnectionState) => {
       if (connectedSnapshotRef.current === state) return;
       connectedSnapshotRef.current = state;
-      onConnectedChangeRef.current(state === 'connected');
+      emitConnectedChange(state === 'connected');
       setConnectionStateSnapshot(state);
     };
 
@@ -47,7 +44,7 @@ export function useAgentControllerEvents({
 
     void session
       .subscribe({
-        onEvent: event => onEventRef.current(event),
+        onEvent: emitEvent,
         onError: () => {
           if (!disposed) disconnect();
         },

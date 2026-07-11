@@ -186,7 +186,7 @@ describe('StatusLine', () => {
       useAgentControllerHandlers();
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
+      expect(await screen.findByText('gpt-4o-mini')).toBeInTheDocument();
       expect(screen.queryByText('no model')).not.toBeInTheDocument();
     });
 
@@ -283,7 +283,7 @@ describe('StatusLine', () => {
       useAgentControllerHandlers([{ type: 'om_observation_start' }]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('observing')).toBeInTheDocument());
+      expect(await screen.findByText('observing')).toBeInTheDocument();
     });
 
     it('shows tokens-per-second throughput after a streamed step reports usage', async () => {
@@ -300,7 +300,7 @@ describe('StatusLine', () => {
       );
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText(/\d+ tok\/s/)).toBeInTheDocument());
+      expect(await screen.findByText(/\d+ tok\/s/)).toBeInTheDocument();
     });
   });
 
@@ -310,7 +310,7 @@ describe('StatusLine', () => {
       useAgentControllerHandlers([{ type: 'follow_up_queued', count: 2 }]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('2 queued')).toBeInTheDocument());
+      expect(await screen.findByText('2 queued')).toBeInTheDocument();
     });
   });
 
@@ -325,7 +325,7 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('pursuing goal')).toBeInTheDocument());
+      expect(await screen.findByText('pursuing goal')).toBeInTheDocument();
     });
 
     it('shows the paused label for a paused goal', async () => {
@@ -338,7 +338,7 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('goal paused')).toBeInTheDocument());
+      expect(await screen.findByText('goal paused')).toBeInTheDocument();
     });
 
     it('hides the goal indicator once the goal is done', async () => {
@@ -351,7 +351,7 @@ describe('StatusLine', () => {
       ]);
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
+      expect(await screen.findByText('gpt-4o-mini')).toBeInTheDocument();
       expect(screen.queryByText('pursuing goal')).not.toBeInTheDocument();
       expect(screen.queryByText('goal paused')).not.toBeInTheDocument();
     });
@@ -363,7 +363,7 @@ describe('StatusLine', () => {
       useAgentControllerHandlers();
       renderStatusLine();
 
-      await waitFor(() => expect(screen.getByText('gpt-4o-mini')).toBeInTheDocument());
+      expect(await screen.findByText('gpt-4o-mini')).toBeInTheDocument();
       expect(screen.queryByTitle('Message window until next observation')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Observations accumulated until next reflection')).not.toBeInTheDocument();
       expect(screen.queryByText(/tok\/s/)).not.toBeInTheDocument();

@@ -5,7 +5,6 @@ import { queryKeys } from '../api/keys';
 import type {
   CompleteProviderOAuthBody,
   CompleteProviderOAuthResponse,
-  ProviderInfo,
   ProvidersResponse,
   SaveProviderKeyResponse,
   StartProviderOAuthResponse,

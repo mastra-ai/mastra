@@ -1,8 +1,8 @@
 import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMProgress } from '@mastra/client-js';
-import { useReducer, useRef } from 'react';
+import { useReducer } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
-import type { TranscriptState, UsageSnapshot } from '../services/transcript';
+import type { UsageSnapshot } from '../services/transcript';
 
 export interface SessionStateSnapshot {
   omProgress?: AgentControllerOMProgress;
@@ -26,9 +26,6 @@ export function useAgentControllerTranscript({
       usage: initialState?.tokenUsage,
     }),
   );
-  const transcriptRef = useRef<TranscriptState>(transcript);
-  transcriptRef.current = transcript;
-
   const reset = (threadId?: string, state?: SessionStateSnapshot) => {
     dispatch({
       type: 'reset',
@@ -64,7 +61,6 @@ export function useAgentControllerTranscript({
 
   return {
     transcript,
-    transcriptRef,
     reset,
     syncState,
     onEvent,

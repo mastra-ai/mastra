@@ -15,8 +15,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui/render';
-import type { GithubStatus, Project } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
+import type { GithubStatus, Project } from '../../workspaces';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
 import type { IntakeConfig } from '../services/intake';
 import type { LinearIssue, LinearStatus } from '../services/linear';
@@ -160,7 +160,7 @@ interface AppHandlerOptions {
   linearStatus?: LinearStatus;
 }
 
-function useAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions = {}) {
+function installAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(githubStatus)),
@@ -196,7 +196,7 @@ function renderAt(
   options: AppHandlerOptions = {},
 ) {
   seedActiveProject(project);
-  useAppHandlers(githubStatus, options);
+  installAppHandlers(githubStatus, options);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);

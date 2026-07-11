@@ -4,7 +4,8 @@ import type { ComponentType } from 'react';
 import { NavLink } from 'react-router';
 
 import { useOverlays } from '../../../lib/overlays';
-import { useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
+import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
+import { useGithubStatusQuery } from '../../workspaces/hooks/useGithubStatus';
 
 /**
  * Sidebar navigation for the Factory pages. Factory data comes from GitHub, so

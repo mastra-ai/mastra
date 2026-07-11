@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Hono } from 'hono';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildConfigRoutes, buildProviderAccess, listProviders } from './config-routes.js';
 import { mountApiRoutes } from './test-utils.js';

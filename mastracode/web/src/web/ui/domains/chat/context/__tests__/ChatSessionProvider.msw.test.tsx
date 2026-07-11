@@ -13,10 +13,10 @@ import type {
   PermissionPolicy,
   PermissionRules,
 } from '@mastra/client-js';
-import type { ReactNode } from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -30,10 +30,10 @@ import { ChatCommandsProvider, useChatCommands } from '../ChatCommandsProvider';
 import { ChatSessionProvider } from '../ChatSessionProvider';
 import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
-import { useChatPermissions } from '../useChatPermissions';
-import { useChatTranscript } from '../useChatTranscript';
 import { useChatModes } from '../useChatModes';
+import { useChatPermissions } from '../useChatPermissions';
 import { useChatSessionContext } from '../useChatSessionContext';
+import { useChatTranscript } from '../useChatTranscript';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-test';

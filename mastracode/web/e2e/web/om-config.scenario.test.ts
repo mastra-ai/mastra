@@ -2,10 +2,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { applyOmRoleOverride } from '@mastra/code-sdk/onboarding/om-settings';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import { applyOmRoleOverride } from '@mastra/code-sdk/onboarding/om-settings';
 import { readOMConfig } from '../../src/web/config-routes.js';
 import type { OMSession } from '../../src/web/config-routes.js';
 

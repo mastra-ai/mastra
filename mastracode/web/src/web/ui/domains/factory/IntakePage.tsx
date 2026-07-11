@@ -5,7 +5,7 @@ import { CircleDot } from 'lucide-react';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { relativeTime } from '../../../../shared/lib/date';
-import { SkeletonRows } from '../../ui';
+import { SkeletonRows } from '../../ui/SkeletonRows';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';

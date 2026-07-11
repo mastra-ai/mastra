@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { once } from 'node:events';
 import { copyFile, mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
 import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
@@ -263,7 +263,7 @@ async function launchDesktopOverCdp(
 }
 
 function reportStage(stage: string): void {
-  console.log(`[MastraCode Desktop E2E] ${stage}`);
+  console.info(`[MastraCode Desktop E2E] ${stage}`);
 }
 
 async function expectProjectPersisted(page: Page, expectedName: string, expectedPath: string): Promise<void> {
@@ -353,6 +353,12 @@ export async function runDesktopAcceptance(options: DesktopAcceptanceOptions): P
     const appInfo = await page.evaluate(() => window.mastracodeDesktop?.getAppInfo());
     if (!appInfo) throw new Error('The typed desktop bridge did not return app information');
     expect(appInfo.name).toBe('MastraCode Desktop Alpha');
+    const dragRegion = page.locator('.mastracode-desktop-drag-region');
+    await expect(dragRegion).toBeAttached();
+    const desktopTopPadding = await dragRegion.evaluate(
+      element => window.getComputedStyle(element.parentElement ?? element).paddingTop,
+    );
+    expect(desktopTopPadding).toBe('40px');
     const windowTitle = await desktopInstance.getWindowTitle();
     if (windowTitle !== undefined) expect(windowTitle).toBe('MastraCode Desktop Alpha');
 
@@ -467,7 +473,7 @@ export async function runDesktopAcceptance(options: DesktopAcceptanceOptions): P
   } finally {
     reportStage('cleaning up');
     const diagnostics = desktopInstance?.diagnostics().trim();
-    if (!acceptanceSucceeded && diagnostics) console.log(`[MastraCode Desktop E2E diagnostics]\n${diagnostics}`);
+    if (!acceptanceSucceeded && diagnostics) console.info(`[MastraCode Desktop E2E diagnostics]\n${diagnostics}`);
     await desktopInstance?.close().catch(() => undefined);
     await rm(projectDir, { recursive: true, force: true });
     await rm(unauthorizedProjectDir, { recursive: true, force: true });

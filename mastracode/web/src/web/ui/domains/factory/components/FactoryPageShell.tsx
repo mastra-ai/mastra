@@ -4,10 +4,12 @@ import type { ReactNode } from 'react';
 
 import { useOverlays } from '../../../lib/overlays';
 import { Sidebar } from '../../../Sidebar';
-import { ChatLayout } from '../../../ui';
+import { ChatLayout } from '../../../ui/ChatLayout';
 import { ChatHeader } from '../../chat/components/ChatHeader';
-import { EmptyProjectState, useActiveProjectContext, useGithubStatusQuery } from '../../workspaces';
-import type { Project } from '../../workspaces';
+import { EmptyProjectState } from '../../workspaces/components/EmptyProjectState';
+import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
+import { useGithubStatusQuery } from '../../workspaces/hooks/useGithubStatus';
+import type { Project } from '../../workspaces/services/projects';
 
 interface FactoryPageShellProps {
   title: string;

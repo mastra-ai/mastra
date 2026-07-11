@@ -3,7 +3,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GitPullRequest } from 'lucide-react';
 
 import { relativeTime } from '../../../../shared/lib/date';
-import { SkeletonRows } from '../../ui';
+import { SkeletonRows } from '../../ui/SkeletonRows';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';

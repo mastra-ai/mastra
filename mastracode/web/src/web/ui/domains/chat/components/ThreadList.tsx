@@ -10,7 +10,7 @@ import { useNavigate, useParams } from 'react-router';
 
 import { relativeTime } from '../../../../../shared/lib/date';
 import { useOverlays } from '../../../lib/overlays';
-import { useToast } from '../../../ui';
+import { useToast } from '../../../ui/toast';
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';

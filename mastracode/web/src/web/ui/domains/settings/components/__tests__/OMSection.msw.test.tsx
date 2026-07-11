@@ -94,7 +94,7 @@ describe('OMSection', () => {
       await user.tab();
 
       await waitFor(() => expect(putBody).toEqual({ resourceId: RESOURCE_ID, observationThreshold: 5000 }));
-      await waitFor(() => expect(screen.getByDisplayValue('5000')).toBeInTheDocument());
+      expect(await screen.findByDisplayValue('5000')).toBeInTheDocument();
     });
   });
 

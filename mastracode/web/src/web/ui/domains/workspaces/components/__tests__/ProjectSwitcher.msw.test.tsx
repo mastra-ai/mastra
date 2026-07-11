@@ -5,7 +5,7 @@
  * drives the projects modal through `useOverlays` — no props. Opening the
  * projects overlay also closes the sidebar drawer (mobile behavior).
  */
-import { screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -59,7 +59,7 @@ describe('ProjectSwitcher', () => {
     seedProject();
     renderSwitcher();
 
-    await waitFor(() => expect(screen.getByText('MastraCode Test')).toBeInTheDocument());
+    expect(await screen.findByText('MastraCode Test')).toBeInTheDocument();
     expect(screen.getByText('/tmp/mastracode-test')).toBeInTheDocument();
   });
 
@@ -76,7 +76,7 @@ describe('ProjectSwitcher', () => {
     await userEvent.click(screen.getByRole('button', { name: 'open sidebar' }));
     expect(screen.getByTestId('sidebar-open')).toHaveTextContent('yes');
 
-    await waitFor(() => expect(screen.getByText('MastraCode Test')).toBeInTheDocument());
+    expect(await screen.findByText('MastraCode Test')).toBeInTheDocument();
     await userEvent.click(screen.getByTitle('/tmp/mastracode-test'));
 
     expect(screen.getByTestId('projects-open')).toHaveTextContent('yes');

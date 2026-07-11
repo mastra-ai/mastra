@@ -10,6 +10,11 @@ const targetApp = '/Applications/MastraCode Desktop Alpha.app';
 const appName = 'MastraCode Desktop Alpha';
 const appId = 'ai.mastra.mastracode.desktop.alpha';
 
+/**
+ * @param {string} command
+ * @param {string[]} args
+ * @param {import('node:child_process').SpawnSyncOptions} [options]
+ */
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, { stdio: 'inherit', ...options });
   if (result.status !== 0) {

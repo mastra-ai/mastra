@@ -8,9 +8,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
+import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatCommandsProvider } from '../../../chat/context/ChatCommandsProvider';
 import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
-import { OverlaysProvider } from '../../../../lib/overlays';
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider } from '../../../workspaces';
 import { SettingsPanel } from '../../index';
@@ -55,7 +55,7 @@ function sse(): Response {
   });
 }
 
-function useAgentControllerHandlers(): CapturedRequests {
+function installAgentControllerHandlers(): CapturedRequests {
   const captured: CapturedRequests = { modelIds: [], stateUpdates: [], permissions: [] };
 
   server.use(
@@ -147,7 +147,7 @@ function Harness({ children }: { children: ReactNode }) {
 
 function renderSettingsPanel() {
   seedProject();
-  const captured = useAgentControllerHandlers();
+  const captured = installAgentControllerHandlers();
   renderWithProviders(
     <Harness>
       <SettingsPanel onClose={() => {}} />

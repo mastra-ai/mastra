@@ -1,12 +1,12 @@
 import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
 
-const require = createRequire(import.meta.url);
-const electronDist = join(dirname(require.resolve('electron/package.json')), 'dist');
+import { resolveElectronDist } from './electron-dist.mjs';
+
+const electronDist = resolveElectronDist();
 const packageRoot = new URL('..', import.meta.url);
 const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
 
+/** @param {NodeJS.ProcessEnv} env */
 function hasNotarizationCredentials(env) {
   return (
     (env.APPLE_API_KEY && env.APPLE_API_KEY_ID && env.APPLE_API_ISSUER) ||
