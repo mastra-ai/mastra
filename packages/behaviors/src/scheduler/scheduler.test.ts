@@ -100,6 +100,74 @@ describe('BehaviorScheduler', () => {
     expect(audit.map(event => event.type)).toEqual(['scheduler.claimed', 'scheduler.failed']);
   });
 
+  it('fails closed and backs off when a judge times out', async () => {
+    let time = 0;
+    const now = () => new Date(time);
+    const judged = normalizeBehavior({
+      id: 'judged', version: '1', initialState: 'poll', states: [{
+        id: 'poll', periodic: { intervalMs: 100, transition: 'again' }, transitions: [
+          { id: 'again', target: 'poll', judge: true },
+          { id: 'exit', target: 'exit', exit: true },
+        ],
+      }],
+    });
+    const store = new InMemoryBehaviorRuntimeStore();
+    const engine = new BehaviorTransitionEngine({
+      definition: judged,
+      store,
+      now,
+      judgeTimeoutMs: 5,
+      judge: async () => new Promise(() => {}),
+    });
+    await store.init();
+    await engine.initialize('thread');
+    time = 100;
+    const scheduler = new BehaviorScheduler({
+      behaviorId: judged.id, definition: judged, store, engine, now, retryBackoffMs: 500,
+    });
+    expect(await scheduler.tick()).toBe(0);
+    const record = await store.readThread({ threadId: 'thread', behaviorId: judged.id });
+    expect(record?.transitionHistory).toHaveLength(0);
+    expect(record?.nextCheckAt).toBe(new Date(600).toISOString());
+    expect(record?.audit.lastSchedulerError).toContain('failed closed');
+  });
+
+  it('rejects a stale judge result after the claimed record changes', async () => {
+    let time = 0;
+    const now = () => new Date(time);
+    let releaseJudge!: (result: { approved: boolean }) => void;
+    const judgeResult = new Promise<{ approved: boolean }>(resolve => { releaseJudge = resolve; });
+    const judged = normalizeBehavior({
+      id: 'stale', version: '1', initialState: 'poll', states: [{
+        id: 'poll', periodic: { intervalMs: 100, transition: 'again' }, transitions: [
+          { id: 'again', target: 'poll', judge: true },
+          { id: 'exit', target: 'exit', exit: true },
+        ],
+      }],
+    });
+    const store = new InMemoryBehaviorRuntimeStore();
+    const engine = new BehaviorTransitionEngine({ definition: judged, store, now, judge: async () => judgeResult });
+    await store.init();
+    await engine.initialize('thread');
+    time = 100;
+    const scheduler = new BehaviorScheduler({ behaviorId: judged.id, definition: judged, store, engine, now });
+    const tick = scheduler.tick();
+    await vi.waitFor(async () => {
+      const record = await store.readThread({ threadId: 'thread', behaviorId: judged.id });
+      expect(record?.checkpoints.schedulerLease).toBeDefined();
+    });
+    const key = { threadId: 'thread', behaviorId: judged.id };
+    await store.transactThread(key, current => ({
+      next: { ...current!, revision: current!.revision + 1, conditionState: { changed: true } },
+      result: undefined,
+    }));
+    releaseJudge({ approved: true });
+    expect(await tick).toBe(0);
+    const record = await store.readThread(key);
+    expect(record?.transitionHistory).toHaveLength(0);
+    expect(record?.audit.lastSchedulerError).toContain('Stale transition result');
+  });
+
   it('owns one timer and stops it during replacement', () => {
     vi.useFakeTimers();
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');

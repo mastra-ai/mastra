@@ -169,16 +169,24 @@ export class BehaviorTransitionEngine {
     if (!this.options.judge) throw new BehaviorTransitionError('Transition requires a judge');
     const timeout = AbortSignal.timeout(this.options.judgeTimeoutMs ?? 30_000);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+    let rejectOnAbort: ((event: Event) => void) | undefined;
     try {
-      return await this.options.judge({
+      const judgeResult = this.options.judge({
         definition: this.options.definition,
         record,
         transition,
         judgeInstructions: this.options.definition.states[record.activeState]?.judgeInstructions,
         signal: combined,
       });
+      const aborted = new Promise<never>((_, reject) => {
+        rejectOnAbort = () => reject(combined.reason ?? new Error('Judge timed out'));
+        combined.addEventListener('abort', rejectOnAbort, { once: true });
+      });
+      return await Promise.race([judgeResult, aborted]);
     } catch (error) {
       throw new BehaviorTransitionError(`Judge failed closed: ${String(error)}`);
+    } finally {
+      if (rejectOnAbort) combined.removeEventListener('abort', rejectOnAbort);
     }
   }
 
