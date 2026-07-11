@@ -11,6 +11,8 @@ export type {
   NormalizedBehaviorState,
   NormalizedBehaviorTransition,
 } from './definition/types.js';
+export { BehaviorIntentPolicyProcessor, behaviorIntentField } from './enforcement/intent-policy.js';
+export type { BehaviorIntentJudge, BehaviorIntentPolicyOptions } from './enforcement/intent-policy.js';
 export { InMemoryBehaviorRuntimeStore } from './runtime/in-memory-store.js';
 export { LibSQLBehaviorRuntimeStore } from './runtime/libsql-store.js';
 export { BehaviorSignalProvider } from './runtime/provider.js';
