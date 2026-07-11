@@ -74,14 +74,21 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
   private readonly intentProcessor: BehaviorIntentPolicyProcessor;
   private readonly routingProcessor: BehaviorRoutingProcessor;
   private readonly tools: Record<string, unknown>;
+  private readonly threadIds = new WeakMap<RequestContext, string>();
+  private readonly resolveThreadId: (requestContext?: RequestContext) => string | undefined;
 
   constructor(readonly options: BehaviorSignalProviderOptions) {
     super();
     this.id = `behavior-${options.definition.id}`;
+    this.resolveThreadId = requestContext =>
+      options.resolveThreadId(requestContext) ?? (requestContext ? this.threadIds.get(requestContext) : undefined);
+    const runtimeOptions = { ...options, resolveThreadId: this.resolveThreadId };
     this.engine = new BehaviorTransitionEngine(options);
-    this.stateProcessor = new BehaviorStateProcessor(options.definition, options.store);
-    this.intentProcessor = new BehaviorIntentPolicyProcessor(options);
-    this.routingProcessor = new BehaviorRoutingProcessor(options);
+    this.stateProcessor = new BehaviorStateProcessor(options.definition, options.store, (requestContext, threadId) => {
+      if (requestContext) this.threadIds.set(requestContext, threadId);
+    });
+    this.intentProcessor = new BehaviorIntentPolicyProcessor(runtimeOptions);
+    this.routingProcessor = new BehaviorRoutingProcessor(runtimeOptions);
     this.tools = this.createTools();
   }
 
@@ -103,7 +110,7 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
 
   private createTools(): Record<string, unknown> {
     const threadId = (context: BehaviorToolContext) => {
-      const id = this.options.resolveThreadId(context.requestContext);
+      const id = this.resolveThreadId(context.requestContext);
       if (!id) throw new Error('Behavior tool requires thread context');
       return id;
     };

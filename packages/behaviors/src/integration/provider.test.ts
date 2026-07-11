@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { normalizeBehavior } from '../definition/normalize.js';
@@ -65,6 +66,24 @@ describe('BehaviorSignalProvider integration', () => {
     const { provider } = await makeProvider({ resolveModel: () => undefined, unavailableModel: 'error' });
     const routing = provider.getInputProcessors()[1] as { processInputStep(args: never): Promise<unknown> };
     await expect(routing.processInputStep(inputArgs())).rejects.toThrow('is unavailable');
+  });
+
+  it('uses state-signal thread context for tools in ordinary memory-backed agents', async () => {
+    const { provider, store } = await makeProvider({ resolveThreadId: () => undefined });
+    const requestContext = new RequestContext();
+    const stateProcessor = provider.getInputProcessors()[2] as {
+      computeStateSignal(args: never): Promise<unknown>;
+    };
+    await stateProcessor.computeStateSignal({
+      threadId: 'studio-thread',
+      requestContext,
+      contextWindow: { hasSnapshot: false },
+      activeStateSignals: [],
+      deltasSinceSnapshot: [],
+    } as never);
+    const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
+    await tools.behavior_select!.execute({}, { requestContext });
+    expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('understand');
   });
 
   it('exposes stable selection, intent, transition, and exit tools', async () => {

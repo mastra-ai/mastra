@@ -14,12 +14,14 @@ export class BehaviorStateProcessor {
   constructor(
     private readonly definition: NormalizedBehaviorDefinition,
     private readonly store: BehaviorRuntimeStore,
+    private readonly rememberThreadId?: (requestContext: ComputeStateSignalArgs['requestContext'], threadId: string) => void,
   ) {
     this.id = `behavior-state-${definition.id}`;
     this.stateId = `behavior:${definition.id}`;
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
+    this.rememberThreadId?.(args.requestContext, args.threadId);
     const record = await this.store.readThread({ threadId: args.threadId, behaviorId: this.definition.id });
     const prior = args.lastSnapshot?.metadata?.record as { revision?: number; status?: string } | undefined;
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
