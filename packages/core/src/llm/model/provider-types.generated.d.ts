@@ -381,8 +381,10 @@ export type ProviderModelsMap = {
     'klingai/kling-v3.0-i2v',
     'klingai/kling-v3.0-motion-control',
     'klingai/kling-v3.0-t2v',
+    'kwaipilot/kat-coder-air-v2.5',
     'kwaipilot/kat-coder-pro-v1',
     'kwaipilot/kat-coder-pro-v2',
+    'kwaipilot/kat-coder-pro-v2.5',
     'meituan/longcat-flash-chat',
     'meituan/longcat-flash-thinking-2601',
     'meta/llama-3.1-70b',
@@ -4009,6 +4011,7 @@ export type ProviderModelsMap = {
     'databricks-gemini-3-1-pro',
     'databricks-gemini-3-flash',
     'databricks-gemini-3-pro',
+    'databricks-glm-5-2',
     'databricks-gpt-5',
     'databricks-gpt-5-1',
     'databricks-gpt-5-2',
@@ -4020,6 +4023,7 @@ export type ProviderModelsMap = {
     'databricks-gpt-5-nano',
     'databricks-gpt-oss-120b',
     'databricks-gpt-oss-20b',
+    'databricks-kimi-k2-7-code',
   ];
   readonly crof: readonly [
     'deepseek-v3.2',
