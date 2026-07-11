@@ -33,6 +33,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
+    "@aws-sdk/client-bedrock-agent-runtime": "^3.1076.0",
     "big.js": "^7.0.1",
     "js-tiktoken": "^1.0.21",
     "node-html-better-parser": "^1.5.8",
