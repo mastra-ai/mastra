@@ -268,6 +268,7 @@ describe('updateStatusLine', () => {
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(70);
     expect(rendered).toContain('PR#17439');
+    expect(rendered).not.toContain('60/120k');
   });
 
   it('shows the PR label without a thread title or branch and uses orange for high priority', () => {
@@ -400,7 +401,8 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('A much longe..d app…');
+    expect(rendered).toContain('A much longe..d appear');
+    expect(rendered).not.toContain('60/120k');
     expect(rendered).not.toContain('feature/super-long-branch');
     expect(rendered).not.toContain('mastra--feat-mc-queueing-ux');
   });
@@ -567,13 +569,15 @@ describe('updateStatusLine', () => {
     expect(visibleWidthMock(withoutSavings)).toBe(visibleWidthMock(withSavings));
   });
 
-  it('keeps the unified indicator at 60 columns', () => {
+  it('drops the unified indicator before core status content at 60 columns', () => {
     const state = createState();
     process.stdout.columns = 60;
 
     updateStatusLine(state);
 
-    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('━━━━━━━━━━  60/120k↓ ');
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('feat/mc-queueing-ux');
+    expect(rendered).not.toContain('60/120k');
   });
 
   it('animates only the message segment while keeping the middle, model, badge, and text static', () => {

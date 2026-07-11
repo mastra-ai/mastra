@@ -469,7 +469,7 @@ export function updateStatusLine(state: TUIState): void {
     return { plain: '', styled: styledLine };
   };
   // Try progressively more compact layouts.
-  // Priority: context indicator > provider > badge > queue/goal details.
+  // Preserve status content before the context indicator, which is a visual summary.
   const result =
     buildLine({
       modelId: fullModelId,
@@ -478,10 +478,17 @@ export function updateStatusLine(state: TUIState): void {
       allowDirTruncation: false,
       showQueue: true,
     }) ??
-    buildLine({ modelId: fullModelId, showDir: false, dir: centerTextShort, showQueue: true }) ??
-    buildLine({ modelId: fullModelId, showDir: false, showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showDir: false, showQueue: true }) ??
-    buildLine({ modelId: tinyModelId, showDir: false, badge: 'short', showQueue: true }) ??
+    buildLine({
+      modelId: fullModelId,
+      showOM: false,
+      showDir: false,
+      dir: centerText,
+      allowDirTruncation: false,
+      showQueue: true,
+    }) ??
+    buildLine({ modelId: fullModelId, showOM: false, showDir: false, dir: centerTextShort, showQueue: true }) ??
+    buildLine({ modelId: fullModelId, showOM: false, showDir: false, showQueue: true }) ??
+    buildLine({ modelId: tinyModelId, showOM: false, showDir: false, showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({ modelId: '', showOM: false, showDir: false, badge: 'short', showQueue: true }) ??
     buildLine({ modelId: tinyModelId, showOM: false, showDir: false }) ??
