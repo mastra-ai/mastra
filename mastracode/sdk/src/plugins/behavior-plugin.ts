@@ -35,7 +35,7 @@ export function createMastraCodeBehaviorPlugin(options: MastraCodeBehaviorPlugin
             return controller?.threadId ?? requestContext?.get('threadId');
           },
           resolveModel: (model, { requestContext }) => resolveModel(model, { requestContext }),
-          unavailableModel: 'fallback',
+          unavailableModel: 'error',
         }),
       ];
     },
