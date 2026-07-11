@@ -2147,8 +2147,6 @@ export type ProviderModelsMap = {
     'llama-3.3-70b-instruct',
     'llama-4-maverick-17b-instruct',
     'llama-4-scout-17b-instruct',
-    'mimo-v2-omni',
-    'mimo-v2-pro',
     'mimo-v2.5',
     'mimo-v2.5-pro',
     'minimax-m2',
@@ -3609,7 +3607,6 @@ export type ProviderModelsMap = {
     'liquid/lfm-2.5-1.2b-instruct:free',
     'liquid/lfm-2.5-1.2b-thinking:free',
     'mancer/weaver',
-    'meta-llama/llama-3-8b-instruct',
     'meta-llama/llama-3.1-70b-instruct',
     'meta-llama/llama-3.1-8b-instruct',
     'meta-llama/llama-3.2-11b-vision-instruct',
@@ -4760,7 +4757,12 @@ export type ProviderModelsMap = {
   ];
   readonly moark: readonly ['GLM-4.7', 'MiniMax-M2.1'];
   readonly lilac: readonly ['google/gemma-4-31b-it', 'minimaxai/minimax-m3', 'moonshotai/kimi-k2.6', 'zai-org/glm-5.2'];
-  readonly ambient: readonly ['moonshotai/kimi-k2.6', 'moonshotai/kimi-k2.7-code', 'zai-org/GLM-5.1-FP8'];
+  readonly ambient: readonly [
+    'moonshotai/kimi-k2.6',
+    'moonshotai/kimi-k2.7-code',
+    'zai-org/GLM-5.1-FP8',
+    'zai-org/GLM-5.2-FP8',
+  ];
   readonly neon: readonly [
     'claude-haiku-4-5',
     'claude-opus-4-1',
