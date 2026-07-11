@@ -116,11 +116,23 @@ export class BehaviorTransitionEngine {
   private reconcile(record: BehaviorRuntimeRecord): BehaviorRuntimeRecord {
     if (record.definitionVersion === this.options.definition.version) return record;
     if (this.options.definition.states[record.activeState]) {
-      return { ...record, definitionVersion: this.options.definition.version, revision: record.revision + 1 };
+      return {
+        ...record,
+        definitionVersion: this.options.definition.version,
+        revision: record.revision + 1,
+        nextCheckAt: this.nextCheckAt(record.activeState),
+      };
     }
     const mapped = this.options.definition.migrations[record.activeState];
     if (mapped) {
-      return { ...record, activeState: mapped, definitionVersion: this.options.definition.version, revision: record.revision + 1, enteredAt: this.now().toISOString() };
+      return {
+        ...record,
+        activeState: mapped,
+        definitionVersion: this.options.definition.version,
+        revision: record.revision + 1,
+        enteredAt: this.now().toISOString(),
+        nextCheckAt: this.nextCheckAt(mapped),
+      };
     }
     return {
       ...record,
@@ -129,6 +141,11 @@ export class BehaviorTransitionEngine {
       definitionVersion: this.options.definition.version,
       revision: record.revision + 1,
     };
+  }
+
+  private nextCheckAt(stateId: string): string | undefined {
+    const periodic = this.options.definition.states[stateId]?.periodic;
+    return periodic ? new Date(this.now().getTime() + periodic.intervalMs).toISOString() : undefined;
   }
 
   private async evaluateGuards(record: BehaviorRuntimeRecord, transition: NormalizedBehaviorTransition): Promise<void> {

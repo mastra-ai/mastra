@@ -50,15 +50,23 @@ export class BehaviorStateProcessor {
     ]
       .filter(Boolean)
       .join('\n');
+    const projected = {
+      id: this.definition.id,
+      version: record.definitionVersion,
+      revision: record.revision,
+      state: record.activeState,
+      status: record.status,
+      intent: record.intent,
+    };
     return {
       id: this.stateId,
       cacheKey,
       mode: 'snapshot',
       tagName: 'current-behavior',
       contents: `\n${contents}\n`,
-      value: { behavior: record },
+      value: { behavior: projected },
       attributes: { id: this.definition.id, state: record.activeState, status: record.status },
-      metadata: { record },
+      metadata: { record: { revision: record.revision, status: record.status } },
     };
   }
 }

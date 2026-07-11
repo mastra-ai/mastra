@@ -51,6 +51,31 @@ describe.each([
   });
 });
 
+it('serializes LibSQL transactions across store instances', async () => {
+  const url = `file:${path.join(os.tmpdir(), `behavior-shared-${crypto.randomUUID()}.db`)}`;
+  const firstClient = createClient({ url });
+  const secondClient = createClient({ url });
+  const first = new LibSQLBehaviorRuntimeStore(firstClient);
+  const second = new LibSQLBehaviorRuntimeStore(secondClient);
+  await first.init();
+  const key = { threadId: 'thread', behaviorId: 'shared' };
+  const initial = {
+    threadId: 'thread', behaviorId: 'shared', definitionVersion: '1', revision: 0, status: 'active' as const,
+    activeState: 'state', enteredAt: '', transitionHistory: [], conditionState: {}, checkpoints: {}, judgeResults: {}, audit: {},
+  };
+  await first.transactThread(key, () => ({ next: initial, result: undefined }));
+  await Promise.all([
+    first.transactThread(key, async current => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return { next: { ...current!, revision: current!.revision + 1 }, result: undefined };
+    }),
+    second.transactThread(key, current => ({ next: { ...current!, revision: current!.revision + 1 }, result: undefined })),
+  ]);
+  expect((await first.readThread(key))?.revision).toBe(2);
+  firstClient.close();
+  secondClient.close();
+});
+
 describe('BehaviorTransitionEngine', () => {
   it('runs guards before judges, commits atomically, and mirrors committed state', async () => {
     const order: string[] = [];

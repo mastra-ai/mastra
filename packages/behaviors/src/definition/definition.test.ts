@@ -87,6 +87,7 @@ describe('behavior definitions', () => {
     ['missing target', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'bad', target: 'missing' }, { id: 'exit', target: 'exit', exit: true }] }] }, 'unknown state'],
     ['missing exit', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'loop', target: 'understand' }] }] }, 'exit transition'],
     ['bad schedule', { ...input, states: input.states.map(state => state.id === 'test' ? { ...state, periodic: { intervalMs: 0, transition: 'exit' } } : state) }, 'positive number'],
+    ['unsafe state ID', { ...input, initialState: '../outside', states: [{ ...input.states[0]!, id: '../outside' }] }, 'may contain only'],
   ])('rejects %s', (_name, definition, message) => {
     expect(() => defineBehavior(definition as BehaviorDefinitionInput)).toThrow(message);
   });

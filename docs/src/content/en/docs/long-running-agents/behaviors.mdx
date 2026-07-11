@@ -106,7 +106,7 @@ export const agent = new Agent({
   id: 'debug-agent',
   name: 'Debug agent',
   instructions: 'Follow the active behavior state.',
-  model: 'openai/gpt-5.5',
+  model: '__GATEWAY_OPENAI_MODEL__',
   signals: [behavior],
 })
 ```
@@ -115,7 +115,7 @@ Filesystem paths must stay inside the behavior directory. The loader rejects abs
 
 ## Persist behavior state
 
-`InMemoryBehaviorRuntimeStore` is suitable for local and single-process use. Use `LibSQLBehaviorRuntimeStore` when state must survive restarts or multiple processes need database-level transaction locking.
+`InMemoryBehaviorRuntimeStore` is suitable for local and single-process use. Use `LibSQLBehaviorRuntimeStore` when state must survive restarts or multiple processes need revision-checked compare-and-swap updates.
 
 The behavior store is authoritative. The provider can mirror committed records into Mastra thread state for interoperability, but transitions never use that mirror as their source of truth.
 

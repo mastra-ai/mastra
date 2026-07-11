@@ -58,7 +58,7 @@ await store.init()
 
 ### `LibSQLBehaviorRuntimeStore`
 
-Stores records in LibSQL write transactions. The table is created by `init()`.
+Stores records in LibSQL with revision-checked compare-and-swap updates. The table is created by `init()`.
 
 ```typescript
 import { createClient } from '@libsql/client'

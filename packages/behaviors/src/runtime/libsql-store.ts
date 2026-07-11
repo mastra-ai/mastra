@@ -59,28 +59,35 @@ export class LibSQLBehaviorRuntimeStore implements BehaviorRuntimeStore {
     key: BehaviorThreadKey,
     operation: (current: BehaviorRuntimeRecord | undefined) => Promise<BehaviorTransactionResult<T>> | BehaviorTransactionResult<T>,
   ): Promise<{ runtime: BehaviorRuntimeRecord; result: T }> {
-    const tx = await this.client.transaction('write');
-    try {
-      const selected = await tx.execute({
-        sql: `SELECT value FROM ${TABLE} WHERE thread_id = ? AND behavior_id = ?`,
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const selected = await this.client.execute({
+        sql: `SELECT revision, value FROM ${TABLE} WHERE thread_id = ? AND behavior_id = ?`,
         args: [key.threadId, key.behaviorId],
       });
-      const value = selected.rows[0]?.value;
-      const current = typeof value === 'string' ? (JSON.parse(value) as BehaviorRuntimeRecord) : undefined;
+      const row = selected.rows[0];
+      const current = typeof row?.value === 'string' ? (JSON.parse(row.value) as BehaviorRuntimeRecord) : undefined;
       const { next, result } = await operation(current);
-      await tx.execute({
-        sql: `INSERT INTO ${TABLE} (thread_id, behavior_id, revision, next_check_at, value)
-          VALUES (?, ?, ?, ?, ?)
-          ON CONFLICT(thread_id, behavior_id) DO UPDATE SET
-            revision = excluded.revision, next_check_at = excluded.next_check_at, value = excluded.value`,
-        args: [key.threadId, key.behaviorId, next.revision, next.nextCheckAt ?? null, JSON.stringify(next)],
-      });
-      await tx.commit();
-      return { runtime: structuredClone(next), result };
-    } catch (error) {
-      if (!tx.closed) await tx.rollback();
-      throw error;
+      const write = current
+        ? await this.client.execute({
+            sql: `UPDATE ${TABLE} SET revision = ?, next_check_at = ?, value = ?
+              WHERE thread_id = ? AND behavior_id = ? AND revision = ?`,
+            args: [
+              next.revision,
+              next.nextCheckAt ?? null,
+              JSON.stringify(next),
+              key.threadId,
+              key.behaviorId,
+              current.revision,
+            ],
+          })
+        : await this.client.execute({
+            sql: `INSERT OR IGNORE INTO ${TABLE} (thread_id, behavior_id, revision, next_check_at, value)
+              VALUES (?, ?, ?, ?, ?)`,
+            args: [key.threadId, key.behaviorId, next.revision, next.nextCheckAt ?? null, JSON.stringify(next)],
+          });
+      if ((write.rowsAffected ?? 0) > 0) return { runtime: structuredClone(next), result };
     }
+    throw new Error(`Behavior transaction contention exceeded for ${key.behaviorId}/${key.threadId}`);
   }
 
   async listDue(before: Date, limit = 100): Promise<BehaviorDueWork[]> {

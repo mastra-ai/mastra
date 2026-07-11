@@ -21,6 +21,7 @@ export function defineBehavior(input: BehaviorDefinitionInput): NormalizedBehavi
 export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string): NormalizedBehaviorDefinition {
   const diagnostics: BehaviorDiagnostic[] = [];
   if (!input.id?.trim()) diagnostics.push({ path: 'id', message: 'must be a non-empty string' });
+  else if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(input.id)) diagnostics.push({ path: 'id', message: 'may contain only letters, numbers, dots, underscores, and hyphens' });
   if (!input.version?.trim()) diagnostics.push({ path: 'version', message: 'must be a non-empty string' });
   if (!Array.isArray(input.states) || input.states.length === 0) {
     diagnostics.push({ path: 'states', message: 'must contain at least one state' });
@@ -31,6 +32,10 @@ export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string)
     const statePath = `states[${stateIndex}]`;
     if (!state.id?.trim()) {
       diagnostics.push({ path: `${statePath}.id`, message: 'must be a non-empty string' });
+      continue;
+    }
+    if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(state.id)) {
+      diagnostics.push({ path: `${statePath}.id`, message: 'may contain only letters, numbers, dots, underscores, and hyphens' });
       continue;
     }
     if (states[state.id]) {
