@@ -397,6 +397,27 @@ describe('AgentControllerChannels', () => {
     }, 30_000);
   });
 
+  describe('instance-based channel resolution', () => {
+    it('attaches the controller channels onto the backing agent instance (not the request context)', async () => {
+      const { agent, controller, channels } = await createSetup();
+
+      // The controller propagates its AgentControllerChannels onto the backing
+      // agent via Agent.setChannels — the instance carries the channels, with
+      // no per-run channels key on the request context involved.
+      expect(agent.getChannels()).toBe(channels);
+      expect(agent.getChannels()).toBe(controller.getChannels());
+    }, 30_000);
+
+    it('resolves the ChatChannelOutputProcessor from the backing agent instance', async () => {
+      const { agent } = await createSetup();
+
+      // Because the channels live on the instance, the agent's own channels
+      // yield the render output processor with no request context in play.
+      const processors = agent.getChannels()!.getOutputProcessors([]);
+      expect(processors.map(p => (p as any).id)).toContain('chat-channel-render');
+    }, 30_000);
+  });
+
   describe('approvals through sessions', () => {
     it('parks at the approval gate, posts a card, and the approve action drives the engine continuation', async () => {
       const { tool, executeSpy } = createDeployTool();

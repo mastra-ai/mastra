@@ -1093,21 +1093,6 @@ export class Agent<
   }
 
   /**
-   * Resolves the channels instance to use for the current run.
-   * A controller-owned channels instance carried on the request context wins —
-   * the run originated from that controller's chat channel, so its stream must
-   * render back through the controller's adapters. Falls back to this agent's
-   * own configured channels.
-   */
-  #resolveChannelsForRun(requestContext?: RequestContext): AgentChannels | null {
-    const controllerCtx = requestContext?.get('controller') as { channels?: unknown } | undefined;
-    if (controllerCtx?.channels instanceof AgentChannels) {
-      return controllerCtx.channels;
-    }
-    return this.#agentChannels;
-  }
-
-  /**
    * Returns the browser instance for this agent, if configured.
    * Browser tools are automatically added at execution time via `convertTools()`.
    * This getter is primarily used by server-side code to access browser features
@@ -1601,7 +1586,7 @@ export class Agent<
     // Get channel output processors (with deduplication) — mirrors the input
     // processor hookup. Channels render the agent's stream to the originating
     // chat platform via this processor; without it, replies never reach Slack.
-    const runChannels = this.#resolveChannelsForRun(requestContext);
+    const runChannels = this.#agentChannels;
     const channelProcessors = runChannels ? runChannels.getOutputProcessors(configuredProcessors) : [];
     // Combine all processors into a single workflow
     // User-configured processors run first so they can transform chunks
@@ -1644,7 +1629,7 @@ export class Agent<
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Get channel input processors (with deduplication)
-    const runChannels = this.#resolveChannelsForRun(requestContext);
+    const runChannels = this.#agentChannels;
     const channelProcessors = runChannels ? runChannels.getInputProcessors(configuredProcessors) : [];
 
     // Get browser context processors (with deduplication)

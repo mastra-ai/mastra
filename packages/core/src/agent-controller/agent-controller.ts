@@ -1063,6 +1063,15 @@ export class AgentController<TState = {}> {
       agent.setBrowser(this.browser);
     }
 
+    // Propagate controller channels onto the resolved (possibly lazily-built)
+    // mode agent so its run renders back through the controller's adapters.
+    // Unconditional: a controller's mode agents never carry their own channels,
+    // and `Agent.setChannels` is idempotent for the same instance. There is no
+    // `hasOwnChannels()` guard equivalent to `hasOwnBrowser()`.
+    if (this.#channels && agent.getChannels() !== this.#channels) {
+      agent.setChannels(this.#channels);
+    }
+
     return agent;
   }
 
@@ -1075,11 +1084,14 @@ export class AgentController<TState = {}> {
   }
 
   /**
-   * Sets the AgentControllerChannels instance for this controller.
-   * Used by ChannelProvider implementations (e.g. SlackProvider) to inject
-   * channels they create for dynamic installations. Runs pick up the new
-   * instance immediately — it is carried per-run on the request context
-   * (`controller.channels`), never attached to mode agents.
+   * Sets the AgentControllerChannels instance for this controller and
+   * propagates it onto every backing agent so their runs render back through
+   * the controller's adapters. Used by ChannelProvider implementations (e.g.
+   * SlackProvider) to inject channels they create for dynamic installations.
+   * Mirrors {@link setBrowser}: the instance is attached to the shared backing
+   * agent plus any per-mode agents via `Agent.setChannels`, and lazily-built
+   * mode agents pick it up on their first run via
+   * `propagateRuntimeServicesToAgent`.
    * @internal
    */
   setChannels(channels: AgentControllerChannels): void {
@@ -1088,6 +1100,22 @@ export class AgentController<TState = {}> {
     }
     this.#channels = channels;
     channels.__setController(this);
+
+    // Attach to every already-constructed backing agent: shared backing agent
+    // + any deprecated per-mode agent instances. Lazily-built mode agents
+    // receive channels on first run via `propagateRuntimeServicesToAgent`.
+    const agents = new Set<Agent<any, any, any, any>>();
+    if (this.config.agent) {
+      agents.add(this.config.agent);
+    }
+    for (const mode of this.config.modes) {
+      if (mode.agent || !this.config.agent) {
+        agents.add(this.getAgentForMode(mode));
+      }
+    }
+    for (const agent of agents) {
+      agent.setChannels(channels);
+    }
   }
 
   private getAgentForMode(mode: AgentControllerMode): Agent<any, any, any, any> {
@@ -2170,7 +2198,6 @@ export class AgentController<TState = {}> {
       abortSignal: session.run.getAbortSignal(),
       emitEvent: event => session.emit(event),
       getSubagentModelId: params => session.subagents.model.get(params ?? {}),
-      channels: this.#channels ?? undefined,
     };
 
     requestContext.set('controller', controllerContext);
