@@ -961,7 +961,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   let currentIteration = 0;
   const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
 
-  const cleanupServerToolSpans = (terminal: boolean) => {
+  const cleanupProviderToolSpans = (terminal: boolean) => {
     for (const [toolCallId, entry] of providerToolSpansByToolCallId.entries()) {
       if (entry.ended) {
         providerToolSpansByToolCallId.delete(toolCallId);
@@ -1612,7 +1612,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           } catch (error) {
             // Force-close any server tool spans opened during the failed stream
             // before abort/error/fallback handling can return or throw.
-            cleanupServerToolSpans(true);
+            cleanupProviderToolSpans(true);
 
             const provider = model?.provider;
             const modelIdStr = model?.modelId;
@@ -1744,7 +1744,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
-            cleanupServerToolSpans(true);
+            cleanupProviderToolSpans(true);
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
@@ -1867,7 +1867,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
-        cleanupServerToolSpans(true);
+        cleanupProviderToolSpans(true);
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -2133,7 +2133,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // Clean up server tool spans: remove ended entries, force-close unclosed on terminal exit.
       // On retry (shouldRetry), unclosed spans from the rejected attempt must also be closed —
       // the LLM will produce a fresh response with new tool calls.
-      cleanupServerToolSpans(!shouldContinue || shouldRetry);
+      cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;
