@@ -17,33 +17,36 @@ import type {
   WorkflowResult,
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
+import { NonRetriableError } from 'inngest';
 import { InngestWorkflow } from './workflow';
 
 function isNonRetryableStepFailure(error: unknown): boolean {
-  if (error instanceof MastraNonRetryableError) {
+  if (error instanceof MastraNonRetryableError || error instanceof NonRetriableError) {
     return true;
   }
 
-  if (error instanceof Error) {
-    if (error.name === 'NonRetriableError') {
+  if (error instanceof Error && error.cause !== undefined && isNonRetryableStepFailure(error.cause)) {
+    return true;
+  }
+
+  if (error && typeof error === 'object') {
+    const record = error as {
+      nonRetryable?: true;
+      error?: unknown;
+      name?: string;
+      isNonRetryable?: boolean;
+    };
+
+    if (record.nonRetryable) {
       return true;
     }
 
-    const cause = error.cause;
-    if (cause && typeof cause === 'object') {
-      const failure = cause as {
-        nonRetryable?: true;
-        error?: { name?: string; isNonRetryable?: boolean };
-      };
+    if (record.name === 'MastraNonRetryableError' || record.isNonRetryable) {
+      return true;
+    }
 
-      if (failure.nonRetryable) {
-        return true;
-      }
-
-      const inner = failure.error;
-      if (inner?.name === 'MastraNonRetryableError' || inner?.isNonRetryable) {
-        return true;
-      }
+    if (record.error !== undefined && isNonRetryableStepFailure(record.error)) {
+      return true;
     }
   }
 

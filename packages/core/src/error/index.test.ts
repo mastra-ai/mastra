@@ -111,6 +111,7 @@ describe('MastraNonRetryableError', () => {
     const error = new MastraNonRetryableError('Invalid template ID');
 
     expect(error).toBeInstanceOf(Error);
+    expect(error).toBeInstanceOf(MastraNonRetryableError);
     expect(error.name).toBe('MastraNonRetryableError');
     expect(error.isNonRetryable).toBe(true);
     expect(error.message).toBe('Invalid template ID');

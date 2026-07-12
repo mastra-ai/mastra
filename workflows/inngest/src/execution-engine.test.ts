@@ -54,6 +54,26 @@ describe('InngestExecutionEngine.executeStepWithRetry', () => {
     }
   });
 
+  it('does not retry when a wrapped error carries a NonRetriableError cause', async () => {
+    const engine = createEngine();
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.fatal',
+      async () => {
+        calls++;
+        throw new Error('wrapped failure', { cause: new NonRetriableError('permanent failure') });
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.nonRetryable).toBe(true);
+    }
+  });
+
   it('retries transient errors until retry attempts are exhausted', async () => {
     const engine = createEngine();
     let calls = 0;
