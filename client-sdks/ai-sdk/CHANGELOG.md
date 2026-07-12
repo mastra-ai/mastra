@@ -1,5 +1,14 @@
 # @mastra/ai-sdk
 
+## 1.6.2-alpha.0
+
+### Patch Changes
+
+- Fixed AI SDK v6 native tool approvals resuming the wrong tool call. When multiple tool calls were awaiting approval, approving one could execute a different one. The approval response now carries the answered tool call's ID through to the resume, so the approved tool call is the one that runs. ([#19266](https://github.com/mastra-ai/mastra/pull/19266))
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+
 ## 1.6.1
 
 ### Patch Changes

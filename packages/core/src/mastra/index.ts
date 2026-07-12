@@ -653,6 +653,7 @@ export class Mastra<
   #vectors?: TVectors;
   #agents: TAgents;
   #logger: TLogger;
+  #loggerExplicit = false;
   #workflows: TWorkflows;
   #harnesses: Record<string, Harness<any>> = {};
   #hiddenWorkflowKeys = new Set<string>();
@@ -1335,9 +1336,11 @@ export class Mastra<
     let logger: TLogger;
     if (config?.logger === false) {
       logger = noopLogger as unknown as TLogger;
+      this.#loggerExplicit = true;
     } else {
       if (config?.logger) {
         logger = config.logger;
+        this.#loggerExplicit = true;
       } else {
         const levelOnEnv =
           process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
@@ -2428,6 +2431,34 @@ export class Mastra<
       }
       this.addWorkflow(workflow, key);
     }
+  }
+
+  /**
+   * Registers a file-system routed logger (discovered from `logger.ts`) into
+   * this Mastra instance.
+   *
+   * Code-registered loggers win: if the user already passed `logger` to the
+   * `new Mastra({logger})` constructor (including `logger: false`), the
+   * file-system logger is skipped and a warning is logged. Otherwise the
+   * fs-provided logger replaces the default ConsoleLogger via {@link setLogger}.
+   *
+   * Intended to be called by the bundler/dev generated entry, not by user code.
+   *
+   * @internal
+   */
+  public __registerFsLogger(fsLogger: TLogger): void {
+    if (!fsLogger) {
+      return;
+    }
+
+    if (this.#loggerExplicit) {
+      this.getLogger().warn(
+        `File-system routed logger conflicts with a code-registered logger. Keeping the code-registered logger.`,
+      );
+      return;
+    }
+
+    this.setLogger({ logger: fsLogger });
   }
 
   /**

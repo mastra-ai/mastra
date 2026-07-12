@@ -278,6 +278,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/empiriolabs',
+          label: 'EmpirioLabs AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/evroc',
           label: 'evroc',
         },
@@ -355,6 +360,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/inferx',
+          label: 'InferX',
         },
         {
           type: 'doc',
@@ -568,6 +578,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/pioneer',
+          label: 'Pioneer',
+        },
+        {
+          type: 'doc',
           id: 'providers/poe',
           label: 'Poe',
         },
@@ -710,6 +725,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/umans-ai-coding-plan',
           label: 'Umans AI Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/unorouter',
+          label: 'UnoRouter',
         },
         {
           type: 'doc',

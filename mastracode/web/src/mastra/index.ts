@@ -32,7 +32,12 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
-import { assembleWebApiRoutes, resolveGithubReady } from '../web/web-surface.js';
+import {
+  assembleWebApiRoutes,
+  resolveGithubReady,
+  resolveIntakeReady,
+  resolveLinearReady,
+} from '../web/web-surface.js';
 
 const CONTROLLER_ID = 'code';
 
@@ -56,6 +61,12 @@ const allowedOrigins = (process.env.MASTRACODE_ALLOWED_ORIGINS ?? '')
 // the github routes are simply omitted from `apiRoutes` when unavailable. Fails
 // soft (see resolveGithubReady).
 const githubReady = await resolveGithubReady();
+
+// Linear intake readiness, same fail-soft pattern as GitHub.
+const linearReady = await resolveLinearReady();
+
+// Intake source configuration (Settings › Intake) — needs at least one source.
+const intakeReady = await resolveIntakeReady(githubReady || linearReady);
 
 const webAuthEnabled = isWebAuthEnabled();
 
@@ -86,7 +97,7 @@ const prepared = await prepareAgentControllerMount({
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.
     ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
     // Custom `/web/*` routes (fs / config / github).
-    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady }),
+    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady, linearReady, intakeReady }),
   ],
   buildServerConfig: () => {
     const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};

@@ -22,7 +22,8 @@
     "databricks-gpt-5-4-nano",
     "databricks-gpt-5-5",
     "databricks-gpt-5-mini",
-    "databricks-gpt-5-nano"
+    "databricks-gpt-5-nano",
+    "databricks-kimi-k2-7-code"
   ],
   "temperature": [
     "databricks-claude-haiku-4-5",
@@ -38,6 +39,7 @@
     "databricks-gemini-3-1-pro",
     "databricks-gemini-3-flash",
     "databricks-gemini-3-pro",
+    "databricks-glm-5-2",
     "databricks-gpt-oss-120b",
     "databricks-gpt-oss-20b"
   ]

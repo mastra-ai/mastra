@@ -64,6 +64,14 @@ async function emitAgentEntry(
     outputProcessorIdents.push(ident);
   }
 
+  const scorerIdents: { key: string; ident: string }[] = [];
+  for (let s = 0; s < agent.scorers.length; s++) {
+    const scorer = agent.scorers[s]!;
+    const ident = sanitizeIdentifier(`${agent.name}_scorer_${scorer.key}`, 'scorer', `${idPath}_${s}`);
+    lines.push(`import ${ident} from ${JSON.stringify(scorer.path)};`);
+    scorerIdents.push({ key: scorer.key, ident });
+  }
+
   // Skills: `createSkill(...)` modules are imported and used directly;
   // packaged `SKILL.md` skills are inlined via `createSkill({...})`.
   const skillExprs: string[] = [];
@@ -124,6 +132,10 @@ async function emitAgentEntry(
   if (outputProcessorIdents.length > 0) {
     entryFields.push(`outputProcessors: [${outputProcessorIdents.join(', ')}]`);
   }
+  if (scorerIdents.length > 0) {
+    const scorerEntries = scorerIdents.map(({ key, ident }) => `{ key: ${JSON.stringify(key)}, scorer: ${ident} }`);
+    entryFields.push(`scorers: [${scorerEntries.join(', ')}]`);
+  }
   if (subagentExprs.length > 0) {
     entryFields.push(`subagents: [${subagentExprs.join(', ')}]`);
   }
@@ -169,6 +181,7 @@ export async function generateFsAgentsModule(
     workflows?: DiscoveredFsWorkflow[];
     storage?: DiscoveredFsSingleton;
     observability?: DiscoveredFsSingleton;
+    logger?: DiscoveredFsSingleton;
     server?: DiscoveredFsSingleton;
     studio?: DiscoveredFsSingleton;
   },
@@ -176,6 +189,7 @@ export async function generateFsAgentsModule(
   const workflows = options?.workflows ?? [];
   const storage = options?.storage;
   const observability = options?.observability;
+  const logger = options?.logger;
   const server = options?.server;
   const studio = options?.studio;
   const standalone = userEntry === undefined;
@@ -214,6 +228,9 @@ export async function generateFsAgentsModule(
   }
   if (observability) {
     singletonImports.push(`import __fsObservability from ${JSON.stringify(observability.path)};`);
+  }
+  if (logger) {
+    singletonImports.push(`import __fsLogger from ${JSON.stringify(logger.path)};`);
   }
   if (server) {
     singletonImports.push(`import __fsServer from ${JSON.stringify(server.path)};`);
@@ -273,6 +290,16 @@ export async function generateFsAgentsModule(
   // storage-dependent primitives at registration time, so the fs singletons
   // have to be in place first — otherwise fs-discovered agents/workflows would
   // stay bound to the default InMemoryStore.
+
+  // Logger is registered before everything else so storage/observability and
+  // agents receive the fs-provided logger when they are wired up below.
+  if (logger) {
+    lines.push(`if (__mastra && typeof __mastra.__registerFsLogger === 'function') {`);
+    lines.push(`  __mastra.__registerFsLogger(__fsLogger);`);
+    lines.push(`}`);
+    lines.push(``);
+  }
+
   if (storage) {
     lines.push(`if (__mastra && typeof __mastra.__registerFsStorage === 'function') {`);
     lines.push(`  __mastra.__registerFsStorage(__fsStorage);`);
