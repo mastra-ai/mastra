@@ -26,7 +26,11 @@ export type BehaviorSignalProviderOptions = Omit<BehaviorTransitionEngineOptions
   unavailableModel?: 'fallback' | 'error';
 };
 
-type BehaviorToolContext = { requestContext?: RequestContext; abortSignal?: AbortSignal };
+type BehaviorToolContext = {
+  requestContext?: RequestContext;
+  abortSignal?: AbortSignal;
+  agent?: { toolCallId?: string };
+};
 type BehaviorToolFactory = (definition: {
   id: string;
   description: string;
@@ -39,15 +43,20 @@ class BehaviorRoutingProcessor {
   readonly id: string;
   readonly name = 'Behavior state routing';
 
-  constructor(private readonly options: BehaviorSignalProviderOptions) {
+  constructor(
+    private readonly options: BehaviorSignalProviderOptions,
+    private readonly engine: BehaviorTransitionEngine,
+  ) {
     this.id = `behavior-routing-${options.definition.id}`;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     const threadId = this.options.resolveThreadId(args.requestContext);
     if (!threadId) return {};
-    const record = await this.options.store.readThread({ threadId, behaviorId: this.options.definition.id });
-    if (!record || record.status !== 'active') return {};
+    const record =
+      (await this.options.store.readThread({ threadId, behaviorId: this.options.definition.id })) ??
+      (await this.engine.initialize(threadId));
+    if (record.status !== 'active') return {};
     const state = this.options.definition.states[record.activeState];
     if (!state) return {};
     const resolverInput = { threadId, stateId: state.id, requestContext: args.requestContext };
@@ -84,11 +93,16 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
       options.resolveThreadId(requestContext) ?? (requestContext ? this.threadIds.get(requestContext) : undefined);
     const runtimeOptions = { ...options, resolveThreadId: this.resolveThreadId };
     this.engine = new BehaviorTransitionEngine(options);
-    this.stateProcessor = new BehaviorStateProcessor(options.definition, options.store, (requestContext, threadId) => {
-      if (requestContext) this.threadIds.set(requestContext, threadId);
-    });
+    this.stateProcessor = new BehaviorStateProcessor(
+      options.definition,
+      options.store,
+      (requestContext, threadId) => {
+        if (requestContext) this.threadIds.set(requestContext, threadId);
+      },
+      threadId => this.engine.initialize(threadId),
+    );
     this.intentProcessor = new BehaviorIntentPolicyProcessor(runtimeOptions);
-    this.routingProcessor = new BehaviorRoutingProcessor(runtimeOptions);
+    this.routingProcessor = new BehaviorRoutingProcessor(runtimeOptions, this.engine);
     this.tools = this.createTools();
   }
 
@@ -115,46 +129,25 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
       return id;
     };
     return {
-      behavior_select: createBehaviorTool({
-        id: 'behavior_select',
-        description: 'Start or resume this behavior for the current thread',
-        inputSchema: z.object({}),
-        execute: async (_input, context) => this.engine.initialize(threadId(context)),
+      behavior: createBehaviorTool({
+        id: 'behavior',
+        description: 'Move to an available behavior connected to the current behavior',
+        inputSchema: z.object({
+          name: z.string().min(1).describe('Name of the destination behavior'),
+        }),
+        execute: async (input, context) =>
+          this.engine.transition({
+            threadId: threadId(context),
+            name: input.name,
+            idempotencyKey: context.agent?.toolCallId,
+            signal: context.abortSignal,
+          }),
       }),
       behavior_intent: createBehaviorTool({
         id: 'behavior_intent',
         description: 'Set an approved intent for the active behavior state',
         inputSchema: z.object({ intent: z.string().min(1) }),
         execute: async (input, context) => this.intentProcessor.setIntent(threadId(context), input.intent),
-      }),
-      behavior_transition: createBehaviorTool({
-        id: 'behavior_transition',
-        description: 'Move through an available behavior transition',
-        inputSchema: z.object({
-          transition: z.string().min(1),
-          attemptId: z.string().min(1).describe('Unique idempotency key; use a new value for every transition attempt'),
-        }),
-        execute: async (input, context) =>
-          this.engine.transition({
-            threadId: threadId(context),
-            transitionId: input.transition,
-            attemptId: input.attemptId,
-            signal: context.abortSignal,
-          }),
-      }),
-      behavior_exit: createBehaviorTool({
-        id: 'behavior_exit',
-        description: 'Exit the active behavior through the current state exit transition',
-        inputSchema: z.object({
-          attemptId: z.string().min(1).describe('Unique idempotency key; use a new value for this exit attempt'),
-        }),
-        execute: async (input, context) => {
-          const id = threadId(context);
-          const record = await this.options.store.readThread({ threadId: id, behaviorId: this.options.definition.id });
-          const exit = record ? this.options.definition.states[record.activeState]?.transitions.find(item => item.exit) : undefined;
-          if (!exit) throw new Error('Active behavior state has no exit transition');
-          return this.engine.transition({ threadId: id, transitionId: exit.id, attemptId: input.attemptId, signal: context.abortSignal });
-        },
       }),
     };
   }

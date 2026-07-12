@@ -12,6 +12,8 @@ import type { BehaviorRuntimeRecord, BehaviorRuntimeStore } from '../runtime/typ
 
 export const behaviorIntentField = 'intent';
 
+const isBehaviorControlTool = (name: string) => name === 'behavior' || name === 'behavior_intent';
+
 export type BehaviorIntentJudge = (input: {
   intent: string;
   toolName: string;
@@ -58,7 +60,7 @@ export class BehaviorIntentPolicyProcessor {
 
   async processOutputStep(args: ProcessOutputStepArgs) {
     for (const call of args.toolCalls ?? []) {
-      if (call.toolName.startsWith('behavior_')) continue;
+      if (isBehaviorControlTool(call.toolName)) continue;
       const intent = this.readIntent(call.args);
       if (!intent) args.abort(`Tool "${call.toolName}" requires an intent`, { retry: true });
       const threadId = this.options.resolveThreadId?.(args.requestContext);
@@ -87,7 +89,7 @@ export class BehaviorIntentPolicyProcessor {
   }
 
   private wrapTool(name: string, tool: ToolLike): ToolLike {
-    if (!tool || typeof tool !== 'object' || typeof tool.execute !== 'function' || name.startsWith('behavior_')) return tool;
+    if (!tool || typeof tool !== 'object' || typeof tool.execute !== 'function' || isBehaviorControlTool(name)) return tool;
     const cached = this.wrappers.get(tool);
     if (cached) return cached;
     const originalExecute = tool.execute.bind(tool);
@@ -128,7 +130,7 @@ export class BehaviorIntentPolicyProcessor {
     if (!record || record.status !== 'active') throw new Error('Behavior is not active');
     const state = this.options.definition.states[record.activeState];
     if (!state) throw new Error(`Behavior state "${record.activeState}" is unavailable`);
-    if (!toolName.startsWith('behavior_') && state.tools.length && !state.tools.includes(toolName)) {
+    if (!isBehaviorControlTool(toolName) && state.tools.length && !state.tools.includes(toolName)) {
       throw new Error(`Tool "${toolName}" is not allowed in state "${state.id}"`);
     }
     if (intent === state.id) return;

@@ -3,15 +3,17 @@
     {
       "match": {
         "endpoint": "chat",
-        "userMessage": "Activate the coding behavior.",
+        "userMessage": "Move to the implementation behavior.",
         "hasToolResult": false
       },
       "response": {
         "toolCalls": [
           {
-            "id": "call_behavior_select",
-            "name": "behavior_select",
-            "arguments": {}
+            "id": "call_behavior",
+            "name": "behavior",
+            "arguments": {
+              "name": "implement"
+            }
           }
         ]
       }

@@ -82,16 +82,13 @@ function writeBehaviorPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectD
           id: 'understand',
           instructions: 'Understand before editing.',
           tools: ['e2e_governed_probe'],
-          transitions: [
-            { id: 'implement', target: 'implement' },
-            { id: 'exit', target: 'exit', exit: true },
-          ],
+          transitions: [{ id: 'implement', target: 'implement' }],
         },
         {
           id: 'implement',
           instructions: 'Implementation state.',
           tools: ['e2e_governed_probe'],
-          transitions: [{ id: 'exit', target: 'exit', exit: true }],
+          transitions: [{ id: 'return', target: 'understand' }],
         },
       ],
     }),
@@ -538,13 +535,13 @@ export const behaviorsScenario: McE2eScenario = {
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
     await runtime.waitForScreenText(/Resource ID:/i, terminal);
-    terminal.submit('Activate the coding behavior.');
+    terminal.submit('Move to the implementation behavior.');
     await runtime.waitForScreenText(/Behavior provider active/i, terminal);
     terminal.keyCtrlC();
   },
   verifyAimockRequests(requests) {
     const names = getToolNames(requests);
-    for (const name of ['behavior_select', 'behavior_intent', 'behavior_transition', 'behavior_exit']) {
+    for (const name of ['behavior', 'behavior_intent']) {
       if (!names.includes(name)) throw new Error(`Expected behavior tool ${name}. Names: ${names.join(', ')}`);
     }
     const schemas = (

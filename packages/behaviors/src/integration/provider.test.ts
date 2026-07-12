@@ -15,7 +15,11 @@ const definition = normalizeBehavior({
       instructions: 'Understand before editing.',
       skills: ['debugging'],
       model: 'small',
-      transitions: [{ id: 'exit', target: 'exit', exit: true }],
+      transitions: [{ id: 'implement', target: 'implement' }],
+    },
+    {
+      id: 'implement',
+      transitions: [{ id: 'return', target: 'understand' }],
     },
   ],
 });
@@ -29,7 +33,6 @@ const makeProvider = async (overrides = {}) => {
     ...overrides,
   });
   await provider.start();
-  await provider.engine.initialize('thread');
   return { provider, store };
 };
 
@@ -81,9 +84,10 @@ describe('BehaviorSignalProvider integration', () => {
       activeStateSignals: [],
       deltasSinceSnapshot: [],
     } as never);
-    const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
-    await tools.behavior_select!.execute({}, { requestContext });
     expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('understand');
+    const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
+    await tools.behavior!.execute({ name: 'implement' }, { requestContext, agent: { toolCallId: 'move-1' } });
+    expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('implement');
     const signal = await stateProcessor.computeStateSignal({
       threadId: 'studio-thread',
       requestContext,
@@ -93,19 +97,30 @@ describe('BehaviorSignalProvider integration', () => {
     } as never) as { tagName?: string; contents?: string; attributes?: Record<string, string> };
     expect(signal).toMatchObject({
       tagName: 'current-behavior',
-      attributes: { id: 'coding', state: 'understand', status: 'active' },
+      attributes: { id: 'coding', state: 'implement', status: 'active' },
     });
-    expect(signal.contents).toContain('State: understand');
+    expect(signal.contents).toContain('State: implement');
   });
 
-  it('exposes stable selection, intent, transition, and exit tools', async () => {
+  it('exposes one stable behavior transition tool with runtime-owned idempotency', async () => {
     const { provider, store } = await makeProvider();
-    const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
-    expect(Object.keys(tools)).toEqual(['behavior_select', 'behavior_intent', 'behavior_transition', 'behavior_exit']);
-    const context = { requestContext: { get: (key: string) => (key === 'threadId' ? 'thread' : undefined) } };
-    await tools.behavior_intent!.execute({ intent: 'understand' }, context);
-    expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.intent).toBe('understand');
-    await tools.behavior_exit!.execute({ attemptId: 'exit-1' }, context);
-    expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.status).toBe('exited');
+    const tools = provider.getTools() as Record<string, { inputSchema: { toJSONSchema(): unknown }; execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
+    expect(Object.keys(tools)).toEqual(['behavior', 'behavior_intent']);
+    expect(tools.behavior!.inputSchema.toJSONSchema()).toMatchObject({
+      required: ['name'],
+      properties: { name: expect.any(Object) },
+    });
+    expect(JSON.stringify(tools.behavior!.inputSchema.toJSONSchema())).not.toContain('attemptId');
+    const context = {
+      requestContext: { get: (key: string) => (key === 'threadId' ? 'thread' : undefined) },
+      agent: { toolCallId: 'move-1' },
+    };
+    await tools.behavior!.execute({ name: 'implement' }, context);
+    expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.activeState).toBe('implement');
+    await tools.behavior!.execute({ name: 'implement' }, context);
+    expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.revision).toBe(2);
+    await expect(tools.behavior!.execute({ name: 'missing' }, { ...context, agent: { toolCallId: 'move-2' } })).rejects.toThrow(
+      'is not available',
+    );
   });
 });

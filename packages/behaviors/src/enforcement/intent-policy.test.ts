@@ -14,18 +14,12 @@ const definition = normalizeBehavior({
     {
       id: 'understand',
       tools: ['read'],
-      transitions: [
-        { id: 'implement', target: 'implement' },
-        { id: 'exit', target: 'exit', exit: true },
-      ],
+      transitions: [{ id: 'implement', target: 'implement' }],
     },
     {
       id: 'implement',
       tools: ['write'],
-      transitions: [
-        { id: 'back', target: 'understand' },
-        { id: 'exit', target: 'exit', exit: true },
-      ],
+      transitions: [{ id: 'back', target: 'understand' }],
     },
   ],
 });
@@ -52,7 +46,7 @@ describe('BehaviorIntentPolicyProcessor', () => {
     const second = await processor.processInputStep({ tools: { read: tool } } as never);
     expect(second.tools!.read).toBe(wrapped);
     const schemaBefore = JSON.stringify((wrapped.inputSchema as z.ZodType).toJSONSchema());
-    await engine.transition({ threadId: 'thread', transitionId: 'implement', attemptId: 'move' });
+    await engine.transition({ threadId: 'thread', name: 'implement', idempotencyKey: 'move' });
     const third = await processor.processInputStep({ tools: { read: tool } } as never);
     expect(third.tools!.read).toBe(wrapped);
     expect(JSON.stringify((wrapped.inputSchema as z.ZodType).toJSONSchema())).toBe(schemaBefore);
@@ -70,7 +64,7 @@ describe('BehaviorIntentPolicyProcessor', () => {
     const { wrapped, engine, judgeIntent } = await setup();
     await expect(wrapped.execute({ path: 'x', intent: 'inspect code' }, { threadId: 'thread' })).resolves.toEqual({ path: 'x' });
     expect(judgeIntent).toHaveBeenCalledOnce();
-    await engine.transition({ threadId: 'thread', transitionId: 'implement', attemptId: 'move' });
+    await engine.transition({ threadId: 'thread', name: 'implement', idempotencyKey: 'move' });
     await expect(wrapped.execute({ path: 'x', intent: 'understand' }, { threadId: 'thread' })).rejects.toThrow('not allowed');
   });
 

@@ -19,7 +19,7 @@ describe('createMastraCodeBehaviorPlugin', () => {
         id: 'coding',
         version: '1',
         initialState: 'work',
-        states: [{ id: 'work', transitions: [{ id: 'leave', target: 'exit', exit: true }] }],
+        states: [{ id: 'work', transitions: [{ id: 'continue', target: 'work' }] }],
       }),
     );
     const plugin = createMastraCodeBehaviorPlugin({ id: 'coding-plugin', definition: tempDir });
@@ -27,11 +27,6 @@ describe('createMastraCodeBehaviorPlugin', () => {
 
     expect(providers).toHaveLength(1);
     expect(providers[0]?.id).toBe('behavior-coding');
-    expect(Object.keys(providers[0]?.getTools?.() ?? {})).toEqual([
-      'behavior_select',
-      'behavior_intent',
-      'behavior_transition',
-      'behavior_exit',
-    ]);
+    expect(Object.keys(providers[0]?.getTools?.() ?? {})).toEqual(['behavior', 'behavior_intent']);
   });
 });
