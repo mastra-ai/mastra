@@ -130,7 +130,10 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
       behavior_transition: createBehaviorTool({
         id: 'behavior_transition',
         description: 'Move through an available behavior transition',
-        inputSchema: z.object({ transition: z.string().min(1), attemptId: z.string().min(1) }),
+        inputSchema: z.object({
+          transition: z.string().min(1),
+          attemptId: z.string().min(1).describe('Unique idempotency key; use a new value for every transition attempt'),
+        }),
         execute: async (input, context) =>
           this.engine.transition({
             threadId: threadId(context),
@@ -142,7 +145,9 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
       behavior_exit: createBehaviorTool({
         id: 'behavior_exit',
         description: 'Exit the active behavior through the current state exit transition',
-        inputSchema: z.object({ attemptId: z.string().min(1) }),
+        inputSchema: z.object({
+          attemptId: z.string().min(1).describe('Unique idempotency key; use a new value for this exit attempt'),
+        }),
         execute: async (input, context) => {
           const id = threadId(context);
           const record = await this.options.store.readThread({ threadId: id, behaviorId: this.options.definition.id });
