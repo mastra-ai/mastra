@@ -167,6 +167,19 @@ export async function persistStepUpdate(
       return;
     }
 
+    // Guard: never overwrite a `suspended` / `paused` snapshot with a later
+    // `running` update from the same run. During resume the loop transitions
+    // suspended → running mid-execution, and any step-update write would
+    // otherwise clobber the suspend record before the resume actually
+    // completes. The engine tracks its own last-persisted status for this
+    // run (process-local) so we don't need an extra storage read per step.
+    if (workflowStatus === 'running') {
+      const lastPersisted = engine.getLastPersistedStatus(runId);
+      if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
+        return;
+      }
+    }
+
     const requestContextObj = engine.serializeRequestContext(requestContext);
 
     const snapshot: WorkflowRunState = {
@@ -196,6 +209,7 @@ export async function persistStepUpdate(
       resourceId,
       snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
     });
+    engine.setLastPersistedStatus(runId, workflowStatus);
   });
 }
 

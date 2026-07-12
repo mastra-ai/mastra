@@ -364,6 +364,7 @@
         "bytedance/seedream-4.0",
         "bytedance/seedream-4.5",
         "bytedance/seedream-5.0-lite",
+        "bytedance/seedream-5.0-pro",
         "cohere/command-a",
         "cohere/embed-v4.0",
         "cohere/rerank-v3.5",
@@ -1239,7 +1240,10 @@
         "gpt-5.4",
         "gpt-5.4-mini",
         "gpt-5.4-nano",
-        "gpt-5.5"
+        "gpt-5.5",
+        "gpt-5.6-luna",
+        "gpt-5.6-sol",
+        "gpt-5.6-terra"
       ],
       "docUrl": "https://docs.vivgrid.com/models",
       "gateway": "models.dev",
@@ -2802,8 +2806,6 @@
         "llama-3.3-70b-instruct",
         "llama-4-maverick-17b-instruct",
         "llama-4-scout-17b-instruct",
-        "mimo-v2-omni",
-        "mimo-v2-pro",
         "mimo-v2.5",
         "mimo-v2.5-pro",
         "minimax-m2",
@@ -3664,7 +3666,17 @@
       "apiKeyEnvVar": "HPC_AI_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "HPC-AI",
-      "models": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
+      "models": [
+        "anthropic/claude-opus-4.7",
+        "deepseek/deepseek-v4-flash",
+        "deepseek/deepseek-v4-pro",
+        "minimax/minimax-m2.5",
+        "moonshotai/kimi-k2.5",
+        "moonshotai/kimi-k2.7-code",
+        "openai/gpt-5.5",
+        "zai-org/glm-5.1",
+        "zai-org/glm-5.2"
+      ],
       "docUrl": "https://www.hpc-ai.com/doc/docs/quickstart/",
       "gateway": "models.dev"
     },
@@ -4007,6 +4019,15 @@
         "umans-qwen3.6-35b-a3b"
       ],
       "docUrl": "https://app.umans.ai/offers/code/docs",
+      "gateway": "models.dev"
+    },
+    "ai-router": {
+      "url": "https://api.ai-router.dev/v1",
+      "apiKeyEnvVar": "AI_ROUTER_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "AI-ROUTER",
+      "models": ["gpt-5.4", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
+      "docUrl": "https://ai-router.dev/openai-compatible-api-gateway/",
       "gateway": "models.dev"
     },
     "io-net": {
@@ -4646,6 +4667,22 @@
       "docUrl": "https://docs.meganova.ai",
       "gateway": "models.dev"
     },
+    "inferx": {
+      "url": "https://model.inferx.net/v1",
+      "apiKeyEnvVar": "INFERX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "InferX",
+      "models": [
+        "google/gemma-4-31b-it-fp8",
+        "qwen/qwen3-coder-next-fp8",
+        "qwen/qwen3-coder-next-fp8-1m",
+        "qwen/qwen3.5-122b-a10b-nvfp4",
+        "qwen/qwen3.6-27b-fp8",
+        "qwen/qwen3.6-35b-a3b-fp8"
+      ],
+      "docUrl": "https://model.inferx.net/endpoints",
+      "gateway": "models.dev"
+    },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
@@ -4834,7 +4871,6 @@
         "liquid/lfm-2.5-1.2b-instruct:free",
         "liquid/lfm-2.5-1.2b-thinking:free",
         "mancer/weaver",
-        "meta-llama/llama-3-8b-instruct",
         "meta-llama/llama-3.1-70b-instruct",
         "meta-llama/llama-3.1-8b-instruct",
         "meta-llama/llama-3.2-11b-vision-instruct",
@@ -6173,7 +6209,7 @@
       "apiKeyEnvVar": "AMBIENT_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Ambient",
-      "models": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "zai-org/GLM-5.1-FP8"],
+      "models": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "zai-org/GLM-5.1-FP8", "zai-org/GLM-5.2-FP8"],
       "docUrl": "https://ambient.xyz",
       "gateway": "models.dev"
     },
@@ -6357,16 +6393,7 @@
       "apiKeyEnvVar": "WAFER_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Wafer",
-      "models": [
-        "GLM-5.1",
-        "GLM-5.2",
-        "Kimi-K2.6",
-        "Qwen3.5-397B-A17B",
-        "Qwen3.6-35B-A3B",
-        "deepseek-v4-flash",
-        "deepseek-v4-pro",
-        "qwen3.7-max"
-      ],
+      "models": ["GLM-5.1", "GLM-5.2", "Kimi-K2.6", "MiniMax-M3", "glm5.2-fast"],
       "docUrl": "https://docs.wafer.ai/wafer-pass",
       "gateway": "models.dev"
     },
@@ -6897,6 +6924,7 @@
       "bytedance/seedream-4.0",
       "bytedance/seedream-4.5",
       "bytedance/seedream-5.0-lite",
+      "bytedance/seedream-5.0-pro",
       "cohere/command-a",
       "cohere/embed-v4.0",
       "cohere/rerank-v3.5",
@@ -7619,7 +7647,10 @@
       "gpt-5.4",
       "gpt-5.4-mini",
       "gpt-5.4-nano",
-      "gpt-5.5"
+      "gpt-5.5",
+      "gpt-5.6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.6-terra"
     ],
     "tinfoil": [
       "gemma4-31b",
@@ -8709,8 +8740,6 @@
       "llama-3.3-70b-instruct",
       "llama-4-maverick-17b-instruct",
       "llama-4-scout-17b-instruct",
-      "mimo-v2-omni",
-      "mimo-v2-pro",
       "mimo-v2.5",
       "mimo-v2.5-pro",
       "minimax-m2",
@@ -9233,7 +9262,17 @@
       "stepaudio-2.5-asr",
       "stepaudio-2.5-tts"
     ],
-    "hpc-ai": ["minimax/minimax-m2.5", "moonshotai/kimi-k2.5", "zai-org/glm-5.1"],
+    "hpc-ai": [
+      "anthropic/claude-opus-4.7",
+      "deepseek/deepseek-v4-flash",
+      "deepseek/deepseek-v4-pro",
+      "minimax/minimax-m2.5",
+      "moonshotai/kimi-k2.5",
+      "moonshotai/kimi-k2.7-code",
+      "openai/gpt-5.5",
+      "zai-org/glm-5.1",
+      "zai-org/glm-5.2"
+    ],
     "minimax-cn": [
       "MiniMax-M2",
       "MiniMax-M2.1",
@@ -9492,6 +9531,7 @@
       "umans-kimi-k2.7",
       "umans-qwen3.6-35b-a3b"
     ],
+    "ai-router": ["gpt-5.4", "gpt-5.5", "gpt-5.6-luna", "gpt-5.6-sol", "gpt-5.6-terra"],
     "io-net": [
       "Intel/Qwen3-Coder-480B-A35B-Instruct-int4-mixed-ar",
       "Qwen/Qwen2.5-VL-32B-Instruct",
@@ -10017,6 +10057,14 @@
       "zai-org/GLM-4.7",
       "zai-org/GLM-5"
     ],
+    "inferx": [
+      "google/gemma-4-31b-it-fp8",
+      "qwen/qwen3-coder-next-fp8",
+      "qwen/qwen3-coder-next-fp8-1m",
+      "qwen/qwen3.5-122b-a10b-nvfp4",
+      "qwen/qwen3.6-27b-fp8",
+      "qwen/qwen3.6-35b-a3b-fp8"
+    ],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
     "umans-ai": ["umans-coder", "umans-flash", "umans-glm-5.1", "umans-glm-5.2", "umans-kimi-k2.7"],
     "togetherai": [
@@ -10171,7 +10219,6 @@
       "liquid/lfm-2.5-1.2b-instruct:free",
       "liquid/lfm-2.5-1.2b-thinking:free",
       "mancer/weaver",
-      "meta-llama/llama-3-8b-instruct",
       "meta-llama/llama-3.1-70b-instruct",
       "meta-llama/llama-3.1-8b-instruct",
       "meta-llama/llama-3.2-11b-vision-instruct",
@@ -11322,7 +11369,7 @@
     ],
     "moark": ["GLM-4.7", "MiniMax-M2.1"],
     "lilac": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"],
-    "ambient": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "zai-org/GLM-5.1-FP8"],
+    "ambient": ["moonshotai/kimi-k2.6", "moonshotai/kimi-k2.7-code", "zai-org/GLM-5.1-FP8", "zai-org/GLM-5.2-FP8"],
     "neon": [
       "claude-haiku-4-5",
       "claude-opus-4-1",
@@ -11388,16 +11435,7 @@
       "MiniMax-M3"
     ],
     "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
-    "wafer.ai": [
-      "GLM-5.1",
-      "GLM-5.2",
-      "Kimi-K2.6",
-      "Qwen3.5-397B-A17B",
-      "Qwen3.6-35B-A3B",
-      "deepseek-v4-flash",
-      "deepseek-v4-pro",
-      "qwen3.7-max"
-    ],
+    "wafer.ai": ["GLM-5.1", "GLM-5.2", "Kimi-K2.6", "MiniMax-M3", "glm5.2-fast"],
     "minimax": [
       "MiniMax-M2",
       "MiniMax-M2.1",
