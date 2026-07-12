@@ -12,10 +12,7 @@ const definition = normalizeBehavior({
   states: [{
     id: 'poll',
     periodic: { intervalMs: 1_000, transition: 'again' },
-    transitions: [
-      { id: 'again', target: 'poll' },
-      { id: 'exit', target: 'exit', exit: true },
-    ],
+    transitions: [{ id: 'again', target: 'poll' }],
   }],
 });
 
@@ -78,7 +75,6 @@ describe('BehaviorScheduler', () => {
       id: 'guarded', version: '1', initialState: 'poll', states: [{
         id: 'poll', periodic: { intervalMs: 100, transition: 'again' }, transitions: [
           { id: 'again', target: 'poll', guards: [{ id: 'deny' }] },
-          { id: 'exit', target: 'exit', exit: true },
         ],
       }],
     });
@@ -107,7 +103,6 @@ describe('BehaviorScheduler', () => {
       id: 'judged', version: '1', initialState: 'poll', states: [{
         id: 'poll', periodic: { intervalMs: 100, transition: 'again' }, transitions: [
           { id: 'again', target: 'poll', judge: true },
-          { id: 'exit', target: 'exit', exit: true },
         ],
       }],
     });
@@ -141,7 +136,6 @@ describe('BehaviorScheduler', () => {
       id: 'stale', version: '1', initialState: 'poll', states: [{
         id: 'poll', periodic: { intervalMs: 100, transition: 'again' }, transitions: [
           { id: 'again', target: 'poll', judge: true },
-          { id: 'exit', target: 'exit', exit: true },
         ],
       }],
     });

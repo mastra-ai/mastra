@@ -98,15 +98,16 @@ export class BehaviorScheduler {
     await this.audit('scheduler.claimed', key, checkpoint);
     const state = this.options.definition.states[claim.result.state];
     const transitionId = state?.periodic?.transition;
-    if (!transitionId) {
+    const transition = state?.transitions.find(candidate => candidate.id === transitionId);
+    if (!transition) {
       await this.release(key, leaseId, checkpoint, 'Periodic transition is unavailable');
       return false;
     }
     try {
       await this.options.engine.transition({
         threadId: key.threadId,
-        transitionId,
-        attemptId: `periodic:${checkpoint}:${transitionId}`,
+        name: transition.target,
+        idempotencyKey: `periodic:${checkpoint}:${transitionId}`,
       });
       await this.complete(key, leaseId, checkpoint);
       await this.audit('scheduler.completed', key, checkpoint);

@@ -25,7 +25,7 @@ const definition = defineBehavior({
   states: [
     {
       id: 'inspect',
-      transitions: [{ id: 'exit', target: 'exit', exit: true }],
+      transitions: [{ id: 'continue', target: 'inspect' }],
     },
   ],
 })
@@ -103,15 +103,13 @@ const engine = new BehaviorTransitionEngine({
   }),
 })
 
-await engine.initialize('thread-id')
 await engine.transition({
   threadId: 'thread-id',
-  transitionId: 'exit',
-  attemptId: crypto.randomUUID(),
+  name: 'inspect',
 })
 ```
 
-The `attemptId` makes a completed transition idempotent. A judge result can't commit after another transition changes the record revision.
+`transition()` initializes a missing thread at the root before resolving the requested destination. The engine creates idempotency keys internally. A judge result can't commit after another transition changes the record revision.
 
 ## `BehaviorSignalProvider`
 
@@ -127,9 +125,9 @@ const provider = new BehaviorSignalProvider({
 })
 ```
 
-The projected `<current-behavior>` state includes acting instructions, transition IDs, intent, and status. It excludes judge instructions.
+The projected `<current-behavior>` state includes acting instructions, available destination behavior names, intent, and status. It excludes judge instructions.
 
-The provider also exposes stable `behavior_select`, `behavior_intent`, `behavior_transition`, and `behavior_exit` tools. Configure `resolveThreadId` to read the host's thread ID from `RequestContext`. Optional `resolveModel` and `resolveSkillInstructions` callbacks route state-specific models and skill instructions without constructing provider clients.
+The provider initializes the root silently and exposes stable `behavior` and `behavior_intent` tools. `behavior` requires only `{ name }`, where `name` is an available destination behavior. Configure `resolveThreadId` to read the host's thread ID from `RequestContext`. Optional `resolveModel` and `resolveSkillInstructions` callbacks route state-specific models and skill instructions without constructing provider clients.
 
 Governed host tools receive one required `intent` input. `BehaviorIntentPolicyProcessor` memoizes wrappers by original tool identity and checks authorization both before and during execution.
 

@@ -42,19 +42,18 @@ export const debugBehavior = defineBehavior({
           guards: [{ id: 'cause-proven' }],
           judge: true,
         },
-        { id: 'exit', target: 'exit', exit: true },
       ],
     },
     {
       id: 'test',
       instructions: 'Write a failing regression test.',
-      transitions: [{ id: 'exit', target: 'exit', exit: true }],
+      transitions: [{ id: 'return', target: 'understand' }],
     },
   ],
 })
 ```
 
-Every state requires an exit transition. Mastra rejects duplicate IDs, missing targets, unreachable states, invalid schedules, and states without an exit.
+`initialState` is the root behavior and initializes automatically for each thread. Every transition targets another behavior node, including edges that return to the root. Mastra rejects duplicate IDs or targets, missing targets, unreachable states, and invalid schedules.
 
 ## Load a behavior directory
 
@@ -84,9 +83,8 @@ states:
     skills:
       - skills/research
     transitions:
-      - id: exit
-        target: exit
-        exit: true
+      - id: continue
+        target: understand
 ```
 
 Filesystem paths must stay inside the behavior directory. The loader rejects absolute paths, traversal, and symbolic links that escape the directory.
@@ -131,10 +129,10 @@ Set `intent` to the active state ID for automatic approval. A free-form value us
 
 The control tools remain available in every state:
 
-- `behavior_select` starts or resumes the behavior.
+- `behavior({ name })` moves to an available destination behavior. The runtime derives idempotency from the tool call; the model doesn't supply an attempt ID.
 - `behavior_intent` approves and records intent.
-- `behavior_transition` evaluates an available transition.
-- `behavior_exit` follows the current state's required exit transition.
+
+The root initializes silently. Returning to the root or leaving a branch uses the same `behavior({ name })` call and the same graph-edge guard and judge checks as every other move.
 
 ## Judge transitions
 
@@ -170,7 +168,7 @@ Inspect `BehaviorRuntimeRecord` for status, revision, transition history, checkp
 
 Common failures:
 
-- **Behavior isn't active:** call `behavior_select` for the current thread.
+- **Destination isn't available:** choose a behavior listed in the current `<current-behavior>` signal.
 - **Intent is rejected:** use the current state ID or adjust `judgeIntent`.
 - **Tool isn't allowed:** add its stable tool name to the state's `tools` list.
 - **Model is unavailable:** ensure the host resolver recognizes the state's model ID.
