@@ -4644,6 +4644,22 @@
       "docUrl": "https://docs.meganova.ai",
       "gateway": "models.dev"
     },
+    "inferx": {
+      "url": "https://model.inferx.net/v1",
+      "apiKeyEnvVar": "INFERX_API_KEY",
+      "apiKeyHeader": "Authorization",
+      "name": "InferX",
+      "models": [
+        "google/gemma-4-31b-it-fp8",
+        "qwen/qwen3-coder-next-fp8",
+        "qwen/qwen3-coder-next-fp8-1m",
+        "qwen/qwen3.5-122b-a10b-nvfp4",
+        "qwen/qwen3.6-27b-fp8",
+        "qwen/qwen3.6-35b-a3b-fp8"
+      ],
+      "docUrl": "https://model.inferx.net/endpoints",
+      "gateway": "models.dev"
+    },
     "perplexity": {
       "apiKeyEnvVar": "PERPLEXITY_API_KEY",
       "name": "Perplexity",
@@ -6354,16 +6370,7 @@
       "apiKeyEnvVar": "WAFER_API_KEY",
       "apiKeyHeader": "Authorization",
       "name": "Wafer",
-      "models": [
-        "GLM-5.1",
-        "GLM-5.2",
-        "Kimi-K2.6",
-        "Qwen3.5-397B-A17B",
-        "Qwen3.6-35B-A3B",
-        "deepseek-v4-flash",
-        "deepseek-v4-pro",
-        "qwen3.7-max"
-      ],
+      "models": ["GLM-5.1", "GLM-5.2", "Kimi-K2.6", "MiniMax-M3", "Qwen3.5-397B-A17B", "glm5.2-fast"],
       "docUrl": "https://docs.wafer.ai/wafer-pass",
       "gateway": "models.dev"
     },
@@ -10012,6 +10019,14 @@
       "zai-org/GLM-4.7",
       "zai-org/GLM-5"
     ],
+    "inferx": [
+      "google/gemma-4-31b-it-fp8",
+      "qwen/qwen3-coder-next-fp8",
+      "qwen/qwen3-coder-next-fp8-1m",
+      "qwen/qwen3.5-122b-a10b-nvfp4",
+      "qwen/qwen3.6-27b-fp8",
+      "qwen/qwen3.6-35b-a3b-fp8"
+    ],
     "perplexity": ["sonar", "sonar-deep-research", "sonar-pro", "sonar-reasoning-pro"],
     "umans-ai": ["umans-coder", "umans-flash", "umans-glm-5.1", "umans-glm-5.2", "umans-kimi-k2.7"],
     "togetherai": [
@@ -11382,16 +11397,7 @@
       "MiniMax-M3"
     ],
     "deepseek": ["deepseek-chat", "deepseek-reasoner", "deepseek-v4-flash", "deepseek-v4-pro"],
-    "wafer.ai": [
-      "GLM-5.1",
-      "GLM-5.2",
-      "Kimi-K2.6",
-      "Qwen3.5-397B-A17B",
-      "Qwen3.6-35B-A3B",
-      "deepseek-v4-flash",
-      "deepseek-v4-pro",
-      "qwen3.7-max"
-    ],
+    "wafer.ai": ["GLM-5.1", "GLM-5.2", "Kimi-K2.6", "MiniMax-M3", "Qwen3.5-397B-A17B", "glm5.2-fast"],
     "minimax": [
       "MiniMax-M2",
       "MiniMax-M2.1",

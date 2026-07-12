@@ -3453,6 +3453,14 @@ export type ProviderModelsMap = {
     'zai-org/GLM-4.7',
     'zai-org/GLM-5',
   ];
+  readonly inferx: readonly [
+    'google/gemma-4-31b-it-fp8',
+    'qwen/qwen3-coder-next-fp8',
+    'qwen/qwen3-coder-next-fp8-1m',
+    'qwen/qwen3.5-122b-a10b-nvfp4',
+    'qwen/qwen3.6-27b-fp8',
+    'qwen/qwen3.6-35b-a3b-fp8',
+  ];
   readonly perplexity: readonly ['sonar', 'sonar-deep-research', 'sonar-pro', 'sonar-reasoning-pro'];
   readonly 'umans-ai': readonly ['umans-coder', 'umans-flash', 'umans-glm-5.1', 'umans-glm-5.2', 'umans-kimi-k2.7'];
   readonly togetherai: readonly [
@@ -4836,16 +4844,7 @@ export type ProviderModelsMap = {
     'MiniMax-M3',
   ];
   readonly deepseek: readonly ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash', 'deepseek-v4-pro'];
-  readonly 'wafer.ai': readonly [
-    'GLM-5.1',
-    'GLM-5.2',
-    'Kimi-K2.6',
-    'Qwen3.5-397B-A17B',
-    'Qwen3.6-35B-A3B',
-    'deepseek-v4-flash',
-    'deepseek-v4-pro',
-    'qwen3.7-max',
-  ];
+  readonly 'wafer.ai': readonly ['GLM-5.1', 'GLM-5.2', 'Kimi-K2.6', 'MiniMax-M3', 'Qwen3.5-397B-A17B', 'glm5.2-fast'];
   readonly minimax: readonly [
     'MiniMax-M2',
     'MiniMax-M2.1',

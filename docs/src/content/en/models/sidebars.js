@@ -363,6 +363,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inferx',
+          label: 'InferX',
+        },
+        {
+          type: 'doc',
           id: 'providers/io-net',
           label: 'IO.NET',
         },
