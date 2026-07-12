@@ -20,10 +20,10 @@ const definition = defineBehavior({
       judgeInstructions: 'Secret judge instructions',
       transitions: [
         { id: 'test', target: 'test', guards: [{ id: 'ready' }], judge: true },
-        { id: 'exit', target: 'exit', exit: true },
+        { id: 'refresh', target: 'understand' },
       ],
     },
-    { id: 'test', transitions: [{ id: 'exit', target: 'exit', exit: true }] },
+    { id: 'test', transitions: [{ id: 'return', target: 'understand' }] },
   ],
   migrations: { investigate: 'understand' },
 });
@@ -88,8 +88,7 @@ describe('BehaviorTransitionEngine', () => {
       guards: { ready: () => { order.push('guard'); return true; } },
       judge: async input => { order.push('judge'); expect(input.judgeInstructions).toBe('Secret judge instructions'); return { approved: true }; },
     });
-    await engine.initialize('thread');
-    const result = await engine.transition({ threadId: 'thread', transitionId: 'test', attemptId: 'attempt' });
+    const result = await engine.transition({ threadId: 'thread', name: 'test', idempotencyKey: 'attempt' });
     expect(order).toEqual(['guard', 'judge']);
     expect(result).toMatchObject({ activeState: 'test', revision: 2 });
     expect(mirror.setState).toHaveBeenLastCalledWith(expect.objectContaining({ type: '@mastra/behaviors:debug' }));
@@ -106,9 +105,9 @@ describe('BehaviorTransitionEngine', () => {
       judge: async () => { await pending; return { approved: true }; },
     });
     await engine.initialize('thread');
-    const judged = engine.transition({ threadId: 'thread', transitionId: 'test', attemptId: 'judged' });
+    const judged = engine.transition({ threadId: 'thread', name: 'test', idempotencyKey: 'judged' });
     await Promise.resolve();
-    await engine.transition({ threadId: 'thread', transitionId: 'exit', attemptId: 'exit' });
+    await engine.transition({ threadId: 'thread', name: 'understand', idempotencyKey: 'refresh' });
     release();
     await expect(judged).rejects.toThrow('Stale transition result');
   });
@@ -116,8 +115,7 @@ describe('BehaviorTransitionEngine', () => {
   it('fails closed before judging when a guard rejects', async () => {
     const judge = vi.fn();
     const engine = new BehaviorTransitionEngine({ definition, store: new InMemoryBehaviorRuntimeStore(), guards: { ready: () => false }, judge });
-    await engine.initialize('thread');
-    await expect(engine.transition({ threadId: 'thread', transitionId: 'test', attemptId: 'bad' })).rejects.toThrow('Guard');
+    await expect(engine.transition({ threadId: 'thread', name: 'test' })).rejects.toThrow('Guard');
     expect(judge).not.toHaveBeenCalled();
   });
 

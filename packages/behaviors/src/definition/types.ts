@@ -6,7 +6,6 @@ export type BehaviorTransitionInput = {
   description?: string;
   guards?: BehaviorGuard[];
   judge?: boolean;
-  exit?: boolean;
 };
 
 export type BehaviorStateInput = {
@@ -38,7 +37,6 @@ export type NormalizedBehaviorTransition = Readonly<{
   description?: string;
   guards: readonly Readonly<BehaviorGuard>[];
   judge: boolean;
-  exit: boolean;
 }>;
 
 export type NormalizedBehaviorState = Readonly<{

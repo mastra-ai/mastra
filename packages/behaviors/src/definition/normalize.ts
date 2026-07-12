@@ -43,6 +43,7 @@ export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string)
       continue;
     }
     const transitionIds = new Set<string>();
+    const transitionTargets = new Set<string>();
     for (const [transitionIndex, transition] of (state.transitions ?? []).entries()) {
       const transitionPath = `${statePath}.transitions[${transitionIndex}]`;
       if (!transition.id?.trim()) diagnostics.push({ path: `${transitionPath}.id`, message: 'must be non-empty' });
@@ -50,6 +51,10 @@ export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string)
         diagnostics.push({ path: `${transitionPath}.id`, message: `duplicate transition ID "${transition.id}"` });
       }
       transitionIds.add(transition.id);
+      if (transitionTargets.has(transition.target)) {
+        diagnostics.push({ path: `${transitionPath}.target`, message: `duplicate target behavior "${transition.target}"` });
+      }
+      transitionTargets.add(transition.target);
       if (transition.guards) {
         const guards = new Set<string>();
         for (const guard of transition.guards) {
@@ -72,16 +77,12 @@ export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string)
         ...transition,
         guards: [...(transition.guards ?? [])],
         judge: transition.judge ?? false,
-        exit: transition.exit ?? false,
       })),
     };
   }
 
   if (!states[input.initialState]) diagnostics.push({ path: 'initialState', message: `unknown state "${input.initialState}"` });
   for (const state of Object.values(states)) {
-    if (!state.transitions.some(transition => transition.exit)) {
-      diagnostics.push({ path: `states.${state.id}.transitions`, message: 'must include an exit transition' });
-    }
     if (state.periodic) {
       if (!Number.isFinite(state.periodic.intervalMs) || state.periodic.intervalMs <= 0) {
         diagnostics.push({ path: `states.${state.id}.periodic.intervalMs`, message: 'must be a positive number' });
@@ -91,7 +92,7 @@ export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string)
       }
     }
     for (const transition of state.transitions) {
-      if (!transition.exit && !states[transition.target]) {
+      if (!states[transition.target]) {
         diagnostics.push({ path: `states.${state.id}.transitions.${transition.id}.target`, message: `unknown state "${transition.target}"` });
       }
     }
@@ -104,7 +105,7 @@ export function normalizeBehavior(input: BehaviorDefinitionInput, root?: string)
       const id = pending.pop()!;
       if (reachable.has(id)) continue;
       reachable.add(id);
-      for (const transition of states[id]?.transitions ?? []) if (!transition.exit) pending.push(transition.target);
+      for (const transition of states[id]?.transitions ?? []) pending.push(transition.target);
     }
     for (const id of Object.keys(states)) {
       if (!reachable.has(id)) diagnostics.push({ path: `states.${id}`, message: 'state is unreachable from initialState' });

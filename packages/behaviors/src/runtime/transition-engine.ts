@@ -58,22 +58,24 @@ export class BehaviorTransitionEngine {
 
   async transition(input: {
     threadId: string;
-    transitionId: string;
-    attemptId: string;
+    name: string;
+    idempotencyKey?: string;
     signal?: AbortSignal;
   }): Promise<BehaviorRuntimeRecord> {
     const key = { threadId: input.threadId, behaviorId: this.options.definition.id };
-    const current = await this.options.store.readThread(key);
-    if (!current) throw new BehaviorTransitionError('Behavior has not been initialized');
+    const current = (await this.options.store.readThread(key)) ?? (await this.initialize(input.threadId));
     if (current.status !== 'active') throw new BehaviorTransitionError(`Behavior is ${current.status}`);
     if (current.definitionVersion !== this.options.definition.version) {
       throw new BehaviorTransitionError('Behavior definition changed; initialize to reconcile state first');
     }
-    if (current.transitionHistory.some(item => item.id === input.attemptId)) return current;
+    const idempotencyKey = input.idempotencyKey ?? crypto.randomUUID();
+    if (current.transitionHistory.some(item => item.id === idempotencyKey)) return current;
 
     const state = this.options.definition.states[current.activeState];
-    const transition = state?.transitions.find(item => item.id === input.transitionId);
-    if (!state || !transition) throw new BehaviorTransitionError(`Transition "${input.transitionId}" is not available`);
+    const transition = state?.transitions.find(item => item.target === input.name);
+    if (!state || !transition) {
+      throw new BehaviorTransitionError(`Behavior "${input.name}" is not available from "${current.activeState}"`);
+    }
     await this.evaluateGuards(current, transition);
     const judgeResult = transition.judge ? await this.evaluateJudge(current, transition, input.signal) : undefined;
 
@@ -83,24 +85,25 @@ export class BehaviorTransitionEngine {
       }
       if (judgeResult && !judgeResult.approved) throw new BehaviorTransitionError(judgeResult.reason ?? 'Transition rejected by judge');
       const now = this.now().toISOString();
-      const target = transition.exit ? undefined : this.options.definition.states[transition.target];
+      const target = this.options.definition.states[transition.target]!;
       const next: BehaviorRuntimeRecord = {
         ...latest,
         revision: latest.revision + 1,
-        status: transition.exit ? 'exited' : 'active',
-        activeState: target?.id ?? latest.activeState,
+        status: 'active',
+        activeState: target.id,
+        intent: undefined,
         enteredAt: now,
-        nextCheckAt: target?.periodic
+        nextCheckAt: target.periodic
           ? new Date(this.now().getTime() + target.periodic.intervalMs).toISOString()
           : undefined,
-        judgeResults: judgeResult ? { ...latest.judgeResults, [input.attemptId]: judgeResult } : latest.judgeResults,
+        judgeResults: judgeResult ? { ...latest.judgeResults, [idempotencyKey]: judgeResult } : latest.judgeResults,
         transitionHistory: [
           ...latest.transitionHistory,
           {
-            id: input.attemptId,
+            id: idempotencyKey,
             transitionId: transition.id,
             from: latest.activeState,
-            to: target?.id,
+            to: target.id,
             at: now,
             revision: latest.revision + 1,
             reason: judgeResult?.reason,

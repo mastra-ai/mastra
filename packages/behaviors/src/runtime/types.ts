@@ -1,6 +1,6 @@
 import type { NormalizedBehaviorDefinition, NormalizedBehaviorTransition } from '../definition/types.js';
 
-export type BehaviorStatus = 'active' | 'exited' | 'paused' | 'error';
+export type BehaviorStatus = 'active' | 'paused' | 'error';
 
 export type BehaviorTransitionRecord = {
   id: string;

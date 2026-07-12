@@ -19,14 +19,14 @@ const input: BehaviorDefinitionInput = {
       skills: [],
       transitions: [
         { id: 'test', target: 'test', guards: [{ id: 'cause-proven' }], judge: true },
-        { id: 'exit', target: 'exit', exit: true },
+        { id: 'refresh', target: 'understand' },
       ],
     },
     {
       id: 'test',
       instructions: 'Write a failing test.',
-      transitions: [{ id: 'exit', target: 'exit', exit: true }],
-      periodic: { intervalMs: 1000, transition: 'exit' },
+      transitions: [{ id: 'return', target: 'understand' }],
+      periodic: { intervalMs: 1000, transition: 'return' },
     },
   ],
   migrations: { investigate: 'understand' },
@@ -66,7 +66,7 @@ describe('behavior definitions', () => {
   it('normalizes programmatic definitions into an immutable graph', () => {
     const behavior = defineBehavior(input);
     expect(Object.keys(behavior.states)).toEqual(['understand', 'test']);
-    expect(behavior.states.understand?.transitions[0]).toMatchObject({ id: 'test', judge: true, exit: false });
+    expect(behavior.states.understand?.transitions[0]).toMatchObject({ id: 'test', target: 'test', judge: true });
     expect(Object.isFrozen(behavior.states.understand?.transitions)).toBe(true);
   });
 
@@ -84,16 +84,16 @@ describe('behavior definitions', () => {
 
   it.each([
     ['duplicate states', { ...input, states: [...input.states, input.states[0]!] }, 'duplicate state ID'],
-    ['missing target', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'bad', target: 'missing' }, { id: 'exit', target: 'exit', exit: true }] }] }, 'unknown state'],
-    ['missing exit', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'loop', target: 'understand' }] }] }, 'exit transition'],
-    ['bad schedule', { ...input, states: input.states.map(state => state.id === 'test' ? { ...state, periodic: { intervalMs: 0, transition: 'exit' } } : state) }, 'positive number'],
+    ['missing target', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'bad', target: 'missing' }] }] }, 'unknown state'],
+    ['duplicate target', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'first', target: 'test' }, { id: 'second', target: 'test' }] }] }, 'duplicate target behavior'],
+    ['bad schedule', { ...input, states: input.states.map(state => state.id === 'test' ? { ...state, periodic: { intervalMs: 0, transition: 'return' } } : state) }, 'positive number'],
     ['unsafe state ID', { ...input, initialState: '../outside', states: [{ ...input.states[0]!, id: '../outside' }] }, 'may contain only'],
   ])('rejects %s', (_name, definition, message) => {
     expect(() => defineBehavior(definition as BehaviorDefinitionInput)).toThrow(message);
   });
 
   it('rejects unreachable states', () => {
-    const unreachable = { id: 'orphan', transitions: [{ id: 'exit', target: 'exit', exit: true }] };
+    const unreachable = { id: 'orphan', transitions: [{ id: 'stay', target: 'orphan' }] };
     expect(() => defineBehavior({ ...input, states: [...input.states, unreachable] })).toThrow('unreachable');
   });
 
