@@ -64,6 +64,19 @@ describe('registerApiRoute Type Tests', () => {
         },
       });
     });
+
+    it('types the createHandler factory arg as { mastra }, not a Hono Context', () => {
+      registerApiRoute('/factory', {
+        method: 'GET',
+        createHandler: async ({ mastra }) => {
+          // adapter calls this as route.createHandler({ mastra }), so mastra
+          // should be the Mastra instance, not a Hono Context
+          expectTypeOf(mastra).toEqualTypeOf<Mastra>();
+
+          return async c => c.json({ ok: true });
+        },
+      });
+    });
   });
 });
 
