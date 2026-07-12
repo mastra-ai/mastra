@@ -77,6 +77,36 @@ type IterationState = z.infer<typeof iterationStateSchema> & {
 };
 
 /**
+ * Resolve the effective tool-call concurrency for one agentic iteration.
+ *
+ * Mirrors @mastra/core's `resolveToolCallConcurrency`: default 10 concurrent tool calls, but
+ * forced to 1 (sequential) whenever the run requires tool approval OR any tool the model called
+ * this step can suspend / requires approval — so approval/suspend flows never race with concurrent
+ * tool calls. `toolCallConcurrency` from the request/agent options overrides the default when > 0.
+ */
+function resolveIterationToolCallConcurrency(
+  options: { toolCallConcurrency?: number; requireToolApproval?: unknown } | undefined,
+  toolCalls: DurableToolCallInput[],
+): number {
+  const configured =
+    options?.toolCallConcurrency && options.toolCallConcurrency > 0 ? options.toolCallConcurrency : 10;
+
+  // Global approval policy → always sequential (a function policy is evaluated per call at
+  // execution time; before args are known we conservatively treat it like `true`).
+  if (options?.requireToolApproval) {
+    return 1;
+  }
+
+  // Any called tool that can suspend / requires approval → sequential.
+  const anySuspends = toolCalls.some(tc => {
+    const t = tc as { hasSuspendSchema?: unknown; requireApproval?: unknown };
+    return Boolean(t.hasSuspendSchema || t.requireApproval);
+  });
+
+  return anySuspends ? 1 : configured;
+}
+
+/**
  * Create a durable agentic workflow using Inngest.
  *
  * This workflow implements the agentic loop pattern in a durable way using
@@ -117,6 +147,12 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
   // Create the background task check step
   const backgroundTaskCheckStep = createDurableBackgroundTaskCheckStep();
+
+  // Mutable foreach options for the tool-call step. Recomputed per iteration in the
+  // extract-tool-calls map below (default 10; forced to 1 for approval/suspend flows).
+  // Without this, .foreach() defaults to concurrency 1 and tool calls always run sequentially,
+  // ignoring `toolCallConcurrency` — matching @mastra/core's behavior after #9704.
+  const toolCallForeachOptions = { concurrency: 1 };
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
   const singleIterationWorkflow = createWorkflow({
@@ -160,17 +196,25 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     )
     // Step 1: Execute LLM
     .then(llmExecutionStep)
-    // Step 2: Extract tool calls as array for foreach
+    // Step 2: Extract tool calls as array for foreach + resolve tool-call concurrency for this step
     .map(
-      async ({ inputData }) => {
+      async ({ inputData, getInitData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
-        return (llmOutput.toolCalls ?? []) as DurableToolCallInput[];
+        const toolCalls = (llmOutput.toolCalls ?? []) as DurableToolCallInput[];
+        // Resolve concurrency from the run options + the tools actually called this step.
+        // Mutates the shared toolCallForeachOptions the foreach below reads.
+        const initData = getInitData() as IterationState;
+        toolCallForeachOptions.concurrency = resolveIterationToolCallConcurrency(
+          (initData as { options?: { toolCallConcurrency?: number; requireToolApproval?: unknown } }).options,
+          toolCalls,
+        );
+        return toolCalls;
       },
       { id: 'extract-tool-calls' },
     )
     // Step 3: Execute each tool call individually (with suspend support)
     // Tool result/error PubSub emission is handled by createDurableToolCallStep
-    .foreach(toolCallStep)
+    .foreach(toolCallStep, toolCallForeachOptions)
     // Step 4: Collect tool results, create observability spans, and bundle for mapping
     .map(
       async ({ inputData, getStepResult, getInitData, mastra }) => {
