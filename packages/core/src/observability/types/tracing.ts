@@ -353,6 +353,8 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   toolType?: string;
   toolDescription?: string;
   success?: boolean;
+  /** ID of the tool call this span belongs to, used to correlate the call with its result. */
+  toolCallId?: string;
 }
 
 /**
@@ -387,6 +389,8 @@ export interface MCPToolCallAttributes extends AIBaseAttributes {
   toolDescription?: string;
   /** Whether tool execution was successful */
   success?: boolean;
+  /** ID of the tool call this span belongs to, used to correlate the call with its result. */
+  toolCallId?: string;
 }
 
 /**

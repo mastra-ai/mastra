@@ -861,6 +861,110 @@ describe('BraintrustExporter', () => {
     );
   });
 
+  /**
+   * Regression test for issue #19309: the Braintrust Thread view never showed
+   * tool results because core creates the TOOL_CALL span with input = args only
+   * (no toolCallId). The toolCallId now lives on the span attributes, and the
+   * exporter reads it from there to pair each result with its call.
+   *
+   * @see https://github.com/mastra-ai/mastra/issues/19309
+   */
+  it('attaches tool results using the toolCallId from span attributes (issue #19309)', async () => {
+    const traceId = 'tool-result-attributes-trace';
+
+    const llmSpan = createMockSpan({
+      id: 'model-gen-span',
+      traceId,
+      name: 'gpt-4-call',
+      type: SpanType.MODEL_GENERATION,
+      isRoot: true,
+      input: [{ role: 'user', content: 'What is 2+2?' }],
+      output: { text: 'The answer is 4.' },
+      attributes: { model: 'gpt-4', provider: 'openai' },
+    });
+
+    const modelStep0Span = createMockSpan({
+      id: 'model-step-0-span',
+      traceId,
+      name: 'Model Step 0',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      output: {
+        text: '',
+        toolCalls: [{ toolCallId: 'tc-1', toolName: 'calculator', args: { a: 2, b: 2 } }],
+      },
+      attributes: { stepIndex: 0 },
+    });
+    modelStep0Span.parentSpanId = llmSpan.id;
+
+    // Realistic TOOL_CALL span: input is the validated args only (no toolCallId),
+    // and the toolCallId lives on the attributes (as core now sets it).
+    const toolCallSpan = createMockSpan({
+      id: 'tool-call-span',
+      traceId,
+      name: "tool: 'calculator'",
+      type: SpanType.TOOL_CALL,
+      isRoot: false,
+      input: { a: 2, b: 2 },
+      output: { result: 4 },
+      attributes: { toolId: 'calculator', success: true, toolCallId: 'tc-1' },
+    });
+    toolCallSpan.parentSpanId = modelStep0Span.id;
+
+    const modelStep1Span = createMockSpan({
+      id: 'model-step-1-span',
+      traceId,
+      name: 'Model Step 1',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      output: { text: 'The answer is 4.', toolCalls: [] },
+      attributes: { stepIndex: 1 },
+    });
+    modelStep1Span.parentSpanId = llmSpan.id;
+
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: llmSpan });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: modelStep0Span });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: toolCallSpan });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...toolCallSpan, endTime: new Date() },
+    });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStep0Span, endTime: new Date() },
+    });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: modelStep1Span });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStep1Span, endTime: new Date() },
+    });
+
+    mockSpan.log.mockClear();
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...llmSpan, endTime: new Date() },
+    });
+
+    // The tool result (from the TOOL_CALL span) must appear as a tool message,
+    // paired with the call by tc-1.
+    expect(mockSpan.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: [
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [{ id: 'tc-1', type: 'function', function: { name: 'calculator', arguments: '{"a":2,"b":2}' } }],
+          },
+          { role: 'tool', content: '{"result":4}', tool_call_id: 'tc-1' },
+          { role: 'assistant', content: 'The answer is 4.' },
+        ],
+      }),
+    );
+  });
+
   describe('AI SDK v5 Message Conversion', () => {
     it('should convert AI SDK v5 user messages to OpenAI format', async () => {
       const llmSpan = createMockSpan({

@@ -250,6 +250,7 @@ describe('MCP Tool Tracing', () => {
           mcpServer: 'filesystem-server',
           serverVersion: '1.2.0',
           toolDescription: 'List files in a directory',
+          toolCallId: 'test-call-id',
         },
       }),
     );
@@ -301,9 +302,50 @@ describe('MCP Tool Tracing', () => {
         attributes: {
           toolDescription: 'A regular tool',
           toolType: 'tool',
+          toolCallId: 'test-call-id',
         },
       }),
     );
+  });
+
+  it('should include the toolCallId on the tool span so exporters can correlate the result', async () => {
+    const testTool = createTool({
+      id: 'regular-tool',
+      description: 'A regular tool',
+      inputSchema: z.object({ value: z.string() }),
+      execute: async inputData => ({ result: inputData.value }),
+    });
+
+    const mockToolSpan = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+
+    const mockAgentSpan = {
+      createChildSpan: vi.fn().mockReturnValue(mockToolSpan),
+    } as unknown as AnySpan;
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'regular-tool',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        description: 'A regular tool',
+        requestContext: new RequestContext(),
+        tracingContext: { currentSpan: mockAgentSpan },
+      },
+    });
+
+    const builtTool = builder.build();
+    await builtTool.execute!({ value: 'test' }, { toolCallId: 'call-abc-123', messages: [] });
+
+    const spanArgs = (mockAgentSpan.createChildSpan as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(spanArgs.attributes.toolCallId).toBe('call-abc-123');
   });
 
   it('should handle mcpMetadata with missing serverVersion', async () => {
@@ -351,6 +393,7 @@ describe('MCP Tool Tracing', () => {
       mcpServer: 'my-mcp-server',
       serverVersion: undefined,
       toolDescription: 'Read a resource',
+      toolCallId: 'test-call-id',
     });
     expect(spanArgs.name).toBe("mcp_tool: 'mcp_read-resource' on 'my-mcp-server'");
   });

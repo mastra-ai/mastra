@@ -392,9 +392,11 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Extract tool call ID from TOOL_CALL span input
+    // Extract the tool call ID. Core sets it on the span attributes; fall back to
+    // the span input for older core versions that included it there.
+    const attributes = span.attributes as { toolCallId?: string } | undefined;
     const input = span.input as { toolCallId?: string } | undefined;
-    const toolCallId = input?.toolCallId;
+    const toolCallId = attributes?.toolCallId ?? input?.toolCallId;
     if (!toolCallId) {
       return;
     }
