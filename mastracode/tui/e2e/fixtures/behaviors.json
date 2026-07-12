@@ -3,7 +3,6 @@
     {
       "match": {
         "endpoint": "chat",
-        "userMessage": "Move to the implementation behavior.",
         "hasToolResult": false
       },
       "response": {
