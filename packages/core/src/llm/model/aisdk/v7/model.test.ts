@@ -1,5 +1,6 @@
 import type { LanguageModelV4, LanguageModelV4CallOptions } from '@ai-sdk/provider-v7';
 import { describe, expect, it, vi } from 'vitest';
+import { MessageList } from '../../../../agent/message-list';
 import { AISDKV7LanguageModel } from './model';
 
 function createMockV4Model() {
@@ -72,6 +73,119 @@ describe('AISDKV7LanguageModel', () => {
 
       const passed = (model.doStream as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
       expect(passed.tools[0].type).toBe('function');
+    });
+  });
+
+  describe('file part remapping', () => {
+    it('normalizes file data from the agent prompt before streaming to a V4 provider', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+      const imageData = 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==';
+      const messageList = new MessageList();
+
+      messageList.add(
+        [
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: 'What is in this image?' },
+              {
+                type: 'file',
+                data: `data:image/webp;base64,${imageData}`,
+                mimeType: 'image/webp',
+              },
+            ],
+          },
+        ],
+        'input',
+      );
+
+      const prompt = await messageList.get.all.aiV6.llmPrompt();
+      const legacyFilePart =
+        prompt[0]?.role === 'user' ? prompt[0].content.find(part => part.type === 'file') : undefined;
+
+      // This is the flat V2/V3 data shape produced by the Agent's prompt path.
+      expect(legacyFilePart).toMatchObject({
+        type: 'file',
+        data: imageData,
+        mediaType: 'image/webp',
+      });
+
+      await wrapped.doStream({ prompt } as unknown as LanguageModelV4CallOptions);
+
+      const passed = (model.doStream as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      const v4FilePart = passed.prompt[0].content.find((part: { type: string }) => part.type === 'file');
+
+      expect(v4FilePart).toMatchObject({
+        type: 'file',
+        data: { type: 'data', data: imageData },
+        mediaType: 'image/webp',
+      });
+    });
+
+    it('normalizes all legacy file data forms for doGenerate and preserves tagged data', async () => {
+      const model = createMockV4Model();
+      const wrapped = new AISDKV7LanguageModel(model);
+      const remoteUrl = new URL('https://example.com/image.jpeg');
+      const binaryData = new Uint8Array([1, 2, 3]);
+      const taggedData = { type: 'reference' as const, reference: { openai: 'file-123' } };
+
+      await wrapped.doGenerate({
+        prompt: [
+          {
+            role: 'user',
+            content: [
+              { type: 'file', data: 'data:image/gif;base64,R0lGODlh', mediaType: 'application/octet-stream' },
+              { type: 'file', data: 'aGVsbG8=', mediaType: 'text/plain' },
+              { type: 'file', data: remoteUrl, mediaType: 'image/jpeg' },
+              { type: 'file', data: binaryData, mediaType: 'application/octet-stream' },
+              { type: 'file', data: taggedData, mediaType: 'application/pdf' },
+            ],
+          },
+          {
+            role: 'assistant',
+            content: [{ type: 'file', data: 'YXNzaXN0YW50', mediaType: 'text/plain' }],
+          },
+        ],
+      } as unknown as LanguageModelV4CallOptions);
+
+      const passed = (model.doGenerate as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+      const fileParts = passed.prompt[0].content.filter((part: { type: string }) => part.type === 'file');
+      const assistantFilePart = passed.prompt[1].content.find((part: { type: string }) => part.type === 'file');
+
+      expect(fileParts).toEqual([
+        {
+          type: 'file',
+          data: { type: 'data', data: 'R0lGODlh' },
+          mediaType: 'image/gif',
+        },
+        {
+          type: 'file',
+          data: { type: 'data', data: 'aGVsbG8=' },
+          mediaType: 'text/plain',
+        },
+        {
+          type: 'file',
+          data: { type: 'url', url: remoteUrl },
+          mediaType: 'image/jpeg',
+        },
+        {
+          type: 'file',
+          data: { type: 'data', data: binaryData },
+          mediaType: 'application/octet-stream',
+        },
+        {
+          type: 'file',
+          data: taggedData,
+          mediaType: 'application/pdf',
+        },
+      ]);
+      expect(fileParts[4].data).toBe(taggedData);
+      expect(assistantFilePart).toMatchObject({
+        type: 'file',
+        data: { type: 'data', data: 'YXNzaXN0YW50' },
+        mediaType: 'text/plain',
+      });
     });
   });
 });
