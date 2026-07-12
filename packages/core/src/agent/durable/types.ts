@@ -667,6 +667,24 @@ export interface RunRegistryEntry {
    */
   drainPendingSignals?: (scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   /**
+   * Thread title generation closure — mirrors the non-durable `#executeOnFinish`
+   * title-generation branch, which was never ported to the durable finish step
+   * (so `memory.options.generateTitle` never fired for durable/evented agents).
+   * Parked here during preparation, where the agent instance is in scope; the
+   * durable finish step invokes it after the run completes. When the merged
+   * memory config has no `generateTitle`, or the thread already has a title, it
+   * is a no-op. Non-serializable (a closure) — cross-process engines lose it and
+   * skip title generation, matching the other registry closures.
+   */
+  generateThreadTitle?: (args: {
+    threadId: string;
+    resourceId: string;
+    memoryConfig?: MemoryConfig;
+    messageListState: SerializedMessageListState;
+    requestContext?: RequestContext;
+    tracingContext?: unknown;
+  }) => Promise<void>;
+  /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts
    * so the client sees them without re-fetching history. The array is spliced

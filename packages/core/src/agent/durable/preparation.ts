@@ -678,6 +678,50 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
+    // which was never ported to the durable finish step (so `generateTitle` never
+    // fired for durable/evented agents). Parked here because the agent instance is
+    // in scope; the durable finish step invokes it after the run completes. No-op
+    // when the merged config has no `generateTitle` or the thread already has a
+    // title. Non-serializable — cross-process engines skip title generation.
+    generateThreadTitle: memory
+      ? async ({ threadId, resourceId, memoryConfig, messageListState, requestContext: rc, tracingContext }) => {
+          // Re-read the thread so a title written mid-run isn't regenerated, and so we only
+          // generate on the first turn (mirrors the non-durable `!thread.title` guard).
+          const thread = await memory.getThreadById?.({ threadId });
+          const mergedConfig = memory.getMergedThreadConfig?.(memoryConfig);
+          const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
+            mergedConfig?.generateTitle as Parameters<typeof agent.resolveTitleGenerationConfig>[0],
+          );
+          if (!shouldGenerate || thread?.title) return;
+
+          const titleMessageList = new MessageList().deserialize(messageListState);
+          const uiMessages = titleMessageList.get.all.ui();
+          const coreMessages = titleMessageList.get.all.core();
+          if (coreMessages.length < (minMessages ?? 1)) return;
+
+          const userMessage = agent.getMostRecentUserMessage(uiMessages);
+          if (!userMessage) return;
+
+          const title = await agent.genTitle(
+            userMessage,
+            rc ?? new RequestContext(),
+            createObservabilityContext(tracingContext as any),
+            model,
+            instructions,
+            uiMessages,
+          );
+          if (!title) return;
+
+          await memory.createThread({
+            threadId,
+            resourceId,
+            memoryConfig,
+            title,
+            metadata: thread?.metadata,
+          });
+        }
+      : undefined,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.
