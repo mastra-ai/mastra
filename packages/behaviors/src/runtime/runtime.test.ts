@@ -143,6 +143,17 @@ describe('BehaviorStateProcessor', () => {
     const signal = await processor.computeStateSignal(args);
     expect(signal?.contents).toContain('Actor instructions');
     expect(signal?.contents).not.toContain('Secret judge instructions');
-    expect(await processor.computeStateSignal({ ...args, contextWindow: { hasSnapshot: true }, lastSnapshot: { metadata: { state: { cacheKey: signal?.cacheKey }, record: { revision: 1, status: 'active' } } } } as any)).toBeUndefined();
+    const activeWindow = {
+      ...args,
+      contextWindow: { hasSnapshot: true },
+      lastSnapshot: { metadata: { state: { cacheKey: signal?.cacheKey }, record: { revision: 1, status: 'active' } } },
+    } as any;
+    expect(await processor.computeStateSignal(activeWindow)).toBeUndefined();
+
+    await store.transactThread({ threadId: 'thread', behaviorId: definition.id }, current => ({
+      next: { ...current!, revision: current!.revision + 1 },
+      result: undefined,
+    }));
+    expect(await processor.computeStateSignal(activeWindow)).toBeUndefined();
   });
 });

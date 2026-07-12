@@ -39,7 +39,7 @@ export class BehaviorStateProcessor {
     const state = this.definition.states[record.activeState];
     if (!state) return;
     const transitions = state.transitions.map(item => item.id).join(', ');
-    const cacheKey = `${this.stateId}:${lp(String(record.revision))}${lp(record.activeState)}${lp(record.intent ?? '')}`;
+    const cacheKey = `${this.stateId}:${lp(record.definitionVersion)}${lp(record.activeState)}${lp(record.intent ?? '')}`;
     if (hasBase && args.lastSnapshot?.metadata?.state?.cacheKey === cacheKey) return;
     const contents = [
       `Behavior: ${this.definition.id}`,
