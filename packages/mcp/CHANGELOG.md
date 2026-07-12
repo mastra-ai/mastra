@@ -1,5 +1,80 @@
 # @mastra/mcp
 
+## 1.14.0-alpha.0
+
+### Minor Changes
+
+- Add `serverlessStreaming` option to `MCPServer.startHTTP()` for request-scoped progress notifications in serverless mode. ([#17927](https://github.com/mastra-ai/mastra/pull/17927))
+
+  Serverless mode (`serverless: true`) buffers each request into a single JSON response, which silently drops any `notifications/progress` a tool emits via `extra.sendNotification()`. Setting `options: { serverless: true, serverlessStreaming: true }` now handles the request with request-scoped SSE streaming (`enableJsonResponse: false` on the transient transport), so progress notifications reach the MCP client's `onprogress` handler before the final result. An explicit `enableJsonResponse` is also honored.
+
+  ```ts
+  await server.startHTTP({
+    url,
+    httpPath: '/mcp',
+    req,
+    res,
+    options: { serverless: true, serverlessStreaming: true },
+  });
+  ```
+
+  This is still fully stateless — no `mcp-session-id` is required or persisted — and the default behavior is unchanged (`enableJsonResponse: true`), so existing serverless JSON-response users are unaffected. It enables only notifications scoped to the current request, such as progress; elicitation, resource subscriptions, and out-of-request resource/list-change notifications still require session state.
+
+- Fixed MCP server notifications (resource updates, resource/prompt list changes) not reaching clients connected over streamable HTTP. Notifications are now broadcast to every connected session across all transports. ([#19193](https://github.com/mastra-ai/mastra/pull/19193))
+
+  Fixed resource subscriptions being shared globally across all clients. Subscriptions are now tracked per session, so `resources.notifyUpdated()` only notifies sessions that subscribed to the resource URI, and one client unsubscribing no longer removes another client's subscription. Clients that relied on receiving `notifications/resources/updated` without subscribing must now call `resources/subscribe` first.
+
+  Added support for the remaining MCP notification features:
+
+  **Dynamic tools and tools/list_changed**
+
+  Servers can now add and remove tools at runtime and notify clients via `notifications/tools/list_changed`:
+
+  ```typescript
+  // Server: manage tools at runtime
+  await server.toolActions.add({ myNewTool });
+  await server.toolActions.remove(['myNewTool']);
+  await server.toolActions.notifyListChanged();
+  ```
+
+  When the server is registered with a Mastra instance, dynamic add/remove also keeps the Mastra instance's tool registry in sync.
+
+  ```typescript
+  // Client: react to tool list changes
+  await mcp.tools.onListChanged('myServer', async () => {
+    const tools = await mcp.listTools();
+  });
+  ```
+
+  **Server-side log messages**
+
+  Servers can now emit `notifications/message` log notifications. The minimum level a client sets via `logging/setLevel` is honored per session:
+
+  ```typescript
+  // Broadcast to all connected clients
+  await server.sendLoggingMessage({ level: 'info', data: { message: 'Sync completed' } });
+
+  // From inside a tool, send to the calling client
+  await context.mcp.log('debug', 'Fetching weather', { location });
+  ```
+
+  **Progress notifications from tools**
+
+  Tools can now report progress to the calling client:
+
+  ```typescript
+  await context.mcp.progress({ progress: 1, total: 3, message: 'step 1' });
+  ```
+
+### Patch Changes
+
+- Fixed MCP clients advertising elicitation support before a handler is registered. ([#19192](https://github.com/mastra-ai/mastra/pull/19192))
+
+- Fixed `MCPServer` dropping a resource's `_meta` from `resources/read` results. The read handler rebuilt each content item with only `{ uri, mimeType, text | blob }`, so `appResources` (MCP Apps / SEP-1865) metadata attached during `resources/list` as `_meta: { ui: meta }` never reached the client. Hosts read the UI CSP from `contents[]._meta.ui.csp`, so `connectDomains` was silently ignored and widget `fetch`/XHR calls failed with `Failed to fetch`. The resource's `_meta` is now preserved on the read contents. ([#19163](https://github.com/mastra-ai/mastra/pull/19163))
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+
 ## 1.13.1
 
 ### Patch Changes

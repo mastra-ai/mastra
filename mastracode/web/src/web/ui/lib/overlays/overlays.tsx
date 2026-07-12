@@ -8,7 +8,7 @@ import type { ReactNode } from 'react';
  * being prop-drilled through the layout tree.
  */
 
-export type OverlayName = 'sidebar' | 'palette' | 'settings' | 'shortcuts' | 'projects';
+export type OverlayName = 'sidebar' | 'palette' | 'settings' | 'shortcuts' | 'projects' | 'github';
 
 export interface OverlaysApi {
   isOpen: (name: OverlayName) => boolean;
@@ -24,6 +24,7 @@ const CLOSED: Record<OverlayName, boolean> = {
   settings: false,
   shortcuts: false,
   projects: false,
+  github: false,
 };
 
 const OverlaysContext = createContext<OverlaysApi | null>(null);

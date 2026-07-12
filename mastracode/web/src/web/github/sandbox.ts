@@ -114,16 +114,18 @@ export function isSandboxEnabled(): boolean {
  * derived from client input.
  */
 export function computeSandboxWorkdir(repoFullName: string): string {
-  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
   const repoName = repoFullName.split('/').pop() || 'repo';
+  // The local provider runs on the host filesystem, where a cloud path like
+  // `/workspace` is not writable. `MASTRACODE_SANDBOX_WORKDIR` documents
+  // itself as cloud-only (and the schema defaults it to `/workspace`), so the
+  // local provider ignores it and checks out under the local sandbox root.
+  if (getSandboxProvider() === 'local') {
+    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
+  }
+  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
   if (base) {
     // If the configured base already ends with the repo name, use it as-is.
     return base.endsWith(`/${repoName}`) ? base : `${base.replace(/\/$/, '')}/${repoName}`;
-  }
-  // The local provider runs on the host filesystem, where `/workspace` is not
-  // writable; check out under the local sandbox root instead.
-  if (getSandboxProvider() === 'local') {
-    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
   }
   return `/workspace/${repoName}`;
 }
@@ -417,8 +419,14 @@ export async function materializeRepo(
 
   const authUrl = tokenUrl(repo, token);
 
+  // The DB's `materializedAt` can drift from disk — a fresh per-user binding
+  // row over an already-populated workdir (local dev DB resets, repaired
+  // rows, earlier flows) would make `git clone` fail on the non-empty
+  // directory. Re-detect an existing checkout of this repo and pull instead.
+  const alreadyMaterialized = Boolean(sandboxRow.materializedAt) || (await hasExistingCheckout(sandbox, workdir, repo));
+
   try {
-    if (!sandboxRow.materializedAt) {
+    if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
       // shallow single-branch clone is dramatically faster for large repos; the
       // later re-open uses `git pull --ff-only`, which works on shallow clones.
@@ -450,7 +458,7 @@ export async function materializeRepo(
     // git config, even when the clone/pull above failed partway through. This
     // is best-effort on the failure path (the workdir may not exist yet after a
     // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, Boolean(sandboxRow.materializedAt));
+    await scrubRemote(sandbox, workdir, repo, alreadyMaterialized);
   }
 
   // 4. Mark materialized.
@@ -459,6 +467,23 @@ export async function materializeRepo(
     .update(githubProjectSandboxes)
     .set({ materializedAt: new Date() })
     .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+}
+
+/**
+ * True when the workdir already holds a git checkout whose `origin` points at
+ * this exact repo. Matches both the clean and token-auth URL forms; any other
+ * remote (or no git dir at all) falls back to the clone path.
+ */
+async function hasExistingCheckout(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+): Promise<boolean> {
+  const result = await sh(sandbox, `git -C ${shellQuote(workdir)} remote get-url origin`);
+  if (result.exitCode !== 0) return false;
+  const url = result.stdout.trim().toLowerCase();
+  const suffix = `github.com/${repoFullName.toLowerCase()}`;
+  return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
 }
 
 /**

@@ -154,8 +154,6 @@ export interface TranscriptState {
    * when the run's start/end events arrive in a single batched flush.
    */
   pending: boolean;
-  modeId?: string;
-  modelId?: string;
   threadId?: string;
   /** Current task list from task_updated events. */
   tasks: AgentControllerTaskSnapshot[];
@@ -202,42 +200,18 @@ type Action =
   | { type: 'resolvePrompt'; id: string }
   | {
       type: 'reset';
-      modeId?: string;
-      modelId?: string;
-      threadId?: string;
-      omProgress?: AgentControllerOMProgress;
-      usage?: UsageSnapshot;
-    }
-  | {
-      type: 'hydrate';
-      messages: AgentControllerMessage[];
-      modeId?: string;
-      modelId?: string;
       threadId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     }
   | {
       /**
-       * Fold persisted messages into the timeline while keeping all live state
-       * (mode/model/usage/goal/OM). Used by the query-driven history hydration,
-       * which can resolve after live stream events have already arrived —
-       * entries the history doesn't know about (matched by id) are preserved.
-       */
-      type: 'hydrateMessages';
-      messages: AgentControllerMessage[];
-      threadId: string;
-    }
-  | {
-      /**
-       * Patch session-level metadata (mode/model/OM/usage) from an authoritative
+       * Patch transcript-owned metadata (OM/usage) from an authoritative
        * `session.state()` fetch without touching the timeline or thread binding.
        * Used after thread switches, where the state fetch can resolve *after*
        * history hydration — it must never wipe already-rendered entries.
        */
       type: 'syncState';
-      modeId?: string;
-      modelId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
     };
@@ -247,25 +221,13 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'reset':
       return {
         ...initialTranscript,
-        modeId: action.modeId,
-        modelId: action.modelId,
         threadId: action.threadId,
         omProgress: action.omProgress,
         usage: action.usage,
       };
-    case 'hydrate':
-      return hydrate(action.messages, action.modeId, action.modelId, action.threadId, action.omProgress, action.usage);
-    case 'hydrateMessages': {
-      const hydrated = hydrateEntries(action.messages);
-      const known = new Set(hydrated.map(entry => entry.id));
-      const liveExtras = state.entries.filter(entry => !known.has(entry.id));
-      return { ...state, threadId: action.threadId, entries: [...hydrated, ...liveExtras] };
-    }
     case 'syncState':
       return {
         ...state,
-        modeId: action.modeId,
-        modelId: action.modelId,
         omProgress: action.omProgress,
         usage: action.usage,
       };
@@ -374,9 +336,8 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       });
 
     case 'mode_changed':
-      return { ...state, modeId: event.modeId };
     case 'model_changed':
-      return { ...state, modelId: event.modelId };
+      return state;
     case 'thread_changed':
       return { ...state, threadId: event.threadId };
 
@@ -536,15 +497,24 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
     case 'info':
       return pushNotice(state, 'info', event.message);
     case 'error':
-      return pushNotice(
-        state,
-        'error',
-        typeof event.error === 'string' ? event.error : (event.error?.message ?? 'Error'),
-      );
+      return pushNotice(state, 'error', describeErrorEvent(event));
 
     default:
       return state;
   }
+}
+
+/**
+ * Extracts a human-useful message from an `error` event. The error payload can
+ * arrive as a string or an object; when the message is missing (e.g. an Error
+ * that lost its non-enumerable fields crossing an older server's SSE boundary),
+ * fall back to the machine-readable `errorType` rather than a bare "Error".
+ */
+function describeErrorEvent(event: { error: { message?: string } | string; errorType?: string }): string {
+  const message = typeof event.error === 'string' ? event.error : event.error?.message;
+  if (message) return message;
+  if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
+  return 'Run failed with an unknown error. Check the server logs for details.';
 }
 
 /**
@@ -556,18 +526,21 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
  * and tool calls in content order, so we emit the running text and each tool
  * call (matched to its result) as part of the same assistant entry.
  */
-function hydrate(
-  messages: AgentControllerMessage[],
-  modeId?: string,
-  modelId?: string,
-  threadId?: string,
-  omProgress?: AgentControllerOMProgress,
-  usage?: UsageSnapshot,
-): TranscriptState {
-  return { ...initialTranscript, entries: hydrateEntries(messages), modeId, modelId, threadId, omProgress, usage };
+export function createInitialTranscript({
+  messages = [],
+  threadId,
+  omProgress,
+  usage,
+}: {
+  messages?: AgentControllerMessage[];
+  threadId?: string;
+  omProgress?: AgentControllerOMProgress;
+  usage?: UsageSnapshot;
+} = {}): TranscriptState {
+  return { ...initialTranscript, entries: messagesToEntries(messages), threadId, omProgress, usage };
 }
 
-function hydrateEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
+function messagesToEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
   return messages.map(message => toMessageEntry(toMastraDBMessage(message), { streaming: false }));
 }
 

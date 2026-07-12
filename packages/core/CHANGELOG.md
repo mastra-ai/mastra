@@ -1,5 +1,103 @@
 # @mastra/core
 
+## 1.51.0-alpha.5
+
+### Minor Changes
+
+- Added file-system routing for a Mastra logger and per-agent scorers. ([#19262](https://github.com/mastra-ai/mastra/pull/19262))
+
+  Define a logger in `src/mastra/logger.ts` (default export) and it is auto-registered as the Mastra logger, just like `storage.ts` and `observability.ts`. A code-registered logger still wins.
+
+  Register scorers per agent by adding an `agents/<name>/scorers/` folder. Each module's default export (a `MastraScorer`, or a `{ scorer, sampling }` entry) is wired into that agent, keyed by filename. `config.scorers` wins on collision.
+
+  ```text
+  src/mastra/
+    logger.ts                 # export default new PinoLogger({ name: 'App' })
+    agents/weather/
+      config.ts
+      scorers/
+        relevance.ts          # export default myRelevanceScorer
+  ```
+
+### Patch Changes
+
+- Added an optional `scope` field to `ResolveToolsOpts` so tool providers can see a connection's identity bucketing (`per-author`, `shared`, or `caller-supplied`) when resolving tools. Providers can use this to let the backend auto-resolve an account within a caller's bucket instead of pinning a specific one. The field is optional and defaults to previous behavior when absent. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+  Also added an optional `defaultScope` to `BaseToolProviderOptions` (surfaced on the `ToolProvider` interface as `defaultScope`). This lets an app author set a tool provider's connection scope at config time — for example `defaultScope: 'caller-supplied'` for multi-tenant OAuth — so every connection authorized against the provider is bucketed correctly without any per-connection UI control. Defaults to `'per-author'` when absent.
+
+  ```ts
+  import { BaseToolProvider, type ResolveToolsOpts } from '@mastra/core/tool-provider';
+
+  class MyToolProvider extends BaseToolProvider {
+    // ...required members like `info` and `capabilities` elided
+
+    constructor() {
+      // Config-level tenancy decision: bucket connections per caller.
+      super({ defaultScope: 'caller-supplied' });
+    }
+
+    async resolveToolsVNext(opts: ResolveToolsOpts) {
+      if (opts.scope === 'caller-supplied') {
+        // Let the backend auto-resolve an account within the caller's
+        // bucket instead of pinning a specific connected account.
+      }
+      // ...
+    }
+  }
+  ```
+
+## 1.51.0-alpha.4
+
+### Minor Changes
+
+- Added support for custom processors on `createScorer` judges. You can now pass `inputProcessors`, `outputProcessors`, `errorProcessors`, and `maxProcessorRetries` in a scorer's `judge` config (or per-step judge config) to apply processors to the internal judge agent — for example wiring up `StreamErrorRetryProcessor` to retry transient LLM errors while scoring. ([#19195](https://github.com/mastra-ai/mastra/pull/19195))
+
+  ```typescript
+  import { createScorer } from '@mastra/core/evals';
+  import { StreamErrorRetryProcessor } from '@mastra/core/processors';
+
+  const scorer = createScorer({
+    id: 'my-scorer',
+    description: 'Scores responses',
+    judge: {
+      model: myModel,
+      instructions: 'You are an expert evaluator...',
+      errorProcessors: [new StreamErrorRetryProcessor()],
+      maxProcessorRetries: 3,
+    },
+  });
+  ```
+
+- Added anonymous feature usage telemetry for server startup surface counts and a `trackFeatureUsage()` API. ([#19159](https://github.com/mastra-ai/mastra/pull/19159))
+
+- Added optional `log` and `progress` functions to the MCP tool execution context type so tools running in an MCP server can send log and progress notifications to the calling client. ([#19193](https://github.com/mastra-ai/mastra/pull/19193))
+
+  Added `mastra.removeTool(key)` to remove a dynamically registered tool from the Mastra instance, the counterpart to `mastra.addTool()`:
+
+  ```typescript
+  mastra.addTool(calculatorTool);
+  mastra.removeTool('calculator-tool'); // returns true if a tool was removed
+  ```
+
+### Patch Changes
+
+- Pass tracingContext through to runProcessAPIError so error-processor runs show up as processor_run spans in observability exports ([#19188](https://github.com/mastra-ai/mastra/pull/19188))
+
+- Fixed `iterationCount` always being 1 for `dountil` and `dowhile` loops on the evented workflow engine. The count was never carried forward between iterations, so any loop whose condition depended on `iterationCount` never advanced and ran forever. ([#19233](https://github.com/mastra-ai/mastra/pull/19233))
+
+  **Before**
+
+  ```ts
+  // On the evented engine this loop never terminated: iterationCount stayed 1.
+  workflow.dountil(step, async ({ iterationCount }) => iterationCount >= 3);
+  ```
+
+  **After**
+
+  The condition now receives an incrementing count (1, 2, 3, ...) exactly as it does on the default engine, so the loop stops as expected. Loops whose conditions read step output (`inputData`) were unaffected.
+
+- Fixed an infinite retry loop in evented workflows when workflow storage is unavailable (for example when the workflows table does not exist). A failing workflow.fail event no longer republishes another workflow.fail after exhausting its retry budget, which previously flooded logs with endless "error processing event" entries. ([#19194](https://github.com/mastra-ai/mastra/pull/19194))
+
 ## 1.51.0-alpha.3
 
 ### Patch Changes
