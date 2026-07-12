@@ -1,7 +1,6 @@
+import { transcriptReducer, initialTranscript } from '@mastra/code-app/chat/transcript';
+import type { TranscriptState } from '@mastra/code-app/chat/transcript';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
-import { transcriptReducer, initialTranscript } from '../../src/web/ui/domains/chat/services/transcript';
-import type { TranscriptState } from '../../src/web/ui/domains/chat/services/transcript';
 
 /**
  * Tokens/sec computation — tested by driving the transcript reducer directly

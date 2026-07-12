@@ -64,10 +64,7 @@ describe('listProviders', () => {
   it('does not report stale OAuth as active when refresh fails', async () => {
     const auth = makeAuthStorage({ loggedIn: ['anthropic'], oauthTokens: { anthropic: undefined } });
 
-    const list = await listProviders(
-      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
-      auth,
-    );
+    const list = await listProviders(makeAgentController([{ provider: 'anthropic', hasApiKey: true }]), auth);
 
     expect(list[0]?.source).toBe('none');
   });
@@ -112,16 +109,13 @@ describe('buildProviderAccess', () => {
   it('does not unlock OAuth-gated packs when an OAuth refresh fails', async () => {
     const auth = makeAuthStorage({ loggedIn: ['anthropic'], oauthTokens: { anthropic: undefined } });
 
-    const access = await buildProviderAccess(
-      makeAgentController([{ provider: 'anthropic', hasApiKey: false, apiKeyEnvVar: 'ANTHROPIC_API_KEY' }]),
-      auth,
-    );
+    const access = await buildProviderAccess(makeAgentController([{ provider: 'anthropic', hasApiKey: true }]), auth);
 
     expect(access.anthropic).toBe(false);
   });
 
-  it('maps stored OpenAI catalog access to the openai-codex auth slot', async () => {
-    const auth = makeAuthStorage({ storedKeys: ['openai-codex'] });
+  it('keeps stored OpenAI API-key access in the catalog provider slot', async () => {
+    const auth = makeAuthStorage({ storedKeys: ['openai'] });
 
     const access = await buildProviderAccess(
       makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
@@ -224,6 +218,38 @@ describe('buildConfigRoutes OAuth orchestration', () => {
 
     expect(completeResponse.status).toBe(200);
     expect(login).toHaveBeenCalledOnce();
+  });
+});
+
+describe('buildConfigRoutes API-key storage', () => {
+  it('stores OpenAI API keys under the catalog provider id', async () => {
+    const setStoredApiKey = vi.fn<ConfigAuthStorage['setStoredApiKey']>();
+    const remove = vi.fn<ConfigAuthStorage['remove']>();
+    const authStorage: ConfigAuthStorage = {
+      ...makeAuthStorage({}),
+      remove,
+      setStoredApiKey,
+    };
+    const app = new Hono();
+    mountApiRoutes(
+      app,
+      buildConfigRoutes({
+        controller: makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
+        authStorage,
+      }),
+    );
+
+    const saveResponse = await app.request('/web/config/providers/openai/key', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ key: 'sk-openai', envVar: 'OPENAI_API_KEY' }),
+    });
+    const removeResponse = await app.request('/web/config/providers/openai/key', { method: 'DELETE' });
+
+    expect(saveResponse.status).toBe(200);
+    expect(removeResponse.status).toBe(200);
+    expect(setStoredApiKey).toHaveBeenCalledWith('openai', 'sk-openai', 'OPENAI_API_KEY');
+    expect(remove).toHaveBeenCalledWith('apikey:openai');
   });
 });
 

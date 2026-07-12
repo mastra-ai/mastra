@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.renderer.json",
+  "compilerOptions": {
+    "types": ["vite/client", "node", "@testing-library/jest-dom"]
+  },
+  "include": ["src", "e2e/web-ui"]
+}

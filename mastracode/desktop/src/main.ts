@@ -1,6 +1,7 @@
 import { basename, isAbsolute, join, resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import type { DesktopAppInfo, DesktopDirectorySelection, DesktopPlatform } from '@mastra/code-app/desktop-host';
 import electron from 'electron';
 import type {
   BrowserWindow as ElectronBrowserWindow,
@@ -9,17 +10,17 @@ import type {
   OpenDialogOptions,
   Session,
 } from 'electron';
-import type { DesktopAppInfo, DesktopDirectorySelection, DesktopPlatform } from 'mastracode-web/desktop-host';
 
+import { startDesktopBackend } from './backend-client.js';
 import { DESKTOP_IPC_CHANNELS, parseDirectorySelectionOptions } from './ipc.js';
 import { createLaunchScreenDataUrl } from './launch-screen.js';
 import { resolvePreloadPath } from './paths.js';
-import type { DesktopServerHandle } from './server.js';
+import type { DesktopServerHandle } from './server-types.js';
 
 const APP_NAME = 'MastraCode Desktop Alpha';
 const APP_LOAD_TIMEOUT_MS = 30_000;
 const MIN_LAUNCH_SCREEN_MS = 1_400;
-const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['https:']);
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:']);
 const { app, BrowserWindow, dialog, ipcMain, nativeImage, session, shell } = electron;
 
 let mainWindow: ElectronBrowserWindow | null = null;
@@ -34,6 +35,11 @@ let cleanupComplete = false;
 const desktopTestMode = process.env.MASTRACODE_DESKTOP_TEST_MODE === '1';
 const desktopTestUserDataDir = desktopTestMode ? process.env.MASTRACODE_DESKTOP_TEST_USER_DATA_DIR : undefined;
 const desktopTestProjectDir = desktopTestMode ? process.env.MASTRACODE_DESKTOP_TEST_PROJECT_DIR : undefined;
+
+if (!desktopTestMode) {
+  app.commandLine.removeSwitch('remote-debugging-pipe');
+  app.commandLine.removeSwitch('remote-debugging-port');
+}
 
 if (desktopTestUserDataDir) {
   app.setPath('userData', desktopTestUserDataDir);
@@ -258,9 +264,12 @@ async function createMainWindow(): Promise<void> {
   const launchStartedAt = performance.now();
   const splash = await createSplashWindow(launchScreenUrl, appSession);
 
-  const { startDesktopServer } = await import('./server.js');
-  const startedServer = await startDesktopServer({
+  const startedServer = await startDesktopBackend({
     projectAccessFile: join(app.getPath('userData'), 'approved-projects.json'),
+    onUnexpectedExit: error => {
+      dialog.showErrorBox(APP_NAME, error.message);
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close();
+    },
   });
   serverHandle = startedServer;
 

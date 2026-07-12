@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
+import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '@mastra/code-app/api-types';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import {
@@ -38,19 +39,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  *
  * Keys are never returned to the client; only their presence and source.
  */
-
-/** A model provider with the current source of its credentials. */
-export interface ProviderInfo {
-  provider: string;
-  /** Env var the provider's key is read from, if any. */
-  envVar?: string;
-  /** Human-readable name when the provider has a first-class auth flow. */
-  displayName?: string;
-  /** Whether the web client can start an OAuth login flow for this provider. */
-  oauthSupported?: boolean;
-  /** Where the active credential comes from. */
-  source: 'oauth' | 'stored' | 'env' | 'none';
-}
 
 const OAUTH_LOGIN_TTL_MS = 10 * 60 * 1000;
 type OAuthCompletionMode = 'browser-callback' | 'manual-code';
@@ -110,8 +98,12 @@ function toError(error: unknown): Error {
  * OAuth credentials are stored under the auth provider id, which differs from
  * the catalog provider id for OpenAI (stored as `openai-codex`).
  */
-function getAuthProviderId(provider: string): string {
+function getOAuthProviderId(provider: string): string {
   return provider === 'openai' ? 'openai-codex' : provider;
+}
+
+function hasExpiredOAuthCredential(authStorage: ConfigAuthStorage | undefined, provider: string): boolean {
+  return authStorage?.get(getOAuthProviderId(provider))?.type === 'oauth';
 }
 
 function getOAuthProviderInfo(provider: string): Pick<ProviderInfo, 'displayName' | 'oauthSupported'> {
@@ -125,15 +117,11 @@ async function getStoredProviderSource(
 ): Promise<Extract<ProviderInfo['source'], 'oauth' | 'stored'> | undefined> {
   if (!authStorage) return undefined;
 
-  const authProviderId = getAuthProviderId(provider);
-  const credential = authStorage.get(authProviderId);
+  const credential = authStorage.get(getOAuthProviderId(provider));
   if (credential?.type === 'oauth') {
-    return (await authStorage.getApiKey(authProviderId)) ? 'oauth' : undefined;
+    return (await authStorage.getApiKey(getOAuthProviderId(provider))) ? 'oauth' : undefined;
   }
-  if (credential?.type === 'api_key' && credential.key.trim().length > 0) {
-    return 'stored';
-  }
-  if (authStorage.hasStoredApiKey(authProviderId)) {
+  if (authStorage.hasStoredApiKey(provider)) {
     return 'stored';
   }
   return undefined;
@@ -206,7 +194,7 @@ export async function listProviders(
     let source: ProviderInfo['source'] = storedSource ?? 'none';
     if (!storedSource && model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
       source = 'env';
-    } else if (!storedSource && model.hasApiKey) {
+    } else if (!storedSource && model.hasApiKey && !hasExpiredOAuthCredential(authStorage, model.provider)) {
       source = 'env';
     }
 
@@ -219,15 +207,6 @@ export async function listProviders(
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
-}
-
-/** A user-defined OpenAI-compatible provider, with key presence (never the key). */
-export interface CustomProviderInfo {
-  id: string;
-  name: string;
-  url: string;
-  hasApiKey: boolean;
-  models: string[];
 }
 
 /** Read the saved custom providers from global settings (keys redacted). */
@@ -267,12 +246,6 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
 
 // ── Model packs ──────────────────────────────────────────────────────────
 
-/** A model pack as surfaced to the web client, with an `active` flag. */
-export interface ModelPackInfo extends ModePack {
-  custom: boolean;
-  active: boolean;
-}
-
 /**
  * Compute which providers the user can reach, mirroring the TUI's
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
@@ -283,16 +256,22 @@ export async function buildProviderAccess(
   authStorage?: ConfigAuthStorage,
 ): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
-  const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-  const accessLevel = async (storageProviderId: string): Promise<ProviderAccessLevel> => {
-    const cred = authStorage?.get(storageProviderId);
-    if (cred?.type === 'oauth') return (await authStorage?.getApiKey(storageProviderId)) ? 'oauth' : false;
-    if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
-    if (authStorage?.hasStoredApiKey(storageProviderId)) return 'apikey';
+  const hasEnv = (provider: string) =>
+    models.some(
+      model =>
+        model.provider === provider &&
+        ((model.apiKeyEnvVar !== undefined && Boolean(process.env[model.apiKeyEnvVar])) ||
+          (model.hasApiKey && !hasExpiredOAuthCredential(authStorage, provider))),
+    );
+  const accessLevel = async (provider: string): Promise<ProviderAccessLevel> => {
+    const oauthProviderId = getOAuthProviderId(provider);
+    const credential = authStorage?.get(oauthProviderId);
+    if (credential?.type === 'oauth') return (await authStorage?.getApiKey(oauthProviderId)) ? 'oauth' : false;
+    if (authStorage?.hasStoredApiKey(provider)) return 'apikey';
     return false;
   };
   const anthropicAccess = (await accessLevel('anthropic')) || (hasEnv('anthropic') ? 'apikey' : false);
-  const openaiAccess = (await accessLevel('openai-codex')) || (hasEnv('openai') ? 'apikey' : false);
+  const openaiAccess = (await accessLevel('openai')) || (hasEnv('openai') ? 'apikey' : false);
   const access: ProviderAccess = {
     anthropic: anthropicAccess,
     openai: openaiAccess,
@@ -394,14 +373,6 @@ const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
 const DEFAULT_REFLECTION_THRESHOLD = 40_000;
 
 /** Read the current OM config from a session. */
-export interface OMConfigInfo {
-  observerModelId: string;
-  reflectorModelId: string;
-  observationThreshold: number;
-  reflectionThreshold: number;
-  observeAttachments: 'auto' | boolean;
-}
-
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -604,7 +575,7 @@ export function buildConfigRoutes(options: {
         }
 
         try {
-          authStorage.remove(getAuthProviderId(provider));
+          authStorage.remove(getOAuthProviderId(provider));
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {
@@ -632,7 +603,7 @@ export function buildConfigRoutes(options: {
         if (!key) return c.json({ error: 'Missing required field: key' }, 400);
         const envVar = typeof body.envVar === 'string' ? body.envVar : undefined;
         try {
-          authStorage.setStoredApiKey(getAuthProviderId(provider), key, envVar);
+          authStorage.setStoredApiKey(provider, key, envVar);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {
@@ -651,7 +622,7 @@ export function buildConfigRoutes(options: {
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
         try {
-          authStorage.remove(`apikey:${getAuthProviderId(provider)}`);
+          authStorage.remove(`apikey:${provider}`);
           const providers = await listProviders(controller, authStorage);
           return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {

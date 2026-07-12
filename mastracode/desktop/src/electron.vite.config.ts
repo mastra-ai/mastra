@@ -4,6 +4,8 @@ import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 
+import tailwindcss from '@tailwindcss/vite';
+import react from '@vitejs/plugin-react';
 import { defineConfig } from 'electron-vite';
 import type { Plugin } from 'vite';
 
@@ -87,14 +89,14 @@ function targetNativeBindings(): Plugin {
       if (id === duckdbId) {
         return `
           import { createRequire } from 'node:module';
-          const binding = createRequire(import.meta.url)('./duckdb.darwin.node');
+          const binding = createRequire(import.meta.url)('./chunks/duckdb.darwin.node');
           export default binding;
         `;
       }
       if (id === tokenizersId) {
         return `
           import { createRequire } from 'node:module';
-          const binding = createRequire(import.meta.url)('./tokenizers.darwin-universal.node');
+          const binding = createRequire(import.meta.url)('./chunks/tokenizers.darwin-universal.node');
           export const AddedToken = binding.AddedToken;
           export const Tokenizer = binding.Tokenizer;
         `;
@@ -113,7 +115,7 @@ function targetNativeBindings(): Plugin {
     renderChunk(code) {
       if (!code.includes('__mastracodeLoadOnnxBinding()')) return null;
       return {
-        code: `import { createRequire as __mastracodeCreateOnnxRequire } from "node:module";\nconst __mastracodeLoadOnnxBinding = () => __mastracodeCreateOnnxRequire(import.meta.url)("./onnxruntime_binding.node");\n${code}`,
+        code: `import { createRequire as __mastracodeCreateOnnxRequire } from "node:module";\nconst __mastracodeLoadOnnxBinding = () => __mastracodeCreateOnnxRequire(import.meta.url)("./chunks/onnxruntime_binding.node");\n${code}`,
         map: null,
       };
     },
@@ -159,8 +161,14 @@ export default defineConfig({
       externalizeDeps: false,
       outDir: 'dist/main',
       rollupOptions: {
-        input: resolve('src/main.ts'),
+        input: {
+          backend: resolve('src/backend.ts'),
+          main: resolve('src/main.ts'),
+        },
         external: ['electron', /^node:/, 'typescript'],
+        output: {
+          entryFileNames: '[name].js',
+        },
       },
     },
   },
@@ -176,6 +184,19 @@ export default defineConfig({
           entryFileNames: 'preload.cjs',
         },
       },
+    },
+  },
+  renderer: {
+    root: resolve('src/renderer'),
+    publicDir: resolve('../app/src/ui/public'),
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+    },
+    build: {
+      outDir: resolve('dist/renderer'),
+      emptyOutDir: true,
+      minify: 'esbuild',
     },
   },
 });

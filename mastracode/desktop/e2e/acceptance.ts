@@ -7,14 +7,14 @@ import { homedir, tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import type { DesktopAppInfo } from '@mastra/code-app/desktop-host';
 import { _electron as electron, chromium, expect } from '@playwright/test';
 import type { Browser, ElectronApplication, Page } from '@playwright/test';
-import type { DesktopAppInfo } from 'mastracode-web/desktop-host';
 
 export interface DesktopLaunchTarget {
   executablePath: string;
   args?: string[];
-  webUiDist?: string;
+  rendererDist?: string;
   automation?: 'electron' | 'cdp';
 }
 
@@ -135,7 +135,7 @@ async function launchDesktop(
     MASTRACODE_DESKTOP_TEST_USER_DATA_DIR: userDataDir,
     MASTRACODE_TELEMETRY_DISABLED: 'true',
     MASTRA_TELEMETRY_DISABLED: 'true',
-    ...(target.webUiDist ? { MASTRACODE_DESKTOP_WEB_DIST: target.webUiDist } : {}),
+    ...(target.rendererDist ? { MASTRACODE_DESKTOP_RENDERER_DIST: target.rendererDist } : {}),
   };
   if (target.automation === 'cdp') return withRendererDiagnostics(await launchDesktopOverCdp(target, env));
 

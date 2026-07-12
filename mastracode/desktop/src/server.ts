@@ -3,6 +3,10 @@ import { once } from 'node:events';
 import { dirname } from 'node:path';
 
 import { serve } from '@hono/node-server';
+import {
+  MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE,
+  MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_MESSAGE,
+} from '@mastra/code-app/desktop-host';
 import { mountAgentControllerOnMastra } from '@mastra/code-sdk';
 import { MastraServer } from '@mastra/hono';
 import { InMemoryTaskStore } from '@mastra/server/a2a/store';
@@ -10,27 +14,12 @@ import { Hono } from 'hono';
 import { setCookie } from 'hono/cookie';
 import { HTTPException } from 'hono/http-exception';
 import { parse as parseCookie } from 'hono/utils/cookie';
-import {
-  MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_CODE,
-  MASTRACODE_DESKTOP_PROJECT_ACCESS_ERROR_MESSAGE,
-} from 'mastracode-web/desktop-host';
 import { assembleCoreWebApiRoutes } from 'mastracode-web/server-surface';
 
 import { ProjectAccessPolicy, projectPathMutation } from './project-access.js';
-import { installStaticWebUi } from './static.js';
-import { resolveWebUiDistPath } from './web-ui-path.js';
-
-export interface DesktopServerHandle {
-  bootstrapUrl: string;
-  origin: string;
-  port: number;
-  approveProjectDirectory: (path: string) => Promise<string>;
-  close: () => Promise<void>;
-}
-
-export interface DesktopServerOptions {
-  projectAccessFile: string;
-}
+import { resolveRendererDistPath } from './renderer-path.js';
+import type { DesktopServerHandle, DesktopServerOptions } from './server-types.js';
+import { installStaticRenderer } from './static.js';
 
 const DESKTOP_HOST = '127.0.0.1';
 const DESKTOP_PORTS = [41731, 41732, 41733, 41734, 41735];
@@ -160,7 +149,7 @@ export async function startDesktopServer(options: DesktopServerOptions): Promise
     });
     await adapter.init();
 
-    installStaticWebUi(app, resolveWebUiDistPath());
+    installStaticRenderer(app, resolveRendererDistPath());
 
     nodeServer = await listen(app);
   } catch (error) {

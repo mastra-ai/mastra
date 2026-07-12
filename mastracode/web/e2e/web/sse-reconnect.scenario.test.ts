@@ -1,8 +1,8 @@
 import { MastraClient } from '@mastra/client-js';
 import type { AgentControllerEvent } from '@mastra/client-js';
+import { initialTranscript, transcriptReducer } from '@mastra/code-app/chat/transcript';
 import { describe, it, expect } from 'vitest';
 
-import { initialTranscript, transcriptReducer } from '../../src/web/ui/domains/chat/services/transcript';
 import { startAgentControllerServer } from './agent-controller-server';
 import { startAimock } from './aimock';
 

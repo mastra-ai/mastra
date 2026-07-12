@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "react": ["./node_modules/@types/react/index.d.ts"],
+      "react/jsx-runtime": ["./node_modules/@types/react/jsx-runtime.d.ts"],
+      "react-dom": ["./node_modules/@types/react-dom/index.d.ts"],
+      "class-variance-authority": ["./node_modules/class-variance-authority/dist/index.d.ts"],
+      "class-variance-authority/types": ["./node_modules/class-variance-authority/dist/types.d.ts"]
+    }
+  }
+}

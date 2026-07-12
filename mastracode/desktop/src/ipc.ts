@@ -3,7 +3,7 @@ import type {
   DesktopDirectorySelection,
   DesktopDirectorySelectionOptions,
   DesktopPlatform,
-} from 'mastracode-web/desktop-host';
+} from '@mastra/code-app/desktop-host';
 
 export const DESKTOP_IPC_CHANNELS = Object.freeze({
   getAppInfo: 'mastracode:desktop:get-app-info',

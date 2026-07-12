@@ -1,6 +1,5 @@
+import { renderMarkdown } from '@mastra/code-app/markdown';
 import { describe, expect, it } from 'vitest';
-
-import { renderMarkdown } from '../../src/web/ui/ui/Markdown.js';
 
 // Agent output is rendered as markdown via dangerouslySetInnerHTML, and it can
 // contain attacker-influenced text (file contents, tool output, fetched pages).

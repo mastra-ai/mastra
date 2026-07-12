@@ -18,7 +18,7 @@ export default [
     languageOptions: {
       parserOptions: {
         projectService: false,
-        project: ['./tsconfig.json', './tsconfig.e2e.json'],
+        project: ['./tsconfig.json', './tsconfig.renderer.json', './tsconfig.e2e.json'],
         tsconfigRootDir: import.meta.dirname,
       },
     },

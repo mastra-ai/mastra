@@ -1,6 +1,6 @@
+import { MASTRACODE_DESKTOP_API_KEY } from '@mastra/code-app/desktop-host';
+import type { DesktopDirectorySelectionOptions, MastraCodeDesktopApi } from '@mastra/code-app/desktop-host';
 import { contextBridge, ipcRenderer } from 'electron';
-import { MASTRACODE_DESKTOP_API_KEY } from 'mastracode-web/desktop-host';
-import type { DesktopDirectorySelectionOptions, MastraCodeDesktopApi } from 'mastracode-web/desktop-host';
 
 import { DESKTOP_IPC_CHANNELS, parseDesktopAppInfo, parseDesktopDirectorySelection } from './ipc.js';
 

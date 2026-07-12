@@ -9,7 +9,7 @@ test('launches the desktop app and opens a project through the typed native brid
     target: {
       executablePath: resolveDevelopmentElectronExecutable(),
       args: [resolve('dist/main/main.js')],
-      webUiDist: resolve('dist/web-ui'),
+      rendererDist: resolve('dist/renderer'),
     },
     requireAuthenticatedModels: process.env.MASTRACODE_DESKTOP_E2E_REQUIRE_AUTHED_MODELS === '1',
     runLiveChat: process.env.MASTRACODE_DESKTOP_E2E_LIVE_CHAT === '1',

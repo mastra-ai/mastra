@@ -22,7 +22,7 @@ function injectRuntimeConfig(html: string): string {
   return html.includes('</head>') ? html.replace('</head>', `${script}</head>`) : `${script}${html}`;
 }
 
-export function installStaticWebUi(app: Hono, webUiDistPath: string): void {
+export function installStaticRenderer(app: Hono, rendererDistPath: string): void {
   app.use('*', async (c, next) => {
     c.header('Content-Security-Policy', CSP);
     c.header('Cross-Origin-Opener-Policy', 'same-origin');
@@ -42,7 +42,7 @@ export function installStaticWebUi(app: Hono, webUiDistPath: string): void {
 
   app.use(
     '*',
-    createSpaStaticMiddleware(webUiDistPath, {
+    createSpaStaticMiddleware(rendererDistPath, {
       transformIndexHtml: injectRuntimeConfig,
     }),
   );
