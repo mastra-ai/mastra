@@ -118,6 +118,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai-router',
+          label: 'AI-ROUTER',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
