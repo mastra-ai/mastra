@@ -157,7 +157,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <Avatar name={agentName ?? 'Agent'} src={agentAvatarUrl} size="lg" />
             </div>
             <div className="starter-chip" style={{ animationDelay: '150ms' }}>
-              <Txt variant="ui-lg" className="text-neutral6 font-semibold" style={{ viewTransitionName: 'agent-name' }}>
+              <Txt variant="ui-lg" className="font-semibold text-neutral6" style={{ viewTransitionName: 'agent-name' }}>
                 {agentName ?? 'your agent'}
               </Txt>
             </div>
@@ -165,7 +165,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
               <div className="starter-chip" style={{ animationDelay: '220ms' }}>
                 <Txt
                   variant="ui-sm"
-                  className="text-neutral4 max-w-[40ch]"
+                  className="max-w-[40ch] text-neutral4"
                   style={{ viewTransitionName: 'agent-description' }}
                 >
                   {agentDescription}
@@ -182,7 +182,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 onClick={() => onStarterPromptSelect(starterPrompt.prompt)}
                 data-testid={`agent-builder-agent-chat-starter-${starterPrompt.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + index * 40}ms` }}
-                className="starter-chip group flex gap-3 rounded-3xl border border-border1 bg-surface2 p-4 text-left transition-colors duration-normal ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+                className="starter-chip group duration-normal flex gap-3 rounded-3xl border border-border1 bg-surface2 p-4 text-left transition-colors ease-out-custom hover:border-border2 hover:bg-surface3 focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none"
               >
                 <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-surface3 text-neutral4 transition-colors group-hover:text-neutral6">
                   <starterPrompt.Icon className="size-4" aria-hidden="true" />
@@ -190,7 +190,7 @@ const AgentChatMessageList = ({ onStarterPromptSelect }: AgentChatMessageListPro
                 <span className="min-w-0">
                   <Txt
                     variant="ui-sm"
-                    className="text-neutral6 font-medium transition-colors group-hover:text-neutral6"
+                    className="font-medium text-neutral6 transition-colors group-hover:text-neutral6"
                   >
                     {starterPrompt.title}
                   </Txt>

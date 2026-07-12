@@ -142,11 +142,11 @@ export const Thread = ({
   return (
     <ComposerAttachmentsProvider>
       <MessageScrollerProvider>
-        <div className="group/thread grid grid-rows-[1fr_auto] h-full overflow-y-auto" data-testid="thread-wrapper">
+        <div className="group/thread grid h-full grid-rows-[1fr_auto] overflow-y-auto" data-testid="thread-wrapper">
           <MessageScroller>
             <MessageScrollerViewport
               ref={areaRef}
-              className="overflow-y-scroll h-full"
+              className="h-full overflow-y-scroll"
               style={{ overflowAnchor: 'none' }}
             >
               {isEmpty ? (
@@ -157,7 +157,7 @@ export const Thread = ({
                   <div
                     ref={messagesContainerRef}
                     data-testid="thread-message-column"
-                    className="relative max-w-3xl w-full mx-auto px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
+                    className="relative mx-auto w-full max-w-3xl px-4 pb-7 group-has-[[data-attachments-row]]/thread:pb-24"
                   >
                     <BracketOverlay containerRef={messagesContainerRef} />
                     <MessageScrollerContent className="flex flex-col gap-6 py-6">
@@ -197,7 +197,7 @@ export const Thread = ({
           </MessageScroller>
 
           {showThumbnailInChat && agentId && threadId && (
-            <div className="mb-2 max-w-3xl w-full mx-auto px-4">
+            <div className="mx-auto mb-2 w-full max-w-3xl px-4">
               <BrowserThumbnail agentName={agentName} />
             </div>
           )}
@@ -283,14 +283,14 @@ const Composer = ({
           void submit();
         }}
       >
-        <div className="max-w-3xl w-full mx-auto pb-2">
+        <div className="mx-auto w-full max-w-3xl pb-2">
           <ComposerAttachments />
         </div>
 
         <VoiceCallPanel voiceCall={voiceCall} />
 
         <div
-          className="relative overflow-hidden bg-surface3 rounded-[22px] border border-border2/40 mt-auto max-w-3xl w-full mx-auto transition-colors duration-normal focus-within:border-border2 @container"
+          className="duration-normal @container relative mx-auto mt-auto w-full max-w-3xl overflow-hidden rounded-[22px] border border-border2/40 bg-surface3 transition-colors focus-within:border-border2"
           onClick={e => {
             if (e.target === e.currentTarget) textareaRef.current?.focus();
           }}
@@ -304,7 +304,7 @@ const Composer = ({
                 ref={textareaRef}
                 value={text}
                 autoFocus={false}
-                className="field-sizing-content min-h-17 w-full text-ui-lg leading-ui-lg placeholder:text-neutral3 text-neutral6 bg-transparent focus:outline-hidden resize-none outline-hidden disabled:cursor-not-allowed disabled:opacity-50 px-3 pt-3 pb-2"
+                className="min-h-17 field-sizing-content w-full resize-none bg-transparent px-3 pt-3 pb-2 text-ui-lg leading-ui-lg text-neutral6 outline-hidden placeholder:text-neutral3 focus:outline-hidden disabled:cursor-not-allowed disabled:opacity-50"
                 placeholder={canExecuteAgent ? 'Enter your message...' : "You don't have permission to execute agents"}
                 onChange={e => {
                   setThreadInput(e.target.value);
@@ -347,7 +347,7 @@ const Composer = ({
 };
 
 const ComposerGradientColumn = ({ className }: { className?: string }) => (
-  <div className={cn('flex h-full w-full flex-col -space-y-3', className)}>
+  <div className={cn('flex size-full flex-col -space-y-3', className)}>
     <div className="w-full flex-1 bg-accent1 blur-xl" />
     <div className="w-full flex-1 bg-accent1Dark blur-xl" />
     <div className="w-full flex-1 bg-accent1 blur-xl" />
@@ -361,7 +361,7 @@ const ComposerSendingGradient = ({ pulseKey }: { pulseKey: number }) => {
     <div
       key={pulseKey}
       aria-hidden
-      className="composer-sending pointer-events-none absolute -left-[10%] top-0 z-0 flex h-10 w-[120%] transform-gpu"
+      className="composer-sending pointer-events-none absolute top-0 left-[-10%] z-0 flex h-10 w-[120%] transform-gpu"
     >
       <ComposerGradientColumn />
       <ComposerGradientColumn className="-translate-y-2" />
@@ -387,7 +387,7 @@ const SpeechInput = ({ agentId, onTranscript }: { agentId?: string; onTranscript
       tooltip={isListening ? 'Stop dictation' : 'Start dictation'}
       onClick={() => (isListening ? stop() : start())}
     >
-      {isListening ? <CircleStopIcon /> : <Mic className="h-5 w-5 text-neutral3 hover:text-neutral6" />}
+      {isListening ? <CircleStopIcon /> : <Mic className="size-5 text-neutral3 hover:text-neutral6" />}
     </Button>
   );
 };
@@ -418,12 +418,12 @@ const ComposerActionRow = ({
   voiceCall,
 }: ComposerActionRowProps) => {
   return (
-    <div className="flex flex-wrap-reverse justify-between items-center gap-2 px-1.5 pb-1.5">
+    <div className="flex flex-wrap-reverse items-center justify-between gap-2 px-1.5 pb-1.5">
       {((showModelSwitcher && agentId) || runOptionsSlot) && (
-        <div className="flex items-center gap-1.5 shrink-0 max-w-full">
+        <div className="flex max-w-full shrink-0 items-center gap-1.5">
           {showModelSwitcher && agentId && (
             <>
-              <div className="rounded-full bg-surface3 border border-border1 transition-colors duration-normal focus-within:border-border2">
+              <div className="duration-normal rounded-full border border-border1 bg-surface3 transition-colors focus-within:border-border2">
                 <ComposerModelSwitcher agentId={agentId} />
               </div>
               <ComposerModelSettings agentId={agentId} />
@@ -485,7 +485,7 @@ const ComposerSendButton = ({
         className="rounded-full border border-border1 bg-surface5"
         disabled={!canExecute || isEmpty}
       >
-        <ArrowUp className="h-6 w-6 text-neutral3 hover:text-neutral6" />
+        <ArrowUp className="size-6 text-neutral3 hover:text-neutral6" />
       </Button>
       {isRunning && (
         <Button variant="default" size="icon-md" type="button" tooltip="Cancel" onClick={onCancel}>

@@ -18,7 +18,7 @@ export const AgentMetadataSection = ({ title, children, hint }: AgentMetadataSec
   const { Link } = useLinkComponent();
   return (
     <section className="space-y-2 pb-7 last:pb-0">
-      <Txt as="h3" variant="ui-md" className="text-neutral3 flex items-center gap-1">
+      <Txt as="h3" variant="ui-md" className="flex items-center gap-1 text-neutral3">
         {title}
         {hint && (
           <TooltipProvider>

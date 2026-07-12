@@ -34,10 +34,10 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(undefined)}
           className={cn(
-            'text-left px-3 py-2 rounded-md text-ui-sm',
+            'rounded-md px-3 py-2 text-left text-ui-sm',
             transitions.colors,
             selectedToolkit === undefined
-              ? 'bg-surface4 text-neutral6 font-medium'
+              ? 'bg-surface4 font-medium text-neutral6'
               : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
           )}
         >
@@ -48,16 +48,16 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
           type="button"
           onClick={() => onSelectToolkit(SELECTED_TOOLKIT_SENTINEL)}
           className={cn(
-            'text-left px-3 py-2 rounded-md text-ui-sm flex items-center justify-between gap-2',
+            'flex items-center justify-between gap-2 rounded-md px-3 py-2 text-left text-ui-sm',
             transitions.colors,
             selectedToolkit === SELECTED_TOOLKIT_SENTINEL
-              ? 'bg-surface4 text-neutral6 font-medium'
+              ? 'bg-surface4 font-medium text-neutral6'
               : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
           )}
         >
           Selected
           {selectedCount > 0 && (
-            <span className="text-ui-xs tabular-nums bg-surface3 rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center">
+            <span className="min-w-5 rounded-full bg-surface3 px-1.5 py-0.5 text-center text-ui-xs tabular-nums">
               {selectedCount}
             </span>
           )}
@@ -69,10 +69,10 @@ export function ToolkitList({ providerId, selectedToolkit, onSelectToolkit, sele
             type="button"
             onClick={() => onSelectToolkit(toolkit.slug)}
             className={cn(
-              'text-left px-3 py-2 rounded-md text-ui-sm truncate',
+              'truncate rounded-md px-3 py-2 text-left text-ui-sm',
               transitions.colors,
               selectedToolkit === toolkit.slug
-                ? 'bg-surface4 text-neutral6 font-medium'
+                ? 'bg-surface4 font-medium text-neutral6'
                 : 'text-neutral3 hover:bg-surface4 hover:text-neutral5',
             )}
             title={toolkit.name}

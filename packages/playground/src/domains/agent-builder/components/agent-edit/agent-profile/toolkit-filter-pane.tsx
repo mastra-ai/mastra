@@ -47,7 +47,7 @@ const ToolkitFilterRow = memo(
           data-testid={`${TEST_ID_PREFIX}-filter-item-${item.id}`}
           data-checked={checked ? 'true' : 'false'}
           className={cn(
-            'flex min-w-0 flex-1 cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
+            'flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors select-none hover:bg-surface4',
             disabled && 'cursor-not-allowed opacity-60',
           )}
         >
@@ -57,7 +57,7 @@ const ToolkitFilterRow = memo(
             onCheckedChange={() => onToggle(item.id)}
             style={checkboxStyle}
             data-testid={`${TEST_ID_PREFIX}-filter-checkbox-${item.id}`}
-            className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
+            className="size-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:size-2.5"
           />
           {item.icon && (
             <img
@@ -65,7 +65,7 @@ const ToolkitFilterRow = memo(
               alt=""
               aria-hidden
               data-testid={`${TEST_ID_PREFIX}-filter-icon-${item.id}`}
-              className="h-4 w-4 shrink-0 rounded object-contain"
+              className="size-4 shrink-0 rounded object-contain"
             />
           )}
           <span className="truncate">{item.label}</span>
@@ -146,7 +146,7 @@ const ProviderToolkitSection = ({
       <Txt
         variant="ui-xs"
         data-testid={`tools-provider-section-${provider.providerId}`}
-        className="px-2 pt-1 text-neutral3 uppercase tracking-wide"
+        className="px-2 pt-1 tracking-wide text-neutral3 uppercase"
       >
         {provider.providerName}
       </Txt>
@@ -209,7 +209,7 @@ export const ToolkitFilterPane = ({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6"
+      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 p-6"
       data-testid={`${TEST_ID_PREFIX}-filter`}
     >
       <div className="shrink-0 rounded-full bg-surface3" data-testid={`${TEST_ID_PREFIX}-filter-search`}>

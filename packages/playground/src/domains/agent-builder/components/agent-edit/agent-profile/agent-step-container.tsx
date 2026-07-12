@@ -66,7 +66,7 @@ export const AgentStepContainer = ({
   ) : null;
 
   return (
-    <div className="relative w-full h-full min-h-0 border border-border1 rounded-3xl overflow-hidden p-4">
+    <div className="relative size-full min-h-0 overflow-hidden rounded-3xl border border-border1 p-4">
       <div
         aria-hidden
         className={cn('agent-step-banner pointer-events-none', isStreaming && 'agent-step-banner-rotating')}
@@ -74,7 +74,7 @@ export const AgentStepContainer = ({
       />
       <div
         className={cn(
-          'relative h-full overflow-hidden bg-surface3 rounded-2xl grid min-h-0',
+          'relative grid h-full min-h-0 overflow-hidden rounded-2xl bg-surface3',
           title ? 'grid-rows-[auto_minmax(0,1fr)_auto]' : 'grid-rows-[minmax(0,1fr)_auto]',
           panelClassName,
         )}
@@ -82,7 +82,7 @@ export const AgentStepContainer = ({
         {panelOverlay}
         {title && (
           <div className="border-b border-border1 px-6 pt-6 pb-4" data-testid="agent-step-title-section">
-            <h2 className="text-3xl font-semibold text-neutral6 pb-1">{title}</h2>
+            <h2 className="pb-1 text-3xl font-semibold text-neutral6">{title}</h2>
             {description && <div className="w-1/2 text-neutral3">{description}</div>}
           </div>
         )}
@@ -91,7 +91,7 @@ export const AgentStepContainer = ({
         </div>
         {showLastStepCtas ? (
           <div
-            className="flex justify-center items-center gap-2 shrink-0 border-t border-border1 pt-6 pb-6"
+            className="flex shrink-0 items-center justify-center gap-2 border-t border-border1 py-6"
             data-testid="agent-step-footer"
           >
             {backButton}
@@ -108,7 +108,7 @@ export const AgentStepContainer = ({
           </div>
         ) : (
           <div
-            className="flex justify-center items-center gap-2 shrink-0 border-t border-border1 pt-6 pb-6"
+            className="flex shrink-0 items-center justify-center gap-2 border-t border-border1 py-6"
             data-testid="agent-step-footer"
           >
             {backButton}

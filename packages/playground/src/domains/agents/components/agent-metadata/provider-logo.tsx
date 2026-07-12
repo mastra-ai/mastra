@@ -50,7 +50,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20 }: Provider
     if (providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]) {
       return <Icon>{providerMapToIcon[fallbackIcon as keyof typeof providerMapToIcon]}</Icon>;
     }
-    return <div className={`bg-surface4 rounded ${className}`} style={{ width: size, height: size }} />;
+    return <div className={`rounded bg-surface4 ${className}`} style={{ width: size, height: size }} />;
   }
 
   return (

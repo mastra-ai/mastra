@@ -33,8 +33,8 @@ export function ExperimentTraceTimeline({
       {isLoading ? (
         <div
           className={cn(
-            'flex items-center text-ui-md gap-4 bg-surface3/50 rounded-md p-6 justify-center text-neutral3',
-            '[&_svg]:w-[1.25em] [&_svg]:h-[1.25em] [&_svg]:opacity-50',
+            'flex items-center justify-center gap-4 rounded-md bg-surface3/50 p-6 text-ui-md text-neutral3',
+            '[&_svg]:size-[1.25em] [&_svg]:opacity-50',
           )}
         >
           <Spinner /> Loading Trace Timeline ...

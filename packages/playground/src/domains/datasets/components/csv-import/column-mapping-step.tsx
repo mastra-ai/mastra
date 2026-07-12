@@ -69,8 +69,8 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                     ref={provided.innerRef}
                     {...provided.droppableProps}
                     className={`
-                      min-h-header-default rounded-lg border-2 border-dashed p-2
-                      flex flex-wrap gap-2 items-center
+                      flex min-h-header-default flex-wrap items-center gap-2
+                      rounded-lg border-2 border-dashed p-2
                       transition-colors
                       ${snapshot.isDraggingOver ? 'border-accent1/50 bg-accent1/5' : 'border-surface4'}
                       ${needsAttention ? 'border-warning bg-warning/5' : ''}
@@ -91,19 +91,19 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
                               {...provided.draggableProps}
                               style={provided.draggableProps.style}
                               className={`
-                                inline-flex items-center gap-1.5 px-2.5 py-1.5
-                                rounded-md text-sm font-medium
-                                bg-surface2 text-neutral1
+                                inline-flex items-center gap-1.5 rounded-md bg-surface2
+                                px-2.5 py-1.5 text-sm
+                                font-medium text-neutral1
                                 transition-all
                                 ${snapshot.isDragging ? 'shadow-lg ring-2 ring-accent1/30' : 'hover:bg-surface3'}
                               `}
                             >
                               <span
                                 {...provided.dragHandleProps}
-                                className="text-neutral4 cursor-grab active:cursor-grabbing"
+                                className="cursor-grab text-neutral4 active:cursor-grabbing"
                               >
                                 <Icon>
-                                  <GripVertical className="h-3.5 w-3.5" />
+                                  <GripVertical className="size-3.5" />
                                 </Icon>
                               </span>
                               <span>{column}</span>
@@ -130,7 +130,7 @@ export function ColumnMappingStep({ headers, mapping, onMappingChange }: ColumnM
         })}
 
         {/* Validation message */}
-        {!inputHasColumns && <div className="text-sm text-warning">At least one column must be mapped to Input</div>}
+        {!inputHasColumns && <div className="text-warning text-sm">At least one column must be mapped to Input</div>}
       </div>
     </DragDropContext>
   );

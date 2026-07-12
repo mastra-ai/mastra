@@ -265,7 +265,7 @@ export const WorkflowStepActionBar = ({
               <DialogTitle>Time travel to {stepKey}</DialogTitle>
               <DialogDescription>Time travel to a specific workflow step</DialogDescription>
             </DialogHeader>
-            <DialogBody className="max-h-[600px]">
+            <DialogBody className="max-h-150">
               <WorkflowTimeTravelForm stepKey={stepKey} closeModal={() => setIsTimeTravelOpen(false)} />
             </DialogBody>
           </DialogContent>
@@ -280,7 +280,7 @@ export const WorkflowStepActionBar = ({
                 <DialogTitle>Run step {stepKey}</DialogTitle>
                 <DialogDescription>Run a specific workflow step</DialogDescription>
               </DialogHeader>
-              <DialogBody className="max-h-[600px]">
+              <DialogBody className="max-h-150">
                 <WorkflowTimeTravelForm
                   stepKey={stepKey}
                   closeModal={() => setIsPerStepRunOpen(false)}
@@ -298,7 +298,7 @@ export const WorkflowStepActionBar = ({
                 <DialogTitle>Continue run {stepKey}</DialogTitle>
                 <DialogDescription>Continue the workflow run from this step</DialogDescription>
               </DialogHeader>
-              <DialogBody className="max-h-[600px]">
+              <DialogBody className="max-h-150">
                 <WorkflowTimeTravelForm
                   stepKey={stepKey}
                   closeModal={() => setIsContinueRunOpen(false)}

@@ -47,13 +47,13 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
       <TooltipTrigger asChild>
         <span
           className={cn(
-            'inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors duration-normal',
+            'duration-normal inline-flex items-center gap-1 rounded-full border px-1.5 py-0.5 transition-colors',
             enabled ? 'border-border1 bg-surface4 text-neutral6' : 'border-border1/40 text-neutral3/50',
           )}
         >
-          <Icon className="h-3 w-3 shrink-0" />
+          <Icon className="size-3 shrink-0" />
           {value !== undefined && (
-            <Txt as="span" variant="ui-xs" className="font-medium tabular-nums leading-none">
+            <Txt as="span" variant="ui-xs" className="leading-none font-medium tabular-nums">
               {value}
             </Txt>
           )}
@@ -66,7 +66,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
 
 function MemorySidebarSkeleton() {
   return (
-    <div data-testid="memory-sidebar-skeleton" className="flex h-full min-h-0 w-full flex-col gap-2.5 p-3">
+    <div data-testid="memory-sidebar-skeleton" className="flex size-full min-h-0 flex-col gap-2.5 p-3">
       <Skeleton className="h-3 w-28" />
       <Skeleton className="h-3 w-20" />
       <Skeleton className="h-3 w-24" />
@@ -166,7 +166,7 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
   }
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col overflow-hidden">
+    <div className="flex size-full min-h-0 flex-col overflow-hidden">
       <div className="relative min-h-0 flex-1 overflow-hidden">
         <div
           aria-hidden={showMemory && hasMemory}
@@ -233,15 +233,15 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
             >
               <span className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
-                  <MemoryIcon className="h-4 w-4 shrink-0" />
+                  <MemoryIcon className="size-4 shrink-0" />
                   <Txt as="span" variant="ui-sm" className="font-medium">
                     Memory
                   </Txt>
                 </span>
                 {showMemory ? (
-                  <ChevronDown className="h-4 w-4 shrink-0 text-neutral3" />
+                  <ChevronDown className="size-4 shrink-0 text-neutral3" />
                 ) : (
-                  <ChevronUp className="h-4 w-4 shrink-0 text-neutral3" />
+                  <ChevronUp className="size-4 shrink-0 text-neutral3" />
                 )}
               </span>
 
@@ -294,7 +294,7 @@ function MemorySidebarBody({ agentId, threadId, threads, onDelete }: MemorySideb
                 <span className="mt-2 block h-1 w-full overflow-hidden rounded-full bg-surface5">
                   <span
                     className={cn(
-                      'block h-full rounded-full transition-all duration-normal',
+                      'duration-normal block h-full rounded-full transition-all',
                       barColor(observationPercent),
                     )}
                     style={{ width: `${observationPercent}%` }}

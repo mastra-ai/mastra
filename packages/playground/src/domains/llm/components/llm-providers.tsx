@@ -52,7 +52,7 @@ export const LLMProviders = ({
         <div className="relative shrink-0">
           <ProviderLogo providerId={provider.id} size={16} />
           <div
-            className={`absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full ${
+            className={`absolute -top-0.5 -right-0.5 size-1.5 rounded-full ${
               provider.connected ? 'bg-accent1' : 'bg-accent2'
             }`}
             title={provider.connected ? 'Connected' : 'Not connected'}
@@ -62,7 +62,7 @@ export const LLMProviders = ({
       end: provider.docUrl ? (
         <Info
           className={cn(
-            'size-3.5 text-neutral2 opacity-0 transition-opacity duration-100 cursor-pointer',
+            'size-3.5 cursor-pointer text-neutral2 opacity-0 transition-opacity duration-100',
             'hover:text-neutral4 hover:opacity-100',
             'group-data-[highlighted]/item:opacity-100',
           )}
@@ -81,7 +81,7 @@ export const LLMProviders = ({
   };
 
   if (providersLoading) {
-    return <Skeleton className="w-full h-8" />;
+    return <Skeleton className="h-8 w-full" />;
   }
 
   // Find the matching provider, handling gateway prefix fallback

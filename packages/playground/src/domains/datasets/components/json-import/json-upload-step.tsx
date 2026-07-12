@@ -91,7 +91,7 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
         onDrop={handleDrop}
         className={cn(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-6',
+          'min-h-40 rounded-lg border-2 border-dashed p-6',
           'cursor-pointer transition-colors',
           // Default state
           'border-surface4 bg-surface2',
@@ -111,7 +111,7 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
         ) : (
           <>
             <Icon className="text-neutral4">
-              <FileJson className="h-8 w-8" />
+              <FileJson className="size-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
               <span className="text-sm font-medium text-neutral1">Click to upload or drag and drop</span>
@@ -125,9 +125,9 @@ export function JSONUploadStep({ onFileSelect, isParsing, error }: JSONUploadSte
       {error && <div className="text-sm text-accent2">{error}</div>}
 
       {/* Format hint */}
-      <div className="text-xs text-neutral4 bg-surface2 p-3 rounded-md">
-        <p className="font-medium mb-1">Expected format:</p>
-        <pre className="text-[10px] overflow-x-auto">
+      <div className="rounded-md bg-surface2 p-3 text-xs text-neutral4">
+        <p className="mb-1 font-medium">Expected format:</p>
+        <pre className="overflow-x-auto text-[10px]">
           {`[
   {
     "input": "Your input data",

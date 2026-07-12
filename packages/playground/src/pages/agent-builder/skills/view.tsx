@@ -37,7 +37,7 @@ export default function AgentBuilderSkillsView() {
 }
 
 const AgentBuilderSkillViewSkeleton = () => (
-  <div className="h-screen w-screen flex items-center justify-center">
+  <div className="flex h-screen w-screen items-center justify-center">
     <Spinner />
   </div>
 );
@@ -99,7 +99,7 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
       </div>
 
       {/* Body */}
-      <div className="flex-1 min-h-0 overflow-y-auto bg-surface1">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-surface1">
         <div className="mx-auto w-full max-w-[80ch] px-4 pt-6 pb-10 md:px-10">
           <h1 className="text-display-md text-neutral6">{skill.name}</h1>
           {skill.description && (

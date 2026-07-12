@@ -54,7 +54,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
           <DataList.Cell height="compact">
             <span className="inline-flex items-center gap-2 whitespace-nowrap">
               <code className="font-mono text-ui-sm">{s.cron}</code>
-              {s.timezone ? <span className="text-neutral4 text-ui-xs">{s.timezone}</span> : null}
+              {s.timezone ? <span className="text-ui-xs text-neutral4">{s.timezone}</span> : null}
             </span>
           </DataList.Cell>
           <DataList.Cell height="compact">
@@ -69,7 +69,7 @@ export function SchedulesList({ schedules, isLoading, search = '' }: SchedulesLi
             {s.lastRun ? (
               <span className="inline-flex items-center gap-2 whitespace-nowrap">
                 <WorkflowRunStatusInline status={s.lastRun.status} />
-                <span className="text-neutral4 text-ui-sm" title={formatScheduleTimestamp(s.lastFireAt)}>
+                <span className="text-ui-sm text-neutral4" title={formatScheduleTimestamp(s.lastFireAt)}>
                   {s.lastFireAt ? formatRelativeTime(s.lastFireAt) : ''}
                 </span>
               </span>

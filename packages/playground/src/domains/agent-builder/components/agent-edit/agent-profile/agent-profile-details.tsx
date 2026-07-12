@@ -30,7 +30,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
   return (
     <div
       className={cn(
-        'flex w-full flex-col items-start gap-0.5 max-w-[44ch]',
+        'flex w-full max-w-[44ch] flex-col items-start gap-0.5',
         isHighlighted && HIGHLIGHTED_CLASSNAME,
         className,
       )}
@@ -54,7 +54,7 @@ export const AgentProfileDetails = ({ disabled = false, className, mode = 'defau
         disabled={disabled}
         data-testid="agent-configure-description"
         rows={2}
-        className="w-full resize-none field-sizing-content rounded-lg px-3 py-2 text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed"
+        className="field-sizing-content w-full resize-none rounded-lg px-3 py-2 text-ui-md text-neutral6 placeholder:text-neutral2 hover:bg-surface4 focus:bg-surface4 focus:outline-none disabled:cursor-not-allowed"
         style={{ viewTransitionName: 'agent-description' }}
       />
     </div>

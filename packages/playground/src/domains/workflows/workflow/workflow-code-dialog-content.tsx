@@ -42,11 +42,11 @@ export const CodeDialogContent = ({
   if (typeof data !== 'string') {
     const content = JSON.stringify(data, null, 2);
     return (
-      <div className="max-h-[500px] overflow-auto relative">
-        <div className="absolute right-2 top-2 bg-surface4 rounded-full z-10">
+      <div className="max-h-125 relative overflow-auto">
+        <div className="absolute top-2 right-2 z-10 rounded-full bg-surface4">
           <CopyButton content={content} />
         </div>
-        <div className="bg-surface4 rounded-lg p-4">
+        <div className="rounded-lg bg-surface4 p-4">
           <CodeMirror value={content} theme={theme} extensions={[jsonLanguage, EditorView.lineWrapping]} />
         </div>
       </div>
@@ -65,11 +65,11 @@ export const CodeDialogContent = ({
   }
 
   return (
-    <div className="max-h-[500px] overflow-auto relative">
-      <div className="absolute right-2 top-2 bg-surface4 rounded-full z-10">
+    <div className="max-h-125 relative overflow-auto">
+      <div className="absolute top-2 right-2 z-10 rounded-full bg-surface4">
         <CopyButton content={data} />
       </div>
-      <div className="bg-surface4 rounded-lg p-4">
+      <div className="rounded-lg bg-surface4 p-4">
         <CodeMirror value={displayContent} theme={theme} extensions={extensions} />
       </div>
     </div>

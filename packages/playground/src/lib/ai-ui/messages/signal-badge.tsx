@@ -105,13 +105,13 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
     return (
       <div className="my-2 max-w-[80%] rounded-lg border border-border1 bg-surface2 px-4 py-3 text-neutral5">
         <div className="flex items-start gap-3">
-          <Database className="mt-0.5 h-4 w-4 shrink-0 text-icon3" />
+          <Database className="text-icon3 mt-0.5 size-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">{state.id}</p>
               {state.mode ? <Pill>{state.mode}</Pill> : null}
             </div>
-            {text ? <p className="mt-2 whitespace-pre-wrap break-words text-ui-sm leading-ui-md">{text}</p> : null}
+            {text ? <p className="mt-2 text-ui-sm leading-ui-md break-words whitespace-pre-wrap">{text}</p> : null}
           </div>
         </div>
       </div>
@@ -128,7 +128,7 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
     return (
       <div className={`my-2 max-w-[80%] rounded-lg border px-4 py-3 ${toneClass}`}>
         <div className="flex items-start gap-3">
-          <Bell className="mt-0.5 h-4 w-4 shrink-0" />
+          <Bell className="mt-0.5 size-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">{getNotificationTitle(value)}</p>
@@ -136,7 +136,7 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
               {status ? <Pill>{status}</Pill> : null}
               {pending ? <Pill>{`${pending} pending`}</Pill> : null}
             </div>
-            {text ? <p className="mt-2 whitespace-pre-wrap break-words text-ui-sm leading-ui-md">{text}</p> : null}
+            {text ? <p className="mt-2 text-ui-sm leading-ui-md break-words whitespace-pre-wrap">{text}</p> : null}
           </div>
         </div>
       </div>
@@ -147,10 +147,10 @@ export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
     return (
       <div className="my-2 max-w-[80%] rounded-lg border border-border1 bg-surface2 px-4 py-3 text-neutral5">
         <div className="flex items-start gap-3">
-          <Radio className="mt-0.5 h-4 w-4 shrink-0 text-icon3" />
+          <Radio className="text-icon3 mt-0.5 size-4 shrink-0" />
           <div className="min-w-0 flex-1">
             <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">{value.tagName ?? 'Signal'}</p>
-            {text ? <p className="mt-2 whitespace-pre-wrap break-words text-ui-sm leading-ui-md">{text}</p> : null}
+            {text ? <p className="mt-2 text-ui-sm leading-ui-md break-words whitespace-pre-wrap">{text}</p> : null}
           </div>
         </div>
       </div>

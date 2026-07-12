@@ -90,7 +90,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   return (
     <div
       className={cn(
-        'bg-surface2 border border-border1 rounded-3xl overflow-hidden transition-all duration-200',
+        'overflow-hidden rounded-3xl border border-border1 bg-surface2 transition-all duration-200',
         'hover:border-border2',
       )}
     >
@@ -99,38 +99,38 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         type="button"
         onClick={handleToggleExpand}
         className={cn(
-          'group flex items-center gap-3 w-full px-4 py-3',
-          'hover:bg-surface3 transition-colors',
-          'focus:outline-none focus:ring-2 focus:ring-accent1 focus:ring-inset',
+          'group flex w-full items-center gap-3 px-4 py-3',
+          'transition-colors hover:bg-surface3',
+          'focus:ring-2 focus:ring-accent1 focus:outline-none focus:ring-inset',
         )}
       >
         {/* Thumbnail preview */}
-        <div className="relative shrink-0 w-24 h-14 bg-surface3 rounded-md overflow-hidden border border-border1">
+        <div className="relative h-14 w-24 shrink-0 overflow-hidden rounded-md border border-border1 bg-surface3">
           {hasFrame ? (
-            <img ref={imgRef} alt="Browser preview" className="w-full h-full object-cover" />
+            <img ref={imgRef} alt="Browser preview" className="size-full object-cover" />
           ) : (
-            <div className="flex items-center justify-center w-full h-full">
-              <Monitor className="h-5 w-5 text-neutral3" />
+            <div className="flex size-full items-center justify-center">
+              <Monitor className="size-5 text-neutral3" />
             </div>
           )}
           {/* Live indicator dot */}
-          {isLive && <div className="absolute top-1 right-1 w-2 h-2 bg-success rounded-full animate-pulse" />}
+          {isLive && <div className="bg-success absolute top-1 right-1 size-2 animate-pulse rounded-full" />}
         </div>
 
         {/* Info section */}
-        <div className="flex-1 min-w-0 text-left">
+        <div className="min-w-0 flex-1 text-left">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-neutral6 truncate">{agentName}&apos;s browser</span>
+            <span className="truncate text-sm font-medium text-neutral6">{agentName}&apos;s browser</span>
             <StatusBadge variant={isLive ? 'success' : 'neutral'} size="sm" withDot pulse={isLive}>
               {isLive ? 'Live' : 'Idle'}
             </StatusBadge>
           </div>
-          <p className="text-xs text-neutral4 truncate mt-0.5">{displayUrl}</p>
+          <p className="mt-0.5 truncate text-xs text-neutral4">{displayUrl}</p>
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className="shrink-0 text-neutral4 group-hover:text-neutral5 transition-colors">
-          {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
+        <div className="shrink-0 text-neutral4 transition-colors group-hover:text-neutral5">
+          {isExpanded ? <ChevronDown className="size-5" /> : <ChevronUp className="size-5" />}
         </div>
       </button>
 
@@ -150,7 +150,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleOpenModal}
                   className="bg-surface1/80 backdrop-blur-sm"
                 >
-                  <Maximize2 className="h-3.5 w-3.5" />
+                  <Maximize2 className="size-3.5" />
                 </Button>
                 <Button
                   variant="default"
@@ -159,7 +159,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
                   onClick={handleClose}
                   className="bg-surface1/80 backdrop-blur-sm"
                 >
-                  <X className="h-3.5 w-3.5" />
+                  <X className="size-3.5" />
                 </Button>
               </div>
             </div>
@@ -167,9 +167,9 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
 
           {/* Browser actions (scrollable, max height) */}
           {toolCalls.length > 0 && (
-            <div ref={actionsRef} className="border-t border-border1 max-h-40 overflow-y-auto">
+            <div ref={actionsRef} className="max-h-40 overflow-y-auto border-t border-border1">
               <div className="px-3 py-2">
-                <h4 className="text-xs font-medium text-neutral4 mb-2">Browser Actions</h4>
+                <h4 className="mb-2 text-xs font-medium text-neutral4">Browser Actions</h4>
                 <div className="space-y-1">
                   {toolCalls.slice(-5).map(entry => (
                     <BrowserToolCallItem key={entry.toolCallId} entry={entry} />

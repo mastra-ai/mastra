@@ -83,18 +83,18 @@ export function WorkflowNestedNode({
         data-workflow-node
         data-workflow-step-status={displayStatus}
         className={cn(
-          'bg-surface3 rounded-lg w-[274px] border border-border1',
+          'w-[274px] rounded-lg border border-border1 bg-surface3',
           hasSpecialBadge ? 'pt-0' : 'pt-2',
           displayStatus === 'success' && 'bg-accent1Darker',
           displayStatus === 'failed' && 'bg-accent2Darker',
-          displayStatus === 'tripwire' && 'bg-amber-950/40 border-amber-500/30',
+          displayStatus === 'tripwire' && 'border-amber-500/30 bg-amber-950/40',
           displayStatus === 'suspended' && 'bg-accent3Darker',
           displayStatus === 'waiting' && 'bg-accent5Darker',
           displayStatus === 'running' && 'bg-accent6Darker',
         )}
       >
         {hasSpecialBadge && (
-          <div className="px-3 pt-2 pb-1 flex gap-1.5 flex-wrap">
+          <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-1">
             {canSuspend && (
               <Badge icon={<BADGE_ICONS.suspend className="text-current" style={{ color: BADGE_COLORS.suspend }} />}>
                 SUSPEND/RESUME
@@ -127,27 +127,27 @@ export function WorkflowNestedNode({
             {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" />}
             {displayStatus === 'suspended' && <PauseIcon className="text-accent3" />}
             {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {displayStatus === 'running' && <Loader2 className="animate-spin text-accent6" />}
             {!step && <CircleDashed className="text-neutral2" />}
           </Icon>
 
           <Txt
             variant="ui-lg"
-            className="text-neutral6 font-medium inline-flex items-center gap-1 justify-between w-full"
+            className="inline-flex w-full items-center justify-between gap-1 font-medium text-neutral6"
           >
             {label} {step?.startedAt && <Clock startedAt={step.startedAt} endedAt={step.endedAt} />}
           </Txt>
         </div>
 
         {description && (
-          <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
+          <Txt variant="ui-sm" className="px-3 pb-2 text-neutral3">
             {description}
           </Txt>
         )}
 
         {isForEachNode && step?.foreachProgress && (
-          <div className="px-3 pb-2 flex items-center gap-2">
-            <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
+          <div className="flex items-center gap-2 px-3 pb-2">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface1">
               <div
                 className={cn(
                   'h-full rounded-full transition-all duration-300',
@@ -158,7 +158,7 @@ export function WorkflowNestedNode({
                 }}
               />
             </div>
-            <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+            <Txt variant="ui-xs" className="whitespace-nowrap text-neutral3">
               {step.foreachProgress.completedCount} / {step.foreachProgress.totalCount}
             </Txt>
           </div>

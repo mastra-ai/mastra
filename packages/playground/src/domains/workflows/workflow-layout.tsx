@@ -21,7 +21,7 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   if (!workflowId) {
     return (
       <div className="flex h-full flex-col items-center justify-center">
-        <Txt variant="ui-md" className="text-neutral6 text-center">
+        <Txt variant="ui-md" className="text-center text-neutral6">
           No workflow ID provided
         </Txt>
       </div>

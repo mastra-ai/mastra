@@ -125,8 +125,8 @@ export function WorkflowsPage() {
                           type="text"
                           disabled={isDisabled}
                           className={cn(
-                            'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                            !isDisabled && 'border-border1 border-dashed ',
+                            'block w-full appearance-none border border-transparent bg-transparent text-neutral3',
+                            !isDisabled && 'border-dashed border-border1 ',
                           )}
                           value={
                             isSelected

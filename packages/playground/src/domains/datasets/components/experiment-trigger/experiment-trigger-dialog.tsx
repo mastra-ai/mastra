@@ -52,7 +52,7 @@ function RequestContextForm({
   }, [requestContextSchema]);
 
   if (!zodSchema) {
-    return <p className="text-sm text-destructive">Failed to parse request context schema</p>;
+    return <p className="text-destructive text-sm">Failed to parse request context schema</p>;
   }
 
   return (
@@ -193,7 +193,7 @@ export function ExperimentTriggerDialog({
                 value={requestContextRaw}
                 onChange={setRequestContextRaw}
                 showCopyButton={false}
-                className="min-h-[80px]"
+                className="min-h-20"
               />
             </div>
           )}
@@ -206,7 +206,7 @@ export function ExperimentTriggerDialog({
           <Button variant="primary" onClick={handleRun} disabled={!canRun || isRunning}>
             {isRunning ? (
               <>
-                <Spinner className="w-4 h-4" />
+                <Spinner className="size-4" />
                 Running...
               </>
             ) : (

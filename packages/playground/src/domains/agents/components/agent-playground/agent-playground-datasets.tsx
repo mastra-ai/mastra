@@ -36,33 +36,33 @@ export function AgentPlaygroundDatasets({ agentId }: AgentPlaygroundDatasetsProp
   }, [experiments]);
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-border1 flex items-center justify-between">
+    <div className="flex h-full flex-col">
+      <div className="flex items-center justify-between border-b border-border1 px-4 py-3">
         <Txt variant="ui-sm" className="text-neutral3">
           Manage test datasets for this agent. Create datasets, generate seed data, and run experiments.
         </Txt>
         <Button variant="primary" size="sm" onClick={() => setShowCreateDialog(true)}>
-          <Plus className="h-3.5 w-3.5 mr-1" />
+          <Plus className="mr-1 size-3.5" />
           Create
         </Button>
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
+        <div className="space-y-2 p-4">
           {isDatasetsLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-neutral3" />
+              <Loader2 className="size-5 animate-spin text-neutral3" />
             </div>
           ) : datasets.length === 0 ? (
-            <div className="text-center py-12 space-y-3">
-              <Icon size="lg" className="text-neutral3 mx-auto">
+            <div className="space-y-3 py-12 text-center">
+              <Icon size="lg" className="mx-auto text-neutral3">
                 <Database />
               </Icon>
               <div>
                 <Txt variant="ui-sm" className="text-neutral3">
                   No datasets yet
                 </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-1">
+                <Txt variant="ui-xs" className="mt-1 text-neutral3">
                   Create a dataset to start testing your agent with structured test cases.
                 </Txt>
               </div>
@@ -119,11 +119,11 @@ function DatasetCard({
     : null;
 
   return (
-    <div className="border border-border1 rounded-lg p-3 hover:bg-surface2 transition-colors">
+    <div className="rounded-lg border border-border1 p-3 transition-colors hover:bg-surface2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <Txt variant="ui-sm" className="text-neutral5 font-medium truncate">
+            <Txt variant="ui-sm" className="truncate font-medium text-neutral5">
               {name}
             </Txt>
             <Txt variant="ui-xs" className="text-neutral3">
@@ -131,16 +131,16 @@ function DatasetCard({
             </Txt>
           </div>
           {description && (
-            <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-1">
+            <Txt variant="ui-xs" className="mt-0.5 line-clamp-1 text-neutral3">
               {description}
             </Txt>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex shrink-0 items-center gap-1.5">
           {latestExperiment && <ExperimentBadge status={latestExperiment.status} passRate={passRate} />}
           <Button variant="ghost" size="sm" onClick={onGenerate} title="Generate test data with AI">
-            <Sparkles className="h-3.5 w-3.5" />
+            <Sparkles className="size-3.5" />
           </Button>
         </div>
       </div>
@@ -152,7 +152,7 @@ function ExperimentBadge({ status, passRate }: { status: string; passRate: numbe
   if (status === 'running' || status === 'pending') {
     return (
       <div className="flex items-center gap-1 text-blue-400">
-        <Loader2 className="h-3 w-3 animate-spin" />
+        <Loader2 className="size-3 animate-spin" />
         <Txt variant="ui-xs" className="text-blue-400">
           Running
         </Txt>
@@ -163,7 +163,7 @@ function ExperimentBadge({ status, passRate }: { status: string; passRate: numbe
   if (status === 'failed') {
     return (
       <div className="flex items-center gap-1 text-red-400">
-        <XCircle className="h-3 w-3" />
+        <XCircle className="size-3" />
         <Txt variant="ui-xs" className="text-red-400">
           Failed
         </Txt>
@@ -178,7 +178,7 @@ function ExperimentBadge({ status, passRate }: { status: string; passRate: numbe
 
   return (
     <div className={`flex items-center gap-1 ${color}`}>
-      <StatusIcon className="h-3 w-3" />
+      <StatusIcon className="size-3" />
       <Txt variant="ui-xs" className={color}>
         {passRate}%
       </Txt>

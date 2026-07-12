@@ -16,7 +16,7 @@ const STATUS_TEXT_COLOR: Record<ScheduleStatus, string> = {
 export const ScheduleStatusText = ({ status }: { status: ScheduleStatus }) => {
   return (
     <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_DOT_COLOR[status]}`} aria-hidden />
+      <span className={`size-1.5 rounded-full ${STATUS_DOT_COLOR[status]}`} aria-hidden />
       <span className={`text-ui-sm ${STATUS_TEXT_COLOR[status]}`}>{status}</span>
     </span>
   );

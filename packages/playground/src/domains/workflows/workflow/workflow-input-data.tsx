@@ -92,7 +92,7 @@ export const WorkflowInputData = ({
   );
 
   const defaultHeading = (
-    <Txt as="span" variant="ui-md" className={cn('text-neutral5 font-semibold', headingClassName)}>
+    <Txt as="span" variant="ui-md" className={cn('font-semibold text-neutral5', headingClassName)}>
       {heading ?? (withoutSubmit ? 'Run input' : 'Trigger a run')}
     </Txt>
   );
@@ -109,7 +109,7 @@ export const WorkflowInputData = ({
   const body = (
     <>
       {!hideInputTypeLabel && (
-        <div className="flex justify-between gap-3 py-3 px-5">
+        <div className="flex justify-between gap-3 px-5 py-3">
           <Txt as="p" variant="ui-sm" className="text-neutral3">
             {inputTypeLabel}
           </Txt>
@@ -195,7 +195,7 @@ export const WorkflowInputData = ({
   return (
     <Collapsible defaultOpen>
       <CollapsibleTrigger className="flex w-full items-center gap-2 pb-3 text-left">
-        <ChevronRight className="h-4 w-4 shrink-0 text-neutral3" />
+        <ChevronRight className="size-4 shrink-0 text-neutral3" />
         {headingSlot ?? defaultHeading}
       </CollapsibleTrigger>
 
@@ -322,12 +322,12 @@ const WorkflowJsonInput = ({
   return (
     <div className="flex flex-col gap-4">
       {errors.length > 0 && (
-        <div className="border border-accent2 rounded-lg p-2">
-          <Txt as="p" variant="ui-md" className="text-accent2 font-semibold">
+        <div className="rounded-lg border border-accent2 p-2">
+          <Txt as="p" variant="ui-md" className="font-semibold text-accent2">
             {errors.length} errors found
           </Txt>
 
-          <ul className="list-disc list-inside">
+          <ul className="list-inside list-disc">
             {errors.map((error, idx) => (
               <li key={idx} className="text-ui-sm text-accent2">
                 {error}
@@ -338,7 +338,7 @@ const WorkflowJsonInput = ({
       )}
 
       <div>
-        <Txt as="label" variant="ui-sm" className="text-neutral3 pb-1 block">
+        <Txt as="label" variant="ui-sm" className="block pb-1 text-neutral3">
           Input data
         </Txt>
         <CodeEditor data={data} onChange={setInputData} editable={!isReadOnly} />
@@ -441,11 +441,11 @@ const WorkflowProcessorInput = ({
   return (
     <div className="flex flex-col gap-4">
       {errors.length > 0 && (
-        <div className="border border-accent2 rounded-lg p-2">
-          <Txt as="p" variant="ui-md" className="text-accent2 font-semibold">
+        <div className="rounded-lg border border-accent2 p-2">
+          <Txt as="p" variant="ui-md" className="font-semibold text-accent2">
             {errors.length} errors found
           </Txt>
-          <ul className="list-disc list-inside">
+          <ul className="list-inside list-disc">
             {errors.map((error, idx) => (
               <li key={idx} className="text-ui-sm text-accent2">
                 {error}
@@ -486,7 +486,7 @@ const WorkflowProcessorInput = ({
           placeholder="Enter a test message..."
           rows={4}
           disabled={isReadOnly}
-          className="w-full bg-transparent border border-border1 rounded-md p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:outline-hidden focus:ring-2 focus:ring-accent1 disabled:opacity-50"
+          className="w-full rounded-md border border-border1 bg-transparent p-3 text-ui-sm text-neutral6 placeholder:text-neutral3 focus:ring-2 focus:ring-accent1 focus:outline-hidden disabled:opacity-50"
         />
       </div>
 

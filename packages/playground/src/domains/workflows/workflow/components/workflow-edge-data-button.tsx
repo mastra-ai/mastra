@@ -35,11 +35,11 @@ export const WorkflowEdgeDataButton = ({ previousStepId, output, label }: Workfl
       </Button>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-3xl w-full">
+        <DialogContent className="w-full max-w-3xl">
           <DialogHeader>
             <DialogTitle>Step output</DialogTitle>
           </DialogHeader>
-          <DialogBody className="max-h-[700px] overflow-auto">
+          <DialogBody className="max-h-175 overflow-auto">
             <div className="min-w-0 rounded-lg border border-border1 bg-surface2 p-3">
               <Txt variant="ui-sm" className="mb-2 block text-neutral5">
                 {dataLabel}

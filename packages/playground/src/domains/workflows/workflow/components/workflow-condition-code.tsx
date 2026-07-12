@@ -23,7 +23,7 @@ export const WorkflowConditionCode = ({ condition, onOpen }: WorkflowConditionCo
       {({ className, style, tokens, getLineProps, getTokenProps }) => (
         <pre
           className={cn(
-            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
+            'relative w-full cursor-pointer rounded-lg bg-surface4! p-3 font-mono text-xs wrap-break-word whitespace-pre-wrap',
             className,
           )}
           onClick={onOpen}
@@ -31,7 +31,7 @@ export const WorkflowConditionCode = ({ condition, onOpen }: WorkflowConditionCo
         >
           {tokens.map((line, i) => (
             <div key={i} {...getLineProps({ line })}>
-              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+              <span className="mr-2 inline-block text-neutral3">{i + 1}</span>
               {line.map((token, key) => (
                 <span key={key} {...getTokenProps({ token })} />
               ))}
@@ -51,7 +51,7 @@ export interface WorkflowConditionDialogProps {
 
 export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: WorkflowConditionDialogProps) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent className="max-w-[30rem]">
+    <DialogContent className="max-w-120">
       <DialogHeader>
         <DialogTitle className="sr-only">Condition Function</DialogTitle>
         <DialogDescription>View the condition function code</DialogDescription>
@@ -62,7 +62,7 @@ export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: Workf
             <Highlight theme={themes.oneDark} code={String(condition.fnString).trim()} language="javascript">
               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                 <pre
-                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
                   style={{
                     ...style,
                     backgroundColor: '#121212',
@@ -71,7 +71,7 @@ export const WorkflowConditionDialog = ({ open, onOpenChange, condition }: Workf
                 >
                   {tokens.map((line, i) => (
                     <div key={i} {...getLineProps({ line })}>
-                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                      <span className="mr-2 inline-block text-neutral3">{i + 1}</span>
                       {line.map((token, key) => (
                         <span key={key} {...getTokenProps({ token })} />
                       ))}

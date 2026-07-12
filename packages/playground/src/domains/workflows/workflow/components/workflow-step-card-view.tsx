@@ -13,8 +13,8 @@ const WorkflowForEachProgress = ({ foreachProgress }: Pick<WorkflowStepCardViewP
   }
 
   return (
-    <div className="px-3 pb-2 flex items-center gap-2">
-      <div className="flex-1 h-1.5 bg-surface1 rounded-full overflow-hidden">
+    <div className="flex items-center gap-2 px-3 pb-2">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface1">
         <div
           className={cn(
             'h-full rounded-full transition-all duration-300',
@@ -27,7 +27,7 @@ const WorkflowForEachProgress = ({ foreachProgress }: Pick<WorkflowStepCardViewP
           }}
         />
       </div>
-      <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+      <Txt variant="ui-xs" className="whitespace-nowrap text-neutral3">
         {foreachProgress.completedCount} / {foreachProgress.totalCount}
       </Txt>
     </div>
@@ -37,12 +37,12 @@ const WorkflowForEachProgress = ({ foreachProgress }: Pick<WorkflowStepCardViewP
 const WorkflowSleepDetails = ({ duration, date }: Pick<WorkflowStepCardViewProps, 'duration' | 'date'>) => (
   <>
     {duration && (
-      <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
+      <Txt variant="ui-sm" className="px-3 pb-2 text-neutral3">
         sleeps for <strong>{duration}ms</strong>
       </Txt>
     )}
     {date && (
-      <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
+      <Txt variant="ui-sm" className="px-3 pb-2 text-neutral3">
         sleeps until <strong>{new Date(date).toLocaleString()}</strong>
       </Txt>
     )}
@@ -89,7 +89,7 @@ export const WorkflowStepCardView = ({
       onMouseLeave={() => onHoverChange?.(false)}
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
       className={cn(
-        'bg-surface3 rounded-lg w-[274px] border border-border1 transition-colors hover:border-neutral6',
+        'w-[274px] rounded-lg border border-border1 bg-surface3 transition-colors hover:border-neutral6',
         accentColor && 'border-l-4',
         isHovered && !isSelected && 'border-neutral6',
         isWaiting && !isSelected && 'border-accent3',
@@ -100,7 +100,7 @@ export const WorkflowStepCardView = ({
         <WorkflowCardBadges indicators={indicators} className="shrink-0" />
         <WorkflowCardStatusIcon displayStatus={displayStatus} hasStep={hasStep} />
         <div className="min-w-0 flex-1">
-          <Txt variant="ui-sm" className="block truncate text-neutral6 font-medium" title={label}>
+          <Txt variant="ui-sm" className="block truncate font-medium text-neutral6" title={label}>
             {label}
           </Txt>
         </div>
@@ -111,7 +111,7 @@ export const WorkflowStepCardView = ({
       </div>
 
       {description && (
-        <Txt variant="ui-sm" className="text-neutral3 px-3 pb-2">
+        <Txt variant="ui-sm" className="px-3 pb-2 text-neutral3">
           {description}
         </Txt>
       )}

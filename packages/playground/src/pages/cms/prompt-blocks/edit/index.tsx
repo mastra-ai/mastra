@@ -244,12 +244,12 @@ function CmsPromptBlocksEditPage() {
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
           leftSlot={
-            <div className="flex items-center justify-center h-full">
+            <div className="flex h-full items-center justify-center">
               <Spinner className="size-8" />
             </div>
           }
         >
-          <div className="flex items-center justify-center h-full">
+          <div className="flex h-full items-center justify-center">
             <Spinner className="size-8" />
           </div>
         </AgentEditLayout>
@@ -261,9 +261,9 @@ function CmsPromptBlocksEditPage() {
     return (
       <MainContentLayout className="grid-rows-[1fr]">
         <AgentEditLayout
-          leftSlot={<div className="flex items-center justify-center h-full text-neutral3">Prompt block not found</div>}
+          leftSlot={<div className="flex h-full items-center justify-center text-neutral3">Prompt block not found</div>}
         >
-          <div className="flex items-center justify-center h-full text-neutral3">Prompt block not found</div>
+          <div className="flex h-full items-center justify-center text-neutral3">Prompt block not found</div>
         </AgentEditLayout>
       </MainContentLayout>
     );

@@ -48,9 +48,9 @@ export const WorkflowStatus = ({ stepId, status, result, tripwire }: WorkflowSta
             {status === 'tripwire' && <ShieldAlert className="text-amber-400" />}
             {status === 'suspended' && <CirclePause className="text-accent3" />}
             {status === 'waiting' && <HourglassIcon className="text-accent5" />}
-            {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+            {status === 'running' && <Loader2 className="animate-spin text-accent6" />}
           </Icon>
-          <Txt as="span" variant="ui-lg" className="text-neutral6 font-medium">
+          <Txt as="span" variant="ui-lg" className="font-medium text-neutral6">
             {stepId.charAt(0).toUpperCase() + stepId.slice(1)}
           </Txt>
         </div>
@@ -79,12 +79,12 @@ interface TripwireDetailsProps {
 
 const TripwireDetails = ({ tripwire, isExpanded, onToggleExpand, hasMetadata }: TripwireDetailsProps) => {
   return (
-    <div className="rounded-lg border border-amber-500/30 bg-amber-950/20 overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-amber-500/30 bg-amber-950/20">
       {/* Header */}
       <div className="flex items-start gap-3 p-4">
-        <ShieldAlert className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium text-amber-200 mb-1">Content Blocked</p>
+        <ShieldAlert className="mt-0.5 size-5 shrink-0 text-amber-400" />
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-sm font-medium text-amber-200">Content Blocked</p>
           <p className="text-sm text-amber-300/90">{tripwire.reason || 'Tripwire triggered'}</p>
         </div>
       </div>
@@ -94,18 +94,18 @@ const TripwireDetails = ({ tripwire, isExpanded, onToggleExpand, hasMetadata }: 
         <>
           <button
             onClick={onToggleExpand}
-            className="w-full flex items-center gap-2 px-4 py-2 text-xs text-amber-400/70 hover:text-amber-400 hover:bg-amber-900/20 transition-colors border-t border-amber-500/20"
+            className="flex w-full items-center gap-2 border-t border-amber-500/20 px-4 py-2 text-xs text-amber-400/70 transition-colors hover:bg-amber-900/20 hover:text-amber-400"
           >
-            {isExpanded ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+            {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
             <span>Details</span>
           </button>
 
           {isExpanded && (
-            <div className="px-4 pb-4 space-y-3 border-t border-amber-500/20 bg-amber-950/10">
+            <div className="space-y-3 border-t border-amber-500/20 bg-amber-950/10 px-4 pb-4">
               {/* Retry indicator */}
               {tripwire.retry !== undefined && (
                 <div className="flex items-center gap-2 pt-3">
-                  <RefreshCw className="w-3.5 h-3.5 text-amber-400/60" />
+                  <RefreshCw className="size-3.5 text-amber-400/60" />
                   <span className="text-xs text-amber-300/70">
                     Retry:{' '}
                     {tripwire.retry ? (
@@ -120,10 +120,10 @@ const TripwireDetails = ({ tripwire, isExpanded, onToggleExpand, hasMetadata }: 
               {/* Processor ID */}
               {tripwire.processorId && (
                 <div className="flex items-center gap-2">
-                  <Tag className="w-3.5 h-3.5 text-amber-400/60" />
+                  <Tag className="size-3.5 text-amber-400/60" />
                   <span className="text-xs text-amber-300/70">
                     Processor:{' '}
-                    <code className="px-1.5 py-0.5 rounded bg-amber-900/30 text-amber-200 font-mono">
+                    <code className="rounded bg-amber-900/30 px-1.5 py-0.5 font-mono text-amber-200">
                       {tripwire.processorId}
                     </code>
                   </span>
@@ -133,8 +133,8 @@ const TripwireDetails = ({ tripwire, isExpanded, onToggleExpand, hasMetadata }: 
               {/* Custom metadata */}
               {tripwire.metadata !== undefined && tripwire.metadata !== null && (
                 <div className="pt-1">
-                  <p className="text-xs text-amber-400/60 mb-1.5">Metadata:</p>
-                  <pre className="text-xs text-amber-200/80 bg-amber-900/30 rounded p-2 overflow-x-auto font-mono">
+                  <p className="mb-1.5 text-xs text-amber-400/60">Metadata:</p>
+                  <pre className="overflow-x-auto rounded bg-amber-900/30 p-2 font-mono text-xs text-amber-200/80">
                     {String(JSON.stringify(tripwire.metadata, null, 2))}
                   </pre>
                 </div>

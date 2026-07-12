@@ -35,7 +35,7 @@ export function ExperimentTraceTimelineTimingCol({
     <HoverCard.Root openDelay={250}>
       <HoverCard.Trigger
         className={cn(
-          'h-12 p-2 grid grid-cols-[1fr_auto] gap-4 items-center cursor-help pr-3 rounded-r-lg col-span-2 xl:col-span-1 ',
+          'col-span-2 grid h-12 cursor-help grid-cols-[1fr_auto] items-center gap-4 rounded-r-lg p-2 pr-3 xl:col-span-1 ',
           '[&:hover>div]:bg-surface5',
           {
             'opacity-30 [&:hover]:opacity-60': isFaded,
@@ -44,10 +44,10 @@ export function ExperimentTraceTimelineTimingCol({
         )}
         style={{ border: '2px dashed blue' }}
       >
-        <div className={cn('w-full p-2.5 rounded-lg bg-surface4 transition-colors duration-1000 min-w-40')}>
-          <div className="relative w-full h-1.5 rounded-sm">
+        <div className={cn('w-full min-w-40 rounded-lg bg-surface4 p-2.5 transition-colors duration-1000')}>
+          <div className="relative h-1.5 w-full rounded-sm">
             <div
-              className={cn('bg-neutral1 absolute rounded-sm h-1.5 top-0')}
+              className={cn('absolute top-0 h-1.5 rounded-sm bg-neutral1')}
               style={{
                 width: percentageSpanLatency ? `${percentageSpanLatency}%` : '2px',
                 left: `${percentageSpanStartTime || 0}%`,
@@ -57,24 +57,24 @@ export function ExperimentTraceTimelineTimingCol({
           </div>
         </div>
 
-        <div className={cn('flex justify-end text-neutral3 text-ui-sm')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
+        <div className={cn('flex justify-end text-ui-sm text-neutral3')}>{(span.latency / 1000).toFixed(3)}&nbsp;s</div>
       </HoverCard.Trigger>
       <HoverCard.Portal>
         <HoverCard.Content
-          className="z-50 w-auto max-w-[25rem] rounded-md bg-surface4 p-2 px-4 pr-6 text-ui-sm text-neutral5 text-center border border-border1"
+          className="max-w-100 z-50 w-auto rounded-md border border-border1 bg-surface4 p-2 px-4 pr-6 text-center text-ui-sm text-neutral5"
           sideOffset={5}
           side="top"
         >
           <div
             className={cn(
-              'text-ui-md flex items-center gap-2 mb-4',
-              '[&>svg]:w-[1.25em] [&>svg]:h-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
+              'mb-4 flex items-center gap-2 text-ui-md',
+              '[&>svg]:size-[1.25em] [&>svg]:shrink-0 [&>svg]:opacity-50',
             )}
           >
             <TimerIcon /> Span Timing
           </div>
           <KeyValueList
-            className="[&>dd]:text-ui-md [&>dt]:text-ui-md [&>dt]:min-h-0 [&>dd]:min-h-0"
+            className="[&>dd]:min-h-0 [&>dd]:text-ui-md [&>dt]:min-h-0 [&>dt]:text-ui-md"
             data={[
               {
                 key: 'Latency',

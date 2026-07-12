@@ -55,9 +55,9 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
   // No login capability available - show auth required message without login option
   if (!capabilities.login) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
+      <div className="flex size-full items-center justify-center">
         <div className="flex flex-col items-center space-y-6 text-center">
-          <LogoWithoutText className="h-16 w-16 opacity-50" />
+          <LogoWithoutText className="size-16 opacity-50" />
           <div className="space-y-2">
             <h2 className="text-xl font-semibold text-neutral6">Authentication Required</h2>
             <p className="max-w-sm text-neutral3">
@@ -79,16 +79,16 @@ export function AuthRequired({ children, loginUrl = '/login', signupUrl = '/sign
   };
 
   return (
-    <div className="flex h-full w-full items-center justify-center">
+    <div className="flex size-full items-center justify-center">
       <div className="flex flex-col items-center space-y-6 text-center">
-        <LogoWithoutText className="h-16 w-16 opacity-50" />
+        <LogoWithoutText className="size-16 opacity-50" />
         <div className="space-y-2">
           <h2 className="text-xl font-semibold text-neutral6">Sign in to continue</h2>
           <p className="max-w-sm text-neutral3">You need to sign in to access this page.</p>
         </div>
         {capabilities.login.description && (
           <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface2 p-3 text-left">
-            <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
+            <Lock className="mt-0.5 size-4 shrink-0 text-neutral4" />
             <p className="max-w-sm text-sm text-neutral3">{capabilities.login.description}</p>
           </div>
         )}

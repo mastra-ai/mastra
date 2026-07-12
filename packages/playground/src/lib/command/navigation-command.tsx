@@ -71,7 +71,7 @@ const resultIconClassName =
   'mt-0.5 flex size-4 min-w-4 max-w-4 basis-4 shrink-0 items-center justify-center text-neutral3 transition-colors duration-150 ease-out group-data-[selected=true]:text-neutral6 [&>svg]:!size-4 [&>svg]:shrink-0';
 
 const CommandPath = ({ children }: { children: React.ReactNode }) => (
-  <span className="max-w-[13rem] truncate rounded-md border border-border1 bg-surface4/70 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3">
+  <span className="max-w-52 truncate rounded-md border border-border1 bg-surface4/70 px-1.5 py-0.5 font-mono text-[10px] leading-none text-neutral3">
     {children}
   </span>
 );
@@ -98,9 +98,9 @@ const NavigationCommandItem = ({
       <span className={resultIconClassName}>{icon}</span>
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="truncate text-ui-smd font-medium leading-ui-sm text-neutral6">{title}</span>
+          <span className="truncate text-ui-smd leading-ui-sm font-medium text-neutral6">{title}</span>
           {badge && (
-            <span className="shrink-0 rounded-md border border-border1 bg-surface4/60 px-1.5 py-0.5 text-[10px] font-medium uppercase leading-none text-neutral3">
+            <span className="shrink-0 rounded-md border border-border1 bg-surface4/60 px-1.5 py-0.5 text-[10px] leading-none font-medium text-neutral3 uppercase">
               {badge}
             </span>
           )}
@@ -190,7 +190,7 @@ const CommandRail = ({
   activeScope: CommandScope;
   onScopeChange: (scope: CommandScope) => void;
 }) => (
-  <aside className="navigation-command-surface navigation-command-surface-rail flex min-h-0 max-h-[min(14rem,32dvh)] flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none">
+  <aside className="navigation-command-surface navigation-command-surface-rail flex max-h-[min(14rem,32dvh)] min-h-0 flex-col overflow-hidden rounded-2xl border border-border1 bg-surface2 p-3 shadow-[0_8px_24px_-20px_rgb(0_0_0_/_0.55)] md:h-full md:max-h-none">
     <ScrollArea className="-m-1 min-h-0 flex-1 p-1" viewPortClassName="pr-1">
       <div className="flex flex-col gap-1">
         {scopeOptions.map(option => (
@@ -557,7 +557,7 @@ const EvaluationResults = ({
 };
 
 const CommandFooter = () => (
-  <div className="navigation-command-footer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pb-2 pt-5 text-ui-xs text-neutral3">
+  <div className="navigation-command-footer pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-end justify-between gap-3 px-4 pt-5 pb-2 text-ui-xs text-neutral3">
     <span className="truncate">Studio search</span>
     <span className="flex shrink-0 items-center gap-1.5">
       <Kbd className="min-w-5 px-1 text-[10px]">↑</Kbd>
@@ -694,11 +694,11 @@ export const NavigationCommand = () => {
       overlayClassName="bg-surface1/40 backdrop-blur-none"
       contentClassName="navigation-command-popup max-w-[min(56rem,calc(100vw-2rem))] overflow-visible border-none bg-transparent p-0 shadow-none backdrop-blur-none sm:max-w-[min(56rem,calc(100vw-2rem))]"
       commandClassName={cn(
-        'h-[min(42rem,calc(100dvh-2rem))] min-h-[min(30rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
+        'h-[min(42rem,calc(100dvh-2rem))] max-h-[calc(100dvh-2rem)] min-h-[min(30rem,calc(100dvh-2rem))] gap-2 overflow-visible rounded-none bg-transparent text-neutral4 shadow-none backdrop-blur-none',
         '[&_[data-slot=command-input-wrapper]]:h-14 [&_[data-slot=command-input-wrapper]]:shrink-0 [&_[data-slot=command-input-wrapper]]:rounded-xl [&_[data-slot=command-input-wrapper]]:border [&_[data-slot=command-input-wrapper]]:border-border1 [&_[data-slot=command-input-wrapper]]:bg-surface3 [&_[data-slot=command-input-wrapper]]:px-4 [&_[data-slot=command-input-wrapper]]:shadow-[0_6px_18px_-16px_rgb(0_0_0_/_0.55)]',
-        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)] [&_[data-slot=command-input-wrapper]_svg]:text-neutral4',
+        '[&_[data-slot=command-input-wrapper]]:pr-11 [&_[data-slot=command-input-wrapper]]:transition-[border-color,box-shadow] [&_[data-slot=command-input-wrapper]]:duration-150 [&_[data-slot=command-input-wrapper]]:ease-out [&_[data-slot=command-input-wrapper]_svg]:text-neutral4 [&_[data-slot=command-input-wrapper]:focus-within]:border-border1 [&_[data-slot=command-input-wrapper]:focus-within]:bg-surface3 [&_[data-slot=command-input-wrapper]:focus-within]:shadow-[0_8px_22px_-18px_rgb(0_0_0_/_0.6)]',
         '**:[[cmdk-input]]:h-full **:[[cmdk-input]]:text-ui-md',
-        '**:[[cmdk-group]]:p-0 **:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group-heading]]:pt-3',
+        '**:[[cmdk-group-heading]]:px-3 **:[[cmdk-group-heading]]:pt-3 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group]]:p-0',
         '**:[[cmdk-item]]:px-3 **:[[cmdk-item]]:py-2.5',
       )}
     >

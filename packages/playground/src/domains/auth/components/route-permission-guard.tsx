@@ -22,7 +22,7 @@ export function RoutePermissionGuard({ children }: { children: React.ReactNode }
   // already loaded and validated by RoutePermissionsGate higher in the tree.
   if (isLoading) {
     return (
-      <div className="flex h-full w-full items-center justify-center">
+      <div className="flex size-full items-center justify-center">
         <Spinner />
       </div>
     );

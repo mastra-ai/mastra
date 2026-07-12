@@ -17,27 +17,27 @@ export const SystemReminderBadge = ({ text }: SystemReminderBadgeProps) => {
   const title = reminder.path || reminder.type || 'System reminder';
 
   return (
-    <div className="rounded-lg border border-border1 bg-surface2 overflow-hidden">
+    <div className="overflow-hidden rounded-lg border border-border1 bg-surface2">
       <button
         type="button"
         onClick={() => setIsExpanded(value => !value)}
-        className="w-full flex items-start gap-3 px-4 py-3 text-left hover:bg-surface3 transition-colors"
+        className="flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-surface3"
       >
-        <FileText className="w-4 h-4 text-icon3 mt-0.5 shrink-0" />
+        <FileText className="text-icon3 mt-0.5 size-4 shrink-0" />
         <div className="min-w-0 flex-1">
           <p className="text-ui-sm leading-ui-sm font-medium text-neutral6">System reminder</p>
-          <p className="text-ui-xs leading-ui-xs text-neutral4 break-all mt-1">{title}</p>
+          <p className="mt-1 text-ui-xs leading-ui-xs break-all text-neutral4">{title}</p>
         </div>
         {isExpanded ? (
-          <ChevronDown className="w-4 h-4 text-icon3 shrink-0" />
+          <ChevronDown className="text-icon3 size-4 shrink-0" />
         ) : (
-          <ChevronRight className="w-4 h-4 text-icon3 shrink-0" />
+          <ChevronRight className="text-icon3 size-4 shrink-0" />
         )}
       </button>
 
       {isExpanded && reminder.body && (
-        <div className="border-t border-border1 px-4 py-3 bg-surface1">
-          <pre className="whitespace-pre-wrap break-words text-ui-xs leading-ui-md text-neutral5 font-mono">
+        <div className="border-t border-border1 bg-surface1 px-4 py-3">
+          <pre className="font-mono text-ui-xs leading-ui-md break-words whitespace-pre-wrap text-neutral5">
             {reminder.body}
           </pre>
         </div>

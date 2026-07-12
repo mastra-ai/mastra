@@ -41,14 +41,14 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
   return (
     <div className="rounded-md border border-border1 bg-surface2">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 w-full p-3 bg-surface3">
-          <ChevronRight className="h-4 w-4 text-neutral3" />
+        <CollapsibleTrigger className="flex w-full items-center gap-1 bg-surface3 p-3">
+          <ChevronRight className="size-4 text-neutral3" />
           <SectionTitle icon={<MemoryIcon className="text-neutral3" />}>
-            Memory{isEnabled && <span className="text-accent1 font-normal">(enabled)</span>}
+            Memory{isEnabled && <span className="font-normal text-accent1">(enabled)</span>}
           </SectionTitle>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="p-3 border-t border-border1 flex flex-col gap-4">
+          <div className="flex flex-col gap-4 border-t border-border1 p-3">
             <Controller
               name="memory.enabled"
               control={control}
@@ -219,7 +219,7 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
                 />
 
                 {observationalMemoryEnabled && (
-                  <div className="ml-2 pl-3 border-l-2 border-border1 flex flex-col gap-4">
+                  <div className="ml-2 flex flex-col gap-4 border-l-2 border-border1 pl-3">
                     <div className="flex flex-col gap-1.5">
                       <Label className="text-xs text-neutral4">Provider</Label>
                       <span className="text-xs text-neutral3">Provider for the observer and reflector agents</span>
@@ -303,14 +303,14 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                     {/* Observer Configuration */}
                     <Collapsible open={isObserverOpen} onOpenChange={setIsObserverOpen}>
-                      <CollapsibleTrigger className="flex items-center gap-1 w-full">
+                      <CollapsibleTrigger className="flex w-full items-center gap-1">
                         <ChevronRight
-                          className={`h-3 w-3 text-neutral3 transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
+                          className={`size-3 text-neutral3 transition-transform ${isObserverOpen ? 'rotate-90' : ''}`}
                         />
-                        <Label className="text-sm text-neutral5 cursor-pointer">Observer</Label>
+                        <Label className="cursor-pointer text-sm text-neutral5">Observer</Label>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="ml-2 pl-3 border-l-2 border-border1 mt-2 flex flex-col gap-4">
+                        <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border1 pl-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs text-neutral4">Provider Override</Label>
                             <span className="text-xs text-neutral3">
@@ -508,14 +508,14 @@ export function MemorySection({ control, setValue, readOnly = false }: MemorySec
 
                     {/* Reflector Configuration */}
                     <Collapsible open={isReflectorOpen} onOpenChange={setIsReflectorOpen}>
-                      <CollapsibleTrigger className="flex items-center gap-1 w-full">
+                      <CollapsibleTrigger className="flex w-full items-center gap-1">
                         <ChevronRight
-                          className={`h-3 w-3 text-neutral3 transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
+                          className={`size-3 text-neutral3 transition-transform ${isReflectorOpen ? 'rotate-90' : ''}`}
                         />
-                        <Label className="text-sm text-neutral5 cursor-pointer">Reflector</Label>
+                        <Label className="cursor-pointer text-sm text-neutral5">Reflector</Label>
                       </CollapsibleTrigger>
                       <CollapsibleContent>
-                        <div className="ml-2 pl-3 border-l-2 border-border1 mt-2 flex flex-col gap-4">
+                        <div className="mt-2 ml-2 flex flex-col gap-4 border-l-2 border-border1 pl-3">
                           <div className="flex flex-col gap-1.5">
                             <Label className="text-xs text-neutral4">Provider Override</Label>
                             <span className="text-xs text-neutral3">

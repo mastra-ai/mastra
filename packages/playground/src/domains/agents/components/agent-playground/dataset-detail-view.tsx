@@ -215,21 +215,21 @@ export function DatasetDetailView({
   ]);
 
   return (
-    <div className="flex flex-col h-full overflow-hidden">
+    <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-border1 space-y-3">
+      <div className="space-y-3 border-b border-border1 p-4">
         <div className="flex items-center justify-between">
           <div className="min-w-0">
-            <Txt variant="ui-sm" className="text-neutral5 font-medium block truncate">
+            <Txt variant="ui-sm" className="block truncate font-medium text-neutral5">
               {datasetName}
             </Txt>
             {datasetDescription && (
-              <Txt variant="ui-xs" className="text-neutral3 block mt-0.5 truncate">
+              <Txt variant="ui-xs" className="mt-0.5 block truncate text-neutral3">
                 {datasetDescription}
               </Txt>
             )}
             {datasetTags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
+              <div className="mt-1.5 flex flex-wrap gap-1">
                 {datasetTags.map(tag => (
                   <Chip key={tag} color={getTagColor(tag)} size="small">
                     {tag}
@@ -238,7 +238,7 @@ export function DatasetDetailView({
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex shrink-0 items-center gap-2">
             <Button variant="ghost" size="sm" onClick={onGenerate}>
               <Icon size="sm">
                 <Sparkles />
@@ -253,7 +253,7 @@ export function DatasetDetailView({
             >
               {isRunning ? (
                 <>
-                  <Spinner className="h-3 w-3" /> Running...
+                  <Spinner className="size-3" /> Running...
                 </>
               ) : (
                 <>
@@ -268,8 +268,8 @@ export function DatasetDetailView({
         </div>
         {/* Version selectors */}
         <div className="flex items-center gap-3">
-          <div className="flex-1 min-w-0">
-            <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
+          <div className="min-w-0 flex-1">
+            <Txt variant="ui-xs" className="mb-1 block text-neutral3">
               Dataset version
             </Txt>
             <Combobox
@@ -288,8 +288,8 @@ export function DatasetDetailView({
             />
           </div>
           {isAgentTarget && (
-            <div className="flex-1 min-w-0">
-              <Txt variant="ui-xs" className="text-neutral3 mb-1 block">
+            <div className="min-w-0 flex-1">
+              <Txt variant="ui-xs" className="mb-1 block text-neutral3">
                 Agent version
               </Txt>
               <div className="flex items-center gap-1">
@@ -321,20 +321,20 @@ export function DatasetDetailView({
       </div>
 
       {/* Scorers + Items + Past runs */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-        <ScrollArea className="flex-1 min-h-0">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <ScrollArea className="min-h-0 flex-1">
           {/* Scorers section (collapsible) */}
           <div className="border-b border-border1">
             <div className="flex items-center justify-between">
               <button
                 type="button"
                 onClick={() => setScorersCollapsed(prev => !prev)}
-                className="flex-1 px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+                className="flex flex-1 items-center gap-1 px-4 py-2 transition-colors hover:bg-surface3"
               >
                 <Icon size="sm" className="text-neutral3">
                   {scorersCollapsed ? <ChevronRight /> : <ChevronDown />}
                 </Icon>
-                <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+                <Txt variant="ui-xs" className="font-semibold tracking-wider text-neutral3 uppercase">
                   Scorers ({attachedScorerEntries.length})
                 </Txt>
               </button>
@@ -348,7 +348,7 @@ export function DatasetDetailView({
             </div>
             {!scorersCollapsed &&
               (attachedScorerEntries.length === 0 ? (
-                <div className="px-4 py-4 text-center">
+                <div className="p-4 text-center">
                   <Txt variant="ui-xs" className="text-neutral3">
                     No scorers attached to this dataset.
                   </Txt>
@@ -367,16 +367,16 @@ export function DatasetDetailView({
                     return (
                       <div
                         key={id}
-                        className="flex items-center justify-between px-4 py-1.5 hover:bg-surface3 transition-colors group"
+                        className="group flex items-center justify-between px-4 py-1.5 transition-colors hover:bg-surface3"
                       >
-                        <Txt variant="ui-xs" className="text-neutral5 truncate">
+                        <Txt variant="ui-xs" className="truncate text-neutral5">
                           {name}
                         </Txt>
                         <button
                           type="button"
                           onClick={() => handleDetachScorer(id)}
                           aria-label={`Detach "${name}" from this dataset`}
-                          className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity text-neutral3 hover:text-red-500 p-0.5"
+                          className="p-0.5 text-neutral3 opacity-0 transition-opacity group-hover:opacity-100 hover:text-red-500 focus-visible:opacity-100"
                           title="Detach scorer"
                         >
                           <Icon size="sm">
@@ -395,12 +395,12 @@ export function DatasetDetailView({
             <button
               type="button"
               onClick={() => setItemsCollapsed(prev => !prev)}
-              className="w-full px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+              className="flex w-full items-center gap-1 px-4 py-2 transition-colors hover:bg-surface3"
             >
               <Icon size="sm" className="text-neutral3">
                 {itemsCollapsed ? <ChevronRight /> : <ChevronDown />}
               </Icon>
-              <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+              <Txt variant="ui-xs" className="font-semibold tracking-wider text-neutral3 uppercase">
                 Items ({items.length})
               </Txt>
             </button>
@@ -420,13 +420,13 @@ export function DatasetDetailView({
                         <button
                           type="button"
                           onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                          className="w-full text-left px-4 py-2 hover:bg-surface3 transition-colors flex items-start gap-2"
+                          className="flex w-full items-start gap-2 px-4 py-2 text-left transition-colors hover:bg-surface3"
                         >
-                          <Icon size="sm" className="text-neutral3 mt-0.5 shrink-0">
+                          <Icon size="sm" className="mt-0.5 shrink-0 text-neutral3">
                             {isExpanded ? <ChevronDown /> : <ChevronRight />}
                           </Icon>
-                          <div className="flex-1 min-w-0 flex items-center gap-2">
-                            <Txt variant="ui-xs" className="text-neutral5 block truncate flex-1">
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <Txt variant="ui-xs" className="block flex-1 truncate text-neutral5">
                               {truncateValue(item.input)}
                             </Txt>
                             {item.expectedTrajectory != null && (
@@ -443,7 +443,7 @@ export function DatasetDetailView({
                   <div ref={setEndOfListElement} />
                   {isFetchingNextPage && (
                     <div className="flex items-center justify-center py-2">
-                      <Spinner className="h-3 w-3" />
+                      <Spinner className="size-3" />
                     </div>
                   )}
                 </div>
@@ -455,7 +455,7 @@ export function DatasetDetailView({
             <button
               type="button"
               onClick={() => setRunsCollapsed(prev => !prev)}
-              className="w-full px-4 py-2 flex items-center gap-1 hover:bg-surface3 transition-colors"
+              className="flex w-full items-center gap-1 px-4 py-2 transition-colors hover:bg-surface3"
             >
               <Icon size="sm" className="text-neutral3">
                 {runsCollapsed ? <ChevronRight /> : <ChevronDown />}
@@ -463,13 +463,13 @@ export function DatasetDetailView({
               <Icon size="sm" className="text-neutral3">
                 <Clock />
               </Icon>
-              <Txt variant="ui-xs" className="text-neutral3 font-semibold uppercase tracking-wider">
+              <Txt variant="ui-xs" className="font-semibold tracking-wider text-neutral3 uppercase">
                 Past Runs ({datasetExperiments.length})
               </Txt>
             </button>
             {!runsCollapsed &&
               (datasetExperiments.length === 0 ? (
-                <div className="px-4 py-4 text-center">
+                <div className="p-4 text-center">
                   <Txt variant="ui-xs" className="text-neutral3">
                     No experiment runs yet
                   </Txt>
@@ -481,11 +481,11 @@ export function DatasetDetailView({
                       key={exp.id}
                       type="button"
                       onClick={() => onViewExperiment(exp.id)}
-                      className="w-full text-left px-4 py-2 hover:bg-surface3 transition-colors flex items-center gap-2"
+                      className="flex w-full items-center gap-2 px-4 py-2 text-left transition-colors hover:bg-surface3"
                     >
                       <ExperimentStatusDot status={exp.status} />
-                      <div className="flex-1 min-w-0">
-                        <Txt variant="ui-xs" className="text-neutral5 block">
+                      <div className="min-w-0 flex-1">
+                        <Txt variant="ui-xs" className="block text-neutral5">
                           {exp.startedAt ? formatTimestamp(exp.startedAt) : 'Unknown'}
                         </Txt>
                         <Txt variant="ui-xs" className="text-neutral3">
@@ -523,7 +523,7 @@ export function DatasetDetailView({
           </DialogHeader>
           <DialogBody className="max-h-[50vh] overflow-y-auto">
             {unattachedScorerEntries.length === 0 ? (
-              <Txt variant="ui-sm" className="text-neutral3 py-4 text-center">
+              <Txt variant="ui-sm" className="py-4 text-center text-neutral3">
                 No scorers available to attach.
               </Txt>
             ) : (
@@ -533,7 +533,7 @@ export function DatasetDetailView({
                   placeholder="Search scorers..."
                   value={attachScorerSearch}
                   onChange={e => setAttachScorerSearch(e.target.value)}
-                  className="w-full px-3 py-1.5 text-sm rounded border border-border1 bg-surface2 text-text1 placeholder:text-neutral3 focus:outline-none focus:ring-1 focus:ring-accent1"
+                  className="w-full rounded border border-border1 bg-surface2 px-3 py-1.5 text-sm text-text1 placeholder:text-neutral3 focus:ring-1 focus:ring-accent1 focus:outline-none"
                 />
                 {unattachedScorerEntries
                   .filter(([id, scorer]) => {
@@ -547,7 +547,7 @@ export function DatasetDetailView({
                       <button
                         key={id}
                         type="button"
-                        className="w-full text-left px-3 py-2 rounded hover:bg-surface4 transition-colors"
+                        className="w-full rounded px-3 py-2 text-left transition-colors hover:bg-surface4"
                         onClick={async () => {
                           try {
                             await handleAttachScorer(id);
@@ -656,9 +656,9 @@ function ExpandedItemEditor({
 
   if (isEditing) {
     return (
-      <div className="px-4 pb-3 pl-10 space-y-2">
+      <div className="space-y-2 px-4 pb-3 pl-10">
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+          <Txt variant="ui-xs" className="font-medium text-neutral3">
             Input
           </Txt>
           <Textarea
@@ -669,7 +669,7 @@ function ExpandedItemEditor({
           />
         </div>
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+          <Txt variant="ui-xs" className="font-medium text-neutral3">
             Ground Truth
           </Txt>
           <Textarea
@@ -681,7 +681,7 @@ function ExpandedItemEditor({
           />
         </div>
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+          <Txt variant="ui-xs" className="font-medium text-neutral3">
             Expected Trajectory (JSON)
           </Txt>
           <Textarea
@@ -695,7 +695,7 @@ function ExpandedItemEditor({
         <div className="flex items-center gap-2 pt-1">
           <Button variant="primary" size="sm" onClick={handleSave} disabled={updateItem.isPending}>
             {updateItem.isPending ? (
-              <Spinner className="h-3 w-3" />
+              <Spinner className="size-3" />
             ) : (
               <Icon size="sm">
                 <Save />
@@ -715,31 +715,31 @@ function ExpandedItemEditor({
   }
 
   return (
-    <div className="px-4 pb-3 pl-10 space-y-2">
+    <div className="space-y-2 px-4 pb-3 pl-10">
       <div>
-        <Txt variant="ui-xs" className="text-neutral3 font-medium">
+        <Txt variant="ui-xs" className="font-medium text-neutral3">
           Input
         </Txt>
-        <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
+        <pre className="mt-1 max-h-48 overflow-auto rounded bg-surface1 px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap text-neutral5">
           {formatValue(item.input)}
         </pre>
       </div>
       {item.groundTruth !== undefined && item.groundTruth !== null && (
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+          <Txt variant="ui-xs" className="font-medium text-neutral3">
             Ground Truth
           </Txt>
-          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-48 overflow-y-auto mt-1">
+          <pre className="mt-1 max-h-48 overflow-auto rounded bg-surface1 px-2 py-1.5 text-xs wrap-break-word whitespace-pre-wrap text-neutral5">
             {formatValue(item.groundTruth)}
           </pre>
         </div>
       )}
       {item.expectedTrajectory != null && (
         <div>
-          <Txt variant="ui-xs" className="text-neutral3 font-medium">
+          <Txt variant="ui-xs" className="font-medium text-neutral3">
             Expected Trajectory
           </Txt>
-          <pre className="text-xs text-neutral5 bg-surface1 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-words max-h-48 overflow-y-auto mt-1">
+          <pre className="mt-1 max-h-48 overflow-auto rounded bg-surface1 px-2 py-1.5 text-xs break-words whitespace-pre-wrap text-neutral5">
             {formatValue(item.expectedTrajectory)}
           </pre>
         </div>
@@ -753,7 +753,7 @@ function ExpandedItemEditor({
         </Button>
         {isConfirmingDelete ? (
           <>
-            <Txt variant="ui-xs" className="text-negative1 font-medium">
+            <Txt variant="ui-xs" className="font-medium text-negative1">
               Delete this item?
             </Txt>
             <Button
@@ -763,7 +763,7 @@ function ExpandedItemEditor({
               disabled={deleteItem.isPending}
               className="text-negative1 hover:text-negative1"
             >
-              {deleteItem.isPending ? <Spinner className="h-3 w-3" /> : 'Yes'}
+              {deleteItem.isPending ? <Spinner className="size-3" /> : 'Yes'}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setIsConfirmingDelete(false)}>
               No
@@ -804,5 +804,5 @@ function ExperimentStatusDot({ status }: { status: string }) {
         : status === 'failed'
           ? 'bg-negative1'
           : 'bg-neutral3';
-  return <div className={cn('w-2 h-2 rounded-full shrink-0', color)} />;
+  return <div className={cn('size-2 shrink-0 rounded-full', color)} />;
 }

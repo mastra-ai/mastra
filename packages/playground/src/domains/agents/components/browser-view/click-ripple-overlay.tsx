@@ -27,7 +27,7 @@ export function ClickRippleOverlay({ ripples, onAnimationEnd }: ClickRippleOverl
       {ripples.map(ripple => (
         <span
           key={ripple.id}
-          className="absolute rounded-full pointer-events-none animate-click-ripple bg-accent1/40"
+          className="animate-click-ripple pointer-events-none absolute rounded-full bg-accent1/40"
           style={{
             left: ripple.x - RIPPLE_RADIUS,
             top: ripple.y - RIPPLE_RADIUS,

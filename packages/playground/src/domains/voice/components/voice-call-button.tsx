@@ -17,7 +17,7 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
         data-testid="voice-call-button"
         onClick={() => voiceCall.start()}
       >
-        <Phone className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+        <Phone className="size-5 text-neutral3 hover:text-neutral6" />
       </Button>
     );
   }
@@ -25,7 +25,7 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
   if (voiceCall.status === 'connecting') {
     return (
       <Button variant="default" size="icon-md" type="button" tooltip="Connecting…" data-testid="voice-call-button">
-        <Loader2 className="h-5 w-5 text-neutral3 animate-spin" />
+        <Loader2 className="size-5 animate-spin text-neutral3" />
       </Button>
     );
   }
@@ -39,7 +39,7 @@ export const VoiceCallButton = ({ voiceCall }: VoiceCallButtonProps) => {
       data-testid="voice-call-button"
       onClick={() => voiceCall.stop()}
     >
-      <PhoneOff className="h-5 w-5 text-red-500" />
+      <PhoneOff className="size-5 text-red-500" />
     </Button>
   );
 };

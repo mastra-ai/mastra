@@ -73,7 +73,7 @@ export default function Templates() {
         </HeaderTitle>
       </Header>
 
-      <div className={cn('overflow-y-auto w-full h-full px-8 pb-12 z-10')}>
+      <div className={cn('z-10 size-full overflow-y-auto px-8 pb-12')}>
         <TemplatesTools
           selectedTag={selectedTag}
           onTagChange={value => handleFilterChange(value, 'tag')}
@@ -84,13 +84,13 @@ export default function Templates() {
           searchTerm={searchTerm}
           onSearchChange={handleSearch}
           onReset={isFiltered ? handleReset : undefined}
-          className="max-w-[80rem]"
+          className="max-w-7xl"
           isLoading={isLoading}
         />
         <TemplatesList
           templates={filteredTemplates}
           linkComponent={Link}
-          className="max-w-[80rem] mx-auto"
+          className="mx-auto max-w-7xl"
           isLoading={isLoading}
         />
       </div>

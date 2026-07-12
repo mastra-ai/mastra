@@ -19,16 +19,16 @@ export function WorkflowStepDetailContent() {
   }
 
   return (
-    <div className="flex flex-col h-full" data-testid="workflow-step-detail-panel">
+    <div className="flex h-full flex-col" data-testid="workflow-step-detail-panel">
       {/* Header with title and close button */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border1 bg-surface1">
+      <div className="flex items-center justify-between border-b border-border1 bg-surface1 px-4 py-3">
         <div className="flex items-center gap-2">
-          {stepDetail.type === 'map-config' && <List className="w-4 h-4" style={{ color: BADGE_COLORS.map }} />}
+          {stepDetail.type === 'map-config' && <List className="size-4" style={{ color: BADGE_COLORS.map }} />}
           {stepDetail.type === 'nested-graph' && (
-            <WorkflowIcon className="w-4 h-4" style={{ color: BADGE_COLORS.workflow }} />
+            <WorkflowIcon className="size-4" style={{ color: BADGE_COLORS.workflow }} />
           )}
           <div className="flex flex-col">
-            <Txt variant="ui-md" className="text-neutral6 font-medium">
+            <Txt variant="ui-md" className="font-medium text-neutral6">
               {stepDetail.type === 'map-config' ? `${stepDetail.stepName} Config` : `${stepDetail.stepName} Workflow`}
             </Txt>
             {stepDetail.type === 'map-config' && stepDetail.stepId && stepDetail.stepId !== stepDetail.stepName && (
@@ -40,17 +40,17 @@ export function WorkflowStepDetailContent() {
         </div>
         <button
           onClick={closeStepDetail}
-          className="p-1 hover:bg-surface3 rounded transition-colors"
+          className="rounded p-1 transition-colors hover:bg-surface3"
           aria-label="Close"
         >
-          <X className="w-4 h-4 text-neutral3" />
+          <X className="size-4 text-neutral3" />
         </button>
       </div>
 
       <div className="flex-1 overflow-auto">
         {stepDetail.type === 'map-config' && stepDetail.mapConfig && <CodeDialogContent data={stepDetail.mapConfig} />}
         {stepDetail.type === 'nested-graph' && stepDetail.nestedGraph && (
-          <div className="h-full min-h-[400px]">
+          <div className="min-h-100 h-full">
             <ReactFlowProvider key={`nested-graph-${stepDetail.nestedGraph.fullStep}`}>
               <WorkflowNestedGraph
                 stepGraph={stepDetail.nestedGraph.stepGraph}
@@ -77,7 +77,7 @@ export function WorkflowStepDetailPanel() {
   }
 
   return (
-    <div className="h-full w-[400px] max-w-[45%] shrink-0 border-l border-border1 bg-surface2">
+    <div className="w-100 h-full max-w-[45%] shrink-0 border-l border-border1 bg-surface2">
       <WorkflowStepDetailContent />
     </div>
   );

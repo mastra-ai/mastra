@@ -239,7 +239,7 @@ export function SaveAsDatasetItemDialog({
               </SelectTrigger>
               <SelectContent>
                 {datasets.length === 0 ? (
-                  <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
+                  <div className="px-2 py-4 text-center text-sm text-neutral4">No datasets available</div>
                 ) : (
                   datasets.map(dataset => (
                     <SelectItem key={dataset.id} value={dataset.id}>
@@ -253,7 +253,7 @@ export function SaveAsDatasetItemDialog({
 
           <div className="grid gap-2">
             <Label htmlFor="item-input">Input (JSON) *</Label>
-            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
+            <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-30" />
           </div>
 
           <div className="grid gap-2">
@@ -262,7 +262,7 @@ export function SaveAsDatasetItemDialog({
               value={groundTruth}
               onChange={handleGroundTruthChange}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 
@@ -272,7 +272,7 @@ export function SaveAsDatasetItemDialog({
               value={expectedTrajectory}
               onChange={handleExpectedTrajectoryChange}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 
@@ -282,7 +282,7 @@ export function SaveAsDatasetItemDialog({
               value={toolMocks}
               onChange={handleToolMocksChange}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 

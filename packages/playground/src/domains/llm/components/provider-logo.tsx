@@ -55,7 +55,7 @@ export const ProviderLogo = ({ providerId, className = '', size = 20, style }: P
     }
     return (
       <div
-        className={cn('bg-surface4 rounded shrink-0', className)}
+        className={cn('shrink-0 rounded bg-surface4', className)}
         style={{ width: size, height: size, minWidth: size, minHeight: size, ...style }}
       />
     );

@@ -39,14 +39,14 @@ export function AgentVersionPanel({
   const activeVersionNumber = activeVersion?.versionNumber;
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="px-3 py-3 border-b border-border1">
+    <div className="flex h-full flex-col">
+      <div className="border-b border-border1 p-3">
         <Txt variant="ui-sm" className="font-medium text-neutral5">
           Version history
         </Txt>
       </div>
 
-      <ScrollArea className="flex-1 min-h-0">
+      <ScrollArea className="min-h-0 flex-1">
         {isLoading ? (
           <div className="px-3 py-4">
             <Txt variant="ui-xs" className="text-neutral2">
@@ -67,9 +67,9 @@ export function AgentVersionPanel({
                     type="button"
                     onClick={() => onVersionSelect(version.id)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 text-sm transition-colors border-l-2',
+                      'w-full border-l-2 px-3 py-2.5 text-left text-sm transition-colors',
                       isSelected
-                        ? 'bg-surface2 text-neutral5 border-accent1'
+                        ? 'border-accent1 bg-surface2 text-neutral5'
                         : 'border-transparent text-neutral3 hover:bg-surface3 hover:text-neutral5',
                     )}
                   >
@@ -80,7 +80,7 @@ export function AgentVersionPanel({
                       {isPublished && <Badge variant="success">Published</Badge>}
                       {isDraft && <Badge variant="info">Draft</Badge>}
                     </div>
-                    <Txt variant="ui-xs" className="text-neutral2 mt-0.5">
+                    <Txt variant="ui-xs" className="mt-0.5 text-neutral2">
                       {formatTimestamp(version.createdAt)}
                     </Txt>
                   </button>

@@ -362,7 +362,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
               <div className="space-y-1">
                 <Label>Model</Label>
                 <div className="flex items-center gap-1.5">
-                  <div className="w-[160px]">
+                  <div className="w-40">
                     <LLMProviders
                       value={analyzeProvider}
                       onValueChange={value => {
@@ -438,12 +438,12 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
           <DialogHeader>
             <DialogTitle>Proposed Tag Assignments</DialogTitle>
             {analysisModelId && (
-              <Txt variant="ui-xs" className="text-neutral3 mt-1">
+              <Txt variant="ui-xs" className="mt-1 text-neutral3">
                 Analyzed by <span className="font-medium text-neutral4">{analysisModelId}</span>
               </Txt>
             )}
           </DialogHeader>
-          <DialogBody className="max-h-[400px] overflow-y-auto space-y-2">
+          <DialogBody className="max-h-100 space-y-2 overflow-y-auto">
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               const inputStr =
@@ -452,7 +452,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                 <div
                   key={proposal.itemId}
                   className={cn(
-                    'flex items-start gap-2 p-2 rounded-md border border-border1',
+                    'flex items-start gap-2 rounded-md border border-border1 p-2',
                     proposal.accepted ? 'bg-surface1' : 'bg-surface1 opacity-50',
                   )}
                 >
@@ -465,11 +465,11 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     }}
                     className="mt-1"
                   />
-                  <div className="flex-1 min-w-0">
-                    <Txt variant="ui-xs" className="text-neutral4 truncate block">
+                  <div className="min-w-0 flex-1">
+                    <Txt variant="ui-xs" className="block truncate text-neutral4">
                       {inputStr || `Item ${proposal.itemId.slice(0, 8)}`}
                     </Txt>
-                    <div className="flex flex-wrap gap-1 mt-1">
+                    <div className="mt-1 flex flex-wrap gap-1">
                       {proposal.tags.map((tag, tagIdx) => (
                         <ProposalTag
                           key={`${tag}-${tagIdx}`}
@@ -492,7 +492,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                       ))}
                     </div>
                     {proposal.reason && (
-                      <Txt variant="ui-xs" className="text-neutral3 mt-1 italic">
+                      <Txt variant="ui-xs" className="mt-1 text-neutral3 italic">
                         {proposal.reason}
                       </Txt>
                     )}
@@ -530,7 +530,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     {activeFilterCount > 0 && (
                       <span
                         className={cn(
-                          'ml-0.5 inline-flex items-center justify-center rounded-full bg-accent1/50 text-neutral5 text-ui-sm w-5 h-5',
+                          'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-neutral5',
                         )}
                       >
                         {activeFilterCount}
@@ -657,7 +657,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     <DropdownMenu.Trigger asChild>
                       <Button disabled={isAnalyzing}>
                         {isAnalyzing ? (
-                          <Spinner className="w-4 h-4" />
+                          <Spinner className="size-4" />
                         ) : (
                           <Icon size="sm">
                             <ChevronDown />
@@ -723,16 +723,16 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
           </Column.Toolbar>
 
           {isLoadingDisplay ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Spinner className="h-4 w-4" />
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner className="size-4" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center px-8">
-                <Txt variant="ui-sm" className="text-neutral3 block">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="px-8 text-center">
+                <Txt variant="ui-sm" className="block text-neutral3">
                   {showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
+                <Txt variant="ui-xs" className="mt-2 block text-neutral3">
                   {showCompleted
                     ? 'Items marked as complete will appear here for auditing.'
                     : 'When you identify failures in experiment results, send them here to annotate, cluster, and create scorers from failure patterns.'}
@@ -774,7 +774,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     {/* Comment preview */}
                     <DataList.Cell height="compact" className="min-w-0">
                       {item.comment ? (
-                        <Txt variant="ui-xs" className="text-neutral3 truncate">
+                        <Txt variant="ui-xs" className="truncate text-neutral3">
                           {item.comment}
                         </Txt>
                       ) : (
@@ -787,7 +787,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                     {/* Tags */}
                     <DataList.Cell height="compact" className="min-w-0">
                       {item.tags.length > 0 ? (
-                        <Txt variant="ui-xs" className="text-neutral4 truncate">
+                        <Txt variant="ui-xs" className="truncate text-neutral4">
                           {item.tags.join(', ')}
                         </Txt>
                       ) : (
@@ -823,7 +823,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                           <Icon size="sm" className="text-neutral3">
                             <GaugeIcon />
                           </Icon>
-                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
+                          <Txt variant="ui-xs" className="font-mono text-neutral4">
                             {scoreEntries[0][1].toFixed(2)}
                           </Txt>
                           {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
@@ -851,7 +851,7 @@ export function AgentPlaygroundReview({ agentId, onCreateScorer }: AgentPlaygrou
                           role="img"
                           aria-label={item.error ? 'Error' : 'Success'}
                           title={item.error ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
+                          className={cn('size-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
                         />
                       </DataList.Cell>
                     )}

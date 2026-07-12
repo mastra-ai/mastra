@@ -12,13 +12,13 @@ export const WorkflowCardStatusIcon = ({ displayStatus, hasStep }: WorkflowCardS
   const strokeWidth = 2;
 
   return (
-    <Icon size="sm" className="inline-flex h-5 w-5 shrink-0 items-center justify-center">
+    <Icon size="sm" className="inline-flex size-5 shrink-0 items-center justify-center">
       {displayStatus === 'tripwire' && <ShieldAlert className="text-amber-400" strokeWidth={strokeWidth} />}
       {displayStatus === 'failed' && <CircleX className="text-accent2" strokeWidth={strokeWidth} />}
       {displayStatus === 'success' && <CircleCheck className="text-accent1" strokeWidth={strokeWidth} />}
       {displayStatus === 'suspended' && <PauseIcon className="text-accent3" strokeWidth={strokeWidth} />}
       {displayStatus === 'waiting' && <HourglassIcon className="text-accent5" strokeWidth={strokeWidth} />}
-      {displayStatus === 'running' && <Loader2 className="text-accent6 animate-spin" strokeWidth={strokeWidth} />}
+      {displayStatus === 'running' && <Loader2 className="animate-spin text-accent6" strokeWidth={strokeWidth} />}
       {!displayStatus && !hasStep && <CircleDashed className="text-neutral2" strokeWidth={strokeWidth} />}
     </Icon>
   );

@@ -47,7 +47,7 @@ export const Tools = ({ editable = true, availableAgentTools = [] }: ToolsProps)
       return <TwoPanePickerSkeleton testId="tools-card-picker-loading" />;
     }
     return (
-      <div className="px-6 py-6" data-testid="tools-empty-state">
+      <div className="p-6" data-testid="tools-empty-state">
         <ToolListEmptyState details={'No tools available in this project'} />
       </div>
     );

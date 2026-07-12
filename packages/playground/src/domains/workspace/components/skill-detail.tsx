@@ -29,19 +29,19 @@ function getSourceInfo(source: SkillSource): { icon: React.ReactNode; label: str
   switch (source.type) {
     case 'external':
       return {
-        icon: <Package className="h-3.5 w-3.5" />,
+        icon: <Package className="size-3.5" />,
         label: 'External Package',
         path: source.packagePath,
       };
     case 'local':
       return {
-        icon: <Home className="h-3.5 w-3.5" />,
+        icon: <Home className="size-3.5" />,
         label: 'Local Project',
         path: source.projectPath,
       };
     case 'managed':
       return {
-        icon: <Server className="h-3.5 w-3.5" />,
+        icon: <Server className="size-3.5" />,
         label: 'Managed',
         path: source.mastraPath,
       };
@@ -66,28 +66,28 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
   };
 
   return (
-    <div className="space-y-6 min-w-0 overflow-hidden">
+    <div className="min-w-0 space-y-6 overflow-hidden">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <div className="p-3 rounded-lg bg-surface5">
-          <SkillIcon className="h-6 w-6 text-neutral4" />
+        <div className="rounded-lg bg-surface5 p-3">
+          <SkillIcon className="size-6 text-neutral4" />
         </div>
         <div className="flex-1">
           <h1 className="text-xl font-semibold text-neutral6">{skill.name}</h1>
-          <p className="text-sm text-neutral4 mt-1">{skill.description}</p>
+          <p className="mt-1 text-sm text-neutral4">{skill.description}</p>
         </div>
       </div>
 
       {/* Metadata */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <MetadataCard label="Source" value={sourceInfo.label} icon={sourceInfo.icon} />
-        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen className="h-3.5 w-3.5" />} />
+        <MetadataCard label="Path" value={skill.path} icon={<FolderOpen className="size-3.5" />} />
         {skill.license && <MetadataCard label="License" value={skill.license} />}
         {skill.compatibility != null && <MetadataCard label="Compatibility" value={skill.compatibility} />}
         <MetadataCard
           label="References"
           value={`${skill.references.length} files`}
-          icon={<FileText className="h-3.5 w-3.5" />}
+          icon={<FileText className="size-3.5" />}
         />
       </div>
 
@@ -102,16 +102,16 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               e.stopPropagation();
               setShowRawInstructions(!showRawInstructions);
             }}
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-xs text-neutral4 hover:text-neutral5 hover:bg-surface4 transition-colors"
+            className="flex items-center gap-1.5 rounded px-2 py-1 text-xs text-neutral4 transition-colors hover:bg-surface4 hover:text-neutral5"
             title={showRawInstructions ? 'Show rendered' : 'Show source'}
           >
-            {showRawInstructions ? <Eye className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
+            {showRawInstructions ? <Eye className="size-3.5" /> : <FileCode2 className="size-3.5" />}
             {showRawInstructions ? 'Rendered' : 'Source'}
           </button>
         }
       >
         {showRawInstructions ? (
-          <div style={{ backgroundColor: 'black' }} className="rounded-lg overflow-x-auto w-0 min-w-full">
+          <div style={{ backgroundColor: 'black' }} className="w-0 min-w-full overflow-x-auto rounded-lg">
             <SyntaxHighlighter
               language="markdown"
               style={coldarkDark}
@@ -142,9 +142,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
               <button
                 key={ref}
                 onClick={() => onReferenceClick?.(ref)}
-                className="flex items-center gap-2 w-full px-3 py-2 rounded hover:bg-surface4 text-left transition-colors"
+                className="flex w-full items-center gap-2 rounded px-3 py-2 text-left transition-colors hover:bg-surface4"
               >
-                <FileText className="h-4 w-4 text-neutral3" />
+                <FileText className="size-4 text-neutral3" />
                 <span className="text-sm text-neutral5">{ref}</span>
               </button>
             ))}
@@ -161,8 +161,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.scripts.map(script => (
-              <div key={script} className="flex items-center gap-2 px-3 py-2 rounded bg-surface3">
-                <Code className="h-4 w-4 text-neutral3" />
+              <div key={script} className="flex items-center gap-2 rounded bg-surface3 px-3 py-2">
+                <Code className="size-4 text-neutral3" />
                 <span className="text-sm text-neutral5">{script}</span>
               </div>
             ))}
@@ -179,8 +179,8 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
         >
           <div className="space-y-1">
             {skill.assets.map(asset => (
-              <div key={asset} className="flex items-center gap-2 px-3 py-2 rounded bg-surface3">
-                <Image className="h-4 w-4 text-neutral3" />
+              <div key={asset} className="flex items-center gap-2 rounded bg-surface3 px-3 py-2">
+                <Image className="size-4 text-neutral3" />
                 <span className="text-sm text-neutral5">{asset}</span>
               </div>
             ))}
@@ -189,9 +189,9 @@ export function SkillDetail({ skill, rawSkillMd, onReferenceClick }: SkillDetail
       )}
 
       {/* Path */}
-      <div className="pt-4 border-t border-border1">
+      <div className="border-t border-border1 pt-4">
         <p className="text-xs text-neutral3">
-          Path: <code className="px-1 py-0.5 rounded bg-surface4">{skill.path}</code>
+          Path: <code className="rounded bg-surface4 px-1 py-0.5">{skill.path}</code>
         </p>
       </div>
     </div>
@@ -231,11 +231,11 @@ function formatDisplayValue(value: unknown): string {
 function MetadataCard({ label, value, icon }: { label: string; value: unknown; icon?: React.ReactNode }) {
   const displayValue = formatDisplayValue(value);
   return (
-    <div className="p-3 rounded-lg bg-surface3">
-      <p className="text-xs text-neutral3 mb-1">{label}</p>
+    <div className="rounded-lg bg-surface3 p-3">
+      <p className="mb-1 text-xs text-neutral3">{label}</p>
       <div className="flex items-center gap-1.5">
         {icon && <span className="text-neutral4">{icon}</span>}
-        <p className="text-sm font-medium text-neutral5 truncate" title={displayValue}>
+        <p className="truncate text-sm font-medium text-neutral5" title={displayValue}>
           {displayValue}
         </p>
       </div>
@@ -257,19 +257,19 @@ function CollapsibleSection({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border border-border1 rounded-lg overflow-hidden min-w-0">
-      <div className="flex items-center bg-surface3 hover:bg-surface4 transition-colors">
-        <button onClick={onToggle} className="flex items-center gap-2 flex-1 px-4 py-3">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border1">
+      <div className="flex items-center bg-surface3 transition-colors hover:bg-surface4">
+        <button onClick={onToggle} className="flex flex-1 items-center gap-2 px-4 py-3">
           {isExpanded ? (
-            <ChevronDown className="h-4 w-4 text-neutral3" />
+            <ChevronDown className="size-4 text-neutral3" />
           ) : (
-            <ChevronRight className="h-4 w-4 text-neutral3" />
+            <ChevronRight className="size-4 text-neutral3" />
           )}
           <span className="text-sm font-medium text-neutral5">{title}</span>
         </button>
         {headerAction && <div className="pr-3">{headerAction}</div>}
       </div>
-      {isExpanded && <div className="p-4 bg-surface2 overflow-x-auto w-0 min-w-full">{children}</div>}
+      {isExpanded && <div className="w-0 min-w-full overflow-x-auto bg-surface2 p-4">{children}</div>}
     </div>
   );
 }

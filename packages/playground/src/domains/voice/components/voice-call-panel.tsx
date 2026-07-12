@@ -29,21 +29,21 @@ export const VoiceCallPanel = ({ voiceCall }: VoiceCallPanelProps) => {
   return (
     <div
       data-testid="voice-call-panel"
-      className="max-w-3xl w-full mx-auto mb-2 rounded-[16px] border border-border2/40 bg-surface3 px-4 py-3"
+      className="mx-auto mb-2 w-full max-w-3xl rounded-[16px] border border-border2/40 bg-surface3 px-4 py-3"
     >
       <div className="flex items-center gap-2">
         <span
           className={cn(
-            'h-2 w-2 rounded-full',
+            'size-2 rounded-full',
             voiceCall.status === 'connecting' && 'bg-neutral3',
-            voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'bg-accent1 animate-pulse',
+            voiceCall.status === 'active' && voiceCall.agentState === 'speaking' && 'animate-pulse bg-accent1',
             voiceCall.status === 'active' && voiceCall.agentState !== 'speaking' && 'bg-green-500',
           )}
         />
         <span className="text-ui-sm text-neutral4">{stateLabel}</span>
       </div>
       {lastUserCaption && (
-        <p className="mt-2 text-ui-sm text-neutral3 truncate" data-testid="voice-caption-user">
+        <p className="mt-2 truncate text-ui-sm text-neutral3" data-testid="voice-caption-user">
           {lastUserCaption.text}
         </p>
       )}

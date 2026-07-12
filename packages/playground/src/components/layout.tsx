@@ -36,7 +36,7 @@ function MobileNavbar() {
   };
 
   return (
-    <header className="lg:hidden sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border1 bg-surface1 px-3">
+    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border1 bg-surface1 px-3 lg:hidden">
       <div className="flex min-w-0 items-center gap-3">
         <MainSidebar.MobileTrigger />
         <span className="flex min-w-0 items-center gap-2">
@@ -74,7 +74,7 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
       <NavigationCommand />
       <div className={cn('h-full', shouldShowSidebar && 'lg:grid lg:grid-cols-[auto_1fr] lg:grid-rows-[1fr]')}>
         {shouldShowSidebar && <AppSidebar />}
-        <div className="flex flex-col h-full min-h-0">
+        <div className="flex h-full min-h-0 flex-col">
           {shouldShowSidebar && <MobileNavbar />}
           {shouldShowSidebar && (
             <div className="mx-1.5 mt-1 shrink-0 lg:mx-2 lg:mt-1.5">
@@ -84,8 +84,8 @@ function LayoutContent({ children }: { children: React.ReactNode }) {
           <PageHeadingContext.Provider value={pageHeading}>
             <div
               className={cn(
-                'ml-0 mx-1.5 mb-1.5 flex-1 min-h-0 overflow-y-auto [--studio-frame-radius:1.5rem] [--studio-frame-inset:0.5rem] rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame lg:mx-2 lg:mb-2 lg:ml-0',
-                shouldShowSidebar ? 'mt-0' : 'mt-1.5 lg:mt-2 h-[calc(100%-1.5rem)]',
+                'mx-1.5 mb-1.5 ml-0 min-h-0 flex-1 overflow-y-auto rounded-studio-frame border border-border1 bg-surface2 shadow-main-frame [--studio-frame-inset:0.5rem] [--studio-frame-radius:1.5rem] lg:mx-2 lg:mb-2 lg:ml-0',
+                shouldShowSidebar ? 'mt-0' : 'mt-1.5 h-[calc(100%-1.5rem)] lg:mt-2',
               )}
             >
               <AuthRequired>
@@ -103,7 +103,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const { experimentalUIEnabled } = useExperimentalUIEnabled();
 
   return (
-    <div className="bg-surface1 font-sans h-screen">
+    <div className="h-screen bg-surface1 font-sans">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="dark">
         <TooltipProvider delayDuration={0}>

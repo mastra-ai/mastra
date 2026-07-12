@@ -369,7 +369,7 @@ function EditModeContent({
       <div className="space-y-6">
         <div className="space-y-2">
           <Label>Input (JSON) *</Label>
-          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
+          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-30" />
         </div>
 
         <div className="space-y-2">
@@ -378,7 +378,7 @@ function EditModeContent({
             value={groundTruthValue}
             onChange={setGroundTruthValue}
             showCopyButton={false}
-            className="min-h-[100px]"
+            className="min-h-25"
           />
         </div>
 
@@ -388,7 +388,7 @@ function EditModeContent({
             value={trajectoryValue}
             onChange={setTrajectoryValue}
             showCopyButton={false}
-            className="min-h-[80px]"
+            className="min-h-20"
           />
         </div>
 
@@ -398,18 +398,13 @@ function EditModeContent({
             value={requestContextValue}
             onChange={setRequestContextValue}
             showCopyButton={false}
-            className="min-h-[80px]"
+            className="min-h-20"
           />
         </div>
 
         <div className="space-y-2">
           <Label>Metadata (JSON, optional)</Label>
-          <CodeEditor
-            value={metadataValue}
-            onChange={setMetadataValue}
-            showCopyButton={false}
-            className="min-h-[80px]"
-          />
+          <CodeEditor value={metadataValue} onChange={setMetadataValue} showCopyButton={false} className="min-h-20" />
         </div>
 
         <div className="flex justify-end gap-2 pt-4">

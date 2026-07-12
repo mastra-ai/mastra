@@ -91,7 +91,7 @@ export const AskUserBadge = ({ toolCallId, suspendPayload, result }: AskUserBadg
         </div>
 
         <div className="flex flex-col gap-4 p-4">
-          <Txt as="p" variant="ui-xs" className="uppercase tracking-wide text-neutral3">
+          <Txt as="p" variant="ui-xs" className="tracking-wide text-neutral3 uppercase">
             Question
           </Txt>
           <Txt as="p" variant="ui-lg" className="text-neutral6">

@@ -63,8 +63,8 @@ export const AgentLayout = ({
   // side slots move into edge drawers and the main content takes the full width.
   if (isMobile) {
     return (
-      <div className="relative h-full w-full overflow-hidden">
-        <div className="h-full w-full min-w-0">{children}</div>
+      <div className="relative size-full overflow-hidden">
+        <div className="size-full min-w-0">{children}</div>
         {leftSlot && (
           <PanelDrawer direction="left" label={leftDrawerLabel}>
             {leftSlot}
@@ -81,8 +81,8 @@ export const AgentLayout = ({
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden">
-      <Group className="h-full min-h-0 w-full min-w-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+    <div className="relative size-full overflow-hidden">
+      <Group className="size-full min-h-0 min-w-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
         {leftSlot && (
           <Panel
             id="left-slot"
@@ -97,7 +97,7 @@ export const AgentLayout = ({
         )}
 
         {leftSlot && <PanelSeparator />}
-        <Panel id="main-slot" className="grid min-w-0 overflow-y-auto relative">
+        <Panel id="main-slot" className="relative grid min-w-0 overflow-y-auto">
           {children}
         </Panel>
         {rightSlot && (

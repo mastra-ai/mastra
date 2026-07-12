@@ -72,11 +72,11 @@ export function ExperimentResultsList({
                 <DataList.Cell height="compact">
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <div className="flex items-center justify-center w-10 relative bg-transparent h-full">
+                      <div className="relative flex h-full w-10 items-center justify-center bg-transparent">
                         <div
                           role="img"
                           aria-label={hasError ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')}
+                          className={cn('size-2 rounded-full', hasError ? 'bg-red-700' : 'bg-green-600')}
                         />
                       </div>
                     </TooltipTrigger>
@@ -90,7 +90,7 @@ export function ExperimentResultsList({
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
                   return (
-                    <DataList.Cell key={scorerId} height="compact" className="font-mono text-neutral3 text-ui-smd">
+                    <DataList.Cell key={scorerId} height="compact" className="font-mono text-ui-smd text-neutral3">
                       {score != null ? score.score.toFixed(3) : '-'}
                     </DataList.Cell>
                   );

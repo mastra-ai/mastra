@@ -17,13 +17,13 @@ export function WorkflowLoopResultNode({ data }: NodeProps<LoopResultNode>) {
     <div
       data-testid="workflow-loop-result-node"
       data-workflow-step-status={result ? 'success' : 'failed'}
-      className={cn('bg-surface4 rounded-md w-[274px]')}
+      className={cn('w-[274px] rounded-md bg-surface4')}
       data-workflow-node
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
       <div className="p-2">
-        <div className="text-sm bg-surface5 flex items-center gap-1.5 rounded-sm  p-2">
-          {result ? <CircleCheck className="text-current w-4 h-4" /> : <CircleX className="text-current w-4 h-4" />}
+        <div className="flex items-center gap-1.5 rounded-sm bg-surface5 p-2  text-sm">
+          {result ? <CircleCheck className="size-4 text-current" /> : <CircleX className="size-4 text-current" />}
           <Txt variant="ui-xs" className="text-neutral6 capitalize">
             {String(result)}
           </Txt>

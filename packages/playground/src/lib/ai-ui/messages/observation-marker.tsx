@@ -72,13 +72,13 @@ const ObservationStartMarker = ({ data }: { data: DataOmObservationStartPart['da
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
-        'bg-accent1/10 border border-accent1/20 text-accent1',
+        'my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1',
+        'border border-accent1/20 bg-accent1/10 text-accent1',
         'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-observation-start"
     >
-      <Loader2 className="h-3 w-3 animate-spin" />
+      <Loader2 className="size-3 animate-spin" />
       <span>Observing {tokensK}k tokens...</span>
     </div>
   );
@@ -100,13 +100,13 @@ const ObservationEndMarker = ({ data }: { data: DataOmObservationEndPart['data']
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
-        'bg-green-500/10 border border-green-500/20 text-green-600 dark:text-green-400',
+        'my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1',
+        'border border-green-500/20 bg-green-500/10 text-green-600 dark:text-green-400',
         'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-observation-end"
     >
-      <CheckCircle2 className="h-3 w-3" />
+      <CheckCircle2 className="size-3" />
       <span>
         Observed {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
         {extractedCount > 0 ? ` · ${extractedCount} extracted` : ''}
@@ -125,14 +125,14 @@ const ObservationFailedMarker = ({ data }: { data: DataOmObservationFailedPart['
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
-        'bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400',
+        'my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1',
+        'border border-red-500/20 bg-red-500/10 text-red-600 dark:text-red-400',
         'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-observation-failed"
       title={data.error}
     >
-      <XCircle className="h-3 w-3" />
+      <XCircle className="size-3" />
       <span>Observation failed ({tokensK}k tokens)</span>
     </div>
   );
@@ -148,14 +148,14 @@ const BufferingStartMarker = ({ data }: { data: DataOmBufferingStartPart['data']
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
-        'bg-purple-500/10 border border-dashed border-purple-500/40 text-purple-600 dark:text-purple-400',
+        'my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1',
+        'border border-dashed border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-400',
         'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-buffering-start"
     >
-      <Loader2 className="h-3 w-3 animate-spin" />
-      <CloudCog className="h-3 w-3" />
+      <Loader2 className="size-3 animate-spin" />
+      <CloudCog className="size-3" />
       <span>
         {label} ~{tokensK}k tokens...
       </span>
@@ -177,13 +177,13 @@ const BufferingEndMarker = ({ data }: { data: DataOmBufferingEndPart['data'] }) 
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
-        'bg-purple-500/10 border border-dashed border-purple-500/40 text-purple-600 dark:text-purple-400',
+        'my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1',
+        'border border-dashed border-purple-500/40 bg-purple-500/10 text-purple-600 dark:text-purple-400',
         'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-buffering-end"
     >
-      <CloudCog className="h-3 w-3" />
+      <CloudCog className="size-3" />
       <span>
         Buffered {tokensK}k tokens → {compressionRatio}% compression ({durationSec}s)
         {extractedCount > 0 ? ` · ${extractedCount} extracted` : ''}
@@ -200,14 +200,14 @@ const BufferingFailedMarker = ({ data }: { data: DataOmBufferingFailedPart['data
   return (
     <div
       className={cn(
-        'inline-flex items-center gap-1.5 px-2 py-1 my-1 rounded-md',
-        'bg-red-500/10 border border-dashed border-red-500/40 text-red-600 dark:text-red-400',
+        'my-1 inline-flex items-center gap-1.5 rounded-md px-2 py-1',
+        'border border-dashed border-red-500/40 bg-red-500/10 text-red-600 dark:text-red-400',
         'text-ui-xs leading-ui-xs',
       )}
       data-testid="om-buffering-failed"
       title={data.error}
     >
-      <XCircle className="h-3 w-3" />
+      <XCircle className="size-3" />
       <span>Buffering failed</span>
     </div>
   );
@@ -221,8 +221,8 @@ export const ObservationIndicator = ({ part }: { part: OmObservationMarkerPart }
   if (part.type === 'data-om-observation-start') {
     return (
       <span className="inline-flex items-center gap-1 text-accent1" title="Observing...">
-        <Brain className="h-3 w-3" />
-        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+        <Brain className="size-3" />
+        <Loader2 className="size-2.5 animate-spin" />
       </span>
     );
   }
@@ -230,7 +230,7 @@ export const ObservationIndicator = ({ part }: { part: OmObservationMarkerPart }
   if (part.type === 'data-om-observation-end') {
     return (
       <span className="inline-flex items-center text-green-500" title="Observation complete">
-        <Brain className="h-3 w-3" />
+        <Brain className="size-3" />
       </span>
     );
   }
@@ -238,7 +238,7 @@ export const ObservationIndicator = ({ part }: { part: OmObservationMarkerPart }
   if (part.type === 'data-om-observation-failed') {
     return (
       <span className="inline-flex items-center text-red-500" title={`Observation failed: ${part.data.error}`}>
-        <Brain className="h-3 w-3" />
+        <Brain className="size-3" />
       </span>
     );
   }

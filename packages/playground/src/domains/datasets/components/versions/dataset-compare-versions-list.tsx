@@ -49,7 +49,7 @@ function EmptyCell({ red = false, tooltip }: { red?: boolean; tooltip?: React.Re
     <Tooltip>
       <TooltipTrigger asChild>
         <BanIcon
-          className={cn('text-neutral3/40 w-5 h-5 ', {
+          className={cn('size-5 text-neutral3/40 ', {
             'text-red-900': red,
           })}
         />
@@ -69,7 +69,7 @@ function VersionInfo({ variant, version }: { variant?: keyof typeof versionInfoC
       <TooltipTrigger asChild>
         <div className="grid grid-cols-[1fr_auto]">
           {version !== undefined && (
-            <span className="pr-3 text-ui-md text-neutral4 min-w-16 flex justify-end">v. {version}</span>
+            <span className="flex min-w-16 justify-end pr-3 text-ui-md text-neutral4">v. {version}</span>
           )}
           <Chip color={color} size="small">
             {icon}
@@ -127,7 +127,7 @@ export function DatasetCompareVersionsList({
                         )}
                       </ItemList.LinkCell>
                     ) : (
-                      <ItemList.Cell className={'justify-center flex  items-center'}>
+                      <ItemList.Cell className={'flex items-center  justify-center'}>
                         <EmptyCell
                           red={isANewer}
                           tooltip={isANewer ? 'Deleted in this version' : 'Not present in this version'}
@@ -149,7 +149,7 @@ export function DatasetCompareVersionsList({
                         )}
                       </ItemList.LinkCell>
                     ) : (
-                      <ItemList.Cell className={'justify-center flex items-center'}>
+                      <ItemList.Cell className={'flex items-center justify-center'}>
                         <EmptyCell
                           red={!isANewer}
                           tooltip={!isANewer ? 'Deleted in this version' : 'Not present in this version'}

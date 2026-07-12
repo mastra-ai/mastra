@@ -43,8 +43,8 @@ export function AgentCmsSidebar({ basePath, currentPath, versionId }: AgentCmsSi
   }, [isCodeAgentOverride, editorConfig, features]);
 
   return (
-    <div className="h-full flex flex-col">
-      <ScrollArea className="flex-1 min-h-0">
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
         <nav className="py-4">
           <ul className="flex flex-col gap-0">
             {sections.map((section, index) => (
@@ -99,17 +99,17 @@ const SidebarLink = ({
       <Link
         href={href}
         className={cn(
-          'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors border-r-2 border-transparent',
-          active ? 'bg-surface2 text-neutral5 border-accent1' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
+          'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2 text-sm transition-colors',
+          active ? 'border-accent1 bg-surface2 text-neutral5' : 'text-neutral3 hover:bg-surface3 hover:text-neutral5',
         )}
       >
         {done ? (
-          <div className="size-6 rounded-full bg-accent1 flex items-center justify-center shrink-0">
+          <div className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent1">
             <Check className="size-3.5 text-white" />
           </div>
         ) : (
           <Txt
-            className="size-6 rounded-full border border-neutral2 flex items-center justify-center text-neutral2 font-mono shrink-0"
+            className="flex size-6 shrink-0 items-center justify-center rounded-full border border-neutral2 font-mono text-neutral2"
             variant="ui-sm"
           >
             {index + 1}
@@ -127,7 +127,7 @@ const SidebarLink = ({
         </div>
       </Link>
 
-      {!isLast && <div className="bg-surface3 w-0.5 h-2 inline-block ml-6" />}
+      {!isLast && <div className="ml-6 inline-block h-2 w-0.5 bg-surface3" />}
     </li>
   );
 };

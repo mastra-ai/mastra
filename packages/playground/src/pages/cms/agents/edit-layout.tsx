@@ -281,7 +281,7 @@ function EditLayoutWrapper() {
                 <Button onClick={() => void handleSaveDraft()} disabled={!isDirty || isSavingDraft || isSubmitting}>
                   {isSavingDraft ? (
                     <>
-                      <Spinner className="h-4 w-4" />
+                      <Spinner className="size-4" />
                       Saving...
                     </>
                   ) : (
@@ -302,7 +302,7 @@ function EditLayoutWrapper() {
                 >
                   {isSubmitting ? (
                     <>
-                      <Spinner className="h-4 w-4" />
+                      <Spinner className="size-4" />
                       Publishing...
                     </>
                   ) : (
@@ -320,7 +320,7 @@ function EditLayoutWrapper() {
 
       {isNotFound ? (
         <>
-          <div className="flex items-center justify-center h-full text-neutral3">Agent not found</div>
+          <div className="flex h-full items-center justify-center text-neutral3">Agent not found</div>
           <div className="hidden">
             <EditFormContent
               agentId={agentId ?? ''}

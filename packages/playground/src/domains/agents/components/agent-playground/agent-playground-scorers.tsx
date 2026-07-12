@@ -61,8 +61,8 @@ export function AgentPlaygroundScorers(_props: AgentPlaygroundScorersProps) {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-4 py-3 border-b border-border1 space-y-2">
+    <div className="flex h-full flex-col">
+      <div className="space-y-2 border-b border-border1 px-4 py-3">
         <div className="flex items-center justify-between">
           <Txt variant="ui-sm" className="text-neutral3">
             Toggle scorers to evaluate agent responses during experiments.
@@ -85,21 +85,21 @@ export function AgentPlaygroundScorers(_props: AgentPlaygroundScorersProps) {
       </div>
 
       <ScrollArea className="flex-1">
-        <div className="p-4 space-y-2">
+        <div className="space-y-2 p-4">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-5 w-5 animate-spin text-neutral3" />
+              <Loader2 className="size-5 animate-spin text-neutral3" />
             </div>
           ) : filteredScorers.length === 0 ? (
-            <div className="text-center py-12 space-y-3">
-              <Icon size="lg" className="text-neutral3 mx-auto">
+            <div className="space-y-3 py-12 text-center">
+              <Icon size="lg" className="mx-auto text-neutral3">
                 <Calculator />
               </Icon>
               <div>
                 <Txt variant="ui-sm" className="text-neutral3">
                   {search ? 'No scorers match your search' : 'No scorers available'}
                 </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-1">
+                <Txt variant="ui-xs" className="mt-1 text-neutral3">
                   {search
                     ? 'Try a different search term.'
                     : 'Create scorers in your Mastra config or through the Scorers page.'}
@@ -112,28 +112,28 @@ export function AgentPlaygroundScorers(_props: AgentPlaygroundScorersProps) {
               return (
                 <div
                   key={scorer.id}
-                  className="border border-border1 rounded-lg p-3 hover:bg-surface2 transition-colors"
+                  className="rounded-lg border border-border1 p-3 transition-colors hover:bg-surface2"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
-                        <Txt variant="ui-sm" className="text-neutral5 font-medium truncate">
+                        <Txt variant="ui-sm" className="truncate font-medium text-neutral5">
                           {scorer.name}
                         </Txt>
                         {scorer.isRegistered && (
                           <Badge variant="default">
-                            <CheckCircle2 className="h-3 w-3 mr-1" />
+                            <CheckCircle2 className="mr-1 size-3" />
                             Registered
                           </Badge>
                         )}
                       </div>
                       {scorer.description && (
-                        <Txt variant="ui-xs" className="text-neutral3 mt-0.5 line-clamp-2">
+                        <Txt variant="ui-xs" className="mt-0.5 line-clamp-2 text-neutral3">
                           {scorer.description}
                         </Txt>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0 pt-0.5">
+                    <div className="flex shrink-0 items-center gap-2 pt-0.5">
                       <Label htmlFor={`scorer-${scorer.id}`} className="sr-only">
                         Toggle {scorer.name}
                       </Label>

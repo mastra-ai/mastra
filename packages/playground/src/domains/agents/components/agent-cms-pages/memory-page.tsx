@@ -80,8 +80,8 @@ function LastMessagesEntity() {
   const lastMessagesEnabled = lastMessages !== false;
 
   return (
-    <Entity className="flex-col gap-0 p-0 overflow-hidden">
-      <div className="flex gap-3 py-3 px-4">
+    <Entity className="flex-col gap-0 overflow-hidden p-0">
+      <div className="flex gap-3 px-4 py-3">
         <EntityContent>
           <EntityName>Message History</EntityName>
           <EntityDescription>Number of recent messages to include in context</EntityDescription>
@@ -107,7 +107,7 @@ function LastMessagesEntity() {
       </div>
 
       {lastMessagesEnabled && (
-        <div className="bg-surface2 border-t border-border1 p-4">
+        <div className="border-t border-border1 bg-surface2 p-4">
           <Controller
             name="memory.lastMessages"
             control={control}
@@ -145,8 +145,8 @@ function SemanticRecallEntity() {
   const embedders = embeddersData?.embedders ?? [];
 
   return (
-    <Entity className="flex-col gap-0 p-0 overflow-hidden">
-      <div className="flex gap-3 py-3 px-4">
+    <Entity className="flex-col gap-0 overflow-hidden p-0">
+      <div className="flex gap-3 px-4 py-3">
         <EntityContent>
           <EntityName>Semantic Recall</EntityName>
           <EntityDescription>Enable semantic search in memory</EntityDescription>
@@ -162,7 +162,7 @@ function SemanticRecallEntity() {
       </div>
 
       {semanticRecallEnabled && (
-        <div className="bg-surface2 border-t border-border1 p-4 grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-4 border-t border-border1 bg-surface2 p-4">
           <Controller
             name="memory.vector"
             control={control}
@@ -246,8 +246,8 @@ function ObservationalMemoryEntity() {
   const observationalMemoryEnabled = useWatch({ control, name: 'memory.observationalMemory.enabled' }) ?? false;
 
   return (
-    <Entity className="flex-col gap-0 p-0 overflow-hidden">
-      <div className="flex gap-3 py-3 px-4">
+    <Entity className="flex-col gap-0 overflow-hidden p-0">
+      <div className="flex gap-3 px-4 py-3">
         <EntityContent>
           <EntityName>Observational Memory</EntityName>
           <EntityDescription>
@@ -275,7 +275,7 @@ function ObservationalMemoryEntity() {
       </div>
 
       {observationalMemoryEnabled && (
-        <div className="bg-surface2 border-t border-border1 p-4">
+        <div className="border-t border-border1 bg-surface2 p-4">
           <ObservationalMemoryFields />
         </div>
       )}
@@ -371,10 +371,10 @@ function ObservationalMemoryFields() {
         />
       </div>
 
-      <div className="border-t border-border1 pt-4 mt-2">
+      <div className="mt-2 border-t border-border1 pt-4">
         <ObserverFields observerProvider={observerProvider} />
       </div>
-      <div className="border-t border-border1 pt-4 mt-2">
+      <div className="mt-2 border-t border-border1 pt-4">
         <ReflectorFields reflectorProvider={reflectorProvider} />
       </div>
     </div>

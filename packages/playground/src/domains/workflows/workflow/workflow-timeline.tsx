@@ -33,7 +33,7 @@ const StepStatusIcon = ({ status }: { status: Step['status'] }) => (
     {status === 'suspended' && <CirclePause className="text-accent3" />}
     {status === 'waiting' && <HourglassIcon className="text-accent5" />}
     {status === 'skipped' && <HourglassIcon className="text-icon3" />}
-    {status === 'running' && <Loader2 className="text-accent6 animate-spin" />}
+    {status === 'running' && <Loader2 className="animate-spin text-accent6" />}
   </Icon>
 );
 
@@ -151,7 +151,7 @@ const WorkflowTimelineRow = ({
         onSelectStep(row.stepId);
       }}
       className={cn(
-        'grid grid-cols-[auto_auto_auto_minmax(0,10rem)_minmax(0,1fr)_auto_5rem] items-center gap-2 rounded-md border border-transparent px-2 py-1 text-left transition-colors focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1',
+        'grid grid-cols-[auto_auto_auto_minmax(0,10rem)_minmax(0,1fr)_auto_5rem] items-center gap-2 rounded-md border border-transparent px-2 py-1 text-left transition-colors focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
         canSelect && 'cursor-pointer',
         canSelect && 'hover:bg-surface4',
         canSelect && isHovered && !isSelected && 'border-neutral6 bg-surface4',
@@ -186,7 +186,7 @@ const WorkflowTimelineRow = ({
       <Txt
         as="span"
         variant="ui-sm"
-        className="block min-w-0 max-w-full justify-self-stretch overflow-hidden text-ellipsis whitespace-nowrap text-left text-neutral6"
+        className="block max-w-full min-w-0 justify-self-stretch truncate text-left text-neutral6"
       >
         {titleCase(row.stepId)}
       </Txt>
@@ -286,7 +286,7 @@ export function WorkflowTimeline() {
               onClick={() => setIsCollapsed(collapsed => !collapsed)}
               className="rounded-md p-1 text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral6"
             >
-              <ChevronDown className={cn('h-4 w-4 transition-transform', isCollapsed && '-rotate-90')} />
+              <ChevronDown className={cn('size-4 transition-transform', isCollapsed && '-rotate-90')} />
             </button>
           </div>
           {!isCollapsed && (

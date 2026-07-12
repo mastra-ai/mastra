@@ -289,7 +289,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
         onStartTextFilter={setAutoFocusFilterFieldId}
         hiddenFieldIds={hiddenCreatorFieldIds}
       />
-      <div className="flex h-form-default items-center gap-2 ml-auto">
+      <div className="ml-auto flex h-form-default items-center gap-2">
         {!branchesUnsupported && (
           <>
             <Switch
@@ -310,9 +310,9 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
           tooltip={autoRefetchTraces ? 'Auto-refetch ON' : 'Auto-refetch OFF'}
         >
           {autoRefetchTraces ? (
-            <RefreshCw className={`h-4 w-4 ${isRefetchingTraces ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`size-4 ${isRefetchingTraces ? 'animate-spin' : ''}`} />
           ) : (
-            <CircleSlash2 className="h-4 w-4" />
+            <CircleSlash2 className="size-4" />
           )}
         </Button>
       </div>
@@ -339,7 +339,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
   const pageTopArea = (
     <PageLayout.TopArea>
       <PageLayout.Row>
-        <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2 w-full">
+        <PageLayout.Column className="flex w-full flex-wrap items-start justify-start gap-2">
           {toolbarControls}
         </PageLayout.Column>
       </PageLayout.Row>

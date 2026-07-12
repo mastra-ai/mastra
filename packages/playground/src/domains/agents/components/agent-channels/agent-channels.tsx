@@ -109,12 +109,12 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
   return (
     <DataList.RowStatic>
       <DataList.Cell className="text-left text-neutral4">
-        <span className="flex items-center gap-3 min-w-0">
-          <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
-          <span className="flex flex-col min-w-0">
+        <span className="flex min-w-0 items-center gap-3">
+          <PlatformIcon platform={platform.id} className="size-5 shrink-0" />
+          <span className="flex min-w-0 flex-col">
             <span className="truncate">{platform.name}</span>
             {activeInstallation ? (
-              <Txt variant="ui-xs" className="text-neutral5 truncate">
+              <Txt variant="ui-xs" className="truncate text-neutral5">
                 {activeInstallation.displayName || 'Workspace'}
               </Txt>
             ) : null}
@@ -140,7 +140,7 @@ function ChannelRow({ platform, agentId }: ChannelRowProps) {
             type="button"
             onClick={handleDisconnect}
             disabled={isDisconnecting}
-            className="shrink-0 text-[11px] text-neutral5 hover:text-accent2 transition-colors disabled:opacity-50"
+            className="shrink-0 text-[11px] text-neutral5 transition-colors hover:text-accent2 disabled:opacity-50"
           >
             {isDisconnecting ? 'Removing...' : 'Remove'}
           </button>

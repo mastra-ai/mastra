@@ -5,7 +5,7 @@ const Tool = () => {
   const { toolId } = useParams();
 
   return (
-    <div className="h-full w-full overflow-y-hidden">
+    <div className="size-full overflow-y-hidden">
       <ToolPanel toolId={toolId!} />
     </div>
   );

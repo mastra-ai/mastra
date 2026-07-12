@@ -6,9 +6,9 @@ import type { ReactNode } from 'react';
 import { useChatTasks } from './chat/chat-context';
 
 const statusIcon: Record<TaskItem['status'], ReactNode> = {
-  completed: <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-green-500" />,
-  in_progress: <Loader2 className="h-3.5 w-3.5 shrink-0 text-yellow-500 animate-spin" />,
-  pending: <Circle className="h-3.5 w-3.5 shrink-0 text-neutral4" />,
+  completed: <CheckCircle2 className="size-3.5 shrink-0 text-green-500" />,
+  in_progress: <Loader2 className="size-3.5 shrink-0 animate-spin text-yellow-500" />,
+  pending: <Circle className="size-3.5 shrink-0 text-neutral4" />,
 };
 
 const statusTextClass: Record<TaskItem['status'], string> = {
@@ -39,21 +39,21 @@ export const TaskPanel = () => {
 
   return (
     <div className="px-2 pb-1" data-testid="task-panel">
-      <div className="max-w-3xl w-full mx-auto">
+      <div className="mx-auto w-full max-w-3xl">
         <div className="rounded-2xl border border-border2/40 bg-surface3 px-3 py-2.5">
           {/* Header */}
-          <div className="flex items-center gap-2 mb-2">
-            <ListChecks className="h-4 w-4 shrink-0 text-accent6" />
+          <div className="mb-2 flex items-center gap-2">
+            <ListChecks className="size-4 shrink-0 text-accent6" />
             <span className="text-ui-sm leading-ui-sm font-medium text-neutral6">Tasks</span>
-            <span className="text-ui-xs leading-ui-xs text-neutral4 ml-auto tabular-nums">
+            <span className="ml-auto text-ui-xs leading-ui-xs text-neutral4 tabular-nums">
               {completed}/{total} completed
             </span>
           </div>
 
           {/* Progress bar */}
-          <div className="h-1 w-full rounded-full bg-surface4 mb-2.5">
+          <div className="mb-2.5 h-1 w-full rounded-full bg-surface4">
             <div
-              className="h-full rounded-full transition-all duration-300 bg-accent6"
+              className="h-full rounded-full bg-accent6 transition-all duration-300"
               style={{ width: `${total > 0 ? (completed / total) * 100 : 0}%` }}
             />
           </div>

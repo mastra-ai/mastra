@@ -99,13 +99,13 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-ui-xs text-neutral4 transition-colors duration-normal',
-        'hover:bg-surface4/60 hover:text-neutral6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        'group/capability-row duration-normal flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-ui-xs text-neutral4 transition-colors',
+        'hover:bg-surface4/60 hover:text-neutral6 focus-visible:ring-1 focus-visible:ring-border2 focus-visible:outline-none',
       )}
     >
       <span
         className={cn(
-          'mt-0.5 size-3.5 shrink-0 text-neutral3 transition-colors duration-normal [&>svg]:size-3.5',
+          'duration-normal mt-0.5 size-3.5 shrink-0 text-neutral3 transition-colors [&>svg]:size-3.5',
           enabled ? toneIcon : 'group-hover/capability-row:text-neutral5',
         )}
       >
@@ -114,13 +114,13 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate font-medium text-neutral5">{label}</span>
-          <span className="shrink-0 tabular-nums text-neutral3">{status}</span>
+          <span className="shrink-0 text-neutral3 tabular-nums">{status}</span>
         </span>
-        <span className="mt-0.5 block text-neutral3 transition-colors duration-normal group-hover/capability-row:text-neutral4">
+        <span className="duration-normal mt-0.5 block text-neutral3 transition-colors group-hover/capability-row:text-neutral4">
           {description}
         </span>
       </span>
-      <ExternalLink className="mt-0.5 size-3 shrink-0 text-neutral3 transition-colors duration-normal group-hover/capability-row:text-neutral5" />
+      <ExternalLink className="duration-normal mt-0.5 size-3 shrink-0 text-neutral3 transition-colors group-hover/capability-row:text-neutral5" />
     </a>
   );
 }
@@ -302,7 +302,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left text-neutral4 transition-colors duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70"
+            className="duration-normal flex w-full cursor-pointer items-center gap-1.5 p-2 text-left text-neutral4 transition-colors hover:bg-surface4 hover:!text-neutral4 focus-visible:bg-surface4 focus-visible:!text-neutral4 focus-visible:ring-1 focus-visible:ring-border2 focus-visible:outline-none focus-visible:ring-inset active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70"
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <MemoryCapability agentId={agentId} view="chip" />
@@ -315,7 +315,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
             <CapabilitiesSummary agentId={agentId} />
             <ChevronRight
               className={cn(
-                'size-3.5 shrink-0 text-neutral3 transition-transform duration-normal ease-out-custom',
+                'duration-normal size-3.5 shrink-0 text-neutral3 transition-transform ease-out-custom',
                 isExpanded ? 'rotate-90' : undefined,
               )}
             />

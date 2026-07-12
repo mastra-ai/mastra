@@ -159,9 +159,9 @@ const AssistantActionBar = ({
   onReadAloud?: (text: string) => void;
   onStopSpeaking?: () => void;
 }) => (
-  <div className="flex gap-1 items-center transition-all relative">
+  <div className="relative flex items-center gap-1 transition-all">
     {modelMetadata && (
-      <div className="flex items-center gap-1 pr-2 text-icon5 text-ui-xs leading-ui-xs">
+      <div className="text-icon5 flex items-center gap-1 pr-2 text-ui-xs leading-ui-xs">
         <ProviderLogo providerId={modelMetadata.modelProvider} size={14} />
         <span>
           {modelMetadata.modelProvider}/{modelMetadata.modelId}
@@ -232,7 +232,7 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
       return (
         <div
           ref={ref}
-          className={cn('w-full flex items-end pb-4 pt-2 flex-col', className)}
+          className={cn('flex w-full flex-col items-end pt-2 pb-4', className)}
           {...rootProps}
           data-message-id={message.id}
           data-message-pending={isPending ? 'true' : undefined}
@@ -240,8 +240,8 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
           <DatasetSaveAction messageText={getTextFromParts(message)} />
           <div
             className={cn(
-              'max-w-[max(366px,70%)] break-words px-4 py-2 text-neutral6 text-ui-lg leading-ui-lg rounded-xl bg-surface3',
-              isPending && 'opacity-60 animate-pulse',
+              'max-w-[max(366px,70%)] rounded-xl bg-surface3 px-4 py-2 text-ui-lg leading-ui-lg break-words text-neutral6',
+              isPending && 'animate-pulse opacity-60',
             )}
           >
             <MessageFactory message={dbMessage} {...userRenderers} status={messageStatusRenderers} />
@@ -254,11 +254,11 @@ export const MessageRow = forwardRef<HTMLDivElement, MessageRowProps>(
 
     return (
       <div ref={ref} className={cn('max-w-full', className)} {...rootProps} data-message-id={message.id}>
-        <div className="text-neutral6 text-ui-lg leading-ui-lg pt-2">
+        <div className="pt-2 text-ui-lg leading-ui-lg text-neutral6">
           <MessageFactory message={dbMessage} {...assistantRenderers} status={messageStatusRenderers} />
         </div>
         {showActionBar && (
-          <div className="h-6 pt-4 flex gap-2 items-center">
+          <div className="flex h-6 items-center gap-2 pt-4">
             <AssistantActionBar
               text={getTextFromParts(message)}
               modelMetadata={modelMetadata}

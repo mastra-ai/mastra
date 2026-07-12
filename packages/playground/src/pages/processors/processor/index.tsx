@@ -36,14 +36,14 @@ export function Processor() {
   if (isLoading) {
     return (
       <div className="p-6">
-        <Skeleton className="h-8 w-48 mb-4" />
+        <Skeleton className="mb-4 h-8 w-48" />
         <Skeleton className="h-32 w-full" />
       </div>
     );
   }
 
   return (
-    <div className="h-full w-full overflow-y-hidden">
+    <div className="size-full overflow-y-hidden">
       <ProcessorPanel processorId={processorId!} />
     </div>
   );

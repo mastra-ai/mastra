@@ -5,7 +5,7 @@ const AgentTool = () => {
   const { toolId, agentId } = useParams();
 
   return (
-    <div className="h-full w-full overflow-y-auto">
+    <div className="size-full overflow-y-auto">
       <AgentToolPanel toolId={toolId!} agentId={agentId!} />
     </div>
   );

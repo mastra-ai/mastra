@@ -33,22 +33,22 @@ function RecursiveFieldRenderer({
   depth: number;
 }) {
   return (
-    <div className="py-2 border-border1 border-l-4 border-b">
+    <div className="border-b border-l-4 border-border1 py-2">
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
-          <div className="flex flex-row gap-2 items-center">
+          <div className="flex flex-row items-center gap-2">
             <JSONSchemaForm.FieldName
               labelIsHidden
               placeholder="Variable name"
               size="md"
-              className="[&_input]:bg-surface3 w-full"
+              className="w-full [&_input]:bg-surface3"
             />
 
-            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="[&_button]:bg-surface3 w-full" />
+            <JSONSchemaForm.FieldType placeholder="Type" size="md" className="w-full [&_button]:bg-surface3" />
             <JSONSchemaForm.FieldRemove variant="default" className="shrink-0" />
           </div>
 
-          <div className="flex flex-row gap-2 items-center">
+          <div className="flex flex-row items-center gap-2">
             <JSONSchemaForm.FieldOptional />
             <JSONSchemaForm.FieldNullable />
           </div>
@@ -66,7 +66,7 @@ function RecursiveFieldRenderer({
             )}
           </JSONSchemaForm.FieldList>
           <JSONSchemaForm.AddField variant="ghost" size="sm" className="mt-2">
-            <PlusIcon className="w-3 h-3 mr-1" />
+            <PlusIcon className="mr-1 size-3" />
             Add nested variable
           </JSONSchemaForm.AddField>
         </JSONSchemaForm.NestedFields>
@@ -112,8 +112,8 @@ export function AgentEditSidebar({
   const initialFields = useMemo(() => jsonSchemaToFields(watchedVariables), [watchedVariables]);
 
   return (
-    <div className="h-full flex flex-col">
-      <Tabs defaultTab="identity" className="flex-1 min-h-0 flex flex-col">
+    <div className="flex h-full flex-col">
+      <Tabs defaultTab="identity" className="flex min-h-0 flex-1 flex-col">
         <TabList className="shrink-0">
           <Tab value="identity">
             <Icon size="sm">
@@ -136,14 +136,14 @@ export function AgentEditSidebar({
           </Tab>
         </TabList>
 
-        <TabContent value="identity" className="flex-1 min-h-0 py-0 pb-3">
+        <TabContent value="identity" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
             <div className="flex flex-col gap-6 p-4">
               <SectionHeader title="Identity" subtitle="Define your agent's name, description, and model." />
 
               {/* Agent Name */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-name" className="text-xs text-icon5">
+                <Label htmlFor="agent-name" className="text-icon5 text-xs">
                   Name <span className="text-accent2">*</span>
                 </Label>
                 <Input
@@ -159,7 +159,7 @@ export function AgentEditSidebar({
 
               {/* Description */}
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="agent-description" className="text-xs text-icon5">
+                <Label htmlFor="agent-description" className="text-icon5 text-xs">
                   Description
                 </Label>
                 <Textarea
@@ -175,7 +175,7 @@ export function AgentEditSidebar({
 
               {/* Provider */}
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">
+                <Label className="text-icon5 text-xs">
                   Provider <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -194,7 +194,7 @@ export function AgentEditSidebar({
 
               {/* Model */}
               <div className="flex flex-col gap-1.5">
-                <Label className="text-xs text-icon5">
+                <Label className="text-icon5 text-xs">
                   Model <span className="text-accent2">*</span>
                 </Label>
                 <Controller
@@ -217,7 +217,7 @@ export function AgentEditSidebar({
           </ScrollArea>
         </TabContent>
 
-        <TabContent value="capabilities" className="flex-1 min-h-0 py-0 pb-3">
+        <TabContent value="capabilities" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
             <div className="flex flex-col gap-6 p-4">
               <SectionHeader
@@ -239,16 +239,16 @@ export function AgentEditSidebar({
           </ScrollArea>
         </TabContent>
 
-        <TabContent value="variables" className="flex-1 min-h-0 py-0 pb-3">
+        <TabContent value="variables" className="min-h-0 flex-1 py-0 pb-3">
           <ScrollArea className="h-full">
-            <div className="flex flex-col gap-6 p-4 border-b border-border1">
+            <div className="flex flex-col gap-6 border-b border-border1 p-4">
               <SectionHeader
                 title="Variables"
                 subtitle={
                   <>
                     Variables are dynamic values that change based on the context of each request. Use them in your
                     agent's instructions with the{' '}
-                    <code className="text-[#F59E0B] font-medium">{'{{variableName}}'}</code> syntax.
+                    <code className="font-medium text-[#F59E0B]">{'{{variableName}}'}</code> syntax.
                   </>
                 }
               />
@@ -264,7 +264,7 @@ export function AgentEditSidebar({
 
                 <div className="p-2">
                   <JSONSchemaForm.AddField variant="outline" size="sm">
-                    <PlusIcon className="w-4 h-4 mr-2" />
+                    <PlusIcon className="mr-2 size-4" />
                     Add variable
                   </JSONSchemaForm.AddField>
                 </div>
@@ -280,7 +280,7 @@ export function AgentEditSidebar({
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <Spinner className="size-4" />
                 {mode === 'edit' ? 'Updating...' : 'Creating...'}
               </>
             ) : (

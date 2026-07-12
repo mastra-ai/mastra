@@ -25,7 +25,7 @@ export const Models = ({ editable = true }: Modelprops) => {
     const policyModelId = policy.default?.modelId;
 
     return (
-      <div className="px-6 py-6">
+      <div className="p-6">
         <LockedModelChip provider={policyProvider} modelId={policyModelId} />
       </div>
     );
@@ -135,8 +135,8 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
           />
         )}
 
-        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 px-6 py-6">
-          <div data-testid="model-card-picker-search" className="shrink-0 max-w-[30ch] rounded-full bg-surface3">
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-6 p-6">
+          <div data-testid="model-card-picker-search" className="max-w-[30ch] shrink-0 rounded-full bg-surface3">
             <InputGroup variant="outline" size="lg">
               <InputGroupAddon align="inline-start">
                 <SearchIcon />
@@ -203,12 +203,12 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           <Txt
             variant="ui-sm"
             as="h3"
-            className="text-neutral3 uppercase tracking-wide"
+            className="tracking-wide text-neutral3 uppercase"
             data-testid={`model-provider-section-title-${group.providerId}`}
           >
             {group.providerName}
           </Txt>
-          <div className="grid grid-cols-1 content-start gap-2 lg:gap-6 sm:grid-cols-2 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 content-start gap-2 2xl:grid-cols-3 sm:grid-cols-2 lg:gap-6">
             {group.models.map(entry => {
               const cleanedProvider = cleanProviderId(entry.provider);
               const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -246,7 +246,7 @@ const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
       data-testid="model-detail-stale-warning"
       role="alert"
     >
-      <TriangleAlertIcon className="h-4 w-4 shrink-0 mt-0.5" />
+      <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
       <Txt variant="ui-xs">
         <span className="font-medium">
           {provider}/{modelId}
@@ -267,8 +267,8 @@ const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
     className="flex items-center gap-2 rounded-md border border-border1 bg-surface3 px-3 py-2"
     data-testid="model-detail-locked-chip"
   >
-    <LockIcon className="h-4 w-4 shrink-0 text-neutral3" />
-    <Txt variant="ui-sm" className="font-medium text-neutral6 truncate">
+    <LockIcon className="size-4 shrink-0 text-neutral3" />
+    <Txt variant="ui-sm" className="truncate font-medium text-neutral6">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>
     <Txt variant="ui-xs" className="ml-auto shrink-0 text-neutral3">

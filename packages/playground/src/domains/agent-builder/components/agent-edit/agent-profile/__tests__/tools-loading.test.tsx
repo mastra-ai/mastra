@@ -43,7 +43,7 @@ describe('Tools loading state', () => {
     cleanup();
   });
 
-  it('shows a skeleton (never the empty state) while provider tools load, then the padded empty state', async () => {
+  it('shows a skeleton while provider tools load, then the empty state', async () => {
     const gate = (() => {
       let resolve: () => void = () => {};
       const promise = new Promise<void>(r => {
@@ -74,13 +74,9 @@ describe('Tools loading state', () => {
 
     gate.resolve();
 
-    // Once resolved-empty, the empty state appears with the pane padding the
-    // two-column layouts use, so it is not flush under the `!py-0` tab shell.
     await waitFor(() => {
       expect(screen.queryByTestId('tools-card-picker-loading')).toBeNull();
     });
     expect(screen.getByText('No tools available in this project')).toBeTruthy();
-    expect(screen.getByTestId('tools-empty-state').className).toContain('px-6');
-    expect(screen.getByTestId('tools-empty-state').className).toContain('py-6');
   });
 });

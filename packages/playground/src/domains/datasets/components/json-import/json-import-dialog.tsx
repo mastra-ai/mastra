@@ -164,7 +164,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
             <Spinner />
             <div className="text-center">
               <div className="text-lg font-medium text-neutral1">Importing items...</div>
-              <div className="text-sm text-neutral4 mt-1">
+              <div className="mt-1 text-sm text-neutral4">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -177,7 +177,7 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
             <div className="text-4xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
               <div className="text-lg font-medium text-neutral1">Import Complete</div>
-              <div className="text-sm text-neutral4 mt-1">
+              <div className="mt-1 text-sm text-neutral4">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">
@@ -230,15 +230,15 @@ export function JSONImportDialog({ datasetId, open, onOpenChange, onSuccess }: J
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-h-[90vh] max-w-2xl">
         <DialogHeader>
           <DialogTitle>{stepTitles[step]}</DialogTitle>
           <DialogDescription>Import dataset items from a JSON file.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="min-h-[200px] max-h-[50vh] overflow-y-auto">{renderStepContent()}</DialogBody>
+        <DialogBody className="min-h-50 max-h-[50vh] overflow-y-auto">{renderStepContent()}</DialogBody>
 
-        <DialogFooter className="px-6 pt-4 flex justify-end gap-2">{renderFooter()}</DialogFooter>
+        <DialogFooter className="flex justify-end gap-2 px-6 pt-4">{renderFooter()}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

@@ -123,7 +123,7 @@ function DatasetPage() {
         <PageLayout.TopArea>
           <PageLayout.Row>
             <PageLayout.Column>
-              {dataset?.description && <p className="text-ui-smd text-neutral3 mb-1">{dataset.description}</p>}
+              {dataset?.description && <p className="mb-1 text-ui-smd text-neutral3">{dataset.description}</p>}
               <DataKeysAndValues numOfCol={2}>
                 <DataKeysAndValues.Key>Created at</DataKeysAndValues.Key>
                 <DataKeysAndValues.Value>

@@ -61,10 +61,10 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
         data-workflow-step-status={previousDisplayStatus}
         data-testid="workflow-condition-node"
         className={cn(
-          'bg-surface3 rounded-lg w-dropdown-max-height border border-border1',
+          'w-dropdown-max-height rounded-lg border border-border1 bg-surface3',
           previousDisplayStatus === 'success' && nextStep && 'bg-accent1Darker',
           previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Darker',
-          previousDisplayStatus === 'tripwire' && nextStep && 'bg-amber-950/40 border-amber-500/30',
+          previousDisplayStatus === 'tripwire' && nextStep && 'border-amber-500/30 bg-amber-950/40',
           !previousStep && Boolean(nextStep?.status) && 'bg-accent1Darker',
         )}
       >
@@ -76,7 +76,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
             }
           }}
         >
-          <CollapsibleTrigger className="flex items-center justify-between w-full px-3 py-2">
+          <CollapsibleTrigger className="flex w-full items-center justify-between px-3 py-2">
             <Badge
               icon={
                 IconComponent ? (
@@ -89,7 +89,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
             {isCollapsible && (
               <Icon>
                 <ChevronDown
-                  className={cn('transition-transform text-neutral3', {
+                  className={cn('text-neutral3 transition-transform', {
                     'transform rotate-180': open,
                   })}
                 />
@@ -125,7 +125,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       {({ className, style, tokens, getLineProps, getTokenProps }) => (
                         <pre
                           className={cn(
-                            'relative font-mono p-3 w-full cursor-pointer rounded-lg text-xs bg-surface4! whitespace-pre-wrap wrap-break-word',
+                            'relative w-full cursor-pointer rounded-lg bg-surface4! p-3 font-mono text-xs wrap-break-word whitespace-pre-wrap',
                             className,
                             previousDisplayStatus === 'success' && nextStep && 'bg-accent1Dark!',
                             previousDisplayStatus === 'failed' && nextStep && 'bg-accent2Dark!',
@@ -136,7 +136,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                         >
                           {tokens.map((line, i) => (
                             <div key={i} {...getLineProps({ line })}>
-                              <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                              <span className="mr-2 inline-block text-neutral3">{i + 1}</span>
                               {line.map((token, key) => (
                                 <span key={key} {...getTokenProps({ token })} />
                               ))}
@@ -147,7 +147,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                     </Highlight>
 
                     <Dialog open={openDialog} onOpenChange={setOpenDialog}>
-                      <DialogContent className="max-w-[30rem]">
+                      <DialogContent className="max-w-120">
                         <DialogHeader>
                           <DialogTitle className="sr-only">Condition Function</DialogTitle>
                           <DialogDescription>View the condition function code</DialogDescription>
@@ -161,7 +161,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                             >
                               {({ className, style, tokens, getLineProps, getTokenProps }) => (
                                 <pre
-                                  className={`${className} relative font-mono text-sm overflow-x-auto p-3 w-full rounded-lg mt-2 dark:bg-zinc-800`}
+                                  className={`${className} relative mt-2 w-full overflow-x-auto rounded-lg p-3 font-mono text-sm dark:bg-zinc-800`}
                                   style={{
                                     ...style,
                                     backgroundColor: '#121212',
@@ -170,7 +170,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                                 >
                                   {tokens.map((line, i) => (
                                     <div key={i} {...getLineProps({ line })}>
-                                      <span className="inline-block mr-2 text-neutral3">{i + 1}</span>
+                                      <span className="mr-2 inline-block text-neutral3">{i + 1}</span>
                                       {line.map((token, key) => (
                                         <span key={key} {...getTokenProps({ token })} />
                                       ))}
@@ -190,7 +190,7 @@ export function WorkflowConditionNode({ data }: NodeProps<ConditionNode>) {
                       <div className="flex items-center gap-1">
                         {conjBadge}
 
-                        <Txt variant="ui-xs" className=" text-neutral3 flex-1">
+                        <Txt variant="ui-xs" className=" flex-1 text-neutral3">
                           {(condition.ref.step as any).id || condition.ref.step}'s {condition.ref.path}{' '}
                           {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}
                         </Txt>

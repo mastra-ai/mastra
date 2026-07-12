@@ -11,7 +11,7 @@ const MCPServerToolExecutor = () => {
   if (!mcpTool) return null;
 
   return (
-    <div className="h-full w-full overflow-y-auto">
+    <div className="size-full overflow-y-auto">
       <MCPToolPanel toolId={toolId!} serverId={serverId!} />
     </div>
   );

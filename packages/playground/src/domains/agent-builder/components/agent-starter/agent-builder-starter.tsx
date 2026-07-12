@@ -89,7 +89,7 @@ export const AgentBuilderStarter = () => {
 
         <form
           onSubmit={handleSubmit}
-          className="starter-prompt rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
+          className="starter-prompt duration-normal rounded-2xl border border-border1 bg-surface2 transition-colors ease-out-custom focus-within:border-neutral3"
           style={{ viewTransitionName: 'chat-composer' }}
         >
           <Textarea
@@ -102,7 +102,7 @@ export const AgentBuilderStarter = () => {
             onChange={e => setMessage(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isCreating}
-            className="min-h-[112px] resize-none px-5 py-4 text-ui-md outline-none placeholder:text-neutral3 focus:outline-none focus-visible:outline-none"
+            className="min-h-28 resize-none px-5 py-4 text-ui-md outline-none placeholder:text-neutral3 focus:outline-none focus-visible:outline-none"
             rows={3}
           />
 

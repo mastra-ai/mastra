@@ -42,7 +42,7 @@ export function WorkflowSuspendedOverlay() {
     <div
       key={runId}
       data-testid="workflow-suspended-overlay"
-      className="absolute top-2 right-2 z-20 w-[380px] max-w-[calc(100%-1rem)] max-h-[calc(100%-1rem)] overflow-y-auto rounded-lg shadow-lg animate-in fade-in-0 slide-in-from-top-2 zoom-in-95 duration-300"
+      className="w-95 absolute top-2 right-2 z-20 max-h-[calc(100%-1rem)] max-w-[calc(100%-1rem)] animate-in overflow-y-auto rounded-lg shadow-lg duration-300 fade-in-0 zoom-in-95 slide-in-from-top-2"
     >
       <WorkflowSuspendedSteps
         suspendedSteps={suspendedSteps}

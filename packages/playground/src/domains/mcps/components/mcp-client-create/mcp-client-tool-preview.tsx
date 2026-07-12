@@ -63,7 +63,7 @@ export function MCPClientToolPreview({
     <div className="p-5">
       {tryConnect.isPending && (
         <div className="flex items-center gap-2">
-          <Spinner className="h-3 w-3" />
+          <Spinner className="size-3" />
           <Txt className="text-neutral3">Connecting...</Txt>
         </div>
       )}
@@ -91,7 +91,7 @@ export function MCPClientToolPreview({
 }
 
 function EmptyState({ children }: { children: React.ReactNode }) {
-  return <div className="flex items-center justify-center h-full p-8 text-center">{children}</div>;
+  return <div className="flex h-full items-center justify-center p-8 text-center">{children}</div>;
 }
 
 function ToolList({
@@ -108,9 +108,9 @@ function ToolList({
   const selectedCount = Object.keys(selectedTools).length;
 
   return (
-    <div className="p-5 overflow-y-auto">
-      <div className="text-neutral6 flex gap-2 items-center">
-        <Icon size="lg" className="bg-surface4 rounded-md p-1">
+    <div className="overflow-y-auto p-5">
+      <div className="flex items-center gap-2 text-neutral6">
+        <Icon size="lg" className="rounded-md bg-surface4 p-1">
           <McpServerIcon />
         </Icon>
         <Txt variant="header-md" as="h2" className="font-medium">
@@ -135,8 +135,8 @@ function ToolList({
                     type="text"
                     disabled={isDisabled}
                     className={cn(
-                      'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                      !isDisabled && 'border-border1 border-dashed',
+                      'block w-full appearance-none border border-transparent bg-transparent text-neutral3',
+                      !isDisabled && 'border-dashed border-border1',
                     )}
                     value={
                       isSelected

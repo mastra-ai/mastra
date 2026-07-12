@@ -13,7 +13,7 @@ export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeTyp
       <div
         data-workflow-boundary-node
         data-testid={`workflow-boundary-${data.boundaryRole}`}
-        className="flex h-14 w-14 items-center justify-center rounded-full border border-border1 bg-surface3 text-neutral5"
+        className="flex size-14 items-center justify-center rounded-full border border-border1 bg-surface3 text-neutral5"
       >
         <Txt variant="ui-xs" className="font-medium">
           {data.label}

@@ -30,7 +30,7 @@ export function ComposerRunOptions({ requestContextSchema }: ComposerRunOptionsP
           tooltip="Run options"
           data-testid="composer-run-options-trigger"
         >
-          <Settings2 className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+          <Settings2 className="size-5 text-neutral3 hover:text-neutral6" />
         </Button>
       </PopoverTrigger>
       <PopoverContent

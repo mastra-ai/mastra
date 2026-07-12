@@ -187,7 +187,7 @@ export const AgentMetadata = ({ agentId }: AgentMetadataProps) => {
       </AgentMetadataSection>
       <AgentMetadataSection title="System Prompt">
         <CodeMirror
-          className="border border-border1 rounded-md"
+          className="rounded-md border border-border1"
           value={extractPrompt(agent.instructions)}
           editable={false}
           extensions={[markdown({ base: markdownLanguage, codeLanguages }), EditorView.lineWrapping]}
@@ -330,7 +330,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
         const isActivated = isSkillActivated(skill.name);
         const badge = (
           <Badge
-            icon={<SkillIcon className={`h-3 w-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
+            icon={<SkillIcon className={`size-3 ${isActivated ? 'text-green-400' : 'text-accent2'}`} />}
             variant={isActivated ? 'success' : 'default'}
           >
             {skill.name}
@@ -351,7 +351,7 @@ export const AgentMetadataSkillList = ({ skills, agentId, workspaceId }: AgentMe
                       {badge}
                     </Link>
                   </TooltipTrigger>
-                  <TooltipContent className="bg-surface3 text-neutral6 border border-border1">Active</TooltipContent>
+                  <TooltipContent className="border border-border1 bg-surface3 text-neutral6">Active</TooltipContent>
                 </Tooltip>
               </TooltipProvider>
             ) : (
@@ -391,7 +391,7 @@ export const AgentMetadataWorkspaceToolsList = ({ tools }: AgentMetadataWorkspac
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Folder className="h-3 w-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
+          <Badge icon={<Folder className="size-3 text-accent1" />}>{formatWorkspaceToolName(tool)}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>
@@ -411,7 +411,7 @@ export const AgentMetadataBrowserToolsList = ({ tools }: AgentMetadataBrowserToo
     <AgentMetadataList>
       {tools.map(tool => (
         <AgentMetadataListItem key={tool}>
-          <Badge icon={<Globe className="h-3 w-3 text-cyan-500" />}>{tool}</Badge>
+          <Badge icon={<Globe className="size-3 text-cyan-500" />}>{tool}</Badge>
         </AgentMetadataListItem>
       ))}
     </AgentMetadataList>

@@ -31,12 +31,12 @@ function RecursiveFieldRenderer({
     <div className={'py-2'} style={{ paddingLeft: depth * 8 }}>
       <JSONSchemaForm.Field key={field.id} field={field} parentPath={parentPath} depth={depth}>
         <div className="space-y-2 px-2">
-          <div className="flex flex-row gap-4 items-center">
+          <div className="flex flex-row items-center gap-4">
             <JSONSchemaForm.FieldName
               labelIsHidden
               placeholder="Variable name"
               size="md"
-              className="[&_input]:bg-surface3 w-full"
+              className="w-full [&_input]:bg-surface3"
             />
 
             <JSONSchemaForm.FieldType placeholder="Type" />
@@ -123,8 +123,8 @@ export function PromptBlockEditSidebar({
   }, [blockId, storedAgentsData]);
 
   return (
-    <div className="h-full flex flex-col">
-      <ScrollArea className="flex-1 min-h-0">
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-6 p-4">
           <SectionHeader title="Configuration" subtitle="Define your prompt block's name and description." />
 
@@ -160,13 +160,13 @@ export function PromptBlockEditSidebar({
         </div>
 
         {/* Variables */}
-        <div className="flex flex-col gap-4 p-4 border-t border-border1">
+        <div className="flex flex-col gap-4 border-t border-border1 p-4">
           <SectionHeader
             title="Variables"
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="text-accent1 font-medium">{'{{variableName}}'}</code> syntax in your content.
+                <code className="font-medium text-accent1">{'{{variableName}}'}</code> syntax in your content.
               </>
             }
           />
@@ -194,7 +194,7 @@ export function PromptBlockEditSidebar({
 
         {/* Used by */}
         {mode === 'edit' && blockId && (
-          <div className="flex flex-col gap-3 p-4 border-t border-border1">
+          <div className="flex flex-col gap-3 border-t border-border1 p-4">
             <SectionHeader title="Used by" subtitle="Agents that reference this prompt block." />
             {usedByAgents.length > 0 ? (
               <div className="flex flex-col gap-1.5">
@@ -203,9 +203,9 @@ export function PromptBlockEditSidebar({
                     key={agent.id}
                     type="button"
                     onClick={() => navigate(paths.agentLink(agent.id))}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-md text-left hover:bg-surface3 transition-colors"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-surface3"
                   >
-                    <Txt variant="ui-sm" className="text-neutral5 truncate">
+                    <Txt variant="ui-sm" className="truncate text-neutral5">
                       {agent.name || agent.id}
                     </Txt>
                   </button>
@@ -227,7 +227,7 @@ export function PromptBlockEditSidebar({
             <Button onClick={onSaveDraft} disabled={!isDirty || isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
-                  <Spinner className="h-4 w-4" />
+                  <Spinner className="size-4" />
                   Saving...
                 </>
               ) : (
@@ -245,7 +245,7 @@ export function PromptBlockEditSidebar({
             >
               {isSubmitting ? (
                 <>
-                  <Spinner className="h-4 w-4" />
+                  <Spinner className="size-4" />
                   Publishing...
                 </>
               ) : (
@@ -260,7 +260,7 @@ export function PromptBlockEditSidebar({
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <Spinner className="size-4" />
                 Creating...
               </>
             ) : (

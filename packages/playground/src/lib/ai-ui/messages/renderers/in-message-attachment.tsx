@@ -14,7 +14,7 @@ export interface InMessageAttachmentProps {
  * placeholder chip for media the browser cannot preview (video, gs://, s3://).
  */
 export const InMessageAttachment = ({ type, contentType, src, data, name }: InMessageAttachmentProps) => (
-  <div className="h-full w-full overflow-hidden rounded-lg">
+  <div className="size-full overflow-hidden rounded-lg">
     {type === 'image' ? (
       <ImageEntry src={src ?? ''} />
     ) : type === 'file' ? (

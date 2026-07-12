@@ -56,28 +56,28 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
         <DialogBody>
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2 rounded-md border border-border1 bg-surface2 px-3 py-2">
-              <Search className="h-4 w-4 text-neutral3" />
+              <Search className="size-4 text-neutral3" />
               <input
                 type="text"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 placeholder="Search prompt blocks..."
-                className="flex-1 bg-transparent text-ui-sm text-neutral6 placeholder:text-neutral3 outline-hidden"
+                className="flex-1 bg-transparent text-ui-sm text-neutral6 outline-hidden placeholder:text-neutral3"
               />
             </div>
 
             {isLoading ? (
               <div className="flex flex-col items-center justify-center gap-2 py-8 text-neutral3">
-                <Spinner className="h-6 w-6" />
+                <Spinner className="size-6" />
                 <Txt variant="ui-sm">Loading prompt blocks...</Txt>
               </div>
             ) : filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 py-8 text-neutral3">
-                <FileText className="h-8 w-8" />
+                <FileText className="size-8" />
                 <Txt variant="ui-sm">{search ? 'No matching prompt blocks' : 'No prompt blocks available'}</Txt>
               </div>
             ) : (
-              <div className="flex flex-col gap-1 max-h-dropdown-max-height overflow-y-auto">
+              <div className="flex max-h-dropdown-max-height flex-col gap-1 overflow-y-auto">
                 {filtered.map(block => (
                   <button
                     key={block.id}
@@ -85,14 +85,14 @@ export function PromptBlockPickerDialog({ open, onOpenChange, onSelect }: Prompt
                     onClick={() => handleSelect(block.id)}
                     className={cn(
                       'flex flex-col gap-0.5 rounded-md px-3 py-2 text-left',
-                      'hover:bg-surface4 active:bg-surface5 transition-colors',
+                      'transition-colors hover:bg-surface4 active:bg-surface5',
                     )}
                   >
-                    <Txt variant="ui-sm" className="text-neutral6 font-medium">
+                    <Txt variant="ui-sm" className="font-medium text-neutral6">
                       {block.name}
                     </Txt>
                     {block.description && (
-                      <Txt variant="ui-xs" className="text-neutral3 line-clamp-1">
+                      <Txt variant="ui-xs" className="line-clamp-1 text-neutral3">
                         {block.description}
                       </Txt>
                     )}

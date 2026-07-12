@@ -23,7 +23,7 @@ export const AgentBuilderRootLayout = ({ paths }: AgentBuilderRootLayoutProps) =
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center">
         <Spinner />
       </div>
     );
@@ -44,7 +44,7 @@ const AgentBuilderPermissionsGuard = ({ paths }: AgentBuilderRootLayoutProps) =>
 
   if (isLoading) {
     return (
-      <div className="h-screen w-full flex items-center justify-center">
+      <div className="flex h-screen w-full items-center justify-center">
         <Spinner />
       </div>
     );
@@ -114,12 +114,12 @@ function AccessDeniedScreen() {
         />
         <div className="flex items-center gap-2">
           <Button as="a" href="/agents" variant="outline" size="sm">
-            <ArrowLeft className="h-3.5 w-3.5" />
+            <ArrowLeft className="size-3.5" />
             Back to Studio
           </Button>
           {isImpersonating && (
             <Button variant="default" size="sm" onClick={stopImpersonation}>
-              <Eye className="h-3.5 w-3.5" />
+              <Eye className="size-3.5" />
               Exit {impersonatedRole?.name} preview
             </Button>
           )}

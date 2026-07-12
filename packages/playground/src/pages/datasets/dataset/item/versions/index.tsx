@@ -88,7 +88,7 @@ function DatasetItemVersionsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="py-8 text-center text-neutral4">
             <p>Select at least two versions to compare.</p>
           </div>
         </MainContentContent>
@@ -107,7 +107,7 @@ function DatasetItemVersionsComparePage() {
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div
-          className={cn('grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full', {
+          className={cn('max-w-560 mx-auto grid h-full grid-rows-[auto_1fr] gap-6', {
             'grid-rows-[auto_auto_1fr]': isDiffView,
           })}
         >
@@ -162,7 +162,7 @@ function DatasetItemVersionsComparePage() {
                     setSearchParams({ ids: newVersions.join(',') });
                   }}
                 />
-                {idx === 0 && <div className={cn('bg-surface5 w-[3px] shrink-0 mx-[1.5vw]')} />}
+                {idx === 0 && <div className={cn('mx-[1.5vw] w-[3px] shrink-0 bg-surface5')} />}
               </Fragment>
             ))}
           </Columns>
@@ -234,8 +234,8 @@ function CompareVersionColumn({
 
   return (
     <Column>
-      <Column.Toolbar className="grid gap-4 grid-cols-[auto_1fr]">
-        <HistoryIcon className="w-6 h-6 opacity-50" />
+      <Column.Toolbar className="grid grid-cols-[auto_1fr] gap-4">
+        <HistoryIcon className="size-6 opacity-50" />
         <Select
           name={`compare-version-${idx}`}
           value={String(datasetVersion)}
@@ -257,9 +257,9 @@ function CompareVersionColumn({
       {showContent && (
         <Column.Content>
           {isLoading ? (
-            <div className="text-neutral4 text-sm">Loading...</div>
+            <div className="text-sm text-neutral4">Loading...</div>
           ) : !version || !displayItem ? (
-            <div className="text-neutral4 text-sm">Version {datasetVersion} not found</div>
+            <div className="text-sm text-neutral4">Version {datasetVersion} not found</div>
           ) : (
             <DatasetItemContent item={displayItem} Link={Link} />
           )}

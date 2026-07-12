@@ -22,7 +22,7 @@ function isCodeBasedScorer(score?: ScoreRowData): boolean {
 function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: ScoreRowData) {
   return (
     <>
-      <span className="flex items-center gap-1.5 text-neutral2 uppercase tracking-widest [&>svg]:size-3.5">
+      <span className="flex items-center gap-1.5 tracking-widest text-neutral2 uppercase [&>svg]:size-3.5">
         {icon}
         {sectionTitle}
       </span>
@@ -101,7 +101,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             )}
           </DataKeysAndValues>
 
-          <div className="mt-6 mb-6 flex justify-end ">
+          <div className="my-6 flex justify-end ">
             <Button size="sm" onClick={() => setDatasetDialogOpen(true)}>
               <Icon>
                 <SaveIcon />
@@ -110,18 +110,18 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext }: ScoreData
             </Button>
           </div>
 
-          <div className="text-neutral4 mb-6">
+          <div className="mb-6 text-neutral4">
             <div
               className={cn(
-                'text-neutral2 text-ui-lg flex gap-2 items-baseline',
-                '[&>svg]:w-5 [&>svg]:h-5 [&>svg]:translate-y-1',
+                'flex items-baseline gap-2 text-ui-lg text-neutral2',
+                '[&>svg]:size-5 [&>svg]:translate-y-1',
               )}
             >
               <GaugeIcon />
               <span className="">Score:</span>
               <b className="font-mono text-neutral3">{`${score.score == null || Number.isNaN(score.score) ? 'n/a' : score.score}`}</b>
             </div>
-            <div className="text-ui-smd font-mono mt-2">
+            <div className="mt-2 font-mono text-ui-smd">
               {score.reason ||
                 (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
             </div>

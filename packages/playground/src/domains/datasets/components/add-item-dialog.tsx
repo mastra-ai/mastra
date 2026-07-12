@@ -41,8 +41,8 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   return (
     <div className="mt-2 space-y-1">
       {errors.map((err, idx) => (
-        <p key={idx} className="text-xs text-destructive">
-          <code className="bg-destructive/10 px-1 rounded">
+        <p key={idx} className="text-destructive text-xs">
+          <code className="bg-destructive/10 rounded px-1">
             {field}
             {err.path !== '/' ? err.path : ''}
           </code>
@@ -206,7 +206,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="item-input">Input (JSON) *</Label>
-              <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-[120px]" />
+              <CodeEditor value={input} onChange={handleInputChange} showCopyButton={false} className="min-h-30" />
               {validationErrors?.field === 'input' && (
                 <ValidationErrors field="input" errors={validationErrors.errors} />
               )}
@@ -218,7 +218,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
                 value={groundTruth}
                 onChange={handleGroundTruthChange}
                 showCopyButton={false}
-                className="min-h-[80px]"
+                className="min-h-20"
               />
               {validationErrors?.field === 'groundTruth' && (
                 <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
@@ -231,7 +231,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
                 value={expectedTrajectory}
                 onChange={setExpectedTrajectory}
                 showCopyButton={false}
-                className="min-h-[80px]"
+                className="min-h-20"
               />
             </div>
 
@@ -241,7 +241,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
                 value={toolMocks}
                 onChange={handleToolMocksChange}
                 showCopyButton={false}
-                className="min-h-[80px]"
+                className="min-h-20"
               />
               {validationErrors?.field === 'toolMocks' && (
                 <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
@@ -254,7 +254,7 @@ export function AddItemDialog({ datasetId, open, onOpenChange, onSuccess }: AddI
                 value={requestContext}
                 onChange={setRequestContext}
                 showCopyButton={false}
-                className="min-h-[80px]"
+                className="min-h-20"
               />
             </div>
 

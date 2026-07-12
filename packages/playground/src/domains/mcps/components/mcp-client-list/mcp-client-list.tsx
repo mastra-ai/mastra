@@ -145,11 +145,11 @@ export function MCPClientList() {
         </Section.Header>
 
         {mcpClients.length === 0 && (
-          <div className="rounded-xl border border-border2 border-dashed py-8 text-center">
+          <div className="rounded-xl border border-dashed border-border2 py-8 text-center">
             <EmptyState
               className="py-4!"
               iconSlot={
-                <div className="size-6 text-neutral3 rounded-full bg-surface3 p-2 flex items-center justify-center">
+                <div className="flex size-6 items-center justify-center rounded-full bg-surface3 p-2 text-neutral3">
                   <LaptopMinimal className="size-6" />
                 </div>
               }
@@ -181,7 +181,7 @@ export function MCPClientList() {
                   onClick={() => setViewIndex(index)}
                 >
                   <div
-                    className="size-11 rounded-lg flex items-center justify-center uppercase shrink-0"
+                    className="flex size-11 shrink-0 items-center justify-center rounded-lg uppercase"
                     style={{ backgroundColor: bg, color: text }}
                   >
                     <Icon>

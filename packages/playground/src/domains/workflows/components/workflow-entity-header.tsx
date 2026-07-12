@@ -38,7 +38,7 @@ export const WorkflowEntityHeader = ({ workflowId }: WorkflowEntityHeaderProps) 
           </Badge>
 
           {workflow?.isProcessorWorkflow && (
-            <Badge icon={<Cpu className="h-3 w-3" />} className="bg-violet-500/20 text-violet-400">
+            <Badge icon={<Cpu className="size-3" />} className="bg-violet-500/20 text-violet-400">
               Processor
             </Badge>
           )}

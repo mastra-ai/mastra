@@ -90,13 +90,13 @@ export function AppSidebar() {
 
   return (
     <MainSidebar>
-      <div className="pt-2 mb-2">
+      <div className="mb-2 pt-2">
         {state === 'collapsed' ? (
-          <div className="flex flex-col gap-2 items-center">
-            <div className="relative grid place-items-center size-9">
+          <div className="flex flex-col items-center gap-2">
+            <div className="relative grid size-9 place-items-center">
               <LogoWithoutText
                 className={cn(
-                  'h-[1.5rem] w-[1.5rem] shrink-0 transition-opacity duration-150',
+                  'size-[1.5rem] shrink-0 transition-opacity duration-150',
                   !isMobile && 'group-hover/sidebar:opacity-0',
                 )}
               />
@@ -109,10 +109,10 @@ export function AppSidebar() {
             {isUserAuthenticated && <AuthStatus />}
           </div>
         ) : isUserAuthenticated ? (
-          <span className="flex items-center justify-between pl-3 pr-2">
-            <span className="flex items-center gap-2 flex-1 min-w-0">
-              <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-              <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+          <span className="flex items-center justify-between pr-2 pl-3">
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <LogoWithoutText className="size-[1.5rem] shrink-0" />
+              <span className="truncate font-display text-sm font-semibold tracking-tight whitespace-nowrap">
                 Mastra Studio
               </span>
               {!isMobile && <MainSidebar.Trigger />}
@@ -120,9 +120,9 @@ export function AppSidebar() {
             <AuthStatus />
           </span>
         ) : (
-          <span className="flex items-center gap-2 pl-3 pr-2">
-            <LogoWithoutText className="h-[1.5rem] w-[1.5rem] shrink-0" />
-            <span className="font-display text-sm font-semibold tracking-tight whitespace-nowrap truncate">
+          <span className="flex items-center gap-2 pr-2 pl-3">
+            <LogoWithoutText className="size-[1.5rem] shrink-0" />
+            <span className="truncate font-display text-sm font-semibold tracking-tight whitespace-nowrap">
               Mastra Studio
             </span>
             {!isMobile && <MainSidebar.Trigger />}

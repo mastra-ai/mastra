@@ -130,7 +130,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
     <div
       ref={containerRef}
       className={cn(
-        'relative w-full aspect-video bg-surface2 rounded-md overflow-hidden',
+        'relative aspect-video w-full overflow-hidden rounded-md bg-surface2',
         isInteractive && !isAgentBusy && 'ring-2 ring-accent1',
         isInteractive && isAgentBusy && 'ring-2 ring-amber-400',
         className,
@@ -150,7 +150,7 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
         tabIndex={status === 'streaming' ? 0 : -1}
         role="button"
         className={cn(
-          'absolute inset-0 w-full h-full object-contain',
+          'absolute inset-0 size-full object-contain',
           hasFrame ? 'opacity-100' : 'opacity-0',
           status === 'streaming' && (isInteractive ? 'cursor-text' : 'cursor-pointer'),
         )}
@@ -167,9 +167,9 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
 
       {/* Reconnecting overlay - shown over last frame */}
       {isReconnecting && (
-        <div className="absolute inset-0 bg-surface1/80 flex items-center justify-center">
+        <div className="absolute inset-0 flex items-center justify-center bg-surface1/80">
           <div className="flex flex-col items-center gap-2">
-            <div className="w-4 h-4 border-2 border-neutral4 border-t-transparent rounded-full animate-spin" />
+            <div className="size-4 animate-spin rounded-full border-2 border-neutral4 border-t-transparent" />
             <span className="text-sm text-neutral4">Reconnecting...</span>
           </div>
         </div>
@@ -177,11 +177,11 @@ export function BrowserViewFrame({ className, onStatusChange, onUrlChange, onFir
 
       {/* Error overlay */}
       {hasError && (
-        <div className="absolute inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
           <div className="flex flex-col items-center gap-3 px-6 py-4 text-center">
-            <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
+            <div className="flex size-14 items-center justify-center rounded-full bg-red-500/20">
               <svg
-                className="w-7 h-7 text-red-400"
+                className="size-7 text-red-400"
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"

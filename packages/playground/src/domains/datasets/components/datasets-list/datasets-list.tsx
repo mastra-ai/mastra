@@ -158,7 +158,7 @@ export function DatasetsList({
                 )}
               </EntityList.Cell>
               <EntityList.TextCell>v{ds.version ?? 1}</EntityList.TextCell>
-              <EntityList.Cell className="text-neutral4 text-ui-smd">
+              <EntityList.Cell className="text-ui-smd text-neutral4">
                 {ds.targetTypes.length > 0 ? (
                   <span className="flex min-w-0 items-center gap-2 overflow-hidden">
                     {ds.targetTypes.map(type => (
@@ -183,7 +183,7 @@ export function DatasetsList({
                 to={`${paths.datasetLink(ds.id)}?tab=experiments`}
                 variant="ghost"
                 size="sm"
-                className="w-full  rounded-lg h-full p-0!"
+                className="size-full  rounded-lg p-0!"
               >
                 <Chip color={experimentsChipColor}>
                   {ds.experimentCount} ({ds.successPct ?? 0}%)
@@ -197,7 +197,7 @@ export function DatasetsList({
                 to={`${paths.datasetLink(ds.id)}?tab=review`}
                 variant="ghost"
                 size="sm"
-                className="w-full  rounded-lg h-full p-0!"
+                className="size-full  rounded-lg p-0!"
               >
                 {review.needsReview > 0 ? (
                   <Chip color="yellow">{review.needsReview} pending</Chip>

@@ -68,7 +68,7 @@ export function ReviewItemCard({
   return (
     <div
       className={cn(
-        'border border-border1 rounded-lg p-3 transition-colors',
+        'rounded-lg border border-border1 p-3 transition-colors',
         isSelected && 'ring-1 ring-accent1',
         item.tags.length > 0 && 'border-l-2 border-l-accent1',
       )}
@@ -76,7 +76,7 @@ export function ReviewItemCard({
       {/* Header row */}
       <div className="flex items-center gap-2">
         {isCompleted ? (
-          <Icon size="sm" className="text-positive1 shrink-0">
+          <Icon size="sm" className="shrink-0 text-positive1">
             <CheckCircle />
           </Icon>
         ) : (
@@ -84,11 +84,11 @@ export function ReviewItemCard({
             type="checkbox"
             checked={isSelected}
             onChange={onToggleSelect}
-            className="w-3.5 h-3.5 rounded border-border1 accent-accent1"
+            className="size-3.5 rounded border-border1 accent-accent1"
           />
         )}
-        <button type="button" onClick={onToggleExpand} className="flex-1 text-left min-w-0">
-          <Txt variant="ui-xs" className="text-neutral4 truncate block">
+        <button type="button" onClick={onToggleExpand} className="min-w-0 flex-1 text-left">
+          <Txt variant="ui-xs" className="block truncate text-neutral4">
             {inputPreview}
           </Txt>
         </button>
@@ -97,16 +97,16 @@ export function ReviewItemCard({
 
       {/* Error indicator */}
       {Boolean(item.error) && (
-        <Txt variant="ui-xs" className="text-negative1 mt-1 block truncate">
+        <Txt variant="ui-xs" className="mt-1 block truncate text-negative1">
           Error: {typeof item.error === 'string' ? item.error : 'Failed'}
         </Txt>
       )}
 
       {/* Rating + Tags + Remove row */}
       <TooltipProvider delayDuration={200}>
-        <div className="flex items-center gap-2 mt-2">
+        <div className="mt-2 flex items-center gap-2">
           {/* Rating: thumbs up / down */}
-          <div className="flex items-center gap-0.5 mr-1">
+          <div className="mr-1 flex items-center gap-0.5">
             <Button
               tooltip="Good — this result is acceptable"
               variant={item.rating === 'positive' ? 'default' : 'ghost'}
@@ -132,10 +132,10 @@ export function ReviewItemCard({
           </div>
 
           {/* Tags */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {isCompleted ? (
               item.tags.length > 0 ? (
-                <div className="flex items-center gap-1 flex-wrap">
+                <div className="flex flex-wrap items-center gap-1">
                   {item.tags.map(t => (
                     <Badge key={t} variant="default">
                       {t}
@@ -176,10 +176,10 @@ export function ReviewItemCard({
 
       {/* Expanded content */}
       {isExpanded && (
-        <div className="mt-3 pt-2 border-t border-border1 space-y-2">
+        <div className="mt-3 space-y-2 border-t border-border1 pt-2">
           {/* Scores */}
           {scoresEntries.length > 0 && (
-            <div className="flex items-center gap-2 flex-wrap">
+            <div className="flex flex-wrap items-center gap-2">
               {scoresEntries.map(([scorerId, score]) => (
                 <Badge key={scorerId} variant={score >= 0.5 ? 'success' : 'error'}>
                   {scorerId.slice(0, 12)}: {score.toFixed(3)}
@@ -190,23 +190,23 @@ export function ReviewItemCard({
 
           {/* Input */}
           <div>
-            <Txt variant="ui-xs" className="text-neutral3 font-medium block mb-1">
+            <Txt variant="ui-xs" className="mb-1 block font-medium text-neutral3">
               Input
             </Txt>
-            <pre className="text-xs text-neutral4 bg-surface3 rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-24 overflow-y-auto">
+            <pre className="max-h-24 overflow-auto rounded bg-surface3 px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap text-neutral4">
               {formatUnknown(item.input)}
             </pre>
           </div>
 
           {/* Output / Error */}
           <div>
-            <Txt variant="ui-xs" className="text-neutral3 font-medium block mb-1">
+            <Txt variant="ui-xs" className="mb-1 block font-medium text-neutral3">
               {item.error ? 'Error' : 'Output'}
             </Txt>
             <pre
               className={cn(
-                'text-xs rounded px-3 py-2 overflow-x-auto whitespace-pre-wrap wrap-break-word max-h-24 overflow-y-auto',
-                item.error ? 'text-negative1 bg-negative1/10' : 'text-neutral4 bg-surface3',
+                'max-h-24 overflow-auto rounded px-3 py-2 text-xs wrap-break-word whitespace-pre-wrap',
+                item.error ? 'bg-negative1/10 text-negative1' : 'bg-surface3 text-neutral4',
               )}
             >
               {formatUnknown(item.error || item.output)}
@@ -215,8 +215,8 @@ export function ReviewItemCard({
 
           {/* Comment */}
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <Txt variant="ui-xs" className="text-neutral3 font-medium">
+            <div className="mb-1 flex items-center justify-between">
+              <Txt variant="ui-xs" className="font-medium text-neutral3">
                 Comment
               </Txt>
               {commentSaved && (

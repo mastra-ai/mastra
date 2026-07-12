@@ -22,7 +22,7 @@ export function DashboardLineChart({
 }) {
   return (
     <div>
-      <div className="flex flex-wrap items-end gap-4 mb-4">
+      <div className="mb-4 flex flex-wrap items-end gap-4">
         {series.map(s => {
           const aggregated = s.aggregate?.(data);
           return (
@@ -32,7 +32,7 @@ export function DashboardLineChart({
                 <span className="text-ui-xs text-neutral3 uppercase">{s.label}</span>
               </div>
               {aggregated && (
-                <p className="text-ui-md text-neutral4 pl-5">
+                <p className="pl-5 text-ui-md text-neutral4">
                   {aggregated.value}
                   {aggregated.suffix && <span className="text-ui-sm text-neutral2"> {aggregated.suffix}</span>}
                 </p>

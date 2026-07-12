@@ -15,7 +15,7 @@ const StatusBadge = ({ ok, label }: { ok: boolean; label: string }) => (
     data-slot="infrastructure-status-badge"
     data-ok={ok ? 'true' : 'false'}
   >
-    <span className={`h-1.5 w-1.5 rounded-full ${ok ? 'bg-accent3' : 'bg-neutral3'}`} aria-hidden="true" />
+    <span className={`size-1.5 rounded-full ${ok ? 'bg-accent3' : 'bg-neutral3'}`} aria-hidden="true" />
     {label}
   </span>
 );
@@ -71,7 +71,7 @@ export const AgentBuilderInfrastructure = () => {
         </PageHeader>
       </PageLayout.TopArea>
 
-      <PageLayout.MainArea className="flex flex-col gap-5 mt-6">
+      <PageLayout.MainArea className="mt-6 flex flex-col gap-5">
         <SectionCard
           title="Agent Builder Infrastructure"
           description="Deployment-level defaults Agent Builder applies when users create or run builder agents."
@@ -105,7 +105,7 @@ export const AgentBuilderInfrastructure = () => {
                 ) : (
                   <ul className="flex flex-col gap-2">
                     {data.channels.providers.map(provider => (
-                      <li key={provider.id} className="rounded-md border border-border1 px-3 py-3">
+                      <li key={provider.id} className="rounded-md border border-border1 p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex flex-col gap-1">
                             <Txt variant="ui-sm" className="font-medium">
@@ -143,7 +143,7 @@ export const AgentBuilderInfrastructure = () => {
                 {!data.browser.provider ? (
                   <EmptyRow message="No browser configured." />
                 ) : (
-                  <div className="rounded-md border border-border1 px-3 py-3">
+                  <div className="rounded-md border border-border1 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex flex-col gap-1">
                         <Txt variant="ui-sm" className="font-medium">
@@ -174,7 +174,7 @@ export const AgentBuilderInfrastructure = () => {
                     External skill registries available to import skills into the workspace.
                   </Txt>
                 </div>
-                <div className="rounded-md border border-border1 px-3 py-3">
+                <div className="rounded-md border border-border1 p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex flex-col gap-1">
                       <Txt variant="ui-sm" className="font-medium">
@@ -205,7 +205,7 @@ export const AgentBuilderInfrastructure = () => {
                 {!data.workspace.type ? (
                   <EmptyRow message="No workspace configured." />
                 ) : (
-                  <div className="rounded-md border border-border1 px-3 py-3">
+                  <div className="rounded-md border border-border1 p-3">
                     <div className="flex items-start justify-between gap-3">
                       <Txt variant="ui-sm" className="font-medium">
                         {data.workspace.workspaceId ?? data.workspace.name ?? 'Inline workspace'}

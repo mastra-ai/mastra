@@ -47,16 +47,16 @@ const ToolExecutorContent = ({
 
   return (
     <MainContentContent hasLeftServiceColumn={true} className="relative">
-      <div className="bg-surface2 border-r border-border1 w-80 flex flex-col">
+      <div className="flex w-80 flex-col border-r border-border1 bg-surface2">
         <ToolInformation toolDescription={toolDescription} toolId={toolId} toolType={toolType} />
-        <div className="flex-1 overflow-hidden border-t border-border1 flex flex-col">
+        <div className="flex flex-1 flex-col overflow-hidden border-t border-border1">
           <Tabs defaultTab="input-data" value={selectedTab} onValueChange={setSelectedTab}>
             <TabList>
               <Tab value="input-data">Input Data</Tab>
               {requestContextSchema && <Tab value="request-context">Request Context</Tab>}
             </TabList>
           </Tabs>
-          <div className={cn('p-5 overflow-y-auto', selectedTab !== 'input-data' && 'hidden')}>
+          <div className={cn('overflow-y-auto p-5', selectedTab !== 'input-data' && 'hidden')}>
             <DynamicForm
               isSubmitLoading={isExecutingTool}
               schema={zodInputSchema}
@@ -67,7 +67,7 @@ const ToolExecutorContent = ({
             />
           </div>
           {requestContextSchema && (
-            <div className={cn('p-5 overflow-y-auto', selectedTab !== 'request-context' && 'hidden')}>
+            <div className={cn('overflow-y-auto p-5', selectedTab !== 'request-context' && 'hidden')}>
               <RequestContextSchemaForm requestContextSchema={requestContextSchema} />
             </div>
           )}
@@ -76,7 +76,7 @@ const ToolExecutorContent = ({
       <div className="absolute top-4 right-4 z-10">
         <CopyButton content={code} tooltip="Copy JSON result to clipboard" />
       </div>
-      <div className="p-5 h-full relative overflow-x-auto overflow-y-auto">
+      <div className="relative h-full overflow-auto p-5">
         <CodeMirror value={errorString || code} editable={true} theme={theme} extensions={[jsonLanguage]} />
       </div>
     </MainContentContent>

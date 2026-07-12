@@ -75,7 +75,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
         </div>
       ) : (
         <div>
-          <div className="px-5 pb-2 pt-3 text-left">
+          <div className="px-5 pt-3 pb-2 text-left">
             <Txt as="h2" variant="ui-md" className="text-neutral3">
               Recent runs
             </Txt>
@@ -126,7 +126,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId }: WorkflowRecentRunsProp
                 })}
 
                 {isFetchingNextPage && (
-                  <li className="flex justify-center items-center py-2">
+                  <li className="flex items-center justify-center py-2">
                     <Icon>
                       <Spinner />
                     </Icon>

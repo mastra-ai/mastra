@@ -5,7 +5,7 @@ export function SidebarPanel({ children, className }: { children: ReactNode; cla
   return (
     <div
       className={cn(
-        'bg-surface3 rounded-tr-studio-panel border-t border-r border-border1/50 flex h-full w-full min-h-0 min-w-0 flex-col overflow-hidden',
+        'flex size-full min-h-0 min-w-0 flex-col overflow-hidden rounded-tr-studio-panel border-t border-r border-border1/50 bg-surface3',
         className,
       )}
     >

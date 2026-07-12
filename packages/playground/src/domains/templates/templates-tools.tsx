@@ -34,8 +34,8 @@ export function TemplatesTools({
     return (
       <div
         className={cn(
-          'h-[6.5rem] flex items-center gap-8',
-          '[&>div]:bg-surface3 [&>div]:w-48 [&>div]:h-8 [&>div]:animate-pulse',
+          'h-26 flex items-center gap-8',
+          '[&>div]:h-8 [&>div]:w-48 [&>div]:animate-pulse [&>div]:bg-surface3',
           className,
         )}
       >
@@ -45,7 +45,7 @@ export function TemplatesTools({
   }
 
   return (
-    <div className={cn('flex flex-wrap mx-auto sticky top-0 gap-4 bg-surface2 py-8', className)}>
+    <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-4 bg-surface2 py-8', className)}>
       <SearchFieldBlock
         name="search-templates"
         label="Search templates"

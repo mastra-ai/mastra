@@ -29,9 +29,9 @@ export const Browser = ({ editable = true }: BrowserProps) => {
 
   return (
     <div className="flex h-full min-h-0 items-center justify-center px-6 py-8" data-testid="browser-detail-picker">
-      <div className="flex w-full max-w-[28rem] flex-col items-center gap-5 text-center">
+      <div className="flex w-full max-w-md flex-col items-center gap-5 text-center">
         <div className="grid size-14 place-items-center rounded-full" style={iconStyle}>
-          <GlobeIcon className="h-7 w-7" />
+          <GlobeIcon className="size-7" />
         </div>
 
         <div className="flex flex-col gap-2">

@@ -14,7 +14,7 @@ const RUN_OPTIONS_EDITOR_HEIGHT = 'h-[260px] md:h-[360px]';
 export function AgentRunOptionsContent({ requestContextSchema }: AgentRunOptionsContentProps) {
   return (
     <ScrollArea className="w-full" maxHeight="min(600px, calc(100dvh - 8rem))">
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4">
         <Txt as="h3" variant="ui-md" className="text-neutral3">
           Run options
         </Txt>
@@ -29,12 +29,7 @@ export function AgentRunOptionsContent({ requestContextSchema }: AgentRunOptions
           </section>
 
           <section className="min-w-0">
-            <TracingRunOptions
-              className="px-0 py-0"
-              editorClassName={RUN_OPTIONS_EDITOR_HEIGHT}
-              hideTitle
-              showEditorHeader
-            />
+            <TracingRunOptions className="p-0" editorClassName={RUN_OPTIONS_EDITOR_HEIGHT} hideTitle showEditorHeader />
           </section>
         </div>
       </div>

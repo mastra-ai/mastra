@@ -34,10 +34,10 @@ export function ConnectChannelMessage({ platformId, agentId }: ConnectChannelMes
   return (
     <>
       <div
-        className="border border-1 p-3 rounded-xl flex items-center gap-3"
+        className="flex items-center gap-3 rounded-xl border p-3"
         data-testid={`agent-builder-chat-connect-channel-${platformId}`}
       >
-        <PlatformIcon platform={platform.id} className="h-5 w-5 shrink-0" />
+        <PlatformIcon platform={platform.id} className="size-5 shrink-0" />
         <Txt variant="ui-md" className="flex-1 text-neutral4" as="div">
           {platform.name}
         </Txt>

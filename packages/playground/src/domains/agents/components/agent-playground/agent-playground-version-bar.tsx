@@ -130,7 +130,7 @@ export function AgentPlaygroundVersionBar({
 
   return {
     versionSelector: (
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border1 bg-surface3">
+      <div className="flex items-center gap-2 border-b border-border1 bg-surface3 px-4 py-3">
         {versions.length > 0 ? (
           <Combobox
             options={versionOptions}
@@ -153,7 +153,7 @@ export function AgentPlaygroundVersionBar({
             <button
               type="button"
               aria-label="Version information"
-              className="text-neutral3 hover:text-neutral5 transition-colors shrink-0 rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
+              className="shrink-0 rounded-sm text-neutral3 transition-colors hover:text-neutral5 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
             >
               <Icon size="sm">
                 <Info />
@@ -167,14 +167,14 @@ export function AgentPlaygroundVersionBar({
           </PopoverContent>
         </HoverPopover>
 
-        <div className="flex items-center gap-2 ml-auto shrink-0">
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           {readOnly && <Badge variant="warning">Read-only</Badge>}
           {!readOnly && hasDraft && !isCodeSourceAgent && <Badge variant="info">Unpublished</Badge>}
         </div>
       </div>
     ),
     actionBar: (
-      <div className="flex items-center justify-end px-3 py-2 border-t border-border1 bg-surface3">
+      <div className="flex items-center justify-end border-t border-border1 bg-surface3 px-3 py-2">
         {showCodeModeActions ? (
           <ButtonsGroup className="flex-wrap justify-end">
             <Button variant="default" size="md" onClick={() => void onDownloadJson?.()}>

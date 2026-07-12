@@ -11,7 +11,7 @@ export type SectionHeaderProps = {
 
 export function SectionHeader({ title, subtitle, icon, className }: SectionHeaderProps) {
   return (
-    <header className={cn('flex flex-col w-fit', className)}>
+    <header className={cn('flex w-fit flex-col', className)}>
       <Txt as="h2" variant="header-md" className="flex items-center gap-2">
         {icon && (
           <Icon size="lg" className="text-accent1">
@@ -20,7 +20,7 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
         )}
         {title}
       </Txt>
-      {subtitle && <Txt className="text-ui-md text-neutral3 !font-light">{subtitle}</Txt>}
+      {subtitle && <Txt className="text-ui-md !font-light text-neutral3">{subtitle}</Txt>}
     </header>
   );
 }

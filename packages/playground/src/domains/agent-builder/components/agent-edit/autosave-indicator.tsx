@@ -21,7 +21,7 @@ export const AutosaveIndicator = ({ status, lastError, onRetry }: AutosaveIndica
   if (status === 'saved') {
     return (
       <span className="flex items-center gap-1.5 text-ui-sm text-neutral3" data-testid="agent-builder-autosave-saved">
-        <CheckIcon className="h-3.5 w-3.5" />
+        <CheckIcon className="size-3.5" />
         Saved
       </span>
     );

@@ -171,12 +171,12 @@ export function SchemaConfigSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center gap-2 text-sm font-medium text-neutral4 hover:text-neutral5 w-full py-2">
-        <ChevronRight className="w-4 h-4" />
+      <CollapsibleTrigger className="flex w-full items-center gap-2 py-2 text-sm font-medium text-neutral4 hover:text-neutral5">
+        <ChevronRight className="size-4" />
         Schema Configuration (Optional)
       </CollapsibleTrigger>
 
-      <CollapsibleContent className="pt-4 space-y-4">
+      <CollapsibleContent className="space-y-4 pt-4">
         {/* JSON Schema info notification */}
         <Notice variant="info" title="JSON Schema Format">
           <Notice.Message>
@@ -185,7 +185,7 @@ export function SchemaConfigSection({
               href="https://json-schema.org/"
               target="_blank"
               rel="noopener noreferrer"
-              className="underline hover:text-accent5Lighter"
+              className="hover:text-accent5Lighter underline"
             >
               JSON Schema
             </a>{' '}

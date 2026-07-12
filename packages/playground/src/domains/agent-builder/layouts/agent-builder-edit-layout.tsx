@@ -39,25 +39,25 @@ export const AgentBuilderEditLayout = ({
   const applyMobileChatHide = hideMobileChat && !isCentered;
 
   return (
-    <div className="h-full grid grid-rows-[auto_1fr]">
+    <div className="grid h-full grid-rows-[auto_1fr]">
       {topBar}
       <div
         className={cn(
-          'flex flex-1 min-h-0 min-w-0 flex-col pt-4 pb-4 md:pb-10',
-          !isCentered && 'lg:grid lg:grid-rows-1 lg:grid-cols-[1fr_2fr]',
+          'flex min-h-0 min-w-0 flex-1 flex-col py-4 md:pb-10',
+          !isCentered && 'lg:grid lg:grid-cols-[1fr_2fr] lg:grid-rows-1',
         )}
       >
         <div
           className={cn(
-            'h-full w-full min-w-0 overflow-hidden px-4 md:px-10',
+            'size-full min-w-0 overflow-hidden px-4 md:px-10',
             isCentered && 'lg:mx-auto lg:max-w-[80ch]',
             applyMobileChatHide && 'hidden lg:block',
           )}
           data-testid="agent-builder-panel-chat"
           style={{ viewTransitionName: 'agent-builder-chat-panel' }}
         >
-          <div className="min-h-0 min-w-0 h-full overflow-hidden md:max-w-[80ch] md:mx-auto w-full grid grid-rows-[1fr_auto]">
-            <div className="min-h-0 min-w-0 h-full overflow-hidden">{chat}</div>
+          <div className="grid size-full min-h-0 min-w-0 grid-rows-[1fr_auto] overflow-hidden md:mx-auto md:max-w-[80ch]">
+            <div className="h-full min-h-0 min-w-0 overflow-hidden">{chat}</div>
             {chatFooter ? (
               <div data-testid="agent-builder-chat-footer" className="w-full pt-3 lg:hidden">
                 {chatFooter}
@@ -71,12 +71,12 @@ export const AgentBuilderEditLayout = ({
             className={cn(
               'min-w-0 overflow-hidden',
               'flex-1 px-4 md:px-10',
-              'lg:flex-none lg:h-full lg:min-h-0 lg:pl-0 lg:pr-10',
+              'lg:h-full lg:min-h-0 lg:flex-none lg:pr-10 lg:pl-0',
             )}
             data-testid="agent-builder-panel-profile"
             style={{ viewTransitionName: 'agent-builder-profile-panel' }}
           >
-            <div className="h-full min-h-0 w-full min-w-0 overflow-hidden">{profile}</div>
+            <div className="size-full min-h-0 min-w-0 overflow-hidden">{profile}</div>
           </div>
         )}
       </div>

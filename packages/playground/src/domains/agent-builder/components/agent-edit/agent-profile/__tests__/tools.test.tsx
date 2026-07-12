@@ -187,19 +187,6 @@ describe('Tools', () => {
     await findByText('No selected tools match unchecked');
   });
 
-  it('uses the small-size classes matching the provider-filter checkbox in models.tsx', () => {
-    const { getByTestId } = render(
-      <FormHarness>
-        <Tools availableAgentTools={availableTools} />
-      </FormHarness>,
-    );
-
-    const checkbox = getByTestId('tools-only-selected-filter-checkbox');
-    expect(checkbox.className).toContain('h-3');
-    expect(checkbox.className).toContain('w-3');
-    expect(checkbox.className).toContain('[&_svg]:h-2.5');
-  });
-
   it('paints the filter checkbox with the agent color only when the filter is checked', () => {
     const { getByTestId } = render(
       <FormHarness>

@@ -79,8 +79,8 @@ export default function WorkspaceSkillDetailPage() {
     return (
       <MainContentLayout>
         {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
-        <div className="grid place-items-center h-full">
-          <div className="h-8 w-8 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
+        <div className="grid h-full place-items-center">
+          <div className="size-8 animate-spin rounded-full border-2 border-accent1 border-t-transparent" />
         </div>
       </MainContentLayout>
     );
@@ -114,9 +114,9 @@ export default function WorkspaceSkillDetailPage() {
     return (
       <MainContentLayout>
         {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
-        <div className="grid place-items-center h-full">
+        <div className="grid h-full place-items-center">
           <div className="text-center">
-            <p className="text-red-400 mb-2">Failed to load skill</p>
+            <p className="mb-2 text-red-400">Failed to load skill</p>
             <p className="text-sm text-neutral3">{error instanceof Error ? error.message : 'Skill not found'}</p>
           </div>
         </div>
@@ -127,8 +127,8 @@ export default function WorkspaceSkillDetailPage() {
   return (
     <MainContentLayout>
       {agentCrumbs && <RouteHeaderCrumbs crumbs={agentCrumbs} />}
-      <div className="grid overflow-y-auto overflow-x-hidden h-full">
-        <div className="max-w-[100rem] px-[3rem] mx-auto py-8 h-full w-full overflow-x-hidden">
+      <div className="grid h-full overflow-x-hidden overflow-y-auto">
+        <div className="max-w-400 mx-auto size-full overflow-x-hidden px-12 py-8">
           <SkillDetail skill={skill} rawSkillMd={rawSkillMdData?.content} onReferenceClick={setViewingReference} />
         </div>
       </div>

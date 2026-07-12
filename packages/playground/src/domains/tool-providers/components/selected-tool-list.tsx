@@ -52,7 +52,7 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
                   }
                 : undefined
             }
-            className={cn('flex items-start gap-3 rounded-md px-3 py-2.5 bg-surface4', onToggle && 'cursor-pointer')}
+            className={cn('flex items-start gap-3 rounded-md bg-surface4 px-3 py-2.5', onToggle && 'cursor-pointer')}
           >
             {onToggle && (
               <div className="pt-0.5">
@@ -64,12 +64,12 @@ export function SelectedToolList({ providerId, selectedTools, onToggle }: Select
               </div>
             )}
 
-            <div className="flex flex-col gap-1 min-w-0">
-              <Txt variant="ui-sm" className="text-neutral6 font-medium">
+            <div className="flex min-w-0 flex-col gap-1">
+              <Txt variant="ui-sm" className="font-medium text-neutral6">
                 {tool.slug}
               </Txt>
               {tool.description && (
-                <Txt variant="ui-sm" className="text-neutral3 line-clamp-2">
+                <Txt variant="ui-sm" className="line-clamp-2 text-neutral3">
                   {tool.description}
                 </Txt>
               )}

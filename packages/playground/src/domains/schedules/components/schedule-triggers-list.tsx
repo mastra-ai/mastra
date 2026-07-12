@@ -57,7 +57,7 @@ export function ScheduleTriggersList({
 
   if (triggers.length === 0) {
     return (
-      <Txt variant="ui-md" className="text-neutral4 p-4">
+      <Txt variant="ui-md" className="p-4 text-neutral4">
         No trigger history yet.
       </Txt>
     );
@@ -88,8 +88,8 @@ export function ScheduleTriggersList({
           <span
             className={
               isLinked
-                ? 'text-accent1 font-mono text-ui-sm whitespace-nowrap'
-                : 'text-neutral3 font-mono text-ui-sm whitespace-nowrap'
+                ? 'font-mono text-ui-sm whitespace-nowrap text-accent1'
+                : 'font-mono text-ui-sm whitespace-nowrap text-neutral3'
             }
           >
             {t.runId}
@@ -103,21 +103,21 @@ export function ScheduleTriggersList({
             <DataList.Cell height="compact">
               <span className="inline-flex items-center gap-2">
                 {isPublishFailure ? (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-accent2">
+                  <span className="inline-flex items-center gap-1.5 text-ui-sm whitespace-nowrap text-accent2">
                     <AlertTriangleIcon size={14} />
                     publish failed
                   </span>
                 ) : t.run ? (
                   <WorkflowRunStatusInline status={t.run.status} />
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-ui-sm text-neutral3">
+                  <span className="inline-flex items-center gap-1.5 text-ui-sm whitespace-nowrap text-neutral3">
                     pending
                   </span>
                 )}
                 {errorMessage ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-accent2 inline-flex">
+                      <span className="inline-flex text-accent2">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>
@@ -133,7 +133,7 @@ export function ScheduleTriggersList({
                 {showDriftWarning ? (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="text-accent3 inline-flex">
+                      <span className="inline-flex text-accent3">
                         <AlertTriangleIcon size={14} />
                       </span>
                     </TooltipTrigger>

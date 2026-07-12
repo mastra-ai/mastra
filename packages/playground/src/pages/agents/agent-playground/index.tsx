@@ -133,13 +133,13 @@ function AgentPlayground() {
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center">
-        <Spinner className="h-6 w-6" />
+        <Spinner className="size-6" />
       </div>
     );
   }
 
   if (!codeAgent) {
-    return <div className="text-center py-4">Agent not found</div>;
+    return <div className="py-4 text-center">Agent not found</div>;
   }
 
   return (

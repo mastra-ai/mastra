@@ -82,7 +82,7 @@ const JsonField = ({
   return (
     <>
       {isExampleOpen && (
-        <div className="border border-border1 rounded-lg bg-surface3 p-3 space-y-2">
+        <div className="space-y-2 rounded-lg border border-border1 bg-surface3 p-3">
           <div className="flex items-center gap-2">
             <Txt as="p" variant="ui-sm" className="text-neutral3">
               Example {label}
@@ -107,12 +107,12 @@ const JsonField = ({
             value={exampleCode}
             theme={theme}
             extensions={[jsonLanguage]}
-            className="h-[150px] w-full overflow-y-scroll bg-surface3 rounded-lg overflow-scroll p-3"
+            className="h-[150px] w-full overflow-scroll overflow-y-scroll rounded-lg bg-surface3 p-3"
           />
         </div>
       )}
-      <Collapsible className="border border-border1 rounded-lg bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
-        <div className="flex items-center justify-between w-full px-3">
+      <Collapsible className="rounded-lg border border-border1 bg-surface3" open={isOpen} onOpenChange={setIsOpen}>
+        <div className="flex w-full items-center justify-between px-3">
           <div>
             <Txt as="label" variant="ui-md" className="text-neutral3">
               {label}
@@ -179,7 +179,7 @@ const JsonField = ({
             onChange={onChange}
             theme={theme}
             extensions={[jsonLanguage]}
-            className="h-[260px] overflow-y-scroll bg-surface3 rounded-lg overflow-hidden p-3"
+            className="h-65 overflow-hidden overflow-y-scroll rounded-lg bg-surface3 p-3"
           />
 
           {fieldError && (

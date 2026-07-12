@@ -56,7 +56,7 @@ export const AgentSelectableCard = ({
       style={containerStyle}
       className={cn(
         'flex w-full flex-col gap-2 rounded-lg border bg-surface3 p-4 transition-colors',
-        'focus-visible:!border-[var(--agent-color-bg)] focus-within:!border-[var(--agent-color-bg)]',
+        'focus-within:!border-[var(--agent-color-bg)] focus-visible:!border-[var(--agent-color-bg)]',
         isSelected ? 'bg-surface4' : 'border-border1',
         disabled && 'opacity-60',
       )}
@@ -89,11 +89,11 @@ export const AgentSelectableCard = ({
           data-testid={checkTestId}
           style={checkStyle}
           className={cn(
-            'flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors',
+            'flex size-4 shrink-0 items-center justify-center rounded border transition-colors',
             !isSelected && 'border-border1 bg-transparent',
           )}
         >
-          {isSelected && <Check className="h-3 w-3" />}
+          {isSelected && <Check className="size-3" />}
         </span>
       </button>
       {footer}

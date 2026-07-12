@@ -29,12 +29,12 @@ export function WorkflowNestedGraphDialog({ stepName, fullStep, stepGraph }: Wor
       </Button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-4xl w-full z-10">
+        <DialogContent className="z-10 w-full max-w-4xl">
           <DialogHeader>
             <DialogTitle>{stepName} workflow</DialogTitle>
             <DialogDescription>View the nested workflow graph for this step</DialogDescription>
           </DialogHeader>
-          <DialogBody className="min-h-[500px]">
+          <DialogBody className="min-h-125">
             <ReactFlowProvider key={fullStep}>
               <WorkflowNestedGraph stepGraph={stepGraph} open={open} workflowName={fullStep} />
             </ReactFlowProvider>

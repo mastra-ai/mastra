@@ -23,7 +23,7 @@ export const ZoomSlider = forwardRef<HTMLDivElement, Omit<PanelProps, 'children'
         <Minus />
       </Button>
       <Slider
-        className="w-[140px]"
+        className="w-35"
         value={[zoom]}
         min={0.01}
         max={1}

@@ -31,7 +31,7 @@ export const ManageConnectionList = ({
           {connections.map(connection => (
             <Entity
               key={connection.connectionId}
-              className="relative items-center rounded-lg px-2 py-2 transition-colors hover:bg-surface4"
+              className="relative items-center rounded-lg p-2 transition-colors hover:bg-surface4"
             >
               <EntityContent className="min-w-0">
                 <button

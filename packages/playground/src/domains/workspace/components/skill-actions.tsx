@@ -14,7 +14,7 @@ export interface SkillUpdateButtonProps {
 export function SkillUpdateButton({ skillName, onUpdate, isUpdating }: SkillUpdateButtonProps) {
   return (
     <Button variant="ghost" size="icon-md" disabled={isUpdating} tooltip={`Update ${skillName}`} onClick={onUpdate}>
-      {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+      {isUpdating ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
     </Button>
   );
 }
@@ -33,7 +33,7 @@ export function SkillRemoveButton({ skillName, onRemove, isRemoving }: SkillRemo
     <AlertDialog>
       <AlertDialog.Trigger asChild>
         <Button variant="ghost" size="icon-md" disabled={isRemoving} tooltip={`Remove ${skillName}`}>
-          {isRemoving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+          {isRemoving ? <Loader2 className="size-4 animate-spin" /> : <Trash2 className="size-4" />}
         </Button>
       </AlertDialog.Trigger>
       <AlertDialog.Content>

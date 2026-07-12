@@ -91,7 +91,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         onDrop={handleDrop}
         className={cn(
           'flex flex-col items-center justify-center gap-3',
-          'min-h-[160px] rounded-lg border-2 border-dashed p-6',
+          'min-h-40 rounded-lg border-2 border-dashed p-6',
           'cursor-pointer transition-colors',
           // Default state
           'border-surface4 bg-surface2',
@@ -111,7 +111,7 @@ export function CSVUploadStep({ onFileSelect, isParsing, error }: CSVUploadStepP
         ) : (
           <>
             <Icon className="text-neutral4">
-              <Upload className="h-8 w-8" />
+              <Upload className="size-8" />
             </Icon>
             <div className="flex flex-col items-center gap-1">
               <span className="text-sm font-medium text-neutral1">Click to upload or drag and drop</span>

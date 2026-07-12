@@ -76,9 +76,9 @@ export interface WorkflowTriggerProps {
 function DebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);
   return (
-    <label className="flex shrink-0 items-center gap-2 cursor-pointer">
+    <label className="flex shrink-0 cursor-pointer items-center gap-2">
       <Switch checked={debugMode} onCheckedChange={setDebugMode} aria-label="Debug" />
-      <Txt variant="ui-xs" className="text-neutral3 whitespace-nowrap">
+      <Txt variant="ui-xs" className="whitespace-nowrap text-neutral3">
         Debug
       </Txt>
     </label>
@@ -152,7 +152,7 @@ function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflow
       <Icon className="shrink-0 text-neutral4">
         <WorkflowIcon />
       </Icon>
-      <Txt as="span" variant="ui-md" className="text-neutral5 font-semibold truncate">
+      <Txt as="span" variant="ui-md" className="truncate font-semibold text-neutral5">
         {workflow.name ?? workflowId}
       </Txt>
       <CopyButton content={workflow.name ?? workflowId} variant="ghost" className="shrink-0" />
@@ -302,7 +302,7 @@ export function WorkflowTrigger({
 
   if (isLoading) {
     return (
-      <ScrollArea className="h-[calc(100vh-126px)] pt-2 px-4 pb-4 text-xs">
+      <ScrollArea className="h-[calc(100vh-126px)] px-4 pt-2 pb-4 text-xs">
         <div className="space-y-4">
           <Skeleton className="h-10" />
           <Skeleton className="h-10" />
@@ -329,10 +329,10 @@ export function WorkflowTrigger({
   );
 
   return (
-    <div className="h-full pt-3 overflow-y-auto">
+    <div className="h-full overflow-y-auto pt-3">
       <div className={`border-b border-border1/50`}>
         {isSuspendedSteps && isStreamingWorkflow && (
-          <div className="py-2 px-5 flex items-center gap-2 bg-surface5 -mt-5 border-b border-border1">
+          <div className="-mt-5 flex items-center gap-2 border-b border-border1 bg-surface5 px-5 py-2">
             <Icon>
               <Loader2 className="animate-spin text-neutral6" />
             </Icon>
@@ -370,7 +370,7 @@ export function WorkflowTrigger({
         )}
 
         {!canExecuteWorkflow && (
-          <Txt variant="ui-sm" className="text-neutral3 py-2 px-5">
+          <Txt variant="ui-sm" className="px-5 py-2 text-neutral3">
             You don't have permission to execute workflows.
           </Txt>
         )}
@@ -401,13 +401,13 @@ export function WorkflowTrigger({
         )}
 
         {isPausedDebug && (
-          <div className="px-5 pb-4 pt-3">
+          <div className="px-5 pt-3 pb-4">
             <WorkflowDebugStepControls isStreaming={isStreamingWorkflow} />
           </div>
         )}
 
         {(streamResultToUse?.status === 'running' || isSuspendedSteps || isPausedDebug) && (
-          <div data-testid="workflow-cancel-action" className="px-5 pb-4 pt-3">
+          <div data-testid="workflow-cancel-action" className="px-5 pt-3 pb-4">
             <WorkflowCancelButton
               status={isSuspendedSteps ? 'suspended' : streamResultToUse?.status}
               cancelMessage={cancelResponse?.message ?? null}

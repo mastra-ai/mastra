@@ -43,7 +43,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button id={id} variant="default" size="lg" className={cn('w-full', error ? 'border-accent2' : '')}>
-          <CalendarIcon className="h-4 w-4" />
+          <CalendarIcon className="size-4" />
           {value ? (
             <span className="text-white">{format(value, 'PPP')}</span>
           ) : (
@@ -51,7 +51,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field, err
           )}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-0 bg-surface4" align="start">
+      <PopoverContent className="w-auto bg-surface4 p-0" align="start">
         <DatePicker mode="single" selected={value} onSelect={handleSelect} month={value} onMonthChange={setValue} />
         {value && (
           <div className="p-3 pt-0">

@@ -116,7 +116,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
 
   const description = login.description ? (
     <div className="flex items-start gap-2.5 rounded-md border border-border1 bg-surface1 p-3">
-      <Lock className="mt-0.5 h-4 w-4 shrink-0 text-neutral4" />
+      <Lock className="mt-0.5 size-4 shrink-0 text-neutral4" />
       <p className="text-sm text-neutral3">{login.description}</p>
     </div>
   ) : null;

@@ -178,7 +178,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {datasets.length === 0 ? (
-              <div className="px-2 py-4 text-sm text-neutral4 text-center">No datasets available</div>
+              <div className="px-2 py-4 text-center text-sm text-neutral4">No datasets available</div>
             ) : (
               datasets.map(dataset => (
                 <SelectItem key={dataset.id} value={dataset.id}>
@@ -206,7 +206,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
           </SelectTrigger>
           <SelectContent>
             {items.length === 0 ? (
-              <div className="px-2 py-4 text-sm text-neutral4 text-center">No items available</div>
+              <div className="px-2 py-4 text-center text-sm text-neutral4">No items available</div>
             ) : (
               items.map(item => (
                 <SelectItem key={item.id} value={item.id}>
@@ -220,7 +220,7 @@ function AddTraceMocksForm({ initialMocksJson, onClose }: AddTraceMocksFormProps
 
       <div className="grid gap-2">
         <Label htmlFor="derived-mocks">Tool Mocks (JSON)</Label>
-        <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-[160px]" />
+        <CodeEditor value={mocksJson} onChange={setMocksJson} showCopyButton={false} className="min-h-40" />
         <p className="text-xs text-neutral4">
           Seeded from the trace&apos;s tool calls. Edit or remove entries before appending.
         </p>

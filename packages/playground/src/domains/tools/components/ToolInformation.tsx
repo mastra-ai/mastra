@@ -13,17 +13,17 @@ export const ToolInformation = ({ toolDescription, toolId, toolType }: ToolInfor
   const ToolIconComponent = ToolIconMap[toolType || 'tool'];
 
   return (
-    <div className="p-5 border-b border-border1">
-      <div className="text-neutral6 flex gap-2">
+    <div className="border-b border-border1 p-5">
+      <div className="flex gap-2 text-neutral6">
         <div>
-          <Icon size="lg" className="bg-surface4 rounded-md p-1">
+          <Icon size="lg" className="rounded-md bg-surface4 p-1">
             <ToolIconComponent />
           </Icon>
         </div>
 
-        <div className="flex gap-4 justify-between w-full min-w-0">
+        <div className="flex w-full min-w-0 justify-between gap-4">
           <div>
-            <Txt variant="header-md" as="h2" className="font-medium truncate">
+            <Txt variant="header-md" as="h2" className="truncate font-medium">
               {toolId}
             </Txt>
             <Txt variant="ui-sm" className="text-neutral3">

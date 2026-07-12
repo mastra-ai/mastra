@@ -67,8 +67,8 @@ export const ToolApprovalButtons = ({
   if (toolApprovalMetadata && !toolCalled) {
     return (
       <div>
-        <p className="font-medium pb-2">Approval required</p>
-        <div className="flex gap-2 items-center">
+        <p className="pb-2 font-medium">Approval required</p>
+        <div className="flex items-center gap-2">
           <Button
             onClick={handleApprove}
             disabled={isRunning || !!toolCallApprovalStatus}

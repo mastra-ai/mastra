@@ -107,9 +107,9 @@ export function ComparisonItemPanel({
                       return (
                         <div
                           key={scorerId}
-                          className="flex items-center justify-between gap-4 px-3 py-2 rounded-lg bg-surface2"
+                          className="flex items-center justify-between gap-4 rounded-lg bg-surface2 px-3 py-2"
                         >
-                          <span className="text-sm text-neutral5 font-medium">{scorerId}</span>
+                          <span className="text-sm font-medium text-neutral5">{scorerId}</span>
                           <div className="flex items-center gap-4">
                             <span className="text-sm text-neutral3">
                               {baselineScore != null ? baselineScore.toFixed(3) : '-'} →{' '}

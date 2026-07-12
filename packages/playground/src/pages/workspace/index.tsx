@@ -372,26 +372,26 @@ export default function Workspace() {
           <div className="relative">
             <button
               onClick={() => setShowWorkspaceDropdown(!showWorkspaceDropdown)}
-              className="flex items-center gap-2 px-3 py-2 text-sm border border-border1 rounded-lg bg-surface2 hover:bg-surface3 transition-colors w-full max-w-md"
+              className="flex w-full max-w-md items-center gap-2 rounded-lg border border-border1 bg-surface2 px-3 py-2 text-sm transition-colors hover:bg-surface3"
             >
               {selectedWorkspace?.source === 'agent' ? (
-                <Bot className="h-4 w-4 text-accent1" />
+                <Bot className="size-4 text-accent1" />
               ) : (
-                <Server className="h-4 w-4 text-neutral4" />
+                <Server className="size-4 text-neutral4" />
               )}
-              <span className="flex-1 text-left truncate">
+              <span className="flex-1 truncate text-left">
                 {selectedWorkspace?.name ?? 'Select workspace'}
                 {selectedWorkspace?.source === 'agent' && selectedWorkspace.agentName && (
-                  <span className="text-neutral4 ml-1">({selectedWorkspace.agentName})</span>
+                  <span className="ml-1 text-neutral4">({selectedWorkspace.agentName})</span>
                 )}
               </span>
               <ChevronDown
-                className={`h-4 w-4 text-neutral4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
+                className={`size-4 text-neutral4 transition-transform ${showWorkspaceDropdown ? 'rotate-180' : ''}`}
               />
             </button>
 
             {showWorkspaceDropdown && (
-              <div className="absolute z-50 mt-1 w-full max-w-md bg-surface2 border border-border1 rounded-lg shadow-lg overflow-hidden">
+              <div className="absolute z-50 mt-1 w-full max-w-md overflow-hidden rounded-lg border border-border1 bg-surface2 shadow-lg">
                 {workspaces.map(workspace => (
                   <button
                     key={workspace.id}
@@ -399,35 +399,35 @@ export default function Workspace() {
                       setSelectedWorkspaceId(workspace.id);
                       setShowWorkspaceDropdown(false);
                     }}
-                    className={`flex items-center gap-3 px-3 py-2 w-full text-left hover:bg-surface3 transition-colors ${
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left transition-colors hover:bg-surface3 ${
                       selectedWorkspace?.id === workspace.id ? 'bg-surface3' : ''
                     }`}
                   >
                     {workspace.source === 'agent' ? (
-                      <Bot className="h-4 w-4 text-accent1 shrink-0" />
+                      <Bot className="size-4 shrink-0 text-accent1" />
                     ) : (
-                      <Server className="h-4 w-4 text-neutral4 shrink-0" />
+                      <Server className="size-4 shrink-0 text-neutral4" />
                     )}
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-neutral6 truncate">{workspace.name}</div>
-                      <div className="text-xs text-neutral4 truncate">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-medium text-neutral6">{workspace.name}</div>
+                      <div className="truncate text-xs text-neutral4">
                         {workspace.source === 'agent' ? `Agent: ${workspace.agentName}` : 'Global workspace'}
                       </div>
                     </div>
-                    <div className="flex gap-1 shrink-0">
+                    <div className="flex shrink-0 gap-1">
                       {workspace.safety?.readOnly && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">
+                        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">
                           Read-only
                         </span>
                       )}
                       {workspace.capabilities.hasFilesystem && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">FS</span>
+                        <span className="rounded bg-surface4 px-1.5 py-0.5 text-[10px] text-neutral4">FS</span>
                       )}
                       {workspace.capabilities.hasSandbox && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">Sandbox</span>
+                        <span className="rounded bg-surface4 px-1.5 py-0.5 text-[10px] text-neutral4">Sandbox</span>
                       )}
                       {workspace.capabilities.hasSkills && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface4 text-neutral4">Skills</span>
+                        <span className="rounded bg-surface4 px-1.5 py-0.5 text-[10px] text-neutral4">Skills</span>
                       )}
                     </div>
                   </button>
@@ -441,16 +441,16 @@ export default function Workspace() {
         {workspaces.length === 1 && selectedWorkspace && (
           <div className="flex items-center gap-2 text-sm text-neutral4">
             {selectedWorkspace.source === 'agent' ? (
-              <Bot className="h-4 w-4 text-accent1" />
+              <Bot className="size-4 text-accent1" />
             ) : (
-              <Server className="h-4 w-4" />
+              <Server className="size-4" />
             )}
             <span>{selectedWorkspace.name}</span>
             {selectedWorkspace.source === 'agent' && selectedWorkspace.agentName && (
               <span className="text-neutral3">({selectedWorkspace.agentName})</span>
             )}
             {isReadOnly && (
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400">Read-only</span>
+              <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-400">Read-only</span>
             )}
           </div>
         )}
@@ -483,16 +483,16 @@ export default function Workspace() {
             <TabList>
               {hasFilesystem && (
                 <Tab value="files">
-                  <FileText className="h-4 w-4" />
+                  <FileText className="size-4" />
                   Files
                 </Tab>
               )}
               {hasSkills && (
                 <Tab value="skills">
-                  <Wand2 className="h-4 w-4" />
+                  <Wand2 className="size-4" />
                   Skills
                   {isSkillsConfigured && skills.length > 0 && (
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-surface4 text-neutral4">{skills.length}</span>
+                    <span className="rounded bg-surface4 px-1.5 py-0.5 text-xs text-neutral4">{skills.length}</span>
                   )}
                 </Tab>
               )}
@@ -500,7 +500,7 @@ export default function Workspace() {
 
             {hasFilesystem && (
               <TabContent value="files" className="pb-8">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                   <FileBrowser
                     entries={files}
                     currentPath={currentPath}
@@ -605,15 +605,15 @@ function WorkspaceSearchPanel({
   const searchSkills = useSearchWorkspaceSkills();
 
   return (
-    <div className="border border-border1 rounded-lg p-4 bg-surface2 space-y-4">
+    <div className="space-y-4 rounded-lg border border-border1 bg-surface2 p-4">
       {canSearchFiles && (
         <div>
-          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
-            <FileText className="h-4 w-4" />
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral5">
+            <FileText className="size-4" />
             Search Indexed Files
           </h3>
           {showInitWarning && (
-            <p className="text-xs text-amber-400 mb-3">
+            <p className="mb-3 text-xs text-amber-400">
               File search requires <code className="text-amber-300">workspace.init()</code> to index files from your
               configured <code className="text-amber-300">autoIndexPaths</code>.
             </p>
@@ -638,8 +638,8 @@ function WorkspaceSearchPanel({
 
       {canSearchSkills && (
         <div>
-          <h3 className="text-sm font-medium text-neutral5 mb-3 flex items-center gap-2">
-            <Wand2 className="h-4 w-4" />
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-medium text-neutral5">
+            <Wand2 className="size-4" />
             Search Skills
           </h3>
           <SearchSkillsPanel

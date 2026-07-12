@@ -73,13 +73,13 @@ export const AttachFilePopover = () => {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <Button variant="default" size="icon-md" type="button" tooltip="Add attachment">
-          <PlusIcon className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+          <PlusIcon className="size-5 text-neutral3 hover:text-neutral6" />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-4">
         <form onSubmit={handleSubmit} className="flex flex-row items-end gap-2">
           <div className="w-full space-y-1">
-            <Label htmlFor="url-attachment" className="text-neutral3 text-ui-md">
+            <Label htmlFor="url-attachment" className="text-ui-md text-neutral3">
               Public URL
             </Label>
             <Input
@@ -107,7 +107,7 @@ export const AttachFilePopover = () => {
           <button
             type="button"
             onClick={openFilePicker}
-            className="w-full h-28 border border-border1 rounded-lg text-neutral3 border-dashed flex flex-col items-center justify-center gap-2 hover:bg-surface2 active:bg-surface3"
+            className="flex h-28 w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border1 text-neutral3 hover:bg-surface2 active:bg-surface3"
           >
             <CloudUpload className="size-8" />
             <Txt variant="ui-lg">Add a local file</Txt>

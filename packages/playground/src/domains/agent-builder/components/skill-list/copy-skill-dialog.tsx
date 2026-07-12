@@ -54,7 +54,7 @@ export function CopySkillDialog({
           </AlertDialog.Description>
         </AlertDialog.Header>
         <div className="px-6 py-2">
-          <label className="block text-ui-sm text-neutral4 mb-1.5" htmlFor="copy-skill-name">
+          <label className="mb-1.5 block text-ui-sm text-neutral4" htmlFor="copy-skill-name">
             New skill name
           </label>
           <Input

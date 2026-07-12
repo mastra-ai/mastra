@@ -69,14 +69,14 @@ const InteractiveExample = () => {
   ]);
 
   return (
-    <div className="w-[800px]">
+    <div className="w-200">
       <TooltipProvider>
         <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
       </TooltipProvider>
 
-      <div className="mt-4 p-3 bg-surface2 rounded-lg">
-        <p className="text-xs text-neutral3 mb-2">Current state:</p>
-        <pre className="text-xs text-neutral6 whitespace-pre-wrap">{JSON.stringify(items, null, 2)}</pre>
+      <div className="mt-4 rounded-lg bg-surface2 p-3">
+        <p className="mb-2 text-xs text-neutral3">Current state:</p>
+        <pre className="text-xs whitespace-pre-wrap text-neutral6">{JSON.stringify(items, null, 2)}</pre>
       </div>
     </div>
   );
@@ -90,7 +90,7 @@ const EmptyExample = () => {
   const [items, setItems] = useState<Array<InstructionBlock>>([]);
 
   return (
-    <div className="w-[500px]">
+    <div className="w-125">
       <TooltipProvider>
         <AgentCMSBlocks
           items={items}
@@ -113,7 +113,7 @@ const SingleBlockExample = () => {
   ]);
 
   return (
-    <div className="w-[500px]">
+    <div className="w-125">
       <TooltipProvider>
         <AgentCMSBlocks items={items} onChange={setItems} placeholder="Enter content..." schema={complexSchema} />
       </TooltipProvider>

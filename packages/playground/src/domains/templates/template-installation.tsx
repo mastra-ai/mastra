@@ -69,7 +69,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
   }));
 
   return (
-    <Container className="space-y-6 text-neutral3 mb-8 content-center">
+    <Container className="mb-8 content-center space-y-6 text-neutral3">
       {/* Header */}
       <div className="text-center">
         <h3 className="text-lg font-semibold text-neutral5">{getPhaseMessage()}</h3>
@@ -80,7 +80,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Progress Bar */}
       {hasSteps && totalSteps > 0 && !['error'].includes(phase) && (
-        <div className="max-w-[30rem] w-full mx-auto px-6">
+        <div className="max-w-120 mx-auto w-full px-6">
           <ProcessStepProgressBar steps={steps} />
         </div>
       )}
@@ -89,8 +89,8 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
       {error && phase === 'error' && (
         <div
           className={cn(
-            'rounded-lg text-neutral5 p-6 flex items-center gap-3 text-ui-md bg-red-500/10',
-            '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:opacity-70 [&>svg]:text-red-500',
+            'flex items-center gap-3 rounded-lg bg-red-500/10 p-6 text-ui-md text-neutral5',
+            '[&>svg]:size-6 [&>svg]:text-red-500 [&>svg]:opacity-70',
           )}
         >
           <OctagonXIcon />
@@ -103,7 +103,7 @@ export function TemplateInstallation({ name, streamResult, runId, workflowInfo }
 
       {/* Simple loading state for initialization */}
       {!hasSteps && phase === 'initializing' && (
-        <div className="text-center text-sm text-neutral3 grid gap-4 justify-items-center">
+        <div className="grid justify-items-center gap-4 text-center text-sm text-neutral3">
           <Spinner />
           <p>This may take some time...</p>
         </div>

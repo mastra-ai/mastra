@@ -353,7 +353,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Compact preview */}
             <div className="border-t border-border1 pt-4">
-              <div className="text-xs text-neutral4 mb-2">Data Preview</div>
+              <div className="mb-2 text-xs text-neutral4">Data Preview</div>
               <CSVPreviewTable headers={parsedCSV.headers} data={parsedCSV.data} maxRows={3} />
             </div>
           </div>
@@ -370,18 +370,18 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* Prominent validation summary banner */}
             {schemaValidation.invalidCount > 0 ? (
-              <div className="p-3 bg-warning/10 border border-warning/30 rounded-md">
-                <div className="flex items-center gap-2 text-warning font-medium">
+              <div className="bg-warning/10 border-warning/30 rounded-md border p-3">
+                <div className="text-warning flex items-center gap-2 font-medium">
                   <span className="text-lg">⚠</span>
                   {schemaValidation.invalidCount} row{schemaValidation.invalidCount !== 1 ? 's' : ''} will be skipped
                 </div>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-muted-foreground mt-1 text-sm">
                   {schemaValidation.validCount} of {schemaValidation.totalRows} rows will be imported
                 </p>
               </div>
             ) : (
-              <div className="p-3 bg-success/10 border border-success/30 rounded-md">
-                <div className="flex items-center gap-2 text-success font-medium">
+              <div className="bg-success/10 border-success/30 rounded-md border p-3">
+                <div className="text-success flex items-center gap-2 font-medium">
                   <span className="text-lg">✓</span>
                   All {schemaValidation.totalRows} row{schemaValidation.totalRows !== 1 ? 's are' : ' is'} valid
                 </div>
@@ -390,7 +390,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
             {/* No valid rows warning */}
             {schemaValidation.validCount === 0 && (
-              <p className="text-sm text-destructive">
+              <p className="text-destructive text-sm">
                 No valid rows to import. Please fix the data or adjust the schema.
               </p>
             )}
@@ -406,7 +406,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             <Spinner />
             <div className="text-center">
               <div className="text-lg font-medium text-neutral1">Importing items...</div>
-              <div className="text-sm text-neutral4 mt-1">
+              <div className="mt-1 text-sm text-neutral4">
                 {importProgress.current} of {importProgress.total}
               </div>
             </div>
@@ -419,7 +419,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
             <div className="text-4xl">{importResult && importResult.errors === 0 ? '✓' : '⚠'}</div>
             <div className="text-center">
               <div className="text-lg font-medium text-neutral1">Import Complete</div>
-              <div className="text-sm text-neutral4 mt-1">
+              <div className="mt-1 text-sm text-neutral4">
                 {importResult?.success ?? 0} item{importResult?.success !== 1 ? 's' : ''} imported
                 {importResult && importResult.errors > 0 && (
                   <span className="text-accent2">
@@ -500,15 +500,15 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-2xl max-h-[90vh]">
+      <DialogContent className="max-h-[90vh] max-w-2xl">
         <DialogHeader>
           <DialogTitle>{stepTitles[step]}</DialogTitle>
           <DialogDescription>Import dataset items from a CSV file.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody className="min-h-[200px] max-h-[50vh] overflow-y-auto">{renderStepContent()}</DialogBody>
+        <DialogBody className="min-h-50 max-h-[50vh] overflow-y-auto">{renderStepContent()}</DialogBody>
 
-        <DialogFooter className="px-6 pt-4 flex justify-end gap-2">{renderFooter()}</DialogFooter>
+        <DialogFooter className="flex justify-end gap-2 px-6 pt-4">{renderFooter()}</DialogFooter>
       </DialogContent>
     </Dialog>
   );

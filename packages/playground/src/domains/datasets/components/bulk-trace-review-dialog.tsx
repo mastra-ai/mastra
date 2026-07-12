@@ -133,7 +133,7 @@ export function BulkTraceReviewDialog({
       </SideDialog.Top>
 
       <SideDialog.Content>
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button
               tooltip="Previous item"
@@ -170,7 +170,7 @@ export function BulkTraceReviewDialog({
               value={currentItem.input}
               onChange={(v: string | undefined) => updateCurrentItem('input', v ?? '')}
               showCopyButton={false}
-              className="min-h-[120px]"
+              className="min-h-30"
             />
           </div>
 
@@ -180,7 +180,7 @@ export function BulkTraceReviewDialog({
               value={currentItem.groundTruth}
               onChange={(v: string | undefined) => updateCurrentItem('groundTruth', v ?? '')}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 
@@ -190,7 +190,7 @@ export function BulkTraceReviewDialog({
               value={currentItem.expectedTrajectory}
               onChange={(v: string | undefined) => updateCurrentItem('expectedTrajectory', v ?? '')}
               showCopyButton={false}
-              className="min-h-[80px]"
+              className="min-h-20"
             />
           </div>
 

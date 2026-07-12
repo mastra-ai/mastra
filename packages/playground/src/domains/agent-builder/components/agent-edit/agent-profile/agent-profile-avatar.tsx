@@ -38,14 +38,14 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
   };
 
   return (
-    <div className="rounded-full bg-surface3 p-1 scale-[1.65]" style={{ viewTransitionName: 'agent-avatar' }}>
+    <div className="scale-1.65 rounded-full bg-surface3 p-1" style={{ viewTransitionName: 'agent-avatar' }}>
       {interactive ? (
         <>
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
-            className="relative rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral3 disabled:cursor-not-allowed disabled:opacity-60"
+            className="relative rounded-full focus-visible:ring-2 focus-visible:ring-neutral3 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
             aria-label="Upload avatar"
             data-testid="agent-configure-avatar-trigger"
           >
@@ -58,7 +58,7 @@ export const AgentProfileAvatar = ({ disabled = false }: AgentProfileAvatarProps
               textColor={avatarTextColor}
             />
             <span className="absolute inset-0 flex items-center justify-center rounded-full bg-surface4 opacity-0 transition-opacity">
-              <Plus className="h-5 w-5 text-neutral5" />
+              <Plus className="size-5 text-neutral5" />
             </span>
           </button>
           <input

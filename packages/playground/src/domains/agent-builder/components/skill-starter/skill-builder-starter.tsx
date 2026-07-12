@@ -119,7 +119,7 @@ export const SkillBuilderStarter = () => {
 
         <form onSubmit={handleSubmit}>
           <div
-            className="starter-prompt rounded-2xl border border-border1 bg-surface2 transition-colors duration-normal ease-out-custom focus-within:border-neutral3"
+            className="starter-prompt duration-normal rounded-2xl border border-border1 bg-surface2 transition-colors ease-out-custom focus-within:border-neutral3"
             style={{ viewTransitionName: 'skill-chat-composer' }}
           >
             <Textarea
@@ -132,7 +132,7 @@ export const SkillBuilderStarter = () => {
               onChange={e => setMessage(e.target.value)}
               onKeyDown={handleKeyDown}
               disabled={isCreating}
-              className="min-h-[112px] resize-none px-5 py-4 text-ui-md outline-none placeholder:text-neutral3 focus:outline-none focus-visible:outline-none"
+              className="min-h-28 resize-none px-5 py-4 text-ui-md outline-none placeholder:text-neutral3 focus:outline-none focus-visible:outline-none"
               rows={3}
             />
             <div className="flex items-center justify-end px-3 pb-2.5">
@@ -167,9 +167,9 @@ export const SkillBuilderStarter = () => {
                 onClick={() => handleExampleClick(example.prompt)}
                 data-testid={`skill-builder-starter-example-${example.title.toLowerCase().replace(/\s+/g, '-')}`}
                 style={{ animationDelay: `${280 + i * 40}ms` }}
-                className="starter-chip group inline-flex items-center gap-2 rounded-full border border-border1 bg-transparent px-4 py-2 text-ui-sm text-neutral4 transition-colors duration-normal ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-neutral6"
+                className="starter-chip group duration-normal inline-flex items-center gap-2 rounded-full border border-border1 bg-transparent px-4 py-2 text-ui-sm text-neutral4 transition-colors ease-out-custom hover:border-border2 hover:bg-surface2 hover:text-neutral6"
               >
-                <Icon className="h-3.5 w-3.5 text-neutral3 transition-colors group-hover:text-neutral5" />
+                <Icon className="size-3.5 text-neutral3 transition-colors group-hover:text-neutral5" />
                 {example.title}
               </button>
             );

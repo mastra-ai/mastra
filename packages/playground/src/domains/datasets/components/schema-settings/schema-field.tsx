@@ -105,10 +105,10 @@ export function SchemaField({
             value={jsonText}
             onChange={handleJsonChange}
             showCopyButton={false}
-            className={cn('h-48 border rounded-md', (parseError || error) && 'border-destructive')}
+            className={cn('h-48 rounded-md border', (parseError || error) && 'border-destructive')}
           />
-          {parseError && <p className="text-xs text-destructive">{parseError}</p>}
-          {error && !parseError && <p className="text-xs text-destructive">{error}</p>}
+          {parseError && <p className="text-destructive text-xs">{parseError}</p>}
+          {error && !parseError && <p className="text-destructive text-xs">{error}</p>}
         </div>
       )}
     </div>

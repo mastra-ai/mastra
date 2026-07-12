@@ -70,7 +70,7 @@ export function SpanScoring({
   }
 
   return (
-    <div className="grid grid-cols-[3fr_1fr] gap-4 items-start">
+    <div className="grid grid-cols-[3fr_1fr] items-start gap-4">
       <div className="grid gap-2">
         <SelectFieldBlock
           name="select-scorer"
@@ -87,7 +87,7 @@ export function SpanScoring({
           disabled={isWaiting}
         />
         {selectedScorerDescription && (
-          <TextAndIcon className="text-neutral3 text-ui-sm">
+          <TextAndIcon className="text-ui-sm text-neutral3">
             <InfoIcon /> {selectedScorerDescription}
           </TextAndIcon>
         )}

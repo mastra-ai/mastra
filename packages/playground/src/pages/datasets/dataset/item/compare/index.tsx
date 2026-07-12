@@ -67,7 +67,7 @@ function DatasetItemsComparePage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral4 text-center py-8">
+          <div className="py-8 text-center text-neutral4">
             <p>Select at least two items to compare.</p>
           </div>
         </MainContentContent>
@@ -86,7 +86,7 @@ function DatasetItemsComparePage() {
 
       <div className="h-full overflow-hidden px-[3vw] pb-4">
         <div
-          className={cn('grid gap-6 max-w-[140rem] mx-auto grid-rows-[auto_1fr] h-full', {
+          className={cn('max-w-560 mx-auto grid h-full grid-rows-[auto_1fr] gap-6', {
             'grid-rows-[auto_auto_1fr]': isDiffView,
           })}
         >
@@ -138,7 +138,7 @@ function DatasetItemsComparePage() {
                     setSearchParams({ items: newIds.join(',') });
                   }}
                 />
-                {idx == 0 && <div className={cn('bg-surface5 w-[3px] shrink-0 mx-[1.5vw]')}></div>}
+                {idx == 0 && <div className={cn('mx-[1.5vw] w-[3px] shrink-0 bg-surface5')}></div>}
               </Fragment>
             ))}
           </Columns>
@@ -200,9 +200,9 @@ function CompareItemColumn({
       {showContent && (
         <Column.Content>
           {isLoading ? (
-            <div className="text-neutral4 text-sm">Loading...</div>
+            <div className="text-sm text-neutral4">Loading...</div>
           ) : !item ? (
-            <div className="text-neutral4 text-sm">Item {itemId.slice(0, 8)} not found</div>
+            <div className="text-sm text-neutral4">Item {itemId.slice(0, 8)} not found</div>
           ) : (
             <>
               <DatasetItemHeader item={item} />

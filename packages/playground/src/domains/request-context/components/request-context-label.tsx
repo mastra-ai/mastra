@@ -27,14 +27,14 @@ export function RequestContextLabel({ as = 'span', children, tooltip }: RequestC
               <button
                 type="button"
                 aria-label={ariaLabel}
-                className="rounded-sm text-neutral3 transition-colors hover:text-neutral6 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border2"
+                className="rounded-sm text-neutral3 transition-colors hover:text-neutral6 focus-visible:ring-2 focus-visible:ring-border2 focus-visible:outline-none"
               >
                 <Icon size="sm">
                   <Info />
                 </Icon>
               </button>
             </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[240px]">
+            <TooltipContent side="top" className="max-w-60">
               {tooltip}
             </TooltipContent>
           </Tooltip>

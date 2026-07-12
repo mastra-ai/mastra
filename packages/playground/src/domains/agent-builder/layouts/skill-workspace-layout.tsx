@@ -62,7 +62,7 @@ export const SkillWorkspaceLayout = ({
       {/* Mobile tabs — only when there's a configure side to switch to.
        *  Mirrors the agent-builder pill-style segmented switch for visual parity. */}
       {showForm && (
-        <div className="md:hidden px-4 pt-4 pb-2">
+        <div className="px-4 pt-4 pb-2 md:hidden">
           <div
             role="tablist"
             aria-label="Workspace view"
@@ -120,20 +120,20 @@ export const SkillWorkspaceLayout = ({
       >
         <div
           className={cn(
-            'min-w-0 min-h-0 overflow-hidden bg-surface1',
+            'min-h-0 min-w-0 overflow-hidden bg-surface1',
             showForm && activeTab !== 'chat' ? 'hidden' : 'block',
             'md:block',
             'md:transition-[grid-column] md:duration-300 md:ease-out',
           )}
         >
           <div className="flex h-full min-h-0 flex-col px-4 pt-4 pb-6 md:px-10">
-            <div className="flex min-h-0 flex-1 flex-col md:max-w-[80ch] md:mx-auto w-full">{chat}</div>
+            <div className="flex min-h-0 w-full flex-1 flex-col md:mx-auto md:max-w-[80ch]">{chat}</div>
           </div>
         </div>
         {showForm && (
           <div
             className={cn(
-              'min-w-0 min-h-0 overflow-hidden bg-surface1',
+              'min-h-0 min-w-0 overflow-hidden bg-surface1',
               activeTab === 'configure' ? 'block' : 'hidden',
               'md:block',
               // Mobile uses the same page-layout padding as the rest of the
@@ -142,7 +142,7 @@ export const SkillWorkspaceLayout = ({
               // slides in from the right. The slide is driven by a CSS
               // keyframe animation triggered the first time this element
               // mounts (which matches the moment showForm flips to true).
-              'px-4 pb-6 md:p-4 md:bg-transparent',
+              'px-4 pb-6 md:bg-transparent md:p-4',
             )}
             data-testid="skill-edit-configure-panel"
           >
@@ -154,7 +154,7 @@ export const SkillWorkspaceLayout = ({
             >
               <div className="min-h-0 flex-1 overflow-hidden">{form}</div>
               {deleteAction && (
-                <div className="border-t border-border1 px-4 pb-4 pt-4 md:px-6" data-testid="skill-edit-delete-action">
+                <div className="border-t border-border1 p-4 md:px-6" data-testid="skill-edit-delete-action">
                   {deleteAction}
                 </div>
               )}

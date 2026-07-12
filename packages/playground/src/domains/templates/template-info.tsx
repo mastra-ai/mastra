@@ -20,15 +20,11 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
   return (
     <>
-      <div className={cn('grid mt-8 items-center')}>
+      <div className={cn('mt-8 grid items-center')}>
         <div
-          className={cn(
-            'text-header-lg flex items-center gap-3',
-            '[&>svg]:w-[1.2em] [&>svg]:h-[1.2em] [&>svg]:opacity-50',
-            {
-              '[&>svg]:opacity-20': isLoading,
-            },
-          )}
+          className={cn('flex items-center gap-3 text-header-lg', '[&>svg]:size-[1.2em] [&>svg]:opacity-50', {
+            '[&>svg]:opacity-20': isLoading,
+          })}
         >
           <PackageIcon />
           <h2
@@ -40,10 +36,10 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
           </h2>
         </div>
       </div>
-      <div className="grid lg:grid-cols-[1fr_1fr] gap-x-24">
+      <div className="grid gap-x-24 lg:grid-cols-[1fr_1fr]">
         <div className="grid">
           <p
-            className={cn('mb-4 text-ui-md text-neutral4 mt-2 leading-7', {
+            className={cn('mt-2 mb-4 text-ui-md leading-7 text-neutral4', {
               'bg-surface4 rounded-lg ': isLoading,
             })}
           >
@@ -52,19 +48,19 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
 
           {/* Git Branch Notice */}
           {!isLoading && templateSlug && (
-            <div className={cn('bg-surface2 border border-surface4 rounded-lg p-4 mb-4', 'flex items-start gap-3')}>
-              <div className="shrink-0 mt-0.5">
-                <InfoIcon className="w-[1.1em] h-[1.1em] text-blue-500" />
+            <div className={cn('mb-4 rounded-lg border border-surface4 bg-surface2 p-4', 'flex items-start gap-3')}>
+              <div className="mt-0.5 shrink-0">
+                <InfoIcon className="size-[1.1em] text-blue-500" />
               </div>
               <div className="flex-1 space-y-2">
                 <div className="flex items-center gap-2">
-                  <GitBranchIcon className="w-[1em] h-[1em] text-neutral4" />
+                  <GitBranchIcon className="size-[1em] text-neutral4" />
                   <span className="text-ui-md font-medium text-neutral5">A new Git branch will be created</span>
                 </div>
-                <div className="text-ui-sm text-neutral4 space-y-1">
+                <div className="space-y-1 text-ui-sm text-neutral4">
                   <div>
                     <span className="font-medium">Branch name:</span>{' '}
-                    <code className="bg-surface3 px-1.5 py-0.5 rounded text-ui-sm font-mono">{branchName}</code>
+                    <code className="rounded bg-surface3 px-1.5 py-0.5 font-mono text-ui-sm">{branchName}</code>
                   </div>
                   <div>
                     This ensures safe installation with easy rollback if needed. Your main branch remains unchanged.
@@ -79,7 +75,7 @@ export function TemplateInfo({ title, description, githubUrl, isLoading, infoDat
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center gap-2 mt-auto text-neutral3 text-ui-md hover:text-neutral5"
+              className="mt-auto flex items-center gap-2 text-ui-md text-neutral3 hover:text-neutral5"
             >
               <GithubIcon />
               {githubUrl?.split('/')?.pop()}

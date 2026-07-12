@@ -45,9 +45,9 @@ function AuthorBadge({ agent, className }: { agent: StoredAgentResponse; classNa
   const avatarUrl = agent.author?.avatarUrl;
 
   return (
-    <div className={cn('flex items-center gap-1.5 min-w-0', className)} data-testid="agent-builder-row-author">
+    <div className={cn('flex min-w-0 items-center gap-1.5', className)} data-testid="agent-builder-row-author">
       <Avatar name={label} src={avatarUrl} size="sm" />
-      <span className="text-ui-xs text-neutral3 truncate">{label}</span>
+      <span className="truncate text-ui-xs text-neutral3">{label}</span>
     </div>
   );
 }
@@ -57,7 +57,7 @@ function PrivateVisibilityIcon() {
     <Tooltip>
       <TooltipTrigger asChild>
         <span
-          className="text-neutral3 shrink-0"
+          className="shrink-0 text-neutral3"
           aria-label="Private agent"
           data-testid="agent-builder-private-visibility-icon"
         >
@@ -89,7 +89,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
     return (
       <div className="flex items-center justify-center pt-10">
         <EmptyState
-          iconSlot={<SearchIcon className="h-8 w-8 text-neutral3" />}
+          iconSlot={<SearchIcon className="size-8 text-neutral3" />}
           titleSlot="No agents match your search"
           descriptionSlot="Try a different name or description."
         />
@@ -98,7 +98,7 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
   }
 
   return (
-    <div className="bg-surface2 border h-full border-border1 rounded-xl divide-y divide-border1 overflow-y-auto content-start">
+    <div className="h-full content-start divide-y divide-border1 overflow-y-auto rounded-xl border border-border1 bg-surface2">
       {filtered.map(agent => {
         const avatar = getAvatarUrl(agent);
 
@@ -106,18 +106,18 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
           <Link
             key={agent.id}
             href={`/agent-builder/agents/${agent.id}/view`}
-            className="px-6 py-5 flex items-start gap-4 hover:bg-surface3 transition-colors md:items-center"
+            className="flex items-start gap-4 px-6 py-5 transition-colors hover:bg-surface3 md:items-center"
             data-testid={rowTestId}
           >
             <Avatar name={agent.name ?? ''} src={avatar} size="lg" />
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 min-w-0">
-                <div className="text-ui-md text-neutral6 truncate">{agent.name}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="truncate text-ui-md text-neutral6">{agent.name}</div>
                 {agent.visibility === 'private' && <PrivateVisibilityIcon />}
               </div>
-              <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-ui-sm text-neutral3 line-clamp-1">{agent.description || 'No description'}</span>
+              <div className="mt-0.5 flex items-center gap-2">
+                <span className="line-clamp-1 text-ui-sm text-neutral3">{agent.description || 'No description'}</span>
               </div>
               <AuthorBadge agent={agent} className="mt-2 md:hidden" />
               {showFavorites && (
@@ -131,14 +131,14 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
                 </div>
               )}
             </div>
-            <AuthorBadge agent={agent} className="shrink-0 hidden md:flex max-w-[12rem]" />
+            <AuthorBadge agent={agent} className="hidden max-w-48 shrink-0 md:flex" />
             {showFavorites && (
               <FavoriteButton
                 agentId={agent.id}
                 isFavorited={agent.isFavorited}
                 favoriteCount={agent.favoriteCount}
                 size="sm"
-                className="shrink-0 hidden md:inline-flex"
+                className="hidden shrink-0 md:inline-flex"
               />
             )}
           </Link>
@@ -150,12 +150,12 @@ export function AgentBuilderList({ agents, search, rowTestId, showFavorites = tr
 
 export function AgentBuilderListSkeleton({ rows = 4, rowTestId }: AgentBuilderListSkeletonProps) {
   return (
-    <div className="bg-surface2 border border-border1 rounded-xl divide-y divide-border1 overflow-hidden">
+    <div className="divide-y divide-border1 overflow-hidden rounded-xl border border-border1 bg-surface2">
       {Array.from({ length: rows }).map((_, i) => (
-        <div key={i} className="px-6 py-5 flex items-center gap-4" data-testid={rowTestId}>
-          <div className="flex-1 min-w-0 space-y-2">
-            <div className="h-3.5 w-48 bg-surface3 rounded animate-pulse" />
-            <div className="h-3 w-72 max-w-full bg-surface3 rounded animate-pulse" />
+        <div key={i} className="flex items-center gap-4 px-6 py-5" data-testid={rowTestId}>
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="h-3.5 w-48 animate-pulse rounded bg-surface3" />
+            <div className="h-3 w-72 max-w-full animate-pulse rounded bg-surface3" />
           </div>
         </div>
       ))}

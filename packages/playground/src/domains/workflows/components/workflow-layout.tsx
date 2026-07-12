@@ -31,8 +31,8 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
   // slots move into edge drawers and the main content takes the full width.
   if (isMobile) {
     return (
-      <div className="relative h-full w-full overflow-hidden">
-        <div className="h-full w-full min-w-0 overflow-y-auto">{children}</div>
+      <div className="relative size-full overflow-hidden">
+        <div className="size-full min-w-0 overflow-y-auto">{children}</div>
         {leftSlot && (
           <PanelDrawer direction="left" label="Open left panel">
             {leftSlot}
@@ -49,14 +49,14 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
 
   return (
     <div
-      className="relative h-full min-h-0 w-full min-w-0 overflow-hidden"
+      className="relative size-full min-h-0 min-w-0 overflow-hidden"
       style={{ '--workflow-left-panel-width': `${leftSlot ? leftPanelWidth : 0}px` } as CSSProperties}
     >
       <div className="absolute inset-0 min-w-0 overflow-y-auto">{children}</div>
 
       {leftSlot && (
         <Group
-          className="pointer-events-none absolute inset-0 z-10 h-full min-h-0 w-full min-w-0 bg-transparent"
+          className="pointer-events-none absolute inset-0 z-10 size-full min-h-0 min-w-0 bg-transparent"
           defaultLayout={defaultLayout}
           onLayoutChange={onLayoutChange}
         >
@@ -80,7 +80,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
 
       {rightSlot && (
         <Group
-          className="pointer-events-none absolute inset-0 z-10 h-full min-h-0 w-full min-w-0 bg-transparent"
+          className="pointer-events-none absolute inset-0 z-10 size-full min-h-0 min-w-0 bg-transparent"
           defaultLayout={defaultLayout}
           onLayoutChange={onLayoutChange}
         >

@@ -34,9 +34,9 @@ export const WorkflowRunDetail = ({
 
   if (isLoadingRunExecutionResult) {
     return (
-      <div className="p-4 space-y-4">
+      <div className="space-y-4 p-4">
         <div className="flex items-start gap-3">
-          <Skeleton className="h-5 w-5 shrink-0 rounded-full" />
+          <Skeleton className="size-5 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-4 w-24" />
             <Skeleton className="h-3 w-40" />
@@ -66,7 +66,7 @@ export const WorkflowRunDetail = ({
   if (!runSnapshot || !runId) {
     return (
       <div className="p-4">
-        <Txt variant="ui-md" className="text-neutral6 text-center">
+        <Txt variant="ui-md" className="text-center text-neutral6">
           No previous run
         </Txt>
       </div>
@@ -78,7 +78,7 @@ export const WorkflowRunDetail = ({
 
   if (runId) {
     return (
-      <div className="h-full grid grid-rows-[1fr_auto]">
+      <div className="grid h-full grid-rows-[1fr_auto]">
         <WorkflowTrigger
           {...triggerProps}
           paramsRunId={runId}

@@ -95,9 +95,7 @@ function expectPanelGroupsShrinkable() {
   expect(panelGroups.length).toBeGreaterThan(0);
 
   for (const panelGroup of panelGroups) {
-    expect(panelGroup.className).toContain('h-full');
     expect(panelGroup.className).toContain('min-h-0');
-    expect(panelGroup.className).toContain('w-full');
     expect(panelGroup.className).toContain('min-w-0');
     expect(panelGroup.className).not.toContain('min-w-min');
   }

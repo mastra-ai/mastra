@@ -95,7 +95,7 @@ export function ReviewItemPanel({
         </DataPanel.Header>
 
         <DataPanel.Content>
-          <div className="grid gap-4 mb-6">
+          <div className="mb-6 grid gap-4">
             {/* Rating */}
             {!isCompleted && (
               <div className="flex items-center gap-2">
@@ -143,11 +143,11 @@ export function ReviewItemPanel({
 
             {/* Tags */}
             <div className="flex flex-wrap gap-2">
-              <Txt variant="ui-sm" className="text-neutral3 block mt-0">
+              <Txt variant="ui-sm" className="mt-0 block text-neutral3">
                 Tags
               </Txt>
               {isCompleted ? (
-                <div className="flex gap-1 flex-wrap">
+                <div className="flex flex-wrap gap-1">
                   {item.tags.length > 0 ? (
                     item.tags.map(tag => (
                       <Badge key={tag} variant="default">
@@ -168,7 +168,7 @@ export function ReviewItemPanel({
             {/* Scores */}
             {item.scores && Object.keys(item.scores).length > 0 && (
               <div>
-                <Txt variant="ui-xs" className="text-neutral3 block mb-2">
+                <Txt variant="ui-xs" className="mb-2 block text-neutral3">
                   Scores
                 </Txt>
                 <div className="flex flex-wrap gap-2">
@@ -212,10 +212,10 @@ export function ReviewItemPanel({
           {/* Error */}
           {item.error != null && (
             <div>
-              <Txt variant="ui-xs" className="text-neutral3 block mb-1">
+              <Txt variant="ui-xs" className="mb-1 block text-neutral3">
                 Error
               </Txt>
-              <pre className="text-ui-xs text-negative1 whitespace-pre-wrap wrap-break-word bg-surface2 rounded-md p-3 max-h-48 overflow-auto">
+              <pre className="max-h-48 overflow-auto rounded-md bg-surface2 p-3 text-ui-xs wrap-break-word whitespace-pre-wrap text-negative1">
                 {formatUnknown(item.error)}
               </pre>
             </div>
@@ -223,8 +223,8 @@ export function ReviewItemPanel({
 
           {/* Comment */}
           <div className="mt-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Txt variant="ui-sm" className="uppercase tracking-widest text-neutral2">
+            <div className="mb-2 flex items-center gap-2">
+              <Txt variant="ui-sm" className="tracking-widest text-neutral2 uppercase">
                 Comment
               </Txt>
               {commentSaved && (
@@ -234,7 +234,7 @@ export function ReviewItemPanel({
               )}
             </div>
             {isCompleted ? (
-              <Txt variant="ui-xs" className="text-neutral4 block">
+              <Txt variant="ui-xs" className="block text-neutral4">
                 {item.comment || 'No comment'}
               </Txt>
             ) : (
@@ -251,7 +251,7 @@ export function ReviewItemPanel({
 
           {/* Actions */}
           {!isCompleted && (
-            <div className="flex items-center gap-2 mt-4 pt-4 border-t border-border1">
+            <div className="mt-4 flex items-center gap-2 border-t border-border1 pt-4">
               {onComplete && (
                 <Button size="md" onClick={onComplete}>
                   <CheckCircle />

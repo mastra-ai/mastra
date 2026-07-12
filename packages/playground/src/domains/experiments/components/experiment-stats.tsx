@@ -22,9 +22,9 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
 
   return (
     <div className={cn('grid justify-items-end gap-3', className)}>
-      <div className="flex p-1 px-3 text-ui-lg capitalize text-neutral4 gap-2 items-center bg-surface5 rounded-lg ">
+      <div className="flex items-center gap-2 rounded-lg bg-surface5 p-1 px-3 text-ui-lg text-neutral4 capitalize ">
         <span
-          className={cn('w-5 h-5 flex items-center justify-center rounded-full text-black', '[&>svg]:w-4 [&>svg]:h-4', {
+          className={cn('flex size-5 items-center justify-center rounded-full text-black', '[&>svg]:size-4', {
             'bg-green-700': status === 'completed',
             'bg-red-700': status === 'failed',
             'bg-cyan-600': status === 'running',
@@ -37,9 +37,9 @@ export function ExperimentStats({ experiment, className }: ExperimentStatsProps)
       </div>
       <div
         className={cn(
-          'flex items-center gap-3 text-neutral3 text-ui-md ',
-          '[&>span]:flex [&>span]:gap-1 [&>span]:items-center ',
-          '[&_b]:text-neutral4 [&_b]:font-semibold',
+          'flex items-center gap-3 text-ui-md text-neutral3 ',
+          '[&>span]:flex [&>span]:items-center [&>span]:gap-1 ',
+          '[&_b]:font-semibold [&_b]:text-neutral4',
         )}
       >
         <span>

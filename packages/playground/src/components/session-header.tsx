@@ -51,7 +51,7 @@ export const SessionHeader = () => {
       {presets && Object.keys(presets).length > 0 && (
         <HeaderAction>
           <Select value={selectedPreset} onValueChange={handlePresetChange}>
-            <SelectTrigger size="sm" className="w-[200px]">
+            <SelectTrigger size="sm" className="w-50">
               <SelectValue placeholder="Select a preset..." />
             </SelectTrigger>
             <SelectContent>

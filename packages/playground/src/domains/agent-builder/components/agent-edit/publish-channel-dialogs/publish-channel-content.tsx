@@ -69,7 +69,7 @@ export function PublishChannelContent({
     <>
       <DialogHeader>
         <div className="flex items-center gap-2">
-          <PlatformIcon platform={platform.id} className="h-8 w-8 shrink-0" />
+          <PlatformIcon platform={platform.id} className="size-8 shrink-0" />
           <DialogTitle>{platform.name} integration</DialogTitle>
         </div>
 

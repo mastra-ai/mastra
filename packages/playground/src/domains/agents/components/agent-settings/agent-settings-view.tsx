@@ -33,11 +33,11 @@ export function AgentSettingsView({ agentId }: AgentSettingsViewProps) {
 
   return (
     <div
-      className="h-full w-full min-w-0"
+      className="size-full min-w-0"
       data-testid="agent-settings-view"
       style={{ viewTransitionName: 'agent-settings-view' }}
     >
-      <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
+      <ScrollArea className="size-full" viewPortClassName="h-full" mask={{ top: false }}>
         <Tabs value={selectedTab} defaultTab="overview" onValueChange={handleTabChange}>
           <div className="sticky top-0 z-10 px-3 py-1.5">
             <TabList variant="pill-ghost">

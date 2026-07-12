@@ -63,20 +63,20 @@ const BackgroundTaskMetadata = ({
     argSlot = <CodeEditor data={formattedArgs} />;
   } catch {
     argSlot = (
-      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{args as unknown as string}</pre>
+      <pre className="overflow-x-auto rounded-md bg-surface4 p-4 whitespace-pre">{args as unknown as string}</pre>
     );
   }
 
   const resultSlot =
     typeof result === 'string' ? (
-      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{result}</pre>
+      <pre className="overflow-x-auto rounded-md bg-surface4 p-4 whitespace-pre">{result}</pre>
     ) : (
       <CodeEditor data={result} />
     );
 
   const suspendPayloadSlot =
     typeof suspendPayload === 'string' ? (
-      <pre className="whitespace-pre bg-surface4 p-4 rounded-md overflow-x-auto">{suspendPayload}</pre>
+      <pre className="overflow-x-auto rounded-md bg-surface4 p-4 whitespace-pre">{suspendPayload}</pre>
     ) : (
       <CodeEditor data={suspendPayload as Record<string, unknown> | Record<string, unknown>[] | undefined} />
     );
@@ -92,7 +92,7 @@ const BackgroundTaskMetadata = ({
         <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Txt className="text-neutral3">Background Task Duration</Txt>
-            <Txt className="text-neutral6 text-ui-md">{toSigFigs(timeDiff, 3)}ms</Txt>
+            <Txt className="text-ui-md text-neutral6">{toSigFigs(timeDiff, 3)}ms</Txt>
           </div>
 
           <div className="space-y-2">
@@ -139,9 +139,9 @@ export const BackgroundTaskMetadataDialogTrigger = ({ backgroundTask }: Backgrou
         onClick={() => setIsOpen(s => !s)}
       >
         {backgroundTask.completedAt || backgroundTask.suspendedAt ? (
-          <Share2 className="text-neutral3 size-5" />
+          <Share2 className="size-5 text-neutral3" />
         ) : (
-          <Loader2Icon className="text-neutral3 size-5 animate-spin" />
+          <Loader2Icon className="size-5 animate-spin text-neutral3" />
         )}
       </Button>
 

@@ -155,7 +155,7 @@ export function ToolsPage() {
               aria-label={`Description for ${tool.label}`}
               disabled={!canEditToolDescriptions}
               className={cn(
-                'border border-transparent appearance-none block w-full text-neutral3 bg-transparent rounded px-1 -mx-1 transition-colors focus:outline-solid focus:outline-1 focus:outline-white focus-visible:outline-solid focus-visible:outline-1 focus-visible:outline-white',
+                '-mx-1 block w-full appearance-none rounded border border-transparent bg-transparent px-1 text-neutral3 transition-colors focus:outline-1 focus:outline-white focus:outline-solid focus-visible:outline-1 focus-visible:outline-white focus-visible:outline-solid',
                 canEditToolDescriptions && 'hover:bg-surface4 focus:bg-surface4',
               )}
               value={selectedTools?.[tool.value]?.description ?? tool.description}
@@ -177,7 +177,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className="text-neutral3 hover:text-neutral5 transition-colors rounded-sm focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-white/30"
+            className="rounded-sm text-neutral3 transition-colors hover:text-neutral5 focus-visible:ring-1 focus-visible:ring-white/30 focus-visible:outline-hidden"
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="sm">
@@ -222,13 +222,13 @@ export function ToolsPage() {
                     Add Tools
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent align="end" className="w-80 p-0 pt-4 max-h-72 overflow-y-auto">
+                <PopoverContent align="end" className="max-h-72 w-80 overflow-y-auto p-0 pt-4">
                   {unselectedOptions.map(tool => (
                     <button
                       key={tool.value}
                       type="button"
                       onClick={() => handleAddTool(tool.value)}
-                      className="flex flex-col gap-0.5 w-full text-left px-3 py-2.5 hover:bg-white/10 focus:bg-white/10 transition-colors focus-visible:outline-hidden focus-visible:ring-0"
+                      className="flex w-full flex-col gap-0.5 px-3 py-2.5 text-left transition-colors hover:bg-white/10 focus:bg-white/10 focus-visible:ring-0 focus-visible:outline-hidden"
                     >
                       <span className="text-ui-md font-normal text-neutral5">{tool.label}</span>
                       {tool.description && <span className="text-ui-xs text-neutral3">{tool.description}</span>}

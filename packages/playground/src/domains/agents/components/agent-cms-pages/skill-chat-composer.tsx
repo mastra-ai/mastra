@@ -131,12 +131,12 @@ export function SkillChatComposer({
   }, [initialUserMessage, sendMessage, threadId, clientTools]);
 
   const emptyState = (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center px-6 py-8">
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-8 text-center">
       <div className="rounded-full bg-accent5/10 p-3">
-        <Sparkles className="h-6 w-6 text-accent5" />
+        <Sparkles className="size-6 text-accent5" />
       </div>
       <div className="flex flex-col gap-1">
-        <Txt variant="ui-md" className="text-neutral5 font-medium" as="p">
+        <Txt variant="ui-md" className="font-medium text-neutral5" as="p">
           {hasFields ? 'Refine your skill' : 'Describe your skill'}
         </Txt>
         <Txt variant="ui-sm" className="text-neutral3" as="p">

@@ -39,7 +39,7 @@ export function RouteHeader() {
                 as={linkable ? Link : 'span'}
                 to={linkable ? def.to : undefined}
                 isCurrent={isCurrent}
-                className={isCurrent ? 'max-w-[28rem]' : 'max-w-[18rem]'}
+                className={isCurrent ? 'max-w-md' : 'max-w-2xs'}
               >
                 {IconComponent && (
                   <Icon>
@@ -64,7 +64,7 @@ export function RouteHeader() {
             variant="ghost"
             size="sm"
             aria-label={docs.label ?? 'Documentation'}
-            className="min-w-0 max-w-[14rem]"
+            className="max-w-56 min-w-0"
           >
             <DocsIcon />
             <span className="min-w-0 truncate">{docs.label ?? 'Documentation'}</span>

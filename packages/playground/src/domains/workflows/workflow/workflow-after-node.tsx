@@ -25,15 +25,15 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
     <Collapsible
       open={open}
       onOpenChange={setOpen}
-      className={cn('bg-surface4 rounded-md w-[274px] flex flex-col p-2 gap-2')}
+      className={cn('flex w-[274px] flex-col gap-2 rounded-md bg-surface4 p-2')}
     >
       <Handle type="target" position={Position.Top} style={{ visibility: 'hidden' }} />
 
-      <CollapsibleTrigger className="flex items-center justify-between w-full">
+      <CollapsibleTrigger className="flex w-full items-center justify-between">
         <Badge icon={<BADGE_ICONS.after className="text-current" style={{ color: BADGE_COLORS.after }} />}>AFTER</Badge>
         <Icon>
           <ChevronDown
-            className={cn('transition-transform text-neutral3', {
+            className={cn('text-neutral3 transition-transform', {
               'transform rotate-180': open,
             })}
           />
@@ -41,8 +41,8 @@ export function WorkflowAfterNode({ data }: NodeProps<AfterNode>) {
       </CollapsibleTrigger>
       <CollapsibleContent className="flex flex-col gap-2">
         {steps.map(step => (
-          <div className="text-sm bg-surface5 flex items-center gap-1.5 rounded-sm  p-2" key={step}>
-            <Footprints className="text-current w-4 h-4" />
+          <div className="flex items-center gap-1.5 rounded-sm bg-surface5 p-2  text-sm" key={step}>
+            <Footprints className="size-4 text-current" />
             <Txt variant="ui-xs" className="text-neutral6 capitalize">
               {step}
             </Txt>

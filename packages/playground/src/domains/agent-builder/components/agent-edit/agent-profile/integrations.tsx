@@ -24,7 +24,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   if (isLoading) {
     return (
       <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker-loading">
-        <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
+        <div className="flex w-full max-w-3xl flex-col items-center gap-6 text-center">
           <div className="flex flex-col items-center gap-2">
             <Skeleton className="h-6 w-48" />
             <Skeleton className="h-4 w-80" />
@@ -65,7 +65,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
 
   return (
     <div className="flex justify-center px-6 py-8" data-testid="integrations-detail-picker">
-      <div className="flex w-full max-w-[48rem] flex-col items-center gap-6 text-center">
+      <div className="flex w-full max-w-3xl flex-col items-center gap-6 text-center">
         <div className="flex flex-col gap-2">
           <Txt variant="header-sm" className="font-semibold text-neutral6">
             Channel integrations
@@ -121,10 +121,10 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       onClick={() => onSelect(installation)}
       disabled={disabled}
       data-testid={`integration-card-${platform.id}`}
-      className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6 text-center transition-colors hover:bg-surface4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1 disabled:cursor-not-allowed disabled:opacity-60"
+      className="flex w-48 flex-col items-center gap-3 rounded-xl border border-border1 bg-surface3 px-4 py-6 text-center transition-colors hover:bg-surface4 focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
     >
       <div className="grid size-14 place-items-center rounded-xl bg-surface4">
-        <PlatformIcon platform={platform.id} className="h-7 w-7" />
+        <PlatformIcon platform={platform.id} className="size-7" />
       </div>
 
       <div className="flex flex-col items-center gap-1">

@@ -90,31 +90,29 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
         type="button"
         onClick={() => setIsExpanded(prev => !prev)}
         aria-expanded={isExpanded}
-        className="flex items-center gap-2 w-full px-3 py-0.5 text-left hover:bg-surface3 transition-colors"
+        className="flex w-full items-center gap-2 px-3 py-0.5 text-left transition-colors hover:bg-surface3"
       >
-        <ChevronRight
-          className={cn('h-3 w-3 text-neutral3 transition-transform shrink-0', isExpanded && 'rotate-90')}
-        />
+        <ChevronRight className={cn('size-3 shrink-0 text-neutral3 transition-transform', isExpanded && 'rotate-90')} />
 
         <StatusDot status={entry.status} />
 
-        <span className="text-xs font-medium text-neutral6 shrink-0">{displayName}</span>
+        <span className="shrink-0 text-xs font-medium text-neutral6">{displayName}</span>
 
-        {keyArg && <span className="text-xs text-neutral3 truncate">{keyArg}</span>}
+        {keyArg && <span className="truncate text-xs text-neutral3">{keyArg}</span>}
       </button>
 
       {isExpanded && (
-        <div className="px-3 pb-2 space-y-2">
+        <div className="space-y-2 px-3 pb-2">
           <div>
-            <p className="text-xs font-medium text-neutral4 pb-1">Arguments</p>
+            <p className="pb-1 text-xs font-medium text-neutral4">Arguments</p>
             <CodeEditor data={displayArgs} data-testid="browser-tool-args" />
           </div>
 
           {entry.result !== undefined && entry.result !== null && (
             <div>
-              <p className="text-xs font-medium text-neutral4 pb-1">Result</p>
+              <p className="pb-1 text-xs font-medium text-neutral4">Result</p>
               {typeof entry.result === 'string' ? (
-                <pre className="whitespace-pre text-xs bg-surface4 p-2 rounded-md overflow-x-auto max-h-40 overflow-y-auto">
+                <pre className="max-h-40 overflow-auto rounded-md bg-surface4 p-2 text-xs whitespace-pre">
                   {entry.result}
                 </pre>
               ) : (
@@ -134,10 +132,10 @@ export function BrowserToolCallItem({ entry }: BrowserToolCallItemProps) {
 function StatusDot({ status }: { status: BrowserToolCallEntry['status'] }) {
   switch (status) {
     case 'pending':
-      return <Loader2 className="h-3 w-3 text-neutral4 animate-spin shrink-0" />;
+      return <Loader2 className="size-3 shrink-0 animate-spin text-neutral4" />;
     case 'complete':
-      return <Check className="h-3 w-3 text-green-500 shrink-0" />;
+      return <Check className="size-3 shrink-0 text-green-500" />;
     case 'error':
-      return <X className="h-3 w-3 text-red-500 shrink-0" />;
+      return <X className="size-3 shrink-0 text-red-500" />;
   }
 }

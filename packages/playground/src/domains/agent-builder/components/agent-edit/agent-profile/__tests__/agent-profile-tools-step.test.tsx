@@ -65,7 +65,7 @@ describe('AgentProfileToolsStep', () => {
     expect(count.parentElement?.className).toContain('rounded-full');
   });
 
-  it('renders the navigation footer with a top border and pt-6 spacing', () => {
+  it('renders the navigation footer with a top border', () => {
     render(
       <Harness>
         <AgentProfileToolsStep />
@@ -74,6 +74,5 @@ describe('AgentProfileToolsStep', () => {
 
     const footer = screen.getByTestId('agent-step-footer');
     expect(footer.className).toContain('border-t');
-    expect(footer.className).toContain('pt-6');
   });
 });

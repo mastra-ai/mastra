@@ -60,14 +60,14 @@ export function BrowserViewHeader({
   return (
     <div
       className={cn(
-        'flex items-center justify-between px-3 py-2 border-b border-border1 bg-surface1',
+        'flex items-center justify-between border-b border-border1 bg-surface1 px-3 py-2',
         isCollapsed ? 'rounded-md' : 'rounded-t-md',
         className,
       )}
     >
       {/* URL display */}
-      <div className="flex-1 min-w-0 mr-3">
-        <span className={cn('text-sm text-neutral4 truncate block', !url && 'text-neutral3 italic')}>
+      <div className="mr-3 min-w-0 flex-1">
+        <span className={cn('block truncate text-sm text-neutral4', !url && 'text-neutral3 italic')}>
           {url || 'No URL'}
         </span>
       </div>
@@ -82,10 +82,10 @@ export function BrowserViewHeader({
         {onTuck && (
           <button
             onClick={onTuck}
-            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            className="rounded p-1 text-neutral3 transition-colors hover:bg-surface3 hover:text-neutral6"
             title="Minimize to pill"
           >
-            <Minus className="h-4 w-4" />
+            <Minus className="size-4" />
           </button>
         )}
 
@@ -93,10 +93,10 @@ export function BrowserViewHeader({
         {onToggleCollapse && (
           <button
             onClick={onToggleCollapse}
-            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            className="rounded p-1 text-neutral3 transition-colors hover:bg-surface3 hover:text-neutral6"
             title={isCollapsed ? 'Expand browser view' : 'Minimize browser view'}
           >
-            {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
+            {isCollapsed ? <ChevronDown className="size-4" /> : <ChevronUp className="size-4" />}
           </button>
         )}
 
@@ -104,10 +104,10 @@ export function BrowserViewHeader({
         {onClose && (
           <button
             onClick={onClose}
-            className="p-1 rounded hover:bg-surface3 text-neutral3 hover:text-neutral6 transition-colors"
+            className="rounded p-1 text-neutral3 transition-colors hover:bg-surface3 hover:text-neutral6"
             title="Close browser session"
           >
-            <X className="h-4 w-4" />
+            <X className="size-4" />
           </button>
         )}
       </div>

@@ -38,7 +38,7 @@ const NetworkRadio = ({ hasMemory, hasSubAgents, disabled }: NetworkRadioProps) 
     <div className="flex items-center gap-2">
       <RadioGroupItem value="network" id="network" className="text-neutral6" disabled={itemDisabled} />
       <Label
-        className={cn('text-neutral6 text-ui-md', !isNetworkAvailable && 'text-neutral3! cursor-not-allowed')}
+        className={cn('text-ui-md text-neutral6', !isNetworkAvailable && 'cursor-not-allowed text-neutral3!')}
         htmlFor="network"
       >
         Network
@@ -85,7 +85,7 @@ const StreamSubscriptionRadio = ({ supported, disabled }: StreamSubscriptionRadi
         disabled={itemDisabled}
       />
       <Label
-        className={cn('text-neutral6 text-ui-md', !supported && 'text-neutral3! cursor-not-allowed')}
+        className={cn('text-ui-md text-neutral6', !supported && 'cursor-not-allowed text-neutral3!')}
         htmlFor="streamSubscription"
       >
         Stream subscription (default)
@@ -180,14 +180,14 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
             tooltip="Model settings"
             data-testid="composer-model-settings-trigger"
           >
-            <Sliders className="h-5 w-5 text-neutral3 hover:text-neutral6" />
+            <Sliders className="size-5 text-neutral3 hover:text-neutral6" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-80 p-4">
           {isLoading || isMemoryLoading ? (
             <Skeleton className="h-40 w-full" data-testid="composer-model-settings-skeleton" />
           ) : (
-            <section className="space-y-5 @container">
+            <section className="@container space-y-5">
               <Entry label="Chat Method">
                 <RadioGroup
                   value={radioValue}
@@ -215,7 +215,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="generateLegacy">
+                      <Label className="text-ui-md text-neutral6" htmlFor="generateLegacy">
                         Generate (Legacy)
                       </Label>
                     </div>
@@ -228,7 +228,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="generate">
+                      <Label className="text-ui-md text-neutral6" htmlFor="generate">
                         Generate
                       </Label>
                     </div>
@@ -241,7 +241,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="streamLegacy">
+                      <Label className="text-ui-md text-neutral6" htmlFor="streamLegacy">
                         Stream (Legacy)
                       </Label>
                     </div>
@@ -257,7 +257,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                         className="text-neutral6"
                         disabled={!canEditSettings}
                       />
-                      <Label className="text-neutral6 text-ui-md" htmlFor="stream">
+                      <Label className="text-ui-md text-neutral6" htmlFor="stream">
                         Stream
                       </Label>
                     </div>
@@ -284,10 +284,10 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
 
               {showSamplingBanner && (
                 <div
-                  className="flex items-center gap-2 text-xs text-neutral3 bg-surface3 rounded px-3 py-2"
+                  className="flex items-center gap-2 rounded bg-surface3 px-3 py-2 text-xs text-neutral3"
                   data-testid="sampling-restriction-banner"
                 >
-                  <Info className="w-3.5 h-3.5 shrink-0" />
+                  <Info className="size-3.5 shrink-0" />
                   <span>
                     {settings?.modelSettings?.temperature !== undefined
                       ? 'Claude 4.5+ models only accept Temperature OR Top P. Clear Temperature to use Top P.'
@@ -297,7 +297,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               )}
 
               <Entry label="Temperature">
-                <div className="flex flex-row justify-between items-center gap-2">
+                <div className="flex flex-row items-center justify-between gap-2">
                   <Slider
                     value={[settings?.modelSettings?.temperature ?? -0.1]}
                     max={1}
@@ -322,7 +322,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
               </Entry>
 
               <Entry label="Top P">
-                <div className="flex flex-row justify-between items-center gap-2">
+                <div className="flex flex-row items-center justify-between gap-2">
                   <Slider
                     disabled={!canEditSettings}
                     onValueChange={value =>

@@ -41,13 +41,13 @@ const NetworkChoiceMetadata = ({ selectionReason, open, onOpenChange, input }: N
         <DialogBody className="space-y-4">
           <div className="space-y-2">
             <Txt className="text-neutral3">Selection Reason</Txt>
-            <div className="text-neutral6 text-ui-md">{selectionReason}</div>
+            <div className="text-ui-md text-neutral6">{selectionReason}</div>
           </div>
 
           {inputSlot && (
             <div className="space-y-2">
               <Txt className="text-neutral3">Input</Txt>
-              <div className="text-neutral6 text-ui-md">{inputSlot}</div>
+              <div className="text-ui-md text-neutral6">{inputSlot}</div>
             </div>
           )}
         </DialogBody>
@@ -69,7 +69,7 @@ export const NetworkChoiceMetadataDialogTrigger = ({
   return (
     <>
       <Button variant="default" size="icon-md" tooltip="Show selection reason" onClick={() => setIsOpen(s => !s)}>
-        <Share2 className="text-neutral3 size-5" />
+        <Share2 className="size-5 text-neutral3" />
       </Button>
 
       <NetworkChoiceMetadata

@@ -11,7 +11,7 @@ export function InstructionBlocksPage() {
 
   return (
     <ScrollArea className="h-full">
-      <div className="py-6 px-2">
+      <div className="px-2 py-6">
         <Controller
           name="instructionBlocks"
           control={form.control}

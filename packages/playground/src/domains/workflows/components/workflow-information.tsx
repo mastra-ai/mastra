@@ -57,7 +57,7 @@ function NewWorkflowRunButton({ workflowId, onClick }: { workflowId: string; onC
   const { Link, paths } = useLinkComponent();
 
   return (
-    <div className="flex-none border-b border-border1/50 px-4 py-4">
+    <div className="flex-none border-b border-border1/50 p-4">
       <Button
         as={Link}
         href={`${paths.workflowLink(workflowId)}/graph`}
@@ -104,7 +104,7 @@ function RunWorkflowSidebar({ runId, observeWorkflowStream, ...props }: RunWorkf
 function RecentWorkflowRunsSection({ workflowId, activeRunId }: { workflowId: string; activeRunId?: string }) {
   return (
     <section className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-studio-panel border border-border1/50 bg-surface3">
-      <ScrollArea className="h-full w-full" viewPortClassName="h-full" mask={{ top: false }}>
+      <ScrollArea className="size-full" viewPortClassName="h-full" mask={{ top: false }}>
         <WorkflowRecentRuns workflowId={workflowId} runId={activeRunId} />
       </ScrollArea>
     </section>
@@ -169,7 +169,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   }
 
   if (!workflowId) {
-    return <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2" />;
+    return <div data-testid="workflow-information-panel" className="flex size-full min-h-0 flex-col gap-2 p-2" />;
   }
 
   const resetToNewRun = () => {
@@ -181,7 +181,7 @@ export function WorkflowInformation({ workflowId, initialRunId }: WorkflowInform
   };
 
   return (
-    <div data-testid="workflow-information-panel" className="flex h-full min-h-0 w-full flex-col gap-2 p-2">
+    <div data-testid="workflow-information-panel" className="flex size-full min-h-0 flex-col gap-2 p-2">
       <WorkflowInformationTopSection
         newRunButton={
           showNewRunButton ? <NewWorkflowRunButton workflowId={workflowId} onClick={resetToNewRun} /> : undefined

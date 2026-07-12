@@ -43,7 +43,7 @@ export function DisplayConditionsDialog({ entityName, schema, rules, onRulesChan
           {ruleCount > 0 && <span className="absolute -top-0.5 -right-0.5 size-2 rounded-full bg-accent1" />}
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl w-full">
+      <DialogContent className="w-full max-w-5xl">
         <DialogHeader>
           <DialogTitle>Display Conditions for {entityName}</DialogTitle>
           <DialogDescription>

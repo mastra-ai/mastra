@@ -62,7 +62,7 @@ export function WorkflowGraphInner({ workflow }: WorkflowGraphInnerProps) {
       ref={graphRef}
       tabIndex={-1}
       data-testid="workflow-graph-viewport"
-      className="w-full h-full bg-surface2 outline-none"
+      className="size-full bg-surface2 outline-none"
     >
       <ReactFlow
         nodes={nodes}

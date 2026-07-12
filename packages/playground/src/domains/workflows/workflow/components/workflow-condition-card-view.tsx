@@ -37,7 +37,7 @@ export const WorkflowConditionCardView = ({
       data-workflow-step-status={previousDisplayStatus ?? 'idle'}
       data-testid="workflow-condition-node"
       style={accentColor ? { borderLeftColor: accentColor } : undefined}
-      className={cn('bg-surface3 rounded-lg w-dropdown-max-height border border-border1', accentColor && 'border-l-4')}
+      className={cn('w-dropdown-max-height rounded-lg border border-border1 bg-surface3', accentColor && 'border-l-4')}
     >
       <Collapsible
         open={!isCollapsible ? true : isOpen}
@@ -47,11 +47,11 @@ export const WorkflowConditionCardView = ({
           }
         }}
       >
-        <div className="flex items-center gap-1 w-full px-3 py-2">
+        <div className="flex w-full items-center gap-1 px-3 py-2">
           {isCollapsible && (
             <CollapsibleTrigger
               aria-label={isOpen ? 'Collapse condition' : 'Expand condition'}
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full text-neutral3 hover:text-neutral5 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1"
+              className="inline-flex size-5 items-center justify-center rounded-full text-neutral3 hover:text-neutral5 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
             >
               <Icon>
                 <ChevronDown
@@ -84,7 +84,7 @@ export const WorkflowConditionCardView = ({
                   {condition.ref?.step ? (
                     <div className="flex items-center gap-1">
                       <WorkflowCardBadges indicators={conjIndicators} />
-                      <Txt variant="ui-xs" className=" text-neutral3 flex-1">
+                      <Txt variant="ui-xs" className=" flex-1 text-neutral3">
                         {typeof condition.ref.step === 'string' ? condition.ref.step : condition.ref.step.id}'s{' '}
                         {condition.ref.path}{' '}
                         {Object.entries(condition.query).map(([key, value]) => `${key} ${String(value)}`)}

@@ -254,12 +254,12 @@ export function SkillEditDialog({
       className="h-full"
     >
       <SideDialog.Top>
-        <span className="flex-1 flex items-center gap-2">
+        <span className="flex flex-1 items-center gap-2">
           {dialogTitle}
           {isViewMode && skill?.visibility === 'private' && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <span className="text-neutral3 shrink-0" aria-label="Private skill">
+                <span className="shrink-0 text-neutral3" aria-label="Private skill">
                   <Icon size="sm">
                     <LockIcon />
                   </Icon>
@@ -269,17 +269,17 @@ export function SkillEditDialog({
             </Tooltip>
           )}
         </span>
-        <div className="flex items-center gap-2 mr-6">
+        <div className="mr-6 flex items-center gap-2">
           {isViewMode && isOwner && (
             <Button variant="outline" size="sm" onClick={() => setIsEditing(true)}>
-              <Pencil className="h-3.5 w-3.5" /> Edit
+              <Pencil className="size-3.5" /> Edit
             </Button>
           )}
           {isViewMode && !isOwner && onCopy && skill && (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="sm" onClick={() => onCopy(skill)}>
-                  <CopyIcon className="h-3.5 w-3.5" /> Copy
+                  <CopyIcon className="size-3.5" /> Copy
                 </Button>
               </TooltipTrigger>
               <TooltipContent>Make your own private copy you can edit</TooltipContent>
@@ -295,13 +295,13 @@ export function SkillEditDialog({
                   <SelectContent>
                     <SelectItem value="private">
                       <span className="flex items-center gap-2">
-                        <LockIcon className="h-3.5 w-3.5" />
+                        <LockIcon className="size-3.5" />
                         Private
                       </span>
                     </SelectItem>
                     <SelectItem value="public">
                       <span className="flex items-center gap-2">
-                        <Globe className="h-3.5 w-3.5" />
+                        <Globe className="size-3.5" />
                         Public
                       </span>
                     </SelectItem>
@@ -349,15 +349,15 @@ export function SkillEditDialog({
               <div className="border-t border-border1 pt-4">
                 <button
                   onClick={() => setShowForm(false)}
-                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors mb-3"
+                  className="mb-3 flex items-center gap-1.5 text-xs text-neutral3 transition-colors hover:text-neutral5"
                 >
-                  <ChevronDown className="h-3 w-3" />
+                  <ChevronDown className="size-3" />
                   Hide skill details
                 </button>
 
                 {isAdmin && (!hasFilesystem || !workspaceId) && (
                   <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/10 p-3 text-xs text-yellow-600">
-                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <AlertTriangle className="mt-0.5 size-4 shrink-0" />
                     <span>
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
@@ -393,11 +393,11 @@ export function SkillEditDialog({
                           }
                           setMode('advanced');
                         }}
-                        className="mt-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                        className="mt-3 flex items-center gap-1.5 text-xs text-neutral3 transition-colors hover:text-neutral5"
                       >
-                        <Settings2 className="h-3.5 w-3.5" />
+                        <Settings2 className="size-3.5" />
                         Advanced mode
-                        <ChevronRight className="h-3 w-3" />
+                        <ChevronRight className="size-3" />
                       </button>
                     )}
                   </>
@@ -413,11 +413,11 @@ export function SkillEditDialog({
                           }
                           setMode('simple');
                         }}
-                        className="mb-3 flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                        className="mb-3 flex items-center gap-1.5 text-xs text-neutral3 transition-colors hover:text-neutral5"
                       >
-                        <Pencil className="h-3.5 w-3.5" />
+                        <Pencil className="size-3.5" />
                         Simple mode
-                        <ChevronRight className="h-3 w-3" />
+                        <ChevronRight className="size-3" />
                       </button>
                     )}
                     <SkillFolder
@@ -435,9 +435,9 @@ export function SkillEditDialog({
               <div className="border-t border-border1 pt-3">
                 <button
                   onClick={() => setShowForm(true)}
-                  className="flex items-center gap-1.5 text-xs text-neutral3 hover:text-neutral5 transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-neutral3 transition-colors hover:text-neutral5"
                 >
-                  <ChevronRight className="h-3 w-3" />
+                  <ChevronRight className="size-3" />
                   {hasFields ? 'Show skill details' : 'or fill in manually'}
                 </button>
               </div>

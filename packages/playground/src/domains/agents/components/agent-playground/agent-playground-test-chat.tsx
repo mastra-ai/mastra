@@ -47,7 +47,7 @@ function UnsavedChangesBanner({ ctx }: { ctx: NonNullable<ReturnType<typeof useO
       action={
         handleSaveDraft && (
           <Button type="button" variant="default" size="sm" onClick={() => handleSaveDraft()} disabled={isSavingDraft}>
-            <Save className="h-3.5 w-3.5" />
+            <Save className="size-3.5" />
             {isSavingDraft ? 'Saving...' : saveLabel}
           </Button>
         )
@@ -91,9 +91,9 @@ export function AgentPlaygroundTestChat({
               agentId={agentId}
               requestContext={hasRequestContext ? mergedRequestContext : undefined}
             >
-              <div className="flex flex-col h-full">
+              <div className="flex h-full flex-col">
                 {editFormCtx && <UnsavedChangesBanner ctx={editFormCtx} />}
-                <div className="flex-1 min-h-0">
+                <div className="min-h-0 flex-1">
                   <AgentChat
                     key={testThreadId}
                     agentId={agentId}

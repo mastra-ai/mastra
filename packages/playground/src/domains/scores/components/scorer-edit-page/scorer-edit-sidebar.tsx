@@ -44,8 +44,8 @@ export function ScorerEditSidebar({
   const watchedProvider = useWatch({ control, name: 'model.provider' });
 
   return (
-    <div className="h-full flex flex-col">
-      <ScrollArea className="flex-1 min-h-0">
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-6 p-4">
           <SectionHeader title="Configuration" subtitle="Define your scorer's name, type, and settings." />
 
@@ -117,7 +117,7 @@ export function ScorerEditSidebar({
           {/* Score Range */}
           <div className="flex flex-col gap-1.5">
             <Label className="text-xs text-neutral5">Score Range</Label>
-            <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-2">
               <Controller
                 name="scoreRange.min"
                 control={control}
@@ -200,7 +200,7 @@ export function ScorerEditSidebar({
             <Button variant="outline" onClick={onSaveDraft} disabled={isSavingDraft || isSubmitting} className="flex-1">
               {isSavingDraft ? (
                 <>
-                  <Spinner className="h-4 w-4" />
+                  <Spinner className="size-4" />
                   Saving...
                 </>
               ) : (
@@ -215,7 +215,7 @@ export function ScorerEditSidebar({
             <Button variant="primary" onClick={onPublish} disabled={isSubmitting || isSavingDraft} className="flex-1">
               {isSubmitting ? (
                 <>
-                  <Spinner className="h-4 w-4" />
+                  <Spinner className="size-4" />
                   Publishing...
                 </>
               ) : (
@@ -232,7 +232,7 @@ export function ScorerEditSidebar({
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <Spinner className="size-4" />
                 Creating...
               </>
             ) : (

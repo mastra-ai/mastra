@@ -38,14 +38,14 @@ export function ProviderToolkitSelector({
   onConnect,
 }: ProviderToolkitSelectorProps) {
   return (
-    <div className="space-y-4 border rounded p-4">
+    <div className="space-y-4 rounded border p-4">
       <div className="space-y-1">
         <label className="block font-medium" htmlFor="provider-select">
           Provider
         </label>
         <select
           id="provider-select"
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded border px-2 py-1"
           value={providerId}
           onChange={event => onProviderChange(event.target.value)}
           disabled={providersLoading}
@@ -67,7 +67,7 @@ export function ProviderToolkitSelector({
         </label>
         <select
           id="toolkit-select"
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded border px-2 py-1"
           value={toolkit}
           onChange={event => onToolkitChange(event.target.value)}
           disabled={!providerId || toolkitsLoading}
@@ -90,7 +90,7 @@ export function ProviderToolkitSelector({
         <input
           id="label-input"
           type="text"
-          className="border rounded px-2 py-1 w-full"
+          className="w-full rounded border px-2 py-1"
           placeholder="My personal Gmail"
           value={label}
           onChange={event => onLabelChange(event.target.value)}
@@ -100,7 +100,7 @@ export function ProviderToolkitSelector({
 
       <button
         type="button"
-        className="bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
+        className="rounded bg-blue-600 px-4 py-2 text-white disabled:opacity-50"
         onClick={onConnect}
         disabled={!providerId || !toolkit || authorizePending}
       >

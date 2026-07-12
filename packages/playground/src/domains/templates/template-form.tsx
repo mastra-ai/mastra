@@ -40,11 +40,11 @@ export function TemplateForm({
 }: TemplateFormProps) {
   return (
     <Container>
-      <div className="max-w-[40rem] my-4 p-4 lg:p-8 mx-auto gap-8 grid">
+      <div className="max-w-160 mx-auto my-4 grid gap-8 p-4 lg:p-8">
         <h2
           className={cn(
-            'text-neutral4 text-header-sm font-semibold flex items-center gap-2',
-            '[&>svg]:w-[1.2em] [&_svg]:h-[1.2em] [&_svg]:opacity-70',
+            'flex items-center gap-2 text-header-sm font-semibold text-neutral4',
+            '[&_svg]:h-[1.2em] [&_svg]:opacity-70 [&>svg]:w-[1.2em]',
           )}
         >
           Install Template <PackageOpenIcon />
@@ -61,14 +61,14 @@ export function TemplateForm({
 
         {selectedProvider && Object.entries(variables || {}).length > 0 && (
           <>
-            <h3 className="text-neutral3 text-ui-md">Set required Environmental Variables</h3>
-            <div className="grid grid-cols-[1fr_1fr] gap-4 items-start">
+            <h3 className="text-ui-md text-neutral3">Set required Environmental Variables</h3>
+            <div className="grid grid-cols-[1fr_1fr] items-start gap-4">
               {isLoadingEnvVars ? (
                 <div
                   className={cn(
-                    'flex items-center justify-center col-span-2 text-neutral3 text-ui-sm gap-4',
-                    '[&_svg]:opacity-50 [&_svg]:w-[1.1em] [&_svg]:h-[1.1em]',
-                    'animate-in fade-in duration-300',
+                    'col-span-2 flex items-center justify-center gap-4 text-ui-sm text-neutral3',
+                    '[&_svg]:size-[1.1em] [&_svg]:opacity-50',
+                    'animate-in duration-300 fade-in',
                   )}
                 >
                   <Spinner /> Loading variables...
@@ -98,13 +98,13 @@ export function TemplateForm({
                 ))
               )}
             </div>
-            <div className="border-t border-border1 pt-12 mt-3.5 relative">
-              <div className="absolute w-8 h-8 rounded-full bg-surface2 top-0 left-1/2 -translate-x-1/2 -translate-y-4 text-ui-sm text-neutral3 flex items-center justify-center">
+            <div className="relative mt-3.5 border-t border-border1 pt-12">
+              <div className="absolute top-0 left-1/2 flex size-8 -translate-x-1/2 -translate-y-4 items-center justify-center rounded-full bg-surface2 text-ui-sm text-neutral3">
                 And
               </div>
 
-              <h3 className="text-neutral4 text-ui-lg">Set AI Model for Template Installation</h3>
-              <p className="text-neutral3 text-ui-md mt-2 mb-8">
+              <h3 className="text-ui-lg text-neutral4">Set AI Model for Template Installation</h3>
+              <p className="mt-2 mb-8 text-ui-md text-neutral3">
                 This model will be used by the workflow to process and install the template
               </p>
 
@@ -123,8 +123,8 @@ export function TemplateForm({
         {selectedProvider && !isLoadingEnvVars && (
           <Button
             className={cn(
-              'flex items-center gap-2 mt-4 justify-center text-ui-md w-full bg-surface5 min-h-10 rounded-lg text-neutral5 hover:bg-surface6 transition-colors',
-              '[&>svg]:w-[1.1em] [&_svg]:h-[1.1em] [&_svg]:text-neutral5',
+              'mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-lg bg-surface5 text-ui-md text-neutral5 transition-colors hover:bg-surface6',
+              '[&_svg]:h-[1.1em] [&_svg]:text-neutral5 [&>svg]:w-[1.1em]',
             )}
             onClick={handleInstallTemplate}
             disabled={
@@ -133,7 +133,7 @@ export function TemplateForm({
           >
             {isInstalling ? (
               <>
-                <Spinner className="w-4 h-4" /> Installing...
+                <Spinner className="size-4" /> Installing...
               </>
             ) : (
               <>

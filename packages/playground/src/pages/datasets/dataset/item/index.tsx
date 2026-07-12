@@ -284,7 +284,7 @@ function DatasetItemPage() {
     return (
       <MainContentLayout>
         <MainContentContent>
-          <div className="text-neutral3 p-4">Item not found</div>
+          <div className="p-4 text-neutral3">Item not found</div>
         </MainContentContent>
       </MainContentLayout>
     );
@@ -294,7 +294,7 @@ function DatasetItemPage() {
     <>
       <MainContentLayout>
         <div className="h-full overflow-hidden px-6 pb-4">
-          <div className="grid gap-6 max-w-[60rem] mx-auto grid-rows-[auto_1fr] h-full">
+          <div className="max-w-240 mx-auto grid h-full grid-rows-[auto_1fr] gap-6">
             <MainHeader>
               <MainHeader.Column>
                 <MainHeader.Title>
@@ -382,7 +382,7 @@ function DatasetItemPage() {
                 ) : displayItem ? (
                   <DatasetItemContent item={displayItem} Link={FrameworkLink} />
                 ) : (
-                  <div className="text-neutral4 text-sm">Item data not available</div>
+                  <div className="text-sm text-neutral4">Item data not available</div>
                 )}
               </Column>
               {!isEditing && (

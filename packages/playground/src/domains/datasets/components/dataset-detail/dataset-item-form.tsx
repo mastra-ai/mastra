@@ -18,8 +18,8 @@ function ValidationErrors({ field, errors }: { field: string; errors: Array<{ pa
   return (
     <div className="mt-2 space-y-1">
       {errors.map((err, idx) => (
-        <p key={idx} className="text-xs text-destructive">
-          <code className="bg-destructive/10 px-1 rounded">
+        <p key={idx} className="text-destructive text-xs">
+          <code className="bg-destructive/10 rounded px-1">
             {field}
             {err.path !== '/' ? err.path : ''}
           </code>
@@ -73,15 +73,15 @@ export function EditModeContent({
   return (
     <>
       <div className="mb-4">
-        <h3 className="text-lg font-medium flex items-center gap-2">
-          <Pencil className="w-5 h-5" /> Edit Item
+        <h3 className="flex items-center gap-2 text-lg font-medium">
+          <Pencil className="size-5" /> Edit Item
         </h3>
       </div>
 
       <div className="space-y-6">
         <div className="space-y-2">
           <Label>Input (JSON) *</Label>
-          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-[120px]" />
+          <CodeEditor value={inputValue} onChange={setInputValue} showCopyButton={false} className="min-h-30" />
           {validationErrors?.field === 'input' && <ValidationErrors field="input" errors={validationErrors.errors} />}
         </div>
 
@@ -91,7 +91,7 @@ export function EditModeContent({
             value={groundTruthValue}
             onChange={setGroundTruthValue}
             showCopyButton={false}
-            className="min-h-[100px]"
+            className="min-h-25"
           />
           {validationErrors?.field === 'groundTruth' && (
             <ValidationErrors field="groundTruth" errors={validationErrors.errors} />
@@ -104,23 +104,18 @@ export function EditModeContent({
             value={trajectoryValue}
             onChange={setTrajectoryValue}
             showCopyButton={false}
-            className="min-h-[80px]"
+            className="min-h-20"
           />
         </div>
 
         <div className="space-y-2">
           <Label>Tool Mocks (JSON array, optional)</Label>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-muted-foreground text-xs">
             Ordered static mocks served in place of executing the tool. Each entry is{' '}
             <code>{`{ "toolName", "args", "output" }`}</code>. Calling a mocked tool with non-matching args fails the
             item; unmocked tools run live.
           </p>
-          <CodeEditor
-            value={toolMocksValue}
-            onChange={setToolMocksValue}
-            showCopyButton={false}
-            className="min-h-[100px]"
-          />
+          <CodeEditor value={toolMocksValue} onChange={setToolMocksValue} showCopyButton={false} className="min-h-25" />
           {validationErrors?.field === 'toolMocks' && (
             <ValidationErrors field="toolMocks" errors={validationErrors.errors} />
           )}
@@ -132,18 +127,13 @@ export function EditModeContent({
             value={requestContextValue}
             onChange={setRequestContextValue}
             showCopyButton={false}
-            className="min-h-[80px]"
+            className="min-h-20"
           />
         </div>
 
         <div className="space-y-2">
           <Label>Metadata (JSON, optional)</Label>
-          <CodeEditor
-            value={metadataValue}
-            onChange={setMetadataValue}
-            showCopyButton={false}
-            className="min-h-[80px]"
-          />
+          <CodeEditor value={metadataValue} onChange={setMetadataValue} showCopyButton={false} className="min-h-20" />
         </div>
 
         <div className="flex gap-2 pt-4">

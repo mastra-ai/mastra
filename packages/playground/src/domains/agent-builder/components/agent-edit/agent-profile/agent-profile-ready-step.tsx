@@ -45,7 +45,7 @@ export const AgentProfileReadyStep = () => {
       panelClassName="ready-stage"
       panelOverlay={<span ref={sweepRef} className="ready-stage-sweep" aria-hidden="true" />}
       cta={
-        <div className="relative z-[2] flex items-center justify-center gap-3">
+        <div className="relative z-2 flex items-center justify-center gap-3">
           <Button variant="outline" onClick={handleReview} data-testid="agent-builder-ready-review">
             Review my agent
           </Button>
@@ -55,12 +55,12 @@ export const AgentProfileReadyStep = () => {
         </div>
       }
     >
-      <div className="w-full h-full flex flex-col items-center justify-center py-6 px-6 text-center">
+      <div className="flex size-full flex-col items-center justify-center p-6 text-center">
         <div className="ready-stage-content flex flex-col items-center gap-4">
           <h2 className="text-4xl font-semibold text-neutral6" data-testid="agent-builder-ready-heading">
             Your agent is ready
           </h2>
-          <p className="text-neutral3 text-lg max-w-md">
+          <p className="max-w-md text-lg text-neutral3">
             You can review and fine-tune everything, or jump straight in and try it out.
           </p>
         </div>

@@ -37,7 +37,7 @@ export function WorkflowInputTypeToggle({
       role="radiogroup"
       aria-label="Input type"
       className={cn(
-        'grid grid-flow-col auto-cols-fr gap-1 border border-border1 bg-surface3',
+        'grid auto-cols-fr grid-flow-col gap-1 border border-border1 bg-surface3',
         compact ? 'h-5 w-auto rounded-md p-0.5' : 'w-full rounded-lg p-1',
       )}
     >
@@ -56,7 +56,7 @@ export function WorkflowInputTypeToggle({
             className={cn(
               'flex items-center justify-center rounded-md transition-colors',
               compact ? 'gap-0.5 px-1 py-0' : 'gap-2 px-3 py-1.5',
-              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1',
+              'focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none',
               isActive ? 'bg-surface5 text-neutral5' : 'text-neutral3 hover:text-neutral4',
               disabled && 'cursor-not-allowed opacity-50',
             )}

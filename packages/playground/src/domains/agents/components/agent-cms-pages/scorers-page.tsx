@@ -142,8 +142,8 @@ export function ScorersPage() {
                             type="text"
                             disabled={isDisabled}
                             className={cn(
-                              'border border-transparent appearance-none block w-full text-neutral3 bg-transparent',
-                              !isDisabled && 'border-border1 border-dashed ',
+                              'block w-full appearance-none border border-transparent bg-transparent text-neutral3',
+                              !isDisabled && 'border-dashed border-border1 ',
                             )}
                             value={
                               isSelected
@@ -229,20 +229,20 @@ function ScorerConfigPanel({ scorerId, samplingConfig, onSamplingChange, readOnl
         >
           <div className="flex items-center gap-2">
             <RadioGroupItem value="none" id={`${scorerId}-none`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-none`} className="text-ui-xs text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-none`} className="cursor-pointer text-ui-xs text-neutral5">
               None (evaluate all)
             </Label>
           </div>
           <div className="flex items-center gap-2">
             <RadioGroupItem value="ratio" id={`${scorerId}-ratio`} disabled={readOnly} />
-            <Label htmlFor={`${scorerId}-ratio`} className="text-ui-xs text-neutral5 cursor-pointer">
+            <Label htmlFor={`${scorerId}-ratio`} className="cursor-pointer text-ui-xs text-neutral5">
               Ratio (percentage)
             </Label>
           </div>
         </RadioGroup>
 
         {samplingType === 'ratio' && (
-          <div className="flex flex-col gap-1.5 mt-2">
+          <div className="mt-2 flex flex-col gap-1.5">
             <Label htmlFor={`rate-${scorerId}`} className="text-xs text-neutral4">
               Sample Rate (0-1)
             </Label>

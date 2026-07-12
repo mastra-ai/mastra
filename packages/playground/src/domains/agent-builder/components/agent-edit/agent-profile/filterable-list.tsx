@@ -52,7 +52,7 @@ export const FilterableList = ({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6"
+      className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 p-6"
       data-testid={`${testIdPrefix}-filter`}
     >
       <div className="shrink-0 rounded-full bg-surface3" data-testid={`${testIdPrefix}-filter-search`}>
@@ -116,7 +116,7 @@ export const FilterableList = ({
                     data-testid={`${testIdPrefix}-filter-item-${item.id}`}
                     data-checked={checked ? 'true' : 'false'}
                     className={cn(
-                      'flex cursor-pointer select-none items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors hover:bg-surface4',
+                      'flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-ui-sm text-neutral6 transition-colors select-none hover:bg-surface4',
                       disabled && 'cursor-not-allowed opacity-60',
                     )}
                   >
@@ -126,7 +126,7 @@ export const FilterableList = ({
                       onCheckedChange={() => onToggle(item.id)}
                       style={checkboxStyle}
                       data-testid={`${testIdPrefix}-filter-checkbox-${item.id}`}
-                      className="h-3.5 w-3.5 shrink-0 shadow-none [&_svg]:h-2.5 [&_svg]:w-2.5 data-[state=checked]:shadow-none"
+                      className="size-3.5 shrink-0 shadow-none data-[state=checked]:shadow-none [&_svg]:size-2.5"
                     />
                     {item.icon && <span className="flex shrink-0 items-center">{item.icon}</span>}
                     <span className="truncate">{item.label}</span>

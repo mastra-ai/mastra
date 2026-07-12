@@ -93,14 +93,14 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
         className="flex items-center gap-1.5 rounded-md border border-border1 bg-surface3 px-2 py-1 text-ui-xs text-neutral6"
         data-testid="composer-model-locked"
       >
-        <Lock className="h-3.5 w-3.5 shrink-0 text-neutral3" />
+        <Lock className="size-3.5 shrink-0 text-neutral3" />
         <span className="truncate">{lockedLabel}</span>
       </div>
     );
   }
 
   return (
-    <div className="inline-flex items-stretch max-w-full">
+    <div className="inline-flex max-w-full items-stretch">
       <LLMProviders
         value={currentModelProvider}
         onValueChange={handleProviderSelect}
@@ -108,7 +108,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
         className={cn(
           COMPOSER_TRIGGER_CLASS,
           'shrink-0',
-          'rounded-none! rounded-tl-full! rounded-bl-full!',
+          'rounded-none! rounded-l-full',
           // Collapse provider to icon-only in narrow containers.
           '@max-md:px-2 @max-md:[&>span>span]:hidden @max-md:[&>svg]:hidden',
         )}
@@ -121,7 +121,7 @@ export const ComposerModelSwitcher = ({ agentId }: ComposerModelSwitcherProps) =
         open={modelOpen}
         onOpenChange={setModelOpen}
         size="md"
-        className={cn(COMPOSER_TRIGGER_CLASS, 'rounded-none! rounded-tr-full! rounded-br-full!', 'max-w-[10rem]')}
+        className={cn(COMPOSER_TRIGGER_CLASS, 'rounded-none! rounded-r-full', 'max-w-40')}
       />
     </div>
   );
@@ -159,13 +159,13 @@ export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) =>
     <div className="flex flex-col gap-1 px-3 pb-1.5">
       {stale && (
         <div
-          className="flex items-start gap-1 text-accent6 text-xs min-w-0 max-w-full"
+          className="flex max-w-full min-w-0 items-start gap-1 text-xs text-accent6"
           data-testid="composer-model-stale-warning"
           role="alert"
         >
-          <TriangleAlert className="w-3 h-3 shrink-0 mt-0.5" />
+          <TriangleAlert className="mt-0.5 size-3 shrink-0" />
           <span className="min-w-0 break-words">
-            <code className="px-1 py-0.5 bg-accent6Dark rounded text-accent6 break-all">
+            <code className="rounded bg-accent6Dark px-1 py-0.5 break-all text-accent6">
               {agent.provider}/{selectedModel}
             </code>{' '}
             is no longer allowed by admin policy. Pick a different model.
@@ -173,10 +173,10 @@ export const ComposerModelWarning = ({ agentId }: ComposerModelSwitcherProps) =>
         </div>
       )}
       {showProviderWarning && (
-        <div className="flex items-start gap-1 text-accent6 text-xs min-w-0 max-w-full">
-          <TriangleAlert className="w-3 h-3 shrink-0 mt-0.5" />
+        <div className="flex max-w-full min-w-0 items-start gap-1 text-xs text-accent6">
+          <TriangleAlert className="mt-0.5 size-3 shrink-0" />
           <span className="min-w-0 break-words">
-            Set <code className="px-1 py-0.5 bg-accent6Dark rounded text-accent6 break-all">{envVar}</code> to use this
+            Set <code className="rounded bg-accent6Dark px-1 py-0.5 break-all text-accent6">{envVar}</code> to use this
             provider
           </span>
         </div>

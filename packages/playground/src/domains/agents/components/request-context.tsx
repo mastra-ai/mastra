@@ -189,7 +189,7 @@ export const RequestContext = ({ editorClassName = 'h-[400px]', labelTooltip }: 
           extensions={[jsonLanguage]}
           className={cn(
             editorClassName,
-            'overflow-y-scroll rounded-lg border border-border1 bg-surface2 overflow-hidden p-3',
+            'overflow-hidden overflow-y-scroll rounded-lg border border-border1 bg-surface2 p-3',
             '[&_.cm-editor]:!bg-surface2 [&_.cm-gutters]:!bg-surface2',
           )}
         />

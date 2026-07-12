@@ -70,8 +70,8 @@ export function MCPClientFormSidebar({
   };
 
   return (
-    <div className="h-full flex flex-col">
-      <ScrollArea className="flex-1 min-h-0">
+    <div className="flex h-full flex-col">
+      <ScrollArea className="min-h-0 flex-1">
         <div className="flex flex-col gap-6 p-4">
           <SectionHeader title="Identity" subtitle="Define the MCP client name and description." />
 
@@ -225,7 +225,7 @@ export function MCPClientFormSidebar({
                 <Label className="text-xs text-neutral5">Environment Variables</Label>
                 <div className="flex flex-col gap-2">
                   {env.map((_, index) => (
-                    <div key={index} className="flex gap-2 items-center">
+                    <div key={index} className="flex items-center gap-2">
                       <Input
                         placeholder="KEY"
                         className={`${SOLID_FIELD} flex-1`}
@@ -240,14 +240,14 @@ export function MCPClientFormSidebar({
                       />
                       {!readOnly && (
                         <Button variant="ghost" size="sm" onClick={() => removeEnvVar(index)}>
-                          <XIcon className="h-3 w-3" />
+                          <XIcon className="size-3" />
                         </Button>
                       )}
                     </div>
                   ))}
                   {!readOnly && (
                     <Button variant="outline" size="sm" onClick={addEnvVar} className="w-fit">
-                      <PlusIcon className="h-3 w-3 mr-1" />
+                      <PlusIcon className="mr-1 size-3" />
                       Add variable
                     </Button>
                   )}
@@ -259,7 +259,7 @@ export function MCPClientFormSidebar({
       </ScrollArea>
 
       {(showSubmit ?? !readOnly) && (
-        <div className="shrink-0 p-4 flex flex-col gap-2">
+        <div className="flex shrink-0 flex-col gap-2 p-4">
           {!readOnly &&
             (() => {
               const isDisabled = serverType !== 'http' || !url.trim() || isTryingConnect;
@@ -280,7 +280,7 @@ export function MCPClientFormSidebar({
                 >
                   {isTryingConnect ? (
                     <>
-                      <Spinner className="h-4 w-4" />
+                      <Spinner className="size-4" />
                       Connecting...
                     </>
                   ) : (
@@ -291,7 +291,7 @@ export function MCPClientFormSidebar({
                 <Button variant="outline" onClick={onTryConnect} disabled={isDisabled} className="w-full">
                   {isTryingConnect ? (
                     <>
-                      <Spinner className="h-4 w-4" />
+                      <Spinner className="size-4" />
                       Connecting...
                     </>
                   ) : (
@@ -303,7 +303,7 @@ export function MCPClientFormSidebar({
           <Button variant="primary" onClick={onPublish} disabled={isSubmitting} className="w-full">
             {isSubmitting ? (
               <>
-                <Spinner className="h-4 w-4" />
+                <Spinner className="size-4" />
                 Creating...
               </>
             ) : (

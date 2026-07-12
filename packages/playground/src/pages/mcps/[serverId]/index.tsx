@@ -9,7 +9,7 @@ export const McpServerPage = () => {
   const server = mcpServers.find(server => server.id === serverId);
 
   return (
-    <div className="h-full w-full overflow-hidden">
+    <div className="size-full overflow-hidden">
       <MCPDetail isLoading={isLoading} server={server} />
     </div>
   );

@@ -435,14 +435,14 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
   if (isLoadingReview) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <Spinner className="w-6 h-6" />
+      <div className="flex flex-1 items-center justify-center">
+        <Spinner className="size-6" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-1 min-h-0 overflow-hidden">
+    <div className="flex min-h-0 flex-1 overflow-hidden">
       {/* Analyze config dialog */}
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -453,11 +453,11 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
           <div className="space-y-4 py-2">
             <div className="grid grid-cols-2 gap-2">
               <div>
-                <Label className="text-xs mb-1 block">Provider</Label>
+                <Label className="mb-1 block text-xs">Provider</Label>
                 <LLMProviders value={analyzeProvider} onValueChange={setAnalyzeProvider} />
               </div>
               <div>
-                <Label className="text-xs mb-1 block">Model</Label>
+                <Label className="mb-1 block text-xs">Model</Label>
                 <LLMModels llmId={analyzeProvider} value={analyzeModel} onValueChange={setAnalyzeModel} />
               </div>
             </div>
@@ -471,7 +471,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                 onChange={e => setAnalyzePrompt(e.target.value)}
                 placeholder="E.g., Focus on safety issues and factual errors..."
                 rows={3}
-                className="text-xs mt-1"
+                className="mt-1 text-xs"
               />
             </div>
           </div>
@@ -480,7 +480,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
               Cancel
             </Button>
             <Button onClick={handleAnalyze} disabled={!analyzeProvider || !analyzeModel || isAnalyzing}>
-              {isAnalyzing ? <Spinner className="w-4 h-4 mr-1" /> : null}
+              {isAnalyzing ? <Spinner className="mr-1 size-4" /> : null}
               Analyze
             </Button>
           </DialogFooter>
@@ -489,7 +489,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
 
       {/* Proposal confirmation dialog */}
       <Dialog open={showProposalDialog} onOpenChange={setShowProposalDialog}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Review Proposed Tags</DialogTitle>
             <DialogDescription>
@@ -500,7 +500,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
             {proposedAssignments.map((proposal, idx) => {
               const item = items.find(i => i.id === proposal.itemId);
               return (
-                <div key={proposal.itemId} className={cn('p-3 border rounded-lg', !proposal.accepted && 'opacity-50')}>
+                <div key={proposal.itemId} className={cn('rounded-lg border p-3', !proposal.accepted && 'opacity-50')}>
                   <div className="flex items-start gap-2">
                     <Checkbox
                       checked={proposal.accepted}
@@ -510,15 +510,15 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                         )
                       }
                     />
-                    <div className="flex-1 min-w-0">
-                      <Txt variant="ui-xs" className="text-neutral4 truncate block">
+                    <div className="min-w-0 flex-1">
+                      <Txt variant="ui-xs" className="block truncate text-neutral4">
                         {item
                           ? typeof item.input === 'string'
                             ? item.input.slice(0, 100)
                             : JSON.stringify(item.input).slice(0, 100)
                           : proposal.itemId}
                       </Txt>
-                      <div className="flex gap-1 flex-wrap mt-1.5">
+                      <div className="mt-1.5 flex flex-wrap gap-1">
                         {proposal.tags.map((tag, ti) => (
                           <ProposalTag
                             key={`${tag}-${ti}`}
@@ -539,7 +539,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                         ))}
                       </div>
                       {proposal.reason && (
-                        <Txt variant="ui-xs" className="text-neutral3 mt-1 block italic">
+                        <Txt variant="ui-xs" className="mt-1 block text-neutral3 italic">
                           {proposal.reason}
                         </Txt>
                       )}
@@ -561,11 +561,9 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
       </Dialog>
 
       {/* Main layout: toolbar + List + Detail Panel */}
-      <div
-        className={cn('grid w-full h-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}
-      >
-        <div className="grid gap-8 content-start w-full overflow-y-auto">
-          <div className="flex items-center justify-between w-full flex-wrap gap-4 gap-x-6">
+      <div className={cn('grid size-full grid-cols-1 gap-4 overflow-y-auto', featuredItem && 'grid-cols-[1fr_1fr]')}>
+        <div className="grid w-full content-start gap-8 overflow-y-auto">
+          <div className="flex w-full flex-wrap items-center justify-between gap-4 gap-x-6">
             {/* Filters (left) */}
             <div className="flex items-center gap-3">
               <DropdownMenu>
@@ -576,7 +574,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                     {activeFilterCount > 0 && (
                       <span
                         className={cn(
-                          'ml-0.5 inline-flex items-center justify-center rounded-full bg-accent1/50 text-neutral5 text-ui-sm w-5 h-5',
+                          'ml-0.5 inline-flex size-5 items-center justify-center rounded-full bg-accent1/50 text-ui-sm text-neutral5',
                         )}
                       >
                         {activeFilterCount}
@@ -704,7 +702,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                   <DropdownMenu.Trigger asChild>
                     <Button disabled={isAnalyzing}>
                       {isAnalyzing ? (
-                        <Spinner className="w-4 h-4" />
+                        <Spinner className="size-4" />
                       ) : (
                         <Icon size="sm">
                           <ChevronDown />
@@ -740,16 +738,16 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
           </div>
 
           {isLoadingDisplay ? (
-            <div className="flex-1 flex items-center justify-center">
-              <Spinner className="w-6 h-6" />
+            <div className="flex flex-1 items-center justify-center">
+              <Spinner className="size-6" />
             </div>
           ) : displayItems.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center">
-              <div className="text-center px-8">
-                <Txt variant="ui-sm" className="text-neutral3 block">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="px-8 text-center">
+                <Txt variant="ui-sm" className="block text-neutral3">
                   {showCompleted ? 'No completed reviews yet' : 'No items to review'}
                 </Txt>
-                <Txt variant="ui-xs" className="text-neutral3 mt-2 block">
+                <Txt variant="ui-xs" className="mt-2 block text-neutral3">
                   {showCompleted
                     ? 'Items marked as complete will appear here for auditing.'
                     : 'When experiment results are flagged for review, they will appear here.'}
@@ -791,7 +789,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                     {/* Comment preview */}
                     <DataList.Cell height="compact" className="min-w-0">
                       {item.comment ? (
-                        <Txt variant="ui-xs" className="text-neutral3 truncate">
+                        <Txt variant="ui-xs" className="truncate text-neutral3">
                           {item.comment}
                         </Txt>
                       ) : (
@@ -804,7 +802,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                     {/* Tags */}
                     <DataList.Cell height="compact" className="min-w-0">
                       {item.tags.length > 0 ? (
-                        <Txt variant="ui-xs" className="text-neutral4 truncate">
+                        <Txt variant="ui-xs" className="truncate text-neutral4">
                           {item.tags.join(', ')}
                         </Txt>
                       ) : (
@@ -840,7 +838,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                           <Icon size="sm" className="text-neutral3">
                             <GaugeIcon />
                           </Icon>
-                          <Txt variant="ui-xs" className="text-neutral4 font-mono">
+                          <Txt variant="ui-xs" className="font-mono text-neutral4">
                             {scoreEntries[0][1].toFixed(2)}
                           </Txt>
                           {scoreEntries.length > 1 && <Badge variant="default">+{scoreEntries.length - 1}</Badge>}
@@ -868,7 +866,7 @@ export function DatasetReview({ datasetId, experimentId, featuredItemId: feature
                           role="img"
                           aria-label={item.error ? 'Error' : 'Success'}
                           title={item.error ? 'Error' : 'Success'}
-                          className={cn('w-2 h-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
+                          className={cn('size-2 rounded-full', item.error ? 'bg-red-700' : 'bg-green-600')}
                         />
                       </DataList.Cell>
                     )}

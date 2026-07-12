@@ -38,7 +38,7 @@ export function ReferenceViewerDialog({
 
       {/* Dialog */}
       <div
-        className="relative w-full max-w-4xl max-h-[85vh] mx-4 bg-surface2 rounded-xl border border-border1 shadow-2xl flex flex-col overflow-hidden"
+        className="relative mx-4 flex max-h-[85vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-border1 bg-surface2 shadow-2xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="reference-viewer-title"
@@ -47,10 +47,10 @@ export function ReferenceViewerDialog({
         }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-border1 bg-surface3">
+        <div className="flex items-center justify-between border-b border-border1 bg-surface3 px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="p-1.5 rounded bg-surface5">
-              <FileText className="h-4 w-4 text-neutral4" />
+            <div className="rounded bg-surface5 p-1.5">
+              <FileText className="size-4 text-neutral4" />
             </div>
             <div>
               <h2 id="reference-viewer-title" className="text-base font-medium text-neutral6">
@@ -61,17 +61,15 @@ export function ReferenceViewerDialog({
           </div>
           <div className="flex items-center gap-2">
             <Button size="md" variant="default" onClick={handleCopy} disabled={!content || isLoading}>
-              <Icon>
-                {isCopied ? <Check className="h-3.5 w-3.5 text-green-400" /> : <Copy className="h-3.5 w-3.5" />}
-              </Icon>
+              <Icon>{isCopied ? <Check className="size-3.5 text-green-400" /> : <Copy className="size-3.5" />}</Icon>
               {isCopied ? 'Copied!' : 'Copy'}
             </Button>
             <button
               onClick={() => onOpenChange(false)}
               aria-label="Close reference viewer"
-              className="p-2 rounded-lg hover:bg-surface4 text-neutral3 hover:text-neutral5 transition-colors"
+              className="rounded-lg p-2 text-neutral3 transition-colors hover:bg-surface4 hover:text-neutral5"
             >
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </button>
           </div>
         </div>
@@ -80,15 +78,15 @@ export function ReferenceViewerDialog({
         <div className="flex-1 overflow-auto p-6">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="h-6 w-6 border-2 border-accent1 border-t-transparent rounded-full animate-spin" />
+              <div className="size-6 animate-spin rounded-full border-2 border-accent1 border-t-transparent" />
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-12 text-center">
-              <p className="text-red-400 mb-2">Failed to load reference</p>
+              <p className="mb-2 text-red-400">Failed to load reference</p>
               <p className="text-sm text-neutral3">{error}</p>
             </div>
           ) : content ? (
-            <pre className="whitespace-pre-wrap text-sm text-neutral5 font-mono bg-surface3 p-4 rounded-lg overflow-auto">
+            <pre className="overflow-auto rounded-lg bg-surface3 p-4 font-mono text-sm whitespace-pre-wrap text-neutral5">
               {content}
             </pre>
           ) : (

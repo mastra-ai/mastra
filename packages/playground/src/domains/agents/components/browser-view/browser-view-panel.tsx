@@ -99,7 +99,7 @@ export function BrowserViewPanel() {
       className={cn(
         'fixed inset-0 z-50 flex items-center justify-center p-8',
         'bg-black/60 backdrop-blur-sm transition-opacity duration-200',
-        isModal ? 'opacity-100' : 'opacity-0 pointer-events-none',
+        isModal ? 'opacity-100' : 'pointer-events-none opacity-0',
       )}
       onClick={handleBackdropClick}
       aria-hidden={!isModal}
@@ -111,35 +111,35 @@ export function BrowserViewPanel() {
         aria-label="Browser view"
         tabIndex={-1}
         className={cn(
-          'flex flex-col w-full max-w-5xl max-h-full',
-          'bg-surface2 rounded-xl border border-border1 shadow-2xl overflow-hidden',
+          'flex max-h-full w-full max-w-5xl flex-col',
+          'overflow-hidden rounded-xl border border-border1 bg-surface2 shadow-2xl',
           'transition-transform duration-200 outline-none',
           isModal ? 'scale-100' : 'scale-95',
         )}
         onClick={e => e.stopPropagation()}
       >
         {/* Header with URL bar and controls */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-border1 shrink-0">
-          <Globe className="h-4 w-4 text-neutral4 shrink-0" />
-          <div className="flex-1 min-w-0 px-3 py-1.5 bg-surface3 rounded-md border border-border1">
-            <span className={cn('text-sm truncate block', currentUrl ? 'text-neutral5' : 'text-neutral3 italic')}>
+        <div className="flex shrink-0 items-center gap-3 border-b border-border1 px-4 py-3">
+          <Globe className="size-4 shrink-0 text-neutral4" />
+          <div className="min-w-0 flex-1 rounded-md border border-border1 bg-surface3 px-3 py-1.5">
+            <span className={cn('block truncate text-sm', currentUrl ? 'text-neutral5' : 'text-neutral3 italic')}>
               {currentUrl || 'No URL'}
             </span>
           </div>
           <StatusBadge variant={statusConfig.variant} size="sm" withDot pulse={statusConfig.pulse}>
             {statusConfig.label}
           </StatusBadge>
-          <div className="flex items-center gap-1 ml-2">
+          <div className="ml-2 flex items-center gap-1">
             <Button variant="ghost" size="icon-sm" tooltip="Minimize to chat" onClick={hide}>
-              <Minimize2 className="h-4 w-4" />
+              <Minimize2 className="size-4" />
             </Button>
             {currentUrl && (
               <Button variant="ghost" size="icon-sm" tooltip="Open in new tab" onClick={handleOpenExternal}>
-                <ExternalLink className="h-4 w-4" />
+                <ExternalLink className="size-4" />
               </Button>
             )}
             <Button variant="ghost" size="icon-sm" tooltip="Close browser" onClick={closeBrowser}>
-              <X className="h-4 w-4" />
+              <X className="size-4" />
             </Button>
           </div>
         </div>
@@ -148,7 +148,7 @@ export function BrowserViewPanel() {
         <div className="flex-1 overflow-y-auto">
           {/* Screencast */}
           <div className="p-4">
-            <BrowserViewFrame className="w-full max-h-[60vh]" />
+            <BrowserViewFrame className="max-h-[60vh] w-full" />
           </div>
 
           {/* Browser actions history */}

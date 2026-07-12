@@ -234,7 +234,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
         </div>
 
         <div className="space-y-1">
-          <div className="flex justify-between items-center">
+          <div className="flex items-center justify-between">
             <Txt as="label" className="text-neutral3" variant="ui-sm" htmlFor="provider-options">
               Provider Options
             </Txt>
@@ -290,7 +290,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
             theme={theme}
             extensions={[jsonLanguage]}
             readOnly={!canEdit}
-            className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent shadow-sm transition-colors p-2"
+            className="h-dropdown-max-height overflow-scroll rounded-lg border bg-transparent p-2 shadow-sm transition-colors"
           />
           {error && (
             <Txt variant="ui-md" className="text-accent2">

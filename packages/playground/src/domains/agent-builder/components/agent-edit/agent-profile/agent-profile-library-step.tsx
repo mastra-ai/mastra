@@ -41,7 +41,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
       }
     >
       <div
-        className="relative w-full h-full flex flex-col items-center justify-center gap-4 py-6 px-6 text-center"
+        className="relative flex size-full flex-col items-center justify-center gap-4 p-6 text-center"
         data-testid="agent-builder-library-step"
       >
         <Icon size="lg" className="text-neutral4">
@@ -64,7 +64,7 @@ export const AgentProfileLibraryStep = ({ agentId }: AgentProfileLibraryStepProp
             Add to library
           </Button>
         )}
-        <p className="text-neutral3 max-w-md">
+        <p className="max-w-md text-neutral3">
           You can change this at any time from the agent&apos;s visibility settings — adding to the library now is
           optional.
         </p>

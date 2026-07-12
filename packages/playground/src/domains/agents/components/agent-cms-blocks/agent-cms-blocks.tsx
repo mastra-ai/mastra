@@ -28,19 +28,19 @@ interface AddBlockButtonProps {
 const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonProps) => {
   return (
     <div className={cn('group/add flex items-center gap-2 py-0.5', className)}>
-      <div className="flex-1 h-px bg-border1 opacity-0 group-hover/add:opacity-100 transition-opacity duration-150" />
+      <div className="h-px flex-1 bg-border1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
           <button
             type="button"
-            className="flex items-center justify-center h-6 w-6 rounded-full text-neutral3 hover:text-neutral6 hover:bg-surface4 opacity-0 group-hover/add:opacity-100 transition-all duration-150 focus-visible:opacity-100 focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1"
+            className="flex size-6 items-center justify-center rounded-full text-neutral3 opacity-0 transition-all duration-150 group-hover/add:opacity-100 hover:bg-surface4 hover:text-neutral6 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden"
           >
             <Icon>
               <PlusIcon />
             </Icon>
           </button>
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="start" className="w-[240px]">
+        <DropdownMenu.Content align="start" className="w-60">
           <DropdownMenu.Item onSelect={onAddInline}>
             <Icon>
               <PenLine />
@@ -55,7 +55,7 @@ const AddBlockButton = ({ onAddInline, onPickRef, className }: AddBlockButtonPro
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
-      <div className="flex-1 h-px bg-border1 opacity-0 group-hover/add:opacity-100 transition-opacity duration-150" />
+      <div className="h-px flex-1 bg-border1 opacity-0 transition-opacity duration-150 group-hover/add:opacity-100" />
     </div>
   );
 };
@@ -117,10 +117,10 @@ export const AgentCMSBlocks = ({
   };
 
   return (
-    <div className={cn('flex flex-col w-full h-full overflow-y-auto', className)}>
+    <div className={cn('flex size-full flex-col overflow-y-auto', className)}>
       {items.length > 0 && (
-        <div className="overflow-y-auto h-full pl-10 pr-2">
-          <ContentBlocks items={items} onChange={onChange} className="flex flex-col w-full">
+        <div className="h-full overflow-y-auto pr-2 pl-10">
+          <ContentBlocks items={items} onChange={onChange} className="flex w-full flex-col">
             {items.map((block, index) => (
               <div key={block.id}>
                 {/* Add-block handle between blocks */}
@@ -148,7 +148,7 @@ export const AgentCMSBlocks = ({
       )}
 
       {!readOnly && (
-        <div className="pl-10 pr-2">
+        <div className="pr-2 pl-10">
           <AddBlockButton
             onAddInline={() => handleAddInlineAt(items.length)}
             onPickRef={() => handlePickRefAt(items.length)}
