@@ -13,7 +13,8 @@ import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
-import { removeNullish, convertAISDKMessage } from './formatter';
+import { removeNullish, convertAISDKMessage, serializeToolResult } from './formatter';
+import type { OpenAIMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
 import { reconstructThreadOutput } from './thread-reconstruction';
 import type { ThreadData, ThreadStepData, PendingToolResult } from './thread-reconstruction';
@@ -489,15 +490,78 @@ export class BraintrustExporter extends TrackingExporter<
     return output;
   }
 
+  /**
+   * Resolve the tool name for a TOOL_CALL/MCP_TOOL_CALL span.
+   * Prefers `entityName` (set to the tool name by core), falling back to the
+   * name inside the span name (e.g. `tool: 'getWeather'`).
+   */
+  private getToolName(span: AnyExportedSpan): string {
+    if (span.entityName) {
+      return span.entityName;
+    }
+    const match = /'([^']+)'/.exec(span.name);
+    return match?.[1] ?? span.name;
+  }
+
+  /**
+   * Resolve the id used to pair the tool call with its result. Core does not
+   * currently put the `toolCallId` on the span, so fall back to the span id.
+   * Both the assistant `tool_calls[].id` and the tool message `tool_call_id`
+   * use this so Braintrust's Messages renderer can pair them.
+   */
+  private getToolCallId(span: AnyExportedSpan): string {
+    return span.id;
+  }
+
+  /**
+   * Convert a TOOL_CALL/MCP_TOOL_CALL span input (the tool arguments) into an
+   * OpenAI assistant message with a `tool_calls` entry. Without this, Braintrust's
+   * Messages renderer finds no `function.name` and labels the call `unknown_tool`.
+   */
+  private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
+    const args = span.input;
+    const argsString = typeof args === 'string' ? args : JSON.stringify(args ?? {});
+    return [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: this.getToolCallId(span),
+            type: 'function',
+            function: {
+              name: this.getToolName(span),
+              arguments: argsString,
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  /**
+   * Convert a TOOL_CALL/MCP_TOOL_CALL span output (the tool result) into an
+   * OpenAI tool message paired with the call via `tool_call_id`.
+   */
+  private toToolCallOutput(span: AnyExportedSpan): OpenAIMessage {
+    return {
+      role: 'tool',
+      content: serializeToolResult(span.output),
+      tool_call_id: this.getToolCallId(span),
+    };
+  }
+
   private buildSpanPayload(span: AnyExportedSpan, isCreate = true): Record<string, any> {
     const payload: Record<string, any> = {};
 
+    const isToolSpan = span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL;
+
     if (span.input !== undefined) {
-      payload.input = this.transformInput(span.input, span.type);
+      payload.input = isToolSpan ? this.toToolCallInput(span) : this.transformInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = this.transformOutput(span.output, span.type);
+      payload.output = isToolSpan ? this.toToolCallOutput(span) : this.transformOutput(span.output, span.type);
     }
 
     if (isCreate && span.isRootSpan && span.tags?.length) {
