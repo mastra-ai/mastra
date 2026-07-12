@@ -141,28 +141,7 @@ export class MastraBaseError<DOMAIN, CATEGORY> extends Error {
 
 export class MastraError extends MastraBaseError<`${ErrorDomain}`, `${ErrorCategory}`> {}
 
-/**
- * Throw this from a workflow step to signal that the failure is permanent and
- * should not be retried, regardless of the workflow's `retryConfig`.
- *
- * @example
- * ```ts
- * import { MastraNonRetryableError } from '@mastra/core';
- *
- * const myStep = createStep({
- *   execute: async ({ context }) => {
- *     const res = await vendorAPI.call(context.templateId);
- *     if (res.status === 400) {
- *       throw new MastraNonRetryableError('Invalid template ID — retrying will not help');
- *     }
- *     if (res.status === 500) {
- *       throw new Error('Server error'); // normal Error — will be retried
- *     }
- *     return res.data;
- *   },
- * });
- * ```
- */
+/** Permanent workflow step failure — bypasses workflow retryConfig. */
 export class MastraNonRetryableError extends Error {
   public readonly isNonRetryable = true as const;
 
