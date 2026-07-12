@@ -237,6 +237,47 @@ describe('DurableAgent observability tracing', () => {
     }
   }, 30000);
 
+  it('parents agent-level output STEP processor spans to AGENT_RUN', async () => {
+    // Regression for #19312: the per-step `runProcessOutputStep` call in the durable
+    // llm-execution step omitted `tracingContext`, so `output step processor` spans were
+    // created parentless (one orphan root per LLM step). This asserts they nest under
+    // AGENT_RUN like the input-step and non-durable paths do.
+    const { spy, agentSpans } = await spyOnSpans();
+
+    try {
+      const outputStepProcessor = {
+        id: 'test-output-step-processor',
+        processOutputStep: async () => undefined,
+      };
+
+      const baseAgent = new Agent({
+        id: 'trace-agent-output-step-proc',
+        name: 'Trace Agent (output step proc)',
+        instructions: 'You are a test assistant',
+        model: createTextStreamModel('Hello') as LanguageModelV2,
+        outputProcessors: [outputStepProcessor as any],
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+      const { output, cleanup } = await durableAgent.stream('Hi');
+      await output.consumeStream();
+
+      expect(agentSpans.length).toBe(1);
+      // The per-step output processor's tracingContext walks up to AGENT_RUN via findParent,
+      // so its processor_run span is created as a descendant (not a parentless root).
+      const outputStepProcessorSpanCall = agentSpans[0].createChildSpan.mock.calls.find(
+        (call: any[]) =>
+          call[0]?.type === 'processor_run' &&
+          call[0]?.name === 'output step processor: test-output-step-processor',
+      );
+      expect(outputStepProcessorSpanCall).toBeDefined();
+
+      cleanup();
+    } finally {
+      spy.mockRestore();
+    }
+  }, 30000);
+
   it('forwards AGENT_RUN attributes, metadata and tracingPolicy to match non-durable parity', async () => {
     const { spy, agentSpanOpts } = await spyOnSpans();
 
