@@ -90,6 +90,8 @@ Avoid mapping multiple active chat threads to one session. A session works on on
 
 ### Per-session workspace
 
+The `resolveSessionProjectPath` hook is experimental — its shape may change in a later release.
+
 When the host application supplies a `resolveSessionProjectPath` hook, each chat thread's session runs in its own isolated workspace directory keyed by the session's resource ID. The first message in a thread creates the directory; later messages in that thread reuse it, and two different chat threads get two different directories. Without the hook, sessions fall back to the controller's default workspace. This keeps a session started from one chat thread from running in — or mutating — the workspace of another.
 
 ## Tool approvals

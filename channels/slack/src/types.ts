@@ -164,6 +164,9 @@ interface SlackProviderConfigBase extends SlackAdapterChannelConfigBase {
    * Resolve a per-session workspace `projectPath` for a controller channel session.
    * Only consulted when this provider is connected to an `AgentController`; agent
    * connections ignore it. See `ChannelConfig.resolveSessionProjectPath`.
+   *
+   * @experimental This hook's shape may change — a later release may resolve the
+   * session workspace from the session/thread id directly instead of this hook.
    */
   resolveSessionProjectPath?: ChannelConfig['resolveSessionProjectPath'];
 

@@ -339,6 +339,9 @@ export interface ResolveSessionProjectPathContext {
  * channels ignore it. Return a truthy path to isolate the session's workspace in that
  * directory; return `undefined`/empty to leave the controller's default `projectPath`
  * untouched.
+ *
+ * @experimental This hook's shape may change — a later release may resolve the
+ * session workspace from the session/thread id directly instead of this hook.
  */
 export type ResolveSessionProjectPath = (
   ctx: ResolveSessionProjectPathContext,
@@ -551,6 +554,9 @@ export interface ChannelConfig {
    *   return dir;
    * }
    * ```
+   *
+   * @experimental This hook's shape may change — a later release may resolve the
+   * session workspace from the session/thread id directly instead of this hook.
    */
   resolveSessionProjectPath?: ResolveSessionProjectPath;
 

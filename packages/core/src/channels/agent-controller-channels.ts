@@ -224,7 +224,6 @@ export class AgentControllerChannels extends AgentChannels {
     const sessionProjectPath = await this.channelConfig.resolveSessionProjectPath?.({
       resourceId: channelResourceId,
     });
-    // TODO: probably we can just resolve a workspace for this session/chat thread based on the id and pass that in createSession instead of all this resolveSessionProjectPath code
     const session = await controller.createSession({
       resourceId: channelResourceId,
       id: channelResourceId,

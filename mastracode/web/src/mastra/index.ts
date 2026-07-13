@@ -27,7 +27,7 @@
  * proxies API paths here instead.
  */
 
-import { Card, CardText, Actions, LinkButton, type Thread, Message } from 'chat';
+import { Card, CardText, Actions, LinkButton } from 'chat';
 
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
@@ -209,7 +209,10 @@ export const mastra = new Mastra({
       resolveSessionProjectPath: resolveChannelSessionProjectPath,
       handlers: {
         onSubscribedMessage: async (thread, message, defaultHandler) => {
-          if (message.text.startsWith('aside')) return;
+          // `aside` as its own leading word lets humans talk in a subscribed
+          // thread without the bot replying. Word boundary so messages that
+          // merely start with "aside..." (e.g. "asides can wait") still route.
+          if (/^aside\b/i.test(message.text)) return;
           return defaultHandler(thread, message);
         },
         onMention: newSessionChatHandler,
@@ -219,29 +222,6 @@ export const mastra = new Mastra({
   },
   logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
 });
-
-// const disconnectResult = await mastra.channels.slack.disconnect(CONTROLLER_ID);
-// console.log('Slack disconnect result: ', disconnectResult);
-
-// try {
-//   const connectionArgs = {
-//     id: CONTROLLER_ID,
-//     name: 'MC Web (Caleb)',
-//     // ownerType: 'agentController',
-//     redirectUrl: publicOrigin,
-//   };
-//   console.log('connecting to slack: ', connectionArgs);
-//   const result = await mastra.channels.slack.connect(connectionArgs);
-
-//   if (result?.type === 'oauth') {
-//     const authUrl = result?.authorizationUrl;
-//     console.log('Slack OAuth flow initiated. Please visit the following URL to authorize the app:\n');
-//     console.log(authUrl);
-//     console.log('\n');
-//   }
-// } catch (error) {
-//   console.error('Error connecting to slack: ', error);
-// }
 
 // Post-construct boot: initialize the controller (which now inherits this
 // instance's storage) and start its workers. Runs at module load via top-level
