@@ -42,7 +42,7 @@ import {
   resolveLinearReady,
 } from '../web/web-surface.js';
 import { SlackProvider } from '@mastra/slack';
-import { ConsoleLogger } from '@mastra/core/logger';
+import { ConsoleLogger, type LogLevelType } from '@mastra/core/logger';
 import { resolveChannelSessionProjectPath } from './channel-session-workspace.js';
 import type { ChannelHandlerConfig } from '@mastra/core/channels';
 
@@ -217,7 +217,7 @@ export const mastra = new Mastra({
       },
     }),
   },
-  logger: new ConsoleLogger({ level: 'debug' }),
+  logger: new ConsoleLogger({ level: (process.env.LOG_LEVEL as LogLevelType) ?? 'debug' }),
 });
 
 // const disconnectResult = await mastra.channels.slack.disconnect(CONTROLLER_ID);

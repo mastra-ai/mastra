@@ -214,7 +214,18 @@ export class SlackManifestClient {
       error?: string;
     };
 
-    return data.ok;
+    if (data.ok) return true;
+
+    // Only a definitive "app is gone" answer counts as non-existence. Slack
+    // returns `app_not_found` when the app was deleted and `invalid_app_id`
+    // when the id is malformed. Any other error (rate limiting, auth, outage)
+    // is transient — re-throw so callers don't tear down a valid installation
+    // on a temporary failure.
+    if (data.error === 'app_not_found' || data.error === 'invalid_app_id') {
+      return false;
+    }
+
+    throw new Error(`Failed to check whether Slack app exists: ${data.error ?? 'unknown_error'}`);
   }
 
   /**
