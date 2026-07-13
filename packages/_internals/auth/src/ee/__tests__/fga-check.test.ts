@@ -189,6 +189,8 @@ describe('requireFGA — actor signals', () => {
       expect.objectContaining({
         resource: { type: 'tool', id: 'nightly-agent:weather' },
         permission: MastraFGAPermissions.TOOLS_EXECUTE,
+        // Fails if fga-check.ts stops forwarding the merged FGA context.
+        context: { requestContext },
       }),
     );
   });

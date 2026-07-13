@@ -32,7 +32,9 @@ class MyFga implements IFGAProvider {
 
   async requireActor(actor, { resource, permission }) {
     const granted = actor === true ? [] : (actor.permissions ?? []);
-    if (!granted.includes(permission)) {
+    // `permission` may be a single value or an array (needs ANY one of them).
+    const required = Array.isArray(permission) ? permission : [permission];
+    if (!required.some(p => granted.includes(p))) {
       throw new FGADeniedError(null, resource, permission, 'actor lacks required permission');
     }
   }
