@@ -1,0 +1,79 @@
+---
+title: "Workspace | File-based Agents"
+description: Give a file-based agent a workspace with workspace.ts and seed files under workspace/.
+packages:
+  - "@mastra/core"
+---
+
+# Workspace
+
+A [workspace](/docs/workspace/overview) gives an agent filesystem access and command execution. File-based agents get a default workspace automatically when discovered through `mastra dev` or `mastra build`, so they can read and write files and run shell commands without extra configuration.
+
+Use this page for the file-based convention. For workspace providers, tools, search, lifecycle, and sandbox details, see [Workspaces](/docs/workspace/overview).
+
+## Default workspace
+
+Without `workspace.ts`, a file-based agent gets a default [`Workspace`](/reference/workspace/workspace-class) when the build provides a per-agent workspace path. The default workspace uses:
+
+- [`LocalFilesystem`](/reference/workspace/local-filesystem) rooted at the agent's bundled workspace directory.
+- [`LocalSandbox`](/reference/workspace/local-sandbox) with the same working directory.
+
+This gives the agent file tools and shell tools automatically. The default workspace is per agent; subagents get nested workspace directories under their parent agent's workspace path.
+
+## Quickstart
+
+For the default workspace, don't add a file. Start with an agent directory like this:
+
+```text title="Default workspace"
+src/mastra/agents/weather/
+├── config.ts
+└── instructions.md
+```
+
+Add `workspace.ts` only when you need to customize the workspace:
+
+```typescript title="src/mastra/agents/weather/workspace.ts"
+import { Workspace, LocalFilesystem, LocalSandbox } from '@mastra/core/workspace'
+
+export default new Workspace({
+  name: 'weather-workspace',
+  filesystem: new LocalFilesystem({ basePath: './data/weather' }),
+  sandbox: new LocalSandbox({ workingDirectory: './data/weather' }),
+})
+```
+
+Visit the [`Workspace` reference](/reference/workspace/workspace-class) for the full config.
+
+## When to customize the workspace
+
+Customize the workspace when the default local directory isn't enough. Common reasons include:
+
+- Point file tools at a different filesystem root.
+- Run shell commands in a different sandbox provider.
+- Add workspace search with BM25 or vector search.
+- Share one workspace across multiple agents.
+
+For provider patterns and runtime behavior, see the [workspace overview](/docs/workspace/overview), [sandbox guide](/docs/workspace/sandbox), and [workspace search](/docs/workspace/search).
+
+## Runtime boundary
+
+The workspace filesystem controls what file tools can read and write. The sandbox controls where shell commands run. Application runtime code, including code in [`tools/`](/reference/file-based-agents/tools), still runs in your app/server process unless it explicitly calls workspace or sandbox APIs.
+
+## Seed files
+
+Add a `workspace/` directory to ship starting files with the agent. Mastra mirrors files under `workspace/` into the agent's default runtime workspace at build time, so the agent starts with those files on disk.
+
+```text title="Seed files"
+src/mastra/agents/weather/
+├── config.ts
+└── workspace/
+    ├── README.md
+    └── data/
+        └── cities.json
+```
+
+The files are copied into the bundled workspace path, where workspace file tools and sandbox commands can read them. Symlinked seed files are skipped during mirroring.
+
+## Precedence with config
+
+`config.workspace` wins over `workspace.ts`; otherwise the default file-based workspace is used. See [`config.ts` precedence](/reference/file-based-agents/config#precedence) for the full merge table.

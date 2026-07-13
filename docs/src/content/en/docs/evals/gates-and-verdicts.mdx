@@ -69,11 +69,7 @@ const result = await runEvals({
 // result.gateResults: [{ id: 'check-called-tool', passed: true, score: 1 }]
 ```
 
-Any scorer works as a gate. Quick Checks are a natural fit because they return binary 1/0 scores.
-
-:::note
-Visit [runEvals() reference](/reference/evals/run-evals) for the full parameter and return type documentation.
-:::
+Any scorer works as a gate. Quick Checks are a natural fit because they return binary 1/0 scores. Visit [runEvals() reference](/reference/evals/run-evals) for the full parameter and return type documentation.
 
 ## Thresholds
 
@@ -108,7 +104,7 @@ const result = await runEvals({
 // ]
 ```
 
-A bare scorer (no threshold) still appears in `result.scores` but does not affect the verdict.
+A bare scorer (no threshold) still shows up in `result.scores` but doesn't affect the verdict.
 
 ## Using verdicts in CI
 

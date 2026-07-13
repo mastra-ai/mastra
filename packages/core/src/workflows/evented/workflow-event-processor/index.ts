@@ -2638,7 +2638,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
       try {
         const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
-        if (failWorkflowData && failWorkflowData.workflowId && failWorkflowData.runId) {
+        // Never republish workflow.fail for an event that IS workflow.fail.
+        // Each publish gets a fresh event id (fresh retry bucket), so with a
+        // persistently-broken dependency (e.g. missing workflows table) the
+        // fail event would exhaust its own budget and publish another
+        // workflow.fail forever.
+        if (
+          event.type !== 'workflow.fail' &&
+          failWorkflowData &&
+          failWorkflowData.workflowId &&
+          failWorkflowData.runId
+        ) {
           await this.errorWorkflow(failWorkflowData, getErrorFromUnknown(err));
         }
       } catch (failErr) {

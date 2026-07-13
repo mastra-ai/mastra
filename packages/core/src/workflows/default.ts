@@ -43,6 +43,7 @@ import type {
   StepResult,
   StepTripwireInfo,
   TimeTravelExecutionParams,
+  WorkflowRunStatus,
 } from './types';
 
 // Re-export ExecutionContext for backwards compatibility
@@ -57,6 +58,37 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * The step id is used as the key and the retry count is the value.
    */
   protected retryCounts = new Map<string, number>();
+
+  /**
+   * Tracks the last workflow status this engine successfully persisted for a
+   * given run. Populated by `persistStepUpdate` after each write.
+   *
+   * Used to guard against overwriting a `suspended` / `paused` snapshot with a
+   * later `running` update from the same run (e.g. during resume, when the
+   * loop transitions suspended → running mid-execution and any step-update
+   * write would otherwise clobber the suspend record).
+   *
+   * Process-local by design: on a crash the map is empty, but any run that
+   * was in-flight (`running`) after crash will show `running` in storage
+   * because we now persist that status — which is exactly what boot-time
+   * recovery relies on.
+   */
+  protected lastPersistedStatusByRun = new Map<string, WorkflowRunStatus>();
+
+  /** Returns the last status persisted for a given run in this process, if any. */
+  getLastPersistedStatus(runId: string): WorkflowRunStatus | undefined {
+    return this.lastPersistedStatusByRun.get(runId);
+  }
+
+  /** Records the last status persisted for a given run in this process. */
+  setLastPersistedStatus(runId: string, status: WorkflowRunStatus): void {
+    this.lastPersistedStatusByRun.set(runId, status);
+  }
+
+  /** Clears the last-persisted-status entry for a run (used on run cleanup). */
+  clearLastPersistedStatus(runId: string): void {
+    this.lastPersistedStatusByRun.delete(runId);
+  }
 
   /**
    * Get or generate the retry count for a step.
@@ -903,6 +935,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         }
 
+        // Drop the last-persisted-status tracker for early terminal exits
+        // (failed, canceled, tripwire) so the map does not grow unbounded.
+        // Suspended and paused runs keep their entry so a subsequent resume
+        // in the same process still sees the correct status and refuses to
+        // overwrite it with `running` mid-resume.
+        if (lastOutput.result.status !== 'suspended' && lastOutput.result.status !== 'paused') {
+          this.clearLastPersistedStatus(runId);
+        }
+
         return {
           ...result,
           ...(lastOutput.result.status === 'suspended' && params.outputOptions?.includeResumeLabels
@@ -991,6 +1032,15 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       state: lastState,
       stepExecutionPath,
     });
+
+    // Drop the last-persisted-status tracker for terminal runs so the map
+    // does not grow unbounded across many runs served by the same engine.
+    // Suspended runs keep their entry so a subsequent resume in the same
+    // process still sees `suspended` and refuses to overwrite it with
+    // `running` mid-resume.
+    if (result.status !== 'suspended') {
+      this.clearLastPersistedStatus(runId);
+    }
 
     if (params.outputOptions?.includeState) {
       return { ...result, state: lastState };

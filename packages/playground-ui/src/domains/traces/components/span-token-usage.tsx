@@ -33,25 +33,25 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
 
   return (
     <div
-      className={cn('border-b border-border1 mt-2 mb-8 pb-3 grid grid-cols-1 4xl:grid-cols-2 4xl:gap-12', className)}
+      className={cn('mt-2 mb-8 grid grid-cols-1 border-b border-border1 pb-3 4xl:grid-cols-2 4xl:gap-12', className)}
     >
       {showSplit && (
         <div className="mb-2">
-          <div className="flex items-baseline text-neutral2 gap-3">
+          <div className="flex items-baseline gap-3 text-neutral2">
             <span className="text-ui-md">Tokens Used</span>
-            <span className="text-neutral4 text-ui-md font-semibold">{total.toLocaleString()}</span>
+            <span className="text-ui-md font-semibold text-neutral4">{total.toLocaleString()}</span>
             <span className="ml-auto text-ui-sm">
               {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
             </span>
           </div>
-          <div className="p-1.5 rounded-md bg-surface4 mt-2">
-            <div className="relative w-full h-1.5 rounded-sm overflow-hidden">
+          <div className="mt-2 rounded-md bg-surface4 p-1.5">
+            <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
               <div
-                className="absolute h-1.5 top-0 left-0"
+                className="absolute top-0 left-0 h-1.5"
                 style={{ width: `${inputPct}%`, backgroundColor: INPUT_COLOR }}
               />
               <div
-                className="absolute h-1.5 top-0"
+                className="absolute top-0 h-1.5"
                 style={{ left: `${inputPct}%`, width: `${outputPct}%`, backgroundColor: OUTPUT_COLOR }}
               />
             </div>
@@ -59,7 +59,7 @@ export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
         </div>
       )}
 
-      <div className="grid gap-6 grid-cols-2">
+      <div className="grid grid-cols-2 gap-6">
         <UsageColumn label="Input" color={INPUT_COLOR} value={inputValue} details={inputDetails} />
         <UsageColumn label="Output" color={OUTPUT_COLOR} value={outputValue} details={outputDetails} />
       </div>
@@ -80,12 +80,12 @@ function UsageColumn({
 }) {
   return (
     <div>
-      <div className="flex items-baseline text-neutral2 gap-3 mb-2">
+      <div className="mb-2 flex items-baseline gap-3 text-neutral2">
         <span className="text-ui-md">{label}</span>
         {typeof value === 'number' && (
           <span className="flex items-baseline gap-1.5">
-            <span className="text-neutral4 text-ui-md font-semibold">{value.toLocaleString()}</span>
-            <span className="size-2 rounded-full self-center" style={{ backgroundColor: color }} />
+            <span className="text-ui-md font-semibold text-neutral4">{value.toLocaleString()}</span>
+            <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
           </span>
         )}
       </div>

@@ -35,6 +35,7 @@ import {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableSignalDrainStep,
 } from './steps';
 
 /**
@@ -112,6 +113,10 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   // Create the background task check step
   const backgroundTaskCheckStep = createDurableBackgroundTaskCheckStep();
 
+  // Create the signal drain step — mirrors the non-durable `signalDrainStep`
+  // which drains signals queued during tool execution.
+  const signalDrainStep = createDurableSignalDrainStep();
+
   // Create the isTaskComplete evaluation step (mirrors the non-durable
   // createIsTaskCompleteStep). Lives as a real step (not predicate logic)
   // so it shows up in workflow traces and produces a proper state transition.
@@ -132,14 +137,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     outputSchema: iterationStateSchema,
     options: {
       shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support `resumeStream()`.
-        // - Create the initial record early ("pending")
-        // - Update it when execution is suspended ("paused"/"suspended")
-        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        // We need a persisted snapshot record to support both:
+        //  - `resumeStream()` after a suspend (records with status
+        //    `pending` / `paused` / `suspended`)
+        //  - boot-time recovery of orphaned RUNNING runs after a process
+        //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
+        //    the row to actually be stamped `running` while the loop is
+        //    in-flight (issue #19056).
+        //
+        // The engine's persist path guards against overwriting a `suspended`
+        // / `paused` snapshot with a later `running` update from the same
+        // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
+        // it is safe to return true for `running` here.
         return (
           params.workflowStatus === 'pending' ||
           params.workflowStatus === 'paused' ||
-          params.workflowStatus === 'suspended'
+          params.workflowStatus === 'suspended' ||
+          params.workflowStatus === 'running'
         );
       },
       // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -216,55 +230,7 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // Step 6.5: Drain signals that were queued while tool execution was running
     // within this iteration. Mirrors the non-durable `signalDrainStep` which
     // sits between backgroundTaskCheckStep and isTaskCompleteStep.
-    .map(
-      async params => {
-        const execOutput = params.inputData as DurableAgenticExecutionOutput;
-        const initData = params.getInitData() as IterationState;
-        const runId = initData.runId;
-        const registryEntry = globalRunRegistry.get(runId);
-        const drainFn = registryEntry?.drainPendingSignals;
-
-        if (!drainFn) return execOutput;
-
-        try {
-          const pendingSignals = drainFn('pending');
-          if (pendingSignals.length === 0) return execOutput;
-
-          const drainList = new MessageList();
-          drainList.deserialize(execOutput.messageListState);
-          drainList.markResponseMessageBoundary(execOutput.messageId);
-
-          const nextMessageId =
-            (params.mastra as Mastra | undefined)?.generateId?.() ??
-            globalThis.crypto?.randomUUID?.() ??
-            `msg_${Date.now()}`;
-
-          const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
-          for (const pendingSignal of pendingSignals) {
-            const signalForTranscript = drainList.addSignal(pendingSignal);
-            if (pubsub) {
-              await emitChunkEvent(pubsub, runId, signalForTranscript.toDataPart() as any);
-            }
-          }
-
-          return {
-            ...execOutput,
-            messageListState: drainList.serialize(),
-            messageId: nextMessageId,
-            stepResult: {
-              ...execOutput.stepResult,
-              messageId: nextMessageId,
-              isContinued: true,
-            },
-          };
-        } catch {
-          // Signal drain is best-effort; drainPendingSignals() is inside
-          // the try so signals remain queued if it throws.
-          return execOutput;
-        }
-      },
-      { id: 'signal-drain' },
-    )
+    .then(signalDrainStep)
     // Step 7: Map back to iteration state format using shared function
     .map(
       async ({ inputData, getInitData }) => {
@@ -306,14 +272,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       outputSchema: durableAgenticOutputSchema,
       options: {
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
-          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          // See the singleIterationWorkflow comment above — same policy for
+          // the outer loop. The persist path guards against overwriting a
+          // suspended snapshot with running.
           return (
             params.workflowStatus === 'pending' ||
             params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
+            params.workflowStatus === 'suspended' ||
+            params.workflowStatus === 'running'
           );
         },
         // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -352,6 +318,21 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
         const initData = params.getInitData() as DurableAgenticWorkflowInput;
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const registryEntry = globalRunRegistry.get(state.runId);
+
+        // ── Abort check ────────────────────────────────────────────────
+        // If the abort signal has fired, stop the loop immediately.
+        // The llm-execution step may have already emitted the ABORT event
+        // and returned a clean output, but the signal may also have fired
+        // between steps (e.g. inside a tool). Override the stepResult
+        // reason so the FINISH event carries 'abort' and the client sees
+        // the correct finishReason.
+        if (registryEntry?.abortSignal?.aborted) {
+          if (state.lastStepResult) {
+            state.lastStepResult.reason = 'abort';
+            state.lastStepResult.isContinued = false;
+          }
+          return false;
+        }
 
         // Two-phase stop: if onIterationComplete returned { continue: false, feedback }
         // on the previous iteration, we allowed one more LLM turn with that feedback.

@@ -59,8 +59,8 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
   protected readonly agents?: MCPServerConfig['agents'];
   /** Workflows to be exposed as tools. */
   protected readonly workflows?: MCPServerConfig['workflows'];
-  /** Original tools configuration for re-conversion when Mastra instance is registered. */
-  protected readonly originalTools: ToolsInput;
+  /** Original tools configuration for re-conversion when Mastra instance is registered. Mutable to support dynamic tool management. */
+  protected originalTools: ToolsInput;
 
   /**
    * Public getter for the server's unique ID.

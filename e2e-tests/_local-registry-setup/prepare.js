@@ -84,7 +84,7 @@ function retryWithTimeout(fn, timeout, name, retryCount = 0) {
   });
 }
 
-function cleanup(monorepoDir, resetChanges = false) {
+async function cleanup(monorepoDir, resetChanges = false) {
   execSync('git checkout .', {
     cwd: monorepoDir,
     stdio: ['inherit', 'inherit', 'pipe'],
@@ -255,7 +255,7 @@ export async function prepareMonorepo(monorepoDir, glob, tag) {
       `pnpm changeset-cli version --snapshot ${tag}`,
     );
   } catch (error) {
-    cleanup(monorepoDir, false);
+    await cleanup(monorepoDir, false);
     throw error;
   }
 

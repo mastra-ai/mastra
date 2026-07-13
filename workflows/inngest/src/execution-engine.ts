@@ -474,6 +474,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     perStep?: boolean;
     stepSpan?: any;
     actor?: ActorSignal;
+    requestContext?: RequestContext;
   }): Promise<StepResult<any, any, any, any> | null> {
     // Only handle InngestWorkflow instances
     if (!(params.step instanceof InngestWorkflow)) {
@@ -493,7 +494,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       perStep,
       stepSpan,
       actor,
+      requestContext: parentRequestContext,
     } = params;
+    const forwardedRequestContext = parentRequestContext
+      ? this.serializeRequestContext(parentRequestContext)
+      : (inputData?.requestContextEntries ?? {});
 
     // Build trace context to propagate to nested workflow
     const nestedTracingContext = executionContext.tracingIds?.traceId
@@ -523,6 +528,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             inputData,
             initialState: executionContext.state ?? snapshot?.value ?? {},
+            requestContext: forwardedRequestContext,
             runId: runId,
             resume: {
               runId: runId,
@@ -560,6 +566,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             timeTravel: timeTravelParams,
             initialState: executionContext.state ?? {},
+            requestContext: forwardedRequestContext,
             runId: executionContext.runId,
             outputOptions: { includeState: true },
             perStep,
@@ -576,6 +583,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           data: {
             inputData,
             initialState: executionContext.state ?? {},
+            requestContext: forwardedRequestContext,
             outputOptions: { includeState: true },
             perStep,
             tracingOptions: nestedTracingContext,

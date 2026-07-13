@@ -476,6 +476,31 @@ describe('serverDeployAction', () => {
     });
   });
 
+  it('deploys without a local env file and sends no envVars payload (platform-stored vars win)', async () => {
+    vi.resetModules();
+
+    const { readdir, readFile } = await import('node:fs/promises');
+    const { loadProjectConfig } = await import('../studio/project-config.js');
+    const { uploadServerDeploy } = await import('./platform-api.js');
+
+    // No .env* files in the project dir.
+    vi.mocked(readdir).mockResolvedValue([] as Awaited<ReturnType<typeof readdir>>);
+    vi.mocked(readFile).mockResolvedValue(Buffer.from('zip-data'));
+    vi.mocked(loadProjectConfig).mockResolvedValue(null);
+
+    const { serverDeployAction } = await import('./deploy.js');
+
+    await expect(
+      serverDeployAction(undefined, { yes: true, skipBuild: true, org: 'org-1', project: 'my-app' }),
+    ).resolves.toBeUndefined();
+
+    expect(uploadServerDeploy).toHaveBeenCalledWith('test-token', 'org-1', 'proj-1', expect.any(Buffer), {
+      projectName: 'my-app',
+      envVars: undefined,
+      disablePlatformObservability: false,
+    });
+  });
+
   it('prompts the user with a selector when existing projects are found', async () => {
     vi.resetModules();
 

@@ -46,13 +46,7 @@ export const weatherTool = createTool({
 })
 ```
 
-When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool.
-
-:::note
-
-Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
-
-:::
+When creating tools, keep descriptions concise and focused on what the tool does, emphasizing its primary use case. Descriptive schema names can also help guide the agent on how to use the tool. Visit the [`createTool`](/reference/tools/create-tool) reference for more information on available properties, configurations, and examples.
 
 To make a tool available to an agent, add it to the `tools` property on the `Agent` class. Mentioning available tools and their general purpose in the agent's system prompt helps the agent decide when to call a tool and when not to.
 
@@ -377,11 +371,7 @@ await agent.generate('Check the forecast', {
 })
 ```
 
-:::note
-
 See the [`Agent.generate()` reference](/reference/agents/generate) for all runtime options including `toolsets`, `clientTools`, and `prepareStep`.
-
-:::
 
 ## Control `toolName` in stream responses
 
@@ -433,6 +423,94 @@ Note that for subagents, you'll see two different identifiers in stream response
 - `toolName: "agent-weather"` in tool call events — the generated tool wrapper name
 - `id: "weather-agent"` in `data-tool-agent` chunks — the subagent's actual `id` property
 
+## Built-in tools
+
+Mastra ships agent-agnostic built-in tools in `@mastra/core/tools` that add interactive and organizational capabilities to any agent.
+
+| Tool | Purpose |
+| - | - |
+| `ask_user` | Ask the user a question and wait for their answer |
+| `submit_plan` | Submit a plan file for user approval |
+| `task_write` | Create or replace a structured task list |
+| `task_update` | Update one tracked task by ID |
+| `task_complete` | Mark one tracked task completed |
+| `task_check` | Check task list completion status |
+
+### Ask the user a question
+
+Import [`askUserTool`](/reference/tools/ask-user-tool) and add it to the agent's toolset. The tool suspends the run, emits a `tool-call-suspended` event with the question, and resumes when you call `resumeStream()` with the user's answer.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { askUserTool } from '@mastra/core/tools'
+
+const agent = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'Ask the user for clarification when the request is ambiguous.',
+  model,
+  tools: { askUserTool },
+})
+```
+
+Stream the agent and watch for `tool-call-suspended` chunks. The `suspendPayload` contains the question and optional structured choices:
+
+```typescript title="src/run.ts"
+const stream = await agent.stream('Summarize my project')
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-suspended') {
+    const { question, options } = chunk.payload.suspendPayload
+    console.log(question)
+    const answer = await getUserAnswer() // your UI logic
+    const resumed = await agent.resumeStream(answer, { runId: stream.runId })
+    for await (const c of resumed.textStream) process.stdout.write(c)
+  }
+}
+```
+
+`askUserTool` supports free-text, single-select (`options` array), and multi-select (`selectionMode: 'multi_select'`) prompts. Pair it with `autoResumeSuspendedTools` so the agent resumes automatically from the user's next chat message. See [Automatic tool resumption](/docs/agents/agent-approval#automatic-tool-resumption) for details.
+
+### Submit a plan for review
+
+Import [`submitPlanTool`](/reference/tools/submit-plan-tool) to let the agent write a plan to a file and submit it for user review. The tool suspends the run until the user approves or rejects:
+
+```typescript title="src/run.ts"
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'tool-call-suspended' && chunk.payload.toolName === 'submit_plan') {
+    const { path } = chunk.payload.suspendPayload
+    // Read and display the plan file, then resume:
+    const resumed = await agent.resumeStream({ action: 'approved' }, { runId: stream.runId })
+    for await (const c of resumed.textStream) process.stdout.write(c)
+  }
+}
+```
+
+### Task tracking
+
+The four task tools manage a structured, durable task list for an agent run. They require [Memory](/docs/memory/overview) so the list is persisted in a thread-scoped store.
+
+Add task tracking through [`TaskSignalProvider`](/reference/signals/task-signal-provider), which bundles all four tools and the `TaskStateProcessor` in a single registration:
+
+```typescript title="src/mastra/agents/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { TaskSignalProvider } from '@mastra/core/signals'
+
+const agent = new Agent({
+  id: 'coder',
+  name: 'Coder',
+  instructions: 'Track your progress with the task tools.',
+  model,
+  memory: new Memory(),
+  signals: [new TaskSignalProvider()],
+})
+```
+
+Only one task can be `in_progress` at a time. The list is stored in the thread-scoped `threadState` storage domain and projected onto the agent's [state-signal](/docs/long-running-agents/signals) lane, so it survives observational-memory truncation. See the [Task tools reference](/reference/tools/task-tools) for full schemas.
+
+The [AgentController](/docs/agent-controller/overview) automatically includes all built-in tools in every mode — you don't need to add them manually. See [Tool approvals](/docs/agent-controller/tool-approvals#built-in-tools) for AgentController-specific behavior.
+
 ## Related
 
 - [`createTool` reference](/reference/tools/create-tool)
@@ -442,4 +520,8 @@ Note that for subagents, you'll see two different identifiers in stream response
 - [Dynamic tool search](/reference/processors/tool-search-processor): Load tools on demand for agents with large tool libraries
 - [Tools with structured output](/docs/agents/structured-output#combine-tools-and-structured-output): Model compatibility when combining tools and structured output
 - [Agent approval](/docs/agents/agent-approval)
+- [`askUserTool` reference](/reference/tools/ask-user-tool)
+- [`submitPlanTool` reference](/reference/tools/submit-plan-tool)
+- [Task tools reference](/reference/tools/task-tools)
+- [TaskSignalProvider reference](/reference/signals/task-signal-provider)
 - [Request context](/docs/server/request-context)

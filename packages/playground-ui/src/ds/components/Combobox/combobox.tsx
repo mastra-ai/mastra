@@ -96,7 +96,7 @@ export function Combobox(props: ComboboxProps) {
           </span>
         ) : (
           // Keep truncation off the outer wrapper so start adornments are not clipped.
-          <span className="flex items-center gap-2 min-w-0 flex-1">
+          <span className="flex min-w-0 flex-1 items-center gap-2">
             {selectedOption?.start}
             <span className="truncate">
               <BaseCombobox.Value placeholder={placeholder} />

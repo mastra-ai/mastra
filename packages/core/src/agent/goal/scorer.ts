@@ -4,9 +4,11 @@ import type { AgentMemoryOption, ToolsInput } from '../../agent/types';
 import { createScorer } from '../../evals';
 import type { ScorerJudgeConfig } from '../../evals';
 import type { MastraModelConfig } from '../../llm';
+import type { StreamCompletionContext } from '../../loop/network/validation';
 import type { Mastra } from '../../mastra';
 import type { MastraMemory } from '../../memory';
 import type { RequestContext } from '../../request-context';
+import type { MastraDBMessage, MastraMessageContentV2, MastraMessagePart } from '../message-list';
 import { DEFAULT_GOAL_JUDGE_PROMPT, GOAL_SCORE_WAITING, GOAL_SCORER_ID } from './objective';
 
 // The goal scorer is an LLM-as-judge that grades the agent's latest output
@@ -30,59 +32,78 @@ const analyzeOutputSchema = z.object({
 
 type GoalAnalysis = z.infer<typeof analyzeOutputSchema>;
 
-function getOutputText(run: { input?: unknown; output?: unknown }): string {
+type GoalScorerInput = Partial<Pick<StreamCompletionContext, 'currentText' | 'originalTask' | 'messages'>>;
+
+type GoalScorerRun = {
+  input?: GoalScorerInput;
+  output?: string;
+};
+
+type TextMessagePart = Extract<MastraMessagePart, { type: 'text' }>;
+
+function getOutputText(run: GoalScorerRun): string {
   // The goal step passes the in-progress text on `run.input.currentText`
   // (via StreamCompletionContext), mirroring isTaskComplete.
-  const input = run.input as Record<string, unknown> | undefined;
-  if (input && typeof input.currentText === 'string') return input.currentText;
-  return typeof run.output === 'string' ? run.output : '';
+  return run.input?.currentText ?? run.output ?? '';
 }
 
-function getObjectiveText(run: { input?: unknown }): string {
-  const input = run.input as Record<string, unknown> | undefined;
-  if (input && typeof input.originalTask === 'string') return input.originalTask;
-  return '';
+function getObjectiveText(run: GoalScorerRun): string {
+  return run.input?.originalTask ?? '';
 }
 
 function truncateForJudge(value: string): string {
   return value.length > 4000 ? `${value.slice(0, 4000)}\n...[truncated]` : value;
 }
 
-function extractTextContent(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .map((part: any) => {
-        if (typeof part === 'string') return part;
-        if (typeof part?.text === 'string') return part.text;
-        if (typeof part?.content === 'string') return part.content;
-        return null;
-      })
-      .filter((text: string | null): text is string => Boolean(text))
-      .join('\n');
-  }
-  return String(content ?? '');
+function isTextPart(part: MastraMessagePart): part is TextMessagePart {
+  return part.type === 'text';
 }
 
-function getLatestUserContext(run: { input?: unknown }): {
+function extractTextContent(content: MastraMessageContentV2): string {
+  return (content.parts ?? [])
+    .filter(isTextPart)
+    .map(part => part.text)
+    .filter(Boolean)
+    .join('\n');
+}
+
+function hasUserSignalMetadata(signal: unknown): signal is { type: 'user' } {
+  return (
+    signal !== null &&
+    typeof signal === 'object' &&
+    !Array.isArray(signal) &&
+    'type' in signal &&
+    signal.type === 'user'
+  );
+}
+
+function isUserMessageForGoal(message: MastraDBMessage): boolean {
+  return (
+    message.role === 'user' || (message.role === 'signal' && hasUserSignalMetadata(message.content.metadata?.signal))
+  );
+}
+
+function isSyntheticReminderContent(content: string): boolean {
+  const trimmed = content.trimStart();
+  return trimmed.startsWith('<system-reminder') || trimmed.startsWith('<current-objective');
+}
+
+function isLatestUserCandidateForGoal(message: MastraDBMessage): boolean {
+  if (!isUserMessageForGoal(message)) return false;
+  const textContent = extractTextContent(message.content);
+  return textContent.trim() !== '' && !isSyntheticReminderContent(textContent);
+}
+
+function getLatestUserContext(run: GoalScorerRun): {
   lastUserContent: string | null;
   assistantStepsSinceLastUser: number;
 } {
-  const input = run.input as Record<string, unknown> | undefined;
-  const messages = Array.isArray(input?.messages) ? input.messages : [];
-  let lastUserIndex = -1;
+  const messages = run.input?.messages ?? [];
+  const lastUserIndex = messages.findLastIndex(isLatestUserCandidateForGoal);
 
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i] as any;
-    if (msg?.role === 'user') {
-      lastUserIndex = i;
-      break;
-    }
-  }
-
-  const lastUserContent = lastUserIndex >= 0 ? extractTextContent((messages[lastUserIndex] as any)?.content) : null;
+  const lastUserContent = lastUserIndex >= 0 ? extractTextContent(messages[lastUserIndex]!.content) : null;
   const assistantStepsSinceLastUser =
-    lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1).filter((msg: any) => msg?.role === 'assistant').length : 0;
+    lastUserIndex >= 0 ? messages.slice(lastUserIndex + 1).filter(msg => msg.role === 'assistant').length : 0;
 
   return { lastUserContent, assistantStepsSinceLastUser };
 }

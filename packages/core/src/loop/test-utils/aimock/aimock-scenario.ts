@@ -10,6 +10,7 @@ import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
 import type { EngineVariant, LoopScenarioResult, RunApprovalScenarioOptions, RunLoopScenarioOptions } from './types';
 import { ALL_ENGINE_VARIANTS, SCENARIO_MODEL_ID } from './types';
+import { isDurableAgentLike } from '../../../agent/types';
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -312,8 +313,24 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   let agent: any;
   let mastra: any;
   if (sharedAgent) {
-    agent = sharedAgent.agent;
-    mastra = sharedAgent.mastra;
+    if (engine === 'durable' && !isDurableAgentLike(sharedAgent.agent)) {
+      // sharedAgent provides a regular Agent on the first call; wrap it for
+      // the durable engine and re-register on the Mastra instance so
+      // .getAgent() returns the DurableAgent wrapper.  On subsequent calls
+      // (e.g. resume), the agent is already wrapped — skip re-wrapping to
+      // preserve the run registry across calls.
+      const durableWrapper = createDurableAgent({ agent: sharedAgent.agent as any });
+      const agentId = sharedAgent.agent.name;
+      sharedAgent.mastra.removeAgent(agentId);
+      sharedAgent.mastra.addAgent(durableWrapper as any, agentId);
+      agent = sharedAgent.mastra.getAgent(agentId);
+      // Mutate sharedAgent so subsequent calls see the wrapped version
+      sharedAgent.agent = agent;
+      mastra = sharedAgent.mastra;
+    } else {
+      agent = sharedAgent.agent;
+      mastra = sharedAgent.mastra;
+    }
   } else {
     const built = await buildScenarioAgent({
       llm,
@@ -356,8 +373,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       : {};
 
   // For durable engine, only pass options that DurableAgentStreamOptions supports.
-  // inputProcessors are on the agent constructor, not call-time options;
-  // abortSignal is inapplicable (durable workflows manage their own lifecycle).
+  // inputProcessors are on the agent constructor, not call-time options.
   const isDurable = engine === 'durable';
 
   const streamOptions = {
@@ -379,7 +395,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(onError ? { onError } : {}),
     ...(savePerStep !== undefined ? { savePerStep } : {}),
     ...(actor ? { actor } : {}),
-    ...(abortSignal && !isDurable ? { abortSignal } : {}),
+    ...(abortSignal ? { abortSignal } : {}),
     ...(providerOptions ? { providerOptions } : {}),
     ...(modelSettings ? { modelSettings } : {}),
     ...(toolsets ? { toolsets } : {}),
@@ -390,7 +406,9 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
 
   let rawResult: any;
   if (isDurable) {
-    rawResult = await agent.stream(prompt, streamOptions);
+    rawResult = streamUntilIdle
+      ? await agent.streamUntilIdle(prompt, streamOptions)
+      : await agent.stream(prompt, streamOptions);
   } else {
     rawResult = streamUntilIdle
       ? await agent.streamUntilIdle(prompt, streamOptions)
@@ -443,9 +461,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     await output.consumeStream();
   }
 
-  // Clean up durable resources — but NOT when the stream was suspended,
-  // because the test may still need to call resumeStream()/approveToolCall().
-  if (isDurable && rawResult.cleanup && !suspendedDuringDrain) {
+  // Clean up durable resources — but NOT when the stream was suspended or
+  // the test wants to consume the stream manually (e.g. streamUntilIdle tests
+  // that publish bg-task events after runLoopScenario returns).
+  if (isDurable && rawResult.cleanup && !suspendedDuringDrain && !manualStreamConsumption) {
     try {
       rawResult.cleanup();
     } catch {
