@@ -97,6 +97,7 @@ export type ScenarioName =
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
   | 'om-pack-startup-restore'
+  | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'quiet-settings'
   | 'quiet-tool-history-parity'

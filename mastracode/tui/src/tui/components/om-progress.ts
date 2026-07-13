@@ -145,82 +145,79 @@ function formatTokensThreshold(n: number): string {
   return (s.endsWith('.0') ? s.slice(0, -2) : s) + 'k';
 }
 
-function colorByPercent(text: string, percent: number): string {
-  if (percent >= 90) return chalk.hex(mastra.red)(text); // Mastra red
-  if (percent >= 70) return chalk.hex(mastra.orange)(text); // Mastra orange
-  return chalk.hex('#71717a')(text); // Zinc-500
-}
-/**
- * Format OM observation threshold for status bar.
- * Compact levels (most → least info):
- *   "full":        messages 12.5k/30k ↓2.1k
- *   undefined:     msg 12.5k/30k ↓2.1k
- *   "noBuffer":    msg 12.5k/30k
- *   "percentOnly": msg 42%
- *
- * @param labelStyler - Optional function to style the label text (for animation).
- *                      Receives the raw label string, returns styled string.
- */
-export function formatObservationStatus(
-  state: OMProgressState,
-  compact?: 'percentOnly' | 'noBuffer' | 'full',
-  labelStyler?: (label: string) => string,
-): string {
-  // Status is now shown in the mode badge, so just show the metrics
-  const percent = Math.round(state.thresholdPercent);
-  const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
-  const styleLabel = labelStyler ?? defaultStyler;
-  if (compact === 'percentOnly') {
-    return styleLabel('msg ') + pct;
-  }
-  const label = compact === 'full' ? 'messages' : 'msg';
-  const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
-  const buffered =
-    compact !== 'noBuffer' && state.buffered.observations.projectedMessageRemoval > 0
-      ? chalk.italic(
-          theme.fg('muted', ` ↓${formatTokensThreshold(state.buffered.observations.projectedMessageRemoval)}`),
-        )
-      : '';
-  return styleLabel(`${label} `) + colorByPercent(fraction, percent) + buffered;
-}
-/**
- * Format OM reflection threshold for status bar.
- * Compact levels (most → least info):
- *   "full":        memory 8.2k/40k ↓1.2k
- *   undefined:     mem 8.2k/40k ↓1.2k
- *   "noBuffer":    mem 8.2k/40k
- *   "percentOnly": mem 21%
- *
- * @param labelStyler - Optional function to style the label text (for animation).
- *                      Receives the raw label string, returns styled string.
- */
-export function formatReflectionStatus(
-  state: OMProgressState,
-  compact?: 'percentOnly' | 'noBuffer' | 'full',
-  labelStyler?: (label: string) => string,
-): string {
-  // Status is now shown in the mode badge, so just show the metrics
-  const percent = Math.round(state.reflectionThresholdPercent);
-  const pct = colorByPercent(`${percent}%`, percent);
-  const defaultStyler = (s: string) => chalk.hex(mastra.specialGray)(s);
-  const styleLabel = labelStyler ?? defaultStyler;
-  const label = styleLabel(compact === 'full' ? 'memory' : 'mem') + ' ';
-  if (compact === 'percentOnly') {
-    return label + pct;
-  }
-  const fraction = `${formatTokensValue(state.observationTokens)}/${formatTokensThreshold(state.reflectionThreshold)}`;
-  const savings = state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens;
-  const buffered =
-    compact !== 'noBuffer' && state.buffered.reflection.status === 'complete' && savings > 0
-      ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`))
-      : '';
-  return label + colorByPercent(fraction, percent) + buffered;
+interface OMContextIndicator {
+  plain: string;
+  styled: string;
+  messageCells: number;
+  memoryCells: number;
+  unusedCells: number;
 }
 
-/**
- * @deprecated Use formatObservationStatus and formatReflectionStatus instead
- */
+interface OMContextIndicatorOptions {
+  messages?: (segment: string) => string;
+  memory?: (segment: string) => string;
+  unused?: (segment: string) => string;
+  showBar?: boolean;
+}
+
+export function formatOMContextIndicator(
+  state: OMProgressState,
+  options: OMContextIndicatorOptions = {},
+): OMContextIndicator {
+  const used = Math.max(0, state.pendingTokens) + Math.max(0, state.observationTokens);
+  const capacity = Math.max(0, state.threshold) + Math.max(0, state.reflectionThreshold);
+  const occupiedCells = capacity === 0 ? 0 : Math.max(0, Math.min(10, Math.round((used / capacity) * 10)));
+
+  let messageCells = used === 0 ? 0 : Math.round((Math.max(0, state.pendingTokens) / used) * occupiedCells);
+  if (state.pendingTokens > 0 && state.observationTokens > 0 && occupiedCells >= 2) {
+    messageCells = Math.max(1, Math.min(occupiedCells - 1, messageCells));
+  }
+  const memoryCells = occupiedCells - messageCells;
+  const unusedCells = 10 - occupiedCells;
+
+  const messageSegment = '━'.repeat(messageCells);
+  const unusedSegment = '━'.repeat(unusedCells);
+  const memorySegment = '━'.repeat(memoryCells);
+  const usedText = formatTokensValue(used);
+  const capacityText = formatTokensThreshold(capacity);
+  const fraction = `${usedText}/${capacityText}`;
+  const messageSavings = Math.max(0, state.buffered.observations.projectedMessageRemoval);
+  const reflectionSavings = Math.max(
+    0,
+    state.buffered.reflection.inputObservationTokens - state.buffered.reflection.observationTokens,
+  );
+  const hasSavings = messageSavings + reflectionSavings > 0;
+  const savingsSlot = hasSavings ? '↓ ' : '  ';
+
+  const barPlain = options.showBar === false ? '' : `${memorySegment}${messageSegment}${unusedSegment}  `;
+  const plain = `${barPlain}${fraction}${savingsSlot}`;
+  const styleMessages = options.messages ?? (segment => theme.fg('text', segment));
+  const styleMemory = options.memory ?? (segment => theme.fg('dim', segment));
+  const styleUnused = options.unused ?? (segment => theme.fg('muted', segment));
+  const barStyled =
+    options.showBar === false
+      ? ''
+      : styleMemory(memorySegment) + styleMessages(messageSegment) + styleUnused(unusedSegment) + '  ';
+  const styled =
+    barStyled +
+    chalk.bold(theme.fg('text', usedText)) +
+    theme.fg('thinkingText', `/${capacityText}`) +
+    (hasSavings ? `${theme.fg('success', '↓')} ` : '  ');
+
+  return { plain, styled, messageCells, memoryCells, unusedCells };
+}
+
+/** @deprecated Use formatOMContextIndicator for the unified context display. */
 export function formatOMStatus(state: OMProgressState): string {
-  return formatObservationStatus(state);
+  const percent = Math.round(state.thresholdPercent);
+  const fraction = `${formatTokensValue(state.pendingTokens)}/${formatTokensThreshold(state.threshold)}`;
+  const value =
+    percent >= 90
+      ? chalk.hex(mastra.red)(fraction)
+      : percent >= 70
+        ? chalk.hex(mastra.orange)(fraction)
+        : chalk.hex('#71717a')(fraction);
+  const savings = state.buffered.observations.projectedMessageRemoval;
+  const buffered = savings > 0 ? chalk.italic(theme.fg('muted', ` ↓${formatTokensThreshold(savings)}`)) : '';
+  return chalk.hex(mastra.specialGray)('msg ') + value + buffered;
 }

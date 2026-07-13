@@ -34,23 +34,23 @@ export const omThresholdPersistenceScenario: McE2eScenario = {
 
     terminal.submit('/om');
     await runtime.waitForScreenText(/Observational Memory Settings/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Observation threshold\s+12k/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Reflection threshold\s+80k/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Messages before observation\s+12k/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observations before reflection\s+80k/i, terminal, 8_000);
 
     terminal.write('\x1b[B'.repeat(2));
     terminal.write('\r');
-    await runtime.waitForScreenText(/Observation Threshold/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Messages Before Observation/i, terminal, 8_000);
     terminal.write('15');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Observation threshold\s+15k/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Messages before observation\s+15k/i, terminal, 8_000);
     await runtime.waitForScreenTextAbsent(/_k tokens/i, terminal, 8_000);
 
     terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Reflection Threshold/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observations Before Reflection/i, terminal, 8_000);
     terminal.write('60');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Reflection threshold\s+60k/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Observations before reflection\s+60k/i, terminal, 8_000);
     await runtime.waitForScreenTextAbsent(/_k tokens/i, terminal, 8_000);
 
     terminal.write('\x1b');

@@ -1336,6 +1336,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   text: textDeltas.join(''),
                   usage,
                   requestContext,
+                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: outputStepWriter,
                 });
               } catch (error) {

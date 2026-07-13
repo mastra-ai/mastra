@@ -672,6 +672,37 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
             }
           }
 
+          // Thread title generation (executeOnFinish equivalent).
+          // The non-durable `#executeOnFinish` generates a thread title from the first user
+          // message when `memory.options.generateTitle` is set. That branch was never ported
+          // to the durable path, so `generateTitle` silently never fired for durable/evented
+          // agents (and Inngest). The `generateThreadTitle` closure — parked on the registry
+          // entry during preparation, where the agent instance is in scope — runs it here.
+          //
+          // Kept OUTSIDE the `!observationalMemory` guard above: OM handles its own message
+          // persistence, but title generation is orthogonal and should still run when OM is on.
+          // Non-serializable (a closure), so like the other registry closures it only fires for
+          // in-process durable runs; cross-process engines (Inngest after a restart) skip it.
+          if (
+            registryEntry?.generateThreadTitle &&
+            durableState?.threadId &&
+            durableState?.resourceId &&
+            !durableState.memoryConfig?.readOnly
+          ) {
+            try {
+              await registryEntry.generateThreadTitle({
+                threadId: durableState.threadId,
+                resourceId: durableState.resourceId,
+                memoryConfig: durableState.memoryConfig,
+                messageListState: state.messageListState,
+                requestContext,
+                tracingContext,
+              });
+            } catch (error) {
+              logger?.warn?.(`[DurableAgent] Error generating thread title: ${error}`);
+            }
+          }
+
           const finalOutput = {
             messageListState: state.messageListState,
             messageId: state.messageId,
