@@ -315,9 +315,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Validate input parameters
     validateUpsertInput('MONGODB', vectors, metadata, ids);
     validateVectorValues('MONGODB', vectors);
+    metadata?.forEach((meta, index) => validateMetadataValue(meta, `metadata[${index}]`, new WeakSet()));
 
     try {
-      metadata?.forEach((meta, index) => validateMetadataValue(meta, `metadata[${index}]`, new WeakSet()));
       const collection = await this.getCollection(indexName);
 
       // Get index stats to check dimension
