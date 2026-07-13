@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   DatasetsStorage,
+  hasErrorCode,
+  resolveExistingDataset,
+  validateCallerDefinedDatasetId,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
@@ -220,7 +223,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const collection = await this.getCollection(TABLE_DATASETS);
 
@@ -248,6 +252,10 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
 
       return this.transformDatasetRow(record);
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([11000]))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return resolveExistingDataset(existing, { ...input, id: input.id });
+      }
       if (error instanceof MastraError) throw error;
       throw new MastraError(
         {

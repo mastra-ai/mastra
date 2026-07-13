@@ -1,4 +1,5 @@
 import { getSchemaValidator, SchemaUpdateValidationError } from '../../../datasets/validation';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
 import type {
   DatasetRecord,
   DatasetItem,
@@ -20,6 +21,55 @@ import type {
   DatasetTenancyFilters,
 } from '../../types';
 import { StorageDomain } from '../base';
+
+const DATASET_IMMUTABLE_FIELDS = ['organizationId', 'projectId', 'candidateKey', 'candidateId'] as const;
+
+export function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
+  let current: unknown = error;
+  while (current && typeof current === 'object') {
+    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
+    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
+
+export function validateCallerDefinedDatasetId(id: string): void {
+  if (id.length === 0) {
+    throw new MastraError({
+      id: 'DATASET_INVALID_ID',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      details: { id },
+      text: 'Caller-defined dataset ID must not be empty',
+    });
+  }
+}
+
+/**
+ * Returns an existing dataset when a caller-defined ID is reused compatibly.
+ * Optional immutable fields normalize omitted and null values to the same value.
+ */
+export function resolveExistingDataset(
+  existing: DatasetRecord,
+  input: CreateDatasetInput & { id: string },
+): DatasetRecord {
+  const hasConflict = DATASET_IMMUTABLE_FIELDS.some(field => (existing[field] ?? null) !== (input[field] ?? null));
+
+  if (hasConflict) {
+    throw new MastraError({
+      id: 'DATASET_ID_CONFLICT',
+      domain: ErrorDomain.STORAGE,
+      category: ErrorCategory.USER,
+      details: {
+        id: input.id,
+        reason: 'IMMUTABLE_FIELDS_MISMATCH',
+      },
+      text: `Dataset ID "${input.id}" is already in use with incompatible immutable fields`,
+    });
+  }
+
+  return existing;
+}
 
 /**
  * Abstract base class for datasets storage domain.

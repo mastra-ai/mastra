@@ -11,6 +11,9 @@ import {
   DATASET_ITEMS_SCHEMA,
   DATASET_VERSIONS_SCHEMA,
   DatasetsStorage,
+  hasErrorCode,
+  resolveExistingDataset,
+  validateCallerDefinedDatasetId,
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
@@ -274,7 +277,8 @@ export class DatasetsMySQL extends DatasetsStorage {
 
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
-      const id = randomUUID();
+      const id = input.id ?? randomUUID();
+      if (input.id !== undefined) validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
       await this.operations.insert({
@@ -320,6 +324,11 @@ export class DatasetsMySQL extends DatasetsStorage {
         updatedAt: now,
       };
     } catch (error) {
+      if (input.id !== undefined && hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) {
+        const existing = await this.getDatasetById({ id: input.id });
+        if (existing) return resolveExistingDataset(existing, { ...input, id: input.id });
+      }
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: 'MYSQL_CREATE_DATASET_FAILED',

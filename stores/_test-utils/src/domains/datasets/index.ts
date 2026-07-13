@@ -42,6 +42,85 @@ export function createDatasetsTests({
         expect(ds.createdAt).toBeInstanceOf(Date);
       });
 
+      it('createDataset atomically resolves compatible caller-defined IDs', async () => {
+        const input = {
+          id: 'caller-defined-dataset',
+          name: 'first-write-wins',
+          organizationId: 'org_1',
+          projectId: null,
+        };
+        const results = await Promise.all(Array.from({ length: 20 }, () => datasetsStorage.createDataset(input)));
+        const listed = await datasetsStorage.listDatasets({ pagination: { page: 0, perPage: 100 } });
+
+        expect(results.every(dataset => dataset.id === input.id)).toBe(true);
+        expect(results.every(dataset => dataset.createdAt.getTime() === results[0]!.createdAt.getTime())).toBe(true);
+        expect(listed.datasets.filter(dataset => dataset.id === input.id)).toHaveLength(1);
+      });
+
+      it('createDataset returns the current record for a compatible retry without mutation', async () => {
+        await datasetsStorage.createDataset({
+          id: 'retry-dataset',
+          name: 'original',
+          organizationId: 'org_1',
+        });
+        const updated = await datasetsStorage.updateDataset({ id: 'retry-dataset', name: 'updated' });
+        const retried = await datasetsStorage.createDataset({
+          id: 'retry-dataset',
+          name: 'ignored',
+          organizationId: 'org_1',
+          projectId: null,
+        });
+
+        expect(retried.name).toBe('updated');
+        expect(retried.updatedAt.getTime()).toBe(updated.updatedAt.getTime());
+        expect(retried.version).toBe(0);
+      });
+
+      it('createDataset treats omitted and null immutable fields as compatible', async () => {
+        const created = await datasetsStorage.createDataset({
+          id: 'normalized-dataset',
+          name: 'original',
+          organizationId: undefined,
+          projectId: null,
+        });
+        const retried = await datasetsStorage.createDataset({
+          id: 'normalized-dataset',
+          name: 'ignored',
+          organizationId: null,
+          projectId: undefined,
+        });
+
+        expect(retried.createdAt.getTime()).toBe(created.createdAt.getTime());
+        expect(retried.name).toBe('original');
+      });
+
+      it('createDataset rejects incompatible caller-defined ID reuse', async () => {
+        await datasetsStorage.createDataset({
+          id: 'conflicting-dataset',
+          name: 'original',
+          organizationId: 'org_1',
+          candidateId: 'candidate_1',
+        });
+
+        await expect(
+          datasetsStorage.createDataset({
+            id: 'conflicting-dataset',
+            name: 'retry',
+            organizationId: 'org_2',
+            candidateId: 'candidate_1',
+          }),
+        ).rejects.toMatchObject({ id: 'DATASET_ID_CONFLICT' });
+      });
+
+      it('createDataset releases a caller-defined ID after deletion', async () => {
+        const first = await datasetsStorage.createDataset({ id: 'reusable-dataset', name: 'first' });
+        await datasetsStorage.deleteDataset({ id: first.id });
+        const second = await datasetsStorage.createDataset({ id: first.id, name: 'second' });
+
+        expect(second.name).toBe('second');
+        expect(second.version).toBe(0);
+      });
+
       it('getDatasetById returns record or null', async () => {
         const ds = await datasetsStorage.createDataset({ name: 'get-test' });
         const found = await datasetsStorage.getDatasetById({ id: ds.id });
