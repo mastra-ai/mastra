@@ -47,11 +47,11 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [tab, setTab] = useState<Tab>('general');
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { activeModelId, setModel } = useChatModels();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const { toast } = useToast();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, projectPath, baseUrl, enabled: sessionEnabled };
   const modelsQuery = useAgentControllerModels(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);

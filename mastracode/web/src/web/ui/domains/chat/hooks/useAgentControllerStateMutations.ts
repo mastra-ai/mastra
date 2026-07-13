@@ -6,6 +6,7 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../s
 interface AgentControllerMutationArgs {
   agentControllerId: string;
   resourceId: string;
+  projectPath?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -13,6 +14,7 @@ interface AgentControllerMutationArgs {
 export function useSetAgentControllerStateMutation({
   agentControllerId,
   resourceId,
+  projectPath,
   baseUrl = '',
   enabled = true,
 }: AgentControllerMutationArgs) {
@@ -24,11 +26,13 @@ export function useSetAgentControllerStateMutation({
     onSuccess: async (_data, updates) => {
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId),
+          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
+          exact: true,
         }),
         'settings' in updates
           ? queryClient.invalidateQueries({
               queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId),
+              exact: true,
             })
           : Promise.resolve(),
       ]);
@@ -43,14 +47,14 @@ export function useSwitchAgentControllerModeMutation(args: AgentControllerMutati
   return useMutation({
     mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['agent-controller', args.agentControllerId, 'connection', args.resourceId],
-        }),
-      ]),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(
+          args.agentControllerId,
+          args.resourceId,
+          args.projectPath,
+        ),
+        exact: true,
+      }),
   });
 }
 
@@ -61,13 +65,13 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
   return useMutation({
     mutationFn: (modelId: string) => requireAgentControllerSession(session).switchModel(modelId),
     onSuccess: () =>
-      Promise.all([
-        queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerSession(args.agentControllerId, args.resourceId),
-        }),
-        queryClient.invalidateQueries({
-          queryKey: ['agent-controller', args.agentControllerId, 'connection', args.resourceId],
-        }),
-      ]),
+      queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerConnectionState(
+          args.agentControllerId,
+          args.resourceId,
+          args.projectPath,
+        ),
+        exact: true,
+      }),
   });
 }

@@ -81,6 +81,10 @@ function sessionState(resourceId = RESOURCE_ID): AgentControllerSessionState {
   };
 }
 
+function requestCount(requests: string[], request: string) {
+  return requests.filter(candidate => candidate === request).length;
+}
+
 function sse(events: AgentControllerEvent[] = []): Response {
   const encoder = new TextEncoder();
   return new Response(
@@ -271,14 +275,31 @@ describe('ChatSessionProvider', () => {
       seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
-        http.get(`${API}/modes`, () =>
-          HttpResponse.json({
+        http.get(`${API}/modes`, () => {
+          requests.push('modes');
+          return HttpResponse.json({
             modes: [
               { id: 'build', name: 'Build' },
               { id: 'plan', name: 'Plan' },
             ],
-          }),
-        ),
+          });
+        }),
+        http.get(`${API}/models`, () => {
+          requests.push('models');
+          return HttpResponse.json({ models: [] });
+        }),
+        http.get(`${SESSION}/permissions`, () => {
+          requests.push('permissions');
+          return HttpResponse.json({ categories: {}, tools: {} });
+        }),
+        http.get(`${SESSION}/threads`, () => {
+          requests.push('threads');
+          return HttpResponse.json({ threads: [] });
+        }),
+        http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => {
+          requests.push('messages');
+          return HttpResponse.json({ messages: [] });
+        }),
         http.get(SESSION, () => {
           requests.push('state');
           return HttpResponse.json({ ...sessionState(), modeId: activeModeId });
@@ -298,11 +319,24 @@ describe('ChatSessionProvider', () => {
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Build'));
       expect(screen.getByTestId('active-mode-id')).toHaveTextContent('build');
       expect(screen.getByTestId('modes-count')).toHaveTextContent('2');
+      const readsBeforeSwitch = {
+        create: requestCount(requests, 'create'),
+        state: requestCount(requests, 'state'),
+        modes: requestCount(requests, 'modes'),
+        models: requestCount(requests, 'models'),
+        permissions: requestCount(requests, 'permissions'),
+        threads: requestCount(requests, 'threads'),
+        messages: requestCount(requests, 'messages'),
+      };
 
       await userEvent.click(screen.getByRole('button', { name: 'switch to plan' }));
 
       await waitFor(() => expect(requests).toContain('mode:{"modeId":"plan"}'));
       await waitFor(() => expect(screen.getByTestId('active-mode-label')).toHaveTextContent('Plan'));
+      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state + 1);
+      for (const request of ['create', 'modes', 'models', 'permissions', 'threads', 'messages'] as const) {
+        expect(requestCount(requests, request)).toBe(readsBeforeSwitch[request]);
+      }
     });
 
     it('given a synced model, when a model consumer renders, then it reads and switches model without transcript context', async () => {
@@ -311,9 +345,29 @@ describe('ChatSessionProvider', () => {
       seedProject();
       useAgentControllerHandlers([], requests);
       server.use(
+        http.get(`${API}/modes`, () => {
+          requests.push('modes');
+          return HttpResponse.json({ modes: [{ id: 'build', name: 'Build' }] });
+        }),
+        http.get(`${API}/models`, () => {
+          requests.push('models');
+          return HttpResponse.json({ models: [] });
+        }),
         http.get(SESSION, () => {
           requests.push('state');
           return HttpResponse.json({ ...sessionState(), modelId: activeModelId });
+        }),
+        http.get(`${SESSION}/permissions`, () => {
+          requests.push('permissions');
+          return HttpResponse.json({ categories: {}, tools: {} });
+        }),
+        http.get(`${SESSION}/threads`, () => {
+          requests.push('threads');
+          return HttpResponse.json({ threads: [] });
+        }),
+        http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => {
+          requests.push('messages');
+          return HttpResponse.json({ messages: [] });
         }),
         http.post(`${SESSION}/model`, async ({ request }) => {
           const body = await request.json();
@@ -328,11 +382,24 @@ describe('ChatSessionProvider', () => {
       renderFocusedProbe(<ModelsProbe />);
 
       await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o-mini'));
+      const readsBeforeSwitch = {
+        create: requestCount(requests, 'create'),
+        state: requestCount(requests, 'state'),
+        modes: requestCount(requests, 'modes'),
+        models: requestCount(requests, 'models'),
+        permissions: requestCount(requests, 'permissions'),
+        threads: requestCount(requests, 'threads'),
+        messages: requestCount(requests, 'messages'),
+      };
 
       await userEvent.click(screen.getByRole('button', { name: 'switch model' }));
 
       await waitFor(() => expect(requests).toContain('model:{"modelId":"openai/gpt-4o"}'));
       await waitFor(() => expect(screen.getByTestId('active-model-id')).toHaveTextContent('openai/gpt-4o'));
+      expect(requestCount(requests, 'state')).toBe(readsBeforeSwitch.state + 1);
+      for (const request of ['create', 'modes', 'models', 'permissions', 'threads', 'messages'] as const) {
+        expect(requestCount(requests, request)).toBe(readsBeforeSwitch[request]);
+      }
     });
 
     it('given permission rules, when a permissions consumer updates a category, then it reads fetched rules and exposes pending category state', async () => {

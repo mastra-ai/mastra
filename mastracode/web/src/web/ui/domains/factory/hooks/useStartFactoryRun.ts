@@ -36,7 +36,13 @@ export function useStartFactoryRun() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath: deriveProjectPath(activeProject),
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
   const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
   const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, {

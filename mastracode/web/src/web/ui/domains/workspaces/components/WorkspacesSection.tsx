@@ -14,7 +14,12 @@ import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentCont
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
-import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
+import {
+  deriveProjectPath,
+  useCreateWorkspaceMutation,
+  useSelectWorkspaceMutation,
+  useWorkspacesQuery,
+} from '../hooks/useWorkspaces';
 import type { Worktree } from '../services/projects';
 
 /**
@@ -34,6 +39,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const setStateMutation = useSetAgentControllerStateMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath: deriveProjectPath(activeProject),
     baseUrl,
     enabled: sessionEnabled,
   });

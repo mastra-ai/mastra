@@ -29,7 +29,7 @@ export function useAgentControllerSessionSync({
   const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
 
   return useQuery({
-    queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'],
+    queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, projectPath),
     queryFn: () => session!.state(),
     enabled: enabled && Boolean(session),
     staleTime: Infinity,

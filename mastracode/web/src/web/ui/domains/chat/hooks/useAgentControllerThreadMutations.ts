@@ -17,20 +17,11 @@ function useThreadMutationInvalidation({
   projectPath,
 }: AgentControllerThreadMutationArgs) {
   const queryClient = useQueryClient();
-  return async () => {
-    await Promise.all([
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId),
-        exact: true,
-      }),
-    ]);
-  };
+  return () =>
+    queryClient.invalidateQueries({
+      queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),
+      exact: true,
+    });
 }
 
 export function useCreateAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {

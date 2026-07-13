@@ -31,13 +31,22 @@ export const queryKeys = {
     ['agent-controller', agentControllerId ?? null, 'modes'] as const,
   agentControllerSession: (agentControllerId: string | undefined, resourceId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null] as const,
-  // Keep connection state outside agentControllerSession: mutation hooks invalidate that prefix,
-  // and a sync refetch would bump dataUpdatedAt and wipe the live transcript.
+  // Keep connection state outside agentControllerSession so state refetches do not wipe the live transcript.
   agentControllerConnection: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
+  agentControllerConnectionInit: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'] as const,
+  agentControllerConnectionState: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'] as const,
   agentControllerSettings: (agentControllerId: string | undefined, resourceId: string | undefined) =>
     [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'settings'] as const,
   agentControllerPermissions: (agentControllerId: string | undefined, resourceId: string | undefined) =>
