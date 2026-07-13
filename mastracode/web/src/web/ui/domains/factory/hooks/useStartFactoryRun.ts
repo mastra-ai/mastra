@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
+import type { AgentControllerSession } from '../../chat/services/agentControllerClient';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
@@ -57,8 +58,17 @@ export function useStartFactoryRun() {
         enabled: sessionEnabled,
       });
       const scopedSession = requireAgentControllerSession(session);
-      await scopedSession.create({ tags: { projectPath } });
-      const thread = await scopedSession.createThread(threadTitle);
+      const created = await scopedSession.create({ tags: { projectPath } });
+
+      // Bringing a brand-new scope online seeds it with a fresh empty untitled
+      // thread (core creates one when no thread matches the scope tags). Claim
+      // that seeded thread for this run by renaming it — creating another
+      // thread here would leave a stray "Untitled" thread in the sidebar. When
+      // the session resumed a real thread (titled or with messages), create a
+      // fresh thread as before.
+      const threadId =
+        (await claimSeededThread(scopedSession, created.threadId, threadTitle)) ??
+        (await scopedSession.createThread(threadTitle)).id;
       await scopedSession.sendMessage(prompt);
 
       // Seed the thread's message cache so the prompt renders immediately when
@@ -68,7 +78,7 @@ export function useStartFactoryRun() {
         role: 'user',
         content: [{ type: 'text', text: prompt }],
       };
-      queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, thread.id), [
+      queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
         message,
       ]);
       // The thread now exists under the new worktree's project path; refresh
@@ -76,10 +86,29 @@ export function useStartFactoryRun() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
-      return thread.id;
+      return threadId;
     },
     onSuccess: threadId => void navigate(`/threads/${threadId}`),
   });
 
   return { start: mutation, enabled: sessionEnabled };
+}
+
+/**
+ * Reuse the thread a session was seeded with when it is still a fresh, empty,
+ * untitled thread: rename it to `title` and return its id. Returns null when
+ * the session resumed a real thread (it has a title or messages) — the caller
+ * creates a new thread instead.
+ */
+async function claimSeededThread(
+  session: AgentControllerSession,
+  threadId: string | undefined,
+  title: string,
+): Promise<string | null> {
+  if (!threadId) return null;
+  const [threads, messages] = await Promise.all([session.listThreads(), session.listMessages(threadId, 1)]);
+  const seeded = threads.find(thread => thread.id === threadId);
+  if (!seeded || seeded.title || messages.length > 0) return null;
+  await session.renameThread(threadId, title);
+  return threadId;
 }
