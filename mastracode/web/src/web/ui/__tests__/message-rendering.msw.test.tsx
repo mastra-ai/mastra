@@ -312,7 +312,7 @@ describe('MastraCode message rendering', () => {
 
     renderChat();
 
-    expect(await screen.findByText('Ready')).toBeInTheDocument();
+    await screen.findByRole('textbox', { name: 'Message' });
     await stream.emit();
 
     expect(await screen.findByText('Streaming now')).toBeInTheDocument();
@@ -494,27 +494,6 @@ describe('MastraCode message rendering', () => {
     });
   });
 
-  describe('when a goal evaluation arrives', () => {
-    it('renders the goal panel with its objective and controls in the goal view', async () => {
-      seedProject();
-      useAgentControllerHandlers({
-        events: [
-          {
-            type: 'goal_evaluation',
-            payload: { objective: 'Migrate the UI', status: 'active', iteration: 1, maxRuns: 5, passed: false },
-          },
-        ],
-      });
-
-      const user = userEvent.setup();
-      renderChat();
-
-      await user.click(await screen.findByRole('tab', { name: 'Goal' }));
-      expect(await screen.findByText('Migrate the UI')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
-    });
-  });
-
   describe('when a notice contains markdown', () => {
     it('renders the notice text as formatted markdown instead of raw syntax', async () => {
       seedProject();
@@ -666,7 +645,7 @@ describe('App mode + theme controls', () => {
       expect(header).not.toContainElement(switchers[0]);
     });
 
-    it('renders the ready status above settings in the sidebar', async () => {
+    it('keeps settings in the sidebar without connection status', async () => {
       seedMultiMode();
 
       renderChat();
@@ -676,11 +655,8 @@ describe('App mode + theme controls', () => {
       const header = document.querySelector('header');
       expect(header).not.toBeNull();
       expect(within(header as HTMLElement).queryByRole('button', { name: 'Open settings' })).not.toBeInTheDocument();
-
-      const settings = screen.getByRole('button', { name: 'Open settings' });
-      const readyStatus = screen.getByRole('status', { name: '' });
-      await waitFor(() => expect(readyStatus).toHaveTextContent('Ready'));
-      expect(readyStatus.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Open settings' })).toBeInTheDocument();
+      expect(screen.queryByText('Ready')).not.toBeInTheDocument();
     });
 
     it('does not duplicate the project name in the status line', async () => {

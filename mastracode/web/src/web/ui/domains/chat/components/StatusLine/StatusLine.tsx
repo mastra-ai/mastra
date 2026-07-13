@@ -1,4 +1,5 @@
 import { ActiveModel } from './ActiveModel';
+import { ConnectionActivity } from './ConnectionActivity';
 import { GoalStatus } from './GoalStatus';
 import { ModesSelection } from './ModesSelection';
 import { OperationalMemoryStatus } from './OperationalMemoryStatus';
@@ -19,6 +20,7 @@ export function StatusLine() {
       <ActiveModel />
       <OperationalMemoryStatus />
       <RuntimeActivity />
+      <ConnectionActivity />
       <QueuedFollowUps />
       <GoalStatus />
       <span className="flex-1" />

@@ -4,7 +4,9 @@ type ChatLayoutProps = {
   sidebar: ReactNode;
   /** Optional bar above the chat content (e.g. mobile sidebar toggle). */
   header?: ReactNode;
-  content: ReactNode;
+  content?: ReactNode;
+  /** A complete main area when content and footer need to share one provider boundary. */
+  main?: ReactNode;
   /** Optional pinned region below the chat content (e.g. composer). */
   footer?: ReactNode;
   /** Mobile-only: whether the sidebar overlay is open (controls the backdrop). */
@@ -17,7 +19,7 @@ type ChatLayoutProps = {
  * frame: sidebar column, mobile backdrop, header bar, scrollable content
  * region, and pinned footer. No domain hooks — callers fill the slots.
  */
-export function ChatLayout({ sidebar, header, content, footer, sidebarOpen = false, onSidebarClose }: ChatLayoutProps) {
+export function ChatLayout({ sidebar, header, content, main, footer, sidebarOpen = false, onSidebarClose }: ChatLayoutProps) {
   const backdropVisibilityClass = sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0';
 
   return (
@@ -34,10 +36,12 @@ export function ChatLayout({ sidebar, header, content, footer, sidebarOpen = fal
 
       <div className="relative z-1 flex h-full min-w-0 flex-1 flex-col overflow-y-scroll">
         {header}
-        <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
-          {content}
-          {footer}
-        </div>
+        {main ?? (
+          <div className="grid h-full min-h-0 grid-rows-[minmax(0,1fr)_auto] overflow-hidden">
+            {content}
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

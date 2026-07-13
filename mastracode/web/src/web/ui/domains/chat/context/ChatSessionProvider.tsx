@@ -1,10 +1,9 @@
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
+import { createContext, useContext } from 'react';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { SkeletonRows } from '../../../ui';
-// Deep imports (not the workspaces barrel): the barrel re-exports components
-// that consume this chat context, so importing it here would create a cycle.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath } from '../../workspaces/hooks/useWorkspaces';
 import { useAgentControllerThreadMessages } from '../hooks/useAgentControllerThreadMessages';
@@ -16,20 +15,40 @@ import { ChatSessionContext } from './ChatSessionContext';
 import { ChatTranscriptProvider } from './ChatTranscriptProvider';
 import { useChatSessionContext } from './useChatSessionContext';
 
-export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
+interface ChatThreadMessagesApi {
+  threadId?: string;
+  isPending: boolean;
+  error: unknown;
+}
+
+const ChatThreadMessagesContext = createContext<ChatThreadMessagesApi | null>(null);
+
+/** Stable project/API configuration for chat shell consumers such as the sidebar. */
+export function ChatSessionConfigProvider({ children }: { children: ReactNode }) {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const { baseUrl } = useApiConfig();
   const projectPath = deriveProjectPath(activeProject);
-  const sessionContextValue = { resourceId, sessionEnabled, projectPath, baseUrl };
 
   return (
-    <ChatSessionContext.Provider value={sessionContextValue}>
-      <ChatSessionBoundary threadId={threadId}>{children}</ChatSessionBoundary>
+    <ChatSessionContext.Provider value={{ resourceId, sessionEnabled, projectPath, baseUrl }}>
+      {children}
     </ChatSessionContext.Provider>
   );
 }
 
-function ChatSessionBoundary({ children, threadId }: { children: ReactNode; threadId?: string }) {
+/**
+ * Route-thread state and transport. This boundary deliberately remains below
+ * the persistent shell so only chat content responds to history loading.
+ */
+export function ChatSessionBoundary({
+  children,
+  threadId,
+  deferUntilMessagesReady = false,
+}: {
+  children: ReactNode;
+  threadId?: string;
+  deferUntilMessagesReady?: boolean;
+}) {
   const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
@@ -38,8 +57,44 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),
   });
+  const messages = {
+    threadId,
+    isPending: Boolean(threadId) && messagesQuery.isPending,
+    error: messagesQuery.error,
+  };
 
-  if (threadId && messagesQuery.isPending) {
+  if (deferUntilMessagesReady && threadId && (messages.isPending || messages.error)) {
+    return <ChatMessageFeedback {...messages} />;
+  }
+
+  return (
+    <ChatTranscriptProvider
+      key={`${resourceId}:${threadId ?? 'draft'}:${messagesQuery.dataUpdatedAt}`}
+      initialMessages={messagesQuery.data}
+    >
+      <ChatModesProvider>
+        <ChatModelsProvider>
+          <ChatPermissionsProvider>
+            <ChatThreadMessagesContext.Provider value={messages}>{children}</ChatThreadMessagesContext.Provider>
+          </ChatPermissionsProvider>
+        </ChatModelsProvider>
+      </ChatModesProvider>
+    </ChatTranscriptProvider>
+  );
+}
+
+/** Limits delayed thread-history feedback to the transcript content region. */
+export function ChatMessageBoundary({ children }: { children: ReactNode }) {
+  const value = useContext(ChatThreadMessagesContext);
+  if (!value) throw new Error('ChatMessageBoundary must be used within a ChatSessionBoundary');
+
+  if (value.isPending || value.error) return <ChatMessageFeedback {...value} />;
+
+  return children;
+}
+
+function ChatMessageFeedback({ threadId, isPending, error }: ChatThreadMessagesApi) {
+  if (threadId && isPending) {
     return (
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
         <SkeletonRows label="Loading messages" rows={6} />
@@ -47,9 +102,8 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
     );
   }
 
-  if (threadId && messagesQuery.isError) {
-    const errorMessage = messagesQuery.error instanceof Error ? messagesQuery.error.message : undefined;
-
+  if (threadId && error) {
+    const errorMessage = error instanceof Error ? error.message : undefined;
     return (
       <div className="flex min-h-0 flex-1 flex-col place-items-center gap-4 overflow-y-auto scroll-smooth px-3 pb-2 pt-6 md:px-5 [&>*]:mx-auto [&>*]:w-full [&>*]:max-w-[80ch]">
         <Notice variant="destructive">
@@ -59,13 +113,16 @@ function ChatSessionBoundary({ children, threadId }: { children: ReactNode; thre
     );
   }
 
+  return null;
+}
+
+/** Backward-compatible full chat boundary for focused component tests. */
+export function ChatSessionProvider({ children, threadId }: { children: ReactNode; threadId?: string }) {
   return (
-    <ChatTranscriptProvider key={`${resourceId}:${threadId ?? 'draft'}`} initialMessages={messagesQuery.data}>
-      <ChatModesProvider>
-        <ChatModelsProvider>
-          <ChatPermissionsProvider>{children}</ChatPermissionsProvider>
-        </ChatModelsProvider>
-      </ChatModesProvider>
-    </ChatTranscriptProvider>
+    <ChatSessionConfigProvider>
+      <ChatSessionBoundary threadId={threadId} deferUntilMessagesReady>
+        {children}
+      </ChatSessionBoundary>
+    </ChatSessionConfigProvider>
   );
 }

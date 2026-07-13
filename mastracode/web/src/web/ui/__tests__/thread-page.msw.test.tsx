@@ -96,12 +96,14 @@ interface CapturedRequests {
 function useAgentControllerHandlers({
   boundThreadId = threadOne.id,
   messagesDelayMs = 0,
+  messagesDelayMsByThread = {},
   stateDelayMs = 0,
   switchDelayMsByThread = {},
   failSwitchFor = [],
 }: {
   boundThreadId?: string;
   messagesDelayMs?: number;
+  messagesDelayMsByThread?: Partial<Record<string, number>>;
   /** Delays `GET /sessions/:resourceId` (the state fetch) to expose hydration races. */
   stateDelayMs?: number;
   switchDelayMsByThread?: Partial<Record<string, number>>;
@@ -131,8 +133,9 @@ function useAgentControllerHandlers({
       HttpResponse.json({ threads: captured.created > 0 ? [newThread, threadOne, threadTwo] : [threadOne, threadTwo] }),
     ),
     http.get(`${SESSION}/threads/:threadId/messages`, async ({ params }) => {
-      if (messagesDelayMs > 0) await delay(messagesDelayMs);
       const threadId = String(params.threadId);
+      const messagesDelay = messagesDelayMsByThread[threadId] ?? messagesDelayMs;
+      if (messagesDelay > 0) await delay(messagesDelay);
       if (threadId === newThread.id && captured.sent.length > 0) {
         const messages: AgentControllerMessage[] = captured.sent.map((text, index) => ({
           id: `sent-${index}`,
@@ -198,6 +201,23 @@ describe('MastraCode thread pages', () => {
     await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
     expect(screen.getByRole('region', { name: 'Thread composer' })).toHaveClass('max-w-[80ch]');
     expect(screen.queryByRole('status', { name: 'Loading messages' })).not.toBeInTheDocument();
+  });
+
+  it('given destination history loads slowly, when selecting another thread, then the sidebar and composer stay available while only messages load', async () => {
+    useAgentControllerHandlers({ messagesDelayMsByThread: { [threadTwo.id]: 150 } });
+    const { router } = renderRoutes(`/threads/${threadOne.id}`);
+
+    await waitFor(() => expect(screen.getByText('Reply from thread one')).toBeInTheDocument());
+
+    await userEvent.click(await screen.findByText('Second thread'));
+
+    await expectPathname(router, `/threads/${threadTwo.id}`);
+    expect(await screen.findByRole('status', { name: 'Loading messages' })).toBeInTheDocument();
+    expect(screen.getByText('First thread')).toBeInTheDocument();
+    expect(screen.getByText('Second thread')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByText('Reply from thread two')).toBeInTheDocument());
   });
 
   it('given two threads in the sidebar, when clicking another thread, then the URL and session switch to it without recreating the session', async () => {

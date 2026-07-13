@@ -258,6 +258,14 @@ describe('StatusLine', () => {
   });
 
   describe('when the agent is actively working', () => {
+    it('reports Working in the composer status line', async () => {
+      seedProject();
+      useAgentControllerHandlers([{ type: 'agent_start' }]);
+      renderStatusLine();
+
+      expect(await screen.findByRole('status')).toHaveTextContent('Working…');
+    });
+
     it('shows the observational memory phase while observing', async () => {
       seedProject();
       useAgentControllerHandlers([{ type: 'om_observation_start' }]);

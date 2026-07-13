@@ -24,7 +24,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web
 import type { Project } from '../../../workspaces';
 import { ActiveProjectProvider, useActiveProjectContext } from '../../../workspaces';
 import { ChatMessageList } from '../../components/ChatMessageList';
-import { ChatSessionProvider } from '../ChatSessionProvider';
+import { ChatMessageBoundary, ChatSessionProvider } from '../ChatSessionProvider';
 import { useChatConnection } from '../useChatConnection';
 import { useChatModels } from '../useChatModels';
 import { useChatPermissions } from '../useChatPermissions';
@@ -255,7 +255,9 @@ function renderMessageList(threadId?: string) {
   return renderWithProviders(
     <ActiveProjectProvider>
       <ChatSessionProvider threadId={threadId}>
-        <ChatMessageList />
+        <ChatMessageBoundary>
+          <ChatMessageList />
+        </ChatMessageBoundary>
       </ChatSessionProvider>
     </ActiveProjectProvider>,
   );
@@ -486,12 +488,17 @@ describe('ChatSessionProvider', () => {
   });
 
   describe('when route thread messages are still loading', () => {
-    it('renders the loading skeleton before transcript consumers mount', async () => {
+    it('renders the loading skeleton in the explicit message boundary while the route-thread provider stays available', async () => {
       seedProject();
       useAgentControllerHandlers();
       server.use(http.get(`${SESSION}/threads/${ROUTE_THREAD_ID}/messages`, () => new Promise(() => undefined)));
 
-      renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
+      renderFocusedProbe(
+        <ChatMessageBoundary>
+          <TranscriptProbe />
+        </ChatMessageBoundary>,
+        ROUTE_THREAD_ID,
+      );
 
       expect(await screen.findByLabelText('Loading messages')).toBeVisible();
       expect(screen.queryByTestId('focused-thread-id')).not.toBeInTheDocument();
@@ -522,7 +529,12 @@ describe('ChatSessionProvider', () => {
         ),
       );
 
-      renderFocusedProbe(<TranscriptProbe />, ROUTE_THREAD_ID);
+      renderFocusedProbe(
+        <ChatMessageBoundary>
+          <TranscriptProbe />
+        </ChatMessageBoundary>,
+        ROUTE_THREAD_ID,
+      );
 
       expect(await screen.findByText(/Failed to load messages:/)).toBeVisible();
       expect(screen.queryByTestId('focused-thread-id')).not.toBeInTheDocument();
