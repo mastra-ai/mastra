@@ -7,6 +7,7 @@ import type { ZodType as ZodTypev4 } from 'zod/v4';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser';
+import type { MastraServerCache } from '../cache/base';
 import type { AgentChannels } from '../channels/agent-channels';
 import type { ChannelConfig } from '../channels/types';
 import type { MastraScorer, MastraScorers, ScoringSamplingConfig } from '../evals';
@@ -504,6 +505,33 @@ export interface GoalConfig {
   scorer?: MastraScorer | string;
 }
 
+/**
+ * Options for opting an {@link Agent} into durable execution via
+ * {@link AgentConfigBase.durable}.
+ *
+ * - `true`  → wrap with `createDurableAgent` using defaults on Mastra registration.
+ * - object  → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
+ *   cleanupTimeoutMs, id, name).
+ *
+ * See `packages/core/src/agent/durable/create-durable-agent.ts`.
+ */
+export type AgentDurableOption =
+  | boolean
+  | {
+      /** See createDurableAgent options: cache backend for resumable streams. */
+      cache?: MastraServerCache | false;
+      /** See createDurableAgent options: pubsub instance for streaming events. */
+      pubsub?: PubSub;
+      /** See createDurableAgent options: maximum steps for the agentic loop. */
+      maxSteps?: number;
+      /** Auto-cleanup timer for durable stream state (ms). */
+      cleanupTimeoutMs?: number;
+      /** Optional id override (defaults to agent.id). */
+      id?: string;
+      /** Optional name override (defaults to agent.name). */
+      name?: string;
+    };
+
 interface AgentConfigBase<
   TAgentId extends string = string,
   TTools extends ToolsInput = ToolsInput,
@@ -634,6 +662,24 @@ interface AgentConfigBase<
    * Workflows that the agent can execute. Can be static or dynamically resolved.
    */
   workflows?: DynamicArgument<Record<string, Workflow<any, any, any, any, any, any, any, any>>, TRequestContext>;
+  /**
+   * Opt this agent into durable execution.
+   *
+   * - `true` → wraps with `createDurableAgent` using defaults when the agent is
+   *   registered on a `Mastra` instance.
+   * - object → forwarded to `createDurableAgent` (cache, pubsub, maxSteps,
+   *   cleanupTimeoutMs, id, name).
+   *
+   * Ignored when the agent is used standalone (not attached to a `Mastra`
+   * instance). See {@link AgentDurableOption}.
+   *
+   * @example
+   * ```typescript
+   * new Agent({ id: 'my-agent', instructions: '…', model, durable: true });
+   * new Agent({ id: 'my-agent', instructions: '…', model, durable: { maxSteps: 10 } });
+   * ```
+   */
+  durable?: AgentDurableOption;
   /**
    * Default options used when calling `generate()`.
    */

@@ -42,7 +42,6 @@ import type { MastraLanguageModel, MastraLegacyLanguageModel, MastraModelConfig 
 import { RegisteredLogger } from '../logger';
 import { networkLoop } from '../loop/network';
 import type { Mastra } from '../mastra';
-import { Mastra as MastraClass } from '../mastra';
 import type { VersionOverrides } from '../mastra/types';
 import { mergeVersionOverrides } from '../mastra/types';
 import type { MastraMemory } from '../memory/memory';
@@ -136,6 +135,7 @@ import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import { TripWire } from './trip-wire';
 import type {
   AgentConfig,
+  AgentDurableOption,
   AgentGenerateOptions,
   AgentNotificationConfig,
   GoalConfig,
@@ -453,6 +453,20 @@ function hasOnDemandSkillDiscoveryProcessor(processors: InputProcessorOrWorkflow
  *   memory: new Memory(),
  * });
  * ```
+ *
+ * @example
+ * Opt into durable execution via config — the agent is auto-wrapped with
+ * `createDurableAgent` when it is attached to a `Mastra` instance:
+ * ```typescript
+ * const agent = new Agent({
+ *   id: 'my-agent',
+ *   instructions: 'You are a helpful assistant',
+ *   model: 'openai/gpt-5',
+ *   durable: true, // or: { cache, pubsub, maxSteps, cleanupTimeoutMs }
+ * });
+ *
+ * const mastra = new Mastra({ agents: { myAgent: agent } });
+ * ```
  */
 export class Agent<
   TAgentId extends string = string,
@@ -526,6 +540,7 @@ export class Agent<
    */
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
+  readonly #durable?: AgentDurableOption;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas?: SubAgentToolSchemas;
@@ -566,6 +581,7 @@ export class Agent<
     this.#description = config.description;
     this.#metadata = config.metadata;
     this.#options = config.options;
+    this.#durable = config.durable;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1100,6 +1116,16 @@ export class Agent<
    */
   get browser(): MastraBrowser | undefined {
     return this.#browser;
+  }
+
+  /**
+   * The `durable` option this agent was constructed with, if any.
+   *
+   * Read by `Mastra.addAgent` to auto-wrap the agent with `createDurableAgent`
+   * at registration time. See {@link AgentDurableOption}.
+   */
+  get durable(): AgentDurableOption | undefined {
+    return this.#durable;
   }
 
   /**
@@ -6450,6 +6476,7 @@ export class Agent<
     if (this.#ephemeralMastra) {
       return this.#ephemeralMastra;
     }
+    const { Mastra: MastraClass } = await import('../mastra');
     const ephemeral = new MastraClass({
       logger: false,
       storage: new InMemoryStore(),
