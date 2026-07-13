@@ -11,9 +11,6 @@ import {
   DATASET_ITEMS_SCHEMA,
   DATASET_VERSIONS_SCHEMA,
   DatasetsStorage,
-  hasErrorCode,
-  resolveExistingDataset,
-  validateCallerDefinedDatasetId,
   calculatePagination,
   normalizePerPage,
 } from '@mastra/core/storage';
@@ -63,6 +60,15 @@ function parseJSON<T>(value: unknown): T | undefined {
 
 function jsonArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
+}
+
+function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
+  let current: unknown = error;
+  while (current && typeof current === 'object') {
+    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
+    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
 }
 
 export class DatasetsMySQL extends DatasetsStorage {
@@ -278,7 +284,7 @@ export class DatasetsMySQL extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const id = input.id ?? randomUUID();
-      if (input.id !== undefined) validateCallerDefinedDatasetId(input.id);
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
 
       await this.operations.insert({
@@ -326,7 +332,7 @@ export class DatasetsMySQL extends DatasetsStorage {
     } catch (error) {
       if (input.id !== undefined && hasErrorCode(error, new Set([1062, 'ER_DUP_ENTRY']))) {
         const existing = await this.getDatasetById({ id: input.id });
-        if (existing) return resolveExistingDataset(existing, { ...input, id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
       }
       if (error instanceof MastraError) throw error;
       throw new MastraError(

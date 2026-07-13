@@ -3,9 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   DatasetsStorage,
-  hasErrorCode,
-  resolveExistingDataset,
-  validateCallerDefinedDatasetId,
   TABLE_DATASETS,
   TABLE_DATASET_ITEMS,
   TABLE_DATASET_VERSIONS,
@@ -46,6 +43,15 @@ import type { MongoDBDomainConfig, MongoDBIndexConfig } from '../../types';
 import { applyTenancyFilter } from '../utils';
 
 const MANAGED_COLLECTIONS = [TABLE_DATASETS, TABLE_DATASET_ITEMS, TABLE_DATASET_VERSIONS] as const;
+
+function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
+  let current: unknown = error;
+  while (current && typeof current === 'object') {
+    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
+    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
+}
 
 export class MongoDBDatasetsStorage extends DatasetsStorage {
   #connector: MongoDBConnector;
@@ -224,7 +230,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const id = input.id ?? randomUUID();
-      if (input.id !== undefined) validateCallerDefinedDatasetId(input.id);
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const collection = await this.getCollection(TABLE_DATASETS);
 
@@ -254,7 +260,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
     } catch (error) {
       if (input.id !== undefined && hasErrorCode(error, new Set([11000]))) {
         const existing = await this.getDatasetById({ id: input.id });
-        if (existing) return resolveExistingDataset(existing, { ...input, id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
       }
       if (error instanceof MastraError) throw error;
       throw new MastraError(

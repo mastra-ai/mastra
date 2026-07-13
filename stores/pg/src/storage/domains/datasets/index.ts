@@ -12,9 +12,6 @@ import {
   DATASET_ITEMS_SCHEMA,
   DATASET_VERSIONS_SCHEMA,
   DatasetsStorage,
-  hasErrorCode,
-  resolveExistingDataset,
-  validateCallerDefinedDatasetId,
   calculatePagination,
   normalizePerPage,
   safelyParseJSON,
@@ -49,6 +46,15 @@ import { getTableName, getSchemaName, tenancyWhere } from '../utils';
 /** Serialize a value for a jsonb column. Returns null for null/undefined. */
 function jsonbArg(value: unknown): string | null {
   return value === undefined || value === null ? null : JSON.stringify(value);
+}
+
+function hasErrorCode(error: unknown, codes: ReadonlySet<string | number>): boolean {
+  let current: unknown = error;
+  while (current && typeof current === 'object') {
+    if ('code' in current && codes.has((current as { code: string | number }).code)) return true;
+    current = 'cause' in current ? (current as { cause?: unknown }).cause : undefined;
+  }
+  return false;
 }
 
 export class DatasetsPG extends DatasetsStorage {
@@ -266,7 +272,7 @@ export class DatasetsPG extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     try {
       const id = input.id ?? crypto.randomUUID();
-      if (input.id !== undefined) validateCallerDefinedDatasetId(input.id);
+      if (input.id !== undefined) this.validateCallerDefinedDatasetId(input.id);
       const now = new Date();
       const nowIso = now.toISOString();
 
@@ -315,7 +321,7 @@ export class DatasetsPG extends DatasetsStorage {
     } catch (error) {
       if (input.id !== undefined && hasErrorCode(error, new Set(['23505']))) {
         const existing = await this.getDatasetById({ id: input.id });
-        if (existing) return resolveExistingDataset(existing, { ...input, id: input.id });
+        if (existing) return this.resolveExistingDataset(existing, { ...input, id: input.id });
       }
       if (error instanceof MastraError) throw error;
       throw new MastraError(

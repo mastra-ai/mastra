@@ -30,7 +30,7 @@ function matchesTenancy(
   return true;
 }
 import type { InMemoryDB } from '../inmemory-db';
-import { DatasetsStorage, resolveExistingDataset, validateCallerDefinedDatasetId } from './base';
+import { DatasetsStorage } from './base';
 
 /** Convert a storage row to the public DatasetItem type (strips validTo/isDeleted) */
 function toDatasetItem(row: DatasetItemRow): DatasetItem {
@@ -87,10 +87,10 @@ export class DatasetsInMemory extends DatasetsStorage {
   async createDataset(input: CreateDatasetInput): Promise<DatasetRecord> {
     const id = input.id ?? crypto.randomUUID();
     if (input.id !== undefined) {
-      validateCallerDefinedDatasetId(input.id);
+      this.validateCallerDefinedDatasetId(input.id);
       const existing = this.db.datasets.get(input.id);
       if (existing) {
-        return resolveExistingDataset(toDatasetRecord(existing), { ...input, id: input.id });
+        return this.resolveExistingDataset(toDatasetRecord(existing), { ...input, id: input.id });
       }
     }
 
