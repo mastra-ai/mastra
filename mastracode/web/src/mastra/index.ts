@@ -32,6 +32,7 @@ import { Card, CardText, Actions, LinkButton, type Thread, Message } from 'chat'
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
+import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
 import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
@@ -97,6 +98,9 @@ const prepared = await prepareAgentControllerMount({
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
     : {}),
+  // Linear tools are resolved per session: exposed only when the session's
+  // project belongs to an org with an active Linear connection.
+  ...(linearReady ? { extraTools: buildLinearAgentTools } : {}),
   buildApiRoutes: ({ controller, authStorage }) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
     // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono

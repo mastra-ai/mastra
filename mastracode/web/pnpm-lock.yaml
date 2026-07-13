@@ -85,7 +85,7 @@ importers:
         version: 4.4.3
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^3.0.63
+        specifier: ^3.0.80
         version: 3.0.80(zod@4.4.3)
       '@copilotkit/aimock':
         specifier: ^1.29.0

@@ -53,7 +53,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^3.0.63",
+    "@ai-sdk/openai": "^3.0.80",
     "@copilotkit/aimock": "^1.29.0",
     "@tailwindcss/vite": "4.2.2",
     "@testing-library/dom": "^10.4.0",
