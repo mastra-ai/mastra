@@ -18,7 +18,7 @@ import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboa
 import {
   resolveThreadActiveModelPackId,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-  MEMORY_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_PROVIDER,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { LoadedPlugin } from '@mastra/code-sdk/plugins/types';
 import {
@@ -938,7 +938,7 @@ export class MastraTUI {
     };
     // Gateway covers all providers
     const mgKey =
-      this.state.authStorage?.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+      this.state.authStorage?.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
     if (mgKey) {
       if (!access.anthropic) access.anthropic = 'apikey';
       if (!access.openai) access.openai = 'apikey';
