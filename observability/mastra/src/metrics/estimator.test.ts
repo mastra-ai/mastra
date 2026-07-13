@@ -450,4 +450,56 @@ describe('estimateCosts', () => {
       },
     });
   });
+
+  it('resolves Bedrock inference-profile ids and prices all Anthropic token meters', () => {
+    const costs = estimateCosts(
+      {
+        provider: 'amazon-bedrock',
+        model: 'us.anthropic.claude-sonnet-4-6',
+        usage: {
+          inputTokens: 1_150,
+          outputTokens: 100,
+          inputDetails: { text: 1_000, cacheRead: 100, cacheWrite: 50 },
+          outputDetails: { text: 100 },
+        },
+      },
+      pricingRegistry,
+    );
+
+    const expectedCosts = new Map([
+      [TokenMetrics.INPUT_TEXT, 0.0033],
+      [TokenMetrics.INPUT_CACHE_READ, 0.000033],
+      [TokenMetrics.INPUT_CACHE_WRITE, 0.00020625],
+      [TokenMetrics.OUTPUT_TEXT, 0.00165],
+    ]);
+    for (const [metric, estimatedCost] of expectedCosts) {
+      expect(costs.get(metric)).toMatchObject({
+        provider: 'amazon-bedrock',
+        model: 'claude-sonnet-4-6',
+        costMetadata: { pricing_id: 'amazon-bedrock-claude-sonnet-4-6' },
+      });
+      expect(costs.get(metric)?.estimatedCost).toBeCloseTo(estimatedCost);
+    }
+  });
+
+  it.each([
+    ['anthropic.claude-sonnet-4-6-v1', 'amazon-bedrock-claude-sonnet-4-6', 0.0033],
+    ['global.anthropic.claude-sonnet-4-5-20250929-v1:0', 'amazon-bedrock-claude-sonnet-4-5', 0.003],
+    ['us.amazon.nova-pro-v1:0', 'amazon-bedrock-amazon-nova-pro', 0.0008],
+  ])('resolves Bedrock model id %s', (model, pricingId, estimatedCost) => {
+    const costs = estimateCosts(
+      {
+        provider: 'amazon-bedrock',
+        model,
+        usage: { inputTokens: 1_000 },
+      },
+      pricingRegistry,
+    );
+
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)).toMatchObject({
+      provider: 'amazon-bedrock',
+      costMetadata: { pricing_id: pricingId },
+    });
+    expect(costs.get(TokenMetrics.TOTAL_INPUT)?.estimatedCost).toBeCloseTo(estimatedCost);
+  });
 });
