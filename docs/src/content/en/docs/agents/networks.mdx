@@ -114,7 +114,7 @@ console.log(final?.summary)
 
 When a primitive requires approval, the stream emits an `agent-execution-approval` or `tool-execution-approval` chunk. Use `approveNetworkToolCall()` or `declineNetworkToolCall()` to respond.
 
-Network approval uses snapshots to capture execution state. Ensure a [storage provider](/docs/memory/storage) is enabled in your Mastra instance.
+Network approval uses snapshots to capture execution state. Ensure a [storage provider](/docs/storage/overview) is enabled in your Mastra instance.
 
 ```typescript title="src/approve-network.ts"
 const stream = await routingAgent.network('Perform some sensitive action', {

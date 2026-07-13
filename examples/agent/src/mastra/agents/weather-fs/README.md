@@ -33,24 +33,32 @@ weather-fs/
       instructions.md
       tools/
         get_forecast.ts
+      subagents/
+        historian/                # a nested subagent (depth 2)
+          config.ts               # MUST set a description
+          instructions.md
+          tools/
+            get_climate_normals.ts
 ```
 
 ## How it maps
 
-| File / dir                       | Becomes                                                                         |
-| -------------------------------- | ------------------------------------------------------------------------------- |
-| `config.ts`                      | merged agent config; `id`/`name` default to `weather-fs`.                       |
-| `instructions.md`                | the agent `instructions`.                                                       |
-| `memory.ts`                      | the agent `memory` (default export).                                            |
-| `tools/get_weather.ts`           | a tool keyed `get_weather`.                                                     |
-| `skills/units.md`                | a flat skill named `units`.                                                     |
-| `skills/severe-weather/SKILL.md` | a packaged skill; frontmatter supplies name/description, `references/` inlined. |
-| `workspace/`                     | seed files copied into the agent's default workspace.                           |
-| `subagents/forecaster/`          | a subagent the parent can delegate to via a tool named `forecaster`.            |
+| File / dir                            | Becomes                                                                         |
+| ------------------------------------- | ------------------------------------------------------------------------------- |
+| `config.ts`                           | merged agent config; `id`/`name` default to `weather-fs`.                       |
+| `instructions.md`                     | the agent `instructions`.                                                       |
+| `memory.ts`                           | the agent `memory` (default export).                                            |
+| `tools/get_weather.ts`                | a tool keyed `get_weather`.                                                     |
+| `skills/units.md`                     | a flat skill named `units`.                                                     |
+| `skills/severe-weather/SKILL.md`      | a packaged skill; frontmatter supplies name/description, `references/` inlined. |
+| `workspace/`                          | seed files copied into the agent's default workspace.                           |
+| `subagents/forecaster/`               | a subagent the parent can delegate to via a tool named `forecaster`.            |
+| `.../forecaster/subagents/historian/` | a nested subagent `forecaster` can delegate to via a tool named `historian`.    |
 
-Subagents are **one level deep** and each subagent's `config.ts` must set a
-non-empty `description` — that is what the parent model sees when deciding
-whether to delegate.
+Subagents can nest up to **`MAX_FS_SUBAGENT_DEPTH` (3) levels** below the
+top-level agent — deeper nesting is ignored with a warning. Each subagent's
+`config.ts` must set a non-empty `description` — that is what the parent model
+sees when deciding whether to delegate.
 
 ## Try it
 
@@ -65,6 +73,8 @@ agents. Try:
 
 - "what's the weather in Tokyo?" — calls `get_weather`, reports °C and °F.
 - "give me a 5-day forecast for London" — delegates to the `forecaster` subagent.
+- "how is the weather in Paris usually in April?" — `forecaster` delegates on to
+  the nested `historian` subagent.
 - Ask about a storm — the `severe-weather` skill prepends a safety note.
 
 See the full docs at `/docs/agents/file-based-agents`.

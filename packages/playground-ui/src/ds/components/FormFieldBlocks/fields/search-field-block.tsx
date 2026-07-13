@@ -119,7 +119,7 @@ export function SearchFieldBlock({
             {label}
           </FieldBlock.Label>
         ) : null}
-        <div className="relative group">
+        <div className="group relative">
           <Input
             ref={inputRef}
             name={name}
@@ -131,10 +131,10 @@ export function SearchFieldBlock({
             size={size}
             variant={variant}
             className={cn(
-              size === 'sm' && (hasMatchNav ? 'pl-8' : 'pl-8 pr-8'),
-              size === 'md' && (hasMatchNav ? 'pl-9' : 'pl-9 pr-9'),
-              (!size || size === 'default') && (hasMatchNav ? 'pl-10' : 'pl-10 pr-10'),
-              size === 'lg' && (hasMatchNav ? 'pl-11' : 'pl-11 pr-11'),
+              size === 'sm' && (hasMatchNav ? 'pl-8' : 'px-8'),
+              size === 'md' && (hasMatchNav ? 'pl-9' : 'px-9'),
+              (!size || size === 'default') && (hasMatchNav ? 'pl-10' : 'px-10'),
+              size === 'lg' && (hasMatchNav ? 'pl-11' : 'px-11'),
             )}
             // The counter width varies ("1/3" vs "999+/999+"), so the reserved right padding is
             // computed from the rendered counter text instead of a fixed class — long counters
@@ -144,11 +144,11 @@ export function SearchFieldBlock({
           <SearchIcon
             aria-hidden="true"
             className={cn(
-              'text-neutral4 opacity-50 group-has-focus:opacity-100 absolute left-3 top-1/2 -translate-y-1/2',
-              size === 'sm' && 'w-3.5 h-3.5',
-              size === 'md' && 'w-4 h-4',
-              (!size || size === 'default') && 'w-[1.125rem] h-[1.125rem]',
-              size === 'lg' && 'w-5 h-5',
+              'absolute top-1/2 left-3 -translate-y-1/2 text-neutral4 opacity-50 group-has-focus:opacity-100',
+              size === 'sm' && 'size-3.5',
+              size === 'md' && 'size-4',
+              (!size || size === 'default') && 'size-[1.125rem]',
+              size === 'lg' && 'size-5',
             )}
           />
           <div className="absolute top-1/2 right-0 -translate-y-1/2 flex items-center">

@@ -123,6 +123,17 @@ export type ShapeValue<T extends z.ZodObject<any, any>> = ZodShape<T>[ShapeKey<T
 type ConstraintHelperText = string[];
 
 /**
+ * Returns the v3-style type name (e.g. "ZodString") for a Zod v4 schema. Zod v4
+ * stores the kind as a lowercase `type` (e.g. "string"), so this normalizes it
+ * for comparison against the `*_ZOD_TYPES` lists, mirroring the dispatcher in
+ * `schema-compatibility.ts`.
+ */
+function zodV4TypeName(value: unknown): string {
+  const v4Type = (value as { _zod?: { def?: { type?: string } } } | undefined)?._zod?.def?.type;
+  return v4Type ? 'Zod' + v4Type.charAt(0).toUpperCase() + v4Type.slice(1) : '';
+}
+
+/**
  * Abstract base class for creating schema compatibility layers for different AI model providers.
  *
  * This class provides a framework for transforming Zod schemas to work with specific AI model
@@ -658,8 +669,11 @@ export class SchemaCompatLayer {
     value: ZodOptional<any>,
     handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
   ): ZodType {
-    if (handleTypes.includes(value.constructor.name as AllZodType)) {
-      return this.processZodType(value._zod.def.innerType).optional();
+    const innerType = value._zod?.def?.innerType;
+    // Gate on the INNER type, not the wrapper. `value.constructor.name` is always
+    // "ZodOptional", so it never reflects what is being wrapped.
+    if (innerType && handleTypes.includes(zodV4TypeName(innerType) as AllZodType)) {
+      return this.processZodType(innerType).optional();
     } else {
       return value;
     }
@@ -676,8 +690,11 @@ export class SchemaCompatLayer {
     value: ZodNullable<any>,
     handleTypes: readonly AllZodType[] = SUPPORTED_ZOD_TYPES,
   ): ZodType {
-    if (handleTypes.includes(value.constructor.name as AllZodType)) {
-      return this.processZodType(value._zod.def.innerType).nullable();
+    const innerType = value._zod?.def?.innerType;
+    // Gate on the INNER type, not the wrapper. `value.constructor.name` is always
+    // "ZodNullable", so it never reflects what is being wrapped.
+    if (innerType && handleTypes.includes(zodV4TypeName(innerType) as AllZodType)) {
+      return this.processZodType(innerType).nullable();
     } else {
       return value;
     }

@@ -28,6 +28,11 @@ import type {
   Span,
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../processors/index';
 import { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import { toStandardSchema, standardSchemaToJSONSchema } from '../schema';
@@ -82,6 +87,27 @@ export interface ScorerJudgeConfig {
   onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
   /** Optional maximum number of agentic loop iterations for the internal judge agent. */
   maxSteps?: number;
+  /**
+   * Optional input processors for the internal judge agent. Run before the judge's
+   * messages reach the model (e.g. redaction, validation).
+   */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  /**
+   * Optional output processors for the internal judge agent. Run on the judge's
+   * output before it is returned (e.g. moderation, transformation).
+   */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /**
+   * Optional error processors for the internal judge agent. These implement
+   * `processAPIError` and can inspect LLM API rejections and signal a retry,
+   * e.g. `StreamErrorRetryProcessor`.
+   */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
+  /**
+   * Maximum number of times processors can trigger a retry per judge generation.
+   * Required for retry-based error processors (e.g. `StreamErrorRetryProcessor`) to take effect.
+   */
+  maxProcessorRetries?: number;
   /**
    * Optional request context forwarded to the judge agent execution. When the judge
    * agent has memory with OM observers that read dynamic model config from controller
@@ -562,7 +588,7 @@ class MastraScorer<
         output: prepared.output,
         groundTruth: prepared.groundTruth,
         expectedTrajectory: prepared.expectedTrajectory,
-        requestContext: normalizedRequestContext,
+        requestContext: normalizedRequestContext?.serializeForSpan(),
       },
       attributes: {
         scorerId: this.id,
@@ -886,6 +912,10 @@ class MastraScorer<
     const stepMemoryOptions = originalStep.judge?.memory;
     const onStream = originalStep.judge?.onStream ?? this.config.judge?.onStream;
     const maxSteps = originalStep.judge?.maxSteps ?? this.config.judge?.maxSteps;
+    const inputProcessors = originalStep.judge?.inputProcessors ?? this.config.judge?.inputProcessors;
+    const outputProcessors = originalStep.judge?.outputProcessors ?? this.config.judge?.outputProcessors;
+    const errorProcessors = originalStep.judge?.errorProcessors ?? this.config.judge?.errorProcessors;
+    const maxProcessorRetries = originalStep.judge?.maxProcessorRetries ?? this.config.judge?.maxProcessorRetries;
     const memoryOptions = stepMemoryOptions
       ? {
           ...defaultMemoryOptions,
@@ -926,6 +956,10 @@ class MastraScorer<
       instructions,
       ...(tools ? { tools } : {}),
       ...(memory ? { memory } : {}),
+      ...(inputProcessors ? { inputProcessors } : {}),
+      ...(outputProcessors ? { outputProcessors } : {}),
+      ...(errorProcessors ? { errorProcessors } : {}),
+      ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     });
     if (this.#mastra) {
       judge.__registerMastra(this.#mastra);

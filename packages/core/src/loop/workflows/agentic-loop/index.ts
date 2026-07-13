@@ -12,6 +12,7 @@ import { readScoped, writeScoped } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, DRAIN_PENDING_SIGNALS_KEY, RESOURCE_ID_KEY, THREAD_ID_KEY } from '../../run-scope-keys';
 import type { LoopRun } from '../../types';
 import { createAgenticExecutionWorkflow } from '../agentic-execution';
+import { pruneAgentLoopSnapshot } from '../prune-snapshot';
 import { llmIterationOutputSchema } from '../schema';
 import type { LLMIterationData } from '../schema';
 
@@ -81,6 +82,10 @@ export function createAgenticLoopWorkflow<Tools extends ToolSet = ToolSet, OUTPU
           params.workflowStatus === 'suspended'
         );
       },
+      // Agent-loop snapshots are pure resume artifacts — strip everything a
+      // resume never reads (stale suspend payloads, duplicated message
+      // arrays, AI SDK step history) before persisting.
+      pruneSnapshot: pruneAgentLoopSnapshot,
       validateInputs: false,
     },
   })

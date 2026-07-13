@@ -36,6 +36,9 @@ export type MainSidebarNavLinkProps = Omit<ComponentPropsWithoutRef<'li'>, 'chil
    * Use for `<button>` items or custom router Links. Item classes are forwarded
    * to the slotted element. `link.url` and `LinkComponent` are ignored; other
    * `link` presentation fields still apply when supplied.
+   *
+   * @deprecated Prefer typed render composition for new APIs; this legacy
+   * slotted prop will be migrated separately.
    */
   asChild?: boolean;
 };
@@ -97,7 +100,7 @@ export function MainSidebarNavLink({
   }
 
   return (
-    <li {...props} className={cn('flex flex-col relative min-w-0', className)}>
+    <li {...props} className={cn('relative flex min-w-0 flex-col', className)}>
       {link && needsTooltip && React.isValidElement(interactiveEl) ? (
         <Tooltip>
           <TooltipTrigger render={interactiveEl} />

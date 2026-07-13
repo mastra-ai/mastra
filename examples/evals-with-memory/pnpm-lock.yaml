@@ -4,6 +4,12 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    tsx:
+      specifier: ^4.22.4
+      version: 4.23.0
+
 overrides:
   '@mastra/core': link:../../packages/core
   '@mastra/evals': link:../../packages/evals
@@ -37,8 +43,8 @@ importers:
         specifier: ^20.12.7
         version: 20.19.41
       tsx:
-        specifier: ^4.19.0
-        version: 4.22.2
+        specifier: 'catalog:'
+        version: 4.23.0
 
 packages:
 
@@ -294,8 +300,8 @@ packages:
     resolution: {integrity: sha512-nt6AMGKW1p/70DF/hGBdJB57B8Tspmbp5gfJ8ilhLnt7kkr2ye7hzD6NVG8GGErk2HWF34igrL2CXmNIkzKqKw==}
     engines: {node: '>=18'}
 
-  tsx@4.22.2:
-    resolution: {integrity: sha512-6w9FwtT8WQqRAyTNR+Z+86kghRqpmOLjXUrBlBT6T+CQGDuIMm0VmAqaFUFBIeKDTGobE6/YSigZYLeomzBaRg==}
+  tsx@4.23.0:
+    resolution: {integrity: sha512-eUdUIaCr963q2h5u3+QwvYp0+eqPvn+egeqZUm0hwERCqqx1E3kK5ehbGCvqSE5MQAULr67ww0cA3jKc3YkM1w==}
     engines: {node: '>=18.0.0'}
     hasBin: true
 
@@ -508,7 +514,7 @@ snapshots:
 
   throttleit@2.1.0: {}
 
-  tsx@4.22.2:
+  tsx@4.23.0:
     dependencies:
       esbuild: 0.28.0
     optionalDependencies:

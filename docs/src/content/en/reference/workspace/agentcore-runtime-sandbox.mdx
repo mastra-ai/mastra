@@ -9,13 +9,7 @@ packages:
 
 Executes shell commands in an [AWS Bedrock AgentCore Runtime](https://docs.aws.amazon.com/bedrock-agentcore/latest/devguide/runtime-execute-command.html) session by using `InvokeAgentRuntimeCommand`.
 
-Use `AgentCoreRuntimeSandbox` when your agent already runs in AgentCore Runtime and you want Mastra workspace command execution to use the same runtime session.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Use `AgentCoreRuntimeSandbox` when your agent already runs in AgentCore Runtime and you want Mastra workspace command execution to use the same runtime session. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 :::warning
 
@@ -47,6 +41,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'dev-agent',
   name: 'dev-agent',
   model: 'anthropic/claude-sonnet-4-6',
   instructions: 'You are a helpful development assistant.',

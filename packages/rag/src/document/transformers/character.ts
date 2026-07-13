@@ -81,25 +81,57 @@ export class CharacterTransformer extends TextTransformer {
 
   private __splitChunk(text: string): string[] {
     const chunks: string[] = [];
-    let currentPosition = 0;
+    const codePointBoundaries = [0];
 
-    while (currentPosition < text.length) {
-      let chunkEnd = currentPosition;
+    // String offsets use UTF-16 code units. Record the offsets between complete
+    // Unicode code points so chunking never starts or ends inside a surrogate pair.
+    for (const codePoint of text) {
+      codePointBoundaries.push(codePointBoundaries[codePointBoundaries.length - 1]! + codePoint.length);
+    }
+
+    const finalBoundaryIndex = codePointBoundaries.length - 1;
+    let currentBoundaryIndex = 0;
+
+    while (currentBoundaryIndex < finalBoundaryIndex) {
+      let chunkEndBoundaryIndex = currentBoundaryIndex;
 
       // Build chunk up to max size
-      while (chunkEnd < text.length && this.lengthFunction(text.slice(currentPosition, chunkEnd + 1)) <= this.maxSize) {
-        chunkEnd++;
+      while (
+        chunkEndBoundaryIndex < finalBoundaryIndex &&
+        this.lengthFunction(
+          text.slice(codePointBoundaries[currentBoundaryIndex], codePointBoundaries[chunkEndBoundaryIndex + 1]),
+        ) <= this.maxSize
+      ) {
+        chunkEndBoundaryIndex++;
       }
 
-      const currentChunk = text.slice(currentPosition, chunkEnd);
-      const chunkLength = this.lengthFunction(currentChunk);
+      // Preserve a code point that is larger than maxSize as one oversized
+      // chunk instead of emitting an empty chunk and silently skipping it.
+      if (chunkEndBoundaryIndex === currentBoundaryIndex) {
+        chunkEndBoundaryIndex++;
+      }
+
+      const chunkEnd = codePointBoundaries[chunkEndBoundaryIndex]!;
+      const currentChunk = text.slice(codePointBoundaries[currentBoundaryIndex], chunkEnd);
       chunks.push(currentChunk);
 
       // If we're at the end, break to avoid tiny chunks
-      if (chunkEnd >= text.length) break;
+      if (chunkEndBoundaryIndex >= finalBoundaryIndex) break;
 
-      // Move position forward by chunk size minus overlap
-      currentPosition += Math.max(1, chunkLength - this.overlap);
+      // Find the largest complete-code-point suffix that fits the requested
+      // overlap in lengthFunction units.
+      let nextBoundaryIndex = chunkEndBoundaryIndex;
+      while (
+        this.overlap > 0 &&
+        nextBoundaryIndex > currentBoundaryIndex &&
+        this.lengthFunction(text.slice(codePointBoundaries[nextBoundaryIndex - 1], chunkEnd)) <= this.overlap
+      ) {
+        nextBoundaryIndex--;
+      }
+
+      // Always advance even if a custom length function reports zero or the
+      // requested overlap covers the entire chunk.
+      currentBoundaryIndex = Math.max(currentBoundaryIndex + 1, nextBoundaryIndex);
     }
 
     return chunks;

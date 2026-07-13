@@ -20,6 +20,7 @@ import { Agent } from '@mastra/core/agent'
 import { StreamErrorRetryProcessor } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'openai-agent',
   name: 'openai-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
@@ -39,6 +40,31 @@ When the error is retryable, the processor returns `{ retry: true }`. It doesn't
 
 When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
 
+## Retry unknown errors
+
+Set `retryUnknownErrors` to retry errors that don't match provider metadata, the built-in OpenAI matcher, or a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
+
+```typescript title="src/mastra/agents/resilient-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { StreamErrorRetryProcessor } from '@mastra/core/processors'
+
+export const agent = new Agent({
+  id: 'resilient-agent',
+  name: 'Resilient agent',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_BASE__',
+  errorProcessors: [
+    new StreamErrorRetryProcessor({
+      retryUnknownErrors: true,
+      maxRetries: 2,
+      delayMs: 3000,
+    }),
+  ],
+})
+```
+
+Specific matcher policies still take precedence over the unknown-error values. The option defaults to `false`, so unknown errors aren't retried unless you enable it.
+
 ## Delaying retries
 
 Use `delayMs` with a custom matcher to retry transient network resets with a wait:
@@ -56,6 +82,7 @@ const isECONNRESET = (error: unknown) => {
 }
 
 export const agent = new Agent({
+  id: 'resilient-agent',
   name: 'resilient-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
@@ -98,6 +125,14 @@ export const agent = new Agent({
         description: 'Additional functions that identify provider-specific retryable stream errors.',
         isOptional: true,
         defaultValue: '[]',
+      },
+      {
+        name: 'retryUnknownErrors',
+        type: 'boolean',
+        description:
+          'Whether to retry unknown errors left unmatched by provider metadata, built-in matchers, and custom matchers. Known authorization failures are excluded. Uses the processor-level maxRetries and delayMs values.',
+        isOptional: true,
+        defaultValue: 'false',
       },
       {
         name: 'delayMs',

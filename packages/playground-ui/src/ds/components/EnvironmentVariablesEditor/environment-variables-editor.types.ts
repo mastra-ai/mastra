@@ -18,7 +18,10 @@ export interface EnvironmentVariablesEditorRootProps<
   disabled?: boolean;
   readOnly?: boolean;
   rowErrors?: EnvironmentVariablesEditorRowErrors;
+  hidePasteHint?: boolean;
 }
+
+export type EnvironmentVariablesEditorPasteHintProps = ComponentPropsWithoutRef<'p'>;
 
 export interface EnvironmentVariablesEditorProps<
   TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry,

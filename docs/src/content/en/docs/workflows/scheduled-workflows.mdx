@@ -78,9 +78,9 @@ Fields:
 
 Pass an array to fire the same workflow on multiple cadences. Each entry needs a unique stable `id`:
 
-```typescript title="src/mastra/workflows/heartbeat.ts"
-const heartbeat = createWorkflow({
-  id: 'heartbeat',
+```typescript title="src/mastra/workflows/status-check.ts"
+const statusCheck = createWorkflow({
+  id: 'status-check',
   schedule: [
     { id: 'morning', cron: '0 9 * * *', inputData: { window: 'morning' } },
     { id: 'evening', cron: '0 18 * * *', inputData: { window: 'evening' } },
@@ -142,7 +142,7 @@ A few rules worth knowing:
 - Resume recomputes `nextFireAt` from now. A schedule paused for a week doesn't fire seven backlogged runs the moment you resume it. It fires on the next regular cron tick.
 - The only way to unpause is `resumeSchedule` (or the **Resume** button in Studio). Editing the workflow's `schedule` config doesn't unpause a paused row.
 - Pause and resume are idempotent. Calling pause on an already-paused schedule is a no-op.
-- This is an operational override, not a way to author schedules. Creating, deleting, and editing schedules still happens in code via the `schedule` field on `createWorkflow`.
+- This is an operational override, not a way to author schedules. Declarative schedules are created, deleted, and edited in code via the `schedule` field on `createWorkflow`. To create schedules imperatively at runtime instead, use the unified [`mastra.schedules`](/docs/long-running-agents/schedules) service with a `workflowId`.
 
 The underlying HTTP routes are `POST /api/schedules/:scheduleId/pause` and `POST /api/schedules/:scheduleId/resume`. Both require the `schedules:write` permission.
 
@@ -186,3 +186,4 @@ Manage Inngest schedules from the [Inngest dashboard](https://www.inngest.com/do
 
 - [Workflow overview](/docs/workflows/overview)
 - [Suspend and resume](/docs/workflows/suspend-and-resume)
+- [Agent schedules](/docs/long-running-agents/schedules): run an agent, rather than a workflow, on a cron schedule, and manage both kinds at runtime through `mastra.schedules`.

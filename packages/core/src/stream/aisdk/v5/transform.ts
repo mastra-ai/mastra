@@ -34,8 +34,11 @@ export function sanitizeToolCallInput(input: string): string {
     JSON.parse(input);
     return input;
   } catch {
-    // Input is not valid JSON — strip LLM-specific tokens and retry
-    return input.replace(/[\s]*<\|[^|]*\|>[\s]*/g, '').trim();
+    // Input is not valid JSON — strip LLM-specific tokens and retry.
+    // The pattern starts at the literal `<|` (no leading `\s*`) to keep
+    // matching linear on adversarial inputs (CodeQL js/polynomial-redos);
+    // leftover whitespace is harmless to JSON.parse and trimmed at the ends.
+    return input.replace(/<\|[^|]*\|>\s*/g, '').trim();
   }
 }
 

@@ -9,6 +9,7 @@ import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcesso
 import type { ProcessorState } from '../../processors/runner';
 import { RequestContext, MASTRA_VERSIONS_KEY, mergeVersionOverrides } from '../../request-context';
 import type { VersionOverrides } from '../../request-context';
+import { toStandardSchema } from '../../schema';
 import { normalizeToolPayloadTransformPolicy } from '../../tools/payload-transform';
 import type { CoreTool, ToolHooks, ToolPayloadTransformPolicy } from '../../tools/types';
 import { deepMerge } from '../../utils';
@@ -18,7 +19,17 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
-import type { AgentInstructions, AgentMethodType, AgentModelManagerConfig, ToolsetsInput, ToolsInput } from '../types';
+import type { CreatedAgentSignal } from '../signals';
+import { mastraDBMessageToSignal } from '../signals';
+import { TripWire } from '../trip-wire';
+import type {
+  AgentInstructions,
+  AgentMethodType,
+  AgentModelManagerConfig,
+  GoalConfig,
+  ToolsetsInput,
+  ToolsInput,
+} from '../types';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry, SerializableStructuredOutput } from './types';
 import { createWorkflowInput } from './utils/serialize-state';
 
@@ -65,6 +76,19 @@ function convertInstructionsToString(instructions: AgentInstructions | undefined
 }
 
 /**
+ * Extract signal messages already present in the messageList at run start
+ * (from persisted history) so they can be echoed as data-signal stream parts
+ * on the first LLM step. Mirrors `prepare-memory-step.ts#getInitialSignalEchoes`.
+ */
+function getInitialSignalEchoes(messageList: MessageList): CreatedAgentSignal[] {
+  const inputMessageIds = messageList.makeMessageSourceChecker().input;
+  return messageList.get.all
+    .db()
+    .filter(message => message.role === 'signal' && inputMessageIds.has(message.id))
+    .map(mastraDBMessageToSignal);
+}
+
+/**
  * Interface for the Agent methods needed during durable preparation.
  * This provides proper typing for the public Agent methods we call.
  */
@@ -98,6 +122,9 @@ interface DurablePreparationAgent {
   listErrorProcessors(requestContext?: RequestContext): Promise<ErrorProcessorOrWorkflow[]>;
   getBackgroundTasksConfig(): AgentBackgroundConfig | undefined;
   getToolPayloadTransform?(): ToolPayloadTransformPolicy | undefined;
+  __getDrainPendingSignals(): (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
+  __getGoalConfig(): GoalConfig | undefined;
+  __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]>;
 }
 
 /**
@@ -124,7 +151,7 @@ export interface PreparationResult<_OUTPUT = undefined> {
  * Options for preparation phase
  */
 export interface PreparationOptions<OUTPUT = undefined> {
-  /** The agent instance */
+  /** The agent instance (wrapped agent — used for config resolution: tools, model, instructions, memory) */
   agent: Agent<string, any, OUTPUT>;
   /** User messages to process */
   messages: MessageListInput;
@@ -140,6 +167,18 @@ export interface PreparationOptions<OUTPUT = undefined> {
   mastra?: Mastra;
   /** Method type */
   methodType?: AgentMethodType;
+  /**
+   * The public-facing agent ID (the DurableAgent wrapper's ID).
+   * Used for spans, background tasks, scorers, and all identification visible to Studio.
+   * Falls back to `agent.id` if not provided.
+   */
+  durableAgentId?: string;
+  /**
+   * The public-facing agent name (the DurableAgent wrapper's name).
+   * Used for spans, background tasks, scorers, and all identification visible to Studio.
+   * Falls back to `agent.name` if not provided.
+   */
+  durableAgentName?: string;
 }
 
 /**
@@ -169,7 +208,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger,
     mastra,
     methodType = 'stream',
+    durableAgentId,
+    durableAgentName,
   } = options;
+
+  // Public-facing identity: use the durable wrapper's ID/name for all
+  // external-facing identification (spans, background tasks, scorers, Studio).
+  // Fall back to the wrapped agent's ID/name when called outside the durable wrapper.
+  const publicAgentId = durableAgentId ?? agent.id;
+  const publicAgentName = durableAgentName ?? agent.name ?? agent.id;
 
   const typedAgent = agent as unknown as DurablePreparationAgent;
 
@@ -317,12 +364,20 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // Resolve input processors now that the memory context is in place.
   const processorStates = new Map<string, ProcessorState>();
   let inputProcessors: InputProcessorOrWorkflow[] = [];
+  let llmRequestInputProcessors: InputProcessorOrWorkflow[] = [];
   let outputProcessors: OutputProcessorOrWorkflow[] = [];
   let errorProcessors: ErrorProcessorOrWorkflow[] = [];
 
   try {
     inputProcessors = await typedAgent.listInputProcessors(requestContext);
-    outputProcessors = await typedAgent.listOutputProcessors(requestContext);
+    // Uncombined processors for processLLMRequest — combined (workflow-wrapped)
+    // processors are skipped by ProcessorRunner.runProcessLLMRequest.
+    llmRequestInputProcessors = await typedAgent.__listLLMRequestProcessors(requestContext);
+    // Call-time outputProcessors replace constructor-level ones (parity with
+    // Agent.listResolvedOutputProcessors which uses overrides-first semantics).
+    outputProcessors = execOptions?.outputProcessors
+      ? execOptions.outputProcessors
+      : await typedAgent.listOutputProcessors(requestContext);
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
@@ -341,10 +396,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
-    name: `agent run: '${agent.id}'`,
+    name: `agent run: '${publicAgentId}'`,
     entityType: EntityType.AGENT,
-    entityId: agent.id,
-    entityName: agent.name,
+    entityId: publicAgentId,
+    entityName: publicAgentName,
     input: messages,
     attributes: {
       conversationId: threadId,
@@ -365,11 +420,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext,
     mastra,
   });
-
   // Run processInput (once, before execution) if we have any processors.
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working
   // memory, OM, message history) can access it here.
+  let tripwireData: RunRegistryEntry['tripwire'];
   if (inputProcessors.length > 0) {
     try {
       const { ProcessorRunner } = await import('../../processors/runner');
@@ -378,7 +433,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         outputProcessors,
         errorProcessors,
         logger: logger as any,
-        agentName: agent.name,
+        agentName: publicAgentName,
         processorStates,
       });
       await runner.runInputProcessors(
@@ -388,7 +443,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         0,
       );
     } catch (error) {
-      logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+      if (error instanceof TripWire) {
+        tripwireData = {
+          reason: error.message,
+          retry: error.options?.retry,
+          metadata: error.options?.metadata,
+          processorId: error.processorId,
+        };
+        logger?.warn?.('Input processor tripwire triggered', {
+          agent: publicAgentName,
+          reason: error.message,
+          processorId: error.processorId,
+          retry: error.options?.retry,
+        });
+      } else {
+        logger?.warn?.(`[DurableAgent] Error running input processors: ${error}`);
+      }
     }
   }
 
@@ -506,8 +576,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
     runId,
-    agentId: agent.id,
-    agentName: agent.name,
+    agentId: publicAgentId,
+    agentName: publicAgentName,
     messageList,
     tools,
     model,
@@ -577,11 +647,13 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           model: entry.model,
           maxRetries: entry.maxRetries ?? 0,
           enabled: entry.enabled ?? true,
+          headers: entry.headers,
         }))
       : undefined,
     workspace,
     requestContext,
     inputProcessors,
+    llmRequestInputProcessors,
     outputProcessors,
     errorProcessors,
     processorStates,
@@ -603,6 +675,93 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // real (toolName, args) on each call. The boolean shadow on the
     // serialized workflow input is the cross-process fallback.
     requireToolApproval: execOptions?.requireToolApproval,
+    // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
+    // Non-serializable; cross-process engines lose it and signals go undelivered.
+    drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
+    // which was never ported to the durable finish step (so `generateTitle` never
+    // fired for durable/evented agents). Parked here because the agent instance is
+    // in scope; the durable finish step invokes it after the run completes. No-op
+    // when the merged config has no `generateTitle` or the thread already has a
+    // title. Non-serializable — cross-process engines skip title generation.
+    generateThreadTitle: memory
+      ? async ({ threadId, resourceId, memoryConfig, messageListState, requestContext: rc, tracingContext }) => {
+          // Re-read the thread so a title written mid-run isn't regenerated, and so we only
+          // generate on the first turn (mirrors the non-durable `!thread.title` guard).
+          const thread = await memory.getThreadById?.({ threadId });
+          const mergedConfig = memory.getMergedThreadConfig?.(memoryConfig);
+          const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
+            mergedConfig?.generateTitle as Parameters<typeof agent.resolveTitleGenerationConfig>[0],
+          );
+          if (!shouldGenerate || thread?.title) return;
+
+          const titleMessageList = new MessageList().deserialize(messageListState);
+          const uiMessages = titleMessageList.get.all.ui();
+          const coreMessages = titleMessageList.get.all.core();
+          if (coreMessages.length < (minMessages ?? 1)) return;
+
+          const userMessage = agent.getMostRecentUserMessage(uiMessages);
+          if (!userMessage) return;
+
+          const title = await agent.genTitle(
+            userMessage,
+            rc ?? new RequestContext(),
+            createObservabilityContext(tracingContext),
+            model,
+            instructions,
+            uiMessages,
+          );
+          if (!title) return;
+
+          // Title-only late write. Prefer updateThread when the thread record
+          // already exists so its original createdAt is preserved (createThread
+          // rebuilds the record with a fresh createdAt). Fall back to createThread
+          // for the first-turn case where the record may not be persisted yet.
+          if (thread) {
+            await memory.updateThread({
+              id: threadId,
+              title,
+              metadata: thread.metadata ?? {},
+              memoryConfig,
+            });
+          } else {
+            await memory.createThread({
+              threadId,
+              resourceId,
+              memoryConfig,
+              title,
+            });
+          }
+        }
+      : undefined,
+    // Signal messages already in the messageList at run start (from persisted
+    // history). Echoed as data-signal parts on the first LLM step so the client
+    // sees them without refetching. Spliced once, never re-emitted.
+    initialSignalEchoes: getInitialSignalEchoes(messageList),
+    // Agent-level goal config (judge resolver, tools resolver, scorer).
+    // Non-serializable — cross-process engines skip goal evaluation.
+    goal: agent.__getGoalConfig(),
+    // Tripwire from processInput (initial input processing). When an input
+    // processor calls abort() during runInputProcessors, we store the tripwire
+    // data here so the first llm-execution step can emit a tripwire chunk and
+    // bail immediately without calling the model.
+    tripwire: tripwireData,
+    // Call-time headers from modelSettings.headers. Kept off the serialized
+    // workflow input so they never reach durable storage; the durable
+    // llm-execution step reads them from this registry slot instead.
+    callTimeHeaders: extractCallTimeHeaders(execOptions?.modelSettings),
+    // Call-time structured output config with the live schema. The schema is
+    // non-serializable (Zod / standard-schema instance), so it lives on the
+    // in-process registry. The durable stream adapter reads it to pipe LLM
+    // text through `createObjectStreamTransformer`, producing `object-result`
+    // chunks. Cross-process engines lose this slot and structured output
+    // degrades to raw text.
+    structuredOutput: execOptions?.structuredOutput?.schema
+      ? {
+          ...execOptions.structuredOutput,
+          schema: toStandardSchema(execOptions.structuredOutput.schema),
+        }
+      : undefined,
     cleanup: () => {},
   };
 
@@ -615,4 +774,22 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     threadId,
     resourceId,
   };
+}
+
+/**
+ * Extract string-valued headers from `modelSettings.headers` for storage on the
+ * in-process `RunRegistryEntry`. Returns `undefined` when no valid headers are
+ * present so the registry slot stays empty rather than carrying an empty object.
+ */
+function extractCallTimeHeaders(
+  modelSettings: Record<string, unknown> | undefined,
+): Record<string, string> | undefined {
+  const raw = (modelSettings as Record<string, unknown> | undefined)?.headers;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+
+  const headers: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'string') headers[key] = value;
+  }
+  return Object.keys(headers).length > 0 ? headers : undefined;
 }

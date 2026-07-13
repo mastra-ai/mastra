@@ -44,12 +44,16 @@ function isECONNRESETError(error: unknown): boolean {
 }
 
 /**
- * Builds the portable default error processors: an ECONNRESET + bad-request
- * retry policy, prefill-error recovery, and provider-history compatibility.
+ * Builds the portable default error processors: catch-all stream retries with
+ * specialized ECONNRESET and bad-request policies, prefill-error recovery, and
+ * provider-history compatibility.
  */
 function defaultErrorProcessors(): NonNullable<AgentConfig['errorProcessors']> {
   return [
     new StreamErrorRetryProcessor({
+      retryUnknownErrors: true,
+      maxRetries: 2,
+      delayMs: 3000,
       matchers: [
         { match: isBadRequestError, maxRetries: 1, delayMs: 2000 },
         {
@@ -82,7 +86,7 @@ function defaultWorkspace(basePath: string): Workspace {
  *
  * Most fields are passed straight through to the underlying `Agent`. The
  * factory fills portable defaults for the pieces a coding agent always needs —
- * a local workspace, the task-list signal provider, network-retry error
+ * a local workspace, the task-list signal provider, stream-retry error
  * processors, and the goal judge prompt — so a caller can get a working coding
  * agent by supplying only `model`, `instructions`, and `tools`.
  */
@@ -96,18 +100,21 @@ export interface CreateCodingAgentConfig extends AgentConfig {
 
 /**
  * Creates a coding agent as a Mastra {@link Agent}, applying portable defaults
- * for the workspace, task-list signal, network-retry error processors, and goal
+ * for the workspace, task-list signal, stream-retry error processors, and goal
  * judge prompt.
  *
  * Caller-provided values always win:
  * - `workspace` is used verbatim when provided; otherwise a {@link Workspace}
  *   backed by {@link LocalFilesystem}/{@link LocalSandbox} rooted at
  *   `basePath` (default `process.cwd()`) is built.
- * - `signals` is used verbatim when provided; otherwise it defaults to a single
- *   {@link TaskSignalProvider}.
+ * - `signals` are merged with a {@link TaskSignalProvider} when `memory` is
+ *   configured; otherwise the caller-provided signals are used verbatim (or
+ *   an empty array when none are provided). This avoids wiring
+ *   {@link TaskSignalProvider} — which requires a memory-backed thread — into
+ *   agents that have no memory.
  * - `errorProcessors` is used verbatim when provided; otherwise it defaults to
- *   the ECONNRESET/bad-request retry stack plus prefill + provider-history
- *   compatibility processors.
+ *   catch-all stream retries with specialized ECONNRESET/bad-request policies,
+ *   plus prefill + provider-history compatibility processors.
  * - `goal.prompt` defaults to {@link DEFAULT_GOAL_JUDGE_PROMPT} when a goal is
  *   configured without one.
  *
@@ -125,12 +132,18 @@ export interface CreateCodingAgentConfig extends AgentConfig {
  * ```
  */
 export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
-  const { basePath, workspace: _workspace, signals, errorProcessors, goal, ...rest } = config;
+  const { basePath, workspace: _workspace, signals, errorProcessors, goal, memory, ...rest } = config;
 
   // Distinguish an absent `workspace` key (build the default) from an explicit
   // `workspace: undefined` (caller opts out — e.g. when the workspace is wired
   // elsewhere, such as at a controller/request-context level).
   const workspace = 'workspace' in config ? config.workspace : defaultWorkspace(basePath ?? process.cwd());
+
+  // TaskSignalProvider needs a memory-backed thread to function. Only include
+  // it when the caller has configured memory; merge it into caller-provided
+  // signals so custom signal providers don't drop task tracking.
+  const taskSignals = memory ? [new TaskSignalProvider()] : [];
+  const resolvedSignals = signals ? [...signals, ...taskSignals] : taskSignals;
 
   // Treat an explicit `prompt: undefined` the same as an omitted prompt so the
   // documented default is preserved.
@@ -138,8 +151,9 @@ export function createCodingAgent(config: CreateCodingAgentConfig): Agent {
 
   return new Agent({
     ...rest,
+    memory,
     workspace,
-    signals: signals ?? [new TaskSignalProvider()],
+    signals: resolvedSignals,
     errorProcessors: errorProcessors ?? defaultErrorProcessors(),
     ...(resolvedGoal ? { goal: resolvedGoal } : {}),
   });

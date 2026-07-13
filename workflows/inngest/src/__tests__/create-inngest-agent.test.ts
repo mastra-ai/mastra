@@ -11,6 +11,7 @@ import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, globalRunRegistry } from '@m
 import { InMemoryServerCache } from '@mastra/core/cache';
 import { CachingPubSub, EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
+import { RequestContext } from '@mastra/core/request-context';
 import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 import { describe, it, expect, vi } from 'vitest';
@@ -599,6 +600,91 @@ describe('InngestAgent parity surface', () => {
       // undefined). Awaiting it shouldn't throw.
       await expect(entry?.workflowExecution).resolves.toBeUndefined();
       expect(sendSpy).toHaveBeenCalled();
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('forwards requestContext entries into the workflow trigger event', async () => {
+    const durableAgent = makeIsolatedAgent('parity-request-context-trigger');
+    const sendSpy = stubInngestSend();
+    const requestContext = new RequestContext();
+    requestContext.set('userId', 'user-1');
+    requestContext.set('organizationId', 'org-1');
+
+    const result = await durableAgent.stream([{ role: 'user', content: 'hi' }], {
+      requestContext,
+    });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(result.runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(result.runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestContext: {
+              userId: 'user-1',
+              organizationId: 'org-1',
+            },
+          }),
+        }),
+      );
+    } finally {
+      result.cleanup();
+      sendSpy.mockRestore();
+    }
+  });
+
+  it('forwards persisted requestContext entries into the workflow resume event', async () => {
+    const durableAgent = makeIsolatedAgent('parity-request-context-resume');
+    const sendSpy = stubInngestSend();
+    const runId = 'request-context-resume-run';
+    const loadWorkflowSnapshot = vi.fn().mockResolvedValue({
+      value: { retainedState: true },
+      context: {},
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      requestContext: {
+        userId: 'user-1',
+        organizationId: 'org-1',
+      },
+    });
+    const mastra = {
+      getStorage: () => ({
+        getStore: async () => ({ loadWorkflowSnapshot }),
+      }),
+    };
+    (durableAgent as any).__setMastra(mastra);
+
+    const result = await durableAgent.resume(runId, { answer: 'approved' });
+    try {
+      const deadline = Date.now() + 1_000;
+      let entry = globalRunRegistry.get(runId);
+      while (!entry?.workflowExecution && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 0));
+        entry = globalRunRegistry.get(runId);
+      }
+      await expect(entry?.workflowExecution).resolves.toBeUndefined();
+
+      expect(loadWorkflowSnapshot).toHaveBeenCalledWith({
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+        runId,
+      });
+      expect(sendSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            requestContext: {
+              userId: 'user-1',
+              organizationId: 'org-1',
+            },
+          }),
+        }),
+      );
     } finally {
       result.cleanup();
       sendSpy.mockRestore();

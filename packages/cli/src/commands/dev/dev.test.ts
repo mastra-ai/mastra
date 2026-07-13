@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('node:fs', () => ({
   writeFileSync: vi.fn(),
+  existsSync: vi.fn().mockImplementation((path: string) => path.endsWith('index.ts')),
 }));
 
 vi.mock('execa', () => ({
@@ -19,36 +20,21 @@ vi.mock('@expo/devcert', () => ({
   },
 }));
 
-vi.mock('@mastra/deployer', () => {
-  // Use a class for constructor (Vitest v4 requirement)
-  class MockFileService {
-    getFirstExistingFile = vi.fn().mockReturnValue('/mock/index.ts');
-  }
-
-  return {
-    FileService: MockFileService,
-  };
-});
-
-vi.mock('@mastra/deployer/build', async importOriginal => {
-  // eslint-disable-next-line @typescript-eslint/consistent-type-imports
-  const actual = await importOriginal<typeof import('@mastra/deployer/build')>();
-
-  return {
-    normalizeStudioBase: actual.normalizeStudioBase,
-    prepareFsAgentsEntry: vi.fn().mockImplementation(async (_mastraDir: string, entryFile: string) => ({
-      entryFile,
-      toolPaths: [],
-      agentCount: 0,
-    })),
-    writeFsAgentsEntry: vi.fn().mockResolvedValue(undefined),
-    mirrorFsAgentWorkspaces: vi.fn().mockResolvedValue([]),
-    getServerOptions: vi.fn().mockResolvedValue({
-      port: 4111,
-      host: 'localhost',
-    }),
-  };
-});
+vi.mock('@mastra/deployer/build', () => ({
+  normalizeStudioBase: (base: string) => (base === '/' || base === '' ? '' : base),
+  prepareFsAgentsEntry: vi.fn().mockImplementation(async (_mastraDir: string, entryFile: string | undefined) => ({
+    entryFile: entryFile ?? '/mock/.mastra-fs-agents-entry.mjs',
+    standalone: entryFile === undefined,
+    toolPaths: [],
+    agentCount: 0,
+  })),
+  writeFsAgentsEntry: vi.fn().mockResolvedValue(undefined),
+  mirrorFsAgentWorkspaces: vi.fn().mockResolvedValue([]),
+  getServerOptions: vi.fn().mockResolvedValue({
+    port: 4111,
+    host: 'localhost',
+  }),
+}));
 
 vi.mock('get-port', () => ({
   default: vi.fn().mockResolvedValue(4111),

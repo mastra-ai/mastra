@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 
 import { EnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorContextValue } from './environment-variables-editor-context';
+import { EnvironmentVariablesEditorPasteHint } from './environment-variables-editor-paste-hint';
 import type { EnvironmentVariablesEditorRootProps } from './environment-variables-editor.types';
 import type { EnvironmentVariableEntry } from '@/lib/env-file';
 
@@ -12,6 +13,7 @@ export function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableE
   disabled,
   readOnly,
   rowErrors,
+  hidePasteHint,
   ...props
 }: EnvironmentVariablesEditorRootProps<TRow>) {
   const contextValue = useMemo<EnvironmentVariablesEditorContextValue>(
@@ -42,6 +44,7 @@ export function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableE
     <EnvironmentVariablesEditorContext.Provider value={contextValue}>
       <div className={className} {...props}>
         {children}
+        {!readOnly && !hidePasteHint && <EnvironmentVariablesEditorPasteHint />}
       </div>
     </EnvironmentVariablesEditorContext.Provider>
   );
