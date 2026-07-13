@@ -1,11 +1,11 @@
 @media (prefers-reduced-motion: no-preference) {
-  .panel-group-resize-transition[data-panel-resize-ready] > [data-panel] {
+  .panel-group-resize-transition > [data-panel] {
     transition-property: flex-grow, flex-basis;
     transition-duration: var(--duration-slow, 300ms);
     transition-timing-function: var(--ease-out-custom, ease);
   }
 
-  .panel-group-resize-transition[data-panel-resize-ready]:has(> [data-separator='active']) > [data-panel] {
+  .panel-group-resize-transition:has(> [data-separator='active']) > [data-panel] {
     transition: none;
   }
 }
