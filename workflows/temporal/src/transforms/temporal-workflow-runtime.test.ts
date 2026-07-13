@@ -135,7 +135,18 @@ describe('temporal workflow runtime helper module', () => {
   });
 
   it('executes foreach entries with a concurrency resolver evaluated per run', async () => {
-    const map = vi.fn(async ({ inputData }) => ({ value: inputData.value + 10 }));
+    // Gate activity completion so we can observe how many calls run concurrently:
+    // with a resolved concurrency of 2, two calls must be in flight before any finishes.
+    let active = 0;
+    let maxActive = 0;
+    const releases: (() => void)[] = [];
+    const map = vi.fn(async ({ inputData }: { inputData: { value: number } }) => {
+      active += 1;
+      maxActive = Math.max(maxActive, active);
+      await new Promise<void>(resolve => releases.push(resolve));
+      active -= 1;
+      return { value: inputData.value + 10 };
+    });
     proxyActivities.mockReturnValue({ map });
 
     const resolverCalls: { inputData: unknown; initData: unknown }[] = [];
@@ -149,9 +160,18 @@ describe('temporal workflow runtime helper module', () => {
       })
       .commit();
     const input = [{ value: 1 }, { value: 2 }, { value: 3 }];
-    const result = await workflow({ inputData: input });
+    const run = workflow({ inputData: input });
+
+    // The resolved concurrency (2) caps in-flight calls: the third only starts after a release.
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    expect(map).toHaveBeenCalledTimes(2);
+    releases.shift()!();
+    await vi.waitFor(() => expect(releases).toHaveLength(2));
+    while (releases.length) releases.shift()!();
+    const result = await run;
 
     expect(map).toHaveBeenCalledTimes(3);
+    expect(maxActive).toBe(2);
     expect(result).toMatchObject({
       result: [{ value: 11 }, { value: 12 }, { value: 13 }],
     });
