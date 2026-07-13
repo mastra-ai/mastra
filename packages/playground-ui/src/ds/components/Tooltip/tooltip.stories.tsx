@@ -58,8 +58,8 @@ export const WithIcon: Story = {
   render: () => (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button className="p-1 rounded hover:bg-surface2" aria-label="More information">
-          <Info className="h-4 w-4 text-neutral3" />
+        <button className="rounded p-1 hover:bg-surface2" aria-label="More information">
+          <Info className="size-4 text-neutral3" />
         </button>
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>
@@ -145,7 +145,7 @@ export const LongContent: Story = {
       <TooltipTrigger asChild>
         <Button variant="outline">Hover for details</Button>
       </TooltipTrigger>
-      <TooltipContent className="max-w-[200px]">
+      <TooltipContent className="max-w-50">
         This is a longer tooltip that contains more detailed information about the element.
       </TooltipContent>
     </Tooltip>

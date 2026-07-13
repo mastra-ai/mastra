@@ -352,7 +352,7 @@ export const cryptoResearchTool = createTool({
     coinId: z.string().optional(),
   }),
   execute: async ({ coinId }, context) => {
-    await new Promise(resolve => setTimeout(resolve, 30000));
+    await new Promise(resolve => setTimeout(resolve, 5000));
     const { suspend, resumeData } = context.agent ?? {};
     if (!resumeData) {
       // First invocation — pause IMMEDIATELY until an analyst approves

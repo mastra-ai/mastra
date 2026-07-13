@@ -54,7 +54,7 @@ const meta: Meta<typeof Plan> = {
   decorators: [
     Story => (
       <TooltipProvider>
-        <div className="w-full max-w-180 p-4">
+        <div className="w-full max-w-3xl p-4">
           <Story />
         </div>
       </TooltipProvider>

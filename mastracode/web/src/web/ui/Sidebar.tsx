@@ -6,26 +6,40 @@ import { Circle, LogOut, Settings } from 'lucide-react';
 
 import { useApiConfig } from '../../shared/api/config';
 import { redirectToLogout, useWebAuth } from './domains/auth';
-import { ThreadList, useChatSession } from './domains/chat';
-import { ProjectSwitcher, WorkspacesSection } from './domains/workspaces';
+import { ThreadList, useChatConnection, useChatTranscript } from './domains/chat';
+import { FactorySection } from './domains/factory';
+import { ProjectSwitcher, useActiveProjectContext, WorkspacesSection } from './domains/workspaces';
 import { useOverlays } from './lib/overlays';
 
 /**
  * Composition shell: each section owns its data through the domain contexts
- * (`useActiveProjectContext`, `useChatSession`, `useOverlays`), so nothing is
+ * (`useActiveProjectContext`, focused chat hooks, `useOverlays`), so nothing is
  * wired through props here.
+ *
+ * Threads are scoped to the worktree they run in. GitHub projects nest the
+ * thread list under the main-branch workspace inside the Workspaces section —
+ * feature worktrees hold a single conversation, so they show no thread list;
+ * local projects (no worktrees) keep the flat list.
  */
 export function Sidebar() {
   const overlays = useOverlays();
+  const { activeProject } = useActiveProjectContext();
   const open = overlays.isOpen('sidebar');
+  const isGithubProject = activeProject?.source === 'github';
 
   return (
     <div
       className={`fixed inset-y-0 left-0 z-40 flex h-full w-[82vw] max-w-[300px] shrink-0 flex-col gap-4 border-r border-border1 bg-surface2 p-3 shadow-lg transition-transform duration-200 md:static md:z-auto md:w-full md:max-w-none md:translate-x-0 md:border-r-0 md:bg-transparent md:shadow-none ${open ? 'translate-x-0' : '-translate-x-full'}`}
     >
       <ProjectSwitcher />
-      <WorkspacesSection />
-      <ThreadList />
+      <FactorySection />
+      {isGithubProject ? (
+        <WorkspacesSection>
+          <ThreadList />
+        </WorkspacesSection>
+      ) : (
+        <ThreadList />
+      )}
       <SidebarFooter />
     </div>
   );
@@ -45,7 +59,8 @@ function statusDotClass(status: string): string {
 }
 
 function SidebarFooter() {
-  const { status, busy } = useChatSession();
+  const { status } = useChatConnection();
+  const { busy } = useChatTranscript();
   const overlays = useOverlays();
 
   return (

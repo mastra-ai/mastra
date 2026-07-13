@@ -156,7 +156,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('h-4 w-4 opacity-60', transitions.colors)} />
+              <ChevronDown className={cn('size-4 opacity-60', transitions.colors)} />
             </span>
           }
         />
@@ -230,8 +230,8 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
           <SelectPrimitive.Popup
             ref={ref}
             className={cn(
-              'relative z-50 min-w-32 min-w-[var(--anchor-width)] max-h-dropdown-max-height max-h-[var(--available-height)] overflow-y-auto overflow-x-hidden rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog origin-[var(--transform-origin)]',
-              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog',
+              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               className,
             )}
@@ -254,7 +254,7 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-pointer select-none items-center gap-2.5 rounded-lg py-1.5 pl-2 pr-8 text-neutral4 text-ui-smd leading-ui-sm',
+      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-neutral4 select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       'hover:bg-surface4 hover:text-neutral6',
@@ -266,9 +266,9 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
     )}
     {...props}
   >
-    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute right-2 flex size-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-neutral6" />
+        <Check className="size-4 text-neutral6" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

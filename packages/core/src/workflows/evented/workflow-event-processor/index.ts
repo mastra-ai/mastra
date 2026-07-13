@@ -448,6 +448,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       parentWorkflow,
     } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
     // Check shouldPersistSnapshot option - default to true if not specified
     const finalStatus = perStep && status === 'success' ? 'paused' : status;
@@ -463,7 +464,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         opts: {
           status: finalStatus,
-          result: prevResult,
+          result: normalizedPrevResult,
           activePaths: executionPath,
           activeStepsPath: activeStepsPath,
         },
@@ -508,7 +509,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.end',
       runId,
-      data: { ...args, workflow: undefined },
+      data: { ...args, prevResult: normalizedPrevResult, workflow: undefined },
     });
   }
 
@@ -1549,7 +1550,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (stepResult.status === 'failed') {
       const retries = step.step.retries ?? workflow.retryConfig.attempts ?? 0;
-      if (retryCount >= retries) {
+      if (retryCount >= retries || stepResult.nonRetryable) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
           runId,
@@ -2638,7 +2639,17 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
       try {
         const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
-        if (failWorkflowData && failWorkflowData.workflowId && failWorkflowData.runId) {
+        // Never republish workflow.fail for an event that IS workflow.fail.
+        // Each publish gets a fresh event id (fresh retry bucket), so with a
+        // persistently-broken dependency (e.g. missing workflows table) the
+        // fail event would exhaust its own budget and publish another
+        // workflow.fail forever.
+        if (
+          event.type !== 'workflow.fail' &&
+          failWorkflowData &&
+          failWorkflowData.workflowId &&
+          failWorkflowData.runId
+        ) {
           await this.errorWorkflow(failWorkflowData, getErrorFromUnknown(err));
         }
       } catch (failErr) {

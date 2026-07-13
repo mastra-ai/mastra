@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ExternalLink, Copy } from 'lucide-react';
+import { ExternalLink, GitFork } from 'lucide-react';
 import { useCallback } from 'react';
 import { AgentObservationalMemory } from './agent-observational-memory';
 import { AgentWorkingMemory } from './agent-working-memory';
@@ -20,6 +20,15 @@ interface AgentMemoryProps {
   agentId: string;
   threadId: string;
   memoryType?: 'local' | 'gateway';
+}
+
+function getRecentMessagesDescription(lastMessages: number | false | undefined): string {
+  if (typeof lastMessages !== 'number') {
+    return 'Recent message history is not included in context.';
+  }
+
+  const messageLabel = lastMessages === 1 ? 'message' : 'messages';
+  return `Includes the last ${lastMessages} ${messageLabel} in context.`;
 }
 
 export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps) {
@@ -113,12 +122,17 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
               <p className="text-xs text-neutral3 mt-1">Create a copy of this conversation</p>
             </div>
             <Button onClick={handleCloneThread} disabled={isCloning}>
-              <Copy className="w-4 h-4 mr-2" />
+              <GitFork className="w-4 h-4 mr-2" />
               {isCloning ? 'Cloning...' : 'Clone'}
             </Button>
           </div>
         </div>
       )}
+
+      <div className="p-4 border-b border-border1">
+        <h3 className="text-sm font-medium text-neutral5">Recent Messages</h3>
+        <p className="text-xs text-neutral3 mt-1">{getRecentMessagesDescription(config?.lastMessages)}</p>
+      </div>
 
       {/* Observational Memory Section - moved above Semantic Recall */}
       {isOMEnabled && (
@@ -187,11 +201,11 @@ export function AgentMemory({ agentId, threadId, memoryType }: AgentMemoryProps)
         <div className="p-4 border-b border-border1">
           <div className="bg-surface3 border border-border1 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-1">
-              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400">Gateway</span>
-              <h3 className="text-sm font-medium text-neutral5">Memory Gateway</h3>
+              <span className="text-xs font-medium px-2 py-0.5 rounded bg-green-500/20 text-green-400">Remote</span>
+              <h3 className="text-sm font-medium text-neutral5">Gateway</h3>
             </div>
             <p className="text-xs text-neutral3">
-              Memory is managed by the Memory Gateway. Threads and observations are stored remotely.
+              Memory is managed by the Gateway. Threads and observations are stored remotely.
             </p>
           </div>
         </div>

@@ -28,7 +28,7 @@ export function SignalsEntityFilter({ entities, selected, onChange }: SignalsEnt
   return (
     <div className="flex flex-wrap items-center gap-3" role="search" aria-label="Filter signals by agent">
       <label className="flex items-center gap-2">
-        <span className="whitespace-nowrap font-mono text-xs uppercase text-neutral3">Agent</span>
+        <span className="font-mono text-xs whitespace-nowrap text-neutral3 uppercase">Agent</span>
         <Select value={selected?.entityId ?? ''} onValueChange={handleAgentChange} disabled={agents.length === 0}>
           <SelectTrigger size="sm" variant="outline" className="min-w-64" aria-label="Agent">
             <SelectValue placeholder="Select an agent" />

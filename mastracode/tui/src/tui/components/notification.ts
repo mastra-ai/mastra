@@ -1,7 +1,8 @@
-import { Container, Text, visibleWidth } from '@earendil-works/pi-tui';
+import { Text, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
-import { BOX_INDENT, getTermWidth, mastra, theme } from '../theme.js';
+import { BOX_INDENT, mastra, theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
+import { WidthAwareContainer } from './width-aware-container.js';
 
 export interface NotificationOptions {
   message: string;
@@ -71,16 +72,24 @@ function wrapText(value: string, maxWidth: number): string[] {
   return lines;
 }
 
-export class NotificationComponent extends Container {
+export class NotificationComponent extends WidthAwareContainer {
+  private readonly options: NotificationOptions;
+
   constructor(options: NotificationOptions) {
     super();
+    this.options = options;
+  }
 
+  protected rebuildForWidth(width: number): void {
+    this.clear();
+
+    const options = this.options;
     const titleText = options.source ? `notification from ${options.source}` : 'notification';
     const details = [options.priority, options.kind, options.status].filter(Boolean).join(' · ');
     const message = options.message.trim();
     const maxContentWidth = Math.max(
       MIN_NOTIFICATION_CONTENT_WIDTH,
-      Math.min(MAX_NOTIFICATION_CONTENT_WIDTH, getTermWidth() - BOX_INDENT - 4),
+      Math.min(MAX_NOTIFICATION_CONTENT_WIDTH, width - BOX_INDENT - 4),
     );
     const titleLines = wrapText(titleText, maxContentWidth);
     const detailLines = details ? wrapText(details, maxContentWidth) : [];

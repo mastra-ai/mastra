@@ -11,9 +11,9 @@ export type ItemListHeaderProps = {
 
 export function ItemListHeader({ columns, isSelectionActive, children }: ItemListHeaderProps) {
   return (
-    <div className={cn('sticky top-0 bg-surface3 z-10 rounded-lg px-4 mb-4')}>
+    <div className={cn('sticky top-0 z-10 mb-4 rounded-lg bg-surface3 px-4')}>
       <div
-        className={cn('grid gap-4 text-left items-center uppercase  text-neutral3 tracking-widest text-ui-xs', {
+        className={cn('grid items-center gap-4 text-left text-ui-xs  tracking-widest text-neutral3 uppercase', {
           'pl-12 [&>label]:absolute [&>label]:left-0': isSelectionActive,
         })}
         style={{ gridTemplateColumns: getItemListColumnTemplate(columns) }}

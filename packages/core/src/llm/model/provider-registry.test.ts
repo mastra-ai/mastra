@@ -655,7 +655,7 @@ describe('GatewayRegistry Auto-Refresh', () => {
     vi.spyOn(NetlifyGateway.prototype, 'fetchProviders').mockResolvedValue({});
     const mastraFetchProvidersSpy = vi.spyOn(MastraGateway.prototype, 'fetchProviders').mockResolvedValue({
       mastra: {
-        name: 'Mastra Gateway',
+        name: 'Gateway',
         models: ['anthropic/claude-sonnet-4.5'],
         apiKeyEnvVar: 'MASTRA_GATEWAY_API_KEY',
         gateway: 'mastra',

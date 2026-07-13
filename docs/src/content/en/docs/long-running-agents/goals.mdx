@@ -113,13 +113,7 @@ await worker.updateObjectiveOptions({ threadId, maxRuns: 100 })
 await worker.clearObjective({ threadId })
 ```
 
-Per-objective values written by `setObjective` / `updateObjectiveOptions` take precedence over the agent's `goal` config, and that precedence is remembered in thread state.
-
-:::note
-
-See the [`GoalEvaluationPayload` in the ChunkType reference](/reference/streaming/ChunkType) for the full goal chunk shape.
-
-:::
+Per-objective values written by `setObjective` / `updateObjectiveOptions` take precedence over the agent's `goal` config, and that precedence is remembered in thread state. See the [`GoalEvaluationPayload` in the ChunkType reference](/reference/streaming/ChunkType) for the full goal chunk shape.
 
 ## Related
 

@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
           persist-credentials: false
@@ -54,7 +54,7 @@ jobs:
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
 
       - name: Upload E2E registry artifact
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -74,7 +74,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -89,7 +89,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -118,7 +118,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -133,7 +133,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -162,7 +162,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -177,7 +177,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -206,7 +206,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -221,7 +221,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -249,7 +249,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -264,7 +264,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -293,7 +293,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -308,7 +308,7 @@ jobs:
         run: pnpm install
 
       - name: Download E2E registry artifact
-        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: e2e-verdaccio-registry
           path: ${{ runner.temp }}/mastra-e2e-registry
@@ -339,7 +339,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 
@@ -381,7 +381,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@4f1f4aec02e41874fa0262ea8ff5172d7978ad1e
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ inputs.head_sha }}
 

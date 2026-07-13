@@ -34,6 +34,7 @@ import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
+import { LibSQLVector } from '@mastra/libsql';
 import {
   Observability,
   MastraStorageExporter,
@@ -65,7 +66,7 @@ import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
   loadSettings,
-  MEMORY_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_PROVIDER,
   OBSERVABILITY_AUTH_PREFIX,
   resolveModelDefaults,
   resolveOmRoleModel,
@@ -93,6 +94,8 @@ import {
 import type { StorageConfig } from './utils/project.js';
 import { createSignalsPubSub } from './utils/signals-pubsub.js';
 import { createStorage, createVectorStore } from './utils/storage-factory.js';
+import { createStorageMaintenance, DEFAULT_RETENTION, resolveLocalDbFiles } from './utils/storage-maintenance.js';
+import type { StorageMaintenance } from './utils/storage-maintenance.js';
 import { acquireThreadLock, releaseThreadLock } from './utils/thread-lock.js';
 
 const CODE_AGENT_ID = 'code-agent';
@@ -289,7 +292,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
-  const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
@@ -309,12 +312,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
-    providerEnvVars[MEMORY_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+    providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
     // Registry unavailable — load well-known provider keys so non-gateway flows still work
     authStorage.loadStoredApiKeysIntoEnv({
-      [MEMORY_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+      [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
       anthropic: 'ANTHROPIC_API_KEY',
       openai: 'OPENAI_API_KEY',
       google: 'GOOGLE_GENERATIVE_AI_API_KEY',
@@ -401,7 +404,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     id: 'mastra-code-storage',
     default: storageResult.storage,
     domains: {
-      ...(observabilityDomain ? { observability: observabilityDomain } : {}),
+      // When local tracing is off, disable the observability domain entirely so
+      // trace/score/feedback writes never fall through to the default libsql store.
+      observability: observabilityDomain ?? false,
       harness: harnessStorage,
     },
   });
@@ -464,6 +469,19 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   // Vector store for recall search (separate DB file to avoid bloating main storage)
   const vectorStore = await createVectorStore(storageConfig, storageResult.backend);
+
+  // Maintenance handle for /prune: prunes via the inner store (whose retention
+  // config covers every domain, including legacy libsql observability spans)
+  // and can compact local libsql files to reclaim disk. The vector store's
+  // connection must close alongside storage — the compaction's file swap
+  // refuses to run while any connection is open.
+  const storageMaintenance: StorageMaintenance = createStorageMaintenance({
+    storage: storageResult.storage,
+    backend: storageResult.backend,
+    retention: DEFAULT_RETENTION,
+    localDbFiles: resolveLocalDbFiles(storageConfig, storageResult.backend),
+    closeVector: vectorStore instanceof LibSQLVector ? () => vectorStore.close() : undefined,
+  });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
 
@@ -842,6 +860,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   return {
     controller: controller,
     storage,
+    storageMaintenance,
     observability,
     memory,
     mcpManager,

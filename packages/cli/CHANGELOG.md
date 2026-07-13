@@ -1,5 +1,90 @@
 # mastra
 
+## 1.19.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/core@1.51.0-alpha.6
+  - @mastra/deployer@1.51.0-alpha.6
+
+## 1.19.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+  - @mastra/deployer@1.51.0-alpha.5
+
+## 1.19.0-alpha.4
+
+### Minor Changes
+
+- Added CLI commands to manage platform databases, environments, and deploys without leaving the terminal. ([#19199](https://github.com/mastra-ai/mastra/pull/19199))
+
+  The project is resolved automatically from `MASTRA_PROJECT_ID`, the `--project <name|slug|id>` flag, or the `.mastra-project.json` written by `mastra deploy` — run the commands from your project directory and you never need to name the project.
+
+  **Databases**
+
+  ```bash
+  mastra env db list                     # kind, status, scope, injected env var names
+  mastra env db list staging             # only databases feeding one environment
+  mastra env db create --kind turso      # shared by all environments, polls until ready
+  mastra env db create staging --kind turso   # scoped to one environment
+  mastra env db show <database>          # detail + connection env vars (secrets masked)
+  mastra env db detach <database>        # confirm prompt, admin only
+  ```
+
+  `env db list` shows the attachment mapping: shared (project-scoped) databases feed all environments, environment-scoped databases feed only their environment. Provisioning failures are surfaced with the provider error instead of being swallowed.
+
+  **Environments and deploys**
+
+  ```bash
+  mastra env list             # now shows latest deploy status + managed env var names
+  mastra env create staging   # explicit environment creation
+  mastra env restart <env>    # push saved env vars and restart the running service
+  mastra env deploys          # all deploys across environments, active marker
+  mastra env deploys staging  # only one environment's deploys
+  ```
+
+  Breaking change to the existing `mastra env` commands: the `<project>` positional argument is replaced by the resolution above (`mastra env list <project>` → `mastra env list --project <project>`), and `mastra env create <project> -n <name>` is now `mastra env create <name>`.
+
+### Patch Changes
+
+- `mastra server deploy` and `mastra studio deploy` no longer fail with "No env file found for deploy" when the project has no `.env*` file (e.g. in CI). Like `mastra deploy`, they now proceed without uploading env vars so the vars stored on the platform are used, and preflight reports unverifiable env-guarded paths as warnings instead of errors. ([#19082](https://github.com/mastra-ai/mastra/pull/19082))
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+  - @mastra/deployer@1.51.0-alpha.4
+
+## 1.18.3-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`177010f`](https://github.com/mastra-ai/mastra/commit/177010ff096d2e4b28d89803be5b1a4cad2a0d6b), [`54a51e0`](https://github.com/mastra-ai/mastra/commit/54a51e0a484fe1ebad3fb1f7ef5282a075709eb7)]:
+  - @mastra/core@1.51.0-alpha.3
+  - @mastra/deployer@1.51.0-alpha.3
+
+## 1.18.3-alpha.2
+
+### Patch Changes
+
+- Fixed `mastra deploy` preflight blocking deploys that are actually fine: ([#19071](https://github.com/mastra-ai/mastra/pull/19071))
+
+  **Env-guarded storage fallbacks** — code like `process.env.TURSO_DATABASE_URL || "file:./.mastra-demo.db"` no longer hard-errors when the environment variable is provided for the deploy. If the variable is missing from your env file you still get an error, and if no env file is available you get a warning instead.
+
+  **Library env-var false positives** — the missing environment variable check now only looks at variables your own code references, so variables read by bundled Mastra packages (like `AUTO_BLOCK_EXTERNAL_PROVIDERS`) no longer show up as warnings. They are listed as info instead.
+
+  **Platform-stored env vars** — `mastra deploy` and `mastra server deploy` preflight now merge the env vars already stored on the target environment / server project under your local env file (local wins, mirroring the platform's deploy-time merge). Vars stored only on the platform no longer trigger `MISSING_ENV_VAR` or `LOCAL_STORAGE_PATH` alarms.
+
+  **Platform-injected guards** — storage fallbacks guarded by variables the platform sets automatically (like `MASTRA_STORAGE_URL` on Mastra Cloud) are trusted and never flagged.
+
+  These deploys previously required `--skip-preflight` to get through.
+
+- Updated dependencies [[`e955965`](https://github.com/mastra-ai/mastra/commit/e955965dce575a903e37cf054d28ea99aa48785e), [`860ef7e`](https://github.com/mastra-ai/mastra/commit/860ef7e77d92b63469cbe5857aa1e626197e43e9), [`17e818c`](https://github.com/mastra-ai/mastra/commit/17e818c51a958ba90641b1a959dc38faf8c034e9), [`4451dfe`](https://github.com/mastra-ai/mastra/commit/4451dfe857428e7abcc0261a507a2e186dae6d47), [`1d39058`](https://github.com/mastra-ai/mastra/commit/1d39058e548efd691799985d5c8af2737f1c3bd2), [`19ac158`](https://github.com/mastra-ai/mastra/commit/19ac158584b34b3ff3e3e6f7ad640c8cb65e30f5), [`19ac158`](https://github.com/mastra-ai/mastra/commit/19ac158584b34b3ff3e3e6f7ad640c8cb65e30f5)]:
+  - @mastra/core@1.51.0-alpha.2
+  - @mastra/deployer@1.51.0-alpha.2
+
 ## 1.18.3-alpha.1
 
 ### Patch Changes

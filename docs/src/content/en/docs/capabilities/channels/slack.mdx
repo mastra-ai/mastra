@@ -1,15 +1,15 @@
 ---
 title: "Slack | Channels"
-description: "Configure a Mastra agent to receive Slack messages and mentions through a channel adapter."
+description: "Configure a Mastra agent to respond in Slack channels and direct messages through a channel adapter."
 packages:
   - "@mastra/core"
 ---
 
 # Slack
 
-Slack channels let a Mastra agent receive channel mentions and thread replies from Slack. Use the Slack adapter when you create and configure the Slack app yourself.
+Add your agent to Slack so people can message it in shared channel threads or direct messages. When someone sends a message, Mastra runs your agent through the normal agent pipeline and streams the response back to Slack. The Slack adapter handles Slack AI indicators and interactive cards for you.
 
-## Install the adapter
+## Installation
 
 Install the Slack adapter from the Chat SDK:
 
@@ -17,18 +17,16 @@ Install the Slack adapter from the Chat SDK:
 npm install @chat-adapter/slack
 ```
 
-## Agent configuration
-
 Add `createSlackAdapter()` to the agent's `channels.adapters` object:
 
-```typescript title="src/mastra/agents/slack-agent.ts"
+```typescript title="src/mastra/agents/your-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { createSlackAdapter } from '@chat-adapter/slack'
 
-export const slackAgent = new Agent({
-  id: 'slack-agent',
-  name: 'Slack Agent',
-  instructions: 'Answer questions, help with tasks, and have natural conversations in Slack.',
+export const yourAgent = new Agent({
+  id: 'your-agent',
+  name: 'Your Agent',
+  instructions: 'Help people plan tasks, answer questions, and coordinate work in Slack.',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   channels: {
     adapters: {
@@ -38,86 +36,133 @@ export const slackAgent = new Agent({
 })
 ```
 
-The `channels` property tells Mastra to generate a webhook endpoint for the Slack adapter. The adapter handles Slack event verification, request signature validation, and message formatting.
+## Create a Slack app
 
-Register the agent on the Mastra instance:
+To connect your agent, create a Slack app in the workspace where you want it to run. The Slack app controls how your agent appears in Slack, what it can do, and which events it receives.
 
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-import { slackAgent } from './agents/slack-agent'
+This guide uses a [manifest](https://docs.slack.dev/app-manifests/configuring-apps-with-app-manifests/#creating_manifests): a configuration file that creates the Slack app settings for you. This is the fastest path when you are adding your agent to your own workspace. It doesn't cover the platform OAuth flow where other workspaces install your agent.
 
-export const mastra = new Mastra({
-  agents: { slackAgent },
-})
+Create the Slack app from a manifest:
+
+1. Open [api.slack.com/apps](https://api.slack.com/apps).
+1. Select **Create an app**.
+1. Select **From a manifest**.
+1. Choose the workspace where the agent should run.
+1. Paste this manifest, then select **Create**:
+
+```yaml
+display_information:
+  name: mastra-agent
+features:
+  app_home:
+    home_tab_enabled: false
+    messages_tab_enabled: true
+    messages_tab_read_only_enabled: false
+  bot_user:
+    display_name: mastra-agent
+    always_online: true
+oauth_config:
+  scopes:
+    bot:
+      - im:write
+      - app_mentions:read
+      - channels:history
+      - channels:read
+      - chat:write
+      - users:read
+      - im:read
+      - im:history
+  pkce_enabled: false
+settings:
+  event_subscriptions:
+    request_url: https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
+    bot_events:
+      - app_mention
+      - message.channels
+      - message.im
+  interactivity:
+    is_enabled: true
+    request_url: https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
+  org_deploy_enabled: false
+  socket_mode_enabled: false
+  token_rotation_enabled: false
+  is_mcp_enabled: false
 ```
 
-## Slack app settings
+This manifest configures:
 
-Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps). Select **Create New App** > **From scratch**, then choose the workspace where the agent should run.
+- `display_information.name` and `features.bot_user.display_name`: Set your agent's name in Slack. You can update it at any time; remember to reinstall the app after changing names or permissions.
+- `app_home.messages_tab_enabled` and `app_home.messages_tab_read_only_enabled`: Enable direct messages from the Slack app's **Messages** tab.
+- `always_online`: Shows the Slack bot user as always available.
+- `oauth_config.scopes.bot`: Grants the bot permission to post messages, read channel messages where it is present, read mentions, read and write direct messages, and look up users.
+- `event_subscriptions`: Tells Slack which message events to send to the webhook.
+- `interactivity`: Enables interactive cards and tells Slack where to send card actions.
 
-In **OAuth & Permissions**, add these **Bot Token Scopes**:
+After the app is created, open **Install App**, select **Install to Workspace**, and approve the requested scopes.
 
-- `app_mentions:read`
-- `channels:history`
-- `channels:read`
-- `chat:write`
-- `users:read`
+## Set Slack credentials
 
-Install the app to the workspace from **OAuth & Permissions**, then copy the **Bot User OAuth Token**. In **Basic Information** > **App Credentials**, copy the **Signing Secret**.
+Set the Slack credentials in Mastra so it can verify Slack requests and send messages back to Slack.
 
-Keep **Socket Mode** turned off under **Settings** > **Socket Mode**. The Slack adapter receives events through HTTP webhooks.
+In the Slack app settings, copy these values:
 
-## Environment variables
+- **Basic Information** > **App Credentials** > **Signing Secret**
+- **OAuth & Permissions** > **Bot User OAuth Token**
 
-The adapter reads Slack credentials from these environment variables by default:
+Set them in your Mastra environment:
 
 ```bash title=".env"
 SLACK_SIGNING_SECRET=your-signing-secret
 SLACK_BOT_TOKEN=xoxb-your-bot-token
 ```
 
-For additional adapter options, see the [Chat SDK Slack adapter docs](https://chat-sdk.dev/adapters/official/slack).
+Mastra reads these environment variables automatically.
 
-## Webhook URL
+## Configure the webhook route
 
-Mastra generates the Slack webhook route from the agent ID and adapter key:
+Slack sends channel activity to Mastra through webhooks. A webhook is an HTTP endpoint Slack calls when something happens, such as a new message, a mention, or a user selecting an interactive card.
 
-```text
-/api/agents/slack-agent/channels/slack/webhook
-```
-
-Use your public Mastra server URL as the base URL:
+Mastra automatically registers a Slack webhook route for your agent:
 
 ```text
-https://your-app.example.com/api/agents/slack-agent/channels/slack/webhook
+/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
 ```
 
-For local development, expose the Mastra dev server with a tunnel:
+Build the webhook URL from your public Mastra server URL and the generated route:
+
+```text
+https://<YOUR-PUBLIC-URL>/api/agents/<YOUR-AGENT-ID>/channels/slack/webhook
+```
+
+Slack can't send events to `localhost`. For local development, keep the Mastra dev server running and expose `http://localhost:4111` with a tunnel before you save the request URL in Slack.
+
+Use a tunnel such as `cloudflared` or `ngrok` for local development:
 
 ```bash npm2yarn
 npx cloudflared tunnel --url http://localhost:4111
 ```
 
-Use the generated tunnel URL as the base URL while developing:
+Use the generated tunnel host as `<YOUR-PUBLIC-URL>`, for example:
 
 ```text
-https://<your-tunnel-url>/api/agents/slack-agent/channels/slack/webhook
+https://abc123.trycloudflare.com/api/agents/your-agent/channels/slack/webhook
 ```
 
-In the Slack app settings, open **Event Subscriptions**, turn **Enable Events** on, and set **Request URL** to the webhook URL. Slack sends a verification request to the route.
+Update the request URLs in Slack:
 
-## Event subscriptions
+1. In the Slack app settings, open **Event Subscriptions**.
+1. Replace **Request URL** with the final webhook URL.
+1. Select **Save Changes**.
+1. Open **Interactivity & Shortcuts**.
+1. Replace **Request URL** with the same webhook URL.
+1. Select **Save Changes**.
+1. If Slack asks you to reinstall the app, open **OAuth & Permissions** and select **Reinstall to Workspace**.
 
-Under **Subscribe to bot events**, add these events:
+## Try it in Slack
 
-- `app_mention`: Delivers messages that mention the bot in channels.
-- `message.channels`: Delivers channel messages for conversations where the bot is present.
+Open a direct message with the Slack bot user and send a message. Direct messages work because the manifest includes the `message.im` event and `im:*` scopes.
 
-Select **Save Changes** after updating events. Slack requires the app to be reinstalled after event subscription changes. Open **OAuth & Permissions** and select **Reinstall to Workspace**.
-
-## Slack behavior
-
-Invite the bot to a channel before using channel mentions:
+To use the agent in a channel, invite the Slack bot user first:
 
 ```text
 /invite @your-bot-name
@@ -133,7 +178,7 @@ The agent responds in the thread. Response content depends on the model, instruc
 
 ## Production deployment
 
-When you deploy the Mastra server, update the Slack app's **Request URL** to the production webhook URL. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
+When you deploy the Mastra server, update both request URLs in the Slack app settings to the production webhook URL. The tunnel URL used for local development is temporary and changes when the tunnel restarts.
 
 Channels on serverless platforms may need `waitUntil` and shared pub/sub configuration so background responses and thread leases work across short-lived instances. See [serverless deployment](/docs/capabilities/channels/overview#serverless-deployment) in the channels overview.
 

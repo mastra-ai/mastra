@@ -66,6 +66,12 @@ export const githubProjects = pgTable(
     sandboxProvider: text('sandbox_provider').notNull().default('railway'),
     /** Path inside the sandbox the repo is cloned into. */
     sandboxWorkdir: text('sandbox_workdir').notNull(),
+    /**
+     * Optional shell command (e.g. `pnpm i && pnpm build`) run inside every
+     * freshly created worktree before any agent execution starts. Null when the
+     * project has no setup step.
+     */
+    setupCommand: text('setup_command'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   table => [uniqueIndex('github_projects_org_repo_unique').on(table.orgId, table.repoId)],
@@ -124,23 +130,6 @@ export const githubWorktrees = pgTable(
   ],
 );
 
-/**
- * Stable mapping from a tenant key (the sha256 of an `(org, user)` identity, see
- * `tenant-storage.ts`) to the Turso database provisioned for that tenant. Only
- * the durable `db_name`/`hostname` are persisted — never the auth token, which
- * is minted fresh per resolution. The row is written once, on first provision,
- * with `onConflictDoNothing` so concurrent replicas converge on a single DB.
- */
-export const tenantDatabases = pgTable('tenant_databases', {
-  /** sha256 hex of the `(org, user)` identity (the tenant key). */
-  tenantKey: text('tenant_key').primaryKey(),
-  /** Turso database name (deterministic, derived from the tenant key). */
-  dbName: text('db_name').notNull(),
-  /** Turso database hostname, e.g. `<db>-<org>.turso.io`. */
-  hostname: text('hostname').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
-
 export type GithubInstallationRow = typeof githubInstallations.$inferSelect;
 export type GithubProjectRow = typeof githubProjects.$inferSelect;
 export type GithubProjectSandboxRow = typeof githubProjectSandboxes.$inferSelect;
@@ -149,8 +138,6 @@ export type NewGithubInstallationRow = typeof githubInstallations.$inferInsert;
 export type NewGithubProjectRow = typeof githubProjects.$inferInsert;
 export type NewGithubProjectSandboxRow = typeof githubProjectSandboxes.$inferInsert;
 export type NewGithubWorktreeRow = typeof githubWorktrees.$inferInsert;
-export type TenantDatabaseRow = typeof tenantDatabases.$inferSelect;
-export type NewTenantDatabaseRow = typeof tenantDatabases.$inferInsert;
 
 /**
  * Idempotent DDL run on boot when the feature is enabled. We keep migrations
@@ -192,6 +179,7 @@ CREATE TABLE IF NOT EXISTS github_projects (
 );
 
 ALTER TABLE github_projects ADD COLUMN IF NOT EXISTS org_id text;
+ALTER TABLE github_projects ADD COLUMN IF NOT EXISTS setup_command text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS github_projects_org_repo_unique
   ON github_projects (org_id, repo_id);
@@ -223,11 +211,4 @@ ALTER TABLE github_worktrees ADD COLUMN IF NOT EXISTS org_id text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS github_worktrees_project_user_branch_unique
   ON github_worktrees (github_project_id, user_id, branch);
-
-CREATE TABLE IF NOT EXISTS tenant_databases (
-  tenant_key text PRIMARY KEY,
-  db_name text NOT NULL,
-  hostname text NOT NULL,
-  created_at timestamptz NOT NULL DEFAULT now()
-);
 `;

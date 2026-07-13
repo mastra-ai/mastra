@@ -38,13 +38,14 @@ import {
   handleBrowserCommand,
   handleThemeCommand,
   handleUpdateCommand,
-  handleMemoryGatewayCommand,
+  handleMastraGatewayCommand,
   handleApiKeysCommand,
   handlePluginsCommand,
   handleFeedbackCommand,
   handleObservabilityCommand,
   handleGithubCommand,
   handleGoalCommand,
+  handlePruneCommand,
 } from './commands/index.js';
 import { isCurrentThreadActive, sendSlashCommandMessage } from './commands/send-slash-command-message.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -57,7 +58,16 @@ import {
 } from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 
-const TRACKED_COMMANDS = new Set(['login', 'models', 'mode', 'memory-gateway', 'custom-providers', 'threads', 'new']);
+const TRACKED_COMMANDS = new Set([
+  'login',
+  'models',
+  'mode',
+  'gateway',
+  'memory-gateway',
+  'custom-providers',
+  'threads',
+  'new',
+]);
 
 /**
  * Dispatch a slash command input to the appropriate handler.
@@ -173,6 +183,7 @@ export async function dispatchSlashCommand(
     case 'subagents':
       await handleSubagentsCommand(ctx);
       return true;
+    case 'memory':
     case 'om':
       await handleOMCommand(ctx);
       return true;
@@ -199,6 +210,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'cost':
       handleCostCommand(ctx);
+      return true;
+    case 'prune':
+      await handlePruneCommand(ctx, args);
       return true;
     case 'diff':
       await handleDiffCommand(ctx, args[0]);
@@ -239,8 +253,9 @@ export async function dispatchSlashCommand(
     case 'update':
       await handleUpdateCommand(ctx);
       return true;
+    case 'gateway':
     case 'memory-gateway':
-      await handleMemoryGatewayCommand(ctx);
+      await handleMastraGatewayCommand(ctx);
       return true;
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());

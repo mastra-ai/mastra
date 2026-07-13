@@ -152,12 +152,8 @@ export const ToolCardInner = ({ toolName, input, output, toolCallId, state, meta
   const agentToolName = toolName.startsWith('agent-') ? toolName.substring('agent-'.length) : toolName;
   const workflowToolName = toolName.startsWith('workflow-') ? toolName.substring('workflow-'.length) : toolName;
 
-  const requireApprovalMetadata =
-    (metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate') &&
-    metadata?.requireApprovalMetadata;
-  const suspendedTools =
-    (metadata?.mode === 'stream' || metadata?.mode === 'network' || metadata?.mode === 'generate') &&
-    metadata?.suspendedTools;
+  const requireApprovalMetadata = metadata?.requireApprovalMetadata;
+  const suspendedTools = metadata?.suspendedTools;
 
   const toolApprovalMetadata = requireApprovalMetadata
     ? (requireApprovalMetadata?.[toolName] ?? requireApprovalMetadata?.[toolCallId])
