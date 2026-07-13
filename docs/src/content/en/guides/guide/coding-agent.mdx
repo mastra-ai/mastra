@@ -112,11 +112,8 @@ The response should identify the Acme support portal, its development status, an
 
 Create `src/mastra/coding-agent-controller.ts`. The controller owns the interactive session, exposes UI events, and pauses workspace tools for approval.
 
-**Beta:** `AgentController` is a beta feature and may change in minor releases.
-
 ```typescript title="src/mastra/coding-agent-controller.ts"
 import { AgentController } from '@mastra/core/agent-controller'
-
 import { codingAgent, projectPath } from './agents/coding-agent'
 
 export async function createCodingAgentSession() {
@@ -166,13 +163,13 @@ Create `src/coding-agent-tui.ts`. The UI renders assistant message updates, show
 import { pathToFileURL } from 'node:url'
 import {
   Editor,
+  matchesKey,
   ProcessTerminal,
   Text,
   TUI,
   type EditorTheme,
   type Terminal,
 } from '@earendil-works/pi-tui'
-
 import { createCodingAgentSession } from './mastra/coding-agent-controller'
 
 const plain = (text: string) => text
@@ -257,12 +254,14 @@ export async function startCodingAgentTui(terminal: Terminal = new ProcessTermin
   tui.addChild(output)
   tui.addChild(editor)
   tui.setFocus(editor)
-  tui.start()
 
   let stopPromise: Promise<void> | undefined
+  let removeInputListener = () => {}
+
   const stop = () => {
     stopPromise ??= (async () => {
-      process.off('SIGINT', handleSigint)
+      process.off('SIGINT', handleExit)
+      removeInputListener()
       session.abort()
       unsubscribe()
       tui.stop()
@@ -271,10 +270,20 @@ export async function startCodingAgentTui(terminal: Terminal = new ProcessTermin
     return stopPromise
   }
 
-  const handleSigint = () => {
-    void stop().then(() => process.exit(0))
+  const handleExit = () => {
+    void stop().catch(error => {
+      console.error(error)
+      process.exitCode = 1
+    })
   }
-  process.once('SIGINT', handleSigint)
+
+  removeInputListener = tui.addInputListener(data => {
+    if (!matchesKey(data, 'ctrl+c')) return
+    handleExit()
+    return { consume: true }
+  })
+  process.once('SIGINT', handleExit)
+  tui.start()
 
   return { stop }
 }

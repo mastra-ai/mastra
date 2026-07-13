@@ -266,11 +266,6 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'guide/coding-agent',
-              label: 'Workspace: Coding Agent',
-            },
-            {
-              type: 'doc',
               id: 'guide/dev-assistant',
               label: 'Workspace: Dev Assistant',
             },
@@ -285,6 +280,11 @@ const sidebars = {
               label: 'Filesystem: Docs Manager',
             },
           ],
+        },
+        {
+          type: 'doc',
+          id: 'guide/coding-agent',
+          label: 'Building a Coding Agent',
         },
         {
           type: 'doc',
