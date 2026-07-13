@@ -17,6 +17,7 @@ import type {
   DurableLLMStepOutput,
   DurableToolCallOutput,
   DurableToolCallInput,
+  SerializableToolMetadata,
 } from '@mastra/core/agent/durable';
 import type { PubSub } from '@mastra/core/events';
 import { SpanType, EntityType, InternalSpans } from '@mastra/core/observability';
@@ -79,17 +80,26 @@ type IterationState = z.infer<typeof iterationStateSchema> & {
 /**
  * Resolve the effective tool-call concurrency for one agentic iteration.
  *
- * Mirrors @mastra/core's `resolveToolCallConcurrency`: default 10 concurrent tool calls, but
- * forced to 1 (sequential) whenever the run requires tool approval OR any tool the model called
- * this step can suspend / requires approval — so approval/suspend flows never race with concurrent
- * tool calls. `toolCallConcurrency` from the request/agent options overrides the default when > 0.
+ * Mirrors @mastra/core's `resolveToolCallConcurrency`: default 10 concurrent tool calls, forced to
+ * 1 (sequential) whenever the run requires tool approval OR any tool in the step's *effective
+ * active tool set* can suspend / requires approval — so approval/suspend flows never race with
+ * concurrent tool calls. `toolCallConcurrency` from the request/agent options overrides the
+ * default when > 0.
+ *
+ * The check is against the effective active tool set, NOT the tools the model actually called: a
+ * registered suspending/approval tool the model skipped this step must still force sequential
+ * execution, since a concurrently-running sibling tool would race the suspension.
+ *
+ * `toolsMetadata` (from initData) is the serialized registered tool set and carries the
+ * `hasSuspendSchema` / `requireApproval` flags; each tool call carries the `activeTools` allowlist
+ * the LLM step resolved for that step (`null`/absent = unrestricted).
  */
-function resolveIterationToolCallConcurrency(
+export function resolveIterationToolCallConcurrency(
   options: { toolCallConcurrency?: number; requireToolApproval?: unknown } | undefined,
+  toolsMetadata: SerializableToolMetadata[] | undefined,
   toolCalls: DurableToolCallInput[],
 ): number {
-  const configured =
-    options?.toolCallConcurrency && options.toolCallConcurrency > 0 ? options.toolCallConcurrency : 10;
+  const configured = options?.toolCallConcurrency && options.toolCallConcurrency > 0 ? options.toolCallConcurrency : 10;
 
   // Global approval policy → always sequential (a function policy is evaluated per call at
   // execution time; before args are known we conservatively treat it like `true`).
@@ -97,13 +107,20 @@ function resolveIterationToolCallConcurrency(
     return 1;
   }
 
-  // Any called tool that can suspend / requires approval → sequential.
-  const anySuspends = toolCalls.some(tc => {
-    const t = tc as { hasSuspendSchema?: unknown; requireApproval?: unknown };
-    return Boolean(t.hasSuspendSchema || t.requireApproval);
-  });
+  if (!toolsMetadata?.length) {
+    return configured;
+  }
 
-  return anySuspends ? 1 : configured;
+  // The step's active tool set, as resolved by the LLM step (processors may narrow it). All calls
+  // in one step share the same value; `null`/absent means no restriction → all registered tools.
+  const activeTools = toolCalls.find(tc => tc.activeTools != null)?.activeTools;
+  const activeToolSet = activeTools ? new Set(activeTools) : undefined;
+
+  return toolsMetadata.some(
+    tool => (!activeToolSet || activeToolSet.has(tool.name)) && Boolean(tool.hasSuspendSchema || tool.requireApproval),
+  )
+    ? 1
+    : configured;
 }
 
 /**
@@ -201,11 +218,12 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       async ({ inputData, getInitData }) => {
         const llmOutput = inputData as DurableLLMStepOutput;
         const toolCalls = (llmOutput.toolCalls ?? []) as DurableToolCallInput[];
-        // Resolve concurrency from the run options + the tools actually called this step.
+        // Resolve concurrency from the run options + this step's effective active tool set.
         // Mutates the shared toolCallForeachOptions the foreach below reads.
         const initData = getInitData() as IterationState;
         toolCallForeachOptions.concurrency = resolveIterationToolCallConcurrency(
           (initData as { options?: { toolCallConcurrency?: number; requireToolApproval?: unknown } }).options,
+          initData.toolsMetadata as SerializableToolMetadata[] | undefined,
           toolCalls,
         );
         return toolCalls;
