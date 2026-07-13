@@ -13,7 +13,8 @@ import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
 import { initLogger, currentSpan } from 'braintrust';
 import type { Span, Logger } from 'braintrust';
-import { removeNullish, convertAISDKMessage } from './formatter';
+import { removeNullish, convertAISDKMessage, serializeToolResult } from './formatter';
+import type { OpenAIMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
 import { reconstructThreadOutput } from './thread-reconstruction';
 import type { ThreadData, ThreadStepData, PendingToolResult } from './thread-reconstruction';
@@ -490,15 +491,67 @@ export class BraintrustExporter extends TrackingExporter<
     return output;
   }
 
+  private isToolSpan(span: AnyExportedSpan): boolean {
+    return (
+      span.type === SpanType.TOOL_CALL ||
+      span.type === SpanType.MCP_TOOL_CALL ||
+      span.type === SpanType.PROVIDER_TOOL_CALL
+    );
+  }
+
+  private getToolName(span: AnyExportedSpan): string {
+    if (span.entityName) {
+      return span.entityName;
+    }
+    const match = /'([^']+)'/.exec(span.name);
+    return match?.[1] ?? span.name;
+  }
+
+  private getToolCallId(span: AnyExportedSpan): string {
+    const attrs = span.attributes as { toolCallId?: string } | undefined;
+    return attrs?.toolCallId ?? (span.input as { toolCallId?: string } | undefined)?.toolCallId ?? span.id;
+  }
+
+  private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
+    const args = span.input;
+    const argsString = typeof args === 'string' ? args : JSON.stringify(args ?? {});
+    return [
+      {
+        role: 'assistant',
+        content: '',
+        tool_calls: [
+          {
+            id: this.getToolCallId(span),
+            type: 'function',
+            function: {
+              name: this.getToolName(span),
+              arguments: argsString,
+            },
+          },
+        ],
+      },
+    ];
+  }
+
+  private toToolCallOutput(span: AnyExportedSpan): OpenAIMessage {
+    return {
+      role: 'tool',
+      content: serializeToolResult(span.output),
+      tool_call_id: this.getToolCallId(span),
+    };
+  }
+
   private buildSpanPayload(span: AnyExportedSpan, isCreate = true): Record<string, any> {
     const payload: Record<string, any> = {};
 
+    const isToolType = this.isToolSpan(span);
+
     if (span.input !== undefined) {
-      payload.input = this.transformInput(span.input, span.type);
+      payload.input = isToolType ? this.toToolCallInput(span) : this.transformInput(span.input, span.type);
     }
 
     if (span.output !== undefined) {
-      payload.output = this.transformOutput(span.output, span.type);
+      payload.output = isToolType ? this.toToolCallOutput(span) : this.transformOutput(span.output, span.type);
     }
 
     if (isCreate && span.isRootSpan && span.tags?.length) {
