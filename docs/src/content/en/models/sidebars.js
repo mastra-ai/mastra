@@ -118,6 +118,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai-router',
+          label: 'AI-ROUTER',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -198,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/blueclaw',
+          label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -255,6 +265,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/drun',
           label: 'D.Run (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/daoxe',
+          label: 'DaoXE',
         },
         {
           type: 'doc',
