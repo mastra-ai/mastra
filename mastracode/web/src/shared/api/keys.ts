@@ -13,6 +13,8 @@ export const queryKeys = {
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
   githubIssues: (githubProjectId: string | undefined) => ['github', 'issues', githubProjectId ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
+  githubProjectSettings: (githubProjectId: string | undefined) =>
+    ['github', 'project-settings', githubProjectId ?? null] as const,
   linearStatus: () => ['linear', 'status'] as const,
   linearProjects: () => ['linear', 'projects'] as const,
   linearIssues: () => ['linear', 'issues'] as const,
@@ -36,8 +38,7 @@ export const queryKeys = {
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
-  ) =>
-    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, projectPath ?? null] as const,
+  ) => ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, projectPath ?? null] as const,
   // Keep connection state outside agentControllerSession: mutation hooks invalidate that prefix,
   // and a sync refetch would bump dataUpdatedAt and wipe the live transcript.
   agentControllerConnection: (

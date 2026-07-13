@@ -60,6 +60,7 @@ import {
   pushBranch,
   reattachProjectSandbox,
   removeWorktree,
+  runWorktreeSetup,
   SandboxBudgetError,
   teardownProjectSandbox,
   WorktreeError,
@@ -557,6 +558,52 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
+  // ── Read per-project settings ────────────────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/settings', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        return c.json({ setupCommand: loaded.project.setupCommand });
+      },
+    }),
+  );
+
+  // ── Update per-project settings ──────────────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/settings', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+
+        let body: { setupCommand?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
+          return c.json({ error: 'Invalid setupCommand' }, 400);
+        }
+        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
+          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
+        }
+        // An empty/whitespace command means "no setup step".
+        const setupCommand =
+          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
+            ? body.setupCommand.trim()
+            : null;
+
+        await getAppDb().update(githubProjects).set({ setupCommand }).where(eq(githubProjects.id, loaded.project.id));
+        return c.json({ setupCommand });
+      },
+    }),
+  );
+
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
   routes.push(...buildProjectGitRoutes());
 
@@ -783,6 +830,14 @@ function buildProjectGitRoutes(): ApiRoute[] {
               token,
               repoFullName: project.repoFullName,
             });
+
+            // Run the project's setup command in the fresh checkout before the
+            // route resolves — callers only start agent runs after this request
+            // succeeds, so the tree is guaranteed set up before any agent
+            // execution. Reused worktrees were already set up on creation.
+            if (!result.reused && project.setupCommand) {
+              await runWorktreeSetup(sandbox, result.worktreePath, project.setupCommand);
+            }
 
             await getAppDb()
               .insert(githubWorktrees)

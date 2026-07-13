@@ -719,7 +719,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -837,6 +837,28 @@ export async function ensureWorktree(
   }
 
   return { worktreePath, branch, baseBranch, reused: false };
+}
+
+/**
+ * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
+ * freshly created worktree. Called before the worktree is handed to any agent
+ * run so the checkout is ready to build/test. A non-zero exit is a hard error —
+ * starting agent work in a half-set-up tree is worse than failing the request.
+ *
+ * @param sandbox       live sandbox containing the worktree
+ * @param worktreePath  the server-computed worktree path the command runs in
+ * @param command       the org-configured setup shell command
+ */
+export async function runWorktreeSetup(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
+    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
+  }
 }
 
 /**
