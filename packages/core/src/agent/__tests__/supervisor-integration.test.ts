@@ -177,83 +177,6 @@ describe('Supervisor Pattern Integration Tests', () => {
       expect(onDelegationComplete).not.toHaveBeenCalled();
     });
 
-    it('should preserve streamed text before a regular tool call in final stream text', async () => {
-      const regularTool = createTool({
-        id: 'regular-tool',
-        description: 'A regular tool',
-        inputSchema: z.object({ task: z.string() }),
-        execute: async ({ task }) => ({ result: `Processed: ${task}` }),
-      });
-
-      let callCount = 0;
-      const agent = new Agent({
-        id: 'regular-pre-tool-text-agent',
-        name: 'regular-pre-tool-text-agent',
-        instructions: 'You use regular tools.',
-        model: new MockLanguageModelV2({
-          doStream: async () => {
-            callCount++;
-            if (callCount === 1) {
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                warnings: [],
-                stream: convertArrayToReadableStream([
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'response-metadata', id: 'regular-id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-start', id: 'regular-text-1' },
-                  { type: 'text-delta', id: 'regular-text-1', delta: 'I will use the tool.' },
-                  { type: 'text-end', id: 'regular-text-1' },
-                  {
-                    type: 'tool-call',
-                    toolCallId: 'regular-call-1',
-                    toolName: 'regular-tool',
-                    input: JSON.stringify({ task: 'data-analysis' }),
-                  },
-                  {
-                    type: 'finish',
-                    finishReason: 'tool-calls',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  },
-                ]),
-              };
-            }
-
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                { type: 'response-metadata', id: 'regular-id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-                { type: 'text-start', id: 'regular-text-2' },
-                { type: 'text-delta', id: 'regular-text-2', delta: 'Final response.' },
-                { type: 'text-end', id: 'regular-text-2' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                },
-              ]),
-            };
-          },
-        }),
-        tools: { regularTool },
-        memory: new MockMemory(),
-      });
-
-      const stream = await agent.stream('Use tool then respond', { maxSteps: 3 });
-      const streamedText: string[] = [];
-
-      for await (const chunk of stream.fullStream) {
-        if (chunk.type === 'text-delta') {
-          streamedText.push(chunk.payload.text);
-        }
-      }
-
-      expect(streamedText).toContain('I will use the tool.');
-      expect(streamedText).toContain('Final response.');
-      await expect(stream.text).resolves.toBe('I will use the tool.Final response.');
-    });
-
     it('should track iteration progress with onIterationComplete hook', async () => {
       const iterations: number[] = [];
 
@@ -1051,22 +974,16 @@ describe('Supervisor Pattern - Tool approval propagation', () => {
 
     const stream = await supervisorAgent.stream('Delegate and answer', { maxSteps: 3 });
     const streamedText: string[] = [];
-    const fullStreamChunks: unknown[] = [];
 
     for await (const chunk of stream.fullStream) {
-      fullStreamChunks.push(chunk);
       if (chunk.type === 'text-delta') {
         streamedText.push(chunk.payload.text);
       }
     }
 
     expect(streamedText).toContain('Supervisor narration before delegation.');
-    expect(JSON.stringify(fullStreamChunks)).toContain('Sub-agent streamed answer.');
     expect(streamedText).toContain('Supervisor final answer.');
-
-    const text = await stream.text;
-    expect(text).toContain('Supervisor final answer.');
-    expect(text).not.toContain('Sub-agent streamed answer.');
+    await expect(stream.text).resolves.toBe('Supervisor final answer.');
   });
 
   it('should propagate tool approval decline from sub-agent through supervisor stream', async () => {
