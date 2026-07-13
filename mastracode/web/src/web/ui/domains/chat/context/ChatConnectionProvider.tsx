@@ -27,6 +27,7 @@ export function ChatConnectionProvider({
   const connectionValue: ChatConnectionApi = {
     status: connection.status,
     state: connection.state,
+    stateUpdatedAt: connection.stateUpdatedAt,
     createdThreadId: connection.createdThreadId,
   };
 

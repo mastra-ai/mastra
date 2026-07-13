@@ -600,6 +600,41 @@ describe('Factory investigate flow', () => {
     expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
   });
 
+  it('given the new worktree session is seeded with a fresh untitled thread, when Investigate is clicked, then that thread is renamed and reused instead of creating a second one', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/intake');
+    // A brand-new scope's session create seeds an empty untitled thread and
+    // reports it back; the run must claim it rather than add an "Untitled"
+    // sibling next to the run's own thread.
+    const renames: Record<string, unknown>[] = [];
+    server.use(
+      http.post(`${API}/sessions`, () =>
+        HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: 'thread-seeded' }),
+      ),
+      http.get(`${SESSION}/threads`, () =>
+        HttpResponse.json({ threads: [{ id: 'thread-seeded', resourceId: RESOURCE_ID, title: '' }] }),
+      ),
+      http.put(`${SESSION}/threads/thread-seeded`, async ({ request }) => {
+        renames.push((await request.json()) as Record<string, unknown>);
+        return HttpResponse.json({ ok: true });
+      }),
+    );
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'Investigate issue #12' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-seeded'));
+    expect(renames).toEqual([{ title: 'Issue #12: Fix flaky test' }]);
+    expect(captured.threadTitles).toEqual([]);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('understand-issue skill');
+  });
+
   it('given an issue, when a custom prompt is submitted from the action menu, then the run starts with the typed prompt', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>

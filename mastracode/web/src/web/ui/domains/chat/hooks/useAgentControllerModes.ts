@@ -6,6 +6,7 @@ import { createAgentControllerClient } from '../services/agentControllerClient';
 interface UseAgentControllerModesArgs {
   agentControllerId: string;
   resourceId: string;
+  projectPath?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -13,10 +14,17 @@ interface UseAgentControllerModesArgs {
 export function useAgentControllerModes({
   agentControllerId,
   resourceId,
+  projectPath,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerModesArgs) {
-  const { controller } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { controller } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
 
   return useQuery({
     queryKey: queryKeys.agentControllerModes(agentControllerId),
