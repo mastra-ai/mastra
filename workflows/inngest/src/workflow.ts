@@ -19,6 +19,11 @@ import type {
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 import { InngestExecutionEngine } from './execution-engine';
+import {
+  compactNestedWorkflowResult,
+  NESTED_WORKFLOW_OUTPUT_MODE,
+  resolveNestedWorkflowOutputMode,
+} from './nested-workflow-output';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -276,6 +281,11 @@ export class InngestWorkflow<
     return this.cronFunction;
   }
 
+  /**
+   * Gets the durable Inngest function that executes this workflow.
+   *
+   * @returns The memoized Inngest function for this workflow.
+   */
   getFunction(): ReturnType<Inngest['createFunction']> {
     if (this.function) {
       return this.function;
@@ -294,6 +304,12 @@ export class InngestWorkflow<
         // Spread flow control configuration
         ...this.flowControlConfig,
       },
+      /**
+       * Executes a workflow invocation from its Inngest trigger event.
+       *
+       * @param context - The Inngest event, durable step tools, and current attempt.
+       * @returns The workflow result and run identifier returned to Inngest.
+       */
       async ({ event, step, attempt }) => {
         let {
           inputData,
@@ -307,7 +323,10 @@ export class InngestWorkflow<
           perStep,
           tracingOptions,
           actor,
+          nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
         } = event.data;
+        const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
+        const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
         if (!runId) {
           runId = await step.run(`workflow.${this.id}.runIdGen`, async () => {
@@ -413,12 +432,19 @@ export class InngestWorkflow<
           } as WorkflowResult<TState, TInput, TOutput, TSteps>;
         }
 
+        const returnedResult = shouldCompactNestedWorkflowOutput ? compactNestedWorkflowResult(result) : result;
+
         // Final step to invoke lifecycle callbacks and end workflow span.
         // This step is memoized by step.run.
         let finalizeError: unknown;
         let finalizeErrored = false;
         try {
-          await step.run(`workflow.${this.id}.finalize`, async () => {
+          /**
+           * Finalizes workflow lifecycle reporting in a memoized Inngest step.
+           *
+           * @returns The workflow result, or only its status for compact nested invocations.
+           */
+          const finalizeWorkflow = async () => {
             // For durable agent workflows, emit error event on failure so the
             // client's stream can receive the error and close properly.
             if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
@@ -535,12 +561,13 @@ export class InngestWorkflow<
             // Throw after span ended for failed workflows
             if (result.status === 'failed') {
               throw new NonRetriableError(`Workflow failed`, {
-                cause: result,
+                cause: shouldCompactNestedWorkflowOutput ? { ...returnedResult, runId } : result,
               });
             }
 
-            return result;
-          });
+            return shouldCompactNestedWorkflowOutput ? { status: result.status } : result;
+          };
+          await step.run(`workflow.${this.id}.finalize`, finalizeWorkflow);
         } catch (error) {
           finalizeErrored = true;
           finalizeError = error;
@@ -560,7 +587,7 @@ export class InngestWorkflow<
           throw finalizeError;
         }
 
-        return { result, runId };
+        return { result: returnedResult, runId };
       },
     );
     return this.function;
