@@ -20,7 +20,13 @@ const goalBar = 'flex shrink-0 items-center gap-2.5 border-b border-border1 bg-a
 export function GoalPanel() {
   const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript } = useChatTranscript();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, projectPath, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);

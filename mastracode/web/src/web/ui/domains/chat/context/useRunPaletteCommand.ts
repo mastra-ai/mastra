@@ -30,7 +30,13 @@ export function useRunPaletteCommand(setComposerCommandName: Dispatch<SetStateAc
   const { activeModeId } = useChatModes();
   const { activeModelId, setModel } = useChatModels();
 
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, projectPath, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const clearGoalMutation = useClearAgentControllerGoalMutation(hookArgs);
   const pauseGoalMutation = usePauseAgentControllerGoalMutation(hookArgs);
   const resumeGoalMutation = useResumeAgentControllerGoalMutation(hookArgs);

@@ -26,7 +26,13 @@ export function useAgentControllerSessionSync({
   enabled = true,
   sseConnected,
 }: UseAgentControllerSessionSyncArgs) {
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
 
   return useQuery({
     queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'state'],

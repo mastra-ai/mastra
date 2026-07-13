@@ -20,7 +20,13 @@ export function useSetPermissionForCategoryMutation({
   enabled = true,
 }: AgentControllerPermissionMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
 
   return useMutation({
     mutationFn: ({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }) =>

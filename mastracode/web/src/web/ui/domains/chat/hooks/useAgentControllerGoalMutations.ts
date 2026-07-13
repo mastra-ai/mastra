@@ -11,7 +11,13 @@ interface AgentControllerGoalMutationArgs {
   enabled?: boolean;
 }
 
-function toClientArgs({ agentControllerId, resourceId, projectPath, baseUrl, enabled }: AgentControllerGoalMutationArgs) {
+function toClientArgs({
+  agentControllerId,
+  resourceId,
+  projectPath,
+  baseUrl,
+  enabled,
+}: AgentControllerGoalMutationArgs) {
   return { agentControllerId, resourceId, scope: projectPath, baseUrl, enabled };
 }
 

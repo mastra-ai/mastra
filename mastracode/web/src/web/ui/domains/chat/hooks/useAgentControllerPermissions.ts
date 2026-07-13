@@ -18,7 +18,13 @@ export function useAgentControllerPermissions({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerPermissionsArgs) {
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
 
   return useQuery({
     queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId, projectPath),

@@ -20,7 +20,13 @@ export function useAgentControllerThreads({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerThreadsArgs) {
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
 
   return useQuery({
     queryKey: queryKeys.agentControllerThreads(agentControllerId, resourceId, projectPath),

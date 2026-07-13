@@ -20,7 +20,13 @@ export function useAgentControllerThreadMessages({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerThreadMessagesArgs) {
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
 
   return useQuery({
     queryKey: queryKeys.agentControllerThreadMessages(agentControllerId, resourceId, threadId),
