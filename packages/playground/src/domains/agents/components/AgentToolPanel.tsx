@@ -45,12 +45,16 @@ export const AgentToolPanel = ({ toolId, agentId }: AgentToolPanelProps) => {
       ...(schemaRequestContext ?? {}),
     };
 
-    await executeTool({
-      agentId: agentId!,
-      toolId: tool.id,
-      input: data,
-      playgroundRequestContext: requestContext,
-    });
+    try {
+      await executeTool({
+        agentId: agentId!,
+        toolId: tool.id,
+        input: data,
+        playgroundRequestContext: requestContext,
+      });
+    } catch {
+      toast.error('Error executing agent tool');
+    }
   };
 
   const zodInputSchema = tool?.inputSchema

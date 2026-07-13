@@ -1,5 +1,4 @@
 import { RequestContext } from '@mastra/core/di';
-import { toast } from '@mastra/playground-ui/utils/toast';
 
 import { useMastraClient } from '@mastra/react';
 import { useMutation } from '@tanstack/react-query';
@@ -28,7 +27,6 @@ export const useExecuteTool = () => {
 
         return response;
       } catch (error) {
-        toast.error('Error executing dev tool');
         console.error('Error executing dev tool:', error);
         throw error;
       }

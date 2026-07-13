@@ -25,7 +25,7 @@ export type UseVisibilityChange = UseVisibilityChangeDialogResult<Visibility>;
 
 export function useVisibilityChange(skillId: string): UseVisibilityChange {
   const formMethods = useFormContext<SkillEditFormValues>();
-  const updateSkill = useUpdateSkill({ silent: true });
+  const updateSkill = useUpdateSkill();
 
   return useVisibilityChangeDialog<Visibility>({
     copy: COPY,

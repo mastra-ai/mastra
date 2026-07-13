@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useToast } from '../../../ui/toast';
 import { createWorktree } from '../services/github';
 import type { Project, Worktree } from '../services/projects';
 import { loadProjects, projectWorktrees, selectedWorktree, selectWorktree, upsertWorktree } from '../services/projects';
@@ -89,7 +88,6 @@ export function useCreateWorkspaceMutation(
 ) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
-  const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (branch: string) => {
@@ -106,6 +104,5 @@ export function useCreateWorkspaceMutation(
       return updated;
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
-    onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
   });
 }

@@ -5,6 +5,7 @@ import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDen
 import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowLeftIcon, PauseIcon, PlayIcon } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 import { ScheduleStatusText } from '@/domains/schedules/components/schedule-status-badge';
@@ -83,7 +84,13 @@ export default function SchedulePage() {
             ) : null}
             {schedule ? (
               <Button
-                onClick={() => toggle.mutate(schedule.status === 'active' ? 'pause' : 'resume')}
+                onClick={() => {
+                  const action = schedule.status === 'active' ? 'pause' : 'resume';
+                  toggle.mutate(action, {
+                    onSuccess: () => toast.success(action === 'pause' ? 'Schedule paused' : 'Schedule resumed'),
+                    onError: error => toast.error(error.message),
+                  });
+                }}
                 disabled={toggle.isPending}
                 data-testid="schedule-toggle-button"
               >

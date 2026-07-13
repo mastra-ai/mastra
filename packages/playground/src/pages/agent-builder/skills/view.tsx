@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import { ArrowLeftIcon, PlusIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Navigate, useNavigate, useParams } from 'react-router';
@@ -125,10 +126,11 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           onConfirm={async name => {
             try {
               const created = await copySkill.mutateAsync({ source: skill, name });
+              toast.success('Skill copied');
               setCopyOpen(false);
               void navigate(`/agent-builder/skills/${created.id}/edit`, { viewTransition: true });
-            } catch {
-              // Errors surfaced via the mutation's onError toast; keep dialog open.
+            } catch (error) {
+              toast.error(`Failed to copy skill: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
           }}
         />

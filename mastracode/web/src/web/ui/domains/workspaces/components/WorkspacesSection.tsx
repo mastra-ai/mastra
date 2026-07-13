@@ -9,6 +9,7 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
+import { useToast } from '../../../ui';
 import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentControllerThreads';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
@@ -31,6 +32,7 @@ import type { Worktree } from '../services/projects';
  */
 export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const { baseUrl } = useApiConfig();
+  const { toast } = useToast();
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const [creating, setCreating] = useState(false);
   const [branch, setBranch] = useState('');
@@ -131,6 +133,9 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
         resetCreate();
         const path = updated.selectedWorktreePath;
         if (path) void openWorktreeThread(path);
+      },
+      onError: error => {
+        toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error');
       },
     });
   };

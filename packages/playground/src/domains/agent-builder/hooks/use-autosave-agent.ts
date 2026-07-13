@@ -27,7 +27,7 @@ export function useAutosaveAgent({
   savedDisplayMs = DEFAULT_SAVED_DISPLAY_MS,
 }: UseAutosaveAgentArgs) {
   const formMethods = useFormContext<AgentBuilderEditFormValues>();
-  const { save } = useSaveAgent({ agentId, availableAgentTools, availableSkills, silent: true });
+  const { save } = useSaveAgent({ agentId, availableAgentTools, availableSkills });
 
   const [status, setStatus] = useState<AutosaveStatus>('idle');
   const [lastError, setLastError] = useState<Error | null>(null);
