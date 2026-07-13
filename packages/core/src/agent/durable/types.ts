@@ -16,7 +16,7 @@ import type { ProviderOptions } from '../../llm/model/provider-options';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { MastraMemory } from '../../memory/memory';
 import type { MemoryConfig } from '../../memory/types';
-import type { AIModelGenerationSpan, Span, SpanType, TracingOptions } from '../../observability';
+import type { AIModelGenerationSpan, Span, SpanType, TracingContext, TracingOptions } from '../../observability';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow, ErrorProcessorOrWorkflow } from '../../processors';
 import type { ProcessorState } from '../../processors/runner';
 import type { RequestContext } from '../../request-context';
@@ -682,7 +682,7 @@ export interface RunRegistryEntry {
     memoryConfig?: MemoryConfig;
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
-    tracingContext?: unknown;
+    tracingContext?: TracingContext;
   }) => Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from

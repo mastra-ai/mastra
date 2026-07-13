@@ -706,20 +706,32 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           const title = await agent.genTitle(
             userMessage,
             rc ?? new RequestContext(),
-            createObservabilityContext(tracingContext as any),
+            createObservabilityContext(tracingContext),
             model,
             instructions,
             uiMessages,
           );
           if (!title) return;
 
-          await memory.createThread({
-            threadId,
-            resourceId,
-            memoryConfig,
-            title,
-            metadata: thread?.metadata,
-          });
+          // Title-only late write. Prefer updateThread when the thread record
+          // already exists so its original createdAt is preserved (createThread
+          // rebuilds the record with a fresh createdAt). Fall back to createThread
+          // for the first-turn case where the record may not be persisted yet.
+          if (thread) {
+            await memory.updateThread({
+              id: threadId,
+              title,
+              metadata: thread.metadata ?? {},
+              memoryConfig,
+            });
+          } else {
+            await memory.createThread({
+              threadId,
+              resourceId,
+              memoryConfig,
+              title,
+            });
+          }
         }
       : undefined,
     // Signal messages already in the messageList at run start (from persisted
