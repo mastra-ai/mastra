@@ -42,7 +42,9 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
       client = new MastraClient({ baseUrl, retries: 0 });
 
       // Reset and seed only observability so parallel suites cannot clear each other's data.
-      const res = await fetch(`${baseUrl}/e2e/reset-observability`, { method: 'POST' });
+      const res = await fetch(`${baseUrl}/e2e/reset-observability?agentName=${encodeURIComponent(agentName)}`, {
+        method: 'POST',
+      });
       if (!res.ok) {
         throw new Error(`reset-observability failed: ${res.status} ${res.statusText}`);
       }

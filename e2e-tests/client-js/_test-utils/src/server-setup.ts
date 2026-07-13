@@ -219,6 +219,7 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
           registerApiRoute('/e2e/reset-observability', {
             method: 'POST',
             handler: async c => {
+              const seededAgentId = c.req.query('agentName') || testAgentId;
               const observabilityStore = await storage.getStore('observability');
               if (!observabilityStore) {
                 return c.json({ message: 'Observability storage unavailable' }, 500);
@@ -235,8 +236,8 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
                 type: SpanType.AGENT_RUN,
                 name: 'client-js-e2e-agent-run',
                 entityType: EntityType.AGENT,
-                entityId: testAgentId,
-                entityName: testAgentId,
+                entityId: seededAgentId,
+                entityName: seededAgentId,
                 attributes: {
                   instructions: 'You are a helpful test assistant.',
                 },
