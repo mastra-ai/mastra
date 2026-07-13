@@ -1376,6 +1376,9 @@ export type ProviderModelsMap = {
     'openai/gpt-5.5',
     'openai/gpt-5.5-instant',
     'openai/gpt-5.5-pro',
+    'openai/gpt-5.6-luna',
+    'openai/gpt-5.6-sol',
+    'openai/gpt-5.6-terra',
     'qwen/qwen3-coder-plus',
     'qwen/qwen3-max',
     'qwen/qwen3.5-flash',
@@ -1403,6 +1406,7 @@ export type ProviderModelsMap = {
     'x-ai/grok-4.2-fast',
     'x-ai/grok-4.2-fast-non-reasoning',
     'x-ai/grok-4.3',
+    'x-ai/grok-4.5',
     'x-ai/grok-build-0.1',
     'x-ai/grok-code-fast-1',
     'xiaomi/mimo-v2-flash',
@@ -2434,6 +2438,17 @@ export type ProviderModelsMap = {
     'zai-org/GLM-5',
     'zai-org/GLM-5.1',
     'zai-org/GLM-5.2',
+  ];
+  readonly daoxe: readonly [
+    'claude-haiku-4-5-20251001',
+    'claude-opus-4-8',
+    'claude-sonnet-4-6',
+    'gemini-3.1-pro-preview',
+    'gpt-5.4',
+    'gpt-5.5',
+    'grok-4.3',
+    'grok-4.5',
+    'kimi-k2.5',
   ];
   readonly cerebras: readonly ['gemma-4-31b', 'gpt-oss-120b', 'zai-glm-4.7'];
   readonly 'zai-coding-plan': readonly ['glm-4.5-air', 'glm-4.7', 'glm-5-turbo', 'glm-5.1', 'glm-5.2', 'glm-5v-turbo'];
@@ -4141,6 +4156,7 @@ export type ProviderModelsMap = {
     'gemma-4-E4B-it-IQ4_XS',
     'gemma-4-E4B-it-MLX-4bit',
   ];
+  readonly blueclaw: readonly ['Qwen/Qwen3.6-35B-A3B-FP8', 'Qwen3.6-27B'];
   readonly meta: readonly ['muse-spark-1.1'];
   readonly 'routing-run': readonly [
     'claude-opus-4-8',
