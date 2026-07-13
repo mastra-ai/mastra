@@ -137,14 +137,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     outputSchema: iterationStateSchema,
     options: {
       shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support `resumeStream()`.
-        // - Create the initial record early ("pending")
-        // - Update it when execution is suspended ("paused"/"suspended")
-        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        // We need a persisted snapshot record to support both:
+        //  - `resumeStream()` after a suspend (records with status
+        //    `pending` / `paused` / `suspended`)
+        //  - boot-time recovery of orphaned RUNNING runs after a process
+        //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
+        //    the row to actually be stamped `running` while the loop is
+        //    in-flight (issue #19056).
+        //
+        // The engine's persist path guards against overwriting a `suspended`
+        // / `paused` snapshot with a later `running` update from the same
+        // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
+        // it is safe to return true for `running` here.
         return (
           params.workflowStatus === 'pending' ||
           params.workflowStatus === 'paused' ||
-          params.workflowStatus === 'suspended'
+          params.workflowStatus === 'suspended' ||
+          params.workflowStatus === 'running'
         );
       },
       // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -263,14 +272,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       outputSchema: durableAgenticOutputSchema,
       options: {
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
-          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          // See the singleIterationWorkflow comment above — same policy for
+          // the outer loop. The persist path guards against overwriting a
+          // suspended snapshot with running.
           return (
             params.workflowStatus === 'pending' ||
             params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
+            params.workflowStatus === 'suspended' ||
+            params.workflowStatus === 'running'
           );
         },
         // Agent-loop snapshots are pure resume artifacts — strip everything a
