@@ -21,6 +21,7 @@ export interface RunResult {
   result?: unknown;
   error?: unknown;
   steps?: Record<string, unknown>;
+  tripwire?: { reason?: string; retry?: unknown; metadata?: unknown; processorId?: string };
 }
 
 export interface WorkflowRunEvent {
@@ -102,6 +103,7 @@ export async function runWorkflow(
 ): Promise<RunResult> {
   const wf = (mastra as unknown as MastraLike).getWorkflow(workflowId);
   if (!wf) throw new Error(`No workflow registered with id "${workflowId}". Was it built and saved?`);
+
   const run = await wf.createRun();
   const output = run.stream({ inputData, requestContext });
   if (onEvent) {

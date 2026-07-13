@@ -101,7 +101,7 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
 
-    cachedMemory = new Memory({
+    const memory = new Memory({
       storage,
       vector: vector || false,
       embedder: vector ? fastembed.small : undefined,
@@ -134,8 +134,53 @@ export function getDynamicMemory(storage: MastraCompositeStore, vector?: MastraV
         },
       },
     });
+
+    cachedMemory = wrapMemoryForEphemeralInvocations(memory);
     cachedMemoryKey = cacheKey;
 
     return cachedMemory;
   };
+}
+
+/**
+ * Workflow agent steps invoke `code-agent` without a chat thread context — no
+ * `MastraMemory` is set on the `requestContext`. `ObservationalMemory` (in
+ * `'thread'` scope) throws when it can't find a threadId, which surfaces as a
+ * `tripwire` on the workflow step.
+ *
+ * Wrap the `Memory` instance so `getInputProcessors` / `getOutputProcessors`
+ * strip the observational-memory processor out when no thread context is
+ * available. Those processors only make sense inside a real chat turn; a
+ * one-shot ephemeral invocation should skip them entirely.
+ *
+ * Read from `context` at call time (not construction time) so the same cached
+ * `Memory` instance serves both chat-turn and workflow-step invocations
+ * correctly.
+ */
+export function wrapMemoryForEphemeralInvocations(memory: Memory): Memory {
+  const originalGetInput = memory.getInputProcessors?.bind(memory);
+  const originalGetOutput = memory.getOutputProcessors?.bind(memory);
+
+  const hasThreadContext = (context?: RequestContext): boolean => {
+    const memCtx = context?.get?.('MastraMemory') as { thread?: { id?: string } } | undefined;
+    return !!memCtx?.thread?.id;
+  };
+
+  if (originalGetInput) {
+    memory.getInputProcessors = async function (configuredProcessors, context) {
+      const processors = await originalGetInput(configuredProcessors, context);
+      if (hasThreadContext(context)) return processors;
+      return processors.filter(p => (p as { id?: string }).id !== 'observational-memory');
+    } as typeof memory.getInputProcessors;
+  }
+
+  if (originalGetOutput) {
+    memory.getOutputProcessors = async function (configuredProcessors, context) {
+      const processors = await originalGetOutput(configuredProcessors, context);
+      if (hasThreadContext(context)) return processors;
+      return processors.filter(p => (p as { id?: string }).id !== 'observational-memory');
+    } as typeof memory.getOutputProcessors;
+  }
+
+  return memory;
 }

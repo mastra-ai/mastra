@@ -21,7 +21,7 @@ import { randomUUID } from 'node:crypto';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import type { ProcessInputArgs, Processor } from '@mastra/core/processors';
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext, MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
@@ -273,10 +273,10 @@ describe('run-workflow chat tool — forwards requestContext to service', () => 
     const result = (await (runWorkflowTool as any).execute(
       { workflowId: WORKFLOW_ID, inputData: { name: 'Tony' } },
       { mastra, requestContext: rc },
-    )) as { status: string; error?: { message?: string } };
+    )) as { status: string; error?: string };
 
     expect(result.status).toBe('failed');
-    expect(result.error?.message ?? '').toContain('No model selected');
+    expect(result.error ?? '').toContain('No model selected');
   });
 });
 
@@ -332,23 +332,31 @@ describe('runWorkflow — MastraMemory / ObservationalMemory thread requirement'
     mastra = await buildMastraWithMemoryProcessor();
   });
 
-  it('fails when MastraMemory is absent from the context (regression guard)', async () => {
+  it('fails when MastraMemory is absent (regression guard: service is a pass-through, does NOT synthesize memory)', async () => {
+    // The workflow service intentionally does NOT inject MastraMemory. Making
+    // the observational-memory processor tolerant of missing thread context is
+    // the responsibility of the agent's Memory wrapper (see
+    // mastracode/src/agents/memory.ts:wrapMemoryForEphemeralInvocations).
+    //
+    // This test locks in that the service stays a thin pass-through so we
+    // don't regress by re-adding fake-thread synthesis at this layer.
     const rc = new RequestContext();
     rc.set('controller', { session: { modelId: 'openai/gpt-5.5' }, state: {} });
 
     const result = (await runWorkflow(mastra, WORKFLOW_ID, { name: 'Tony' }, rc)) as {
       status: string;
-      error?: { message?: string; cause?: { message?: string } };
+      error?: { message?: string } | Error;
     };
 
     expect(result.status).toBe('failed');
-    // The Agent wraps input-processor errors as "[Agent:X] - Input processor error";
-    // check either the wrapper OR the underlying cause for the ObservationalMemory
-    // failure signature. Any-of match keeps the assertion tolerant of framing
-    // changes upstream while still asserting the failure mode.
-    const errText = `${result.error?.message ?? ''}\n${result.error?.cause?.message ?? ''}`;
-    const looksLikeMemoryError = errText.includes('Input processor') || errText.includes('ObservationalMemory');
-    expect(looksLikeMemoryError).toBe(true);
+    const err = result.error as (Error & { cause?: unknown }) | { message?: string } | undefined;
+    const errMessage = err instanceof Error ? err.message : (err as { message?: string } | undefined)?.message;
+    const causeMessage =
+      err && typeof err === 'object' && 'cause' in err && err.cause instanceof Error ? err.cause.message : '';
+    // The service is a pass-through: when MastraMemory is absent the
+    // observational-memory processor throws, and the agent wraps it as an
+    // "Input processor error" whose cause carries the threadId text.
+    expect(`${errMessage} ${causeMessage}`).toMatch(/input processor error|threadId|thread id/i);
   });
 
   it('succeeds when MastraMemory.thread.id is populated in the request context', async () => {
@@ -373,5 +381,115 @@ describe('runWorkflow — MastraMemory / ObservationalMemory thread requirement'
       );
     }
     expect(result.result?.text).toBeDefined();
+  });
+});
+
+// ============================================================================
+// Tool-boundary scrub-and-restore: `run-workflow` chat tool must strip the
+// parent chat's memory identity from the forwarded requestContext, then restore
+// it after the workflow returns. Otherwise the nested code-agent invocation in
+// the workflow step writes the workflow prompt + response into the parent chat
+// thread's history and contends with the parent turn's own OM processor.
+// ============================================================================
+
+/**
+ * Captures the requestContext seen at agent-step time so tests can assert what
+ * the nested workflow-agent-step actually inherits from the forwarded context.
+ */
+class CaptureRequestContextProcessor implements Processor<'capture-request-context'> {
+  readonly id = 'capture-request-context' as const;
+  readonly name = 'Capture Request Context';
+  captured: {
+    mastraMemory: unknown;
+    threadIdKey: unknown;
+    resourceIdKey: unknown;
+    controller: unknown;
+  } | null = null;
+
+  async processInput(args: ProcessInputArgs<unknown>) {
+    this.captured = {
+      mastraMemory: args.requestContext?.get('MastraMemory'),
+      threadIdKey: args.requestContext?.get(MASTRA_THREAD_ID_KEY),
+      resourceIdKey: args.requestContext?.get(MASTRA_RESOURCE_ID_KEY),
+      controller: args.requestContext?.get('controller'),
+    };
+    return args.messageList;
+  }
+}
+
+async function buildMastraWithCaptureProcessor(): Promise<{ mastra: Mastra; capture: CaptureRequestContextProcessor }> {
+  const capture = new CaptureRequestContextProcessor();
+  const codeAgent = new Agent({
+    id: 'code-agent',
+    name: 'Code Agent',
+    instructions: 'You are a friendly assistant.',
+    model: fakeGetDynamicModel,
+    inputProcessors: [capture],
+  } as any);
+
+  const mastra = new Mastra({
+    logger: false,
+    agents: { 'code-agent': codeAgent },
+    storage: new InMemoryStore({ id: 'test-store-scrub' }),
+  });
+
+  await (mastra as any).addStoredWorkflow({
+    id: WORKFLOW_ID,
+    description: 'Says hi to a name using the code-agent (capture variant).',
+    inputSchema,
+    outputSchema,
+    graph: testGraph,
+  });
+
+  return { mastra, capture };
+}
+
+describe('run-workflow chat tool — isolates workflow-step memory from parent chat thread', () => {
+  it('replaces parent MastraMemory with a fresh thread id (keeping parent resourceId), scrubs MASTRA_THREAD_ID_KEY, and restores outer context', async () => {
+    const { mastra, capture } = await buildMastraWithCaptureProcessor();
+
+    const rc = new RequestContext();
+    rc.set('controller', { session: { modelId: 'openai/gpt-5.5' }, state: {} });
+    rc.set('MastraMemory', {
+      thread: { id: 'parent-chat-thread' },
+      resourceId: 'user-1',
+      memoryConfig: undefined,
+    });
+    rc.set(MASTRA_THREAD_ID_KEY, 'parent-chat-thread');
+    rc.set(MASTRA_RESOURCE_ID_KEY, 'user-1');
+
+    const result = (await (runWorkflowTool as any).execute(
+      { workflowId: WORKFLOW_ID, inputData: { name: 'Tony' } },
+      { mastra, requestContext: rc },
+    )) as { status: string; error?: unknown };
+
+    expect(result.status).toBe('success');
+
+    // Nested workflow-agent-step must see a FRESH thread id (not the parent's),
+    // but the parent's resourceId is preserved so memory-dependent processors
+    // (task-state, observational-memory, …) have what they need.
+    expect(capture.captured).not.toBeNull();
+    const capturedMemory = capture.captured?.mastraMemory as
+      | { thread?: { id?: string }; resourceId?: string }
+      | undefined;
+    expect(capturedMemory).toBeDefined();
+    expect(capturedMemory?.thread?.id).toBeDefined();
+    expect(capturedMemory?.thread?.id).not.toBe('parent-chat-thread');
+    expect(capturedMemory?.resourceId).toBe('user-1');
+    // MASTRA_THREAD_ID_KEY must be scrubbed so it doesn't override the fresh
+    // thread id in the MastraMemory payload.
+    expect(capture.captured?.threadIdKey).toBeUndefined();
+    // Controller must still be forwarded so getDynamicModel resolves.
+    expect(capture.captured?.controller).toBeDefined();
+
+    // After the tool returns, the outer requestContext still holds the
+    // parent's memory identity — the scrub was undone via `finally`.
+    expect(rc.get('MastraMemory')).toEqual({
+      thread: { id: 'parent-chat-thread' },
+      resourceId: 'user-1',
+      memoryConfig: undefined,
+    });
+    expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('parent-chat-thread');
+    expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-1');
   });
 });
