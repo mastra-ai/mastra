@@ -94,17 +94,25 @@ const createSessionBodySchema = z.object({
   tags: z.record(z.string(), z.string()).optional(),
   sessionScope: z.string().optional(),
 });
+// Server-side attachment limits mirroring the web composer caps (10MB per
+// file, 20MB total), adjusted for base64 overhead (~4/3x).
+const MAX_FILE_DATA_LENGTH = 14 * 1024 * 1024;
+const MAX_TOTAL_FILE_DATA_LENGTH = 28 * 1024 * 1024;
 const sendMessageBodySchema = z.object({
   message: z.string(),
   // Optional attachments (e.g. pasted images). `data` is base64-encoded.
   files: z
     .array(
       z.object({
-        data: z.string(),
+        data: z.string().max(MAX_FILE_DATA_LENGTH),
         mediaType: z.string(),
         filename: z.string().optional(),
       }),
     )
+    .max(20)
+    .refine(files => files.reduce((total, file) => total + file.data.length, 0) <= MAX_TOTAL_FILE_DATA_LENGTH, {
+      message: 'Total attachment size exceeds limit',
+    })
     .optional(),
 });
 const steerBodySchema = z.object({ message: z.string() });

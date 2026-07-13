@@ -249,6 +249,21 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ content: 'see attached', files, requestContext: undefined });
     });
 
+    it('rejects oversized file attachments in the body schema', () => {
+      const schema = SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.bodySchema!;
+
+      const okFile = { data: 'aGVsbG8=', mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [okFile] }).success).toBe(true);
+
+      // Single file over the 14MB base64 cap (10MB binary).
+      const oversized = { data: 'a'.repeat(14 * 1024 * 1024 + 1), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [oversized] }).success).toBe(false);
+
+      // Individually valid files whose combined size exceeds the 28MB total cap.
+      const large = { data: 'a'.repeat(10 * 1024 * 1024), mediaType: 'image/png' };
+      expect(schema.safeParse({ message: 'hi', files: [large, large, large] }).success).toBe(false);
+    });
+
     it('forwards requestContext to session.steer', async () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);
