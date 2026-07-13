@@ -592,6 +592,12 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
           return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
         }
+        // Reject control characters (except newline/tab). The command is a
+        // shell script by design, but escape sequences and NULs have no
+        // legitimate use and can spoof logs or confuse the sandbox shell.
+        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
+          return c.json({ error: 'setupCommand contains control characters' }, 400);
+        }
         // An empty/whitespace command means "no setup step".
         const setupCommand =
           typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0

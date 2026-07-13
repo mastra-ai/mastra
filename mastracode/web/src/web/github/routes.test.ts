@@ -918,6 +918,22 @@ describe('project settings routes', () => {
     });
     expect(res.status).toBe(400);
   });
+
+  it('400s on a setup command containing control characters', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const res = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: 'pnpm i \x1b[31m&& rm -rf /',
+    });
+    expect(res.status).toBe(400);
+    expect(tables.projects[0].setupCommand).toBeNull();
+
+    // Newlines and tabs are legitimate in multi-line setup scripts.
+    const res2 = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: 'pnpm i\npnpm build\t--force',
+    });
+    expect(res2.status).toBe(200);
+  });
 });
 
 describe('worktree route', () => {
