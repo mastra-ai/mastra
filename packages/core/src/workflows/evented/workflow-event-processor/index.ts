@@ -448,6 +448,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       parentWorkflow,
     } = args;
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    const normalizedPrevResult = prevResult ?? ({ status } as StepResult<any, any, any, any>);
 
     // Check shouldPersistSnapshot option - default to true if not specified
     const finalStatus = perStep && status === 'success' ? 'paused' : status;
@@ -463,7 +464,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         runId,
         opts: {
           status: finalStatus,
-          result: prevResult,
+          result: normalizedPrevResult,
           activePaths: executionPath,
           activeStepsPath: activeStepsPath,
         },
@@ -508,7 +509,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish('workflows', {
       type: 'workflow.end',
       runId,
-      data: { ...args, workflow: undefined },
+      data: { ...args, prevResult: normalizedPrevResult, workflow: undefined },
     });
   }
 
