@@ -6,6 +6,7 @@ import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
 import { useClampedElementCursor } from './use-clamped-element-cursor';
+import { usePanelSizeTransitions } from './use-panel-size-transitions';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -18,64 +19,6 @@ export interface CollapsiblePanelProps extends PanelProps {
 const PILL_EDGE_MARGIN = 22;
 
 type PanelElementRef = RefObject<HTMLDivElement | null>;
-
-const usePanelSizeTransitions = (elementRef: PanelElementRef) => {
-  const [booted, setBooted] = useState(false);
-  const bootedRef = useRef(false);
-  const bootScheduled = useRef(false);
-  const enableSizeTransitionsRef = useRef<() => void>(() => {});
-
-  const enableSizeTransitions = useCallback(() => {
-    enableSizeTransitionsRef.current();
-  }, []);
-
-  const boot = useCallback(() => {
-    if (bootScheduled.current) return;
-    bootScheduled.current = true;
-    requestAnimationFrame(() => {
-      bootedRef.current = true;
-      setBooted(true);
-      enableSizeTransitionsRef.current();
-    });
-  }, []);
-
-  useEffect(() => {
-    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const group = elementRef.current?.parentElement;
-    if (!group) return;
-    const panels = Array.from(group.children).filter(
-      (child): child is HTMLElement => child instanceof HTMLElement && child.hasAttribute('data-panel'),
-    );
-    const separators = Array.from(group.children).filter(
-      (child): child is HTMLElement => child instanceof HTMLElement && child.hasAttribute('data-separator'),
-    );
-
-    const enable = () => {
-      if (!bootedRef.current) return;
-      panels.forEach(
-        panel =>
-          (panel.style.transition =
-            'flex-grow 300ms var(--ease-out-custom, ease), flex-basis 300ms var(--ease-out-custom, ease)'),
-      );
-    };
-    const disable = () => panels.forEach(panel => (panel.style.transition = 'none'));
-
-    enable();
-    enableSizeTransitionsRef.current = enable;
-    separators.forEach(separator => separator.addEventListener('pointerdown', disable));
-    window.addEventListener('pointerup', enable);
-    window.addEventListener('pointercancel', enable);
-    return () => {
-      enableSizeTransitionsRef.current = () => {};
-      separators.forEach(separator => separator.removeEventListener('pointerdown', disable));
-      window.removeEventListener('pointerup', enable);
-      window.removeEventListener('pointercancel', enable);
-      panels.forEach(panel => (panel.style.transition = ''));
-    };
-  }, [elementRef]);
-
-  return { booted, boot, enableSizeTransitions };
-};
 
 const useCollapsedEdgePill = ({
   collapsed,
