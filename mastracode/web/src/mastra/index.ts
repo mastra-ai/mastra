@@ -28,9 +28,15 @@
  */
 
 import { Mastra } from '@mastra/core/mastra';
+import type { RequestContext } from '@mastra/core/request-context';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { handleServerError } from '../web/server-error.js';
+import {
+  createGithubSubscriptionTools,
+  parseCreatedPullRequest,
+  subscribeCurrentSessionToPullRequest,
+} from '../web/github/session-subscriptions.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
   assembleWebApiRoutes,
@@ -90,6 +96,19 @@ const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
+    : {}),
+  ...(githubReady
+    ? {
+        extraTools: ({ requestContext }: { requestContext: RequestContext }) =>
+          createGithubSubscriptionTools(requestContext),
+        postToolObserver: async (context: { toolName: string; input: unknown; output?: unknown; error?: unknown; context: unknown }) => {
+          const pullRequestUrl = parseCreatedPullRequest(context);
+          const requestContext = (context.context as { requestContext?: RequestContext } | undefined)?.requestContext;
+          if (pullRequestUrl && requestContext) {
+            await subscribeCurrentSessionToPullRequest(requestContext, pullRequestUrl, 'auto-gh-pr-create');
+          }
+        },
+      }
     : {}),
   buildApiRoutes: ({ controller, authStorage }) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as

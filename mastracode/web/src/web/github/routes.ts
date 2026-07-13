@@ -69,6 +69,7 @@ import {
 import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
+import { subscribeToPullRequest } from './subscriptions';
 
 export interface MountGithubRoutesOptions {
   /**
@@ -78,6 +79,20 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
+}
+
+function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
+  try {
+    const url = new URL(value);
+    const match = url.pathname.match(/^\/([^/]+\/[^/]+)\/pull\/(\d+)\/?$/);
+    if (url.protocol !== 'https:' || url.hostname !== 'github.com' || match?.[1]?.toLowerCase() !== expectedRepo.toLowerCase()) {
+      return undefined;
+    }
+    const number = Number(match[2]);
+    return Number.isInteger(number) && number > 0 ? number : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /** Validate an `owner/name` repo full name. */
@@ -1020,7 +1035,15 @@ function buildProjectGitRoutes(): ApiRoute[] {
         if ('response' in owned) return owned.response;
         const { userId, project, sandboxRow } = owned;
 
-        let body: { branch?: unknown; base?: unknown; title?: unknown; body?: unknown; worktreePath?: unknown };
+        let body: {
+          branch?: unknown;
+          base?: unknown;
+          title?: unknown;
+          body?: unknown;
+          worktreePath?: unknown;
+          sessionId?: unknown;
+          threadId?: unknown;
+        };
         try {
           body = await c.req.json();
         } catch {
@@ -1052,6 +1075,27 @@ function buildProjectGitRoutes(): ApiRoute[] {
             const sandbox = await resolveProjectSandbox(sandboxRow);
             const token = await mintInstallationToken(project.installationId);
             const result = await createPullRequest(sandbox, workdir, { token, base, head, title, body: prBody });
+            if (typeof body.sessionId === 'string' && body.sessionId && typeof body.threadId === 'string' && body.threadId) {
+              const pullRequestNumber = pullRequestNumberFromUrl(result.url, project.repoFullName);
+              if (pullRequestNumber) {
+                await subscribeToPullRequest({
+                  orgId: project.orgId,
+                  installationId: project.installationId,
+                  githubProjectId: project.id,
+                  repoId: project.repoId,
+                  pullRequestNumber,
+                  sessionId: body.sessionId,
+                  ownerId: userId,
+                  resourceId: project.id,
+                  threadId: body.threadId,
+                  sessionScope: workdir,
+                  source: 'factory-pr-create',
+                  subscribedByUserId: userId,
+                }).catch(error => {
+                  console.warn(`[GitHub] Pull request ${result.url} was created but automatic subscription failed.`, error);
+                });
+              }
+            }
             return c.json({ url: result.url });
           });
         } catch (err) {

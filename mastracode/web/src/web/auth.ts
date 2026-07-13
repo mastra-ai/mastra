@@ -533,6 +533,7 @@ export function createWebAuthGate(provider: MastraAuthWorkos) {
         if (orgId) user.organizationId = orgId;
       }
       c.set(WEB_AUTH_USER_KEY, user);
+      c.get('requestContext')?.set('user', user);
       return next();
     }
 
