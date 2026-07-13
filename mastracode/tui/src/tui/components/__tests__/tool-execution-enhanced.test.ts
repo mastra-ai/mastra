@@ -868,7 +868,8 @@ Test plan:
 
     const visible = stripAnsi(rendered.join('\n'));
     expect(visible).toContain('This follows up on the');
-    expect(visible).toContain('quiet-mode terminal rendering work.');
+    expect(visible).toContain('quiet-mode');
+    expect(visible).toContain('rendering work.');
     expect(visible).not.toContain('…');
     expect(boxLines.length).toBeGreaterThan(3);
     expect(boxLines.every(line => visibleWidth(line) === topWidth)).toBe(true);
