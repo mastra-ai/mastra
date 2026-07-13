@@ -7402,7 +7402,7 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.8.0
+        specifier: ^8.8.1
         version: 8.8.1(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
