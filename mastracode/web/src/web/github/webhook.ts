@@ -2,6 +2,20 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 import { getGithubWebhookSecret } from './config';
 
+export interface GithubWebhookTriageRunInput {
+  repository: string;
+  issueNumber: number;
+  issueTitle: string;
+  issueUrl: string;
+  labels: string[];
+  sender?: string;
+  installationId: number;
+}
+
+export interface GithubWebhookHandlerOptions {
+  startIssueTriageRun?: (input: GithubWebhookTriageRunInput) => Promise<void>;
+}
+
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'issues',
   'pull_request',
@@ -94,6 +108,34 @@ function getNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function getLabels(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map(label => (typeof label === 'string' ? label : getString(getObject(label)?.name)))
+    .filter((label): label is string => Boolean(label));
+}
+
+function getIssueTriageRunInput(parsed: ParsedGithubWebhook): GithubWebhookTriageRunInput | null {
+  if (parsed.event !== 'issues' || getString(parsed.payload.action) !== 'opened') return null;
+  const repository = getString(getObject(parsed.payload.repository)?.full_name);
+  const issue = getObject(parsed.payload.issue);
+  const sender = getString(getObject(parsed.payload.sender)?.login);
+  const installationId = getNumber(getObject(parsed.payload.installation)?.id);
+  const issueNumber = getNumber(issue?.number);
+  const issueTitle = getString(issue?.title);
+  const issueUrl = getString(issue?.html_url);
+  if (!repository || !installationId || !issueNumber || !issueTitle || !issueUrl) return null;
+  return {
+    repository,
+    issueNumber,
+    issueTitle,
+    issueUrl,
+    labels: getLabels(issue?.labels),
+    sender,
+    installationId,
+  };
+}
+
 export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): GithubWebhookMetadata {
   const { event, deliveryId, payload } = parsed;
   const repository = getObject(payload.repository);
@@ -114,7 +156,10 @@ export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): Git
   };
 }
 
-export async function handleGithubWebhook(c: Context): Promise<GithubWebhookResult> {
+export async function handleGithubWebhook(
+  c: Context,
+  options: GithubWebhookHandlerOptions = {},
+): Promise<GithubWebhookResult> {
   const parsed = await parseGithubWebhook(c);
   if ('status' in parsed) return parsed;
 
@@ -122,6 +167,22 @@ export async function handleGithubWebhook(c: Context): Promise<GithubWebhookResu
     return { status: 202, body: { ok: true, ignored: true } };
   }
 
-  console.log('[GitHub Webhook]', normalizeGithubWebhookMetadata(parsed));
+  const metadata = normalizeGithubWebhookMetadata(parsed);
+  console.log('[GitHub Webhook]', metadata);
+
+  const issueTriageRun = getIssueTriageRunInput(parsed);
+  if (issueTriageRun && options.startIssueTriageRun) {
+    try {
+      await options.startIssueTriageRun(issueTriageRun);
+    } catch (error) {
+      console.error('[GitHub Webhook] Failed to start issue triage run', {
+        deliveryId: metadata.deliveryId,
+        repository: metadata.repository,
+        issueNumber: metadata.issueNumber,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
   return { status: 202, body: { ok: true } };
 }

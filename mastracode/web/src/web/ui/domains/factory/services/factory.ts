@@ -46,8 +46,13 @@ async function getProjectResource<T>(
   githubProjectId: string,
   resource: string,
   page: number,
+  params?: Record<string, string | undefined>,
 ): Promise<T> {
-  const url = `${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${resource}?page=${page}`;
+  const search = new URLSearchParams({ page: String(page) });
+  for (const [key, value] of Object.entries(params ?? {})) {
+    if (value !== undefined) search.set(key, value);
+  }
+  const url = `${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/${resource}?${search}`;
   const res = await fetch(url, {
     headers: { Accept: 'application/json' },
     credentials: 'include',
@@ -71,8 +76,9 @@ export async function listProjectIssues(
   baseUrl: string,
   githubProjectId: string,
   page: number,
+  label?: string,
 ): Promise<GithubIssuePage> {
-  return getProjectResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', page);
+  return getProjectResource<GithubIssuePage>(baseUrl, githubProjectId, 'issues', page, { label });
 }
 
 /** List one page of a project's open pull requests (drafts excluded server-side). */

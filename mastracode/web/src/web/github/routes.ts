@@ -47,6 +47,7 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyS
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
+import type { GithubWebhookTriageRunInput } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
@@ -78,6 +79,8 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
+  /** Server-side run seam used by GitHub webhooks to start automatic issue triage. */
+  startIssueTriageRun?: (input: GithubWebhookTriageRunInput) => Promise<void>;
 }
 
 /** Validate an `owner/name` repo full name. */
@@ -137,6 +140,12 @@ function parseListPage(raw: string | undefined): number | null {
   if (!/^\d{1,5}$/.test(raw)) return null;
   const page = Number(raw);
   return page >= 1 ? page : null;
+}
+
+function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
+  if (raw === undefined || raw === '') return undefined;
+  if (raw === 'auto-triaged') return raw;
+  return null;
 }
 
 /**
@@ -225,7 +234,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c));
+        const result = await handleGithubWebhook(loose(c), { startIssueTriageRun: options.startIssueTriageRun });
         return c.json(result.body, result.status);
       },
     }),
@@ -526,11 +535,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         if ('response' in loaded) return loaded.response;
         const page = parseListPage(c.req.query('page'));
         if (page === null) return c.json({ error: 'invalid_page' }, 400);
+        const label = parseIssueLabelFilter(c.req.query('label'));
+        if (label === null) return c.json({ error: 'invalid_label' }, 400);
         try {
           const { issues, nextPage } = await listRepoOpenIssues(
             loaded.project.installationId,
             loaded.project.repoFullName,
             page,
+            { label },
           );
           return c.json({ issues, nextPage });
         } catch (err) {

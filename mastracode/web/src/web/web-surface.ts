@@ -7,6 +7,8 @@
  * fail-soft GitHub gating in every environment.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import type { ApiRoute } from '@mastra/core/server';
 
 import type { MountedMastraCode } from '@mastra/code-sdk';
@@ -21,6 +23,7 @@ import {
 } from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
+import type { GithubWebhookTriageRunInput } from './github/webhook.js';
 import { ensureIntakeDbReady } from './intake/db.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
@@ -193,11 +196,44 @@ export async function resolveGithubReady(): Promise<boolean> {
  *   - github routes (only when `githubReady`)
  *   - linear routes (only when `linearReady`)
  */
+function buildIssueTriagePrompt(input: GithubWebhookTriageRunInput): string {
+  const labels = input.labels.length > 0 ? input.labels.join(', ') : 'none';
+  return [
+    'Use the triage-issue skill in headless mode for this newly opened GitHub issue.',
+    '',
+    `Repository: ${input.repository}`,
+    `Issue: #${input.issueNumber}`,
+    `Title: ${input.issueTitle}`,
+    `URL: ${input.issueUrl}`,
+    `Current labels: ${labels}`,
+    `Sender: ${input.sender ?? 'unknown'}`,
+    `Installation ID: ${input.installationId}`,
+    '',
+    'Apply the triage-issue label policy from the skill, including adding auto-triaged from the skill path.',
+    'Post or update an issue comment only; do not create a Maintainer\'s Triage Note for issue triage.',
+  ].join('\n');
+}
+
+async function startIssueTriageRun(controller: MountedMastraCode['controller'], input: GithubWebhookTriageRunInput) {
+  const session = await controller.createSession({
+    id: `github-issue-triage-${input.installationId}-${input.issueNumber}-${randomUUID()}`,
+    ownerId: `github-installation-${input.installationId}`,
+    resourceId: `github:${input.repository}`,
+  });
+  await session.thread.create();
+  await session.sendMessage({ content: buildIssueTriagePrompt(input) });
+}
+
 export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
-    ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin }) : []),
+    ...(deps.githubReady
+      ? buildGithubRoutes({
+          baseUrl: deps.publicOrigin,
+          startIssueTriageRun: input => startIssueTriageRun(deps.controller, input),
+        })
+      : []),
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
   ];

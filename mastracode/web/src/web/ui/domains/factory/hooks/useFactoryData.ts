@@ -8,11 +8,11 @@ import { listProjectIssues, listProjectPullRequests } from '../services/factory'
  * Open issues for a GitHub project, loaded one page at a time as the list is
  * scrolled; disabled until a github project is active.
  */
-export function useProjectIssuesQuery(githubProjectId: string | undefined) {
+export function useProjectIssuesQuery(githubProjectId: string | undefined, label?: string) {
   const { baseUrl } = useApiConfig();
   return useInfiniteQuery({
-    queryKey: queryKeys.githubIssues(githubProjectId),
-    queryFn: ({ pageParam }) => listProjectIssues(baseUrl, githubProjectId!, pageParam),
+    queryKey: queryKeys.githubIssues(githubProjectId, label),
+    queryFn: ({ pageParam }) => listProjectIssues(baseUrl, githubProjectId!, pageParam, label),
     initialPageParam: 1,
     getNextPageParam: lastPage => lastPage.nextPage,
     enabled: Boolean(githubProjectId),

@@ -18,6 +18,7 @@ import { NewPage } from './domains/chat/NewPage';
 import { ThreadPage } from './domains/chat/ThreadPage';
 import { IntakePage } from './domains/factory/IntakePage';
 import { ReviewPage } from './domains/factory/ReviewPage';
+import { TriagePage } from './domains/factory/TriagePage';
 
 /**
  * Full-page placeholder while `/auth/me` resolves — a shimmer block instead
@@ -84,6 +85,7 @@ export function createAppRoutes(): RouteObject[] {
             { path: 'new', element: <NewPage /> },
             { path: 'threads/:threadId', element: <ThreadPage /> },
             { path: 'factory/intake', element: <IntakePage /> },
+            { path: 'factory/triage', element: <TriagePage /> },
             { path: 'factory/review', element: <ReviewPage /> },
           ],
         },

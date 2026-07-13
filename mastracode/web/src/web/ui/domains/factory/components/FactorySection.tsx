@@ -1,5 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { GitPullRequest, Inbox } from 'lucide-react';
+import { CircleDot, GitPullRequest, Inbox } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { NavLink } from 'react-router';
 
@@ -28,6 +28,7 @@ export function FactorySection() {
       </div>
       <div className="flex flex-col gap-1">
         <FactoryLink to="/factory/intake" icon={Inbox} label="Intake" />
+        <FactoryLink to="/factory/triage" icon={CircleDot} label="Triage" />
         <FactoryLink to="/factory/review" icon={GitPullRequest} label="Review" />
       </div>
     </nav>

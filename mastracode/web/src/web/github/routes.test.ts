@@ -64,7 +64,7 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
   issues: [
     {
       number: 12,
@@ -125,8 +125,8 @@ vi.mock('./client', () => ({
       : null,
   ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
-  listRepoOpenIssues: (installationId: number, repoFullName: string, page: number) =>
-    listRepoOpenIssues(installationId, repoFullName, page),
+  listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
+    listRepoOpenIssues(installationId, repoFullName, page, options),
   listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
     listRepoOpenPullRequests(installationId, repoFullName, page),
 }));
@@ -314,7 +314,10 @@ worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  options: { startIssueTriageRun?: (input: any) => Promise<void> } = {},
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) {
@@ -325,7 +328,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     }
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111', ...options }));
   return app;
 }
 
@@ -374,13 +377,19 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 }
 
 describe('webhook route', () => {
-  it('accepts a valid signed issues event and logs normalized metadata', async () => {
+  it('accepts a valid signed issues event, logs normalized metadata, and starts issue triage', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const res = await buildApp(null).request(
+    const startIssueTriageRun = vi.fn(async () => {});
+    const res = await buildApp(null, { startIssueTriageRun }).request(
       signedGithubWebhookRequest('issues', {
         action: 'opened',
         repository: { full_name: 'octo/hello' },
-        issue: { number: 12 },
+        issue: {
+          number: 12,
+          title: 'Fix flaky test',
+          html_url: 'https://github.com/octo/hello/issues/12',
+          labels: [{ name: 'bug' }, { name: 'auto-triaged' }],
+        },
         sender: { login: 'ada' },
         installation: { id: 99 },
       }),
@@ -395,6 +404,15 @@ describe('webhook route', () => {
       repository: 'octo/hello',
       issueNumber: 12,
       pullRequestNumber: undefined,
+      sender: 'ada',
+      installationId: 99,
+    });
+    expect(startIssueTriageRun).toHaveBeenCalledWith({
+      repository: 'octo/hello',
+      issueNumber: 12,
+      issueTitle: 'Fix flaky test',
+      issueUrl: 'https://github.com/octo/hello/issues/12',
+      labels: ['bug', 'auto-triaged'],
       sender: 'ada',
       installationId: 99,
     });
@@ -920,7 +938,7 @@ describe('issues route', () => {
     expect(json.issues).toHaveLength(1);
     expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
     expect(json.nextPage).toBeNull();
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1);
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: undefined });
   });
 
   it('forwards the requested page and echoes the next page', async () => {
@@ -929,7 +947,22 @@ describe('issues route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=2');
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ issues: [], nextPage: 3 });
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2);
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2, { label: undefined });
+  });
+
+  it('forwards the auto-triaged label filter', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=auto-triaged');
+    expect(res.status).toBe(200);
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'auto-triaged' });
+  });
+
+  it('400s on an unsupported label filter', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=needs-approval');
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'invalid_label' });
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
   });
 
   it('400s on a malformed page param', async () => {
