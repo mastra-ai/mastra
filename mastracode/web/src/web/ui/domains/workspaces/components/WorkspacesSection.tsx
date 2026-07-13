@@ -1,8 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@mastra/playground-ui/components/Dialog';
+import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useQueryClient } from '@tanstack/react-query';
-import { GitBranch, Plus } from 'lucide-react';
+import { GitBranch, MoreHorizontal, Plus } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent, KeyboardEvent, ReactNode } from 'react';
 import { useLocation, useNavigate } from 'react-router';
@@ -14,7 +16,12 @@ import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentCont
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
-import { useCreateWorkspaceMutation, useSelectWorkspaceMutation, useWorkspacesQuery } from '../hooks/useWorkspaces';
+import {
+  useCreateWorkspaceMutation,
+  useDeleteWorkspaceMutation,
+  useSelectWorkspaceMutation,
+  useWorkspacesQuery,
+} from '../hooks/useWorkspaces';
 import type { Worktree } from '../services/projects';
 
 /**
@@ -49,12 +56,14 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
     baseUrl,
     enabled: sessionEnabled,
   });
+  const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, workspaceSession, session, scope);
+  const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
 
   if (activeProject?.source !== 'github') return null;
 
   const worktrees = workspaces.data?.worktrees ?? [];
   const selectedPath = workspaces.data?.selected?.worktreePath;
-  const pending = createWorkspace.isPending || selectWorkspace.isPending;
+  const pending = createWorkspace.isPending || selectWorkspace.isPending || deleteWorkspace.isPending;
 
   // Threads are scoped to a worktree, so entering a workspace lands on its
   // most recent thread (creating one when it has none). Factory pages are
@@ -111,6 +120,24 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const resetCreate = () => {
     setCreating(false);
     setBranch('');
+  };
+
+  const confirmDeleteWorktree = () => {
+    if (!confirmDelete) return;
+    const target = confirmDelete;
+    deleteWorkspace.mutate(target, {
+      onSuccess: ({ updated, wasSelected }) => {
+        setConfirmDelete(null);
+        // Threads under the deleted worktree are gone; if we were inside one,
+        // land on the fallback workspace's latest thread.
+        if (wasSelected) {
+          const fallback = updated.selectedWorktreePath;
+          if (fallback) void openWorktreeThread(fallback);
+          else void navigate('/new', { replace: true });
+        }
+      },
+      onError: () => setConfirmDelete(null),
+    });
   };
 
   const createBranch = () => {
@@ -170,6 +197,11 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
                     onSuccess: () => void openWorktreeThread(worktree.worktreePath),
                   })
                 }
+                onDelete={
+                  worktree.worktreePath === activeProject.sandboxWorkdir
+                    ? undefined
+                    : () => setConfirmDelete(worktree)
+                }
               />
               {nested && <div className="ml-[15px] flex flex-col border-l border-border1 pl-2">{children}</div>}
             </div>
@@ -200,6 +232,35 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
           <div className="flex flex-col">{children}</div>
         )}
       </div>
+
+      {confirmDelete && (
+        <Dialog open onOpenChange={open => !open && setConfirmDelete(null)}>
+          <DialogContent className="w-full max-w-sm" aria-label="Delete workspace">
+            <DialogHeader className="px-5 pt-4 pb-2">
+              <DialogTitle>Delete workspace?</DialogTitle>
+            </DialogHeader>
+            <div className="flex flex-col gap-4 px-5 pb-4">
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon4">
+                This deletes the <span className="text-icon6">{confirmDelete.branch}</span> checkout, its uncommitted
+                changes, and every thread in this workspace. This can’t be undone.
+              </Txt>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" onClick={() => setConfirmDelete(null)} disabled={deleteWorkspace.isPending}>
+                  Cancel
+                </Button>
+                <Button
+                  variant="primary"
+                  className="bg-red-600 text-white hover:bg-red-500"
+                  onClick={confirmDeleteWorktree}
+                  disabled={deleteWorkspace.isPending}
+                >
+                  {deleteWorkspace.isPending ? 'Deleting…' : 'Delete'}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </section>
   );
 }
@@ -209,23 +270,50 @@ function WorkspaceRow({
   active,
   disabled,
   onSelect,
+  onDelete,
 }: {
   worktree: Worktree;
   active: boolean;
   disabled: boolean;
   onSelect: () => void;
+  onDelete?: () => void;
 }) {
   return (
-    <button
-      type="button"
-      aria-current={active ? 'true' : undefined}
-      aria-disabled={active || undefined}
-      disabled={disabled}
-      onClick={active ? undefined : onSelect}
-      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'bg-surface4 text-icon6' : 'text-icon3 hover:bg-surface3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
-    >
-      <GitBranch size={13} />
-      <span className="truncate">{worktree.branch}</span>
-    </button>
+    <div className={`group relative rounded-md ${active ? 'bg-surface4' : 'hover:bg-surface3'}`}>
+      <button
+        type="button"
+        aria-current={active ? 'true' : undefined}
+        aria-disabled={active || undefined}
+        disabled={disabled}
+        onClick={active ? undefined : onSelect}
+        className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition ${active ? 'text-icon6' : 'text-icon3 hover:text-icon5'} disabled:cursor-default disabled:opacity-70`}
+      >
+        <GitBranch size={13} />
+        <span className="truncate">{worktree.branch}</span>
+      </button>
+      {onDelete && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Workspace actions"
+                disabled={disabled}
+                className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+              >
+                <MoreHorizontal size={15} />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-28">
+            <DropdownMenu.Item variant="destructive" onClick={onDelete}>
+              Delete
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
+    </div>
   );
 }

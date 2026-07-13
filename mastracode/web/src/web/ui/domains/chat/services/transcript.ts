@@ -415,11 +415,12 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...state, entries };
     }
 
-    // Thread lifecycle.
+    // Thread lifecycle events are surfaced by the sidebar (query invalidation)
+    // and toasts, not as transcript notices — a worktree deletion can cascade
+    // over many threads and would otherwise spam the open conversation.
     case 'thread_created':
-      return pushNotice(state, 'info', `Created thread: ${event.thread.title || event.thread.id}`);
     case 'thread_deleted':
-      return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
+      return state;
 
     // Usage tracking.
     case 'usage_update': {

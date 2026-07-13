@@ -59,6 +59,7 @@ import {
   MaterializeError,
   pushBranch,
   reattachProjectSandbox,
+  removeWorktree,
   SandboxBudgetError,
   teardownProjectSandbox,
   WorktreeError,
@@ -798,6 +799,55 @@ function buildProjectGitRoutes(): ApiRoute[] {
               baseBranch: result.baseBranch,
               resourceId: project.id,
             });
+          });
+        } catch (err) {
+          return gitErrorResponse(loose(c), err);
+        }
+      },
+    }),
+
+    // ── Delete a worktree + its local feature branch ────────────────────────
+    registerApiRoute('/web/github/projects/:id/worktree/delete', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const owned = await loadOwnedProject(loose(c));
+        if ('response' in owned) return owned.response;
+        const { userId, project, sandboxRow } = owned;
+
+        let body: { branch?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (!isValidGitRefSandbox(body.branch)) {
+          return c.json({ error: 'Invalid branch' }, 400);
+        }
+        const branch = body.branch;
+
+        // Only server-created worktrees (persisted rows owned by this user)
+        // can be deleted; the repo root checkout is never a worktree row.
+        const rowFilter = and(
+          eq(githubWorktrees.githubProjectId, project.id),
+          eq(githubWorktrees.userId, userId),
+          eq(githubWorktrees.branch, branch),
+        );
+        const [worktreeRow] = await getAppDb().select().from(githubWorktrees).where(rowFilter);
+        if (!worktreeRow) return c.json({ error: 'Unknown worktree' }, 404);
+        if (worktreeRow.worktreePath === sandboxRow.sandboxWorkdir) {
+          return c.json({ error: 'Cannot delete the repo root workspace' }, 400);
+        }
+
+        try {
+          return await withProjectLock(`${project.id}:${userId}`, async () => {
+            const sandbox = await resolveProjectSandbox(sandboxRow);
+            await removeWorktree(sandbox, sandboxRow.sandboxWorkdir, {
+              branch,
+              worktreePath: worktreeRow.worktreePath,
+            });
+            await getAppDb().delete(githubWorktrees).where(rowFilter);
+            return c.json({ removed: true, branch, worktreePath: worktreeRow.worktreePath });
           });
         } catch (err) {
           return gitErrorResponse(loose(c), err);
