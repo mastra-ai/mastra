@@ -28,7 +28,17 @@ export const saveWorkflowTool = createTool({
     graph: z
       .array(z.any())
       .describe(
-        'The static workflow graph as SerializedStepFlowEntry[]. Each entry is one of: { type: "tool", id, toolId }, { type: "agent", id, agentId }, { type: "mapping", id, mapConfig: <JSON-string of object with template/value/step sources> }.',
+        [
+          'The static workflow graph as SerializedStepFlowEntry[]. Each top-level entry is one of:',
+          '  - { type: "agent", id, agentId }',
+          '  - { type: "tool", id, toolId }',
+          '  - { type: "mapping", id, mapConfig: <JSON-string of object with template/value/step/initData/requestContextPath sources> }',
+          '  - { type: "parallel", steps: SingleStepEntry[] } — children must be agent/tool/mapping (no nested containers)',
+          '  - { type: "foreach", step: { type: "agent"|"tool"|"mapping", ... }, opts: { concurrency: number } } — previous step MUST output an array',
+          '  - { type: "sleep", id, duration: number } — milliseconds; static number only',
+          '  - { type: "sleepUntil", id, date: string | Date } — ISO date; static value only',
+          'Do NOT emit conditional or loop entries; their predicates cannot be rehydrated in v1.',
+        ].join('\n'),
       ),
   }),
   outputSchema: z.object({

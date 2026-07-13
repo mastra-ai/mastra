@@ -22,7 +22,7 @@ import { z } from 'zod';
 import type { Mastra } from '../mastra';
 import { createWorkflow } from './create';
 import type { SerializedSingleStepEntry, SerializedStepFlowEntry, SingleStepEntry, StepFlowEntry } from './types';
-import { mapVariable } from './workflow';
+import { createStep, mapVariable } from './workflow';
 
 // ============================================================================
 // JSON shape persisted to WorkflowDefinitionsStorage
@@ -242,11 +242,17 @@ function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
   switch (entry.type) {
     case 'agent': {
       assertAgentExists(mastra, entry.agentId);
-      return mastra.getAgentById(entry.agentId);
+      // Wrap in createStep so `.parallel()` sees the __agentRef discriminator
+      // and re-emits a `type: 'agent'` entry when re-serialized. A raw agent
+      // instance falls through to the generic `type: 'step'` branch and the
+      // round-trip loses the declarative shape.
+      return createStep(mastra.getAgentById(entry.agentId));
     }
     case 'tool': {
       assertToolExists(mastra, entry.toolId);
-      return mastra.getTool(entry.toolId);
+      // Same reason as above — the tool must be wrapped so `.parallel()` can
+      // recognize the __toolRef discriminator.
+      return createStep(mastra.getTool(entry.toolId) as any);
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
@@ -256,8 +262,10 @@ function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
 }
 
 function resolveStepDescriptor(desc: { id: string }, mastra: Mastra): any {
-  if (desc.id && mastra.getAgentById?.(desc.id)) return mastra.getAgentById(desc.id);
-  if (desc.id && mastra.getTool?.(desc.id)) return mastra.getTool(desc.id);
+  const agent = tryGetAgentById(mastra, desc.id);
+  if (agent) return agent;
+  const tool = mastra.getTool?.(desc.id);
+  if (tool) return tool;
   throw new Error(
     `Stored workflow references step "${desc.id}" which is not registered as an agent or tool on this Mastra instance.`,
   );
@@ -307,7 +315,7 @@ function rehydrateMapConfig(cfg: Record<string, any>, mastra: Mastra): Record<st
 }
 
 function resolveStepReferenceById(id: string, mastra: Mastra): any {
-  const agent = mastra.getAgentById?.(id);
+  const agent = tryGetAgentById(mastra, id);
   if (agent) return agent;
   const tool = mastra.getTool?.(id);
   if (tool) return tool;
@@ -321,8 +329,23 @@ function resolveStepReferenceById(id: string, mastra: Mastra): any {
 }
 
 function assertAgentExists(mastra: Mastra, agentId: string): void {
-  if (!mastra.getAgentById?.(agentId)) {
+  if (!tryGetAgentById(mastra, agentId)) {
     throw new Error(`Stored workflow references agent "${agentId}" which is not registered on this Mastra instance.`);
+  }
+}
+
+/**
+ * Mastra.getAgentById throws when the id isn't registered; every by-id
+ * resolution path in this file wants a nullable "does it exist?" answer so it
+ * can fall through to a tool lookup or a targeted error. Swallow the not-found
+ * throw and return undefined.
+ */
+function tryGetAgentById(mastra: Mastra, id: string): any | undefined {
+  if (!id || typeof mastra.getAgentById !== 'function') return undefined;
+  try {
+    return mastra.getAgentById(id);
+  } catch {
+    return undefined;
   }
 }
 
