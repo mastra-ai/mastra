@@ -483,7 +483,6 @@ export class AgentControllerSession extends BaseResource {
     });
   }
 
-  /** List the threads for this session's resource, most-recently-updated first. Pass `limit` for just the newest N. */
   /**
    * List the session's threads, newest first. Pass `limit` to cap the count
    * (e.g. for a sidebar) and `tags` to scope to threads matching every tag —

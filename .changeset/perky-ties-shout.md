@@ -9,6 +9,6 @@ Agent controller session state now reports run activity. `session.state()` respo
 
 ```ts
 const session = client.getAgentController('code').session(resourceId, scope);
-const { threads } = await session.listThreads({ tags: { projectPath } });
+const threads = await session.listThreads({ tags: { projectPath } });
 const busy = threads.filter(t => t.state === 'active');
 ```

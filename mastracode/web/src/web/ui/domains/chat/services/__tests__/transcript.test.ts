@@ -238,6 +238,20 @@ describe('transcript reducer run flag', () => {
     expect(preserved.running).toBe(true);
   });
 
+  it('preserves live OM progress and usage when syncState omits them', () => {
+    const omProgress = { status: 'idle', pendingTokens: 10 } as never;
+    const usage = { input: 5, output: 7 };
+    const live = transcriptReducer(
+      { ...initialTranscript, omProgress, usage },
+      // A running-only sync (or a stale snapshot) must not roll back
+      // newer SSE-driven progress/usage.
+      { type: 'syncState', running: true },
+    );
+    expect(live.omProgress).toBe(omProgress);
+    expect(live.usage).toBe(usage);
+    expect(live.running).toBe(true);
+  });
+
   it('resets running from the provided snapshot', () => {
     const running = transcriptReducer(initialTranscript, { type: 'reset', running: true });
     expect(running.running).toBe(true);

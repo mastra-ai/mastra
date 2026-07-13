@@ -48,15 +48,14 @@ function ChatTranscriptValueProvider({
   // attaching to a session that's already mid-run (page load, worktree switch,
   // SSE reconnect) shows the working indicator immediately. Live events own
   // the flag from then on via agent_start/agent_end/display_state_changed.
+  // Only the run flag is synced: a delayed reconnect refetch must not roll
+  // back newer SSE-driven OM progress/usage (those hydrate via the fallbacks
+  // in `effectiveTranscript` below until live events supply them).
   const stateRunning = connection.state?.running;
   const stateUpdatedAt = connection.stateUpdatedAt;
   useEffect(() => {
     if (typeof stateRunning !== 'boolean') return;
-    syncState({
-      omProgress: connection.state?.omProgress,
-      tokenUsage: connection.state?.tokenUsage,
-      running: stateRunning,
-    });
+    syncState({ running: stateRunning });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-apply only when a fresh snapshot lands
   }, [stateRunning, stateUpdatedAt]);
 

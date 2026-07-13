@@ -318,7 +318,7 @@ describe('AgentController session registry', () => {
     await controller.init();
 
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
-    controller.setResourceId(a, { resourceId: 'user-a-renamed' });
+    await controller.setResourceId(a, { resourceId: 'user-a-renamed' });
 
     expect(await controller.getSessionByResource('user-a-renamed')).toBe(a);
     expect(await controller.getSessionByResource('user-a')).toBeUndefined();
@@ -398,7 +398,7 @@ describe('AgentController session registry', () => {
       resourceId: 'user-a',
       scope: '/worktrees/a',
     });
-    controller.setResourceId(a, { resourceId: 'user-a-renamed' });
+    await controller.setResourceId(a, { resourceId: 'user-a-renamed' });
 
     expect(await controller.getSessionByResource('user-a-renamed', '/worktrees/a')).toBe(a);
     expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBeUndefined();

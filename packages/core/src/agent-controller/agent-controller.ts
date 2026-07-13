@@ -57,12 +57,13 @@ import type {
 } from './types';
 
 /**
- * Registry key for the session map: a bare resourceId when unscoped, otherwise
- * resourceId + scope joined by NUL (which cannot appear in either value), so a
- * scoped session can never collide with an unscoped one or another scope.
+ * Registry key for the session map. JSON-encodes the (resourceId, scope) pair
+ * so the key is collision-proof for arbitrary strings: a scoped session can
+ * never collide with an unscoped one or with a different resource/scope split
+ * (e.g. `("a\0b", "c")` vs `("a", "b\0c")`).
  */
 function sessionRegistryKey(resourceId: string, scope?: string): string {
-  return scope === undefined ? resourceId : `${resourceId}\u0000${scope}`;
+  return JSON.stringify([resourceId, scope ?? null]);
 }
 
 function validateModes(modes: AgentControllerMode[]): void {

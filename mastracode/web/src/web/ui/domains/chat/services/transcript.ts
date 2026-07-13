@@ -234,10 +234,12 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         running: action.running ?? false,
       };
     case 'syncState':
+      // Fields absent from the snapshot are preserved, so a running-only sync
+      // (or a stale snapshot) never rolls back live OM progress/usage.
       return {
         ...state,
-        omProgress: action.omProgress,
-        usage: action.usage,
+        omProgress: action.omProgress ?? state.omProgress,
+        usage: action.usage ?? state.usage,
         running: action.running ?? state.running,
       };
     case 'localUser':
