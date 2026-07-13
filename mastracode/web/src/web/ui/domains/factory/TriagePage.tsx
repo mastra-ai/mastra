@@ -12,9 +12,7 @@ import { useStartFactoryRun } from './hooks/useStartFactoryRun';
 import type { GithubIssue } from './services/factory';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
-const IN_TRIAGE_LABEL = 'in-triage';
 const NEEDS_APPROVAL_LABEL = 'triage:needs-approval';
-const DONE_LABEL = 'done';
 
 /** Factory › Triage: GitHub issues currently labeled auto-triaged. */
 export function TriagePage() {
@@ -57,11 +55,9 @@ function triageCustomPrompt(issue: GithubIssue, instructions: string): string {
 
 function actionForIssue(issue: GithubIssue): { label: string; status: string; disabled: boolean; prompt: string } {
   const labels = new Set(issue.labels);
-  if (labels.has(DONE_LABEL)) return { label: 'View result', status: 'Done', disabled: true, prompt: investigatePrompt(issue) };
   if (labels.has(NEEDS_APPROVAL_LABEL)) {
     return { label: 'Prepare approval', status: 'Needs approval', disabled: false, prompt: approvalPrompt(issue) };
   }
-  if (labels.has(IN_TRIAGE_LABEL)) return { label: 'Investigate issue', status: 'In triage', disabled: false, prompt: investigatePrompt(issue) };
   return { label: 'Investigate issue', status: 'Ready for investigation', disabled: false, prompt: investigatePrompt(issue) };
 }
 

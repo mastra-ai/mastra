@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 import { getGithubWebhookSecret } from './config';
 
-export interface GithubIssueTriageClassificationInput {
+export interface GithubIssueTriageRunInput {
   repository: string;
   issueNumber: number;
   issueTitle: string;
@@ -12,8 +12,12 @@ export interface GithubIssueTriageClassificationInput {
   installationId: number;
 }
 
+export interface GithubIssueTriageRunResult {
+  threadId?: string;
+}
+
 export interface GithubWebhookHandlerOptions {
-  classifyIssueForTriage?: (input: GithubIssueTriageClassificationInput) => Promise<void>;
+  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
 }
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
@@ -115,7 +119,7 @@ function getLabels(value: unknown): string[] {
     .filter((label): label is string => Boolean(label));
 }
 
-function getIssueTriageClassificationInput(parsed: ParsedGithubWebhook): GithubIssueTriageClassificationInput | null {
+function getIssueTriageRunInput(parsed: ParsedGithubWebhook): GithubIssueTriageRunInput | null {
   if (parsed.event !== 'issues' || getString(parsed.payload.action) !== 'opened') return null;
   const repository = getString(getObject(parsed.payload.repository)?.full_name);
   const issue = getObject(parsed.payload.issue);
@@ -170,10 +174,10 @@ export async function handleGithubWebhook(
   const metadata = normalizeGithubWebhookMetadata(parsed);
   console.log('[GitHub Webhook]', metadata);
 
-  const issueClassification = getIssueTriageClassificationInput(parsed);
-  if (issueClassification && options.classifyIssueForTriage) {
-    void options.classifyIssueForTriage(issueClassification).catch((error: unknown) => {
-      console.error('[GitHub Webhook] Failed to classify issue for triage', {
+  const issueTriageRun = getIssueTriageRunInput(parsed);
+  if (issueTriageRun && options.runIssueTriage) {
+    void options.runIssueTriage(issueTriageRun).catch((error: unknown) => {
+      console.error('[GitHub Webhook] Failed to run issue triage', {
         deliveryId: metadata.deliveryId,
         repository: metadata.repository,
         issueNumber: metadata.issueNumber,

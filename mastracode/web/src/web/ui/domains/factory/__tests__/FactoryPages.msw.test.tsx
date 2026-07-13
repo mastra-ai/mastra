@@ -606,8 +606,10 @@ describe('Factory Triage page', () => {
 });
 
 describe('Factory investigate flow', () => {
-  it('given an issue without auto-triaged, when Triage issue is selected from the action menu, then it shows pending feedback and stays on Intake', async () => {
+  it('given an issue without auto-triaged, when Triage issue is selected from the action menu, then it launches server triage without a Factory run', async () => {
     const triageRequests: Record<string, unknown>[] = [];
+    let worktreeCreated = false;
+    let threadCreated = false;
     let resolveTriage!: () => void;
     const triageStarted = new Promise<void>(resolve => {
       resolveTriage = resolve;
@@ -617,10 +619,18 @@ describe('Factory investigate flow', () => {
         const label = new URL(request.url).searchParams.get('label');
         return HttpResponse.json({ issues: label === 'auto-triaged' ? triageIssues : issues, nextPage: null });
       }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () => {
+        worktreeCreated = true;
+        return HttpResponse.json({}, { status: 500 });
+      }),
+      http.post(`${SESSION}/threads`, () => {
+        threadCreated = true;
+        return HttpResponse.json({}, { status: 500 });
+      }),
       http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/12/triage`, async ({ request }) => {
         triageRequests.push((await request.json()) as Record<string, unknown>);
         await triageStarted;
-        return HttpResponse.json({ ok: true }, { status: 202 });
+        return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
       }),
     );
     const { router } = renderAt('/factory/intake');
@@ -638,6 +648,8 @@ describe('Factory investigate flow', () => {
     resolveTriage();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Investigate issue #12' })).not.toHaveTextContent('Starting…'));
     expect(router.state.location.pathname).toBe('/factory/intake');
+    expect(worktreeCreated).toBe(false);
+    expect(threadCreated).toBe(false);
   });
 
   it('given an auto-triaged issue in intake, when Investigate is clicked, then the existing investigation flow is preserved', async () => {

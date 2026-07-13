@@ -33,7 +33,6 @@ import { streamSSE } from 'hono/streaming';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import {
-  addIssueLabels,
   buildInstallUrl,
   buildOAuthIdentifyUrl,
   exchangeOAuthCode,
@@ -48,7 +47,7 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyS
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
-import type { GithubIssueTriageClassificationInput } from './webhook';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
@@ -80,8 +79,8 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
-  /** Classification-only seam used by GitHub webhooks and manual Intake triage. */
-  classifyIssueForTriage?: (input: GithubIssueTriageClassificationInput) => Promise<void>;
+  /** Run seam used by GitHub webhooks and manual Intake triage. */
+  runIssueTriage?: (input: GithubIssueTriageRunInput) => Promise<GithubIssueTriageRunResult>;
 }
 
 /** Validate an `owner/name` repo full name. */
@@ -143,7 +142,7 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'triage:needs-approval', 'done']);
+const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'triage:needs-approval']);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
@@ -160,11 +159,6 @@ function parseIssueNumberParam(raw: string | undefined): number | null {
 function parseStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
-}
-
-async function defaultClassifyIssueForTriage(input: GithubIssueTriageClassificationInput): Promise<void> {
-  // TODO: replace this label-only fallback with the headless triage-issue skill runner once a non-session seam exists.
-  await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
 }
 
 /**
@@ -248,14 +242,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     return routes;
   }
 
-  const classifyIssueForTriage = options.classifyIssueForTriage ?? defaultClassifyIssueForTriage;
+  const { runIssueTriage } = options;
 
   routes.push(
     registerApiRoute('/web/github/webhook', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c), { classifyIssueForTriage });
+        const result = await handleGithubWebhook(loose(c), { runIssueTriage });
         return c.json(result.body, result.status);
       },
     }),
@@ -576,7 +570,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
-  // ── Manually classify issue triage using the same classification seam as webhooks ──
+  // ── Manually run issue triage using the same run seam as webhooks ──
   routes.push(
     registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
       method: 'POST',
@@ -600,7 +594,8 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           return c.json({ error: 'invalid_url' }, 400);
         }
 
-        await classifyIssueForTriage({
+        if (!runIssueTriage) return c.json({ error: 'triage_unavailable' }, 503);
+        const result = await runIssueTriage({
           repository: loaded.project.repoFullName,
           issueNumber,
           issueTitle: body.title,
@@ -608,7 +603,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           labels: parseStringList(body.labels),
           installationId: loaded.project.installationId,
         });
-        return c.json({ ok: true }, 202);
+        return c.json({ ok: true, threadId: result.threadId }, 202);
       },
     }),
   );

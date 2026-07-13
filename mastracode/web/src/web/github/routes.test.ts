@@ -321,7 +321,7 @@ sandboxesRef = githubProjectSandboxes;
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  options: { classifyIssueForTriage?: (input: any) => Promise<void> } = {},
+  options: { runIssueTriage?: (input: any) => Promise<{ threadId?: string }> } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -383,10 +383,10 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 }
 
 describe('webhook route', () => {
-  it('accepts a valid signed issues event, logs normalized metadata, and classifies issue triage', async () => {
+  it('accepts a valid signed issues event, logs normalized metadata, and runs issue triage', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const classifyIssueForTriage = vi.fn(async () => {});
-    const res = await buildApp(null, { classifyIssueForTriage }).request(
+    const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
+    const res = await buildApp(null, { runIssueTriage }).request(
       signedGithubWebhookRequest('issues', {
         action: 'opened',
         repository: { full_name: 'octo/hello' },
@@ -413,7 +413,7 @@ describe('webhook route', () => {
       sender: 'ada',
       installationId: 99,
     });
-    expect(classifyIssueForTriage).toHaveBeenCalledWith({
+    expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
@@ -993,10 +993,10 @@ describe('issues route', () => {
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
   });
 
-  it('classifies issue triage for the project repo without returning a thread', async () => {
+  it('runs issue triage for the project repo and returns the triage thread', async () => {
     seedMaterializedProject();
-    const classifyIssueForTriage = vi.fn(async () => {});
-    const res = await buildApp({ workosId: 'u1' }, { classifyIssueForTriage }).request(
+    const runIssueTriage = vi.fn(async () => ({ threadId: 'thread-triage' }));
+    const res = await buildApp({ workosId: 'u1' }, { runIssueTriage }).request(
       '/web/github/projects/p1/issues/12/triage',
       {
         method: 'POST',
@@ -1009,8 +1009,8 @@ describe('issues route', () => {
       },
     );
     expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ ok: true });
-    expect(classifyIssueForTriage).toHaveBeenCalledWith({
+    expect(await res.json()).toEqual({ ok: true, threadId: 'thread-triage' });
+    expect(runIssueTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
@@ -1020,16 +1020,15 @@ describe('issues route', () => {
     });
   });
 
-  it('uses the default label-only classification seam for manual triage', async () => {
+  it('returns 503 when issue triage is unavailable', async () => {
     seedMaterializedProject();
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12/triage', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'Fix flaky test', url: 'https://github.com/octo/hello/issues/12', labels: [] }),
     });
-    expect(res.status).toBe(202);
-    expect(await res.json()).toEqual({ ok: true });
-    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
+    expect(res.status).toBe(503);
+    expect(await res.json()).toEqual({ error: 'triage_unavailable' });
   });
 });
 

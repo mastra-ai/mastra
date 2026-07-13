@@ -21,6 +21,7 @@ import {
 } from './github/config.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
+import type { GithubIssueTriageRunInput, GithubIssueTriageRunResult } from './github/webhook.js';
 import { ensureIntakeDbReady } from './intake/db.js';
 import { buildIntakeRoutes } from './intake/routes.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
@@ -186,6 +187,89 @@ export async function resolveGithubReady(): Promise<boolean> {
   }
 }
 
+const ISSUE_TRIAGE_PURPOSE = 'issue-triage';
+
+function buildIssueTriageTags(input: GithubIssueTriageRunInput): Record<string, string> {
+  return {
+    purpose: ISSUE_TRIAGE_PURPOSE,
+    repository: input.repository,
+    issueNumber: String(input.issueNumber),
+  };
+}
+
+type ControllerCreateSessionInput = NonNullable<Parameters<WebApiRoutesDeps['controller']['createSession']>[0]>;
+type ControllerCreateSessionWithScope = (
+  input: ControllerCreateSessionInput & { scope?: string },
+) => ReturnType<WebApiRoutesDeps['controller']['createSession']>;
+
+function createScopedSession(
+  controller: WebApiRoutesDeps['controller'],
+  input: ControllerCreateSessionInput & { scope: string },
+): ReturnType<WebApiRoutesDeps['controller']['createSession']> {
+  return (controller.createSession as ControllerCreateSessionWithScope)(input);
+}
+
+function buildIssueTriagePrompt(input: GithubIssueTriageRunInput): string {
+  const labels = input.labels.length > 0 ? input.labels.join(', ') : '(none)';
+  const sender = input.sender ? `@${input.sender}` : '(unknown)';
+  return [
+    'Use the triage-issue skill to triage this GitHub issue.',
+    '',
+    'Rules:',
+    '- Post or update only one GitHub issue comment with the triage result.',
+    '- Do not edit local files, create branches, create worktrees, or open pull requests.',
+    '- Apply the auto-triaged label after successful triage.',
+    '- Apply triage:needs-approval only when the issue needs explicit human approval before investigation or implementation.',
+    '- Do not use done or in-triage labels.',
+    '',
+    'Issue:',
+    `- Repository: ${input.repository}`,
+    `- Issue: #${input.issueNumber}`,
+    `- Title: ${input.issueTitle}`,
+    `- URL: ${input.issueUrl}`,
+    `- Current labels: ${labels}`,
+    `- Sender: ${sender}`,
+    `- GitHub installation id: ${input.installationId}`,
+  ].join('\n');
+}
+
+async function runIssueTriage(
+  deps: Pick<WebApiRoutesDeps, 'controller'>,
+  input: GithubIssueTriageRunInput,
+): Promise<GithubIssueTriageRunResult> {
+  const resourceId = `github:${input.repository}`;
+  const scope = `github-issue-triage:${input.repository}#${input.issueNumber}`;
+  const tags = buildIssueTriageTags(input);
+  const title = `Triage #${input.issueNumber}: ${input.issueTitle}`;
+  const session = await createScopedSession(deps.controller, {
+    id: scope,
+    ownerId: `github-installation-${input.installationId}`,
+    resourceId,
+    scope,
+    tags,
+  });
+
+  const matchingThreads = await session.thread.list({ metadata: tags });
+  const thread = [...matchingThreads].sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
+  if (thread) {
+    await session.thread.switch({ threadId: thread.id });
+    if (thread.title !== title) await session.thread.rename({ title });
+  } else {
+    await session.thread.create({ title });
+  }
+
+  const threadId = session.thread.requireId();
+  void session.sendMessage({ content: buildIssueTriagePrompt(input) }).catch((error: unknown) => {
+    console.error('[GitHub Issue Triage] Failed to run triage', {
+      repository: input.repository,
+      issueNumber: input.issueNumber,
+      threadId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  });
+  return { threadId };
+}
+
 /**
  * Assemble the custom `/web/*` API routes as Mastra `server.apiRoutes`:
  *   - fs browser routes (project picker), confined to `fsRoot`
@@ -200,6 +284,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...(deps.githubReady
       ? buildGithubRoutes({
           baseUrl: deps.publicOrigin,
+          runIssueTriage: input => runIssueTriage(deps, input),
         })
       : []),
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),

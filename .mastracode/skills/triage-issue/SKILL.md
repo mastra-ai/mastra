@@ -9,24 +9,21 @@ Classify one open GitHub issue, post/update an issue triage comment, and manage 
 
 Use this skill when `gh-triage` delegates an issue, when a GitHub `issues.opened` webhook starts automatic classification, or when a maintainer manually classifies an untriaged issue from Intake.
 
-This skill is **comment-and-label only**. It classifies and routes issues by posting/updating one GitHub issue comment and applying labels. It must not create sessions, threads, branches, worktrees, PRs, commits, or Maintainer's Triage Notes.
+This skill is **comment-and-label only**. It classifies and routes issues by posting/updating one GitHub issue comment and applying labels. It must not create branches, worktrees, PRs, commits, local files, or Maintainer's Triage Notes.
 
 ## Label Policy
 
 The exact label names for this lifecycle are:
 
 - `auto-triaged` — issue was processed by automatic/manual auto-triage classification.
-- `in-triage` — active maintainer/agent triage work has started from the Triage page.
 - `triage:needs-approval` — classification found a path that needs maintainer approval/prep before action.
-- `done` — triage lifecycle is complete.
 
 Rules:
 
 - Add `auto-triaged` to every auto-processed issue before or alongside the triage output.
 - Add routing labels that help the Triage page choose the next action. Use `triage:needs-approval` when the next action requires maintainer approval.
 - When adding `triage:needs-approval`, do not also add redundant lifecycle labels unless they are explicitly useful for the issue state.
-- Do not add `in-triage` from automatic classification; it is for explicit maintainer-started Triage page work.
-- Do not remove lifecycle labels unless the user explicitly asks or the issue is being moved to a later lifecycle state in the same run.
+- Do not remove lifecycle labels unless the user explicitly asks.
 - After successfully posting/updating the triage output, remove `status: needs triage` if present.
 
 ## Rules
@@ -36,7 +33,7 @@ Rules:
 - Triage must always end with one GitHub-visible output: an issue comment. Do not create or update a Maintainer's Triage Note for issue triage.
 - Stop on non-open issues unless the user explicitly asks for a note.
 - Stop if the author is a core contributor (`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`) unless the user explicitly asks for triage.
-- Do not create sessions, threads, branches, worktrees, PRs, commits, or Factory runs.
+- Do not create branches, worktrees, PRs, commits, local files, or Factory runs.
 - Do not modify code, assignees, milestones, branches, issue state, or unrelated labels.
 - Do not invent evidence. Say what was not checked.
 - In `--headless`, classify, post the selected triage output, apply labels, and exit.

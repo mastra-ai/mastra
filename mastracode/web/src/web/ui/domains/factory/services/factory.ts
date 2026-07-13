@@ -83,9 +83,10 @@ export async function listProjectIssues(
 
 export interface StartIssueTriageResult {
   ok: true;
+  threadId?: string;
 }
 
-/** Start classification-only issue triage through the same seam used by GitHub webhooks. */
+/** Start issue triage through the same server-side run seam used by GitHub webhooks. */
 export async function startProjectIssueTriage(
   baseUrl: string,
   githubProjectId: string,
@@ -100,9 +101,9 @@ export async function startProjectIssueTriage(
       body: JSON.stringify({ title: issue.title, url: issue.url, labels: issue.labels }),
     },
   );
-  let body: { error?: string; message?: string; ok?: unknown } | undefined;
+  let body: { error?: string; message?: string; ok?: unknown; threadId?: unknown } | undefined;
   try {
-    body = (await res.json()) as { error?: string; message?: string; ok?: unknown };
+    body = (await res.json()) as { error?: string; message?: string; ok?: unknown; threadId?: unknown };
   } catch {
     if (res.ok) throw new Error('Invalid triage response');
   }
@@ -115,7 +116,7 @@ export async function startProjectIssueTriage(
   if (body?.ok !== true) {
     throw new Error('Invalid triage response');
   }
-  return { ok: true };
+  return { ok: true, threadId: typeof body.threadId === 'string' ? body.threadId : undefined };
 }
 
 /** List one page of a project's open pull requests (drafts excluded server-side). */
