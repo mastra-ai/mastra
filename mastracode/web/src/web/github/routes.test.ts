@@ -899,6 +899,14 @@ describe('worktree route', () => {
     expect(json.resourceId).toBe('p1');
     expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
+    // A freshly minted install token + repo name are passed through so the
+    // worktree forks from the latest fetched origin/<base>, not local state.
+    expect(ensureWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      branch: 'feat/x',
+      baseBranch: 'main',
+      token: 'install-token',
+      repoFullName: 'octo/hello',
+    });
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({ githubProjectId: 'p1', branch: 'feat/x', userId: 'u1' });
   });
