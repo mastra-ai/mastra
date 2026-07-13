@@ -1586,8 +1586,7 @@ export class Agent<
     // Get channel output processors (with deduplication) — mirrors the input
     // processor hookup. Channels render the agent's stream to the originating
     // chat platform via this processor; without it, replies never reach Slack.
-    const runChannels = this.#agentChannels;
-    const channelProcessors = runChannels ? runChannels.getOutputProcessors(configuredProcessors) : [];
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
     // Combine all processors into a single workflow
     // User-configured processors run first so they can transform chunks
     // (e.g. PII redaction, translation) before the channel renders them.
@@ -1629,8 +1628,7 @@ export class Agent<
     const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
 
     // Get channel input processors (with deduplication)
-    const runChannels = this.#agentChannels;
-    const channelProcessors = runChannels ? runChannels.getInputProcessors(configuredProcessors) : [];
+    const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
 
     // Get browser context processors (with deduplication)
     const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
