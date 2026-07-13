@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
@@ -56,9 +57,43 @@ vi.mock('./db', () => {
     update: (table: any) => ({
       set: (vals: any) => ({ where: async () => updateRows(table, vals) }),
     }),
+    delete: (table: any) => ({
+      where: async (cond: any) => deleteRows(table, cond),
+    }),
   });
   return { getAppDb: () => makeDb() };
 });
+
+const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+  issues: [
+    {
+      number: 12,
+      title: 'Fix flaky test',
+      url: 'https://github.com/octo/hello/issues/12',
+      author: 'ada',
+      labels: ['bug'],
+      comments: 3,
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    },
+  ],
+  nextPage: null as number | null,
+}));
+const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+  pullRequests: [
+    {
+      number: 34,
+      title: 'Add factory pages',
+      url: 'https://github.com/octo/hello/pull/34',
+      author: 'grace',
+      baseBranch: 'main',
+      headBranch: 'feat/factory',
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-04T00:00:00Z',
+    },
+  ],
+  nextPage: null as number | null,
+}));
 
 vi.mock('./client', () => ({
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
@@ -90,6 +125,10 @@ vi.mock('./client', () => ({
       : null,
   ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
+  listRepoOpenIssues: (installationId: number, repoFullName: string, page: number) =>
+    listRepoOpenIssues(installationId, repoFullName, page),
+  listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
+    listRepoOpenPullRequests(installationId, repoFullName, page),
 }));
 
 const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
@@ -106,6 +145,7 @@ const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: 
   branch: opts.branch,
   baseBranch: opts.baseBranch,
 }));
+const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
@@ -133,6 +173,7 @@ vi.mock('./sandbox', () => {
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
+    removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -147,6 +188,8 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
+  getGithubFeatureDiagnostics: () => ({}),
+  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
@@ -253,8 +296,13 @@ function insertIfAbsent(table: any, vals: any, opts: any): any | undefined {
 function updateRows(table: any, vals: any): void {
   for (const row of tables[tableKind(table)]) Object.assign(row, vals);
 }
+function deleteRows(table: any, cond?: any): void {
+  const kind = tableKind(table);
+  tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
+}
 
 // Resolve schema refs after import.
+import { listInstallationRepos, listUserInstallations } from './client';
 import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
@@ -284,20 +332,153 @@ beforeEach(() => {
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
+  process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachProjectSandbox.mockClear();
   ensureWorktree.mockClear();
+  removeWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  listRepoOpenIssues.mockClear();
+  listRepoOpenPullRequests.mockClear();
 });
 
 afterEach(() => {
+  delete process.env.GITHUB_APP_WEBHOOK_SECRET;
   delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
+});
+
+function signedGithubWebhookRequest(event: string, payload: Record<string, unknown>, init?: RequestInit): Request {
+  const body = JSON.stringify(payload);
+  const secret = process.env.GITHUB_APP_WEBHOOK_SECRET ?? '';
+  const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+  const headers = new Headers({
+    'content-type': 'application/json',
+    'x-github-event': event,
+    'x-github-delivery': 'delivery-1',
+    'x-hub-signature-256': signature,
+  });
+  new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+  return new Request('http://localhost/web/github/webhook', { ...init, method: 'POST', headers, body });
+}
+
+describe('webhook route', () => {
+  it('accepts a valid signed issues event and logs normalized metadata', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(
+      signedGithubWebhookRequest('issues', {
+        action: 'opened',
+        repository: { full_name: 'octo/hello' },
+        issue: { number: 12 },
+        sender: { login: 'ada' },
+        installation: { id: 99 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logSpy).toHaveBeenCalledWith('[GitHub Webhook]', {
+      event: 'issues',
+      action: 'opened',
+      deliveryId: 'delivery-1',
+      repository: 'octo/hello',
+      issueNumber: 12,
+      pullRequestNumber: undefined,
+      sender: 'ada',
+      installationId: 99,
+    });
+  });
+
+  it('accepts a valid signed PR review comment event and logs normalized PR metadata', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(
+      signedGithubWebhookRequest('pull_request_review_comment', {
+        action: 'created',
+        repository: { full_name: 'octo/hello' },
+        pull_request: { number: 34 },
+        sender: { login: 'grace' },
+        installation: { id: 99 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logSpy).toHaveBeenCalledWith('[GitHub Webhook]', {
+      event: 'pull_request_review_comment',
+      action: 'created',
+      deliveryId: 'delivery-1',
+      repository: 'octo/hello',
+      issueNumber: undefined,
+      pullRequestNumber: 34,
+      sender: 'grace',
+      installationId: 99,
+    });
+  });
+
+  it('rejects invalid signatures without logging', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const req = signedGithubWebhookRequest(
+      'issues',
+      { action: 'opened' },
+      {
+        headers: { 'x-hub-signature-256': 'sha256=0000000000000000000000000000000000000000000000000000000000000000' },
+      },
+    );
+
+    const res = await buildApp(null).request(req);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: 'unauthorized' });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['x-github-event', 400, { error: 'bad_request', message: 'Missing x-github-event header' }],
+    ['x-github-delivery', 400, { error: 'bad_request', message: 'Missing x-github-delivery header' }],
+    ['x-hub-signature-256', 401, { error: 'unauthorized', message: 'Missing x-hub-signature-256 header' }],
+  ] as const)('rejects missing %s header', async (missingHeader, expectedStatus, expectedBody) => {
+    const req = signedGithubWebhookRequest('issues', { action: 'opened' });
+    req.headers.delete(missingHeader);
+
+    const res = await buildApp(null).request(req);
+
+    expect(res.status).toBe(expectedStatus);
+    expect(await res.json()).toEqual(expectedBody);
+  });
+
+  it('rejects malformed JSON after signature verification', async () => {
+    const body = '{';
+    const signature = `sha256=${createHmac('sha256', process.env.GITHUB_APP_WEBHOOK_SECRET ?? '')
+      .update(body)
+      .digest('hex')}`;
+    const res = await buildApp(null).request('/web/github/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'issues',
+        'x-github-delivery': 'delivery-1',
+        'x-hub-signature-256': signature,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'bad_request', message: 'Malformed JSON payload' });
+  });
+
+  it('accepts and ignores a valid unsupported event', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(signedGithubWebhookRequest('installation', { action: 'created' }));
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, ignored: true });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('status route', () => {
@@ -323,17 +504,121 @@ describe('status route', () => {
   });
 });
 
+describe('repos route', () => {
+  const install = (installationId: number, accountLogin: string) => {
+    tables.installations.push({ orgId: 'org1', userId: 'u1', installationId, accountLogin, accountType: 'User' });
+  };
+
+  // The `./client` mock's default implementation must survive these tests
+  // (clearAllMocks does not restore implementations).
+  const defaultImpl = async (installationId: number) => [
+    {
+      id: 99,
+      fullName: 'octo/hello',
+      name: 'hello',
+      owner: 'octo',
+      defaultBranch: 'main',
+      private: false,
+      installationId,
+    },
+  ];
+  afterEach(() => {
+    vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
+  });
+
+  it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
+    install(7, 'octo');
+    install(8, 'stale');
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      if (installationId === 8) {
+        throw Object.assign(new Error('Not Found'), { status: 404 });
+      }
+      return defaultImpl(installationId);
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.repos).toHaveLength(1);
+    expect(json.repos[0].fullName).toBe('octo/hello');
+    // The stale row is gone; the live one remains.
+    expect(tables.installations.map(i => i.installationId)).toEqual([7]);
+    expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
+    errorSpy.mockRestore();
+  });
+
+  it('does not prune on non-404 errors', async () => {
+    install(7, 'octo');
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
+
+    // Hono's default onError turns the rethrown error into a 500.
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(500);
+    expect(tables.installations).toHaveLength(1);
+  });
+});
+
 describe('auth scoping', () => {
   it('401s when no user is present', async () => {
     const res = await buildApp(null).request('/web/github/repos');
     expect(res.status).toBe(401);
   });
+
+  // Platform-adapter topology: custom apiRoutes run on an isolated sub-app
+  // context where the outer gate's stashed user is invisible. The routes must
+  // resolve the session cookie themselves (ensureWebAuthUser), not rely on the
+  // gate's c.set(...).
+  describe('without the gate (isolated custom-route context)', () => {
+    it('status resolves the session from the cookie', async () => {
+      cookieUser = { workosId: 'u1' };
+      tables.installations.push({
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        accountLogin: 'octo',
+        accountType: 'User',
+      });
+      const res = await buildApp(null).request('/web/github/status');
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.enabled).toBe(true);
+      expect(json.connected).toBe(true);
+    });
+
+    it('org-tenant routes resolve the session from the cookie', async () => {
+      cookieUser = { workosId: 'u1' };
+      const res = await buildApp(null).request('/web/github/repos');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ repos: [] });
+    });
+
+    it('status still 401s with auth_required when there is no session', async () => {
+      cookieUser = null;
+      const res = await buildApp(null).request('/web/github/status');
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'unauthorized', reason: 'auth_required' });
+    });
+  });
 });
 
 describe('connect + callback', () => {
-  it('redirects connect to the install URL with a signed state', async () => {
+  it('redirects connect to the OAuth identify URL with a signed state', async () => {
+    // Identify-first: the install page dead-ends for already-installed apps,
+    // so connect verifies the user via OAuth and lets the callback decide
+    // whether an install is actually needed.
     const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
     expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+  });
+
+  it('redirects connect?manage=1 straight to the install URL', async () => {
+    // "Manage GitHub connection" must land on GitHub's installation page —
+    // the identify bounce completes invisibly for already-authorized users.
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect?manage=1');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/installations/new');
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
   });
 
@@ -388,6 +673,27 @@ describe('connect + callback', () => {
     // No code → bounce through OAuth identify, persist nothing.
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it("bounces a GitHub settings 'Save' redirect (no state) through OAuth identify", async () => {
+    // Updating an existing installation redirects here with installation_id +
+    // setup_action but no signed state. Re-sync via a fresh identify bounce
+    // instead of erroring out.
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/auth/github/callback?installation_id=7&setup_action=update',
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it('redirects a verified user with no installations to the install URL', async () => {
+    vi.mocked(listUserInstallations).mockResolvedValueOnce([]);
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/installations/new');
     expect(tables.installations).toHaveLength(0);
   });
 });
@@ -577,6 +883,108 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
   });
 }
 
+describe('issues route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(401);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('403s for a personal (no-org) account', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(403);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(404);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('lists open issues for the project repo', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.issues).toHaveLength(1);
+    expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
+    expect(json.nextPage).toBeNull();
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('forwards the requested page and echoes the next page', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=2');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ issues: [], nextPage: 3 });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2);
+  });
+
+  it('400s on a malformed page param', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
+    expect(res.status).toBe(400);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
+  });
+});
+
+describe('prs route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(401);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(404);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+  });
+
+  it('lists open pull requests for the project repo', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pullRequests).toHaveLength(1);
+    expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
+    expect(json.nextPage).toBeNull();
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('forwards the requested page and echoes the next page', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs?page=3');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ pullRequests: [], nextPage: 4 });
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 3);
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+});
+
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
@@ -623,6 +1031,14 @@ describe('worktree route', () => {
     expect(json.resourceId).toBe('p1');
     expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
+    // A freshly minted install token + repo name are passed through so the
+    // worktree forks from the latest fetched origin/<base>, not local state.
+    expect(ensureWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      branch: 'feat/x',
+      baseBranch: 'main',
+      token: 'install-token',
+      repoFullName: 'octo/hello',
+    });
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({ githubProjectId: 'p1', branch: 'feat/x', userId: 'u1' });
   });
@@ -632,6 +1048,97 @@ describe('worktree route', () => {
     const app = buildApp({ workosId: 'u1' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    expect(tables.worktrees).toHaveLength(1);
+  });
+});
+
+describe('worktree delete route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBe(401);
+  });
+
+  it('400s on an invalid branch name', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'bad branch!',
+    });
+    expect(res.status).toBe(400);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('404s for a worktree that was never created', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'feat/unknown',
+    });
+    expect(res.status).toBe(404);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it("404s for another user's worktree", async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const res = await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(404);
+    expect(removeWorktree).not.toHaveBeenCalled();
+    expect(tables.worktrees).toHaveLength(1);
+  });
+
+  it('400s when the worktree row points at the repo root checkout', async () => {
+    seedMaterializedProject();
+    tables.worktrees.push({
+      id: 'wt-root',
+      orgId: 'org1',
+      userId: 'u1',
+      githubProjectId: 'p1',
+      branch: 'main',
+      baseBranch: 'main',
+      worktreePath: '/workspace/hello',
+    });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'main',
+    });
+    expect(res.status).toBe(400);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('removes the checkout, deletes the row, and returns the path', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    expect(tables.worktrees).toHaveLength(1);
+
+    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({
+      removed: true,
+      branch: 'feat/x',
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(removeWorktree).toHaveBeenCalledOnce();
+    expect(removeWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      branch: 'feat/x',
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(tables.worktrees).toHaveLength(0);
+  });
+
+  it('keeps the row when the sandbox removal fails', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    removeWorktree.mockRejectedValueOnce(
+      Object.assign(new Error('git worktree remove failed'), { name: 'WorktreeError', code: 'worktree-failed' }),
+    );
+
+    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBeGreaterThanOrEqual(400);
     expect(tables.worktrees).toHaveLength(1);
   });
 });

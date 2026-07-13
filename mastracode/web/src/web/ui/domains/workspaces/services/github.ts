@@ -95,6 +95,16 @@ export function connectGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect`);
 }
 
+/**
+ * Open GitHub's installation page to add/remove accounts and repo access
+ * (full-page redirect). Unlike {@link connectGithub}, this skips the OAuth
+ * identify bounce — for an already-authorized user that bounce completes
+ * instantly and invisibly, which would make the manage button a silent no-op.
+ */
+export function manageGithubConnection(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+}
+
 /** List repos across the user's installations, optionally filtered by query. */
 export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
   const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
@@ -305,6 +315,25 @@ export async function createWorktree(
   baseBranch?: string,
 ): Promise<WorktreeResult> {
   return postProjectGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
+}
+
+export interface DeleteWorktreeResult {
+  removed: boolean;
+  branch: string;
+  worktreePath: string;
+}
+
+/**
+ * Delete a worktree's checkout (and local feature branch) from the project's
+ * sandbox and drop its persisted row. Destructive: any uncommitted work in the
+ * checkout is discarded, so callers must confirm with the user first.
+ */
+export async function deleteWorktree(
+  baseUrl: string,
+  githubProjectId: string,
+  branch: string,
+): Promise<DeleteWorktreeResult> {
+  return postProjectGitOp<DeleteWorktreeResult>(baseUrl, githubProjectId, 'worktree/delete', { branch });
 }
 
 export interface CommitResult {

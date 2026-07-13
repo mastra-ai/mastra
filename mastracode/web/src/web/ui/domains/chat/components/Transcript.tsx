@@ -20,6 +20,7 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../hooks/useAgentControllerRunMutations';
+import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
@@ -216,7 +217,8 @@ function ToolCard({
   }, [forceExpanded]);
   const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
   const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
-  const resultText = tool.status !== 'running' && tool.result !== undefined ? stringify(tool.result) : undefined;
+  const resultText =
+    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
   const edit = editArgs(tool.toolName, tool.args);
 
   return (
@@ -714,7 +716,9 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   };
 
   const status = statusMetadata(entry);
-  if (status) return <StatusMetadataCard status={status} />;
+  // Some harness status parts (e.g. om_* markers) carry no text; skip them
+  // entirely instead of rendering an empty notice bubble.
+  if (status) return status.text.trim() ? <StatusMetadataCard status={status} /> : null;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;

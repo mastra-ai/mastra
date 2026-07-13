@@ -37,7 +37,7 @@ catalogs:
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
-  cookie: '>=1.1.1'
+  cookie: '>=1.1.1 <2'
   tmp: '>=0.2.6'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
@@ -237,7 +237,7 @@ importers:
         specifier: ^8.4.2
         version: 8.4.2
       prettier:
-        specifier: ^3.8.3
+        specifier: 3.8.3
         version: 3.8.3
       prettier-plugin-tailwindcss:
         specifier: ^0.7.2
@@ -4262,6 +4262,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.9(vitest@4.1.9)
+      arktype:
+        specifier: ^2.2.0
+        version: 2.2.0
       eslint:
         specifier: ^10.4.1
         version: 10.5.0(jiti@2.7.0)
@@ -4292,6 +4295,9 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
+      valibot:
+        specifier: ^1.4.1
+        version: 1.4.1(typescript@6.0.3)
       vitest:
         specifier: 'catalog:'
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.9)(@vitest/ui@4.1.9)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
@@ -5456,6 +5462,9 @@ importers:
       eslint-plugin-storybook:
         specifier: ^10.4.2
         version: 10.4.2(eslint@10.6.0(jiti@2.7.0))(storybook@10.4.2(@testing-library/dom@10.4.1)(@types/react@19.2.14)(bufferutil@4.1.0)(prettier@3.8.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(typescript@6.0.3)
+      eslint-plugin-tailwindcss:
+        specifier: ^4.1.0
+        version: 4.1.0(eslint@10.6.0(jiti@2.7.0))(tailwindcss@4.2.2)(typescript@6.0.3)
       jsdom:
         specifier: ^26.1.0
         version: 26.1.0(bufferutil@4.1.0)
@@ -16382,6 +16391,10 @@ packages:
     resolution: {integrity: sha512-+1VkjdD0QBLPodGrJUeqarH8VAIvQODIbwh9XpP5Syisf7YoQgsJKPNFoqqLQlu+VQ/tVSshMR6loPMn8U+dPg==}
     engines: {node: '>=14'}
 
+  '@pkgr/core@0.3.6':
+    resolution: {integrity: sha512-SEeaJLb3qBNF/OaXnaR1NmmBbFYk1zC0ZH/52fATcRPLFg/p791YrcyFFy44Bo9sLaGuSuLp5Q6axbb/O+v/RA==}
+    engines: {node: ^14.18.0 || >=16.0.0}
+
   '@playwright/test@1.60.0':
     resolution: {integrity: sha512-O71yZIbAh/PxDMNGns37GHBIfrVkEVyn+AXyIa5dOTfb4/xNvRWV+Vv/NMbNCtODB/pO7vLlF2OTmMVLhmr7Ag==}
     engines: {node: '>=18'}
@@ -21670,10 +21683,6 @@ packages:
     resolution: {integrity: sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ==}
     engines: {node: '>=18'}
 
-  cookie@2.0.1:
-    resolution: {integrity: sha512-yuToqVvRrj6pfDXREyQAAv8SkAEk/8GS3jQRTiUMm66TVtBYmqQeoEjL2Lmq8Rpo6271vH76InTChTitEAm65w==}
-    engines: {node: '>=22'}
-
   cookiejar@2.1.4:
     resolution: {integrity: sha512-LDx6oHrK+PhzLKJU9j5S7/Y3jM/mUHvD/DeI1WQmJn652iPC5Y4TBzC9l+5OMOXlyTTA+SmVUPm0HQUwpD5Jqw==}
 
@@ -22841,6 +22850,17 @@ packages:
     peerDependencies:
       eslint: '>=8'
       storybook: ^10.4.2
+
+  eslint-plugin-tailwindcss@4.1.0:
+    resolution: {integrity: sha512-Z76UU7IhUuxrBAZ6tVZic+jwK2DXohrc4JhRF/I3k0c6sJmWAio+OJsIdvHjVitcnGPg16T4606cqE4vhV97fQ==}
+    engines: {node: '>=20.19.0'}
+    peerDependencies:
+      eslint: ^9.0.0 || ^10.0.0
+      tailwindcss: ^4.0.0
+      typescript: '*'
+    peerDependenciesMeta:
+      typescript:
+        optional: true
 
   eslint-plugin-testing-library@7.16.2:
     resolution: {integrity: sha512-8gleGnQXK2ZA3hHwjCwpYTZvM+9VsrJ+/9kDI8CjqAQGAdMQOdn/rJNu7ZySENuiWlGKQWyZJ4ZjEg2zamaRHw==}
@@ -27004,6 +27024,12 @@ packages:
     peerDependencies:
       postcss: ^8.1.0
 
+  postcss-nested@7.0.2:
+    resolution: {integrity: sha512-5osppouFc0VR9/VYzYxO03VaDa3e8F23Kfd6/9qcZTUI8P58GIYlArOET2Wq0ywSl2o2PjELhYOFI4W7l5QHKw==}
+    engines: {node: '>=18.0'}
+    peerDependencies:
+      postcss: ^8.2.14
+
   postcss-nesting@13.0.2:
     resolution: {integrity: sha512-1YCI290TX+VP0U/K/aFxzHzQWHWURL+CtHMSbex1lCdpXD1SoR2sYuxDu5aNI9lPoXpKTCggFZiDJbwylU0LEQ==}
     engines: {node: '>=18'}
@@ -28993,6 +29019,10 @@ packages:
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
 
+  synckit@0.11.13:
+    resolution: {integrity: sha512-eNRKgb3z66Yp3D2CixVujOUvXLFUTij/zVnV8KRyvFdQwpz7I5DS8UfRkTeLzb64u+dkzDSdelE24izu+zSSUg==}
+    engines: {node: ^14.18.0 || >=16.0.0}
+
   tabbable@6.4.0:
     resolution: {integrity: sha512-05PUHKSNE8ou2dwIxTngl4EzcnsCDZGJ/iCLtDflR/SHB/ny14rXc+qU5P4mG9JkusiV7EivzY9Mhm55AzAvCg==}
 
@@ -29003,6 +29033,11 @@ packages:
   tagged-tag@1.0.0:
     resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
     engines: {node: '>=20'}
+
+  tailwind-api-utils@1.0.3:
+    resolution: {integrity: sha512-KpzUHkH1ug1sq4394SLJX38ZtpeTiqQ1RVyFTTSY2XuHsNSTWUkRo108KmyyrMWdDbQrLYkSHaNKj/a3bmA4sQ==}
+    peerDependencies:
+      tailwindcss: ^3.3.0 || ^4.0.0 || ^4.0.0-beta
 
   tailwind-merge@3.5.0:
     resolution: {integrity: sha512-I8K9wewnVDkL1NTGoqWmVEIlUcB9gFriAEkXkfCjX5ib8ezGxtR3xD7iZIxrfArjEsH7F1CHD4RFUtxefdqV/A==}
@@ -40073,6 +40108,8 @@ snapshots:
   '@pkgjs/parseargs@0.11.0':
     optional: true
 
+  '@pkgr/core@0.3.6': {}
+
   '@playwright/test@1.60.0':
     dependencies:
       playwright: 1.60.0
@@ -46246,8 +46283,6 @@ snapshots:
 
   cookie@1.1.1: {}
 
-  cookie@2.0.1: {}
-
   cookiejar@2.1.4: {}
 
   cookies@0.9.1:
@@ -47588,6 +47623,20 @@ snapshots:
       - supports-color
       - typescript
 
+  eslint-plugin-tailwindcss@4.1.0(eslint@10.6.0(jiti@2.7.0))(tailwindcss@4.2.2)(typescript@6.0.3):
+    dependencies:
+      '@typescript-eslint/utils': 8.59.2(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3)
+      eslint: 10.6.0(jiti@2.7.0)
+      postcss: 8.5.15
+      postcss-nested: 7.0.2(postcss@8.5.15)
+      synckit: 0.11.13
+      tailwind-api-utils: 1.0.3(tailwindcss@4.2.2)
+      tailwindcss: 4.2.2
+    optionalDependencies:
+      typescript: 6.0.3
+    transitivePeerDependencies:
+      - supports-color
+
   eslint-plugin-testing-library@7.16.2(eslint@10.6.0(jiti@2.7.0))(typescript@6.0.3):
     dependencies:
       '@typescript-eslint/scope-manager': 8.59.2
@@ -47893,7 +47942,7 @@ snapshots:
       body-parser: 2.2.2
       content-disposition: 1.1.0
       content-type: 1.0.5
-      cookie: 2.0.1
+      cookie: 1.1.1
       cookie-signature: 1.2.2
       debug: 4.4.3
       depd: 2.0.0
@@ -51289,7 +51338,7 @@ snapshots:
       '@mswjs/interceptors': 0.41.9
       '@open-draft/deferred-promise': 3.0.0
       '@types/statuses': 2.0.6
-      cookie: 2.0.1
+      cookie: 1.1.1
       graphql: 16.14.0
       headers-polyfill: 5.0.1
       is-node-process: 1.2.0
@@ -52654,6 +52703,11 @@ snapshots:
     dependencies:
       icss-utils: 5.1.0(postcss@8.5.15)
       postcss: 8.5.15
+
+  postcss-nested@7.0.2(postcss@8.5.15):
+    dependencies:
+      postcss: 8.5.15
+      postcss-selector-parser: 7.1.1
 
   postcss-nesting@13.0.2(postcss@8.5.15):
     dependencies:
@@ -55286,6 +55340,10 @@ snapshots:
 
   symbol-tree@3.2.4: {}
 
+  synckit@0.11.13:
+    dependencies:
+      '@pkgr/core': 0.3.6
+
   tabbable@6.4.0: {}
 
   table-layout@4.1.1:
@@ -55294,6 +55352,13 @@ snapshots:
       wordwrapjs: 5.1.1
 
   tagged-tag@1.0.0: {}
+
+  tailwind-api-utils@1.0.3(tailwindcss@4.2.2):
+    dependencies:
+      enhanced-resolve: 5.24.2
+      jiti: 2.7.0
+      local-pkg: 1.1.2
+      tailwindcss: 4.2.2
 
   tailwind-merge@3.5.0: {}
 

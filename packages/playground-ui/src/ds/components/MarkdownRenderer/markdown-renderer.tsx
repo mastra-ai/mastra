@@ -39,7 +39,7 @@ const CodeBlock = ({ children, className, language, ...restProps }: CodeBlockPro
     <div className="group/code relative mb-4">
       <Code code={code} lang={language} className={preClass} {...restProps} />
 
-      <div className="invisible absolute right-2 top-2 flex gap-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
+      <div className="invisible absolute top-2 right-2 flex gap-1 rounded-lg p-1 opacity-0 transition-all duration-200 group-hover/code:visible group-hover/code:opacity-100">
         <CopyButton content={code} copyMessage="Copied code to clipboard" />
       </div>
     </div>
@@ -72,17 +72,17 @@ const COMPONENTS: Components = {
     </h1>
   ),
   h2: ({ children, ...props }) => (
-    <h2 className="font-semibold text-xl" {...props}>
+    <h2 className="text-xl font-semibold" {...props}>
       {children}
     </h2>
   ),
   h3: ({ children, ...props }) => (
-    <h3 className="font-semibold text-lg" {...props}>
+    <h3 className="text-lg font-semibold" {...props}>
       {children}
     </h3>
   ),
   h4: ({ children, ...props }) => (
-    <h4 className="font-semibold text-base" {...props}>
+    <h4 className="text-base font-semibold" {...props}>
       {children}
     </h4>
   ),
@@ -166,7 +166,7 @@ const COMPONENTS: Components = {
     </tr>
   ),
   p: ({ children, ...props }) => (
-    <p className="whitespace-pre-wrap leading-relaxed" {...props}>
+    <p className="leading-relaxed whitespace-pre-wrap" {...props}>
       {children}
     </p>
   ),

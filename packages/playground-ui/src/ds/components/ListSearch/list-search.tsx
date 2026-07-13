@@ -71,7 +71,7 @@ export const ListSearch = ({
       onReset={handleReset}
       size={size}
       variant={variant}
-      className="w-full max-w-[30rem]"
+      className="max-w-120 w-full"
     />
   );
 };

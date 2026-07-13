@@ -12,6 +12,8 @@
  * workspace factory reads it to resolve the working directory.
  */
 
+import type { MaterializeResult } from './github';
+
 const STORAGE_KEY = 'mastracode-projects';
 const ACTIVE_KEY = 'mastracode-active-project';
 
@@ -197,6 +199,25 @@ export function updateProject(project: Project): void {
 }
 
 /**
+ * Merge a server `MaterializeResult` (from the `/ensure` route) into a stored
+ * GitHub project and persist it: records the session `resourceId` plus the
+ * sandbox binding, and seeds the root worktree (default branch at the sandbox
+ * workdir) when the project has none yet.
+ */
+export function applyMaterializeResult(project: Project, result: MaterializeResult): Project {
+  const merged: Project = {
+    ...project,
+    resourceId: result.resourceId,
+    sandboxId: result.sandboxId,
+    sandboxWorkdir: result.sandboxWorkdir,
+  };
+  const updated: Project =
+    merged.worktrees && merged.worktrees.length > 0 ? merged : { ...merged, worktrees: projectWorktrees(merged) };
+  updateProject(updated);
+  return updated;
+}
+
+/**
  * The worktree list for a project, normalizing legacy projects: a GitHub
  * project always has at least the repo-root worktree (its default branch), and
  * a pre-`worktrees` project with an `activeBranch` gets that folded in.
@@ -238,6 +259,23 @@ export function upsertWorktree(project: Project, worktree: Worktree): Project {
   const existing = projectWorktrees(project);
   const without = existing.filter(w => w.branch !== worktree.branch);
   const updated: Project = { ...project, worktrees: [...without, worktree] };
+  updateProject(updated);
+  return updated;
+}
+
+/**
+ * Remove a worktree from a project and persist. If the removed worktree was
+ * selected, selection falls back to the repo root (first worktree). Returns the
+ * updated project.
+ */
+export function removeWorktree(project: Project, worktreePath: string): Project {
+  const remaining = projectWorktrees(project).filter(w => w.worktreePath !== worktreePath);
+  const updated: Project = {
+    ...project,
+    worktrees: remaining,
+    selectedWorktreePath:
+      project.selectedWorktreePath === worktreePath ? remaining[0]?.worktreePath : project.selectedWorktreePath,
+  };
   updateProject(updated);
   return updated;
 }

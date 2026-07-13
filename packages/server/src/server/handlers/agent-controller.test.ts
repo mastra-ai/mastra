@@ -256,6 +256,36 @@ describe('agent-controller routes', () => {
       expect(received).toBeDefined();
       expect(received.type).toBe('agent_start');
     });
+
+    it('flattens Error instances on error events so the message survives JSON serialization', async () => {
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-err',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-err', id: 'user-err', ownerId: 'code' });
+      session.emit({ type: 'error', error: new Error('model quota exhausted'), errorType: 'provider' } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(received).toBeDefined();
+      // Error's message/name are non-enumerable; the wire event must carry them
+      // as plain properties so JSON.stringify doesn't send `"error": {}`.
+      expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
+      expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
+      expect(received.errorType).toBe('provider');
+    });
   });
 
   describe('LIST_AGENT_CONTROLLER_MODES_ROUTE', () => {

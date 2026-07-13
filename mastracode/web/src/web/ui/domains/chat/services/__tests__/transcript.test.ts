@@ -121,6 +121,26 @@ describe('transcript reducer message entries', () => {
     ]);
   });
 
+  it('strips ANSI escape sequences from streamed shell output', () => {
+    const started = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'tool_start', toolCallId: 'tool-1', toolName: 'execute_command', args: { command: 'gh pr view' } },
+    });
+
+    const state = transcriptReducer(started, {
+      type: 'event',
+      event: {
+        type: 'shell_output',
+        toolCallId: 'tool-1',
+        output: '\u001b[1;38m{\u001b[m\n  \u001b[1;34m"title"\u001b[m: \u001b[32m"Fix bug"\u001b[m\n',
+      },
+    });
+
+    const entry = state.entries[0];
+    if (!entry || entry.kind !== 'message') throw new Error('expected a message entry');
+    expect(entry.runtimeTools?.['tool-1']?.output).toBe('{\n  "title": "Fix bug"\n');
+  });
+
   it('ignores active mode and model events because focused providers own that state', () => {
     const state = transcriptReducer(initialTranscript, {
       type: 'event',
@@ -179,5 +199,32 @@ describe('transcript reducer message entries', () => {
       expect.objectContaining({ kind: 'notification_summary', pending: 2 }),
       expect.objectContaining({ kind: 'approval', toolCallId: 'tool-1' }),
     ]);
+  });
+});
+
+describe('transcript reducer error notices', () => {
+  function errorNoticeText(event: Record<string, unknown>): string {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
+    const notice = state.entries.find(entry => entry.kind === 'notice');
+    if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
+    return notice.text;
+  }
+
+  it('renders a string error payload verbatim', () => {
+    expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
+  });
+
+  it('renders the message from an object error payload', () => {
+    expect(errorNoticeText({ error: { message: 'model quota exhausted' } })).toBe('model quota exhausted');
+  });
+
+  it('falls back to errorType when the payload has no message', () => {
+    expect(errorNoticeText({ error: {}, errorType: 'provider' })).toBe(
+      'Run failed (provider). Check the server logs for details.',
+    );
+  });
+
+  it('falls back to a generic hint when the payload is empty', () => {
+    expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
   });
 });

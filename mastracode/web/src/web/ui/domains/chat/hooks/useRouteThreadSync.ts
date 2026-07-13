@@ -1,9 +1,12 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
+import { queryKeys } from '../../../../../shared/api/keys';
 import { useChatConnection } from '../context/useChatConnection';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import { createAgentControllerClient } from '../services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThreadMutations';
 import { useAgentControllerThreads } from './useAgentControllerThreads';
@@ -27,6 +30,13 @@ export function useRouteThreadSync() {
     enabled: sessionEnabled,
   });
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { session } = createAgentControllerClient({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    baseUrl,
+    enabled: sessionEnabled,
+  });
   const { threadId: routeThreadId } = useParams<{ threadId: string }>();
   const latestRouteThreadId = useRef<string | null>(null);
 
@@ -35,10 +45,32 @@ export function useRouteThreadSync() {
     const isLatestRequest = () => latestRouteThreadId.current === threadId;
 
     if (!threadsQuery.data?.some(thread => thread.id === threadId)) {
-      const message = `Failed to switch thread: thread ${threadId} was not found`;
+      // The route thread does not exist in the current scope. This is the
+      // normal outcome of a worktree switch (threads are scoped per
+      // worktree), so settle on the scope's most recent thread instead of
+      // bouncing through /new with an error.
+      const latest = [...(threadsQuery.data ?? [])].sort((a, b) => {
+        const ta = a.updatedAt ?? a.createdAt ?? '';
+        const tb = b.updatedAt ?? b.createdAt ?? '';
+        return tb.localeCompare(ta);
+      })[0];
+      if (latest) {
+        // Warm the message cache first so the target thread renders content
+        // instead of a loading skeleton.
+        const warm = session
+          ? queryClient.prefetchQuery({
+              queryKey: queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, latest.id),
+              queryFn: () => session.listMessages(latest.id),
+            })
+          : Promise.resolve();
+        void warm.finally(() => {
+          if (!isLatestRequest()) return;
+          void navigate(`/threads/${latest.id}`, { replace: true });
+        });
+        return;
+      }
       reset();
-      pushNotice(message, 'error');
-      void navigate('/new', { replace: true, state: { routeErrorNotice: message } });
+      void navigate('/new', { replace: true });
       return;
     }
 

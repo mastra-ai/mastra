@@ -35,12 +35,12 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
         indeterminate={indeterminate ?? isCheckedIndeterminate}
         data-slot="checkbox"
         className={cn(
-          'peer flex h-4 w-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
+          'peer flex size-4 shrink-0 cursor-pointer items-center justify-center rounded-[0.3125rem]',
           'border border-neutral6/[0.06] bg-neutral6/[0.12] text-surface1 outline-hidden',
           transitions.all,
           'hover:border-neutral6/[0.12] hover:bg-neutral6/[0.16]',
           'active:scale-95 active:border-neutral6/[0.18] active:bg-neutral6/[0.18]',
-          'focus-visible:border-neutral5/50 focus-visible:outline focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55',
+          'focus-visible:border-neutral5/50 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-neutral5/55 focus-visible:outline-solid',
           'data-[checked]:border-neutral6 data-[checked]:bg-neutral6 data-[checked]:text-surface1',
           'data-[indeterminate]:border-neutral6 data-[indeterminate]:bg-neutral6 data-[indeterminate]:text-surface1',
           'data-[checked]:hover:border-neutral5 data-[checked]:hover:bg-neutral5',
@@ -59,11 +59,11 @@ const Checkbox = React.forwardRef<HTMLSpanElement, CheckboxProps>(
           keepMounted
           className={cn(
             'group/checkbox-indicator flex items-center justify-center text-current',
-            'opacity-0 scale-75 transition-[opacity,transform] duration-200 ease-out-custom',
-            'data-[checked]:opacity-100 data-[checked]:scale-100',
-            'data-[indeterminate]:opacity-100 data-[indeterminate]:scale-100',
-            'data-[starting-style]:opacity-0 data-[starting-style]:scale-75',
-            'data-[ending-style]:opacity-0 data-[ending-style]:scale-75',
+            'scale-75 opacity-0 transition-[opacity,transform] duration-200 ease-out-custom',
+            'data-[checked]:scale-100 data-[checked]:opacity-100',
+            'data-[indeterminate]:scale-100 data-[indeterminate]:opacity-100',
+            'data-[starting-style]:scale-75 data-[starting-style]:opacity-0',
+            'data-[ending-style]:scale-75 data-[ending-style]:opacity-0',
           )}
         >
           <CheckboxIndicatorIcon />
@@ -83,7 +83,7 @@ function CheckboxIndicatorIcon() {
     <>
       <Check
         className={cn(
-          'size-3 scale-95 stroke-[3.25] transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
+          'stroke-3.25 size-3 scale-95 transition-[stroke-dashoffset,transform] duration-200 ease-out-custom',
           // Lucide's check path is ~22.6 units long. Use a longer dash so the
           // final checked mark is never clipped.
           '[stroke-dasharray:28] [stroke-dashoffset:28]',
@@ -94,7 +94,7 @@ function CheckboxIndicatorIcon() {
       />
       <Minus
         className={cn(
-          'hidden size-3 scale-95 stroke-[3.25] transition-transform duration-200 ease-out-custom',
+          'stroke-3.25 hidden size-3 scale-95 transition-transform duration-200 ease-out-custom',
           'group-data-[indeterminate]/checkbox-indicator:block',
           'group-data-[indeterminate]/checkbox-indicator:scale-100',
         )}

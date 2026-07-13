@@ -114,16 +114,18 @@ export function isSandboxEnabled(): boolean {
  * derived from client input.
  */
 export function computeSandboxWorkdir(repoFullName: string): string {
-  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
   const repoName = repoFullName.split('/').pop() || 'repo';
+  // The local provider runs on the host filesystem, where a cloud path like
+  // `/workspace` is not writable. `MASTRACODE_SANDBOX_WORKDIR` documents
+  // itself as cloud-only (and the schema defaults it to `/workspace`), so the
+  // local provider ignores it and checks out under the local sandbox root.
+  if (getSandboxProvider() === 'local') {
+    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
+  }
+  const base = process.env.MASTRACODE_SANDBOX_WORKDIR;
   if (base) {
     // If the configured base already ends with the repo name, use it as-is.
     return base.endsWith(`/${repoName}`) ? base : `${base.replace(/\/$/, '')}/${repoName}`;
-  }
-  // The local provider runs on the host filesystem, where `/workspace` is not
-  // writable; check out under the local sandbox root instead.
-  if (getSandboxProvider() === 'local') {
-    return `${getLocalSandboxRoot().replace(/\/$/, '')}/${repoName}`;
   }
   return `/workspace/${repoName}`;
 }
@@ -417,8 +419,14 @@ export async function materializeRepo(
 
   const authUrl = tokenUrl(repo, token);
 
+  // The DB's `materializedAt` can drift from disk — a fresh per-user binding
+  // row over an already-populated workdir (local dev DB resets, repaired
+  // rows, earlier flows) would make `git clone` fail on the non-empty
+  // directory. Re-detect an existing checkout of this repo and pull instead.
+  const alreadyMaterialized = Boolean(sandboxRow.materializedAt) || (await hasExistingCheckout(sandbox, workdir, repo));
+
   try {
-    if (!sandboxRow.materializedAt) {
+    if (!alreadyMaterialized) {
       // 2a. First open: shallow-clone the default branch into the workdir. A
       // shallow single-branch clone is dramatically faster for large repos; the
       // later re-open uses `git pull --ff-only`, which works on shallow clones.
@@ -450,7 +458,7 @@ export async function materializeRepo(
     // git config, even when the clone/pull above failed partway through. This
     // is best-effort on the failure path (the workdir may not exist yet after a
     // failed clone); on the success path the scrub must succeed or we surface it.
-    await scrubRemote(sandbox, workdir, repo, Boolean(sandboxRow.materializedAt));
+    await scrubRemote(sandbox, workdir, repo, alreadyMaterialized);
   }
 
   // 4. Mark materialized.
@@ -459,6 +467,23 @@ export async function materializeRepo(
     .update(githubProjectSandboxes)
     .set({ materializedAt: new Date() })
     .where(eq(githubProjectSandboxes.id, sandboxRow.id));
+}
+
+/**
+ * True when the workdir already holds a git checkout whose `origin` points at
+ * this exact repo. Matches both the clean and token-auth URL forms; any other
+ * remote (or no git dir at all) falls back to the clone path.
+ */
+async function hasExistingCheckout(
+  sandbox: MaterializationSandbox,
+  workdir: string,
+  repoFullName: string,
+): Promise<boolean> {
+  const result = await sh(sandbox, `git -C ${shellQuote(workdir)} remote get-url origin`);
+  if (result.exitCode !== 0) return false;
+  const url = result.stdout.trim().toLowerCase();
+  const suffix = `github.com/${repoFullName.toLowerCase()}`;
+  return url.endsWith(`${suffix}.git`) || url.endsWith(suffix);
 }
 
 /**
@@ -744,17 +769,26 @@ export interface EnsureWorktreeResult {
 /**
  * Create (or reuse) a git worktree + branch inside the sandbox for a unit of
  * work. Idempotent: if a worktree already exists at the computed path it is
- * reused. The branch is created from `baseBranch` when it does not yet exist.
+ * reused. The branch is created from the freshly fetched `origin/<baseBranch>`
+ * — never the sandbox's possibly stale local ref — so new worktrees always
+ * start from the latest remote state.
  *
- * @param sandbox      live sandbox containing the base checkout
- * @param repoWorkdir  the base repo checkout path inside the sandbox
- * @param branch       the feature branch (ref-validated server-side)
- * @param baseBranch   the branch to fork from (ref-validated; default's repo branch)
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the feature branch (ref-validated server-side)
+ * @param baseBranch    the branch to fork from (ref-validated; defaults to the repo's default branch)
+ * @param token         short-lived installation token used only for the base-branch fetch
+ * @param repoFullName  `owner/repo` used to build the tokenized remote URL
  */
 export async function ensureWorktree(
   sandbox: MaterializationSandbox,
   repoWorkdir: string,
-  { branch, baseBranch }: { branch: string; baseBranch: string },
+  {
+    branch,
+    baseBranch,
+    token,
+    repoFullName,
+  }: { branch: string; baseBranch: string; token: string; repoFullName: string },
 ): Promise<EnsureWorktreeResult> {
   if (!isValidGitRef(branch)) {
     throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
@@ -772,22 +806,80 @@ export async function ensureWorktree(
     return { worktreePath, branch, baseBranch, reused: true };
   }
 
-  // Make sure the base ref is present locally before forking from it.
-  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(baseBranch)}`);
+  // Fetch the latest base ref from origin before forking. The explicit refspec
+  // updates `refs/remotes/origin/<base>` even when the checkout was created as
+  // a single-branch clone. The fetch needs the install token (the resting
+  // remote is tokenless), and a failure is a hard error — silently forking a
+  // stale local ref is worse than failing the request.
+  const baseRef = `origin/${baseBranch}`;
+  await withInstallToken(sandbox, repoWorkdir, repoFullName, token, async () => {
+    const fetch = await sh(
+      sandbox,
+      `git -C ${shellQuote(repoWorkdir)} fetch origin ${shellQuote(`+refs/heads/${baseBranch}:refs/remotes/${baseRef}`)}`,
+    );
+    if (fetch.exitCode !== 0) {
+      throw classifyGitFailure(fetch, 'pull-failed');
+    }
+  });
 
   // Create the worktree. If the branch already exists, check it out into the
-  // worktree; otherwise create it from the base branch. `git worktree add -B`
+  // worktree; otherwise create it from the fetched base. `git worktree add -B`
   // creates-or-resets the branch to the base, which keeps this idempotent for a
   // fresh worktree while still working when the branch already exists remotely.
+  // `--no-track` keeps the feature branch from tracking origin/<base>; pushes
+  // set their own upstream via `push -u`.
   const add = await sh(
     sandbox,
-    `git -C ${shellQuote(repoWorkdir)} worktree add -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseBranch)}`,
+    `git -C ${shellQuote(repoWorkdir)} worktree add --no-track -B ${shellQuote(branch)} ${shellQuote(worktreePath)} ${shellQuote(baseRef)}`,
   );
   if (add.exitCode !== 0) {
     throw new WorktreeError(`git worktree add failed: ${add.stderr.trim() || add.stdout.trim()}`, 'worktree-failed');
   }
 
   return { worktreePath, branch, baseBranch, reused: false };
+}
+
+/**
+ * Remove a worktree (and its local feature branch) from the sandbox. The
+ * checkout is removed with `--force` — the caller owns confirming that any
+ * uncommitted work in it can be discarded. Idempotent: a worktree whose
+ * directory is already gone only has its metadata pruned.
+ *
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the worktree's feature branch (ref-validated)
+ * @param worktreePath  the persisted, server-computed worktree path
+ */
+export async function removeWorktree(
+  sandbox: MaterializationSandbox,
+  repoWorkdir: string,
+  { branch, worktreePath }: { branch: string; worktreePath: string },
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
+  }
+
+  const remove = await sh(
+    sandbox,
+    `git -C ${shellQuote(repoWorkdir)} worktree remove --force ${shellQuote(worktreePath)}`,
+  );
+  if (remove.exitCode !== 0) {
+    // Tolerate a checkout that's already gone (e.g. a fresh sandbox after
+    // re-provisioning): prune stale metadata and only fail when the directory
+    // still exists, meaning git genuinely refused to remove it.
+    await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} worktree prune`);
+    const exists = await sh(sandbox, `test -e ${shellQuote(worktreePath)}`);
+    if (exists.exitCode === 0) {
+      throw new WorktreeError(
+        `git worktree remove failed: ${remove.stderr.trim() || remove.stdout.trim()}`,
+        'worktree-failed',
+      );
+    }
+  }
+
+  // Best-effort local branch cleanup; the branch may not exist locally anymore
+  // or may still be pushed remotely — neither should fail the removal.
+  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} branch -D ${shellQuote(branch)}`);
 }
 
 // ---------------------------------------------------------------------------

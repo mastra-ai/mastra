@@ -10,10 +10,11 @@ import { useProjectsQuery } from '../useProjects';
 import {
   deriveProjectPath,
   useCreateWorkspaceMutation,
+  useDeleteWorkspaceMutation,
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../useWorkspaces';
-import type { WorkspaceSession } from '../useWorkspaces';
+import type { WorkspaceSession, WorkspaceThreadSession } from '../useWorkspaces';
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT_ID = 'project-gh';
@@ -145,6 +146,126 @@ describe('workspaces query hooks', () => {
 
     expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra');
     expect(session.setState).not.toHaveBeenCalled();
+  });
+
+  it('deletes a workspace, cascades its threads, and rebinds the session when it was selected', async () => {
+    saveProject({ ...rootProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui' });
+    const session = sessionStub();
+    let received: unknown;
+
+    server.use(
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+        received = await request.json();
+        return HttpResponse.json({
+          removed: true,
+          branch: 'feat-ui',
+          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        });
+      }),
+    );
+
+    const deletedThreads: string[] = [];
+    let listed = false;
+    const threadSession: WorkspaceThreadSession = {
+      listThreads: async ({ tags }) => {
+        expect(tags).toEqual({ projectPath: '/sandbox/mastra-worktrees/feat-ui' });
+        if (listed) return [];
+        listed = true;
+        return [{ id: 'thread-1' }, { id: 'thread-2' }];
+      },
+      deleteThread: async threadId => {
+        deletedThreads.push(threadId);
+      },
+    };
+
+    const project = loadProjects()[0]!;
+    const { result, client } = renderHookWithProviders(() =>
+      useDeleteWorkspaceMutation(project, session, threadSession, {
+        agentControllerId: 'code',
+        resourceId: project.resourceId,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        branch: 'feat-ui',
+        worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        baseBranch: 'main',
+      });
+    });
+    await waitForMutationsIdle(client);
+
+    expect(received).toEqual({ branch: 'feat-ui' });
+    expect(deletedThreads).toEqual(['thread-1', 'thread-2']);
+    expect(session.setState).toHaveBeenCalledWith({ projectPath: '/sandbox/mastra' });
+    const stored = loadProjects()[0]!;
+    expect(stored.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
+    expect(stored.selectedWorktreePath).toBe('/sandbox/mastra');
+  });
+
+  it('keeps threads and the stored worktree when the server delete fails', async () => {
+    saveProject(rootProject);
+    const session = sessionStub();
+
+    server.use(
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () =>
+        HttpResponse.json({ error: 'worktree-failed', message: 'git worktree remove failed' }, { status: 502 }),
+      ),
+    );
+
+    const threadSession: WorkspaceThreadSession = {
+      listThreads: vi.fn(async () => [{ id: 'thread-1' }]),
+      deleteThread: vi.fn(async () => {}),
+    };
+
+    const { result } = renderHookWithProviders(() => useDeleteWorkspaceMutation(rootProject, session, threadSession));
+
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          branch: 'feat-ui',
+          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+          baseBranch: 'main',
+        }),
+      ).rejects.toMatchObject({ message: 'git worktree remove failed' });
+    });
+
+    expect(threadSession.deleteThread).not.toHaveBeenCalled();
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
+    expect(session.setState).not.toHaveBeenCalled();
+  });
+
+  it('does not rebind the session when deleting an unselected workspace', async () => {
+    saveProject(rootProject); // selected: /sandbox/mastra (root)
+    const session = sessionStub();
+
+    server.use(
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () =>
+        HttpResponse.json({ removed: true, branch: 'feat-ui', worktreePath: '/sandbox/mastra-worktrees/feat-ui' }),
+      ),
+    );
+
+    const threadSession: WorkspaceThreadSession = {
+      listThreads: vi.fn(async () => []),
+      deleteThread: vi.fn(async () => {}),
+    };
+
+    const { result, client } = renderHookWithProviders(() =>
+      useDeleteWorkspaceMutation(rootProject, session, threadSession),
+    );
+
+    await act(async () => {
+      await result.current.mutateAsync({
+        branch: 'feat-ui',
+        worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        baseBranch: 'main',
+      });
+    });
+    await waitForMutationsIdle(client);
+
+    expect(session.setState).not.toHaveBeenCalled();
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
+    expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra');
   });
 
   it('derives the active projectPath from the selected GitHub worktree', () => {
