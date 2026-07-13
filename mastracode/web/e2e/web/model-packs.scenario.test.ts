@@ -2,11 +2,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
 import { AuthStorage } from '@mastra/code-sdk/auth/storage';
-import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
+import { loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { buildProviderAccess, listModelPacks } from '../../src/web/config-routes.js';
 
 /**

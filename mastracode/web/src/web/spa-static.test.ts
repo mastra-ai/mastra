@@ -16,13 +16,13 @@ const { readFile, stat } = await import('node:fs/promises');
 function mockContext(method: string, path: string, accept = '*/*'): any {
   const headers: Record<string, string> = { Accept: accept };
   const resHeaders: Record<string, string> = {};
-  let bodyData: Uint8Array | null = null;
+  let bodyData: BodyInit | null = null;
   return {
     req: { method, path, header: (name: string) => headers[name] ?? null },
     header(name: string, value: string) {
       resHeaders[name] = value;
     },
-    body(data: Uint8Array) {
+    body(data: BodyInit) {
       bodyData = data;
       return new Response(data, { headers: resHeaders });
     },
@@ -45,10 +45,7 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
     const middleware = createSpaStaticMiddleware('/app/ui');
     const c = mockContext('GET', '/..%2fui.key');
-    let calledNext = false;
-    await middleware(c, async () => {
-      calledNext = true;
-    });
+    await middleware(c, async () => {});
 
     // readFile must not be called with a path outside uiDist.
     const readPath = vi.mocked(readFile).mock.calls[0]?.[0] as string | undefined;
@@ -88,6 +85,19 @@ describe('createSpaStaticMiddleware – path traversal', () => {
 
     expect(readFile).toHaveBeenCalledWith('/app/ui/index.html');
     expect(c._resHeaders['Cache-Control']).toBe('no-cache');
+  });
+
+  it('allows host apps to transform index.html without replacing static serving', async () => {
+    vi.mocked(readFile).mockResolvedValue(Buffer.from('<html><head></head><body></body></html>'));
+    vi.mocked(stat).mockRejectedValue(new Error('not a file'));
+
+    const middleware = createSpaStaticMiddleware('/app/ui', {
+      transformIndexHtml: html => html.replace('</head>', '<script>window.host=true;</script></head>'),
+    });
+    const c = mockContext('GET', '/', 'text/html');
+    await middleware(c, async () => {});
+
+    expect(await new Response(c._body()).text()).toContain('window.host=true');
   });
 
   it('passes through server-owned prefixes', async () => {

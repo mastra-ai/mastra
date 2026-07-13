@@ -1,8 +1,8 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
-import { describe, it, expect } from 'vitest';
 
-import { createInitialTranscript } from '../../src/web/ui/domains/chat/services/transcript.js';
-import type { MessageEntry, TimelineEntry } from '../../src/web/ui/domains/chat/services/transcript.js';
+import { createInitialTranscript } from '@mastra/code-app/chat/transcript';
+import type { MessageEntry, TimelineEntry } from '@mastra/code-app/chat/transcript';
+import { describe, it, expect } from 'vitest';
 
 /** Flatten a message entry's ordered text/reasoning parts to a string. */
 function messageText(entry: TimelineEntry): string {

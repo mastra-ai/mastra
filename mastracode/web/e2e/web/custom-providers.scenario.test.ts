@@ -2,14 +2,13 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-
-import { getCustomProviderId, loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
-import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
 import {
   removeCustomProviderFromSettings,
   upsertCustomProviderInSettings,
 } from '@mastra/code-sdk/onboarding/custom-providers';
+import { getCustomProviderId, loadSettings, saveSettings } from '@mastra/code-sdk/onboarding/settings';
+import type { GlobalSettings } from '@mastra/code-sdk/onboarding/settings';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 /**
  * The web settings panel manages custom OpenAI-compatible providers through the

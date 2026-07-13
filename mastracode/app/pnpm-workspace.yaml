@@ -1,0 +1,14 @@
+# Keep the shared renderer source independent from monorepo-wide dependency
+# overrides. Web and desktop consume this package through `link:../app`.
+packages:
+  - '.'
+
+enableGlobalVirtualStore: true
+blockExoticSubdeps: true
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 43200
+
+allowBuilds:
+  esbuild: false
+  msw: false

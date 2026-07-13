@@ -20,6 +20,7 @@ import { ensureWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import { signState, verifyState } from '../github/config';
 import { getAppDb } from '../github/db';
+import { getIntakeConfig } from '../intake/store';
 import {
   buildLinearAuthorizeUrl,
   exchangeLinearOAuthCode,
@@ -27,7 +28,6 @@ import {
   listActiveLinearIssues,
   listLinearProjects,
 } from './client';
-import { getIntakeConfig } from '../intake/store';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';
 import { linearConnections } from './schema';
 import type { LinearConnectionRow } from './schema';

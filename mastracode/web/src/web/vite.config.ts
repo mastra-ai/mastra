@@ -7,6 +7,7 @@ import { defineConfig, loadEnv } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
+const appRoot = resolve(here, '../../../app');
 
 /**
  * Dev-only injection of `window.__MASTRACODE_CONFIG__` into index.html, from
@@ -49,7 +50,8 @@ function runtimeConfigPlugin(mode: string): Plugin {
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
 export default defineConfig(({ mode }) => ({
-  root: resolve(here, 'ui'),
+  root: resolve(here, '../renderer'),
+  publicDir: resolve(appRoot, 'src/ui/public'),
   plugins: [react(), tailwindcss(), runtimeConfigPlugin(mode)],
   resolve: {
     // Monorepo packages arrive via `link:` and would otherwise resolve their

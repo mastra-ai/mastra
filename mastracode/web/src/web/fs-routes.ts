@@ -2,10 +2,10 @@ import { readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, resolve, sep } from 'node:path';
 
+import type { DirectoryEntry, DirectoryListing } from '@mastra/code-app/api-types';
+import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 import { registerApiRoute } from '@mastra/core/server';
 import type { ApiRoute } from '@mastra/core/server';
-
-import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 
 /**
  * Server-side directory browser for the web project picker.
@@ -19,23 +19,6 @@ import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/pro
  * directory). Requests that try to escape the root via `..` or symlinks are
  * clamped back to the root.
  */
-
-export interface DirectoryEntry {
-  name: string;
-  /** Absolute path to the entry. */
-  path: string;
-}
-
-export interface DirectoryListing {
-  /** The allowed root; clients cannot browse above this. */
-  root: string;
-  /** The absolute path that was listed. */
-  path: string;
-  /** Parent directory path, or null when `path` is the root. */
-  parent: string | null;
-  /** Subdirectories of `path` (directories only, sorted, hidden excluded). */
-  entries: DirectoryEntry[];
-}
 
 /** Resolve the browsable root, defaulting to the user's home directory. */
 export function resolveFsRoot(root?: string): string {
@@ -62,6 +45,21 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
   } catch {
     return null;
   }
+}
+
+export async function resolveAllowedProjectPath(
+  requestedPath: string,
+  root: string,
+  additionalRoots: readonly string[] = [],
+): Promise<string | null> {
+  const candidate = isAbsolute(requestedPath) ? resolve(requestedPath) : resolve(root, requestedPath);
+  for (const configuredRoot of [root, ...additionalRoots]) {
+    const allowedRoot = await realpath(resolveFsRoot(configuredRoot)).catch(() => null);
+    if (!allowedRoot) continue;
+    const confined = await realPathWithinRoot(candidate, allowedRoot);
+    if (confined) return confined;
+  }
+  return null;
 }
 
 /**
@@ -147,7 +145,7 @@ export function resolveProject(projectPath: string): ResolvedProject {
  *   - `GET /web/fs/list?path=...`        — browse directories (confined to root)
  *   - `GET /web/project/resolve?path=...` — TUI-compatible project resourceId
  */
-export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
+export function buildFsRoutes(options: { root?: string; additionalRoots?: () => readonly string[] } = {}): ApiRoute[] {
   const root = resolveFsRoot(options.root);
 
   return [
@@ -171,11 +169,7 @@ export function buildFsRoutes(options: { root?: string } = {}): ApiRoute[] {
       handler: async c => {
         const path = c.req.query('path');
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
-        // Confine resolution to the browsable root (following symlinks), so this
-        // endpoint can't be used to probe arbitrary filesystem paths. The web UI
-        // only ever resolves directories the user picked via the root-confined
-        // browser, so legitimate requests are always within the root.
-        const confined = await realPathWithinRoot(isAbsolute(path) ? resolve(path) : resolve(root, path), root);
+        const confined = await resolveAllowedProjectPath(path, root, options.additionalRoots?.());
         if (!confined) return c.json({ error: 'Path is outside the browsable root' }, 403);
         try {
           return c.json(resolveProject(confined));

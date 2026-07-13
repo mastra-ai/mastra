@@ -1,6 +1,6 @@
-import { registerApiRoute } from '@mastra/core/server';
-import type { ApiRoute } from '@mastra/core/server';
+import { randomUUID } from 'node:crypto';
 
+import type { CustomProviderInfo, ModelPackInfo, OMConfigInfo, ProviderInfo } from '@mastra/code-app/api-types';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { removeCustomPackFromSettings } from '@mastra/code-sdk/onboarding/custom-packs';
 import {
@@ -17,6 +17,17 @@ import {
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
+import type { ApiRoute } from '@mastra/core/server';
+import { registerApiRoute } from '@mastra/core/server';
+
+type ConfigAuthStorage = Pick<
+  AuthStorage,
+  'get' | 'getApiKey' | 'hasStoredApiKey' | 'login' | 'remove' | 'setStoredApiKey'
+>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
 
 /**
  * Server-side configuration routes for the web app.
@@ -29,21 +40,91 @@ import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings
  * Keys are never returned to the client; only their presence and source.
  */
 
-/** A model provider with the current source of its credentials. */
-export interface ProviderInfo {
-  provider: string;
-  /** Env var the provider's key is read from, if any. */
-  envVar?: string;
-  /** Where the active credential comes from. */
-  source: 'oauth' | 'stored' | 'env' | 'none';
+const OAUTH_LOGIN_TTL_MS = 10 * 60 * 1000;
+type OAuthCompletionMode = 'browser-callback' | 'manual-code';
+
+interface OAuthProviderConfig {
+  authProviderId: string;
+  completionMode: OAuthCompletionMode;
+  displayName: string;
+}
+
+const OAUTH_SUPPORTED_PROVIDERS = new Map<string, OAuthProviderConfig>([
+  ['anthropic', { authProviderId: 'anthropic', completionMode: 'manual-code', displayName: 'Claude Pro/Max' }],
+  [
+    'openai',
+    {
+      authProviderId: 'openai-codex',
+      completionMode: 'browser-callback',
+      displayName: 'ChatGPT Plus/Pro',
+    },
+  ],
+]);
+
+interface DeferredInput {
+  promise: Promise<string>;
+  reject: (reason: Error) => void;
+  resolve: (value: string) => void;
+}
+
+interface OAuthLoginResult {
+  error?: Error;
+}
+
+interface PendingOAuthLogin {
+  abortController: AbortController;
+  completion: Promise<OAuthLoginResult>;
+  completionMode: OAuthCompletionMode;
+  expirationTimer: ReturnType<typeof setTimeout>;
+  input: DeferredInput;
+}
+
+function createDeferredInput(): DeferredInput {
+  let rejectInput: ((reason: Error) => void) | undefined;
+  let resolveInput: ((value: string) => void) | undefined;
+  const promise = new Promise<string>((resolve, reject) => {
+    rejectInput = reject;
+    resolveInput = resolve;
+  });
+  if (!rejectInput || !resolveInput) throw new Error('Could not initialize OAuth input');
+  return { promise, reject: rejectInput, resolve: resolveInput };
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
 }
 
 /**
  * OAuth credentials are stored under the auth provider id, which differs from
  * the catalog provider id for OpenAI (stored as `openai-codex`).
  */
-function getAuthProviderId(provider: string): string {
+function getOAuthProviderId(provider: string): string {
   return provider === 'openai' ? 'openai-codex' : provider;
+}
+
+function hasExpiredOAuthCredential(authStorage: ConfigAuthStorage | undefined, provider: string): boolean {
+  return authStorage?.get(getOAuthProviderId(provider))?.type === 'oauth';
+}
+
+function getOAuthProviderInfo(provider: string): Pick<ProviderInfo, 'displayName' | 'oauthSupported'> {
+  const entry = OAUTH_SUPPORTED_PROVIDERS.get(provider);
+  return entry ? { displayName: entry.displayName, oauthSupported: true } : {};
+}
+
+async function getStoredProviderSource(
+  authStorage: ConfigAuthStorage | undefined,
+  provider: string,
+): Promise<Extract<ProviderInfo['source'], 'oauth' | 'stored'> | undefined> {
+  if (!authStorage) return undefined;
+
+  const credential = authStorage.get(getOAuthProviderId(provider));
+  if (credential?.type === 'oauth') {
+    return (await authStorage.getApiKey(getOAuthProviderId(provider))) ? 'oauth' : undefined;
+  }
+  if (authStorage.hasStoredApiKey(provider)) {
+    return 'stored';
+  }
+  return undefined;
 }
 
 /** Minimal session surface a pack activation touches. */
@@ -99,37 +180,33 @@ interface ModelCatalog {
  * annotated with where each provider's credential currently comes from.
  * Mirrors the TUI's `/api-keys` provider list.
  */
-export async function listProviders(controller: ModelCatalog, authStorage?: AuthStorage): Promise<ProviderInfo[]> {
+export async function listProviders(
+  controller: ModelCatalog,
+  authStorage?: ConfigAuthStorage,
+): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
     if (seen.has(model.provider)) continue;
 
-    let source: ProviderInfo['source'] = 'none';
-    if (authStorage?.isLoggedIn(getAuthProviderId(model.provider))) {
-      source = 'oauth';
-    } else if (authStorage?.hasStoredApiKey(model.provider)) {
-      source = 'stored';
-    } else if (model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
+    const storedSource = await getStoredProviderSource(authStorage, model.provider);
+    let source: ProviderInfo['source'] = storedSource ?? 'none';
+    if (!storedSource && model.apiKeyEnvVar && process.env[model.apiKeyEnvVar]) {
       source = 'env';
-    } else if (model.hasApiKey) {
+    } else if (!storedSource && model.hasApiKey && !hasExpiredOAuthCredential(authStorage, model.provider)) {
       source = 'env';
     }
 
-    seen.set(model.provider, { provider: model.provider, envVar: model.apiKeyEnvVar, source });
+    seen.set(model.provider, {
+      provider: model.provider,
+      envVar: model.apiKeyEnvVar,
+      source,
+      ...getOAuthProviderInfo(model.provider),
+    });
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
-}
-
-/** A user-defined OpenAI-compatible provider, with key presence (never the key). */
-export interface CustomProviderInfo {
-  id: string;
-  name: string;
-  url: string;
-  hasApiKey: boolean;
-  models: string[];
 }
 
 /** Read the saved custom providers from global settings (keys redacted). */
@@ -146,8 +223,8 @@ export function listCustomProviders(): CustomProviderInfo[] {
 
 /** Validate + coerce a request body into a CustomProviderSetting. */
 function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error: string } {
-  if (!body || typeof body !== 'object') return { error: 'Invalid JSON body' };
-  const b = body as Record<string, unknown>;
+  if (!isRecord(body)) return { error: 'Invalid JSON body' };
+  const b = body;
   const name = typeof b.name === 'string' ? b.name.trim() : '';
   if (!name) return { error: 'Missing required field: name' };
   const url = typeof b.url === 'string' ? b.url.trim() : '';
@@ -169,12 +246,6 @@ function parseCustomProviderBody(body: unknown): CustomProviderSetting | { error
 
 // ── Model packs ──────────────────────────────────────────────────────────
 
-/** A model pack as surfaced to the web client, with an `active` flag. */
-export interface ModelPackInfo extends ModePack {
-  custom: boolean;
-  active: boolean;
-}
-
 /**
  * Compute which providers the user can reach, mirroring the TUI's
  * `/models-pack` access derivation: OAuth/api-key from the credential store for
@@ -182,23 +253,32 @@ export interface ModelPackInfo extends ModePack {
  */
 export async function buildProviderAccess(
   controller: ModelCatalog,
-  authStorage?: AuthStorage,
+  authStorage?: ConfigAuthStorage,
 ): Promise<ProviderAccess> {
   const models = await controller.listAvailableModels();
-  const hasEnv = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
-  const accessLevel = (storageProviderId: string): ProviderAccessLevel => {
-    const cred = authStorage?.get(storageProviderId);
-    if (cred?.type === 'oauth') return 'oauth';
-    if (cred?.type === 'api_key' && cred.key.trim().length > 0) return 'apikey';
+  const hasEnv = (provider: string) =>
+    models.some(
+      model =>
+        model.provider === provider &&
+        ((model.apiKeyEnvVar !== undefined && Boolean(process.env[model.apiKeyEnvVar])) ||
+          (model.hasApiKey && !hasExpiredOAuthCredential(authStorage, provider))),
+    );
+  const accessLevel = async (provider: string): Promise<ProviderAccessLevel> => {
+    const oauthProviderId = getOAuthProviderId(provider);
+    const credential = authStorage?.get(oauthProviderId);
+    if (credential?.type === 'oauth') return (await authStorage?.getApiKey(oauthProviderId)) ? 'oauth' : false;
+    if (authStorage?.hasStoredApiKey(provider)) return 'apikey';
     return false;
   };
+  const anthropicAccess = (await accessLevel('anthropic')) || (hasEnv('anthropic') ? 'apikey' : false);
+  const openaiAccess = (await accessLevel('openai')) || (hasEnv('openai') ? 'apikey' : false);
   const access: ProviderAccess = {
-    anthropic: accessLevel('anthropic'),
-    openai: accessLevel('openai-codex'),
+    anthropic: anthropicAccess,
+    openai: openaiAccess,
     cerebras: hasEnv('cerebras') ? 'apikey' : false,
     google: hasEnv('google') ? 'apikey' : false,
     deepseek: hasEnv('deepseek') ? 'apikey' : false,
-    'github-copilot': accessLevel('github-copilot'),
+    'github-copilot': await accessLevel('github-copilot'),
   };
   const seen = new Set(Object.keys(access));
   for (const m of models) {
@@ -218,7 +298,7 @@ export async function buildProviderAccess(
  */
 export async function listModelPacks(
   controller: ModelCatalog,
-  authStorage?: AuthStorage,
+  authStorage?: ConfigAuthStorage,
   activePackId?: string | null,
 ): Promise<ModelPackInfo[]> {
   const access = await buildProviderAccess(controller, authStorage);
@@ -249,24 +329,30 @@ async function resolveActivePackId(session: PackSession | undefined): Promise<st
  */
 async function applyPackToSession(controller: ModelCatalog, session: PackSession, pack: ModePack): Promise<void> {
   const modes = controller.listModes?.() ?? [];
-  const packModels = pack.models as Record<string, string>;
+
+  const getModelForMode = (modeId: string): string | undefined => {
+    if (modeId === 'build') return pack.models.build;
+    if (modeId === 'plan') return pack.models.plan;
+    if (modeId === 'fast') return pack.models.fast;
+    return undefined;
+  };
 
   for (const mode of modes) {
-    const modelId = packModels[mode.id];
+    const modelId = getModelForMode(mode.id);
     if (modelId) {
       mode.defaultModelId = modelId;
       await session.thread.setSetting({ key: `modeModelId_${mode.id}`, value: modelId });
     }
   }
 
-  const currentModeModel = packModels[session.mode.get()];
+  const currentModeModel = getModelForMode(session.mode.get());
   if (currentModeModel) {
     await session.model.switch({ modelId: currentModeModel });
   }
 
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
   for (const [agentType, modeId] of Object.entries(subagentModeMap)) {
-    const saModelId = packModels[modeId];
+    const saModelId = getModelForMode(modeId);
     if (saModelId) {
       await session.subagents.model.set({ modelId: saModelId, agentType });
     }
@@ -287,14 +373,6 @@ const DEFAULT_OBSERVATION_THRESHOLD = 30_000;
 const DEFAULT_REFLECTION_THRESHOLD = 40_000;
 
 /** Read the current OM config from a session. */
-export interface OMConfigInfo {
-  observerModelId: string;
-  reflectorModelId: string;
-  observationThreshold: number;
-  reflectionThreshold: number;
-  observeAttachments: 'auto' | boolean;
-}
-
 export function readOMConfig(session: OMSession): OMConfigInfo {
   const state = session.state.get() ?? {};
   const observeAttachments = state.observeAttachments;
@@ -339,8 +417,13 @@ function persistOmRoleOverride(
  *   - `PUT    /web/config/om/thresholds`           — set observation/reflection thresholds
  *   - `PUT    /web/config/om/observe-attachments`  — set observe-attachments (auto/on/off)
  */
-export function buildConfigRoutes(options: { controller: ModelCatalog; authStorage?: AuthStorage }): ApiRoute[] {
-  const { controller, authStorage } = options;
+export function buildConfigRoutes(options: {
+  controller: ModelCatalog;
+  authStorage?: ConfigAuthStorage;
+  credentialManagementEnabled?: boolean;
+}): ApiRoute[] {
+  const { controller, authStorage, credentialManagementEnabled = true } = options;
+  const pendingOAuthLogins = new Map<string, PendingOAuthLogin>();
 
   return [
     registerApiRoute('/web/config/providers', {
@@ -348,7 +431,153 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       requiresAuth: false,
       handler: async c => {
         try {
-          return c.json({ providers: await listProviders(controller, authStorage) });
+          const providers = await listProviders(controller, authStorage);
+          return c.json({
+            credentialManagementEnabled,
+            providers: credentialManagementEnabled
+              ? providers
+              : providers.map(provider => ({ ...provider, oauthSupported: false })),
+          });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
+    registerApiRoute('/web/config/providers/:provider/oauth/start', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        const providerConfig = OAUTH_SUPPORTED_PROVIDERS.get(provider);
+        if (!providerConfig) return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+
+        try {
+          const abortController = new AbortController();
+          const input = createDeferredInput();
+          let resolveAuthInfo: ((info: { instructions?: string; url: string }) => void) | undefined;
+          const authInfo = new Promise<{ instructions?: string; url: string }>(resolve => {
+            resolveAuthInfo = resolve;
+          });
+          if (!resolveAuthInfo) throw new Error('Could not initialize OAuth authorization');
+
+          const completion = authStorage
+            .login(providerConfig.authProviderId, {
+              authMode: providerConfig.completionMode === 'browser-callback' ? 'browser' : undefined,
+              onAuth: resolveAuthInfo,
+              onManualCodeInput: () => input.promise,
+              onPrompt: () => input.promise,
+              signal: abortController.signal,
+            })
+            .then<OAuthLoginResult, OAuthLoginResult>(
+              () => ({}),
+              error => ({ error: toError(error) }),
+            );
+
+          const authorization = await Promise.race([
+            authInfo,
+            completion.then(result => {
+              if (result.error) throw result.error;
+              throw new Error('OAuth login completed without an authorization URL');
+            }),
+          ]);
+          const loginId = randomUUID();
+          const expirationTimer = setTimeout(() => {
+            const pendingLogin = pendingOAuthLogins.get(loginId);
+            if (!pendingLogin) return;
+            pendingOAuthLogins.delete(loginId);
+            pendingLogin.abortController.abort();
+            pendingLogin.input.reject(new Error('Login session expired. Start sign-in again.'));
+          }, OAUTH_LOGIN_TTL_MS);
+          expirationTimer.unref();
+          pendingOAuthLogins.set(loginId, {
+            abortController,
+            completion,
+            completionMode: providerConfig.completionMode,
+            expirationTimer,
+            input,
+          });
+          return c.json({
+            ok: true,
+            loginId,
+            authUrl: authorization.url,
+            completionMode: providerConfig.completionMode,
+            expiresInMs: OAUTH_LOGIN_TTL_MS,
+            ...(authorization.instructions ? { instructions: authorization.instructions } : {}),
+          });
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
+    registerApiRoute('/web/config/providers/:provider/oauth/complete', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        const providerConfig = OAUTH_SUPPORTED_PROVIDERS.get(provider);
+        if (!providerConfig) return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+
+        let body: { loginId?: unknown; code?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+
+        const loginId = typeof body.loginId === 'string' ? body.loginId : '';
+        const code = typeof body.code === 'string' ? body.code.trim() : '';
+        if (!loginId) return c.json({ error: 'Missing required field: loginId' }, 400);
+
+        try {
+          const session = pendingOAuthLogins.get(loginId);
+          if (!session) return c.json({ error: 'Login session expired. Start sign-in again.' }, 410);
+          if (session.completionMode === 'manual-code' && !code) {
+            return c.json({ error: 'Missing required field: code' }, 400);
+          }
+          if (code) session.input.resolve(code);
+
+          try {
+            const result = await session.completion;
+            if (result.error) throw result.error;
+            const providers = await listProviders(controller, authStorage);
+            return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
+          } finally {
+            clearTimeout(session.expirationTimer);
+            pendingOAuthLogins.delete(loginId);
+          }
+        } catch (error) {
+          return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+        }
+      },
+    }),
+
+    registerApiRoute('/web/config/providers/:provider/oauth', {
+      method: 'DELETE',
+      requiresAuth: false,
+      handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
+        if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
+        const provider = c.req.param('provider');
+        if (!OAUTH_SUPPORTED_PROVIDERS.has(provider)) {
+          return c.json({ error: `OAuth is not supported for "${provider}"` }, 404);
+        }
+
+        try {
+          authStorage.remove(getOAuthProviderId(provider));
+          const providers = await listProviders(controller, authStorage);
+          return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
         } catch (error) {
           return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
         }
@@ -359,6 +588,9 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'PUT',
       requiresAuth: false,
       handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
         let body: { key?: unknown; envVar?: unknown };
@@ -384,6 +616,9 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
       method: 'DELETE',
       requiresAuth: false,
       handler: async c => {
+        if (!credentialManagementEnabled) {
+          return c.json({ error: 'Provider credentials are managed by this deployment' }, 403);
+        }
         if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
         const provider = c.req.param('provider');
         try {
@@ -425,10 +660,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         const parsed = parseCustomProviderBody(body);
         if ('error' in parsed) return c.json({ error: parsed.error }, 400);
         // `previousId` lets a rename remove the old entry as well as any name clash.
-        const previousId =
-          body && typeof body === 'object' && typeof (body as Record<string, unknown>).previousId === 'string'
-            ? ((body as Record<string, unknown>).previousId as string)
-            : undefined;
+        const previousId = isRecord(body) && typeof body.previousId === 'string' ? body.previousId : undefined;
         try {
           const settings = loadSettings();
           upsertCustomProviderInSettings(settings, parsed, previousId);
@@ -489,7 +721,7 @@ export function buildConfigRoutes(options: { controller: ModelCatalog; authStora
         }
         const name = typeof body.name === 'string' ? body.name.trim() : '';
         if (!name) return c.json({ error: 'Missing required field: name' }, 400);
-        const m = (body.models ?? {}) as Record<string, unknown>;
+        const m = isRecord(body.models) ? body.models : {};
         const build = typeof m.build === 'string' ? m.build.trim() : '';
         const plan = typeof m.plan === 'string' ? m.plan.trim() : '';
         const fast = typeof m.fast === 'string' ? m.fast.trim() : '';

@@ -5,9 +5,8 @@
     "node_modules",
     "**/*.test.ts",
     "**/*.test.tsx",
-    "src/web/ui",
+    "src/renderer",
     "src/web/vite.config.ts",
-    "src/shared/**/*.tsx",
-    "src/shared/hooks"
+    "src/renderer/tsconfig.json"
   ]
 }

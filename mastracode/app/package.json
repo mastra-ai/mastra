@@ -1,0 +1,100 @@
+{
+  "name": "@mastra/code-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Shared MastraCode React application for web and desktop hosts.",
+  "type": "module",
+  "imports": {
+    "#shared/api/config": "./src/shared/api/config.tsx",
+    "#shared/api/errors": "./src/shared/api/errors.ts",
+    "#shared/api/keys": "./src/shared/api/keys.ts",
+    "#shared/api/types": "./src/shared/api/types.ts",
+    "#shared/desktop-host": "./src/shared/desktop-host.ts",
+    "#shared/hooks/use-custom-providers": "./src/shared/hooks/use-custom-providers.ts",
+    "#shared/hooks/use-fs": "./src/shared/hooks/use-fs.ts",
+    "#shared/hooks/use-model-packs": "./src/shared/hooks/use-model-packs.ts",
+    "#shared/hooks/use-om": "./src/shared/hooks/use-om.ts",
+    "#shared/hooks/use-providers": "./src/shared/hooks/use-providers.ts",
+    "#shared/lib/date": "./src/shared/lib/date/index.ts",
+    "#test/msw-server": "./e2e/web-ui/msw-server.ts",
+    "#test/render": "./e2e/web-ui/render.tsx"
+  },
+  "exports": {
+    ".": {
+      "types": "./src/mount.tsx",
+      "default": "./src/mount.tsx"
+    },
+    "./host": {
+      "types": "./src/host.ts",
+      "default": "./src/host.ts"
+    },
+    "./desktop-host": {
+      "types": "./src/shared/desktop-host.ts",
+      "default": "./src/shared/desktop-host.ts"
+    },
+    "./api-types": {
+      "types": "./src/shared/api/types.ts",
+      "default": "./src/shared/api/types.ts"
+    },
+    "./chat/commands": {
+      "types": "./src/ui/domains/chat/services/commands.ts",
+      "default": "./src/ui/domains/chat/services/commands.ts"
+    },
+    "./chat/transcript": {
+      "types": "./src/ui/domains/chat/services/transcript.ts",
+      "default": "./src/ui/domains/chat/services/transcript.ts"
+    },
+    "./markdown": {
+      "types": "./src/ui/ui/Markdown.tsx",
+      "default": "./src/ui/ui/Markdown.tsx"
+    },
+    "./workspaces/projects": {
+      "types": "./src/ui/domains/workspaces/services/projects.ts",
+      "default": "./src/ui/domains/workspaces/services/projects.ts"
+    }
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run --config e2e/web-ui/vitest.config.ts"
+  },
+  "dependencies": {
+    "@mastra/client-js": "link:../../client-sdks/client-js",
+    "@mastra/core": "link:../../packages/core",
+    "@mastra/playground-ui": "link:../../packages/playground-ui",
+    "@mastra/react": "link:../../client-sdks/react",
+    "@tanstack/react-query": "^5.90.21",
+    "date-fns": "^4.4.0",
+    "lucide-react": "^0.474.0",
+    "marked": "^15.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "react-router": "^7.13.1",
+    "shiki": "^1.29.2",
+    "tailwindcss": "4.2.2",
+    "tw-animate-css": "^1.4.0"
+  },
+  "devDependencies": {
+    "@internal/lint": "link:../../packages/_config",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/node": "22.19.21",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "class-variance-authority": "^0.7.1",
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-testing-library": "^7.16.2",
+    "jsdom": "^26.1.0",
+    "msw": "^2.12.11",
+    "typescript": "^6.0.3",
+    "vite": "7.3.6",
+    "vitest": "4.1.8"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  }
+}

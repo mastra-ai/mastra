@@ -1,11 +1,7 @@
 import { MastraClient } from '@mastra/client-js';
 import type { KnownAgentControllerEvent, PlanResume, SendNotificationInput } from '@mastra/client-js';
 
-import {
-  createInitialTranscript,
-  initialTranscript,
-  transcriptReducer,
-} from '../../src/web/ui/domains/chat/services/transcript';
+import { createInitialTranscript, initialTranscript, transcriptReducer } from '@mastra/code-app/chat/transcript';
 import type {
   ApprovalPrompt,
   NotificationEntry,
@@ -13,7 +9,7 @@ import type {
   SuspensionPrompt,
   TimelineEntry,
   TranscriptState,
-} from '../../src/web/ui/domains/chat/services/transcript';
+} from '@mastra/code-app/chat/transcript';
 
 /**
  * Scenario driver — the web equivalent of MastraCode's `McE2eTerminal`.
