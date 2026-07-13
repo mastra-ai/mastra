@@ -1187,28 +1187,7 @@ export class DurableAgent<
   async resume(
     runId: string,
     resumeData: unknown,
-    options?: {
-      onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
-      onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: MastraOnFinishCallback<TOutput>;
-      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
-      onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
-      /**
-       * Optional abort signal scoped to the resumed segment. Forwarded onto a
-       * fresh internal controller installed on the run's registry entry, so
-       * `result.abort()` and the external signal can both cancel the resumed
-       * iterations.
-       */
-      abortSignal?: AbortSignal;
-      /**
-       * When set, keep the resumed segment open after the workflow's initial
-       * resume turn finishes and continue streaming follow-up turns until the
-       * agent goes idle (no in-flight background tasks for the same memory
-       * scope). Same semantics as `stream({ untilIdle })`. Pass an object to
-       * tune `maxIdleMs`.
-       */
-      untilIdle?: boolean | { maxIdleMs?: number };
-    },
+    options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
     // Delegate to the idle-loop wrapper when `untilIdle` is set. Strip
     // `untilIdle` before passing to the wrapper so the inner agent.resume()
@@ -1228,9 +1207,72 @@ export class DurableAgent<
       );
     }
 
-    const entry = this.#runRegistry.get(runId);
+    let entry = this.#runRegistry.get(runId);
     if (!entry) {
-      throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
+      // A persisted durable run can outlive this process (or the registry TTL).
+      // Rebuild the non-serializable runtime state before resuming the stored
+      // workflow snapshot. Keep warm resumes on the existing path to avoid
+      // racing an active registry entry with a second preparation pass.
+      const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+      const persisted = await workflowsStore?.getWorkflowRunById({
+        runId,
+        workflowName: DurableStepIds.AGENTIC_LOOP,
+      });
+      if (!persisted) {
+        throw new Error(`No registry entry found for run ${runId}. Cannot resume.`);
+      }
+
+      const snapshot =
+        typeof persisted.snapshot === 'string'
+          ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
+          : persisted.snapshot;
+      if (snapshot?.status !== 'suspended') {
+        throw new Error('This workflow run was not suspended');
+      }
+      const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+      if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
+        throw new MastraError({
+          id: 'DURABLE_AGENT_RESUME_INVALID_SNAPSHOT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: `DurableAgent "${this.name}" resume(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
+          details: { agentName: this.name, runId },
+        });
+      }
+      if (workflowInput.agentId !== this.id) {
+        throw new MastraError({
+          id: 'DURABLE_AGENT_RESUME_AGENT_MISMATCH',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `DurableAgent "${this.name}" resume(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
+          details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
+        });
+      }
+
+      const messageListMemoryInfo = (
+        workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
+      )?.memoryInfo;
+      const threadId = workflowInput.state?.threadId ?? messageListMemoryInfo?.threadId;
+      const resourceId = workflowInput.state?.resourceId ?? messageListMemoryInfo?.resourceId;
+      const requestContext =
+        options?.requestContext ??
+        (workflowInput.requestContextEntries
+          ? new RequestContext(
+              Object.entries(workflowInput.requestContextEntries) as Iterable<readonly [string, unknown]>,
+            )
+          : undefined);
+      const memory = options?.memory ?? (threadId ? { thread: threadId, resource: resourceId } : undefined);
+
+      await this.prepare([], {
+        ...(options as AgentExecutionOptions<TOutput>),
+        runId,
+        requestContext,
+        memory,
+      });
+      entry = this.#runRegistry.get(runId);
+    }
+    if (!entry) {
+      throw new Error(`Failed to rehydrate registry entry for run ${runId}. Cannot resume.`);
     }
 
     // Install a fresh abort controller for the resumed segment. The original
@@ -1859,11 +1901,9 @@ export class DurableAgent<
     if (!runId) {
       throw new Error('resumeStream() on DurableAgent requires a runId in streamOptions.');
     }
+    const { runId: _runId, ...resumeOptions } = streamOptions;
     const result = await this.resume(runId, resumeData, {
-      onChunk: streamOptions?.onChunk,
-      onStepFinish: streamOptions?.onStepFinish,
-      onFinish: streamOptions?.onFinish,
-      onError: streamOptions?.onError,
+      ...resumeOptions,
       // Close the stream when the workflow re-suspends so the caller's
       // `for await` loop terminates. Without this the stream stays open
       // indefinitely when the resumed turn hits another suspend point.
