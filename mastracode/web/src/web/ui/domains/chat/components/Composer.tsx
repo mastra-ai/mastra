@@ -42,6 +42,11 @@ interface PendingImage {
 
 let pendingImageSeq = 0;
 
+/** Per-image cap; base64 adds ~33% and attachments travel in a JSON POST body. */
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+/** Aggregate cap across all pending images on a single message. */
+const MAX_TOTAL_IMAGE_BYTES = 20 * 1024 * 1024;
+
 function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -131,10 +136,20 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const addImageFiles = async (fileList: Iterable<File>) => {
-    const imageFiles = Array.from(fileList).filter(file => file.type.startsWith('image/'));
+    const imageFiles = Array.from(fileList).filter(
+      file => file.type.startsWith('image/') && file.size <= MAX_IMAGE_BYTES,
+    );
     if (imageFiles.length === 0) return;
+    // Enforce the aggregate cap across already-pending images plus new selections.
+    let budget = MAX_TOTAL_IMAGE_BYTES - images.reduce((sum, img) => sum + Math.floor(img.data.length * 0.75), 0);
+    const accepted = imageFiles.filter(file => {
+      if (file.size > budget) return false;
+      budget -= file.size;
+      return true;
+    });
+    if (accepted.length === 0) return;
     const additions = await Promise.all(
-      imageFiles.map(
+      accepted.map(
         async (file): Promise<PendingImage> => ({
           id: `pending-image-${pendingImageSeq++}`,
           data: await readFileAsBase64(file),
@@ -158,9 +173,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const onDrop = (e: DragEvent<HTMLFormElement>) => {
+    // Always cancel the default action so dropped files never navigate the page away.
+    e.preventDefault();
     const files = Array.from(e.dataTransfer?.files ?? []).filter(file => file.type.startsWith('image/'));
     if (files.length === 0) return;
-    e.preventDefault();
     void addImageFiles(files);
   };
 
@@ -245,7 +261,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     const files = images;
     setImages([]);
-    await send(text, files);
+    try {
+      await send(text, files);
+    } catch (error) {
+      // Requeue the attachments so a failed send can be retried without re-selecting them.
+      setImages(current => [...files, ...current]);
+      throw error;
+    }
   }
 
   const disabled = status !== 'ready';

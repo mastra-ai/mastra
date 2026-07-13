@@ -57,7 +57,12 @@ function toMastraMessageParts(content: AgentControllerMessageContent[]): MastraM
         break;
       case 'file':
         if (part.data && part.mediaType) {
-          parts.push({ type: 'file', data: part.data, mimeType: part.mediaType });
+          parts.push({
+            type: 'file',
+            data: part.data,
+            mimeType: part.mediaType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          });
         }
         break;
       case 'tool_result': {

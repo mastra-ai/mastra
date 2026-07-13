@@ -48,7 +48,7 @@ export function useSendAgentControllerMessageMutation(args: AgentControllerRunMu
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: ({ text, files }: SendAgentControllerMessageInput) =>
-      requireAgentControllerSession(session).sendMessage(text, files?.length ? { files } : undefined),
+      requireAgentControllerSession(session).sendMessage(files?.length ? { content: text, files } : { content: text }),
     onSuccess: invalidateSession,
   });
 }

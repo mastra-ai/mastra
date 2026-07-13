@@ -60,7 +60,7 @@ describe('agent controller message accumulator', () => {
     expect(converted.content.parts).toEqual([
       { type: 'text', text: 'What is in this screenshot?' },
       { type: 'file', data: 'aW1hZ2UtYnl0ZXM=', mimeType: 'image/png' },
-      { type: 'file', data: 'ZmlsZS1ieXRlcw==', mimeType: 'application/pdf' },
+      { type: 'file', data: 'ZmlsZS1ieXRlcw==', mimeType: 'application/pdf', filename: 'doc.pdf' },
     ]);
     expect(converted.content.metadata?.harnessContent).toBeUndefined();
   });

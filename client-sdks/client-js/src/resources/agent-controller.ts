@@ -435,15 +435,16 @@ export class AgentControllerSession extends BaseResource {
 
   /**
    * Send a user message. The reply streams over `subscribe()`.
-   * Optionally attach files (e.g. pasted images) as base64-encoded data.
+   * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
+   * `sendMessage({ content: 'What is in this image?', files })`.
    */
   async sendMessage(
-    message: string,
-    options?: { files?: Array<{ data: string; mediaType: string; filename?: string }> },
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
   ): Promise<void> {
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     await this.request(this.url(`${this.base()}/messages`), {
       method: 'POST',
-      body: { message, ...(options?.files?.length ? { files: options.files } : {}) },
+      body: { message: content, ...(files?.length ? { files } : {}) },
     });
   }
 
