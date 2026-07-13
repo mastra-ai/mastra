@@ -26,7 +26,9 @@ import {
   fetchLinearWorkspace,
   listActiveLinearIssues,
   listLinearProjects,
+  refreshLinearAccessToken,
 } from './client';
+import type { LinearTokenSet } from './client';
 import { getIntakeConfig } from '../intake/store';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './config';
 import { linearConnections } from './schema';
@@ -89,6 +91,82 @@ function parseAfterCursor(raw: string | undefined): string | undefined | null {
 async function loadConnection(orgId: string): Promise<LinearConnectionRow | null> {
   const [row] = await getAppDb().select().from(linearConnections).where(eq(linearConnections.orgId, orgId));
   return row ?? null;
+}
+
+/** Refresh this many ms before the recorded expiry to absorb clock skew. */
+const TOKEN_REFRESH_SKEW_MS = 60_000;
+
+/**
+ * In-flight refreshes keyed by org. Linear rotates refresh tokens, so two
+ * concurrent refreshes with the same token would invalidate each other —
+ * single-flight ensures one exchange per org and shares the result.
+ */
+const inflightRefreshes = new Map<string, Promise<string>>();
+
+/** Thrown when the org's Linear authorization can no longer be renewed. */
+class LinearReauthRequiredError extends Error {
+  constructor() {
+    super('Linear authorization expired. Reconnect Linear to keep syncing intake issues.');
+  }
+}
+
+/** Persist a rotated token set on the org's connection row. */
+async function persistTokens(orgId: string, tokens: LinearTokenSet): Promise<void> {
+  await getAppDb()
+    .update(linearConnections)
+    .set({
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      expiresAt: tokens.expiresAt,
+      updatedAt: new Date(),
+    })
+    .where(eq(linearConnections.orgId, orgId));
+}
+
+/**
+ * Return a usable access token for the connection, proactively refreshing it
+ * when the recorded expiry is past (or imminent). Throws
+ * `LinearReauthRequiredError` when the token is expired and cannot be
+ * refreshed — the org has to go through the OAuth flow again.
+ */
+async function getFreshAccessToken(connection: LinearConnectionRow): Promise<string> {
+  const expired = connection.expiresAt !== null && connection.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
+  if (!expired) return connection.accessToken;
+
+  if (!connection.refreshToken) {
+    // Legacy row from before refresh-token support: nothing to renew with.
+    throw new LinearReauthRequiredError();
+  }
+
+  const existing = inflightRefreshes.get(connection.orgId);
+  if (existing) return existing;
+
+  const refreshToken = connection.refreshToken;
+  const refresh = (async () => {
+    try {
+      const tokens = await refreshLinearAccessToken(refreshToken);
+      await persistTokens(connection.orgId, tokens);
+      return tokens.accessToken;
+    } catch (err) {
+      const status = (err as { status?: number }).status;
+      // invalid_grant surfaces as 400/401: the refresh token was revoked or
+      // already rotated away. Terminal for this connection.
+      if (status === 400 || status === 401) throw new LinearReauthRequiredError();
+      throw err;
+    } finally {
+      inflightRefreshes.delete(connection.orgId);
+    }
+  })();
+  inflightRefreshes.set(connection.orgId, refresh);
+  return refresh;
+}
+
+/** Map a Linear read failure to the API response for the SPA. */
+function linearFetchError(c: RouteContext, err: unknown) {
+  if (err instanceof LinearReauthRequiredError || (err as { status?: number }).status === 401) {
+    return c.json({ error: 'linear_reauth_required', message: new LinearReauthRequiredError().message }, 409);
+  }
+  return c.json({ error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) }, 502);
 }
 
 /**
@@ -185,14 +263,16 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const accessToken = await exchangeLinearOAuthCode(code, redirectUri);
-          const workspace = await fetchLinearWorkspace(accessToken);
+          const tokens = await exchangeLinearOAuthCode(code, redirectUri);
+          const workspace = await fetchLinearWorkspace(tokens.accessToken);
           await getAppDb()
             .insert(linearConnections)
             .values({
               orgId,
               userId,
-              accessToken,
+              accessToken: tokens.accessToken,
+              refreshToken: tokens.refreshToken,
+              expiresAt: tokens.expiresAt,
               workspaceName: workspace.name,
               workspaceUrlKey: workspace.urlKey,
             })
@@ -200,7 +280,9 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
               target: [linearConnections.orgId],
               set: {
                 userId,
-                accessToken,
+                accessToken: tokens.accessToken,
+                refreshToken: tokens.refreshToken,
+                expiresAt: tokens.expiresAt,
                 workspaceName: workspace.name,
                 workspaceUrlKey: workspace.urlKey,
                 updatedAt: new Date(),
@@ -231,13 +313,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const projects = await listLinearProjects(connection.accessToken);
+          const accessToken = await getFreshAccessToken(connection);
+          const projects = await listLinearProjects(accessToken);
           return c.json({ projects });
         } catch (err) {
-          return c.json(
-            { error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return linearFetchError(loose(c), err);
         }
       },
     }),
@@ -274,13 +354,11 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
         }
 
         try {
-          const { issues, nextCursor } = await listActiveLinearIssues(connection.accessToken, after, projectIds);
+          const accessToken = await getFreshAccessToken(connection);
+          const { issues, nextCursor } = await listActiveLinearIssues(accessToken, after, projectIds);
           return c.json({ issues, nextCursor });
         } catch (err) {
-          return c.json(
-            { error: 'linear_fetch_failed', message: err instanceof Error ? err.message : String(err) },
-            502,
-          );
+          return linearFetchError(loose(c), err);
         }
       },
     }),
