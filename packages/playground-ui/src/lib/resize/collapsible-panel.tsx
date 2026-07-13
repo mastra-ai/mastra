@@ -6,7 +6,6 @@ import { Panel, usePanelRef } from 'react-resizable-panels';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
 import { useClampedElementCursor } from './use-clamped-element-cursor';
-import { usePanelSizeTransitions } from './use-panel-size-transitions';
 import { Icon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
@@ -55,6 +54,8 @@ const useCollapsedEdgePill = ({
       if (!pill) return;
       beginPillTracking(point);
       pill.style.transitionProperty = 'opacity, translate';
+      // Re-enable top transitions after the browser commits the pill's new
+      // starting position; otherwise it travels in from its previous position.
       requestAnimationFrame(() => {
         pill.style.transitionProperty = '';
       });
@@ -110,20 +111,16 @@ export const CollapsiblePanel = ({
   ...props
 }: CollapsiblePanelProps) => {
   const [collapsed, setCollapsed] = useState(false);
+  const [motionReady, setMotionReady] = useState(false);
   const panelRef = usePanelRef();
   const elementRef = useRef<HTMLDivElement | null>(null);
-  const { booted, boot, enableSizeTransitions } = usePanelSizeTransitions(elementRef);
   const { endPillTracking, expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition } = useCollapsedEdgePill({
     collapsed,
     direction,
     elementRef,
   });
 
-  const expand = useCallback(() => {
-    enableSizeTransitions();
-    if (!panelRef.current) return;
-    panelRef.current.expand();
-  }, [enableSizeTransitions, panelRef]);
+  const expand = () => panelRef.current?.expand();
 
   const numericMinSize = typeof minSize === 'number' ? minSize : null;
 
@@ -142,11 +139,11 @@ export const CollapsiblePanel = ({
         } as CSSProperties
       }
       {...props}
-      onResize={(size, previousSize, panel) => {
-        onResize?.(size, previousSize, panel);
+      onResize={(size, id, previousSize) => {
+        onResize?.(size, id, previousSize);
         if (typeof collapsedSize !== 'number') return;
+        if (previousSize !== undefined) setMotionReady(true);
         setCollapsed(size.inPixels <= collapsedSize);
-        boot();
       }}
     >
       <div
@@ -163,7 +160,7 @@ export const CollapsiblePanel = ({
           'transition-[opacity,translate] duration-300 ease-out-custom motion-reduce:transition-none',
           'data-[direction=left]:left-0 data-[direction=right]:right-0',
           'data-[state=collapsed]:z-10',
-          !booted && 'transition-none',
+          !motionReady && 'transition-none',
         )}
       >
         {children}

@@ -1,8 +1,8 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode, Ref } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorkflowLayout } from '../../../workflows/components/workflow-layout';
-import type * as AgentsContext from '../../context';
+import type * as MemoryTimelineContext from '../../context/memory-timeline-context';
 import { AgentLayout } from '../agent-layout';
 
 const resizeLeftPanel = vi.hoisted(() => vi.fn());
@@ -20,7 +20,6 @@ vi.mock('react-resizable-panels', () => ({
     className,
     children,
     panelRef,
-    elementRef,
     maxSize,
     defaultSize,
   }: {
@@ -28,7 +27,6 @@ vi.mock('react-resizable-panels', () => ({
     className?: string;
     children: ReactNode;
     panelRef?: Ref<{ getSize: () => { inPixels: number; asPercentage: number }; resize: (size: string) => void }>;
-    elementRef?: Ref<HTMLDivElement>;
     maxSize?: string | number;
     defaultSize?: string | number;
   }) => {
@@ -44,8 +42,6 @@ vi.mock('react-resizable-panels', () => ({
 
     return (
       <section
-        ref={elementRef}
-        data-panel
         data-testid={`panel-${id}`}
         data-max-size={maxSize}
         data-default-size={defaultSize}
@@ -61,8 +57,8 @@ vi.mock('react-resizable-panels', () => ({
   },
 }));
 
-vi.mock('../../context', async () => {
-  const actual = await vi.importActual<typeof AgentsContext>('../../context');
+vi.mock('../../context/memory-timeline-context', async () => {
+  const actual = await vi.importActual<typeof MemoryTimelineContext>('../../context/memory-timeline-context');
 
   return {
     ...actual,
@@ -85,24 +81,13 @@ vi.mock('@mastra/playground-ui/resize/collapsible-panel', () => ({
 }));
 
 vi.mock('@mastra/playground-ui/resize/separator', () => ({
-  PanelSeparator: () => <div data-separator data-testid="panel-separator" />,
+  PanelSeparator: () => <div data-testid="panel-separator" />,
 }));
-
-beforeEach(() => {
-  vi.stubGlobal(
-    'requestAnimationFrame',
-    vi.fn((callback: FrameRequestCallback) => {
-      callback(0);
-      return 1;
-    }),
-  );
-});
 
 afterEach(() => {
   cleanup();
   resizeLeftPanel.mockClear();
   memoryTimelineState.isPanelOpen = false;
-  vi.unstubAllGlobals();
 });
 
 function expectPanelGroupsShrinkable() {
@@ -160,8 +145,6 @@ describe('resizable service layouts', () => {
     const leftPanel = screen.getByTestId('panel-left-slot');
     const mainPanel = screen.getByTestId('panel-main-slot');
     expect(leftPanel.compareDocumentPosition(mainPanel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(getComputedStyle(leftPanel).transition).toContain('flex-grow 300ms');
-    expect(getComputedStyle(mainPanel).transition).toContain('flex-basis 300ms');
 
     // Opening OM widens the single left panel to ~50% (max-size config permits it).
     memoryTimelineState.isPanelOpen = true;

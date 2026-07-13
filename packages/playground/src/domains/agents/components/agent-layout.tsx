@@ -1,11 +1,11 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
-import { usePanelSizeTransitions } from '@mastra/playground-ui/resize/use-panel-size-transitions';
 import { useEffect, useRef } from 'react';
-import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 import type { PanelImperativeHandle } from 'react-resizable-panels';
-import { useMemoryTimeline } from '../context';
+import { useMemoryTimeline } from '../context/memory-timeline-context';
 
 export interface AgentLayoutProps {
   agentId: string;
@@ -33,23 +33,14 @@ export const AgentLayout = ({
   const isMobile = useIsMobile();
   const { isPanelOpen: isMemoryTimelineOpen } = useMemoryTimeline();
   const leftPanelRef = useRef<PanelImperativeHandle | null>(null);
-  const leftPanelElementRef = useRef<HTMLDivElement | null>(null);
   const wasMemoryTimelineOpen = useRef(false);
   const sizeBeforeMemoryDetail = useRef<string | null>(null);
-  const { boot: bootPanelSizeTransitions, enableSizeTransitions } = usePanelSizeTransitions(
-    leftPanelElementRef,
-    !isMobile,
-  );
   const { defaultLayout, onLayoutChange } = useDefaultLayout({
     // Bumped to v6 because the OM detail now replaces the Memory content in the
     // single left panel and expands it to ~50%; avoids restoring stale widths.
     id: `agent-layout-v6-${agentId}`,
     storage: localStorage,
   });
-
-  useEffect(() => {
-    if (!isMobile) bootPanelSizeTransitions();
-  }, [bootPanelSizeTransitions, isMobile]);
 
   useEffect(() => {
     const leftPanel = leftPanelRef.current;
@@ -61,15 +52,13 @@ export const AgentLayout = ({
     if (isMemoryTimelineOpen && !wasOpen) {
       // Opening OM: capture the current width, then expand to half the layout.
       sizeBeforeMemoryDetail.current = `${leftPanel.getSize().inPixels}px`;
-      enableSizeTransitions();
       leftPanel.resize('50%');
     } else if (!isMemoryTimelineOpen && wasOpen) {
       // Closing OM: restore the width the panel had before opening the detail.
-      enableSizeTransitions();
       leftPanel.resize(sizeBeforeMemoryDetail.current ?? MEMORY_DETAIL_LEFT_PANEL_DEFAULT_RESTORE);
       sizeBeforeMemoryDetail.current = null;
     }
-  }, [enableSizeTransitions, isMemoryTimelineOpen, isMobile]);
+  }, [isMemoryTimelineOpen]);
 
   // Resizable side panels are a desktop paradigm; below the breakpoint the
   // side slots move into edge drawers and the main content takes the full width.
@@ -94,12 +83,15 @@ export const AgentLayout = ({
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      <Group className="h-full min-h-0 w-full min-w-0" defaultLayout={defaultLayout} onLayoutChange={onLayoutChange}>
+      <PanelGroup
+        className="h-full min-h-0 w-full min-w-0"
+        defaultLayout={defaultLayout}
+        onLayoutChange={onLayoutChange}
+      >
         {leftSlot && (
           <Panel
             id="left-slot"
             panelRef={leftPanelRef}
-            elementRef={leftPanelElementRef}
             minSize={256}
             maxSize={'50%'}
             defaultSize={300}
@@ -121,7 +113,7 @@ export const AgentLayout = ({
             </Panel>
           </>
         )}
-      </Group>
+      </PanelGroup>
       {/* Browser modal overlay - center view mode */}
       {browserOverlay}
     </div>

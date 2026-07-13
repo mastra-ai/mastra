@@ -25,7 +25,7 @@ vi.mock('react-resizable-panels', () => ({
     className?: string;
     collapsedSize?: number;
     elementRef?: Ref<HTMLDivElement>;
-    onResize?: (size: MockPanelSize, previousSize: MockPanelSize, panel: unknown) => void;
+    onResize?: (size: MockPanelSize, id: string | number | undefined, previousSize: MockPanelSize | undefined) => void;
     style?: CSSProperties;
   }) => {
     const assignRef = (node: HTMLDivElement | null) => {
@@ -43,12 +43,12 @@ vi.mock('react-resizable-panels', () => ({
         <button
           type="button"
           data-testid="resize-collapsed"
-          onClick={() => onResize?.({ inPixels: collapsedSize ?? 0 }, { inPixels: 320 }, {})}
+          onClick={() => onResize?.({ inPixels: collapsedSize ?? 0 }, undefined, undefined)}
         />
         <button
           type="button"
           data-testid="resize-open"
-          onClick={() => onResize?.({ inPixels: 320 }, { inPixels: collapsedSize ?? 0 }, {})}
+          onClick={() => onResize?.({ inPixels: 320 }, undefined, { inPixels: collapsedSize ?? 0 })}
         />
         {children}
       </section>
@@ -81,28 +81,17 @@ const pointerEvent = (type: string, init: MouseEventInit) => new MouseEvent(type
 const renderPanel = (direction: 'left' | 'right' = 'left') =>
   render(
     <div>
-      {direction === 'right' && <div data-panel data-testid="sibling-panel" />}
       {direction === 'right' && <div data-separator data-testid="separator" />}
       <CollapsiblePanel collapsedSize={0} direction={direction} minSize={280}>
         <div data-testid="panel-content">Panel content</div>
       </CollapsiblePanel>
       {direction === 'left' && <div data-separator data-testid="separator" />}
-      {direction === 'left' && <div data-panel data-testid="sibling-panel" />}
     </div>,
   );
 
 describe('CollapsiblePanel', () => {
   beforeEach(() => {
     panelMocks.expand.mockReset();
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: vi.fn().mockReturnValue({
-        matches: false,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
     Object.defineProperty(window, 'requestAnimationFrame', {
       configurable: true,
       writable: true,
@@ -140,43 +129,6 @@ describe('CollapsiblePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
     expect(panelMocks.expand).toHaveBeenCalledTimes(1);
-  });
-
-  it('animates programmatic panel resizing without adding lag while dragging', () => {
-    renderPanel();
-
-    fireEvent.click(screen.getByTestId('resize-open'));
-
-    const panel = screen.getByTestId('panel');
-    const siblingPanel = screen.getByTestId('sibling-panel');
-    expect(getComputedStyle(panel).transition).toContain('flex-grow 300ms');
-    expect(getComputedStyle(siblingPanel).transition).toContain('flex-basis 300ms');
-
-    fireEvent.pointerDown(screen.getByTestId('separator'));
-    expect(getComputedStyle(panel).transition).toBe('none');
-    expect(getComputedStyle(siblingPanel).transition).toBe('none');
-
-    fireEvent.pointerUp(window);
-    expect(getComputedStyle(panel).transition).toContain('flex-grow 300ms');
-    expect(getComputedStyle(siblingPanel).transition).toContain('flex-basis 300ms');
-  });
-
-  it('keeps programmatic panel resizing instant when reduced motion is preferred', () => {
-    Object.defineProperty(window, 'matchMedia', {
-      configurable: true,
-      writable: true,
-      value: vi.fn().mockReturnValue({
-        matches: true,
-        addEventListener: vi.fn(),
-        removeEventListener: vi.fn(),
-      }),
-    });
-    renderPanel();
-
-    fireEvent.click(screen.getByTestId('resize-open'));
-
-    expect(getComputedStyle(screen.getByTestId('panel')).transition).toBe('');
-    expect(getComputedStyle(screen.getByTestId('sibling-panel')).transition).toBe('');
   });
 
   it('clamps the expand pill position inside the collapsed strip', () => {
