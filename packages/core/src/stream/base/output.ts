@@ -153,7 +153,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #emitter = new EventEmitter();
   #bufferedSteps: LLMStepResult<OUTPUT>[] = [];
   #bufferedReasoningDetails: Record<string, LLMStepResult<OUTPUT>['reasoning'][number]> = {};
-  #bufferedTextStepStartIndex = 0;
   #bufferedByStep: LLMStepResult<OUTPUT> = {
     text: '',
     reasoning: [],
@@ -500,14 +499,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               self.#bufferedByStep.sources.push(chunk);
               break;
             case 'text-delta':
-              if (!chunk.metadata?.__mastraExcludeFromOutputText) {
-                self.#bufferedText.push(chunk.payload.text);
-                self.#bufferedByStep.text += chunk.payload.text;
-                if (chunk.payload.id) {
-                  const ary = self.#bufferedTextChunks[chunk.payload.id] ?? [];
-                  ary.push(chunk.payload.text);
-                  self.#bufferedTextChunks[chunk.payload.id] = ary;
-                }
+              self.#bufferedText.push(chunk.payload.text);
+              self.#bufferedByStep.text += chunk.payload.text;
+              if (chunk.payload.id) {
+                const ary = self.#bufferedTextChunks[chunk.payload.id] ?? [];
+                ary.push(chunk.payload.text);
+                self.#bufferedTextChunks[chunk.payload.id] = ary;
               }
               break;
             case 'tool-call-input-streaming-start':
@@ -741,11 +738,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
 
               self.#bufferedSteps.push(stepResult);
-
-              if (chunk.payload.stepResult.reason === 'tool-calls') {
-                self.#bufferedText.splice(self.#bufferedTextStepStartIndex);
-              }
-              self.#bufferedTextStepStartIndex = self.#bufferedText.length;
 
               self.#bufferedByStep = {
                 text: '',
@@ -1819,7 +1811,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       bufferedReasoningDetails: this.#bufferedReasoningDetails,
       bufferedByStep: this.#bufferedByStep,
       bufferedText: this.#bufferedText,
-      bufferedTextStepStartIndex: this.#bufferedTextStepStartIndex,
       bufferedTextChunks: this.#bufferedTextChunks,
       bufferedSources: this.#bufferedSources,
       bufferedReasoning: this.#bufferedReasoning,
@@ -1844,7 +1835,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedReasoningDetails = state.bufferedReasoningDetails;
     this.#bufferedByStep = state.bufferedByStep;
     this.#bufferedText = state.bufferedText;
-    this.#bufferedTextStepStartIndex = state.bufferedTextStepStartIndex ?? this.#bufferedText.length;
     this.#bufferedTextChunks = state.bufferedTextChunks;
     this.#bufferedSources = state.bufferedSources;
     this.#bufferedReasoning = state.bufferedReasoning;
