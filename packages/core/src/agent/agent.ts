@@ -6257,7 +6257,15 @@ export class Agent<
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
-  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
+  async #loadAgenticLoopSnapshotOrThrow({
+    runId,
+    method,
+    toolCallId,
+  }: {
+    runId: string;
+    method: string;
+    toolCallId?: string;
+  }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
     const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
@@ -6280,6 +6288,27 @@ export class Agent<
           hasStorage,
         },
       });
+    }
+
+    if (toolCallId) {
+      const suspendedToolCallIds = this.#getSuspendedToolCalls(existingSnapshot)
+        .map(toolCall => toolCall.toolCallId)
+        .filter((id): id is string => Boolean(id));
+      if (!suspendedToolCallIds.includes(toolCallId)) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `Agent "${this.name}" ${method}() cannot resume tool call "${toolCallId}" because it is not suspended.`,
+          details: {
+            agentName: this.name,
+            method,
+            runId,
+            toolCallId,
+            suspendedToolCallIds: suspendedToolCallIds.join(','),
+          },
+        });
+      }
     }
 
     return existingSnapshot;
@@ -8221,7 +8250,11 @@ export class Agent<
     }
 
     const runId = streamOptions?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeStream' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeStream',
+      toolCallId: streamOptions?.toolCallId,
+    });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
 
     if (snapshotMemoryInfo?.threadId) {
@@ -8383,7 +8416,11 @@ export class Agent<
     delete loopOptions.actor;
 
     const runId = options?.runId ?? '';
-    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({ runId, method: 'resumeGenerate' });
+    const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
+      runId,
+      method: 'resumeGenerate',
+      toolCallId: options?.toolCallId,
+    });
     await this.#requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
       memory: mergedOptions.memory,

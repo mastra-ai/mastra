@@ -205,6 +205,41 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     expect(new Set(approvals.map(a => a.toolCallId)).size).toBe(2);
   });
 
+  it('rejects a targeted approval when that tool call is not actually suspended', async () => {
+    processedOrders.length = 0;
+    const supervisor = buildSupervisorAgent();
+
+    const stream = await supervisor.stream('Process both orders in parallel.', {
+      maxSteps: 6,
+      memory: { resource: 'rep_approval', thread: 'thread-wrong-target' },
+    });
+
+    const approvals = await collectApprovals(stream);
+    const [{ toolCalls }] = (await supervisor.listSuspendedRuns()).runs;
+    const suspendedToolCallIds = new Set(toolCalls.map(toolCall => toolCall.toolCallId));
+    const phantomApproval = approvals.find(approval => !suspendedToolCallIds.has(approval.toolCallId));
+
+    expect(phantomApproval).toBeDefined();
+    let resumeError: unknown;
+    try {
+      const resumed = await supervisor.approveToolCall({
+        runId: stream.runId,
+        toolCallId: phantomApproval!.toolCallId,
+      });
+      for await (const _chunk of resumed.fullStream) {
+        // Drain the stream so unintended tool execution cannot leak into later tests.
+      }
+    } catch (error) {
+      resumeError = error;
+    }
+
+    expect(resumeError).toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
+    await expect(
+      supervisor.resumeGenerate({ approved: true }, { runId: stream.runId, toolCallId: phantomApproval!.toolCallId }),
+    ).rejects.toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
+    expect(processedOrders).toEqual([]);
+  });
+
   it('approving both parallel delegations one at a time processes BOTH orders', async () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();
