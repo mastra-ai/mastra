@@ -51,9 +51,11 @@ vi.mock('./config', () => ({
 }));
 
 const fetchLinearIssueDetail = vi.fn();
+const createLinearIssueComment = vi.fn();
 const refreshLinearAccessToken = vi.fn();
 vi.mock('./client', () => ({
   fetchLinearIssueDetail: (...args: any[]) => fetchLinearIssueDetail(...(args as [])),
+  createLinearIssueComment: (...args: any[]) => createLinearIssueComment(...(args as [])),
   refreshLinearAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
 }));
 
@@ -107,15 +109,17 @@ beforeEach(() => {
   featureEnabled = true;
   clearLinearAgentToolCaches();
   fetchLinearIssueDetail.mockReset();
+  createLinearIssueComment.mockReset();
   refreshLinearAccessToken.mockReset();
 });
 
 describe('buildLinearAgentTools — exposure gating', () => {
-  it('exposes linear_get_issue when the project org has a Linear connection', async () => {
+  it('exposes the Linear tools when the project org has a Linear connection', async () => {
     seedProject();
     seedConnection();
     const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
+    expect(tools).toHaveProperty('linear_create_comment');
   });
 
   it('exposes nothing when the org has not connected Linear', async () => {
@@ -215,5 +219,52 @@ describe('linear_get_issue — execute', () => {
     const tool = await getTool();
     const result = await (tool.execute as any)({ issue: 'ENG-42' });
     expect(result).toEqual({ error: 'Failed to fetch Linear issue: Linear API request failed (502)' });
+  });
+});
+
+describe('linear_create_comment — execute', () => {
+  async function getTool() {
+    seedProject();
+    seedConnection();
+    const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
+    return tools.linear_create_comment!;
+  }
+
+  it('posts a comment and returns its URL', async () => {
+    createLinearIssueComment.mockResolvedValue({
+      id: 'comment-1',
+      url: 'https://linear.app/acme/issue/ENG-42#comment-1',
+    });
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ issue: ' ENG-42 ', body: 'Investigated: root cause is X.' });
+    expect(createLinearIssueComment).toHaveBeenCalledWith('linear-token', 'ENG-42', 'Investigated: root cause is X.');
+    expect(result).toEqual({ posted: true, url: 'https://linear.app/acme/issue/ENG-42#comment-1' });
+  });
+
+  it('returns a not-found error for unknown issues', async () => {
+    createLinearIssueComment.mockResolvedValue(null);
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ issue: 'ENG-999', body: 'Hello' });
+    expect(result).toEqual({ error: 'Linear issue "ENG-999" was not found in this workspace.' });
+  });
+
+  it('surfaces reauth-required as a tool error instead of throwing', async () => {
+    connections.length = 0;
+    seedProject();
+    seedConnection({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
+
+    const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
+    const result = await (tools.linear_create_comment!.execute as any)({ issue: 'ENG-42', body: 'Hello' });
+
+    expect(result).toEqual({
+      error: 'Linear authorization expired. Reconnect Linear to keep syncing intake issues.',
+    });
+  });
+
+  it('maps post failures to a tool error', async () => {
+    createLinearIssueComment.mockRejectedValue(new Error('Linear did not accept the comment.'));
+    const tool = await getTool();
+    const result = await (tool.execute as any)({ issue: 'ENG-42', body: 'Hello' });
+    expect(result).toEqual({ error: 'Failed to post Linear comment: Linear did not accept the comment.' });
   });
 });

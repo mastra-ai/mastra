@@ -402,3 +402,54 @@ export async function fetchLinearIssueDetail(
     })),
   };
 }
+
+/** The comment created by {@link createLinearIssueComment}. */
+export interface LinearCreatedComment {
+  id: string;
+  url: string;
+}
+
+interface IssueIdQueryData {
+  issue: { id: string } | null;
+}
+
+interface CommentCreateMutationData {
+  commentCreate: { success: boolean; comment: { id: string; url: string } | null };
+}
+
+/**
+ * Post a comment on an issue. `idOrIdentifier` accepts both the Linear UUID
+ * and the human key (`ENG-123`) — the identifier is resolved to a UUID first
+ * because `commentCreate` only accepts UUIDs. Returns `null` when the issue
+ * doesn't exist.
+ */
+export async function createLinearIssueComment(
+  accessToken: string,
+  idOrIdentifier: string,
+  body: string,
+): Promise<LinearCreatedComment | null> {
+  let issueId: string;
+  try {
+    const data = await linearGraphql<IssueIdQueryData>(
+      accessToken,
+      `query IssueId($id: String!) { issue(id: $id) { id } }`,
+      { id: idOrIdentifier },
+    );
+    if (!data.issue) return null;
+    issueId = data.issue.id;
+  } catch (err) {
+    if (err instanceof Error && /entity not found/i.test(err.message)) return null;
+    throw err;
+  }
+  const data = await linearGraphql<CommentCreateMutationData>(
+    accessToken,
+    `mutation CommentCreate($input: CommentCreateInput!) {
+      commentCreate(input: $input) { success comment { id url } }
+    }`,
+    { input: { issueId, body } },
+  );
+  if (!data.commentCreate.success || !data.commentCreate.comment) {
+    throw new Error('Linear did not accept the comment.');
+  }
+  return data.commentCreate.comment;
+}

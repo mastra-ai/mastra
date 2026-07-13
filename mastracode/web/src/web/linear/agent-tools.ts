@@ -21,7 +21,7 @@ import { z } from 'zod';
 
 import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
-import { fetchLinearIssueDetail } from './client';
+import { createLinearIssueComment, fetchLinearIssueDetail } from './client';
 import { isLinearFeatureEnabled } from './config';
 import { getFreshLinearAccessToken, LinearReauthRequiredError, loadLinearConnection } from './connection';
 
@@ -108,6 +108,37 @@ function createLinearGetIssueTool(orgId: string) {
   });
 }
 
+function createLinearCommentTool(orgId: string) {
+  return createTool({
+    id: 'linear_create_comment',
+    description:
+      'Post a comment on a Linear issue (e.g. to report investigation findings, link a PR, or ask a clarifying question). The comment is posted as the connected Linear integration, so make clear it comes from the agent.',
+    inputSchema: z.object({
+      issue: z.string().min(1).describe('The Linear issue identifier (e.g. "ENG-123") or issue UUID.'),
+      body: z.string().min(1).describe('The comment body, as Linear-flavored markdown.'),
+    }),
+    execute: async ({ issue, body }: { issue: string; body: string }) => {
+      const connection = await loadLinearConnection(orgId);
+      if (!connection) {
+        return { error: 'Linear is not connected for this project. Connect Linear in Settings to post comments.' };
+      }
+      try {
+        const accessToken = await getFreshLinearAccessToken(connection);
+        const comment = await createLinearIssueComment(accessToken, issue.trim(), body);
+        if (!comment) {
+          return { error: `Linear issue "${issue}" was not found in this workspace.` };
+        }
+        return { posted: true, url: comment.url };
+      } catch (err) {
+        if (err instanceof LinearReauthRequiredError) {
+          return { error: err.message };
+        }
+        return { error: `Failed to post Linear comment: ${err instanceof Error ? err.message : String(err)}` };
+      }
+    },
+  });
+}
+
 /**
  * Async `extraTools` provider: expose Linear tools only when the session's
  * project belongs to an org with an active Linear connection.
@@ -116,7 +147,7 @@ export async function buildLinearAgentTools({
   requestContext,
 }: {
   requestContext: RequestContext;
-}): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool>>> {
+}): Promise<Record<string, ReturnType<typeof createLinearGetIssueTool> | ReturnType<typeof createLinearCommentTool>>> {
   if (!isLinearFeatureEnabled()) return {};
 
   const ctx = requestContext.get('controller') as AgentControllerRequestContext | undefined;
@@ -127,5 +158,8 @@ export async function buildLinearAgentTools({
   if (!orgId) return {};
   if (!(await isLinearConnected(orgId))) return {};
 
-  return { linear_get_issue: createLinearGetIssueTool(orgId) };
+  return {
+    linear_get_issue: createLinearGetIssueTool(orgId),
+    linear_create_comment: createLinearCommentTool(orgId),
+  };
 }
