@@ -543,6 +543,14 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /**
+   * Marks a minimal cross-process placeholder entry (e.g. seeded by
+   * @mastra/inngest resume() to carry an abort controller). Placeholder
+   * entries hold no usable tools/model/processors, so
+   * `resolveRuntimeDependencies` must rebuild runtime state from the agent
+   * registered on the Mastra instance instead of trusting the entry.
+   */
+  isPlaceholder?: boolean;
   /** Resolved tools with execute functions */
   tools: Record<string, CoreTool>;
   /** SaveQueueManager for message persistence (undefined when memory is not configured) */

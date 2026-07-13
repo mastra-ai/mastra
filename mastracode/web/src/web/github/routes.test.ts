@@ -146,6 +146,7 @@ const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: 
   baseBranch: opts.baseBranch,
 }));
 const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
+const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
@@ -174,6 +175,7 @@ vi.mock('./sandbox', () => {
     reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
     removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
+    runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -226,6 +228,9 @@ vi.mock('../auth', async () => {
 
 import { mountApiRoutes } from '../test-utils';
 import { buildGithubRoutes } from './routes';
+// The mocked class from the `./sandbox` factory above — routes match on
+// `instanceof WorktreeError`, so failure specs must throw this exact class.
+import { WorktreeError as MockedWorktreeError } from './sandbox';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -340,6 +345,7 @@ beforeEach(() => {
   reattachProjectSandbox.mockClear();
   ensureWorktree.mockClear();
   removeWorktree.mockClear();
+  runWorktreeSetup.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -852,7 +858,7 @@ describe('ensure (materialize)', () => {
 });
 
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
-function seedMaterializedProject(opts: { orgId?: string; userId?: string } = {}) {
+function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupCommand?: string | null } = {}) {
   const orgId = opts.orgId ?? 'org1';
   const userId = opts.userId ?? 'u1';
   tables.projects.push({
@@ -864,6 +870,7 @@ function seedMaterializedProject(opts: { orgId?: string; userId?: string } = {})
     repoId: 99,
     defaultBranch: 'main',
     sandboxWorkdir: '/workspace/hello',
+    setupCommand: opts.setupCommand ?? null,
   });
   tables.sandboxes.push({
     id: 'sbrow-1',
@@ -985,6 +992,82 @@ describe('prs route', () => {
   });
 });
 
+describe('project settings routes', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/settings');
+    expect(res.status).toBe(401);
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns the stored setup command', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+  });
+
+  it('persists a trimmed setup command', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+      setupCommand: '  pnpm i && pnpm build  ',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+    expect(tables.projects[0].setupCommand).toBe('pnpm i && pnpm build');
+  });
+
+  it('clears the setup command with an empty string or null', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i' });
+    const app = buildApp({ workosId: 'u1' });
+    const res = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: '   ' });
+    expect(await res.json()).toEqual({ setupCommand: null });
+    expect(tables.projects[0].setupCommand).toBeNull();
+
+    tables.projects[0].setupCommand = 'pnpm i';
+    const res2 = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: null });
+    expect(await res2.json()).toEqual({ setupCommand: null });
+    expect(tables.projects[0].setupCommand).toBeNull();
+  });
+
+  it('400s on a non-string setup command', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+      setupCommand: 42,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on an oversized setup command', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+      setupCommand: 'x'.repeat(2001),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on a setup command containing control characters', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const res = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: 'pnpm i \x1b[31m&& rm -rf /',
+    });
+    expect(res.status).toBe(400);
+    expect(tables.projects[0].setupCommand).toBeNull();
+
+    // Newlines and tabs are legitimate in multi-line setup scripts.
+    const res2 = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: 'pnpm i\npnpm build\t--force',
+    });
+    expect(res2.status).toBe(200);
+  });
+});
+
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
@@ -1049,6 +1132,55 @@ describe('worktree route', () => {
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     expect(tables.worktrees).toHaveLength(1);
+  });
+
+  it('runs the configured setup command in the fresh worktree', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(200);
+    expect(runWorktreeSetup).toHaveBeenCalledOnce();
+    expect(runWorktreeSetup).toHaveBeenCalledWith(
+      expect.anything(),
+      '/workspace/hello/../worktrees/feat/x',
+      'pnpm i && pnpm build',
+    );
+  });
+
+  it('skips the setup command when no command is configured', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(200);
+    expect(runWorktreeSetup).not.toHaveBeenCalled();
+  });
+
+  it('skips the setup command when reusing an existing worktree', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i' });
+    ensureWorktree.mockResolvedValueOnce({
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+      branch: 'feat/x',
+      baseBranch: 'main',
+      reused: true,
+    } as any);
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(200);
+    expect(runWorktreeSetup).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a setup failure and does not persist the worktree row', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i' });
+    runWorktreeSetup.mockRejectedValueOnce(new MockedWorktreeError('Setup command failed (exit 1)', 'setup-failed'));
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'setup-failed' });
+    expect(tables.worktrees).toHaveLength(0);
   });
 });
 

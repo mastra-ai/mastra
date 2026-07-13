@@ -553,10 +553,34 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
   | {
       type: 'foreach';
       step: Step;
-      opts: {
-        concurrency: number;
-      };
+      opts: ForeachOptions;
     };
+
+/**
+ * Context passed to a foreach {@link ForeachConcurrencyResolver} when the
+ * foreach entry is about to execute.
+ */
+export interface ForeachConcurrencyContext {
+  /** The array the foreach iterates over (output of the previous step). */
+  inputData: unknown;
+  /** Returns the workflow run's init data (the workflow input). */
+  getInitData: () => unknown;
+}
+
+/**
+ * Resolves the foreach concurrency at execution time, per run.
+ *
+ * Use this instead of a static number when the effective concurrency depends
+ * on run input (e.g. per-run options). Workflow graphs are built once and
+ * shared across runs, so a resolver is the only safe way to vary concurrency
+ * per run — mutating a shared options object races between concurrent runs
+ * and does not survive durable-engine replays.
+ */
+export type ForeachConcurrencyResolver = (context: ForeachConcurrencyContext) => number;
+
+export interface ForeachOptions {
+  concurrency: number | ForeachConcurrencyResolver;
+}
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
   Step<any, any, any, any, any, any, TEngineType>,
@@ -610,7 +634,10 @@ export type SerializedStepFlowEntry =
       type: 'foreach';
       step: SerializedStep;
       opts: {
-        concurrency: number;
+        /** Static concurrency. Omitted when a resolver function is used. */
+        concurrency?: number;
+        /** Source of the concurrency resolver function, when one is used. */
+        fn?: string;
       };
     };
 

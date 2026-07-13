@@ -381,3 +381,32 @@ export async function openPullRequest(
 ): Promise<PullRequestResult> {
   return postProjectGitOp<PullRequestResult>(baseUrl, githubProjectId, 'pr', args);
 }
+
+/** Per-project settings persisted on the server. */
+export interface ProjectSettings {
+  /**
+   * Shell command run inside every freshly created worktree before any agent
+   * execution (e.g. `pnpm i && pnpm build`). `null` when no setup step is
+   * configured.
+   */
+  setupCommand: string | null;
+}
+
+/** Read a project's settings (currently just the worktree setup command). */
+export async function fetchProjectSettings(baseUrl: string, githubProjectId: string): Promise<ProjectSettings> {
+  const res = await fetch(`${baseUrl}/web/github/projects/${encodeURIComponent(githubProjectId)}/settings`, {
+    headers: { Accept: 'application/json' },
+    credentials: 'include',
+  });
+  if (!res.ok) throw new Error(`Failed to load project settings (${res.status})`);
+  return (await res.json()) as ProjectSettings;
+}
+
+/** Persist a project's setup command. Pass `null` (or blank) to clear it. */
+export async function saveProjectSettings(
+  baseUrl: string,
+  githubProjectId: string,
+  settings: ProjectSettings,
+): Promise<ProjectSettings> {
+  return postProjectGitOp<ProjectSettings>(baseUrl, githubProjectId, 'settings', settings);
+}
