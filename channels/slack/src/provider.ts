@@ -907,8 +907,6 @@ export class SlackProvider implements ChannelProvider {
       return null;
     }
 
-    console.log('resolveing channels for installation', installation);
-
     if (installation.ownerType === 'agentController') {
       const controller = this.#resolveAgentController(installation.agentId);
       if (!controller) {
@@ -920,7 +918,6 @@ export class SlackProvider implements ChannelProvider {
         channels = this.#createAgentControllerChannels(controller, currentAdapter);
         await channels.initialize(this.#mastra);
       }
-      console.log('returning channels for "controller"', channels);
       return channels;
     }
 
@@ -934,7 +931,6 @@ export class SlackProvider implements ChannelProvider {
       channels = this.#createAgentChannels(agent, currentAdapter);
       await channels.initialize(this.#mastra);
     }
-    console.log('returning channels for "agent"', channels);
     return channels;
   }
 
