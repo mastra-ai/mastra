@@ -45,20 +45,6 @@
   border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
 }
 
-@utility panel-group-resize-transition {
-  @media (prefers-reduced-motion: no-preference) {
-    &[data-panel-resize-ready] > [data-panel] {
-      transition-property: flex-grow, flex-basis;
-      transition-duration: var(--duration-slow, 300ms);
-      transition-timing-function: var(--ease-out-custom, ease);
-    }
-
-    &[data-panel-resize-ready]:has(> [data-separator='active']) > [data-panel] {
-      transition: none;
-    }
-  }
-}
-
 @utility bg-sidebar-nav-hover {
   background-color: var(--sidebar-nav-hover);
 }

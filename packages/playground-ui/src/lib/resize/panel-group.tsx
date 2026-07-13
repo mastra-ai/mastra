@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { GroupProps } from 'react-resizable-panels';
 import { Group } from 'react-resizable-panels';
 import { cn } from '@/lib/utils';
+import './panel-group.css';
 
 export type PanelGroupProps = Omit<GroupProps, 'elementRef'>;
 
