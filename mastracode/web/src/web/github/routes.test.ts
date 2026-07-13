@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
@@ -188,6 +189,7 @@ let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
+  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
@@ -330,6 +332,7 @@ beforeEach(() => {
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
+  process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
@@ -345,8 +348,137 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.GITHUB_APP_WEBHOOK_SECRET;
   delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
+});
+
+function signedGithubWebhookRequest(event: string, payload: Record<string, unknown>, init?: RequestInit): Request {
+  const body = JSON.stringify(payload);
+  const secret = process.env.GITHUB_APP_WEBHOOK_SECRET ?? '';
+  const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+  const headers = new Headers({
+    'content-type': 'application/json',
+    'x-github-event': event,
+    'x-github-delivery': 'delivery-1',
+    'x-hub-signature-256': signature,
+  });
+  new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+  return new Request('http://localhost/web/github/webhook', { ...init, method: 'POST', headers, body });
+}
+
+describe('webhook route', () => {
+  it('accepts a valid signed issues event and logs normalized metadata', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(
+      signedGithubWebhookRequest('issues', {
+        action: 'opened',
+        repository: { full_name: 'octo/hello' },
+        issue: { number: 12 },
+        sender: { login: 'ada' },
+        installation: { id: 99 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logSpy).toHaveBeenCalledWith('[GitHub Webhook]', {
+      event: 'issues',
+      action: 'opened',
+      deliveryId: 'delivery-1',
+      repository: 'octo/hello',
+      issueNumber: 12,
+      pullRequestNumber: undefined,
+      sender: 'ada',
+      installationId: 99,
+    });
+  });
+
+  it('accepts a valid signed PR review comment event and logs normalized PR metadata', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(
+      signedGithubWebhookRequest('pull_request_review_comment', {
+        action: 'created',
+        repository: { full_name: 'octo/hello' },
+        pull_request: { number: 34 },
+        sender: { login: 'grace' },
+        installation: { id: 99 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logSpy).toHaveBeenCalledWith('[GitHub Webhook]', {
+      event: 'pull_request_review_comment',
+      action: 'created',
+      deliveryId: 'delivery-1',
+      repository: 'octo/hello',
+      issueNumber: undefined,
+      pullRequestNumber: 34,
+      sender: 'grace',
+      installationId: 99,
+    });
+  });
+
+  it('rejects invalid signatures without logging', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const req = signedGithubWebhookRequest(
+      'issues',
+      { action: 'opened' },
+      {
+        headers: { 'x-hub-signature-256': 'sha256=0000000000000000000000000000000000000000000000000000000000000000' },
+      },
+    );
+
+    const res = await buildApp(null).request(req);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: 'unauthorized' });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['x-github-event', 400, { error: 'bad_request', message: 'Missing x-github-event header' }],
+    ['x-github-delivery', 400, { error: 'bad_request', message: 'Missing x-github-delivery header' }],
+    ['x-hub-signature-256', 401, { error: 'unauthorized', message: 'Missing x-hub-signature-256 header' }],
+  ] as const)('rejects missing %s header', async (missingHeader, expectedStatus, expectedBody) => {
+    const req = signedGithubWebhookRequest('issues', { action: 'opened' });
+    req.headers.delete(missingHeader);
+
+    const res = await buildApp(null).request(req);
+
+    expect(res.status).toBe(expectedStatus);
+    expect(await res.json()).toEqual(expectedBody);
+  });
+
+  it('rejects malformed JSON after signature verification', async () => {
+    const body = '{';
+    const signature = `sha256=${createHmac('sha256', process.env.GITHUB_APP_WEBHOOK_SECRET ?? '')
+      .update(body)
+      .digest('hex')}`;
+    const res = await buildApp(null).request('/web/github/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'issues',
+        'x-github-delivery': 'delivery-1',
+        'x-hub-signature-256': signature,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'bad_request', message: 'Malformed JSON payload' });
+  });
+
+  it('accepts and ignores a valid unsupported event', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(signedGithubWebhookRequest('installation', { action: 'created' }));
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, ignored: true });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('status route', () => {
