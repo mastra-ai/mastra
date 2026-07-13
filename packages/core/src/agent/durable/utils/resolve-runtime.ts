@@ -88,6 +88,33 @@ export interface ResolveRuntimeOptions {
 }
 
 /**
+ * Restore a RequestContext from the JSON-safe `requestContextEntries`
+ * snapshot serialized onto the workflow input (see preparation.ts). Returns
+ * an empty context when no snapshot is present.
+ */
+function restoreRequestContext(entries?: Record<string, unknown>): RequestContext {
+  return entries
+    ? new RequestContext(Object.entries(entries) as Iterable<readonly [string, unknown]>)
+    : new RequestContext();
+}
+
+/**
+ * Thrown when the per-request processor pipeline cannot be rebuilt during
+ * cross-process rehydration. Propagated (not swallowed) because continuing
+ * without the rebuilt processors would silently drop skills / workspace
+ * instructions — the exact failure mode this rebuild exists to fix.
+ */
+export class DurableProcessorRebuildError extends Error {
+  constructor(agentId: string, cause: unknown) {
+    super(
+      `[DurableAgent:${agentId}] Failed to rebuild processor pipeline during cross-process rehydration: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+    this.name = 'DurableProcessorRebuildError';
+    this.cause = cause;
+  }
+}
+
+/**
  * Resolve all runtime dependencies needed for durable step execution.
  *
  * This function reconstructs the non-serializable state needed to execute
@@ -159,9 +186,11 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     try {
       const agent = mastra.getAgentById(agentId);
 
-      // Build a request context with version overrides if available
-      const resolveRequestContext = new RequestContext();
-      // Future: restore serialized version overrides from workflow input here
+      // Restore the caller's request context from the JSON-safe snapshot on
+      // the workflow input (mirrors durable-agent.ts resume handling), so
+      // request-scoped tools / workspace / memory / processors resolve with
+      // the same configuration as the original call site.
+      const resolveRequestContext = restoreRequestContext(input.requestContextEntries);
 
       tools = await agent.getToolsForExecution({
         runId,
@@ -204,11 +233,16 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         // there is no prior state to carry, and processors are re-run per step.
         processorStates = globalEntry?.processorStates ?? new Map<string, ProcessorState>();
       } catch (processorError) {
-        logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild processors from Mastra: ${processorError}`);
+        // Fail the step loudly rather than continuing (and writing back) an
+        // incomplete pipeline: running without the rebuilt processors would
+        // silently drop skills / workspace instructions.
+        logger?.error?.(`[DurableAgent:${agentId}] Failed to rebuild processors from Mastra: ${processorError}`);
+        throw new DurableProcessorRebuildError(agentId, processorError);
       }
 
       rehydratedFromMastra = true;
     } catch (error) {
+      if (error instanceof DurableProcessorRebuildError) throw error;
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       model = resolveModel(input.modelConfig, mastra);
     }
@@ -314,14 +348,18 @@ export async function rebuildRunToolsFromMastra(options: {
   agentId: string;
   state: SerializableDurableState;
   options?: SerializableDurableOptions;
+  /** JSON-safe request-context snapshot from the workflow input (see preparation.ts). */
+  requestContextEntries?: Record<string, unknown>;
   logger?: { debug?: (...args: any[]) => void };
 }): Promise<RebuiltRunTools | undefined> {
-  const { mastra, runId, agentId, state, options: execOptions, logger } = options;
+  const { mastra, runId, agentId, state, options: execOptions, requestContextEntries, logger } = options;
   if (!mastra) return undefined;
 
   try {
     const agent = mastra.getAgentById(agentId);
-    const resolveRequestContext = new RequestContext();
+    // Restore the caller's request context so request-scoped tools, workspace
+    // and memory resolve with the same configuration as the original call.
+    const resolveRequestContext = restoreRequestContext(requestContextEntries);
 
     const tools = await agent.getToolsForExecution({
       runId,

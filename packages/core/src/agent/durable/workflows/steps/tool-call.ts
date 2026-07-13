@@ -247,6 +247,7 @@ export function createDurableToolCallStep() {
           memoryConfig?: MemoryConfig;
           threadExists?: boolean;
         };
+        requestContextEntries?: Record<string, unknown>;
         agentSpanData?: unknown;
         modelSpanData?: unknown;
       }>();
@@ -351,6 +352,7 @@ export function createDurableToolCallStep() {
           agentId: initData.agentId,
           state: state as any,
           options: agentOptions,
+          requestContextEntries: initData.requestContextEntries,
           logger,
         });
         if (rebuilt) {
@@ -388,8 +390,7 @@ export function createDurableToolCallStep() {
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
 
       if (!tool || isHiddenByActiveTools) {
-        const availableToolNames =
-          effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
+        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
@@ -458,7 +459,9 @@ export function createDurableToolCallStep() {
               [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
             )
           : undefined,
-        workspace: registryEntry?.workspace,
+        // Use the same rebuilt-workspace fallback as execution (above), so
+        // workspace-aware approval policies see their workspace cross-process.
+        workspace,
       });
 
       // Add suspended-tool / pending-approval metadata to the last assistant
