@@ -332,14 +332,16 @@ describe('runWorkflow — MastraMemory / ObservationalMemory thread requirement'
     mastra = await buildMastraWithMemoryProcessor();
   });
 
-  it('fails when MastraMemory is absent (regression guard: service is a pass-through, does NOT synthesize memory)', async () => {
-    // The workflow service intentionally does NOT inject MastraMemory. Making
-    // the observational-memory processor tolerant of missing thread context is
-    // the responsibility of the agent's Memory wrapper (see
-    // mastracode/src/agents/memory.ts:wrapMemoryForEphemeralInvocations).
-    //
-    // This test locks in that the service stays a thin pass-through so we
-    // don't regress by re-adding fake-thread synthesis at this layer.
+  it('fails when a thread-scoped input processor is present and MastraMemory is absent (regression guard: service is a pass-through, does NOT synthesize memory)', async () => {
+    // The workflow service intentionally does NOT inject MastraMemory. Callers
+    // that need an ephemeral thread must synthesize one at the tool boundary
+    // (see run-workflow.ts). This test uses a FakeObservationalMemoryProcessor
+    // installed directly on the agent as an inputProcessor — bypassing the
+    // real Memory factory — so it exercises the "processor requires a thread
+    // and none was provided" failure surface regardless of the seam that lives
+    // inside packages/memory. Locks in that the service stays a thin
+    // pass-through so we don't regress by re-adding fake-thread synthesis at
+    // this layer.
     const rc = new RequestContext();
     rc.set('controller', { session: { modelId: 'openai/gpt-5.5' }, state: {} });
 
@@ -353,9 +355,6 @@ describe('runWorkflow — MastraMemory / ObservationalMemory thread requirement'
     const errMessage = err instanceof Error ? err.message : (err as { message?: string } | undefined)?.message;
     const causeMessage =
       err && typeof err === 'object' && 'cause' in err && err.cause instanceof Error ? err.cause.message : '';
-    // The service is a pass-through: when MastraMemory is absent the
-    // observational-memory processor throws, and the agent wraps it as an
-    // "Input processor error" whose cause carries the threadId text.
     expect(`${errMessage} ${causeMessage}`).toMatch(/input processor error|threadId|thread id/i);
   });
 

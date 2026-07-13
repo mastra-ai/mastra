@@ -128,9 +128,15 @@ createWorkflowTestSuite({
 
   executeWorkflow: async (workflow, inputData, options = {}): Promise<WorkflowResult> => {
     // Create a fresh Mastra instance for each test execution
-    // This ensures proper isolation between tests
+    // This ensures proper isolation between tests.
+    // Carry through any mastraAgents/mastraTools declared for this workflow in the
+    // shared harness registry so declarative `.agent('id')` / `.tool('id')` builder
+    // calls can resolve their string references at execution time.
+    const registryEntry = registeredRegistry?.[workflow.id];
     const mastra = new Mastra({
       workflows: { [workflow.id]: workflow },
+      agents: registryEntry?.mastraAgents,
+      tools: registryEntry?.mastraTools,
       storage: sharedStorage,
       pubsub: new EventEmitterPubSub(),
     });

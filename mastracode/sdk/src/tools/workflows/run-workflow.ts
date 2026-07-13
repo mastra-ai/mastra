@@ -2,12 +2,11 @@
  * Parent-mode tool: run a saved workflow with input data. Returns the run
  * result inline so the parent agent can summarise / chain it.
  */
-import { randomUUID } from 'node:crypto';
 import type { Mastra } from '@mastra/core/mastra';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 import { runWorkflow } from '../../workflows/service.js';
+import { withEphemeralMemory } from './ephemeral-memory.js';
 
 export const runWorkflowTool = createTool({
   id: 'run-workflow',
@@ -28,39 +27,10 @@ export const runWorkflowTool = createTool({
     // `controller` bindings (session, modelId, workspace) → getDynamicModel
     // and dynamic tools work inside the workflow's agent step.
     //
-    // BUT: the workflow's agent step MUST NOT inherit the caller's chat thread
-    // identity. If we forwarded the parent chat's MastraMemory verbatim, the
-    // nested `code-agent` invocation would write the workflow prompt + response
-    // into the parent chat thread's history and contend with the parent turn's
-    // own memory-dependent processors (observational-memory, task-state, …).
-    //
-    // Give the workflow a fresh isolated thread id but keep the parent's
-    // resource id — mirroring what the `/workflows run` slash command already
-    // does. Reserved thread/resource-key context values take precedence over
-    // the `MastraMemory` payload, so we scrub the MASTRA_THREAD_ID_KEY too.
-    // Everything is restored in `finally` so the parent chat turn continues
-    // with its original memory scope. Mirrors the sub-agent-as-tool save/restore
-    // pattern in packages/core/src/agent/agent.ts:4470–5209.
-    const savedMastraMemory = requestContext?.get('MastraMemory') as
-      | { thread?: { id?: string }; resourceId?: string; memoryConfig?: unknown }
-      | undefined;
-    const savedThreadIdKey = requestContext?.get(MASTRA_THREAD_ID_KEY) as string | undefined;
-    const savedResourceIdKey = requestContext?.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
-    if (requestContext) {
-      const parentResourceId = savedMastraMemory?.resourceId ?? savedResourceIdKey ?? '';
-      requestContext.set('MastraMemory', {
-        thread: { id: randomUUID() },
-        resourceId: parentResourceId,
-        memoryConfig: undefined,
-      });
-      if (savedThreadIdKey !== undefined) {
-        requestContext.delete(MASTRA_THREAD_ID_KEY);
-      }
-      // Leave MASTRA_RESOURCE_ID_KEY as-is (parent's resource) — the workflow
-      // agent step needs a resource to satisfy task-state / observational-memory.
-    }
-
-    try {
+    // Swap the caller's chat memory scope for a fresh isolated one for the
+    // duration of the run so the workflow's agent step doesn't write into
+    // (or read from) the parent chat thread. See ephemeral-memory.ts.
+    return withEphemeralMemory(requestContext, async () => {
       const result = await runWorkflow(mastra as unknown as Mastra, workflowId, inputData, requestContext);
       if (result.status === 'tripwire' && result.tripwire) {
         return {
@@ -95,20 +65,6 @@ export const runWorkflowTool = createTool({
         }
       }
       return { status: result.status, result: result.result, error: errorText };
-    } finally {
-      if (requestContext) {
-        if (savedMastraMemory !== undefined) {
-          requestContext.set('MastraMemory', savedMastraMemory);
-        } else {
-          requestContext.delete('MastraMemory');
-        }
-        if (savedThreadIdKey !== undefined) {
-          requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
-        }
-        if (savedResourceIdKey !== undefined) {
-          requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
-        }
-      }
-    }
+    });
   },
 });

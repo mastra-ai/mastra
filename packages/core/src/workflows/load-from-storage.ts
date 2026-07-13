@@ -311,10 +311,13 @@ function resolveStepReferenceById(id: string, mastra: Mastra): any {
   if (agent) return agent;
   const tool = mastra.getTool?.(id);
   if (tool) return tool;
-  // Fall back to a synthetic ref object — `.map()` reads `.id` to serialize.
-  // If the step truly doesn't exist on the instance, execution will surface
-  // the failure (vs. silently dropping the reference).
-  return { id };
+  // A mapping's `step:` source must point to a real step that ran earlier in
+  // the graph. If neither an agent nor a tool with this id is registered,
+  // rehydration is broken: don't paper over it with a synthetic {id} that
+  // would silently drop mapping wiring and only fail deep inside execution.
+  throw new Error(
+    `Stored workflow mapping references step "${id}" which is not registered as an agent or tool on this Mastra instance.`,
+  );
 }
 
 function assertAgentExists(mastra: Mastra, agentId: string): void {
@@ -351,8 +354,34 @@ export function jsonSchemaToZod(schema: JsonSchema): z.ZodTypeAny {
   return walk(schema);
 }
 
+// JSON Schema keywords that this MVP converter does not support. If a stored
+// workflow's inputSchema/outputSchema uses any of these, silently converting
+// to z.any() would strip the constraint at rehydration and let bad data flow
+// through at execution — hard-crash instead so the corruption surfaces at
+// load time.
+const UNSUPPORTED_SCHEMA_KEYS = [
+  'oneOf',
+  'anyOf',
+  'allOf',
+  'not',
+  '$ref',
+  'patternProperties',
+  'discriminator',
+] as const;
+
 function walk(schema: JsonSchema): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.any();
+
+  for (const key of UNSUPPORTED_SCHEMA_KEYS) {
+    if (key in schema) {
+      throw new Error(
+        `Stored workflow schema uses unsupported JSON Schema keyword "${key}". ` +
+          `This converter only supports the static subset that Zod round-trips through ` +
+          `standardSchemaToJSONSchema (object, array, string, number, integer, boolean, null, enum). ` +
+          `Simplify the schema or extend jsonSchemaToZod to cover this keyword.`,
+      );
+    }
+  }
 
   let out: z.ZodTypeAny;
 
@@ -391,9 +420,16 @@ function walk(schema: JsonSchema): z.ZodTypeAny {
       case 'null':
         out = z.null();
         break;
-      default:
+      case undefined:
+        // No `type` and no enum/typed-array — schema is just a description
+        // or annotation wrapper; permit z.any() for these.
         out = z.any();
         break;
+      default:
+        throw new Error(
+          `Stored workflow schema uses unsupported JSON Schema type "${String(schema.type)}". ` +
+            `This converter only supports object, array, string, number, integer, boolean, null, and enum.`,
+        );
     }
   }
 
