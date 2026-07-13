@@ -99,7 +99,7 @@
     "@ai-sdk/openai-compatible": "^2.0.56",
     "@ast-grep/napi": "^0.42.0",
     "@aws-sdk/credential-providers": "^3.864.0",
-    "@earendil-works/pi-tui": "^0.79.4",
+    "@earendil-works/pi-tui": "0.80.6",
     "@mastra/agent-browser": "workspace:*",
     "@mastra/code-sdk": "workspace:^",
     "@mastra/core": "workspace:*",

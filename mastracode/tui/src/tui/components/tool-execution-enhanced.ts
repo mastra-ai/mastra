@@ -775,6 +775,9 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     if (!normalized) return '';
     const lines = normalized.split('\n');
     const latestLines = lines.slice(-Math.max(1, this.quietPreviewLineLimit)).join('\n');
+    if (this.isPartial && (this.toolName === MC_TOOLS.WRITE_FILE || this.toolName === MC_TOOLS.STRING_REPLACE_LSP)) {
+      return latestLines;
+    }
     if (latestLines.length <= QUIET_CODE_PREVIEW_MAX_CHARS) return latestLines;
     return latestLines.slice(-QUIET_CODE_PREVIEW_MAX_CHARS);
   }

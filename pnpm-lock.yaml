@@ -181,6 +181,7 @@ packageExtensionsChecksum: sha256-/cD8y6AI9CdIuSvELFiNyGPNGS77AbBTfsEAe7m2Qbo=
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
+  '@earendil-works/pi-tui@0.80.6': 88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b
   tsup@8.5.1: 78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f
 
 importers:
@@ -2276,8 +2277,8 @@ importers:
         specifier: ^3.864.0
         version: 3.1006.0
       '@earendil-works/pi-tui':
-        specifier: ^0.79.4
-        version: 0.79.4
+        specifier: 0.80.6
+        version: 0.80.6(patch_hash=88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b)
       '@mastra/agent-browser':
         specifier: workspace:*
         version: link:../../browser/agent-browser
@@ -12194,8 +12195,8 @@ packages:
   '@duckdb/node-bindings@1.5.2-r.2':
     resolution: {integrity: sha512-A17A6pXB7SEBAm93POdmEG+f4vQWMSujUP8/hNUfDWjaqp4C5mUWFnyuBM4XiB4qyXXH3vbjis2TYsnxAN2xEQ==}
 
-  '@earendil-works/pi-tui@0.79.4':
-    resolution: {integrity: sha512-/ZhfFiHSBMH7AbDrBQIN+UWlJnl9tSEpLYICRGGMzmNfyCqX+30NYacIhyOEaD8R5rS6wJZysAOPU0yNwigbXw==}
+  '@earendil-works/pi-tui@0.80.6':
+    resolution: {integrity: sha512-bSuzS4EVSqEPj/Qr/p9eqCESfKsGuDNbl77EGci8Iaqqt/C/XCBZL1MjXaxSWW1NsT5afjp/Cb0NTPzOLv/aPA==}
     engines: {node: '>=22.19.0'}
 
   '@elastic/elasticsearch@8.19.1':
@@ -24472,9 +24473,9 @@ packages:
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
 
-  marked@15.0.12:
-    resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
-    engines: {node: '>= 18'}
+  marked@18.0.5:
+    resolution: {integrity: sha512-S6GcvALHg6K4ohtu4E7x0a1AqhAjp6cV8KhLSyN9qVapnzJkusVBxZRcIU9AeYsbe6P1hKDusSbEOzGyyuce6w==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   marky@1.3.0:
@@ -34565,10 +34566,10 @@ snapshots:
       '@duckdb/node-bindings-win32-arm64': 1.5.2-r.2
       '@duckdb/node-bindings-win32-x64': 1.5.2-r.2
 
-  '@earendil-works/pi-tui@0.79.4':
+  '@earendil-works/pi-tui@0.80.6(patch_hash=88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b)':
     dependencies:
       get-east-asian-width: 1.6.0
-      marked: 15.0.12
+      marked: 18.0.5
 
   '@elastic/elasticsearch@8.19.1':
     dependencies:
@@ -47786,7 +47787,7 @@ snapshots:
 
   markdown-table@3.0.4: {}
 
-  marked@15.0.12: {}
+  marked@18.0.5: {}
 
   marky@1.3.0:
     optional: true

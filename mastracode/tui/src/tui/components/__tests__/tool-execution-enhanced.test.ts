@@ -131,6 +131,18 @@ describe('ToolExecutionComponentEnhanced quiet display', () => {
     expect(visible).not.toContain('WRITE_STREAM_00000');
   });
 
+  it('keeps the beginning of a growing single-line write preview visible', () => {
+    const component = new ToolExecutionComponentEnhanced(
+      'write_file',
+      { path: 'src/large.ts', content: `const stableStart = '${'x'.repeat(3_000)}';` },
+      { quietDisplayMode: 'quiet', quietPreviewLineLimit: 4, collapsedByDefault: true },
+      ui,
+    );
+
+    const visible = stripAnsi(component.render(120).join('\n'));
+    expect(visible).toContain('const stableStart');
+  });
+
   it('shows old_string while large quiet edit new_string has not streamed yet', () => {
     const oldString = Array.from(
       { length: 80 },
