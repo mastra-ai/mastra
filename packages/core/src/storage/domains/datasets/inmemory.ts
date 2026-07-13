@@ -546,6 +546,7 @@ export class DatasetsInMemory extends DatasetsStorage {
 
     const conflicts = [];
     const planned = new Map<string, { id: string; item: (typeof input.items)[number] }>();
+    const plannedByExternalId = new Map<string, { id: string; item: (typeof input.items)[number] }>();
     const resolvedIds: string[] = [];
 
     for (const [index, item] of input.items.entries()) {
@@ -577,7 +578,7 @@ export class DatasetsInMemory extends DatasetsStorage {
         continue;
       }
 
-      const requestLocal = [...planned.values()].find(entry => entry.item.externalId === item.externalId);
+      const requestLocal = plannedByExternalId.get(item.externalId);
       if (requestLocal) {
         if (
           !datasetItemPayloadsEqual(item, {
@@ -603,7 +604,9 @@ export class DatasetsInMemory extends DatasetsStorage {
       }
 
       const id = crypto.randomUUID();
-      planned.set(id, { id, item });
+      const plannedEntry = { id, item };
+      planned.set(id, plannedEntry);
+      plannedByExternalId.set(item.externalId, plannedEntry);
       resolvedIds.push(id);
     }
 

@@ -1,13 +1,13 @@
 ---
 '@mastra/core': minor
-'@mastra/mongodb': patch
-'@mastra/spanner': patch
-'@mastra/libsql': patch
-'@mastra/mysql': patch
-'@mastra/pg': patch
+'@mastra/libsql': minor
+'@mastra/mongodb': minor
+'@mastra/mysql': minor
+'@mastra/pg': minor
+'@mastra/spanner': minor
 ---
 
-Added caller-defined dataset item identities for idempotent insertion.
+Added caller-defined dataset item identities for safe retries across all dataset storage adapters.
 
 Dataset items can now include an `externalId` when calling `addItem` or `addItems`:
 
@@ -18,4 +18,4 @@ await dataset.addItem({
 });
 ```
 
-Retries with the same identity and payload resolve to the existing item, while incompatible reuse returns a typed conflict.
+Retrying with the same identity and payload returns the existing item. Reusing an identity with different content returns a typed conflict, including during concurrent writes. Updates and deletes preserve the identity, Spanner retries transactions without changing the outcome, and MySQL batch writes now preserve every supported dataset item field.
