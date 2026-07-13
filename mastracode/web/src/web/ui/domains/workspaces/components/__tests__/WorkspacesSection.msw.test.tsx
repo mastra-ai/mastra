@@ -141,7 +141,7 @@ describe('WorkspacesSection', () => {
     expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
   });
 
-  it('nests children under the active worktree row', async () => {
+  it('nests children under the active main-branch workspace row', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
 
@@ -154,6 +154,17 @@ describe('WorkspacesSection', () => {
     expect(activeRow.parentElement?.parentElement).toContainElement(nested);
     const inactiveRow = screen.getByRole('button', { name: 'feat-ui' });
     expect(inactiveRow.parentElement?.parentElement).not.toContainElement(nested);
+  });
+
+  it('given a feature worktree is active, then no thread list renders (worktrees hold a single conversation)', async () => {
+    seedActiveProject({ ...githubProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui' });
+    useAgentControllerHandlers();
+
+    renderSection(<div data-testid="nested-threads">Threads</div>);
+
+    const activeRow = await screen.findByRole('button', { name: 'feat-ui' });
+    expect(activeRow).toHaveAttribute('aria-current', 'true');
+    expect(screen.queryByTestId('nested-threads')).not.toBeInTheDocument();
   });
 
   it('does not render for local projects', async () => {
