@@ -212,11 +212,12 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     // is shared across runs, so this must be a resolver — never a mutated
     // shared options object.
     .foreach(toolCallStep, {
-      concurrency: ({ getInitData }) => {
+      concurrency: ({ inputData, getInitData }) => {
         const state = getInitData() as IterationState | undefined;
         return resolveDurableToolCallConcurrency({
           options: state?.options,
           toolsMetadata: state?.toolsMetadata,
+          toolCalls: inputData as DurableToolCallInput[],
         });
       },
     })

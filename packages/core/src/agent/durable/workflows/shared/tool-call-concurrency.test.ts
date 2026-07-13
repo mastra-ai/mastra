@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DurableAgentDefaults } from '../../constants';
-import type { SerializableToolMetadata } from '../../types';
+import type { DurableToolCallInput, SerializableToolMetadata } from '../../types';
 import { resolveDurableToolCallConcurrency } from './tool-call-concurrency';
 
 function tool(overrides: Partial<SerializableToolMetadata> & { name: string }): SerializableToolMetadata {
@@ -9,6 +9,10 @@ function tool(overrides: Partial<SerializableToolMetadata> & { name: string }): 
     inputSchema: { type: 'object' },
     ...overrides,
   };
+}
+
+function call(_toolName: string, activeTools?: string[] | null): Pick<DurableToolCallInput, 'activeTools'> {
+  return activeTools !== undefined ? { activeTools } : {};
 }
 
 describe('resolveDurableToolCallConcurrency', () => {
@@ -77,5 +81,70 @@ describe('resolveDurableToolCallConcurrency', () => {
         toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'gated', requireApproval: true })],
       }),
     ).toBe(1);
+  });
+
+  // The check is against the step's effective active tool set, NOT the tools the model actually
+  // called: a registered suspending/approval tool the model skipped this step must still force
+  // sequential — a concurrently-running sibling tool would race the suspension.
+  it.each([{ hasSuspendSchema: true }, { requireApproval: true }])(
+    'forces sequential for a registered %o tool even when it is not called',
+    flag => {
+      expect(
+        resolveDurableToolCallConcurrency({
+          options: { toolCallConcurrency: 5 },
+          toolsMetadata: [tool({ name: 'plain' }), tool({ name: 'danger', ...flag })],
+          toolCalls: [call('plain')],
+        }),
+      ).toBe(1);
+    },
+  );
+
+  it('stays concurrent when the suspending tool is outside the step active tool set', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5 },
+        toolsMetadata: [tool({ name: 'a' }), tool({ name: 'b' }), tool({ name: 'danger', hasSuspendSchema: true })],
+        toolCalls: [call('a', ['a', 'b'])],
+      }),
+    ).toBe(5);
+  });
+
+  it('forces sequential when the suspending tool is inside the step active tool set', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5 },
+        toolsMetadata: [tool({ name: 'a' }), tool({ name: 'danger', requireApproval: true })],
+        toolCalls: [call('a', ['a', 'danger'])],
+      }),
+    ).toBe(1);
+  });
+
+  it('treats a null activeTools stamp (restriction cleared by a processor) as unrestricted', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5, activeTools: ['a'] },
+        toolsMetadata: [tool({ name: 'a' }), tool({ name: 'danger', hasSuspendSchema: true })],
+        toolCalls: [call('a', null)],
+      }),
+    ).toBe(1);
+  });
+
+  it('prefers the per-step activeTools stamp over the run-level activeTools option', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 5, activeTools: ['danger'] },
+        toolsMetadata: [tool({ name: 'a' }), tool({ name: 'danger', hasSuspendSchema: true })],
+        toolCalls: [call('a', ['a'])],
+      }),
+    ).toBe(5);
+  });
+
+  it('falls back to the configured concurrency when no tool metadata is available', () => {
+    expect(
+      resolveDurableToolCallConcurrency({
+        options: { toolCallConcurrency: 4 },
+        toolCalls: [call('a')],
+      }),
+    ).toBe(4);
   });
 });

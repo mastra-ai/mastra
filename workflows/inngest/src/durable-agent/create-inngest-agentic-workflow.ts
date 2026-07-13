@@ -177,11 +177,12 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     // tool sets run sequentially, otherwise the run's `toolCallConcurrency`
     // applies (default 10). Mirrors @mastra/core's behavior after #9704.
     .foreach(toolCallStep, {
-      concurrency: ({ getInitData }) => {
+      concurrency: ({ inputData, getInitData }) => {
         const state = getInitData() as IterationState | undefined;
         return resolveDurableToolCallConcurrency({
           options: state?.options,
           toolsMetadata: state?.toolsMetadata,
+          toolCalls: inputData as DurableToolCallInput[],
         });
       },
     })

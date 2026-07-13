@@ -12,7 +12,10 @@
 # src/web/.env.example.
 services:
   app-db:
-    image: postgres:18
+    # pgvector build of the official postgres image — agent memory (recall +
+    # observational memory) stores embeddings in this database and needs the
+    # `vector` extension available.
+    image: pgvector/pgvector:pg18
     container_name: mastracode-web-db
     ports:
       - '54329:5432'
