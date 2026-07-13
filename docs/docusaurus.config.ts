@@ -18,9 +18,8 @@ const ADMONITIONS_CONFIG = {
 // The Kapa "Ask AI" chat requires an integrationId at build time. Only
 // register the theme when both credentials are available — e.g. locally and
 // in production — so CI and preview builds without the secrets still succeed.
-// Without the Kapa theme, a local fallback theme provides a stub `@theme/Chat`
-// so the swizzled DocRoot/Layout/Main (which imports it) still compiles; the
-// chat UI itself is hidden at runtime when the plugin data is absent.
+// When the theme is absent, the doc layout falls back to the classic theme and
+// `KapaChatProvider` in Root.tsx renders its children unchanged.
 const KAPA_INTEGRATION_ID = process.env.KAPA_INTEGRATION_ID
 const KAPA_GROUP_ID = process.env.KAPA_GROUP_ID
 const kapaThemes: Config['themes'] =
@@ -34,7 +33,7 @@ const kapaThemes: Config['themes'] =
           },
         ],
       ]
-    : [require.resolve('./src/plugins/kapa-fallback')]
+    : []
 
 const config: Config = {
   title: 'Mastra Docs',

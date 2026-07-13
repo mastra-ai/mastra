@@ -412,16 +412,28 @@
 }
 
 /*
- * The Kapa plugin's DocRoot/Layout/Main override renames the classic theme's
- * hashed layout classes (`.docMainContainer_*`, `.docItemWrapper_*`) to stable
- * names (`.doc-main-container`, `.doc-item-wrapper`). The classic theme's
- * flex-grow rules no longer match those names, so the doc column collapses to
- * 0 width. Restore the grow behaviour for the renamed classes.
+ * The Kapa plugin's DocRoot/Layout/Main renames the classic theme's hashed
+ * layout classes (`.docMainContainer_*`, `.docItemWrapper_*`) to stable names
+ * (`.doc-main-container`, `.doc-item-wrapper`) and drops the classic theme's
+ * `container padding-top--md padding-bottom--lg` utilities from the wrapper.
+ * The classic flex-grow rules no longer match, so the doc column collapses to
+ * 0 width, and without the padding the content sits flush against the navbar.
+ * Restore both the grow behaviour and the container width/padding using the
+ * classic theme's own Infima variables.
  */
 .doc-main-container,
 .doc-chat-layout .doc-item-wrapper {
   flex-grow: 1;
   min-width: 0;
+}
+
+.doc-chat-layout .doc-item-wrapper {
+  width: 100%;
+  max-width: var(--ifm-container-width);
+  margin: 0 auto;
+  /* Mirrors the classic theme's `padding-top--md` (1rem) / `padding-bottom--lg`
+   * (2rem) plus `container` horizontal padding. */
+  padding: 1rem var(--ifm-spacing-horizontal) 2rem;
 }
 
 /* Themed aliases + plugin overrides for dark mode */
