@@ -5,7 +5,7 @@ description: Build the foundation for your own interactive coding agent with Mas
 
 # Building a coding agent
 
-In this guide, you'll build the foundation for your own interactive coding agent—an application in the same category as Mastra Code, Claude Code, or Codex. You'll create branded coding instructions with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt), configure the agent and its local workspace with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent), and register it with Mastra. After testing the agent's core behavior in Studio, you'll see how to connect it to a terminal UI or another application.
+In this guide, you'll build the foundation for your own interactive coding agent, an application in the same category as Mastra Code, Claude Code, or Codex. You'll create branded coding instructions with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt), configure the agent and its local workspace with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent), and register it with Mastra. After testing the agent's core behavior in Studio, you'll see how to connect it to a terminal UI or another application.
 
 ## Prerequisites
 
@@ -22,9 +22,8 @@ import { basename } from 'node:path'
 import { buildBasePrompt, createCodingAgent } from '@mastra/core/coding-agent'
 
 const projectPath = process.cwd()
-const model = '__GATEWAY_OPENAI_MODEL_MINI__'
+const model = '__GATEWAY_OPENAI_MODEL__'
 
-// highlight-start
 const instructions = buildBasePrompt({
   projectPath,
   projectName: basename(projectPath),
@@ -43,9 +42,7 @@ const instructions = buildBasePrompt({
 - Use mastra_workspace_write_file, mastra_workspace_edit_file, and mastra_workspace_file_stat for writing, editing, and inspecting file metadata.
 - Use only the workspace tools provided to you. Do not attempt unavailable capabilities.`,
 })
-// highlight-end
 
-// highlight-start
 export const codingAgent = createCodingAgent({
   id: 'coding-agent',
   name: 'Coding Agent',
@@ -53,7 +50,6 @@ export const codingAgent = createCodingAgent({
   instructions,
   basePath: projectPath,
 })
-// highlight-end
 ```
 
 Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` scopes the filesystem tools and sets the initial working directory for commands. It isn't an operating-system security boundary: the default local sandbox runs commands directly on the host without isolation, so commands can access paths outside that directory. In this development-server example, `process.cwd()` resolves to `src/mastra/public`, so the filesystem tools use that directory. Any configuration you pass to the factory takes precedence over its defaults.
