@@ -6290,7 +6290,7 @@ export class Agent<
       });
     }
 
-    if (toolCallId) {
+    if (toolCallId !== undefined) {
       const suspendedToolCallIds = this.#getSuspendedToolCalls(existingSnapshot)
         .map(toolCall => toolCall.toolCallId)
         .filter((id): id is string => Boolean(id));

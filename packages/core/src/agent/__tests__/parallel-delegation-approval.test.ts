@@ -237,6 +237,9 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     await expect(
       supervisor.resumeGenerate({ approved: true }, { runId: stream.runId, toolCallId: phantomApproval!.toolCallId }),
     ).rejects.toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
+    await expect(
+      supervisor.resumeGenerate({ approved: true }, { runId: stream.runId, toolCallId: '' }),
+    ).rejects.toMatchObject({ id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' });
     expect(processedOrders).toEqual([]);
   });
 
