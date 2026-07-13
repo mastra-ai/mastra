@@ -2,4 +2,4 @@
 '@mastra/react': patch
 ---
 
-fix: emit DB-shaped file parts in useChat accumulator so `toAISdkMessages` does not crash on attachments
+Fixed attachment rendering crash in `useChat` when `enableThreadSignals` is enabled. File attachments now display correctly during live streaming without requiring a page refresh.
