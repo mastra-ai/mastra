@@ -34,9 +34,11 @@ export type ActorSignal =
        */
       agentId?: string;
       /**
-       * Permission grants claimed for this actor — the actor analog of a user's
-       * resolved permissions. The FGA provider decides whether these grants
-       * permit the attempted action; the signal only carries the claim.
+       * Permission grants *claimed* for this actor — the actor analog of a
+       * user's resolved permissions. This is an untrusted, self-asserted hint:
+       * a provider enforcing real least privilege should resolve the actor's
+       * authoritative grants from a trusted source (e.g. a manifest or FGA,
+       * keyed by `agentId`) rather than trusting these values directly.
        */
       permissions?: MastraFGAPermissionInput[];
       /** Additional provider-specific scope for the actor (e.g. tenant, environment). */
@@ -384,6 +386,9 @@ export interface IFGAProvider<TUser = unknown> {
    * Non-throwing sibling of {@link requireActor}. Returns whether the system
    * actor may perform `permission` on `resource`. Use when branching or
    * filtering without throwing.
+   *
+   * Provider-facing primitive: like {@link check}, core does not call this
+   * itself — it exists for consumers that need a non-throwing actor check.
    */
   checkActor?(actor: ActorSignal, params: FGACheckParams): Promise<boolean>;
 }

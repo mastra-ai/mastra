@@ -9,7 +9,7 @@ System actors (`actor: { actorKind: 'system' }` or `actor: true`) skip the user-
 **What's new**
 
 - `IFGAProvider` gains two optional methods: `requireActor(actor, params)` (throws `FGADeniedError` to deny) and `checkActor(actor, params)` (returns a boolean).
-- `ActorSignal` gains optional `agentId`, `permissions`, and `scope` so a provider can identify and constrain the acting agent. `permissions` reuses the `MastraFGAPermissionInput` vocabulary — the actor analog of a user's resolved permissions.
+- `ActorSignal` gains optional `agentId`, `permissions`, and `scope` so a provider can identify and constrain the acting agent. `permissions` reuses the `MastraFGAPermissionInput` vocabulary — the actor analog of a user's resolved permissions. It is a self-asserted claim: a provider enforcing real least privilege should resolve authoritative grants from a trusted source keyed by `agentId` rather than trusting it directly.
 - When a provider does not implement `requireActor`, the existing trusted-actor bypass is preserved exactly — this change is fully backward compatible.
 
 **Before** — system actors always bypassed FGA:
@@ -31,6 +31,9 @@ class MyFga implements IFGAProvider {
   // ...existing check / require / filterAccessible...
 
   async requireActor(actor, { resource, permission }) {
+    // Illustrative only: this trusts actor.permissions (a self-asserted claim).
+    // A real provider should resolve the actor's authoritative grants from a
+    // trusted source keyed by actor.agentId, not trust the inline claim.
     const granted = actor === true ? [] : (actor.permissions ?? []);
     // `permission` may be a single value or an array (needs ANY one of them).
     const required = Array.isArray(permission) ? permission : [permission];
