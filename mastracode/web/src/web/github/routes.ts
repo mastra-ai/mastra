@@ -776,7 +776,13 @@ function buildProjectGitRoutes(): ApiRoute[] {
         try {
           return await withProjectLock(`${project.id}:${userId}`, async () => {
             const sandbox = await resolveProjectSandbox(sandboxRow);
-            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, { branch, baseBranch });
+            const token = await mintInstallationToken(project.installationId);
+            const result = await ensureWorktree(sandbox, sandboxRow.sandboxWorkdir, {
+              branch,
+              baseBranch,
+              token,
+              repoFullName: project.repoFullName,
+            });
 
             await getAppDb()
               .insert(githubWorktrees)
