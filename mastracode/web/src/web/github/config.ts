@@ -54,6 +54,11 @@ export function getGithubFeatureDiagnostics(): GithubFeatureDiagnostics {
   };
 }
 
+/** Secret used by GitHub to sign webhook deliveries. */
+export function getGithubWebhookSecret(): string | undefined {
+  return process.env.GITHUB_APP_WEBHOOK_SECRET || undefined;
+}
+
 /**
  * Secret used to sign the OAuth/install `state`. Falls back to a per-process
  * random secret when no explicit one is configured (state is short-lived).
