@@ -271,7 +271,7 @@ export class MastraCodeGateway extends MastraModelGateway {
 
   /** @deprecated Renamed to {@link MastraCodeGateway.getMastraGatewayApiKey}. */
   static getMemoryGatewayApiKey(): string | undefined {
-    return this.getMastraGatewayApiKey();
+    return MastraCodeGateway.getMastraGatewayApiKey();
   }
 
   /**

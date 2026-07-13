@@ -144,6 +144,9 @@ describe('MastraCodeGateway', () => {
 
       expect(MastraCodeGateway.getMastraGatewayApiKey()).toBe('msk-test');
       expect(MastraCodeGateway.getMemoryGatewayApiKey()).toBe('msk-test');
+
+      const getMemoryGatewayApiKey = MastraCodeGateway.getMemoryGatewayApiKey;
+      expect(getMemoryGatewayApiKey()).toBe('msk-test');
     });
   });
 });

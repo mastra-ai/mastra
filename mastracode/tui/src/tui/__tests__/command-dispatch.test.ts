@@ -163,13 +163,16 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleMastraGatewayCommand).not.toHaveBeenCalled();
   });
 
-  it('keeps /memory-gateway routed separately from Observational Memory settings', async () => {
+  it('routes /gateway and the legacy /memory-gateway alias separately from Observational Memory settings', async () => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;
 
+    expect(await dispatchSlashCommand('/gateway', state, () => ctx)).toBe(true);
     expect(await dispatchSlashCommand('/memory-gateway', state, () => ctx)).toBe(true);
 
-    expect(mocks.handleMastraGatewayCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleMastraGatewayCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleMastraGatewayCommand).toHaveBeenNthCalledWith(1, ctx);
+    expect(mocks.handleMastraGatewayCommand).toHaveBeenNthCalledWith(2, ctx);
     expect(mocks.handleOMCommand).not.toHaveBeenCalled();
   });
 
