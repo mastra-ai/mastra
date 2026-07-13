@@ -229,6 +229,131 @@ describe('StreamErrorRetryProcessor', () => {
     await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
   });
 
+  describe('retryUnknownErrors', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not retry unmatched errors when omitted or false', async () => {
+      const error = new Error('unmatched stream error');
+
+      await expect(new StreamErrorRetryProcessor().processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+      await expect(
+        new StreamErrorRetryProcessor({ retryUnknownErrors: false }).processAPIError(makeArgs({ error })),
+      ).resolves.toBeUndefined();
+    });
+
+    it('retries unmatched errors up to the processor maxRetries', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, maxRetries: 2 });
+      const error = new Error('unmatched stream error');
+
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 0 }))).resolves.toEqual({ retry: true });
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toEqual({ retry: true });
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 2 }))).resolves.toBeUndefined();
+    });
+
+    it.each([401, 403])('does not retry terminal HTTP %s authorization errors', async statusCode => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+
+      await expect(processor.processAPIError(makeArgs({ error: { statusCode } }))).resolves.toBeUndefined();
+      await expect(
+        processor.processAPIError(makeArgs({ error: new Error('wrapped', { cause: { status: statusCode } }) })),
+      ).resolves.toBeUndefined();
+    });
+
+    it.each(['access_denied', 'authentication_error', 'forbidden', 'invalid_api_key', 'permission_denied'])(
+      'does not retry terminal authorization code %s',
+      async code => {
+        const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+
+        await expect(processor.processAPIError(makeArgs({ error: { error: { code } } }))).resolves.toBeUndefined();
+      },
+    );
+
+    it('detects terminal authorization codes in API call response bodies', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+      const error = new APICallError({
+        message: 'invalid credentials',
+        url: 'https://api.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+        responseBody: JSON.stringify({ error: { type: 'authentication_error' } }),
+        isRetryable: false,
+      });
+
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toBeUndefined();
+    });
+
+    it('does not treat isRetryable false alone as a terminal error', async () => {
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true });
+      const error = new APICallError({
+        message: 'unknown provider failure',
+        url: 'https://api.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 422,
+        responseBody: JSON.stringify({ error: { type: 'unknown_stream_failure' } }),
+        isRetryable: false,
+      });
+
+      await expect(processor.processAPIError(makeArgs({ error }))).resolves.toEqual({ retry: true });
+    });
+
+    it('uses the processor delayMs for unmatched errors', async () => {
+      vi.useFakeTimers();
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, delayMs: 1000 });
+      const promise = processor.processAPIError(makeArgs({ error: new Error('unmatched stream error') }));
+
+      let resolved = false;
+      void promise.then(() => {
+        resolved = true;
+      });
+      await vi.advanceTimersByTimeAsync(999);
+      expect(resolved).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await expect(promise).resolves.toEqual({ retry: true });
+    });
+
+    it('preserves specific matcher policies before the catch-all fallback', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        retryUnknownErrors: true,
+        maxRetries: 3,
+        matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+      });
+
+      await expect(
+        processor.processAPIError(makeArgs({ error: { statusCode: 400 }, retryCount: 1 })),
+      ).resolves.toBeUndefined();
+      await expect(
+        processor.processAPIError(makeArgs({ error: new Error('unmatched stream error'), retryCount: 1 })),
+      ).resolves.toEqual({ retry: true });
+    });
+
+    it('resolves a specific policy in the cause chain before falling back', async () => {
+      const processor = new StreamErrorRetryProcessor({
+        retryUnknownErrors: true,
+        maxRetries: 3,
+        matchers: [{ match: isBadRequestError, maxRetries: 1 }],
+      });
+      const error = new Error('wrapped', { cause: { statusCode: 400 } });
+
+      await expect(processor.processAPIError(makeArgs({ error, retryCount: 1 }))).resolves.toBeUndefined();
+    });
+
+    it('uses the abort-aware delay path and removes its listener for catch-all retries', async () => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+      const processor = new StreamErrorRetryProcessor({ retryUnknownErrors: true, delayMs: 60_000 });
+      const promise = processor.processAPIError(
+        makeArgs({ error: new Error('unmatched stream error'), abortSignal: controller.signal }),
+      );
+
+      controller.abort();
+      await expect(promise).resolves.toEqual({ retry: true });
+      expect(removeSpy).toHaveBeenCalledWith('abort', expect.any(Function));
+    });
+  });
+
   describe('per-matcher policy', () => {
     it('uses per-matcher maxRetries instead of processor-level default', async () => {
       const processor = new StreamErrorRetryProcessor({

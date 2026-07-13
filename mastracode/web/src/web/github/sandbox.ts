@@ -815,6 +815,49 @@ export async function ensureWorktree(
   return { worktreePath, branch, baseBranch, reused: false };
 }
 
+/**
+ * Remove a worktree (and its local feature branch) from the sandbox. The
+ * checkout is removed with `--force` — the caller owns confirming that any
+ * uncommitted work in it can be discarded. Idempotent: a worktree whose
+ * directory is already gone only has its metadata pruned.
+ *
+ * @param sandbox       live sandbox containing the base checkout
+ * @param repoWorkdir   the base repo checkout path inside the sandbox
+ * @param branch        the worktree's feature branch (ref-validated)
+ * @param worktreePath  the persisted, server-computed worktree path
+ */
+export async function removeWorktree(
+  sandbox: MaterializationSandbox,
+  repoWorkdir: string,
+  { branch, worktreePath }: { branch: string; worktreePath: string },
+): Promise<void> {
+  if (!isValidGitRef(branch)) {
+    throw new WorktreeError(`Invalid branch name '${branch}'.`, 'invalid-branch');
+  }
+
+  const remove = await sh(
+    sandbox,
+    `git -C ${shellQuote(repoWorkdir)} worktree remove --force ${shellQuote(worktreePath)}`,
+  );
+  if (remove.exitCode !== 0) {
+    // Tolerate a checkout that's already gone (e.g. a fresh sandbox after
+    // re-provisioning): prune stale metadata and only fail when the directory
+    // still exists, meaning git genuinely refused to remove it.
+    await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} worktree prune`);
+    const exists = await sh(sandbox, `test -e ${shellQuote(worktreePath)}`);
+    if (exists.exitCode === 0) {
+      throw new WorktreeError(
+        `git worktree remove failed: ${remove.stderr.trim() || remove.stdout.trim()}`,
+        'worktree-failed',
+      );
+    }
+  }
+
+  // Best-effort local branch cleanup; the branch may not exist locally anymore
+  // or may still be pushed remotely — neither should fail the removal.
+  await sh(sandbox, `git -C ${shellQuote(repoWorkdir)} branch -D ${shellQuote(branch)}`);
+}
+
 // ---------------------------------------------------------------------------
 // Phase 3 — `gh` CLI pull-request creation primitive
 //

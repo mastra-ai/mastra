@@ -45,6 +45,16 @@ describe('temporal workflow runtime helper module', () => {
     });
   });
 
+  it('uses the configured activity timeout', async () => {
+    proxyActivities.mockReturnValue({});
+
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('weather-workflow', { startToCloseTimeout: '5 minutes' }).commit();
+    await workflow({ inputData: { city: 'SF' } });
+
+    expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '5 minutes' });
+  });
+
   it('executes child workflow entries through executeChild', async () => {
     proxyActivities.mockReturnValue({});
     executeChild.mockResolvedValue({ result: { city: 'SF', child: true } });

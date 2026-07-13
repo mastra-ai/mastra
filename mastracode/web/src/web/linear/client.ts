@@ -61,29 +61,60 @@ export function buildLinearAuthorizeUrl(state: string, redirectUri: string): str
   return url.toString();
 }
 
-/** Exchange an OAuth `code` for a workspace-scoped access token. */
-export async function exchangeLinearOAuthCode(code: string, redirectUri: string): Promise<string> {
+/**
+ * Tokens minted by Linear's `/oauth/token` endpoint. Linear access tokens
+ * expire (24h) and refresh tokens rotate: every refresh invalidates the old
+ * pair, so callers must persist the whole set after each exchange.
+ */
+export interface LinearTokenSet {
+  accessToken: string;
+  /** Null when Linear issued no refresh token (legacy non-expiring apps). */
+  refreshToken: string | null;
+  /** Null when Linear reported no `expires_in`. */
+  expiresAt: Date | null;
+}
+
+/** POST to Linear's token endpoint and normalize the response. */
+async function requestLinearTokens(params: Record<string, string>, label: string): Promise<LinearTokenSet> {
   const config = requireConfig();
   const res = await fetch(LINEAR_TOKEN_URL, {
     method: 'POST',
     signal: AbortSignal.timeout(10_000),
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
+      ...params,
       client_id: config.clientId,
       client_secret: config.clientSecret,
     }),
   });
   if (!res.ok) {
-    throw new Error(`Linear token exchange failed (${res.status})`);
+    const err = new Error(`Linear ${label} failed (${res.status})`);
+    (err as { status?: number }).status = res.status;
+    throw err;
   }
-  const body = (await res.json()) as { access_token?: string };
+  const body = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
   if (!body.access_token) {
-    throw new Error('Linear token exchange returned no access token.');
+    throw new Error(`Linear ${label} returned no access token.`);
   }
-  return body.access_token;
+  return {
+    accessToken: body.access_token,
+    refreshToken: body.refresh_token ?? null,
+    expiresAt: typeof body.expires_in === 'number' ? new Date(Date.now() + body.expires_in * 1000) : null,
+  };
+}
+
+/** Exchange an OAuth `code` for a workspace-scoped token set. */
+export async function exchangeLinearOAuthCode(code: string, redirectUri: string): Promise<LinearTokenSet> {
+  return requestLinearTokens({ grant_type: 'authorization_code', code, redirect_uri: redirectUri }, 'token exchange');
+}
+
+/**
+ * Exchange a refresh token for a new token set. Linear rotates refresh tokens,
+ * so the returned set replaces the stored one entirely. A 400/401 here means
+ * the refresh token is invalid/revoked and the org must re-authorize.
+ */
+export async function refreshLinearAccessToken(refreshToken: string): Promise<LinearTokenSet> {
+  return requestLinearTokens({ grant_type: 'refresh_token', refresh_token: refreshToken }, 'token refresh');
 }
 
 /** POST a GraphQL query to Linear with the given OAuth access token. */

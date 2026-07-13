@@ -174,6 +174,7 @@ export async function dispatchSlashCommand(
     case 'subagents':
       await handleSubagentsCommand(ctx);
       return true;
+    case 'memory':
     case 'om':
       await handleOMCommand(ctx);
       return true;

@@ -317,6 +317,25 @@ export async function createWorktree(
   return postProjectGitOp<WorktreeResult>(baseUrl, githubProjectId, 'worktree', { branch, baseBranch });
 }
 
+export interface DeleteWorktreeResult {
+  removed: boolean;
+  branch: string;
+  worktreePath: string;
+}
+
+/**
+ * Delete a worktree's checkout (and local feature branch) from the project's
+ * sandbox and drop its persisted row. Destructive: any uncommitted work in the
+ * checkout is discarded, so callers must confirm with the user first.
+ */
+export async function deleteWorktree(
+  baseUrl: string,
+  githubProjectId: string,
+  branch: string,
+): Promise<DeleteWorktreeResult> {
+  return postProjectGitOp<DeleteWorktreeResult>(baseUrl, githubProjectId, 'worktree/delete', { branch });
+}
+
 export interface CommitResult {
   committed: boolean;
 }
