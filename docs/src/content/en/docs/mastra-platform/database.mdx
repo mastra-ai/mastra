@@ -26,7 +26,7 @@ Use a hosted database when your project needs durable storage that's managed by 
 
 Hosted databases are available through three providers. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
 
-Each provider injects a fixed set of variable names, and those names must be unique across the project. In practice this means one database per provider — for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
+Each provider injects a fixed set of variable names — for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, which means an environment can use at most one database per provider. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
 
 For most agent-focused projects, **Turso** is the simplest starting point. It provides a lightweight, SQLite-compatible engine well suited to agent memory, conversation history, and per-tenant isolation. Choose **Postgres** when your workload needs full SQL, relational schemas, or structured application data beyond Mastra runtime state. **MongoDB** (_coming soon_) will add document storage and built-in vector search for workloads that don't map cleanly to SQL.
 
@@ -44,6 +44,8 @@ A database is attached at one of two scopes:
 - **Environment scope**: Attached to a single environment. Use this to isolate data between environments, for example separate production and staging databases.
 
 The scope is set when you attach the database and shown in `mastra env db list`.
+
+The two scopes can't overlap for the same provider. Because a project-scoped database already injects its variables into every environment, attaching an environment-scoped database of the same provider is rejected with a variable name conflict. To move from a shared database to per-environment databases, detach the project-scoped database first, then attach one database per environment. Environment-scoped databases on different environments never conflict — each deploy only receives the variables for its own environment.
 
 ## Attach with the CLI
 
