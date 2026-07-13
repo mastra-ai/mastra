@@ -36,6 +36,14 @@ export const NoMatches: Story = {
   },
 };
 
+// Displayed values cap at "999+" so the counter width stays bounded on huge match lists.
+export const LargeTotals: Story = {
+  args: {
+    current: 2841,
+    total: 2841,
+  },
+};
+
 // The intended pairing: `useMatchNavigation` owns the active index and wraparound while MatchNav
 // renders the counter and controls. Type in the input to change the match list, use the buttons
 // or Enter / Shift+Enter to step through it.

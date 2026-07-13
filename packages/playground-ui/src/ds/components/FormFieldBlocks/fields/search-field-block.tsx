@@ -3,11 +3,19 @@ import { useEffect, useRef } from 'react';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
-import { MatchNav } from '../../MatchNav';
+import { MatchNav, formatMatchCounter } from '../../MatchNav';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
+
+// Right padding reserved for the match-nav overlay: a fixed base per input size for the prev/next
+// buttons (2 × 1.75rem), the counter's own padding/gaps and the clear button, plus the counter
+// text itself at ~0.45rem per character (text-ui-xs tabular digits, slightly overestimated).
+function matchNavPaddingRem(size: InputProps['size'], counterText: string): string {
+  const base = size === 'sm' ? 6.25 : size === 'md' ? 6.5 : size === 'lg' ? 7 : 6.75;
+  return `${(base + counterText.length * 0.45).toFixed(2)}rem`;
+}
 
 export type SearchFieldBlockProps = {
   name: string;
@@ -68,6 +76,9 @@ export function SearchFieldBlock({
   const inputRef = useRef<HTMLInputElement>(null);
   const buttonSize = size === 'default' ? 'lg' : size;
   const hasMatchNav = matchCount !== undefined;
+  const matchNavPadding = hasMatchNav
+    ? matchNavPaddingRem(size, formatMatchCounter(currentMatch ?? 0, matchCount))
+    : undefined;
 
   useEffect(() => {
     if (isMinimized === false) {
@@ -120,12 +131,15 @@ export function SearchFieldBlock({
             size={size}
             variant={variant}
             className={cn(
-              // Extra right padding when the match-nav cluster is shown so it never overlaps text.
-              size === 'sm' && (hasMatchNav ? 'pl-8 pr-[6.5rem]' : 'pl-8 pr-8'),
-              size === 'md' && (hasMatchNav ? 'pl-9 pr-28' : 'pl-9 pr-9'),
-              (!size || size === 'default') && (hasMatchNav ? 'pl-10 pr-[7.5rem]' : 'pl-10 pr-10'),
-              size === 'lg' && (hasMatchNav ? 'pl-11 pr-32' : 'pl-11 pr-11'),
+              size === 'sm' && (hasMatchNav ? 'pl-8' : 'pl-8 pr-8'),
+              size === 'md' && (hasMatchNav ? 'pl-9' : 'pl-9 pr-9'),
+              (!size || size === 'default') && (hasMatchNav ? 'pl-10' : 'pl-10 pr-10'),
+              size === 'lg' && (hasMatchNav ? 'pl-11' : 'pl-11 pr-11'),
             )}
+            // The counter width varies ("1/3" vs "999+/999+"), so the reserved right padding is
+            // computed from the rendered counter text instead of a fixed class — long counters
+            // must never overlap the typed text.
+            style={matchNavPadding ? { paddingRight: matchNavPadding } : undefined}
           />
           <SearchIcon
             aria-hidden="true"

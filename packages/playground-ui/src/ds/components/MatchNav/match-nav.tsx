@@ -1,5 +1,6 @@
 import { ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
 import { Button } from '../Button';
+import { formatMatchCounter } from './format-match-counter';
 import { cn } from '@/lib/utils';
 
 export type MatchNavProps = {
@@ -25,7 +26,7 @@ export function MatchNav({ current, total, onNext, onPrevious, className }: Matc
         aria-label={`${total === 0 ? 0 : current} of ${total} matches`}
         className="text-neutral3 text-ui-xs tabular-nums whitespace-nowrap select-none px-1"
       >
-        {total === 0 ? '0/0' : `${current}/${total}`}
+        {formatMatchCounter(current, total)}
       </span>
       <Button
         type="button"

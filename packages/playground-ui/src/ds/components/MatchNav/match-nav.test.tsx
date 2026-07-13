@@ -46,4 +46,15 @@ describe('MatchNav', () => {
     expect(screen.getByRole('button', { name: 'Next match' }).getAttribute('type')).toBe('button');
     expect(screen.getByRole('button', { name: 'Previous match' }).getAttribute('type')).toBe('button');
   });
+
+  it('caps displayed values at 999+ while the aria-label keeps the real counts', () => {
+    renderNav({ current: 2841, total: 2841 });
+    expect(screen.getByText('999+/999+')).toBeTruthy();
+    expect(screen.getByLabelText('2841 of 2841 matches')).toBeTruthy();
+  });
+
+  it('only caps the values that exceed the limit', () => {
+    renderNav({ current: 5, total: 1200 });
+    expect(screen.getByText('5/999+')).toBeTruthy();
+  });
 });
