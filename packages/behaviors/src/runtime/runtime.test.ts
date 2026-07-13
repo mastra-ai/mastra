@@ -4,6 +4,7 @@ import { createClient } from '@libsql/client';
 import { describe, expect, it, vi } from 'vitest';
 
 import { defineBehavior } from '../definition/normalize.js';
+import { createStaticBehaviorResolver } from '../definition/resolver.js';
 import { InMemoryBehaviorRuntimeStore } from './in-memory-store.js';
 import { LibSQLBehaviorRuntimeStore } from './libsql-store.js';
 import { BehaviorStateProcessor } from './state-processor.js';
@@ -27,6 +28,7 @@ const definition = defineBehavior({
   ],
   migrations: { investigate: 'understand' },
 });
+const resolver = createStaticBehaviorResolver(definition);
 
 describe.each([
   ['memory', () => new InMemoryBehaviorRuntimeStore()],
@@ -82,7 +84,7 @@ describe('BehaviorTransitionEngine', () => {
     const mirror = { setState: vi.fn() };
     const store = new InMemoryBehaviorRuntimeStore();
     const engine = new BehaviorTransitionEngine({
-      definition,
+      resolver,
       store,
       mirror,
       guards: { ready: () => { order.push('guard'); return true; } },
@@ -90,53 +92,55 @@ describe('BehaviorTransitionEngine', () => {
     });
     const result = await engine.transition({ threadId: 'thread', name: 'test', idempotencyKey: 'attempt' });
     expect(order).toEqual(['guard', 'judge']);
-    expect(result).toMatchObject({ activeState: 'test', revision: 2 });
+    expect(result).toMatchObject({ activeState: '$root/test', revision: 2 });
     expect(mirror.setState).toHaveBeenLastCalledWith(expect.objectContaining({ type: '@mastra/behaviors:debug' }));
   });
 
   it('rejects stale judge results after a concurrent transition', async () => {
     const store = new InMemoryBehaviorRuntimeStore();
     let release!: () => void;
+    let started!: () => void;
     const pending = new Promise<void>(resolve => (release = resolve));
+    const judgeStarted = new Promise<void>(resolve => (started = resolve));
     const engine = new BehaviorTransitionEngine({
-      definition,
+      resolver,
       store,
       guards: { ready: () => true },
-      judge: async () => { await pending; return { approved: true }; },
+      judge: async () => { started(); await pending; return { approved: true }; },
     });
     await engine.initialize('thread');
     const judged = engine.transition({ threadId: 'thread', name: 'test', idempotencyKey: 'judged' });
-    await Promise.resolve();
-    await engine.transition({ threadId: 'thread', name: 'understand', idempotencyKey: 'refresh' });
+    await judgeStarted;
+    await store.transactThread({ threadId: 'thread', behaviorId: 'debug' }, current => ({
+      next: { ...current!, revision: current!.revision + 1 },
+      result: undefined,
+    }));
     release();
     await expect(judged).rejects.toThrow('Stale transition result');
   });
 
   it('fails closed before judging when a guard rejects', async () => {
     const judge = vi.fn();
-    const engine = new BehaviorTransitionEngine({ definition, store: new InMemoryBehaviorRuntimeStore(), guards: { ready: () => false }, judge });
+    const engine = new BehaviorTransitionEngine({ resolver, store: new InMemoryBehaviorRuntimeStore(), guards: { ready: () => false }, judge });
     await expect(engine.transition({ threadId: 'thread', name: 'test' })).rejects.toThrow('Guard');
     expect(judge).not.toHaveBeenCalled();
   });
 
-  it('migrates mapped states and pauses removed states', async () => {
+  it('pauses records whose mutable resolver node was removed', async () => {
     const store = new InMemoryBehaviorRuntimeStore();
-    const old = { threadId: 'thread', behaviorId: 'debug', definitionVersion: '1', revision: 1, status: 'active' as const, activeState: 'investigate', enteredAt: '', transitionHistory: [], conditionState: {}, checkpoints: {}, judgeResults: {}, audit: {} };
+    const old = { threadId: 'thread', behaviorId: 'debug', definitionVersion: '1', revision: 1, status: 'active' as const, activeState: '$root/removed', enteredAt: '', transitionHistory: [], conditionState: {}, checkpoints: {}, judgeResults: {}, audit: {} };
     await store.transactThread({ threadId: 'thread', behaviorId: 'debug' }, () => ({ next: old, result: undefined }));
-    const engine = new BehaviorTransitionEngine({ definition, store });
-    expect((await engine.initialize('thread')).activeState).toBe('understand');
-
-    await store.transactThread({ threadId: 'other', behaviorId: 'debug' }, () => ({ next: { ...old, threadId: 'other', activeState: 'removed' }, result: undefined }));
-    expect(await engine.initialize('other')).toMatchObject({ status: 'paused', pausedReason: expect.stringContaining('removed') });
+    const engine = new BehaviorTransitionEngine({ resolver, store });
+    expect(await engine.initialize('thread')).toMatchObject({ status: 'paused', pausedReason: expect.stringContaining('$root/removed') });
   });
 });
 
 describe('BehaviorStateProcessor', () => {
   it('re-snapshots after compaction and never projects judge instructions', async () => {
     const store = new InMemoryBehaviorRuntimeStore();
-    const engine = new BehaviorTransitionEngine({ definition, store });
+    const engine = new BehaviorTransitionEngine({ resolver, store });
     await engine.initialize('thread');
-    const processor = new BehaviorStateProcessor(definition, store);
+    const processor = new BehaviorStateProcessor(resolver, store);
     const args = { threadId: 'thread', contextWindow: { hasSnapshot: false }, lastSnapshot: undefined } as any;
     const signal = await processor.computeStateSignal(args);
     expect(signal?.contents).toContain('Actor instructions');

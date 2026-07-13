@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { normalizeBehavior } from '../definition/normalize.js';
+import { createStaticBehaviorResolver } from '../definition/resolver.js';
 import { InMemoryBehaviorRuntimeStore } from '../runtime/in-memory-store.js';
 import { BehaviorTransitionEngine } from '../runtime/transition-engine.js';
 import { BehaviorScheduler, type BehaviorAuditEvent } from './scheduler.js';
@@ -15,18 +16,19 @@ const definition = normalizeBehavior({
     transitions: [{ id: 'again', target: 'poll' }],
   }],
 });
+const resolver = createStaticBehaviorResolver(definition);
 
 const setup = async (judge?: () => Promise<{ approved: boolean; reason?: string }>) => {
   let time = 0;
   const now = () => new Date(time);
   const store = new InMemoryBehaviorRuntimeStore();
   await store.init();
-  const engine = new BehaviorTransitionEngine({ definition, store, now, judge });
+  const engine = new BehaviorTransitionEngine({ resolver, store, now, judge });
   await engine.initialize('thread');
   const audit: BehaviorAuditEvent[] = [];
   const scheduler = new BehaviorScheduler({
     behaviorId: definition.id,
-    definition,
+    resolver,
     store,
     engine,
     now,
@@ -43,7 +45,7 @@ describe('BehaviorScheduler', () => {
     fixture.advance(1_000);
     const restarted = new BehaviorScheduler({
       behaviorId: definition.id,
-      definition,
+      resolver,
       store: fixture.store,
       engine: fixture.engine,
       now: fixture.now,
@@ -59,7 +61,7 @@ describe('BehaviorScheduler', () => {
     fixture.advance(1_000);
     const second = new BehaviorScheduler({
       behaviorId: definition.id,
-      definition,
+      resolver,
       store: fixture.store,
       engine: fixture.engine,
       now: fixture.now,
@@ -81,13 +83,14 @@ describe('BehaviorScheduler', () => {
     let time = 0;
     const now = () => new Date(time);
     const store = new InMemoryBehaviorRuntimeStore();
-    const engine = new BehaviorTransitionEngine({ definition: guarded, store, now, guards: { deny: () => false } });
+    const guardedResolver = createStaticBehaviorResolver(guarded);
+    const engine = new BehaviorTransitionEngine({ resolver: guardedResolver, store, now, guards: { deny: () => false } });
     await store.init();
     await engine.initialize('thread');
     time = 100;
     const audit: BehaviorAuditEvent[] = [];
     const scheduler = new BehaviorScheduler({
-      behaviorId: guarded.id, definition: guarded, store, engine, now, retryBackoffMs: 500, onAudit: e => { audit.push(e); },
+      behaviorId: guarded.id, resolver: guardedResolver, store, engine, now, retryBackoffMs: 500, onAudit: e => { audit.push(e); },
     });
     expect(await scheduler.tick()).toBe(0);
     const record = await store.readThread({ threadId: 'thread', behaviorId: 'guarded' });
@@ -107,8 +110,9 @@ describe('BehaviorScheduler', () => {
       }],
     });
     const store = new InMemoryBehaviorRuntimeStore();
+    const judgedResolver = createStaticBehaviorResolver(judged);
     const engine = new BehaviorTransitionEngine({
-      definition: judged,
+      resolver: judgedResolver,
       store,
       now,
       judgeTimeoutMs: 5,
@@ -118,13 +122,13 @@ describe('BehaviorScheduler', () => {
     await engine.initialize('thread');
     time = 100;
     const scheduler = new BehaviorScheduler({
-      behaviorId: judged.id, definition: judged, store, engine, now, retryBackoffMs: 500,
+      behaviorId: judged.id, resolver: judgedResolver, store, engine, now, retryBackoffMs: 500,
     });
     expect(await scheduler.tick()).toBe(0);
     const record = await store.readThread({ threadId: 'thread', behaviorId: judged.id });
     expect(record?.transitionHistory).toHaveLength(0);
     expect(record?.nextCheckAt).toBe(new Date(600).toISOString());
-    expect(record?.audit.lastSchedulerError).toContain('failed closed');
+    expect(record?.audit.lastSchedulerError).toContain('timeout');
   });
 
   it('rejects a stale judge result after the claimed record changes', async () => {
@@ -140,11 +144,12 @@ describe('BehaviorScheduler', () => {
       }],
     });
     const store = new InMemoryBehaviorRuntimeStore();
-    const engine = new BehaviorTransitionEngine({ definition: judged, store, now, judge: async () => judgeResult });
+    const judgedResolver = createStaticBehaviorResolver(judged);
+    const engine = new BehaviorTransitionEngine({ resolver: judgedResolver, store, now, judge: async () => judgeResult });
     await store.init();
     await engine.initialize('thread');
     time = 100;
-    const scheduler = new BehaviorScheduler({ behaviorId: judged.id, definition: judged, store, engine, now });
+    const scheduler = new BehaviorScheduler({ behaviorId: judged.id, resolver: judgedResolver, store, engine, now });
     const tick = scheduler.tick();
     await vi.waitFor(async () => {
       const record = await store.readThread({ threadId: 'thread', behaviorId: judged.id });
@@ -167,7 +172,7 @@ describe('BehaviorScheduler', () => {
     const setIntervalSpy = vi.spyOn(globalThis, 'setInterval');
     const scheduler = new BehaviorScheduler({
       behaviorId: definition.id,
-      definition,
+      resolver,
       store: {} as never,
       engine: {} as never,
     });

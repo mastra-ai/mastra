@@ -1,191 +1,155 @@
 ---
 title: "Behaviors | Long-running agents"
-description: "Define durable state trees that guide a Mastra agent through explicit states and judged transitions."
+description: "Guide agents through mutable, path-addressed behavior trees with durable state and intent enforcement."
 packages:
   - "@mastra/behaviors"
-  - "@mastra/core"
 ---
 
 # Behaviors
 
-Behaviors guide an agent through a durable state tree. Each state supplies acting instructions, allowed tools, optional skills and models, and explicit transitions. A transition can require deterministic guards and a separate judge.
+Behaviors guide an agent through a durable tree of instructions, tools, models, and transition checks. The runtime stores the current behavior path for each thread. A resolver reads only that node and its available destinations, so another process can modify the tree while the agent runs.
 
-## Install the package
+Each node has the same contract. `$root` is the initial node, child nodes are discovered recursively, and the parent is always available for upward navigation.
 
-```bash npm2yarn
-npm install @mastra/behaviors
-```
+## Define behaviors in TypeScript
 
-## Define a behavior in TypeScript
-
-Use `defineBehavior()` to create an immutable, validated graph.
+Use `InMemoryBehaviorResolver` as a mutable path-indexed collection:
 
 ```typescript title="src/mastra/debug-behavior.ts"
-import { defineBehavior } from '@mastra/behaviors'
+import { InMemoryBehaviorResolver } from '@mastra/behaviors'
 
-export const debugBehavior = defineBehavior({
-  id: 'debug',
+const defaults = {
   version: '1',
-  initialState: 'understand',
-  states: [
-    {
-      id: 'understand',
-      instructions: 'Identify and prove the root cause.',
-      judgeInstructions: 'Approve only when the evidence proves one root cause.',
-      model: '__GATEWAY_OPENAI_MODEL__',
-      tools: ['readFile'],
-      skills: ['./skills/research'],
-      transitions: [
-        {
-          id: 'write-test',
-          target: 'test',
-          guards: [{ id: 'cause-proven' }],
-          judge: true,
-        },
-      ],
-    },
-    {
-      id: 'test',
-      instructions: 'Write a failing regression test.',
-      transitions: [{ id: 'return', target: 'understand' }],
-    },
-  ],
+  skills: [],
+  guards: [],
+  judge: false,
+}
+
+export const debugBehavior = new InMemoryBehaviorResolver('debug', {
+  ...defaults,
+  instructions: 'Understand the issue before editing files.',
+  tools: ['read_file', 'run_tests'],
+  model: 'openai/gpt-4.1',
+})
+
+debugBehavior.set('$root/behaviors/write-test', {
+  ...defaults,
+  instructions: 'Add focused regression coverage before changing implementation code.',
+  tools: ['read_file', 'write_file', 'run_tests'],
+})
+
+debugBehavior.set('$root/behaviors/write-test/behaviors/implement', {
+  ...defaults,
+  instructions: 'Make the smallest implementation change that passes the regression test.',
+  tools: ['read_file', 'write_file', 'run_tests'],
 })
 ```
 
-`initialState` is the root behavior and initializes automatically for each thread. Every transition targets another behavior node, including edges that return to the root. Mastra rejects duplicate IDs or targets, missing targets, unreachable states, and invalid schedules.
+Call `set()` or `remove()` at runtime to update the tree. Active agents resolve the current node again on each step; they don't depend on a frozen global graph.
 
-## Load a behavior directory
+## Define behaviors on the filesystem
 
-A filesystem behavior uses `behavior.yaml` as its manifest. State assets can contain acting instructions, judge-only instructions, and skills.
+A filesystem tree uses one `BEHAVIOR.md` file per directory. Subdirectories under `behaviors/` become available child behaviors automatically.
 
 ```text
 behaviors/debug/
-├── behavior.yaml
-└── states/
-    └── understand/
-        ├── AGENTS.md
-        ├── JUDGE.md
-        └── skills/
-            └── research/
+├── BEHAVIOR.md
+├── JUDGE.md
+└── behaviors/
+    └── write-test/
+        ├── BEHAVIOR.md
+        └── behaviors/
+            └── implement/
+                └── BEHAVIOR.md
 ```
 
-Reference the assets from `behavior.yaml`:
+The Markdown body contains acting instructions. Frontmatter configures the node:
 
-```yaml title="behaviors/debug/behavior.yaml"
-id: debug
-version: '1'
-initialState: understand
-states:
-  - id: understand
-    agentsFile: states/understand/AGENTS.md
-    judgeFile: states/understand/JUDGE.md
-    skills:
-      - skills/research
-    transitions:
-      - id: continue
-        target: understand
+```md title="behaviors/debug/BEHAVIOR.md"
+---
+tools:
+  - read_file
+  - run_tests
+model: openai/gpt-4.1
+judge: true
+---
+
+Understand the issue before editing files.
 ```
 
-Filesystem paths must stay inside the behavior directory. The loader rejects absolute paths, traversal, and symbolic links that escape the directory.
+`JUDGE.md` contains judge-only instructions and isn't shown to the acting agent. Load the directory as a resolver:
 
-## Register the provider
+```typescript
+import { loadBehaviorDirectory } from '@mastra/behaviors'
 
-Use the same provider with an ordinary agent and Mastra Code.
+const resolver = await loadBehaviorDirectory('./behaviors/debug', 'debug')
+```
 
-```typescript title="src/mastra/index.ts"
+Filesystem resolvers read `BEHAVIOR.md`, `JUDGE.md`, skills, and child directories when resolving a node. You don't need a manifest or a prebuilt state map.
+
+### Add non-child destinations
+
+Children and the parent are available automatically. Add `destinations` when a node must navigate elsewhere:
+
+```md
+---
+destinations:
+  - $root/shared/verify
+---
+```
+
+Absolute destinations start with `$root`. A destination must resolve to an existing node before the runtime allows navigation.
+
+## Attach the provider
+
+```typescript
 import { Agent } from '@mastra/core/agent'
-import {
-  BehaviorSignalProvider,
-  InMemoryBehaviorRuntimeStore,
-  loadBehaviorDirectory,
-} from '@mastra/behaviors'
+import { BehaviorSignalProvider, InMemoryBehaviorRuntimeStore } from '@mastra/behaviors'
 
-const definition = await loadBehaviorDirectory('./behaviors/debug')
-const behavior = new BehaviorSignalProvider({
-  definition,
+const provider = new BehaviorSignalProvider({
+  resolver: debugBehavior,
   store: new InMemoryBehaviorRuntimeStore(),
   resolveThreadId: requestContext => requestContext?.get('threadId'),
-  resolveModel: model => model,
-  resolveSkillInstructions: async skills => loadSkillInstructions(skills),
 })
 
-export const agent = new Agent({
+const agent = new Agent({
   id: 'debug-agent',
   name: 'Debug agent',
-  instructions: 'Follow the active behavior state.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  signals: [behavior],
+  instructions: 'Follow the active behavior.',
+  model: 'openai/gpt-4.1-mini',
+  signals: [provider],
 })
 ```
 
-Run `mastra dev`, open Studio, and select `debug-agent`. Studio displays the state signal as `<current-behavior>`. State model IDs continue through the host's normal model resolution and authentication path.
+The provider initializes `$root` silently for a new thread. Its state signal shows the current path, acting instructions, available destinations, and current intent.
 
-## Require intent for tools
+## Navigate and set intent
 
-The provider adds an `intent` field to each governed tool once when it attaches to the agent. Tool names, schemas, and wrapper identities stay stable when the behavior changes state, preserving prompt-cache compatibility.
+The provider exposes two stable tools:
 
-Set `intent` to the active state ID for automatic approval. A free-form value uses `judgeIntent`. Calls without approved intent are rejected before execution and checked again against current durable state inside the wrapper. The provider's `behavior_intent` tool persists an approved intent, while every governed call still carries its own intent.
+- `behavior({ name })` navigates to an available path or node name. Idempotency keys remain internal to the runtime.
+- `behavior_intent({ intent })` sets the intent required by governed tool calls.
 
-The control tools remain available in every state:
+The tool names and schemas remain stable across transitions. State-specific policy changes which calls are allowed instead of adding or removing tools.
 
-- `behavior({ name })` moves to an available destination behavior. The runtime derives idempotency from the tool call; the model doesn't supply an attempt ID.
-- `behavior_intent` approves and records intent.
-
-The root initializes silently. Returning to the root or leaving a branch uses the same `behavior({ name })` call and the same graph-edge guard and judge checks as every other move.
+Before a governed tool runs, the processor checks that its intent matches the active node. A node name is approved directly. Free-form intent can use an intent judge. Rejected calls return corrective feedback to the agent loop and are also blocked by execution-time wrappers.
 
 ## Judge transitions
 
-Deterministic guards run before the optional judge. A failed guard prevents the judge call. The engine commits a judged transition only when the runtime revision still matches the revision the judge reviewed.
+A node can define deterministic `guards`, enable `judge`, and provide `JUDGE.md`. Guards run before the judge. The runtime commits only if the stored revision still matches the state the judge reviewed; stale results fail closed.
 
-`JUDGE.md` and `judgeInstructions` are sent only to the judge. They aren't included in the acting agent's state signal, instructions, or skill resolution.
+## Run periodic work
 
-## Recover periodic transitions
-
-Add `periodic` to a state to run a transition on an interval:
+Set `periodic` in node frontmatter:
 
 ```yaml
 periodic:
   intervalMs: 60000
-  transition: refresh
+  destination: $root/shared/refresh
 ```
 
-`BehaviorSignalProvider` starts one `BehaviorScheduler` for the behavior runtime and stops it when the provider is replaced. The scheduler uses `listDue(now)` to recover persisted work after restart. Durable leases, deterministic attempt IDs, and revision checks prevent duplicate or stale commits. Failures back off and fail closed.
+`BehaviorScheduler` leases due work through the behavior store, retries failures with backoff, and recovers persisted due work after restart.
 
-Set `scheduler: false` when another process owns scheduling. You can also configure `intervalMs`, `leaseMs`, `retryBackoffMs`, and `onAudit` through the provider's `scheduler` option.
+## Persist behavior state
 
-## Persist and migrate state
-
-`InMemoryBehaviorRuntimeStore` is suitable for local and single-process use. Use `LibSQLBehaviorRuntimeStore` when state must survive restarts or multiple processes need atomic transactions.
-
-The behavior store is authoritative. The provider can mirror committed records into Mastra thread state for interoperability, but transitions and recovery never use that mirror as their source of truth.
-
-Increment `version` after changing a definition. If the active state still exists, initialization reconciles the version. Use `migrations` to map removed state IDs to replacements. A removed active state without a mapping pauses safely instead of choosing a state automatically.
-
-## Diagnose behavior runs
-
-Inspect `BehaviorRuntimeRecord` for status, revision, transition history, checkpoints, judge results, and the latest scheduler error. `BehaviorScheduler` emits typed `BehaviorAuditEvent` records through `onAudit`; this export boundary can feed logs or future analysis without generating or mutating behavior trees.
-
-Common failures:
-
-- **Destination isn't available:** choose a behavior listed in the current `<current-behavior>` signal.
-- **Intent is rejected:** use the current state ID or adjust `judgeIntent`.
-- **Tool isn't allowed:** add its stable tool name to the state's `tools` list.
-- **Model is unavailable:** ensure the host resolver recognizes the state's model ID.
-- **Behavior is paused:** add a migration for the removed active state, then initialize again.
-- **Periodic work retries:** inspect `audit.lastSchedulerError`, guards, and judge availability.
-
-## Use behaviors in Mastra Code
-
-Create a thin local plugin with `createMastraCodeBehaviorPlugin()`. The plugin uses the same `BehaviorSignalProvider` as an ordinary agent.
-
-```typescript title=".mastracode/plugins/debug.ts"
-import { createMastraCodeBehaviorPlugin } from '@mastra/code-sdk/plugins/behavior-plugin'
-
-export default createMastraCodeBehaviorPlugin({
-  id: 'debug-behavior',
-  definition: './behaviors/debug',
-})
-```
-
-Mastra Code resolves state model IDs through the active session, preserving gateway and authentication configuration. Reloading the plugin stops the old provider scheduler before the stable provider bridge installs its replacement.
+Use `InMemoryBehaviorRuntimeStore` for local sessions. Use `LibSQLBehaviorRuntimeStore` when behavior path, intent, transition history, and scheduler metadata must survive restarts. The behavior store is authoritative; state signals are model-facing projections.

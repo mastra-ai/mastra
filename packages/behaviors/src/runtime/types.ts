@@ -1,4 +1,4 @@
-import type { NormalizedBehaviorDefinition, NormalizedBehaviorTransition } from '../definition/types.js';
+import type { BehaviorNode } from '../definition/resolver.js';
 
 export type BehaviorStatus = 'active' | 'paused' | 'error';
 
@@ -33,7 +33,6 @@ export type BehaviorRuntimeRecord = {
 
 export type BehaviorThreadKey = { threadId: string; behaviorId: string };
 export type BehaviorDueWork = BehaviorThreadKey & { dueAt: string };
-
 export type BehaviorTransactionResult<T> = { next: BehaviorRuntimeRecord; result: T };
 
 export interface BehaviorRuntimeStore {
@@ -48,14 +47,14 @@ export interface BehaviorRuntimeStore {
 
 export type BehaviorGuardEvaluator = (input: {
   record: BehaviorRuntimeRecord;
-  transition: NormalizedBehaviorTransition;
+  destination: BehaviorNode;
   conditionState: Readonly<Record<string, unknown>>;
 }) => boolean | Promise<boolean>;
 
 export type BehaviorTransitionJudge = (input: {
-  definition: NormalizedBehaviorDefinition;
   record: BehaviorRuntimeRecord;
-  transition: NormalizedBehaviorTransition;
+  current: BehaviorNode;
+  destination: BehaviorNode;
   judgeInstructions?: string;
   signal?: AbortSignal;
 }) => Promise<{ approved: boolean; reason?: string; metadata?: unknown }>;

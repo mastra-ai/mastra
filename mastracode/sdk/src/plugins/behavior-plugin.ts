@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { BehaviorSignalProvider, InMemoryBehaviorRuntimeStore, loadBehaviorDirectory } from '@mastra/behaviors';
-import type { BehaviorRuntimeStore, NormalizedBehaviorDefinition } from '@mastra/behaviors';
+import type { BehaviorResolver, BehaviorRuntimeStore } from '@mastra/behaviors';
 
 import { resolveModel } from '../agents/model.js';
 import type { MastraCodePlugin } from '../plugin.js';
@@ -10,7 +10,7 @@ export type MastraCodeBehaviorPluginOptions = {
   id: string;
   name?: string;
   version?: string;
-  definition: NormalizedBehaviorDefinition | string;
+  resolver: BehaviorResolver | string;
   store?: BehaviorRuntimeStore;
 };
 
@@ -22,15 +22,16 @@ export function createMastraCodeBehaviorPlugin(options: MastraCodeBehaviorPlugin
     version: options.version ?? '1.0.0',
     description: 'Govern the Mastra Code agent with a durable behavior tree',
     signalProviders: async context => {
-      const definition =
-        typeof options.definition === 'string'
+      const resolver =
+        typeof options.resolver === 'string'
           ? await loadBehaviorDirectory(
-              options.definition.startsWith('/') ? options.definition : `${context.cwd}/${options.definition}`,
+              options.resolver.startsWith('/') ? options.resolver : `${context.cwd}/${options.resolver}`,
+              options.id,
             )
-          : options.definition;
+          : options.resolver;
       return [
         new BehaviorSignalProvider({
-          definition,
+          resolver,
           store: options.store ?? new InMemoryBehaviorRuntimeStore(),
           resolveThreadId: requestContext => {
             const controller = requestContext?.get('controller') as { threadId?: string } | undefined;

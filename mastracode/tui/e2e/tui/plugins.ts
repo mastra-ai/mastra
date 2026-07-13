@@ -70,28 +70,13 @@ function writeBehaviorPlugin({ projectDir }: Pick<McE2ePrepareContext, 'projectD
   const pluginDir = join(projectDir, 'fixtures', 'plugins', 'behavior-plugin');
   const pluginSrcDir = join(pluginDir, 'src');
   mkdirSync(pluginSrcDir, { recursive: true });
+  const implementDir = join(pluginDir, 'behaviors', 'implement');
+  mkdirSync(implementDir, { recursive: true });
   writePluginPackageLink(pluginDir);
+  writeFileSync(join(pluginDir, 'BEHAVIOR.md'), '---\ntools: [e2e_governed_probe]\n---\nUnderstand before editing.');
   writeFileSync(
-    join(pluginDir, 'behavior.yaml'),
-    JSON.stringify({
-      id: 'coding',
-      version: '1',
-      initialState: 'understand',
-      states: [
-        {
-          id: 'understand',
-          instructions: 'Understand before editing.',
-          tools: ['e2e_governed_probe'],
-          transitions: [{ id: 'implement', target: 'implement' }],
-        },
-        {
-          id: 'implement',
-          instructions: 'Implementation state.',
-          tools: ['e2e_governed_probe'],
-          transitions: [{ id: 'return', target: 'understand' }],
-        },
-      ],
-    }),
+    join(implementDir, 'BEHAVIOR.md'),
+    '---\ntools: [e2e_governed_probe]\ndestinations: [$root]\n---\nImplementation state.',
   );
   writeFileSync(
     join(pluginSrcDir, 'index.ts'),
@@ -100,7 +85,7 @@ import { createTool, z } from 'mastracode/plugin';
 
 const behavior = createMastraCodeBehaviorPlugin({
   id: '${PLUGIN_ID}',
-  definition: ${JSON.stringify(pluginDir)},
+  resolver: ${JSON.stringify(pluginDir)},
 });
 
 export default {

@@ -1,4 +1,4 @@
-import type { NormalizedBehaviorDefinition } from '../definition/types.js';
+import type { BehaviorPath, BehaviorResolver } from '../definition/resolver.js';
 import type { BehaviorTransitionEngine } from '../runtime/transition-engine.js';
 import type { BehaviorRuntimeStore, BehaviorThreadKey } from '../runtime/types.js';
 
@@ -13,7 +13,7 @@ export type BehaviorAuditEvent = {
 
 export type BehaviorSchedulerOptions = {
   behaviorId: string;
-  definition: NormalizedBehaviorDefinition;
+  resolver: BehaviorResolver;
   store: BehaviorRuntimeStore;
   engine: BehaviorTransitionEngine;
   intervalMs?: number;
@@ -96,18 +96,17 @@ export class BehaviorScheduler {
     if (!claim.result) return false;
     const checkpoint = claim.result.checkpoint;
     await this.audit('scheduler.claimed', key, checkpoint);
-    const state = this.options.definition.states[claim.result.state];
-    const transitionId = state?.periodic?.transition;
-    const transition = state?.transitions.find(candidate => candidate.id === transitionId);
-    if (!transition) {
+    const state = await this.options.resolver.resolve(claim.result.state as BehaviorPath);
+    const destination = state?.periodic?.destination;
+    if (!destination) {
       await this.release(key, leaseId, checkpoint, 'Periodic transition is unavailable');
       return false;
     }
     try {
       await this.options.engine.transition({
         threadId: key.threadId,
-        name: transition.target,
-        idempotencyKey: `periodic:${checkpoint}:${transitionId}`,
+        name: destination,
+        idempotencyKey: `periodic:${checkpoint}:${destination}`,
       });
       await this.complete(key, leaseId, checkpoint);
       await this.audit('scheduler.completed', key, checkpoint);

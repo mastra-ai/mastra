@@ -14,19 +14,14 @@ describe('createMastraCodeBehaviorPlugin', () => {
   it('loads a filesystem definition and returns the shared provider', async () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mastracode-behavior-'));
     fs.writeFileSync(
-      path.join(tempDir, 'behavior.yaml'),
-      JSON.stringify({
-        id: 'coding',
-        version: '1',
-        initialState: 'work',
-        states: [{ id: 'work', transitions: [{ id: 'continue', target: 'work' }] }],
-      }),
+      path.join(tempDir, 'BEHAVIOR.md'),
+      '---\ntools: [read_file]\n---\nInspect the current task before editing.',
     );
-    const plugin = createMastraCodeBehaviorPlugin({ id: 'coding-plugin', definition: tempDir });
+    const plugin = createMastraCodeBehaviorPlugin({ id: 'coding-plugin', resolver: tempDir });
     const providers = await plugin.signalProviders!({ cwd: tempDir } as never);
 
     expect(providers).toHaveLength(1);
-    expect(providers[0]?.id).toBe('behavior-coding');
+    expect(providers[0]?.id).toBe('behavior-coding-plugin');
     expect(Object.keys(providers[0]?.getTools?.() ?? {})).toEqual(['behavior', 'behavior_intent']);
   });
 });

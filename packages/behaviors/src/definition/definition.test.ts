@@ -3,34 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { loadBehaviorDirectory } from './loader.js';
-import { defineBehavior } from './normalize.js';
-import { BehaviorDefinitionError, type BehaviorDefinitionInput } from './types.js';
+import { FileSystemBehaviorResolver, InMemoryBehaviorResolver } from './resolver.js';
 
-const input: BehaviorDefinitionInput = {
-  id: 'debug',
-  version: '1',
-  initialState: 'understand',
-  states: [
-    {
-      id: 'understand',
-      instructions: 'Understand the issue.',
-      judgeInstructions: 'Require a proven cause.',
-      skills: [],
-      transitions: [
-        { id: 'test', target: 'test', guards: [{ id: 'cause-proven' }], judge: true },
-        { id: 'refresh', target: 'understand' },
-      ],
-    },
-    {
-      id: 'test',
-      instructions: 'Write a failing test.',
-      transitions: [{ id: 'return', target: 'understand' }],
-      periodic: { intervalMs: 1000, transition: 'return' },
-    },
-  ],
-  migrations: { investigate: 'understand' },
-};
+const node = (instructions: string) => ({
+  version: '1', instructions, skills: [], tools: [], guards: [], judge: false,
+});
 
 let tempDir: string | undefined;
 afterEach(async () => {
@@ -38,84 +15,62 @@ afterEach(async () => {
   tempDir = undefined;
 });
 
-async function writeFixture(definition = input): Promise<string> {
-  tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-definition-'));
-  await fs.mkdir(path.join(tempDir, 'states', 'understand', 'skills', 'research'), { recursive: true });
-  await fs.writeFile(path.join(tempDir, 'states', 'understand', 'AGENTS.md'), 'Understand the issue.');
-  await fs.writeFile(path.join(tempDir, 'states', 'understand', 'JUDGE.md'), 'Require a proven cause.');
-  const manifest = JSON.stringify({
-    ...definition,
-    states: definition.states.map(state =>
-      state.id === 'understand'
-        ? {
-            ...state,
-            instructions: undefined,
-            judgeInstructions: undefined,
-            agentsFile: 'states/understand/AGENTS.md',
-            judgeFile: 'states/understand/JUDGE.md',
-            skills: ['skills/research'],
-          }
-        : state,
-    ),
-  });
-  await fs.writeFile(path.join(tempDir, 'behavior.yaml'), manifest);
-  return tempDir!;
-}
-
-describe('behavior definitions', () => {
-  it('normalizes programmatic definitions into an immutable graph', () => {
-    const behavior = defineBehavior(input);
-    expect(Object.keys(behavior.states)).toEqual(['understand', 'test']);
-    expect(behavior.states.understand?.transitions[0]).toMatchObject({ id: 'test', target: 'test', judge: true });
-    expect(Object.isFrozen(behavior.states.understand?.transitions)).toBe(true);
+describe('behavior resolvers', () => {
+  it('mutates a path-indexed TypeScript behavior tree at runtime', async () => {
+    const resolver = new InMemoryBehaviorResolver('coding', node('root'));
+    resolver.set('$root/behaviors/investigate', node('inspect first'));
+    expect((await resolver.children('$root')).map(item => item.id)).toEqual(['$root/behaviors/investigate']);
+    resolver.set('$root/behaviors/investigate', node('inspect carefully'));
+    expect((await resolver.resolve('$root/behaviors/investigate'))?.instructions).toBe('inspect carefully');
+    resolver.remove('$root/behaviors/investigate');
+    expect(await resolver.children('$root')).toEqual([]);
   });
 
-  it('loads filesystem assets into the same graph semantics', async () => {
-    const root = await writeFixture();
-    const behavior = await loadBehaviorDirectory(root);
-    expect(behavior.states.understand).toMatchObject({
-      instructions: 'Understand the issue.',
-      judgeInstructions: 'Require a proven cause.',
-    });
-    expect(behavior.states.understand?.skills[0]).toBe(
-      await fs.realpath(path.join(root, 'states', 'understand', 'skills', 'research')),
-    );
+  it('discovers nested BEHAVIOR.md nodes and reads frontmatter assets', async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-resolver-'));
+    await fs.mkdir(path.join(tempDir, 'behaviors', 'investigate', 'behaviors', 'implement'), { recursive: true });
+    await fs.mkdir(path.join(tempDir, 'behaviors', 'investigate', 'skills'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'BEHAVIOR.md'), '---\ntools: [read]\n---\nStart here.');
+    await fs.writeFile(path.join(tempDir, 'behaviors', 'investigate', 'BEHAVIOR.md'), '---\nmodel: test-model\nskills: [skills/debug.md]\n---\nInvestigate.');
+    await fs.writeFile(path.join(tempDir, 'behaviors', 'investigate', 'skills', 'debug.md'), '# Debug');
+    await fs.writeFile(path.join(tempDir, 'behaviors', 'investigate', 'behaviors', 'implement', 'BEHAVIOR.md'), 'Implement.');
+    const resolver = await FileSystemBehaviorResolver.create(tempDir!, 'coding');
+    expect((await resolver.resolve('$root'))?.instructions).toBe('Start here.');
+    const investigate = (await resolver.children('$root'))[0]!;
+    expect(investigate).toMatchObject({ id: '$root/behaviors/investigate', model: 'test-model' });
+    expect(investigate.skills[0]).toContain('skills/debug.md');
+    expect((await resolver.children(investigate.id))[0]?.id).toBe('$root/behaviors/investigate/behaviors/implement');
   });
 
-  it.each([
-    ['duplicate states', { ...input, states: [...input.states, input.states[0]!] }, 'duplicate state ID'],
-    ['missing target', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'bad', target: 'missing' }] }] }, 'unknown state'],
-    ['duplicate target', { ...input, states: [{ ...input.states[0]!, transitions: [{ id: 'first', target: 'test' }, { id: 'second', target: 'test' }] }] }, 'duplicate target behavior'],
-    ['bad schedule', { ...input, states: input.states.map(state => state.id === 'test' ? { ...state, periodic: { intervalMs: 0, transition: 'return' } } : state) }, 'positive number'],
-    ['unsafe state ID', { ...input, initialState: '../outside', states: [{ ...input.states[0]!, id: '../outside' }] }, 'may contain only'],
-  ])('rejects %s', (_name, definition, message) => {
-    expect(() => defineBehavior(definition as BehaviorDefinitionInput)).toThrow(message);
+  it('reflects filesystem changes without rebuilding a global graph', async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-resolver-'));
+    await fs.writeFile(path.join(tempDir, 'BEHAVIOR.md'), 'Version one.');
+    const resolver = await FileSystemBehaviorResolver.create(tempDir!);
+    const first = await resolver.resolve('$root');
+    await fs.writeFile(path.join(tempDir, 'BEHAVIOR.md'), 'Version two.');
+    const second = await resolver.resolve('$root');
+    expect(second?.instructions).toBe('Version two.');
+    expect(second?.version).not.toBe(first?.version);
   });
 
-  it('rejects unreachable states', () => {
-    const unreachable = { id: 'orphan', transitions: [{ id: 'stay', target: 'orphan' }] };
-    expect(() => defineBehavior({ ...input, states: [...input.states, unreachable] })).toThrow('unreachable');
+  it('supports declared absolute destinations in addition to discovered children', async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-resolver-'));
+    await fs.mkdir(path.join(tempDir, 'shared'), { recursive: true });
+    await fs.writeFile(path.join(tempDir, 'BEHAVIOR.md'), '---\ndestinations: [$root/shared]\n---\nRoot.');
+    await fs.writeFile(path.join(tempDir, 'shared', 'BEHAVIOR.md'), 'Shared.');
+    const resolver = await FileSystemBehaviorResolver.create(tempDir!);
+    expect((await resolver.children('$root')).map(item => item.id)).toContain('$root/shared');
   });
 
-  it('rejects filesystem state ID traversal before resolving assets', async () => {
-    const root = await writeFixture();
-    const manifest = JSON.parse(await fs.readFile(path.join(root, 'behavior.yaml'), 'utf8'));
-    manifest.initialState = '../../../outside';
-    manifest.states[0].id = '../../../outside';
-    manifest.states[0].skills = ['secret'];
-    await fs.writeFile(path.join(root, 'behavior.yaml'), JSON.stringify(manifest));
-    await expect(loadBehaviorDirectory(root)).rejects.toThrow('may contain only');
-  });
-
-  it('rejects traversal and symlink escape', async () => {
-    const root = await writeFixture();
+  it('rejects traversal and symlink escapes', async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-resolver-'));
+    await fs.writeFile(path.join(tempDir, 'BEHAVIOR.md'), 'Root.');
     const outside = await fs.mkdtemp(path.join(os.tmpdir(), 'behavior-outside-'));
-    await fs.mkdir(path.join(root, 'states', 'understand', 'skills'), { recursive: true });
-    await fs.symlink(outside, path.join(root, 'states', 'understand', 'skills', 'outside'));
-    const manifest = JSON.parse(await fs.readFile(path.join(root, 'behavior.yaml'), 'utf8'));
-    manifest.states[0].skills = ['skills/outside'];
-    await fs.writeFile(path.join(root, 'behavior.yaml'), JSON.stringify(manifest));
-    await expect(loadBehaviorDirectory(root)).rejects.toBeInstanceOf(BehaviorDefinitionError);
+    await fs.writeFile(path.join(outside, 'BEHAVIOR.md'), 'Outside.');
+    await fs.symlink(outside, path.join(tempDir, 'escape'));
+    const resolver = await FileSystemBehaviorResolver.create(tempDir!);
+    await expect(resolver.resolve('$root/../outside' as never)).rejects.toThrow('may not traverse');
+    await expect(resolver.resolve('$root/escape')).rejects.toThrow('symlink escapes');
     await fs.rm(outside, { recursive: true, force: true });
   });
 });

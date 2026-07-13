@@ -1,172 +1,128 @@
 ---
-title: "Reference: Behaviors | Agents"
-description: "API reference for defining, loading, storing, and transitioning agent behaviors."
+title: "Behaviors API | Agents"
+description: "Reference for path-based behavior resolvers, providers, stores, transitions, and scheduling."
 packages:
   - "@mastra/behaviors"
 ---
 
-# Behaviors
+# Behaviors API
 
-`@mastra/behaviors` provides validated behavior graphs, transactional runtime stores, a transition engine, and a signal provider.
+The `@mastra/behaviors` package provides mutable path-based behavior definitions, durable per-thread state, state-signal projection, tool policy enforcement, and periodic transition recovery.
 
-## Definition functions
-
-### `defineBehavior(input)`
-
-Validates a TypeScript definition and returns an immutable `NormalizedBehaviorDefinition`.
+## `BehaviorResolver`
 
 ```typescript
-import { defineBehavior } from '@mastra/behaviors'
-
-const definition = defineBehavior({
-  id: 'review',
-  version: '1',
-  initialState: 'inspect',
-  states: [
-    {
-      id: 'inspect',
-      transitions: [{ id: 'continue', target: 'inspect' }],
-    },
-  ],
-})
-```
-
-### `loadBehaviorDirectory(directory)`
-
-Loads `behavior.yaml` and its referenced state assets from a directory.
-
-```typescript
-import { loadBehaviorDirectory } from '@mastra/behaviors'
-
-const definition = await loadBehaviorDirectory('./behaviors/review')
-```
-
-Returns: `Promise<NormalizedBehaviorDefinition>`
-
-## Runtime stores
-
-### `InMemoryBehaviorRuntimeStore`
-
-Stores records in memory and serializes transactions for each thread and behavior pair.
-
-```typescript
-import { InMemoryBehaviorRuntimeStore } from '@mastra/behaviors'
-
-const store = new InMemoryBehaviorRuntimeStore()
-await store.init()
-```
-
-### `LibSQLBehaviorRuntimeStore`
-
-Stores records in LibSQL with revision-checked compare-and-swap updates. The table is created by `init()`.
-
-```typescript
-import { createClient } from '@libsql/client'
-import { LibSQLBehaviorRuntimeStore } from '@mastra/behaviors'
-
-const store = new LibSQLBehaviorRuntimeStore(createClient({ url: 'file:behaviors.db' }))
-await store.init()
-```
-
-Both stores implement `BehaviorRuntimeStore`:
-
-```typescript
-interface BehaviorRuntimeStore {
-  init(): Promise<void>
-  readThread(key: BehaviorThreadKey): Promise<BehaviorRuntimeRecord | undefined>
-  transactThread<T>(
-    key: BehaviorThreadKey,
-    operation: BehaviorTransaction<T>,
-  ): Promise<{
-    runtime: BehaviorRuntimeRecord
-    result: T
-  }>
-  listDue(before: Date, limit?: number): Promise<BehaviorDueWork[]>
+interface BehaviorResolver {
+  readonly id: string
+  readonly root: '$root'
+  resolve(id: BehaviorPath): Promise<BehaviorNode | undefined>
+  children(id: BehaviorPath): Promise<readonly BehaviorNode[]>
+  parent(id: BehaviorPath): BehaviorPath | undefined
 }
 ```
 
-## `BehaviorTransitionEngine`
+A resolver reads the current node and its immediate destinations. It doesn't need to construct a complete graph.
 
-Initializes records, reconciles definition versions, and commits guarded transitions.
+### `BehaviorNode`
+
+| Property | Type | Description |
+| - | - | - |
+| `id` | `BehaviorPath` | Canonical path beginning with `$root`. |
+| `name` | `string` | Short name accepted by `behavior({ name })`. |
+| `version` | `string` | Version used to detect node changes. |
+| `instructions` | `string` | Instructions shown to the acting agent. |
+| `judgeInstructions` | `string` | Instructions supplied only to the transition judge. |
+| `skills` | `readonly string[]` | Skill paths loaded for the active node. |
+| `tools` | `readonly string[]` | Tool names allowed by the active node. |
+| `model` | `string` | Optional acting-model identifier. |
+| `judgeModel` | `string` | Optional judge-model identifier. |
+| `guards` | `readonly BehaviorGuard[]` | Deterministic checks before navigation. |
+| `judge` | `boolean` | Whether navigation requires a judge. |
+| `destinations` | `readonly string[]` | Additional absolute or relative destinations. |
+| `periodic` | `{ intervalMs, destination }` | Optional scheduled navigation. |
+
+## `InMemoryBehaviorResolver`
+
+A mutable TypeScript resolver.
 
 ```typescript
-import { BehaviorTransitionEngine, InMemoryBehaviorRuntimeStore } from '@mastra/behaviors'
-
-const engine = new BehaviorTransitionEngine({
-  definition,
-  store: new InMemoryBehaviorRuntimeStore(),
-  guards: {
-    complete: ({ conditionState }) => conditionState.complete === true,
-  },
-  judge: async ({ judgeInstructions }) => ({
-    approved: judgeInstructions !== undefined,
-  }),
-})
-
-await engine.transition({
-  threadId: 'thread-id',
-  name: 'inspect',
-})
+const resolver = new InMemoryBehaviorResolver('debug', rootNode)
+resolver.set('$root/behaviors/investigate', investigateNode)
+resolver.remove('$root/behaviors/investigate')
 ```
 
-`transition()` initializes a missing thread at the root before resolving the requested destination. The engine creates idempotency keys internally. A judge result can't commit after another transition changes the record revision.
+`set()` inserts or replaces a node. `remove()` removes the path and all descendants. `children()` discovers immediate direct children and nodes under a `behaviors/` container.
+
+## `FileSystemBehaviorResolver`
+
+```typescript
+const resolver = await FileSystemBehaviorResolver.create('./behaviors/debug', 'debug')
+```
+
+Each node directory contains `BEHAVIOR.md`. The Markdown body is `instructions`; YAML frontmatter accepts `version`, `tools`, `skills`, `model`, `judgeModel`, `judge`, `guards`, `destinations`, and `periodic`. An optional sibling `JUDGE.md` supplies `judgeInstructions`.
+
+The resolver discovers child directories on each `children()` call and reads node files on each `resolve()` call. Path traversal, escaping symlinks, absolute skill paths, and skills outside the behavior root are rejected.
+
+`loadBehaviorDirectory(directory, id?)` is a convenience wrapper around `FileSystemBehaviorResolver.create()`.
 
 ## `BehaviorSignalProvider`
 
-Registers `BehaviorStateProcessor` through the standard Mastra signal-provider API.
-
 ```typescript
-import { BehaviorSignalProvider } from '@mastra/behaviors'
-
-const provider = new BehaviorSignalProvider({
-  definition,
+new BehaviorSignalProvider({
+  resolver,
   store,
-  resolveThreadId: requestContext => requestContext?.get('threadId'),
+  resolveThreadId,
+  resolveModel,
+  resolveSkillInstructions,
+  judgeIntent,
+  unavailableModel: 'error',
 })
 ```
 
-The projected `<current-behavior>` state includes acting instructions, available destination behavior names, intent, and status. It excludes judge instructions.
+The provider contributes:
 
-The provider initializes the root silently and exposes stable `behavior` and `behavior_intent` tools. `behavior` requires only `{ name }`, where `name` is an available destination behavior. Configure `resolveThreadId` to read the host's thread ID from `RequestContext`. Optional `resolveModel` and `resolveSkillInstructions` callbacks route state-specific models and skill instructions without constructing provider clients.
+- A state processor that projects the current behavior path and destinations.
+- A routing processor for active-node instructions, skills, and model.
+- An output processor and execution wrappers that enforce intent and allowed tools.
+- Stable `behavior` and `behavior_intent` tools.
+- Optional scheduler lifecycle management.
 
-Governed host tools receive one required `intent` input. `BehaviorIntentPolicyProcessor` memoizes wrappers by original tool identity and checks authorization both before and during execution.
+The provider initializes `resolver.root` for a thread when behavior state is first needed.
 
-### Provider options
+## `BehaviorTransitionEngine`
 
-- `definition`: Normalized behavior graph.
-- `store`: Authoritative runtime store.
-- `resolveThreadId`: Reads the host thread ID from `RequestContext`.
-- `judgeIntent`: Optionally approves free-form intent.
-- `resolveModel`: Resolves a state model through the host.
-- `resolveSkillInstructions`: Loads instructions for the active state's skills.
-- `unavailableModel`: Uses the host fallback or fails with an error.
-- `scheduler`: Configures periodic recovery or disables provider-owned scheduling with `false`.
+```typescript
+await engine.transition({
+  threadId,
+  name: '$root/behaviors/write-test',
+})
+```
+
+`name` can be an available node's canonical path or short name. The engine resolves availability from `children()` plus `parent()`, evaluates current-node guards before the judge, checks the latest runtime revision, commits atomically, clears intent, and records transition history. Idempotency keys are generated internally unless an infrastructure caller supplies one.
+
+## Runtime stores
+
+Both stores implement `BehaviorRuntimeStore`:
+
+- `InMemoryBehaviorRuntimeStore` serializes transactions in one process.
+- `LibSQLBehaviorRuntimeStore` persists records and serializes competing writers through LibSQL transactions and retry handling.
+
+`transactThread()` is the authority for state changes. `listDue()` supports scheduler recovery after restart.
 
 ## `BehaviorScheduler`
 
-Processes records returned by `BehaviorRuntimeStore.listDue()`. One scheduler instance polls for all threads belonging to a behavior runtime.
+`BehaviorScheduler` polls `listDue()`, claims work with a persisted lease, and calls the transition engine with the active node's periodic destination. It records completion checkpoints, applies retry backoff, rejects stale results, and releases leases after errors or judge timeouts.
 
-```typescript
-import { BehaviorScheduler } from '@mastra/behaviors'
+Call `start()` once for a provider lifecycle and `stop()` before replacing or disposing the provider.
 
-const scheduler = new BehaviorScheduler({
-  behaviorId: definition.id,
-  definition,
-  store,
-  engine,
-  intervalMs: 1000,
-  leaseMs: 30000,
-  retryBackoffMs: 5000,
-  onAudit: event => logger.info(event),
-})
+## State signal
 
-scheduler.start()
-// Stop before replacing the runtime.
-scheduler.stop()
-```
+The state processor emits `<current-behavior>` with:
 
-`tick()` can be called directly by an external scheduler. It returns the number of completed transitions. Claims are persisted in `checkpoints.schedulerLease`; successful checkpoints use `checkpoints.schedulerCheckpoint`. `BehaviorAuditEvent` is a typed, read-only operational export boundary.
+- Behavior ID.
+- Canonical current path.
+- Acting instructions.
+- Available child, parent, and declared destination paths.
+- Current intent.
 
-## Errors
-
-Definition failures throw `BehaviorDefinitionError` with path-specific diagnostics. Transition failures throw `BehaviorTransitionError`, including missing guards, unavailable transitions, rejected judges, and stale results.
+The projection excludes judge instructions. Its cache key changes only when model-facing node data, destinations, or intent changes, which avoids repeated snapshots for internal runtime revisions.

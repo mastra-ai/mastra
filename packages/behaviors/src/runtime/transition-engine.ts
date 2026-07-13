@@ -1,4 +1,4 @@
-import type { NormalizedBehaviorDefinition, NormalizedBehaviorTransition } from '../definition/types.js';
+import type { BehaviorNode, BehaviorPath, BehaviorResolver } from '../definition/resolver.js';
 import type {
   BehaviorGuardEvaluator,
   BehaviorRuntimeRecord,
@@ -8,11 +8,10 @@ import type {
 } from './types.js';
 
 export const behaviorThreadStateType = (behaviorId: string) => `@mastra/behaviors:${behaviorId}`;
-
 export class BehaviorTransitionError extends Error {}
 
 export type BehaviorTransitionEngineOptions = {
-  definition: NormalizedBehaviorDefinition;
+  resolver: BehaviorResolver;
   store: BehaviorRuntimeStore;
   guards?: Record<string, BehaviorGuardEvaluator>;
   judge?: BehaviorTransitionJudge;
@@ -28,25 +27,25 @@ export class BehaviorTransitionEngine {
   }
 
   async initialize(threadId: string): Promise<BehaviorRuntimeRecord> {
-    const key = { threadId, behaviorId: this.options.definition.id };
-    const committed = await this.options.store.transactThread(key, current => {
-      if (current) return { next: this.reconcile(current), result: undefined };
+    const root = await this.requireNode(this.options.resolver.root);
+    const key = { threadId, behaviorId: this.options.resolver.id };
+    const committed = await this.options.store.transactThread(key, async current => {
+      if (current) return { next: await this.reconcile(current), result: undefined };
       const enteredAt = this.now().toISOString();
-      const initial = this.options.definition.states[this.options.definition.initialState]!;
       return {
         next: {
           threadId,
-          behaviorId: this.options.definition.id,
-          definitionVersion: this.options.definition.version,
+          behaviorId: this.options.resolver.id,
+          definitionVersion: root.version,
           revision: 1,
           status: 'active' as const,
-          activeState: initial.id,
+          activeState: root.id,
           enteredAt,
           transitionHistory: [],
           conditionState: {},
           checkpoints: {},
           judgeResults: {},
-          nextCheckAt: initial.periodic ? new Date(this.now().getTime() + initial.periodic.intervalMs).toISOString() : undefined,
+          nextCheckAt: this.nextCheckAt(root),
           audit: {},
         },
         result: undefined,
@@ -56,145 +55,103 @@ export class BehaviorTransitionEngine {
     return committed.runtime;
   }
 
-  async transition(input: {
-    threadId: string;
-    name: string;
-    idempotencyKey?: string;
-    signal?: AbortSignal;
-  }): Promise<BehaviorRuntimeRecord> {
-    const key = { threadId: input.threadId, behaviorId: this.options.definition.id };
+  async available(id: BehaviorPath): Promise<readonly BehaviorNode[]> {
+    const children = await this.options.resolver.children(id);
+    const parentId = this.options.resolver.parent(id);
+    const parent = parentId ? await this.options.resolver.resolve(parentId) : undefined;
+    return parent && !children.some(node => node.id === parent.id) ? [...children, parent] : children;
+  }
+
+  async transition(input: { threadId: string; name: string; idempotencyKey?: string; signal?: AbortSignal }): Promise<BehaviorRuntimeRecord> {
+    const key = { threadId: input.threadId, behaviorId: this.options.resolver.id };
     const current = (await this.options.store.readThread(key)) ?? (await this.initialize(input.threadId));
     if (current.status !== 'active') throw new BehaviorTransitionError(`Behavior is ${current.status}`);
-    if (current.definitionVersion !== this.options.definition.version) {
-      throw new BehaviorTransitionError('Behavior definition changed; initialize to reconcile state first');
-    }
+    const currentNode = await this.requireNode(current.activeState as BehaviorPath);
     const idempotencyKey = input.idempotencyKey ?? crypto.randomUUID();
     if (current.transitionHistory.some(item => item.id === idempotencyKey)) return current;
 
-    const state = this.options.definition.states[current.activeState];
-    const transition = state?.transitions.find(item => item.target === input.name);
-    if (!state || !transition) {
-      throw new BehaviorTransitionError(`Behavior "${input.name}" is not available from "${current.activeState}"`);
-    }
-    await this.evaluateGuards(current, transition);
-    const judgeResult = transition.judge ? await this.evaluateJudge(current, transition, input.signal) : undefined;
+    const available = await this.available(currentNode.id);
+    const destination = available.find(node => node.id === input.name || node.name === input.name || node.id.endsWith(`/${input.name}`));
+    if (!destination) throw new BehaviorTransitionError(`Behavior "${input.name}" is not available from "${currentNode.id}"`);
+    await this.evaluateGuards(current, currentNode, destination);
+    const judgeResult = currentNode.judge ? await this.evaluateJudge(current, currentNode, destination, input.signal) : undefined;
 
     const committed = await this.options.store.transactThread(key, latest => {
-      if (!latest || latest.revision !== current.revision || latest.definitionVersion !== current.definitionVersion) {
-        throw new BehaviorTransitionError('Stale transition result');
-      }
+      if (!latest || latest.revision !== current.revision || latest.activeState !== current.activeState) throw new BehaviorTransitionError('Stale transition result');
       if (judgeResult && !judgeResult.approved) throw new BehaviorTransitionError(judgeResult.reason ?? 'Transition rejected by judge');
       const now = this.now().toISOString();
-      const target = this.options.definition.states[transition.target]!;
-      const next: BehaviorRuntimeRecord = {
-        ...latest,
-        revision: latest.revision + 1,
-        status: 'active',
-        activeState: target.id,
-        intent: undefined,
-        enteredAt: now,
-        nextCheckAt: target.periodic
-          ? new Date(this.now().getTime() + target.periodic.intervalMs).toISOString()
-          : undefined,
-        judgeResults: judgeResult ? { ...latest.judgeResults, [idempotencyKey]: judgeResult } : latest.judgeResults,
-        transitionHistory: [
-          ...latest.transitionHistory,
-          {
+      return {
+        next: {
+          ...latest,
+          revision: latest.revision + 1,
+          status: 'active' as const,
+          activeState: destination.id,
+          definitionVersion: destination.version,
+          intent: undefined,
+          enteredAt: now,
+          nextCheckAt: this.nextCheckAt(destination),
+          judgeResults: judgeResult ? { ...latest.judgeResults, [idempotencyKey]: judgeResult } : latest.judgeResults,
+          transitionHistory: [...latest.transitionHistory, {
             id: idempotencyKey,
-            transitionId: transition.id,
+            transitionId: destination.id,
             from: latest.activeState,
-            to: target.id,
+            to: destination.id,
             at: now,
             revision: latest.revision + 1,
             reason: judgeResult?.reason,
-          },
-        ],
+          }],
+        },
+        result: undefined,
       };
-      return { next, result: undefined };
     });
     await this.mirror(committed.runtime);
     return committed.runtime;
   }
 
-  private reconcile(record: BehaviorRuntimeRecord): BehaviorRuntimeRecord {
-    if (record.definitionVersion === this.options.definition.version) return record;
-    if (this.options.definition.states[record.activeState]) {
-      return {
-        ...record,
-        definitionVersion: this.options.definition.version,
-        revision: record.revision + 1,
-        nextCheckAt: this.nextCheckAt(record.activeState),
-      };
-    }
-    const mapped = this.options.definition.migrations[record.activeState];
-    if (mapped) {
-      return {
-        ...record,
-        activeState: mapped,
-        definitionVersion: this.options.definition.version,
-        revision: record.revision + 1,
-        enteredAt: this.now().toISOString(),
-        nextCheckAt: this.nextCheckAt(mapped),
-      };
-    }
-    return {
-      ...record,
-      status: 'paused',
-      pausedReason: `State "${record.activeState}" was removed without a migration`,
-      definitionVersion: this.options.definition.version,
-      revision: record.revision + 1,
-    };
+  private async reconcile(record: BehaviorRuntimeRecord): Promise<BehaviorRuntimeRecord> {
+    const node = await this.options.resolver.resolve(record.activeState as BehaviorPath);
+    if (!node) return { ...record, status: 'paused', pausedReason: `Behavior "${record.activeState}" was removed`, revision: record.revision + 1 };
+    if (record.definitionVersion === node.version) return record;
+    return { ...record, definitionVersion: node.version, revision: record.revision + 1, nextCheckAt: this.nextCheckAt(node) };
   }
 
-  private nextCheckAt(stateId: string): string | undefined {
-    const periodic = this.options.definition.states[stateId]?.periodic;
-    return periodic ? new Date(this.now().getTime() + periodic.intervalMs).toISOString() : undefined;
+  private nextCheckAt(node: BehaviorNode): string | undefined {
+    return node.periodic ? new Date(this.now().getTime() + node.periodic.intervalMs).toISOString() : undefined;
   }
 
-  private async evaluateGuards(record: BehaviorRuntimeRecord, transition: NormalizedBehaviorTransition): Promise<void> {
-    for (const guard of transition.guards) {
+  private async requireNode(id: BehaviorPath): Promise<BehaviorNode> {
+    const node = await this.options.resolver.resolve(id);
+    if (!node) throw new BehaviorTransitionError(`Behavior "${id}" is unavailable`);
+    return node;
+  }
+
+  private async evaluateGuards(record: BehaviorRuntimeRecord, current: BehaviorNode, destination: BehaviorNode): Promise<void> {
+    for (const guard of current.guards) {
       const evaluate = this.options.guards?.[guard.id];
       if (!evaluate) throw new BehaviorTransitionError(`Guard "${guard.id}" has no evaluator`);
-      if (!(await evaluate({ record, transition, conditionState: record.conditionState }))) {
-        throw new BehaviorTransitionError(`Guard "${guard.id}" rejected the transition`);
-      }
+      if (!(await evaluate({ record, destination, conditionState: record.conditionState }))) throw new BehaviorTransitionError(`Guard "${guard.id}" rejected the transition`);
     }
   }
 
-  private async evaluateJudge(
-    record: BehaviorRuntimeRecord,
-    transition: NormalizedBehaviorTransition,
-    signal?: AbortSignal,
-  ): Promise<{ approved: boolean; reason?: string; metadata?: unknown }> {
+  private async evaluateJudge(record: BehaviorRuntimeRecord, current: BehaviorNode, destination: BehaviorNode, signal?: AbortSignal) {
     if (!this.options.judge) throw new BehaviorTransitionError('Transition requires a judge');
     const timeout = AbortSignal.timeout(this.options.judgeTimeoutMs ?? 30_000);
     const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-    let rejectOnAbort: ((event: Event) => void) | undefined;
+    let rejectOnAbort: (() => void) | undefined;
     try {
-      const judgeResult = this.options.judge({
-        definition: this.options.definition,
-        record,
-        transition,
-        judgeInstructions: this.options.definition.states[record.activeState]?.judgeInstructions,
-        signal: combined,
-      });
+      const result = this.options.judge({ record, current, destination, judgeInstructions: current.judgeInstructions, signal: combined });
       const aborted = new Promise<never>((_, reject) => {
         rejectOnAbort = () => reject(combined.reason ?? new Error('Judge timed out'));
         combined.addEventListener('abort', rejectOnAbort, { once: true });
       });
-      return await Promise.race([judgeResult, aborted]);
-    } catch (error) {
-      throw new BehaviorTransitionError(`Judge failed closed: ${String(error)}`);
+      return await Promise.race([result, aborted]);
     } finally {
       if (rejectOnAbort) combined.removeEventListener('abort', rejectOnAbort);
     }
   }
 
   private async mirror(record: BehaviorRuntimeRecord): Promise<void> {
-    await this.options.mirror?.setState({
-      threadId: record.threadId,
-      type: behaviorThreadStateType(record.behaviorId),
-      value: record,
-    });
+    if (!this.options.mirror) return;
+    await this.options.mirror.setState({ threadId: record.threadId, type: behaviorThreadStateType(record.behaviorId), value: record });
   }
 }

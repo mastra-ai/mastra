@@ -4,15 +4,15 @@ import { SignalProvider } from '@mastra/core/signals';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { NormalizedBehaviorDefinition } from '../definition/types.js';
+import type { BehaviorPath, BehaviorResolver } from '../definition/resolver.js';
 import { BehaviorIntentPolicyProcessor, type BehaviorIntentJudge } from '../enforcement/intent-policy.js';
 import { BehaviorScheduler, type BehaviorAuditEvent } from '../scheduler/scheduler.js';
 import { BehaviorStateProcessor } from './state-processor.js';
 import { BehaviorTransitionEngine, type BehaviorTransitionEngineOptions } from './transition-engine.js';
 import type { BehaviorRuntimeStore } from './types.js';
 
-export type BehaviorSignalProviderOptions = Omit<BehaviorTransitionEngineOptions, 'definition' | 'store'> & {
-  definition: NormalizedBehaviorDefinition;
+export type BehaviorSignalProviderOptions = Omit<BehaviorTransitionEngineOptions, 'resolver' | 'store'> & {
+  resolver: BehaviorResolver;
   store: BehaviorRuntimeStore;
   resolveThreadId: (requestContext?: RequestContext) => string | undefined;
   judgeIntent?: BehaviorIntentJudge;
@@ -54,17 +54,17 @@ class BehaviorRoutingProcessor {
     private readonly options: BehaviorSignalProviderOptions,
     private readonly engine: BehaviorTransitionEngine,
   ) {
-    this.id = `behavior-routing-${options.definition.id}`;
+    this.id = `behavior-routing-${options.resolver.id}`;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     const threadId = this.options.resolveThreadId(args.requestContext);
     if (!threadId) return {};
     const record =
-      (await this.options.store.readThread({ threadId, behaviorId: this.options.definition.id })) ??
+      (await this.options.store.readThread({ threadId, behaviorId: this.options.resolver.id })) ??
       (await this.engine.initialize(threadId));
     if (record.status !== 'active') return {};
-    const state = this.options.definition.states[record.activeState];
+    const state = await this.options.resolver.resolve(record.activeState as BehaviorPath);
     if (!state) return {};
     const resolverInput = { threadId, stateId: state.id, requestContext: args.requestContext };
     const skillInstructions = this.options.resolveSkillInstructions
@@ -96,13 +96,13 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
 
   constructor(readonly options: BehaviorSignalProviderOptions) {
     super();
-    this.id = `behavior-${options.definition.id}`;
+    this.id = `behavior-${options.resolver.id}`;
     this.resolveThreadId = requestContext =>
       options.resolveThreadId(requestContext) ?? (requestContext ? this.threadIds.get(requestContext) : undefined);
     const runtimeOptions = { ...options, resolveThreadId: this.resolveThreadId };
     this.engine = new BehaviorTransitionEngine(options);
     this.stateProcessor = new BehaviorStateProcessor(
-      options.definition,
+      options.resolver,
       options.store,
       (requestContext, threadId) => {
         if (requestContext) this.threadIds.set(requestContext, threadId);
@@ -114,8 +114,8 @@ export class BehaviorSignalProvider extends SignalProvider<string> {
     this.tools = this.createTools();
     if (options.scheduler !== false) {
       this.scheduler = new BehaviorScheduler({
-        behaviorId: options.definition.id,
-        definition: options.definition,
+        behaviorId: options.resolver.id,
+        resolver: options.resolver,
         store: options.store,
         engine: this.engine,
         ...options.scheduler,

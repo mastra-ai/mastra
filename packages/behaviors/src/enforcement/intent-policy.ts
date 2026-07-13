@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 import type { RequestContext } from '@mastra/core/request-context';
 
-import type { NormalizedBehaviorDefinition } from '../definition/types.js';
+import type { BehaviorPath, BehaviorResolver } from '../definition/resolver.js';
 import type { BehaviorRuntimeRecord, BehaviorRuntimeStore } from '../runtime/types.js';
 
 export const behaviorIntentField = 'intent';
@@ -22,7 +22,7 @@ export type BehaviorIntentJudge = (input: {
 }) => Promise<{ approved: boolean; feedback?: string }>;
 
 export type BehaviorIntentPolicyOptions = {
-  definition: NormalizedBehaviorDefinition;
+  resolver: BehaviorResolver;
   store: BehaviorRuntimeStore;
   judgeIntent?: BehaviorIntentJudge;
   resolveThreadId?: (requestContext?: RequestContext) => string | undefined;
@@ -47,7 +47,7 @@ export class BehaviorIntentPolicyProcessor {
   private readonly wrappers = new WeakMap<object, ToolLike>();
 
   constructor(private readonly options: BehaviorIntentPolicyOptions) {
-    this.id = `behavior-intent-${options.definition.id}`;
+    this.id = `behavior-intent-${options.resolver.id}`;
   }
 
   async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
@@ -75,11 +75,11 @@ export class BehaviorIntentPolicyProcessor {
   }
 
   async setIntent(threadId: string, intent: string): Promise<BehaviorRuntimeRecord> {
-    const current = await this.options.store.readThread({ threadId, behaviorId: this.options.definition.id });
+    const current = await this.options.store.readThread({ threadId, behaviorId: this.options.resolver.id });
     if (!current || current.status !== 'active') throw new Error('Behavior is not active');
     await this.authorize(threadId, 'behavior_intent', intent);
     const committed = await this.options.store.transactThread(
-      { threadId, behaviorId: this.options.definition.id },
+      { threadId, behaviorId: this.options.resolver.id },
       latest => {
         if (!latest || latest.revision !== current.revision) throw new Error('Behavior state changed while intent was approved');
         return { next: { ...latest, intent, revision: latest.revision + 1 }, result: undefined };
@@ -126,15 +126,15 @@ export class BehaviorIntentPolicyProcessor {
 
   private async authorize(threadId: string, toolName: string, intent?: string): Promise<void> {
     if (!intent) throw new Error(`Tool "${toolName}" requires an intent`);
-    const record = await this.options.store.readThread({ threadId, behaviorId: this.options.definition.id });
+    const record = await this.options.store.readThread({ threadId, behaviorId: this.options.resolver.id });
     if (!record || record.status !== 'active') throw new Error('Behavior is not active');
-    const state = this.options.definition.states[record.activeState];
+    const state = await this.options.resolver.resolve(record.activeState as BehaviorPath);
     if (!state) throw new Error(`Behavior state "${record.activeState}" is unavailable`);
     if (!isBehaviorControlTool(toolName) && state.tools.length && !state.tools.includes(toolName)) {
       throw new Error(`Tool "${toolName}" is not allowed in state "${state.id}"`);
     }
-    if (intent === state.id) return;
-    if (!this.options.judgeIntent) throw new Error(`Intent must equal active state "${state.id}"`);
+    if (intent === state.id || intent === state.name) return;
+    if (!this.options.judgeIntent) throw new Error(`Intent must equal active behavior "${state.id}"`);
     const result = await this.options.judgeIntent({ intent, toolName, record, allowedTools: state.tools });
     if (!result.approved) throw new Error(result.feedback ?? `Intent was rejected for tool "${toolName}"`);
   }

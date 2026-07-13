@@ -1,16 +1,6 @@
-export { defineBehavior, normalizeBehavior } from './definition/normalize.js';
 export { loadBehaviorDirectory } from './definition/loader.js';
-export { BehaviorDefinitionError } from './definition/types.js';
-export type {
-  BehaviorDefinitionInput,
-  BehaviorDiagnostic,
-  BehaviorGuard,
-  BehaviorStateInput,
-  BehaviorTransitionInput,
-  NormalizedBehaviorDefinition,
-  NormalizedBehaviorState,
-  NormalizedBehaviorTransition,
-} from './definition/types.js';
+export { FileSystemBehaviorResolver, InMemoryBehaviorResolver } from './definition/resolver.js';
+export type { BehaviorNode, BehaviorPath, BehaviorResolver, MutableBehaviorResolver } from './definition/resolver.js';
 export { BehaviorIntentPolicyProcessor, behaviorIntentField } from './enforcement/intent-policy.js';
 export type { BehaviorIntentJudge, BehaviorIntentPolicyOptions } from './enforcement/intent-policy.js';
 export { InMemoryBehaviorRuntimeStore } from './runtime/in-memory-store.js';

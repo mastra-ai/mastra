@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { normalizeBehavior } from '../definition/normalize.js';
+import { createStaticBehaviorResolver } from '../definition/resolver.js';
 import { InMemoryBehaviorRuntimeStore } from '../runtime/in-memory-store.js';
 import { BehaviorTransitionEngine } from '../runtime/transition-engine.js';
 import { BehaviorIntentPolicyProcessor } from './intent-policy.js';
@@ -23,14 +24,15 @@ const definition = normalizeBehavior({
     },
   ],
 });
+const resolver = createStaticBehaviorResolver(definition);
 
 const setup = async () => {
   const store = new InMemoryBehaviorRuntimeStore();
   await store.init();
-  const engine = new BehaviorTransitionEngine({ definition, store });
+  const engine = new BehaviorTransitionEngine({ resolver, store });
   await engine.initialize('thread');
   const judgeIntent = vi.fn(async ({ intent }: { intent: string }) => ({ approved: intent === 'inspect code' }));
-  const processor = new BehaviorIntentPolicyProcessor({ definition, store, judgeIntent });
+  const processor = new BehaviorIntentPolicyProcessor({ resolver, store, judgeIntent });
   const execute = vi.fn(async (input: unknown) => input);
   const tool = { inputSchema: z.object({ path: z.string() }), execute };
   const result = await processor.processInputStep({ tools: { read: tool } } as never);

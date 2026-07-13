@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 
 import { normalizeBehavior } from '../definition/normalize.js';
+import { createStaticBehaviorResolver } from '../definition/resolver.js';
 import { InMemoryBehaviorRuntimeStore } from '../runtime/in-memory-store.js';
 import { BehaviorSignalProvider } from '../runtime/provider.js';
 
@@ -23,11 +24,12 @@ const definition = normalizeBehavior({
     },
   ],
 });
+const resolver = createStaticBehaviorResolver(definition);
 
 const makeProvider = async (overrides = {}) => {
   const store = new InMemoryBehaviorRuntimeStore();
   const provider = new BehaviorSignalProvider({
-    definition,
+    resolver,
     store,
     resolveThreadId: requestContext => requestContext?.get('threadId'),
     ...overrides,
@@ -53,11 +55,11 @@ describe('BehaviorSignalProvider integration', () => {
     const result = await routing.processInputStep(inputArgs());
     expect(resolveModel).toHaveBeenCalledWith(
       'small',
-      expect.objectContaining({ threadId: 'thread', stateId: 'understand' }),
+      expect.objectContaining({ threadId: 'thread', stateId: '$root' }),
     );
     expect(resolveSkillInstructions).toHaveBeenCalledWith(
       ['debugging'],
-      expect.objectContaining({ threadId: 'thread', stateId: 'understand' }),
+      expect.objectContaining({ threadId: 'thread', stateId: '$root' }),
     );
     expect(result.systemMessages).toEqual([
       { role: 'system', content: 'Understand before editing.\n\nDebug systematically.' },
@@ -84,10 +86,10 @@ describe('BehaviorSignalProvider integration', () => {
       activeStateSignals: [],
       deltasSinceSnapshot: [],
     } as never);
-    expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('understand');
+    expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('$root');
     const tools = provider.getTools() as Record<string, { execute(input: Record<string, unknown>, context: unknown): Promise<unknown> }>;
     await tools.behavior!.execute({ name: 'implement' }, { requestContext, agent: { toolCallId: 'move-1' } });
-    expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('implement');
+    expect((await store.readThread({ threadId: 'studio-thread', behaviorId: 'coding' }))?.activeState).toBe('$root/implement');
     const signal = await stateProcessor.computeStateSignal({
       threadId: 'studio-thread',
       requestContext,
@@ -97,9 +99,9 @@ describe('BehaviorSignalProvider integration', () => {
     } as never) as { tagName?: string; contents?: string; attributes?: Record<string, string> };
     expect(signal).toMatchObject({
       tagName: 'current-behavior',
-      attributes: { id: 'coding', state: 'implement', status: 'active' },
+      attributes: { id: 'coding', state: '$root/implement', status: 'active' },
     });
-    expect(signal.contents).toContain('State: implement');
+    expect(signal.contents).toContain('Path: $root/implement');
   });
 
   it('exposes one stable behavior transition tool with runtime-owned idempotency', async () => {
@@ -116,7 +118,7 @@ describe('BehaviorSignalProvider integration', () => {
       agent: { toolCallId: 'move-1' },
     };
     await tools.behavior!.execute({ name: 'implement' }, context);
-    expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.activeState).toBe('implement');
+    expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.activeState).toBe('$root/implement');
     await tools.behavior!.execute({ name: 'implement' }, context);
     expect((await store.readThread({ threadId: 'thread', behaviorId: 'coding' }))?.revision).toBe(2);
     await expect(tools.behavior!.execute({ name: 'missing' }, { ...context, agent: { toolCallId: 'move-2' } })).rejects.toThrow(
