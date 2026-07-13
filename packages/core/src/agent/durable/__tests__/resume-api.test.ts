@@ -87,6 +87,7 @@ async function seedSuspendedRun(
   runId: string,
   agentId: string,
   memory: { threadId: string; resourceId: string },
+  status: WorkflowRunState['status'] = 'suspended',
 ) {
   const workflows = (await store.getStore('workflows'))!;
   await workflows.persistWorkflowSnapshot({
@@ -95,7 +96,7 @@ async function seedSuspendedRun(
     resourceId: memory.resourceId,
     snapshot: {
       runId,
-      status: 'suspended',
+      status,
       value: {},
       context: {
         input: {
@@ -239,6 +240,33 @@ describe('Resume API', () => {
       result.cleanup();
     });
 
+    it('rejects a persisted run that is not suspended before rehydrating', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'completed-cold-resume-agent',
+        name: 'Completed Cold Resume Agent',
+        instructions: 'Test completed cold resume behavior',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { completedColdResumeAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'completed-cold-run';
+      await seedSuspendedRun(
+        store,
+        runId,
+        durableAgent.id,
+        { threadId: 'completed-thread', resourceId: 'completed-resource' },
+        'success',
+      );
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(
+        'This workflow run was not suspended',
+      );
+      expect(prepareSpy).not.toHaveBeenCalled();
+      expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    });
+
     it('keeps the missing-run error when no persisted snapshot exists', async () => {
       const baseAgent = new Agent({
         id: 'missing-cold-resume-agent',
@@ -317,6 +345,67 @@ describe('Resume API', () => {
 
       expect(result).toBe(output);
       expect(resumeSpy).toHaveBeenCalledWith('approval-run', { approved: true }, expect.objectContaining({ memory }));
+    });
+
+    it('forwards decline execution options into the durable resume path', async () => {
+      const baseAgent = new Agent({
+        id: 'decline-options-agent',
+        name: 'Decline Options Agent',
+        instructions: 'Test decline option forwarding',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const output = { marker: 'declined-output' };
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+      const memory = { thread: 'decline-thread', resource: 'decline-resource' };
+
+      const result = await durableAgent.declineToolCall({ runId: 'decline-run', memory });
+
+      expect(result).toBe(output);
+      expect(resumeSpy).toHaveBeenCalledWith('decline-run', { approved: false }, expect.objectContaining({ memory }));
+    });
+
+    it('forwards storage-backed approval options into the durable resume path', async () => {
+      const baseAgent = new Agent({
+        id: 'stored-approval-options-agent',
+        name: 'Stored Approval Options Agent',
+        instructions: 'Test stored approval option forwarding',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const runId = 'stored-approval-run';
+      const toolCallId = 'stored-tool-call';
+      const memory = { thread: 'stored-approval-thread', resource: 'stored-approval-resource' };
+      const output = { marker: 'stored-approval-output' };
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+      const listSuspendedRunsSpy = vi.spyOn(durableAgent, 'listSuspendedRuns').mockResolvedValue({
+        runs: [
+          {
+            runId,
+            status: 'suspended',
+            threadId: memory.thread,
+            resourceId: memory.resource,
+            suspendedAt: new Date(0),
+            toolCalls: [{ toolCallId, requiresApproval: true }],
+          },
+        ],
+        total: 1,
+      });
+
+      const result = await durableAgent.sendToolApproval({
+        threadId: memory.thread,
+        resourceId: memory.resource,
+        toolCallId,
+        approved: true,
+        memory,
+      });
+
+      expect(listSuspendedRunsSpy).toHaveBeenCalledWith({
+        threadId: memory.thread,
+        resourceId: memory.resource,
+      });
+      expect(result).toEqual({ accepted: true, runId, toolCallId });
+      expect(resumeSpy).toHaveBeenCalledWith(runId, { approved: true }, expect.objectContaining({ memory }));
     });
 
     it('should preserve threadId and resourceId from prepare through resume', async () => {
