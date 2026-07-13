@@ -10,6 +10,27 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from '../../workspaces/hooks/useWorkspaces';
+import { createWorkItem, updateWorkItem } from '../services/workItems';
+import type { WorkItemSource } from '../services/workItems';
+
+/**
+ * Board record to file once the run is underway. With an `id` the existing
+ * card is PATCHed (stages + the role's session ref); without one a new card is
+ * POSTed (the server upserts on `sourceKey`).
+ */
+export interface StartFactoryRunWorkItem {
+  /** Existing work item to patch; omit to materialize a new card. */
+  id?: string;
+  /** Session slot the run fills on the card, e.g. `work` or `review`. */
+  role: string;
+  /** Stages the card should hold once the run is underway. */
+  stages: string[];
+  source: WorkItemSource;
+  sourceKey: string | null;
+  title: string;
+  url?: string | null;
+  metadata?: Record<string, unknown>;
+}
 
 export interface StartFactoryRunInput {
   /** Feature branch for the new worktree (e.g. `factory/issue-12`). */
@@ -18,6 +39,8 @@ export interface StartFactoryRunInput {
   threadTitle: string;
   /** First user message sent to the agent (e.g. a skill invocation). */
   prompt: string;
+  /** Board card to file for this run (kanban record; optional). */
+  workItem?: StartFactoryRunWorkItem;
 }
 
 /**
@@ -42,7 +65,7 @@ export function useStartFactoryRun() {
   });
 
   const mutation = useMutation({
-    mutationFn: async ({ branch, threadTitle, prompt }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, prompt, workItem }: StartFactoryRunInput) => {
       const updatedProject = await createWorkspace.mutateAsync(branch);
       const projectPath = deriveProjectPath(updatedProject);
       if (!projectPath) throw new Error('Could not resolve the new worktree path');
@@ -86,6 +109,27 @@ export function useStartFactoryRun() {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
+
+      // File the board card now that the run is underway, hanging the run's
+      // session ref off the requested role.
+      const githubProjectId = activeProject?.githubProjectId;
+      if (workItem && githubProjectId) {
+        const sessions = { [workItem.role]: { projectPath, branch, threadId } };
+        if (workItem.id) {
+          await updateWorkItem(baseUrl, workItem.id, { stages: workItem.stages, sessions });
+        } else {
+          await createWorkItem(baseUrl, githubProjectId, {
+            source: workItem.source,
+            sourceKey: workItem.sourceKey,
+            title: workItem.title,
+            url: workItem.url ?? null,
+            stages: workItem.stages,
+            sessions,
+            metadata: workItem.metadata,
+          });
+        }
+        void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(githubProjectId) });
+      }
       return threadId;
     },
     onSuccess: threadId => void navigate(`/threads/${threadId}`),

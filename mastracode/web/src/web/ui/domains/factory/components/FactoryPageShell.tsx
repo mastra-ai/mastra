@@ -19,7 +19,7 @@ interface FactoryPageShellProps {
 }
 
 /**
- * Shared frame for the Factory pages (Intake / Review): the standard app
+ * Shared frame for the Factory pages (the Board): the standard app
  * layout (sidebar + mobile header) around a titled content column. Factory data
  * comes from GitHub, so local projects and disconnected GitHub states get an
  * explanatory notice instead of a broken empty list.
