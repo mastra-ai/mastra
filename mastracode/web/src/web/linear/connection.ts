@@ -81,7 +81,20 @@ export async function getFreshLinearAccessToken(connection: LinearConnectionRow)
   const existing = inflightRefreshes.get(connection.orgId);
   if (existing) return existing;
 
-  const refreshToken = connection.refreshToken;
+  // The caller may hold a stale row: another request could have refreshed and
+  // rotated the refresh token since this row was loaded. Reload before
+  // refreshing so we don't burn the rotated token and force a false reauth.
+  const latest = await loadLinearConnection(connection.orgId);
+  if (!latest) throw new LinearReauthRequiredError();
+
+  const concurrent = inflightRefreshes.get(connection.orgId);
+  if (concurrent) return concurrent;
+
+  const latestExpired = latest.expiresAt !== null && latest.expiresAt.getTime() - TOKEN_REFRESH_SKEW_MS <= Date.now();
+  if (!latestExpired) return latest.accessToken;
+  if (!latest.refreshToken) throw new LinearReauthRequiredError();
+
+  const refreshToken = latest.refreshToken;
   const refresh = (async () => {
     try {
       const tokens = await refreshLinearAccessToken(refreshToken);

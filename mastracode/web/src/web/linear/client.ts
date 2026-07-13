@@ -338,6 +338,19 @@ export interface LinearIssueDetail extends LinearIssue {
 }
 
 const ISSUE_COMMENTS_PAGE_SIZE = 50;
+/** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
+const ISSUE_COMMENTS_MAX_PAGES = 20;
+
+interface IssueCommentNode {
+  body: string;
+  createdAt: string;
+  user: { name: string } | null;
+}
+
+interface IssueCommentsPage {
+  nodes: IssueCommentNode[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
 
 interface IssueDetailQueryData {
   issue: {
@@ -353,8 +366,41 @@ interface IssueDetailQueryData {
     assignee: { name: string } | null;
     team: { key: string } | null;
     labels: { nodes: Array<{ name: string }> };
-    comments: { nodes: Array<{ body: string; createdAt: string; user: { name: string } | null }> };
+    comments: IssueCommentsPage;
   } | null;
+}
+
+interface IssueCommentsQueryData {
+  issue: { comments: IssueCommentsPage } | null;
+}
+
+/** Follow `comments.pageInfo` until exhausted so long discussions aren't truncated. */
+async function fetchRemainingIssueComments(
+  accessToken: string,
+  issueId: string,
+  firstPage: IssueCommentsPage,
+): Promise<IssueCommentNode[]> {
+  const nodes = [...firstPage.nodes];
+  let { hasNextPage, endCursor } = firstPage.pageInfo;
+  for (let page = 1; hasNextPage && endCursor && page < ISSUE_COMMENTS_MAX_PAGES; page++) {
+    const data = await linearGraphql<IssueCommentsQueryData>(
+      accessToken,
+      `query IssueComments($id: String!, $first: Int!, $after: String!) {
+        issue(id: $id) {
+          comments(first: $first, after: $after) {
+            nodes { body createdAt user { name } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: issueId, first: ISSUE_COMMENTS_PAGE_SIZE, after: endCursor },
+    );
+    const comments = data.issue?.comments;
+    if (!comments) break;
+    nodes.push(...comments.nodes);
+    ({ hasNextPage, endCursor } = comments.pageInfo);
+  }
+  return nodes;
 }
 
 /**
@@ -384,7 +430,10 @@ export async function fetchLinearIssueDetail(
           assignee { name }
           team { key }
           labels { nodes { name } }
-          comments(first: $commentsFirst) { nodes { body createdAt user { name } } }
+          comments(first: $commentsFirst) {
+            nodes { body createdAt user { name } }
+            pageInfo { hasNextPage endCursor }
+          }
         }
       }`,
       { id: idOrIdentifier, commentsFirst: ISSUE_COMMENTS_PAGE_SIZE },
@@ -397,9 +446,8 @@ export async function fetchLinearIssueDetail(
   }
   const issue = data.issue;
   if (!issue) return null;
-  const comments = [...issue.comments.nodes].sort(
-    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-  );
+  const allComments = await fetchRemainingIssueComments(accessToken, issue.id, issue.comments);
+  const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
   return {
     id: issue.id,
     identifier: issue.identifier,

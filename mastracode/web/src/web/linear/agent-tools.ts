@@ -47,21 +47,29 @@ interface ConnectionCheck {
 }
 const connectionCheckByOrg = new Map<string, ConnectionCheck>();
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 async function resolveOrgId(resourceId: string): Promise<string | null> {
   const cached = orgIdByResourceId.get(resourceId);
   if (cached !== undefined) return cached;
-  let orgId: string | null = null;
+  // Non-UUID resource ids (local/dev resources) would make the uuid column
+  // comparison throw — they're definitively "not a project", so cache that.
+  if (!UUID_PATTERN.test(resourceId)) {
+    orgIdByResourceId.set(resourceId, null);
+    return null;
+  }
+  let row: { orgId: string } | undefined;
   try {
-    const [row] = await getAppDb()
+    [row] = await getAppDb()
       .select({ orgId: githubProjects.orgId })
       .from(githubProjects)
       .where(eq(githubProjects.id, resourceId));
-    orgId = row?.orgId ?? null;
   } catch {
-    // Non-UUID resource ids (local/dev resources) make the uuid comparison
-    // throw — treat them as "not a project" rather than failing tool resolution.
-    orgId = null;
+    // Transient database failure: skip the tools for this request but don't
+    // cache the miss, so the next request retries the lookup.
+    return null;
   }
+  const orgId = row?.orgId ?? null;
   orgIdByResourceId.set(resourceId, orgId);
   return orgId;
 }
@@ -140,8 +148,7 @@ function createLinearCommentTool(orgId: string) {
       }
       if (!canPostLinearComments(connection)) {
         return {
-          error:
-            'The Linear connection does not have comment permissions. Reconnect Linear in Settings to grant them.',
+          error: 'The Linear connection does not have comment permissions. Reconnect Linear in Settings to grant them.',
         };
       }
       try {

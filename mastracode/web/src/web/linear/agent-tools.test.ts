@@ -9,6 +9,8 @@ vi.mock('drizzle-orm', () => ({
 // In-memory tables, keyed by the drizzle table object passed to `.from()`.
 let projects: Array<Record<string, any>> = [];
 let connections: Array<Record<string, any>> = [];
+/** When true, every select throws — simulates a transient app-db outage. */
+let dbShouldFail = false;
 
 function rowsFor(table: any): Array<Record<string, any>> {
   // The github_projects table has a `repoFullName` column; linear_connections doesn't.
@@ -30,7 +32,10 @@ vi.mock('../github/db', () => ({
   getAppDb: () => ({
     select: (_projection?: any) => ({
       from: (table: any) => ({
-        where: async (cond: any) => rowsFor(table).filter(row => matches(table, row, cond)),
+        where: async (cond: any) => {
+          if (dbShouldFail) throw new Error('connection refused');
+          return rowsFor(table).filter(row => matches(table, row, cond));
+        },
       }),
     }),
     update: (table: any) => ({
@@ -61,7 +66,7 @@ vi.mock('./client', () => ({
 
 import { buildLinearAgentTools, clearLinearAgentToolCaches, invalidateLinearConnectionCache } from './agent-tools';
 
-const PROJECT_ID = 'project-1';
+const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 const ORG_ID = 'org-1';
 
 function requestContextFor(resourceId: string | undefined): RequestContext {
@@ -107,6 +112,7 @@ const issueDetail = {
 beforeEach(() => {
   projects = [];
   connections = [];
+  dbShouldFail = false;
   featureEnabled = true;
   clearLinearAgentToolCaches();
   fetchLinearIssueDetail.mockReset();
@@ -162,6 +168,19 @@ describe('buildLinearAgentTools — exposure gating', () => {
   it('exposes nothing when there is no controller context', async () => {
     const tools = await buildLinearAgentTools({ requestContext: requestContextFor(undefined) });
     expect(tools).toEqual({});
+  });
+
+  it('does not cache a transient database failure as "not a project"', async () => {
+    seedProject();
+    seedConnection();
+
+    dbShouldFail = true;
+    expect(await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) })).toEqual({});
+
+    // Database recovers: the next request must retry the lookup and get tools.
+    dbShouldFail = false;
+    const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_get_issue');
   });
 
   it('sees a fresh connection immediately after cache invalidation', async () => {
