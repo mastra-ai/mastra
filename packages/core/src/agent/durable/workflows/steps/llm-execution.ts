@@ -165,7 +165,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         logger,
       });
 
-      const { messageList, tools, model: resolvedModel, modelList: resolvedModelList } = resolved;
+      const {
+        messageList,
+        tools,
+        model: resolvedModel,
+        modelList: resolvedModelList,
+        // Processors rebuilt from the agent when the per-process registry was
+        // empty (cross-process worker). resolveRuntimeDependencies also writes
+        // these back into globalRunRegistry, so `registryEntry?.inputProcessors`
+        // below is populated too — these are the direct fallback if the entry is
+        // evicted (TTL) or absent, restoring the SkillsProcessor /
+        // WorkspaceInstructionsProcessor in the cross-process system prompt.
+        inputProcessors: resolvedInputProcessors,
+        llmRequestInputProcessors: resolvedLlmRequestInputProcessors,
+        outputProcessors: resolvedOutputProcessors,
+      } = resolved;
 
       // 1b. Check for abort signal before doing any work. If the signal is
       // already aborted (e.g. pre-aborted before the loop starts), return a
@@ -335,7 +349,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             const registryEntry = globalRunRegistry.get(runId);
             const executionAbortSignal = registryEntry?.abortSignal ?? abortSignal;
-            const baseInputProcessors = registryEntry?.inputProcessors ?? [];
+            const baseInputProcessors = registryEntry?.inputProcessors ?? resolvedInputProcessors ?? [];
+            // Output processors likewise fall back to the rebuilt list when the
+            // per-process registry is empty (cross-process worker).
+            const effectiveOutputProcessors = registryEntry?.outputProcessors ?? resolvedOutputProcessors ?? [];
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
@@ -349,7 +366,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : undefined;
               const runner = new ProcessorRunner({
                 inputProcessors: stepInputProcessors,
-                outputProcessors: registryEntry?.outputProcessors ?? [],
+                outputProcessors: effectiveOutputProcessors,
                 errorProcessors: registryEntry?.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
@@ -520,7 +537,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // `ProcessorRunner.runProcessLLMRequest`. Fall back to
             // `inputProcessors` for backward compatibility.
             let cachedResponse: CachedLLMStepResponse | undefined;
-            const allInputProcessors = registryEntry?.llmRequestInputProcessors ?? registryEntry?.inputProcessors ?? [];
+            const allInputProcessors =
+              registryEntry?.llmRequestInputProcessors ??
+              registryEntry?.inputProcessors ??
+              resolvedLlmRequestInputProcessors ??
+              resolvedInputProcessors ??
+              [];
             // Create a single ProcessorRunner shared between processLLMRequest
             // and processLLMResponse so processor state (e.g. cache keys stashed
             // in the request hook) is available in the response hook.
@@ -1301,10 +1323,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 13.5. Run processOutputStep for output processors (runs AFTER LLM response, BEFORE tool execution)
             // Mirrors the regular agent's llm-execution-step.ts processOutputStep call
-            if (registryEntry?.outputProcessors && registryEntry.outputProcessors.length > 0) {
+            if (effectiveOutputProcessors.length > 0) {
               const outputStepRunner = new ProcessorRunner({
                 inputProcessors: [],
-                outputProcessors: registryEntry.outputProcessors,
+                outputProcessors: effectiveOutputProcessors,
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry?.processorStates,

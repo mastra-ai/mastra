@@ -4,6 +4,12 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
+import type { ProcessorState } from '../../../processors';
+import type {
+  ErrorProcessorOrWorkflow,
+  InputProcessorOrWorkflow,
+  OutputProcessorOrWorkflow,
+} from '../../../processors';
 import { RequestContext } from '../../../request-context';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
@@ -12,7 +18,9 @@ import { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
 import { globalRunRegistry } from '../run-registry';
 import type {
+  RunRegistryEntry,
   SerializableDurableState,
+  SerializableDurableOptions,
   SerializableModelConfig,
   SerializableModelListEntry,
   SerializableToolMetadata,
@@ -41,6 +49,16 @@ export interface ResolvedRuntimeDependencies {
   saveQueueManager?: SaveQueueManager;
   /** Workspace for file/sandbox operations */
   workspace?: Workspace;
+  /** Resolved input processors (rebuilt from the agent when the registry is empty) */
+  inputProcessors?: InputProcessorOrWorkflow[];
+  /** Uncombined input processors for processLLMRequest */
+  llmRequestInputProcessors?: InputProcessorOrWorkflow[];
+  /** Resolved output processors */
+  outputProcessors?: OutputProcessorOrWorkflow[];
+  /** Resolved error processors */
+  errorProcessors?: ErrorProcessorOrWorkflow[];
+  /** Processor state map */
+  processorStates?: Map<string, ProcessorState>;
 }
 
 /**
@@ -88,17 +106,36 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
         resourceId: input.state.resourceId,
       }).deserialize(input.messageListState);
 
-  // 2. Check global registry first (for local/test execution)
-  // This is necessary because workflow steps don't have direct access to DurableAgent's registry
+  // 2. Check global registry first (for local/test execution).
+  // This is necessary because workflow steps don't have direct access to
+  // DurableAgent's registry.
+  //
+  // On a cross-process engine (e.g. the @mastra/inngest connect() worker) the
+  // durable steps run in a DIFFERENT process than the one that prepared the run,
+  // so this process's registry has either no entry or a minimal placeholder
+  // (see @mastra/inngest resume(): `{ tools: {}, model: undefined }`). In that
+  // case we MUST rebuild tools / processors / model from the agent registered on
+  // the Mastra instance — otherwise per-request closure tools (workspace/skill
+  // tools) and per-request processors (SkillsProcessor, WorkspaceInstructions)
+  // silently drop cross-process. Treat an entry lacking real tools as "needs
+  // rehydration" rather than trusting it blindly.
   const globalEntry = globalRunRegistry.get(runId);
+  const hasUsableTools = !!globalEntry && Object.keys(globalEntry.tools ?? {}).length > 0;
   let tools: Record<string, CoreTool> = globalEntry?.tools ?? {};
   let model: MastraLanguageModel = globalEntry?.model as MastraLanguageModel;
   let modelList: RegistryModelListEntry[] | undefined = globalEntry?.modelList;
   let workspace: Workspace | undefined = globalEntry?.workspace;
-  let memory: MastraMemory | undefined;
+  let memory: MastraMemory | undefined = globalEntry?.memory;
+  let inputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.inputProcessors;
+  let llmRequestInputProcessors: InputProcessorOrWorkflow[] | undefined = globalEntry?.llmRequestInputProcessors;
+  let outputProcessors: OutputProcessorOrWorkflow[] | undefined = globalEntry?.outputProcessors;
+  let errorProcessors: ErrorProcessorOrWorkflow[] | undefined = globalEntry?.errorProcessors;
+  let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
+  let rehydratedFromMastra = false;
 
-  // If we found the entry in global registry, we already have model and tools
-  if (globalEntry) {
+  // If the registry entry already carries real tools we trust it wholesale
+  // (in-process / same-process resume). Otherwise fall through and rebuild.
+  if (hasUsableTools) {
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
   } else if (mastra) {
     try {
@@ -134,6 +171,25 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
       memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
       workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
+
+      // Rebuild the per-request processor pipeline. `listInputProcessors` /
+      // `listOutputProcessors` already inject the SkillsProcessor and
+      // WorkspaceInstructionsProcessor (see Agent.listInputProcessors), so this
+      // restores the missing available-skills list + workspace instructions in
+      // the cross-process system prompt. Mirrors preparation.ts.
+      try {
+        inputProcessors = await (agent as any).listInputProcessors?.(resolveRequestContext);
+        llmRequestInputProcessors = await (agent as any).__listLLMRequestProcessors?.(resolveRequestContext);
+        outputProcessors = await (agent as any).listOutputProcessors?.(resolveRequestContext);
+        errorProcessors = await (agent as any).listErrorProcessors?.(resolveRequestContext);
+        // A fresh processor-state map is correct here: on a cross-process worker
+        // there is no prior state to carry, and processors are re-run per step.
+        processorStates = globalEntry?.processorStates ?? new Map<string, ProcessorState>();
+      } catch (processorError) {
+        logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild processors from Mastra: ${processorError}`);
+      }
+
+      rehydratedFromMastra = true;
     } catch (error) {
       logger?.debug?.(`[DurableAgent:${agentId}] Failed to get agent from Mastra: ${error}`);
       model = resolveModel(input.modelConfig, mastra);
@@ -145,6 +201,31 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
 
   if (Object.keys(tools).length === 0) {
     logger?.debug?.(`[DurableAgent:${agentId}] No tools resolved for run ${runId}`);
+  }
+
+  // Write the rebuilt state back into the per-process registry so sibling
+  // durable steps in THIS process (e.g. the tool-call step that runs after the
+  // LLM step on the same worker) reuse it instead of rebuilding per call. Only
+  // persist when we actually rehydrated from Mastra — never clobber a fully
+  // populated in-process entry.
+  if (rehydratedFromMastra) {
+    const rebuilt: Partial<RunRegistryEntry> = {
+      tools,
+      model,
+      modelList,
+      workspace,
+      memory,
+      inputProcessors,
+      llmRequestInputProcessors,
+      outputProcessors,
+      errorProcessors,
+      processorStates,
+    };
+    if (globalEntry) {
+      Object.assign(globalEntry, rebuilt);
+    } else {
+      globalRunRegistry.set(runId, rebuilt as RunRegistryEntry);
+    }
   }
 
   // 3. Get or create SaveQueueManager
@@ -173,7 +254,95 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
     memory,
     saveQueueManager,
     workspace,
+    inputProcessors,
+    llmRequestInputProcessors,
+    outputProcessors,
+    errorProcessors,
+    processorStates,
   };
+}
+
+/**
+ * Tool + workspace state rebuilt for the durable tool-call step.
+ */
+export interface RebuiltRunTools {
+  tools: Record<string, CoreTool>;
+  workspace?: Workspace;
+  memory?: MastraMemory;
+  saveQueueManager?: SaveQueueManager;
+}
+
+/**
+ * Rebuild the run's tools (and workspace/memory) from the agent registered on
+ * the Mastra instance, then write them back into the per-process run registry.
+ *
+ * The durable tool-call step runs as a SEPARATE step from the LLM-execution
+ * step and, on a cross-process engine (e.g. the @mastra/inngest connect()
+ * worker), can execute in a different process than the one that prepared the
+ * run. In that process `globalRunRegistry.get(runId)` is empty (or a minimal
+ * placeholder), so per-request closure tools (workspace/skill tools:
+ * `skill`, `skill_read`, `skill_search`, `mastra_workspace_*`) are absent and
+ * the model's tool call rejects with `ToolNotFoundError`.
+ *
+ * The LLM step already rebuilds the full toolset via
+ * `resolveRuntimeDependencies` → `getToolsForExecution`; this helper gives the
+ * tool-call step the same rebuild so tool resolution is symmetric cross-process.
+ * The writeback means the first unresolved tool call rebuilds once and later
+ * calls in the same process hit the registry.
+ *
+ * Returns `undefined` when no Mastra instance is available or the agent can't
+ * be resolved — callers fall back to their existing `ToolNotFoundError`.
+ */
+export async function rebuildRunToolsFromMastra(options: {
+  mastra?: Mastra;
+  runId: string;
+  agentId: string;
+  state: SerializableDurableState;
+  options?: SerializableDurableOptions;
+  logger?: { debug?: (...args: any[]) => void };
+}): Promise<RebuiltRunTools | undefined> {
+  const { mastra, runId, agentId, state, options: execOptions, logger } = options;
+  if (!mastra) return undefined;
+
+  try {
+    const agent = mastra.getAgentById(agentId);
+    const resolveRequestContext = new RequestContext();
+
+    const tools = await agent.getToolsForExecution({
+      runId,
+      threadId: state.threadId,
+      resourceId: state.resourceId,
+      requestContext: resolveRequestContext,
+      memoryConfig: state.memoryConfig,
+      autoResumeSuspendedTools: execOptions?.autoResumeSuspendedTools,
+    });
+
+    const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
+    const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
+
+    let saveQueueManager: SaveQueueManager | undefined;
+    if (memory) {
+      saveQueueManager = new SaveQueueManager({ logger: mastra.getLogger?.(), memory });
+    }
+
+    // Write back so sibling steps in this process reuse the rebuilt tools.
+    const existing = globalRunRegistry.get(runId);
+    const patch: Partial<RunRegistryEntry> = { tools, workspace, memory, saveQueueManager };
+    if (existing) {
+      // Only fill fields the entry is missing — never clobber a populated entry.
+      if (Object.keys(existing.tools ?? {}).length === 0) existing.tools = tools;
+      existing.workspace ??= workspace;
+      existing.memory ??= memory;
+      existing.saveQueueManager ??= saveQueueManager;
+    } else {
+      globalRunRegistry.set(runId, patch as RunRegistryEntry);
+    }
+
+    return { tools, workspace, memory, saveQueueManager };
+  } catch (error) {
+    logger?.debug?.(`[DurableAgent:${agentId}] Failed to rebuild tools from Mastra for run ${runId}: ${error}`);
+    return undefined;
+  }
 }
 
 /**
