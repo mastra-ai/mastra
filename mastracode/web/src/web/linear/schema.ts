@@ -24,6 +24,14 @@ export const linearConnections = pgTable(
     userId: text('user_id').notNull(),
     /** Linear OAuth access token (workspace-scoped, `read`). Server-side only. */
     accessToken: text('access_token').notNull(),
+    /**
+     * Linear OAuth refresh token. Linear access tokens expire (24h) and refresh
+     * tokens rotate on every exchange, so this is rewritten after each refresh.
+     * Null for connections created before token expiry support.
+     */
+    refreshToken: text('refresh_token'),
+    /** When the current access token expires; null when Linear reported no expiry. */
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
     /** Linear workspace display name, for the status payload. */
     workspaceName: text('workspace_name'),
     /** Linear workspace url key (linear.app/<urlKey>). */
@@ -48,10 +56,14 @@ CREATE TABLE IF NOT EXISTS linear_connections (
   org_id text NOT NULL,
   user_id text NOT NULL,
   access_token text NOT NULL,
+  refresh_token text,
+  expires_at timestamptz,
   workspace_name text,
   workspace_url_key text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+ALTER TABLE linear_connections ADD COLUMN IF NOT EXISTS refresh_token text;
+ALTER TABLE linear_connections ADD COLUMN IF NOT EXISTS expires_at timestamptz;
 CREATE UNIQUE INDEX IF NOT EXISTS linear_connections_org_unique ON linear_connections (org_id);
 `;

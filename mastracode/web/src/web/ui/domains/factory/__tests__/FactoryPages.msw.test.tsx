@@ -378,6 +378,27 @@ describe('Factory Intake page — Linear source', () => {
     expect(screen.queryByRole('list', { name: 'Open issues' })).not.toBeInTheDocument();
   });
 
+  it('given the Linear authorization expired, when Linear is picked, then a reconnect notice renders instead of an error', async () => {
+    emptyGithubIssues();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json(
+          { error: 'linear_reauth_required', message: 'Linear authorization expired.' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Linear/ }));
+
+    expect(
+      await screen.findByText('Linear authorization expired. Reconnect to keep syncing issues.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Linear issues' })).not.toBeInTheDocument();
+  });
+
   it('given Linear is connected but no projects are selected, then a pick-projects hint renders and no issues are fetched', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>

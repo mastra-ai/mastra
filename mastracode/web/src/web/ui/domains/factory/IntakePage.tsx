@@ -16,7 +16,7 @@ import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearDat
 import { useStartFactoryRun } from './hooks/useStartFactoryRun';
 import type { GithubIssue } from './services/factory';
 import type { LinearIssue } from './services/linear';
-import { connectLinear } from './services/linear';
+import { connectLinear, isLinearReauthError } from './services/linear';
 
 /**
  * Factory › Intake: open issues from the configured intake sources.
@@ -168,12 +168,12 @@ function SourceNavButton({
   );
 }
 
-function LinearConnectNotice() {
+function LinearConnectNotice({ message }: { message?: string }) {
   const { baseUrl } = useApiConfig();
   return (
     <div className="flex items-center gap-3">
       <Txt as="span" variant="ui-sm" className="text-icon3">
-        Connect a Linear workspace to see its issues here.
+        {message ?? 'Connect a Linear workspace to see its issues here.'}
       </Txt>
       <Button size="xs" onClick={() => connectLinear(baseUrl)}>
         Connect Linear
@@ -311,6 +311,10 @@ function LinearIssueList() {
 
   if (issues.isPending) return <SkeletonRows label="Loading Linear issues" rows={5} rowClassName="h-12 w-full" />;
   if (issues.isError) {
+    // An expired/revoked authorization isn't a dead end — offer the OAuth flow.
+    if (isLinearReauthError(issues.error)) {
+      return <LinearConnectNotice message="Linear authorization expired. Reconnect to keep syncing issues." />;
+    }
     return (
       <Notice variant="destructive">
         {issues.error instanceof Error ? issues.error.message : 'Failed to load Linear issues'}
