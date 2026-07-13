@@ -88,6 +88,14 @@ Map each primitive or feature to its file convention:
 | [Server config](/reference/file-based-agents/server) | `src/mastra/server.ts` |
 | [Studio config](/reference/file-based-agents/studio) | `src/mastra/studio.ts` |
 
+### Not yet file-based
+
+Some primitives don't have a file convention yet. Configure these in code for now. File-based support is planned.
+
+| Primitive or feature | Current approach |
+| - | - |
+| [Schedules](/docs/long-running-agents/schedules) | Create at runtime with `mastra.schedules.create()` |
+
 ## Discovery lifecycle
 
 File-based primitives are discovered by the Mastra bundler under `mastra dev` and `mastra build`. During discovery, Mastra reads supported files under `src/mastra/`, imports TypeScript and JavaScript modules, reads markdown instructions and skills, copies workspace seed files, and registers the assembled primitives with your Mastra app.
