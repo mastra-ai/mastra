@@ -50088,7 +50088,7 @@ snapshots:
 
   light-my-request@6.6.0:
     dependencies:
-      cookie: 2.0.1
+      cookie: 1.1.1
       process-warning: 4.0.1
       set-cookie-parser: 2.7.2
 
