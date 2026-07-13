@@ -514,7 +514,16 @@ export class BraintrustExporter extends TrackingExporter<
 
   private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
     const args = span.input;
-    const argsString = typeof args === 'string' ? args : JSON.stringify(args ?? {});
+    let argsString: string;
+    if (typeof args === 'string') {
+      argsString = args;
+    } else {
+      try {
+        argsString = JSON.stringify(args ?? {});
+      } catch {
+        argsString = '[unserializable result]';
+      }
+    }
     return [
       {
         role: 'assistant',
