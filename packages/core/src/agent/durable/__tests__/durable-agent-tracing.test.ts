@@ -34,10 +34,12 @@ function createTextStreamModel(text: string) {
 describe('DurableAgent observability tracing', () => {
   let pubsub: EventEmitterPubSub;
   let spanIdCounter = 0;
+  let createdSpans: any[] = [];
 
   beforeEach(() => {
     pubsub = new EventEmitterPubSub();
     spanIdCounter = 0;
+    createdSpans = [];
   });
 
   afterEach(async () => {
@@ -76,7 +78,7 @@ describe('DurableAgent observability tracing', () => {
         return 'mock-trace-id';
       },
       createTracker: vi.fn(() => ({
-        getTracingContext: vi.fn(() => ({})),
+        getTracingContext: vi.fn(() => ({ currentSpan: span })),
         reportGenerationError: vi.fn(),
         endGeneration: vi.fn(),
         updateGeneration: vi.fn(),
@@ -95,6 +97,7 @@ describe('DurableAgent observability tracing', () => {
       getCorrelationContext: vi.fn(),
       observabilityInstance: {},
     };
+    createdSpans.push(span);
     return span;
   }
 
@@ -245,9 +248,10 @@ describe('DurableAgent observability tracing', () => {
     const { spy, agentSpans } = await spyOnSpans();
 
     try {
+      const processOutputStep = vi.fn(async () => undefined);
       const outputStepProcessor = {
         id: 'test-output-step-processor',
-        processOutputStep: async () => undefined,
+        processOutputStep,
       };
 
       const baseAgent = new Agent({
@@ -263,14 +267,22 @@ describe('DurableAgent observability tracing', () => {
       await output.consumeStream();
 
       expect(agentSpans.length).toBe(1);
-      // The per-step output processor's tracingContext walks up to AGENT_RUN via findParent,
-      // so its processor_run span is created as a descendant (not a parentless root).
-      const outputStepProcessorSpanCall = agentSpans[0].createChildSpan.mock.calls.find(
-        (call: any[]) =>
-          call[0]?.type === 'processor_run' &&
-          call[0]?.name === 'output step processor: test-output-step-processor',
-      );
-      expect(outputStepProcessorSpanCall).toBeDefined();
+      // The per-step output processor runs inside the durable workflow step, so the span
+      // may be an indirect descendant of AGENT_RUN. The regression was an orphan root span.
+      expect(processOutputStep).toHaveBeenCalled();
+      let outputStepProcessorSpan: any;
+      for (const span of createdSpans) {
+        const callIndex = span.createChildSpan.mock.calls.findIndex(
+          (call: any[]) =>
+            call[0]?.type === 'processor_run' && call[0]?.name === 'output step processor: test-output-step-processor',
+        );
+        if (callIndex !== -1) {
+          outputStepProcessorSpan = span.createChildSpan.mock.results[callIndex]?.value;
+          break;
+        }
+      }
+      expect(outputStepProcessorSpan).toBeDefined();
+      expect(outputStepProcessorSpan.findParent('agent_run')).toBe(agentSpans[0]);
 
       cleanup();
     } finally {
