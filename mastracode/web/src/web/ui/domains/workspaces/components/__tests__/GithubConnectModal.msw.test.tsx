@@ -10,9 +10,10 @@ import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '../
 // jsdom's `window.location.assign` is unforgeable (cannot be spied on), so the
 // service-level navigation helper is stubbed; everything else stays real.
 const connectGithubMock = vi.hoisted(() => vi.fn());
+const manageGithubConnectionMock = vi.hoisted(() => vi.fn());
 vi.mock('../../services/github', async importOriginal => {
   const actual = await importOriginal<typeof import('../../services/github')>();
-  return { ...actual, connectGithub: connectGithubMock };
+  return { ...actual, connectGithub: connectGithubMock, manageGithubConnection: manageGithubConnectionMock };
 });
 import { useProjectsQuery } from '../../hooks/useProjects';
 import type { GithubRepo, GithubStatus } from '../../services/github';
@@ -144,13 +145,14 @@ describe('GithubConnectModal', () => {
     expect(loadProjects()).toEqual([]);
   });
 
-  it('offers a manage-connection button when connected that re-runs the install flow', async () => {
+  it('offers a manage-connection button when connected that opens the GitHub install page', async () => {
     server.use(http.get(`${ORIGIN}/web/github/repos`, () => HttpResponse.json({ repos: [repo] })));
 
     renderModal();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Manage GitHub connection' }));
-    expect(connectGithubMock).toHaveBeenCalledWith(ORIGIN);
+    expect(manageGithubConnectionMock).toHaveBeenCalledWith(ORIGIN);
+    expect(connectGithubMock).not.toHaveBeenCalled();
   });
 
   it('shows the missing-config callout with missing env var names and no connect button', () => {

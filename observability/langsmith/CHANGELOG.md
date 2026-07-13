@@ -1,5 +1,13 @@
 # @mastra/langsmith
 
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`bd4d720`](https://github.com/mastra-ai/mastra/commit/bd4d720458e42c49b6829c4662812332be32cfcf), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+  - @mastra/observability@1.16.1-alpha.0
+
 ## 1.3.3
 
 ### Patch Changes

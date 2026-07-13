@@ -34,6 +34,8 @@ export interface DiscoveredFsAgent {
   inputProcessors: { key: string; path: string }[];
   /** Output processors discovered under `processors/output/`, in stable (sorted) order. */
   outputProcessors: { key: string; path: string }[];
+  /** Scorers discovered under `scorers/`, in stable (sorted) order. */
+  scorers: { key: string; path: string }[];
   /** Skills discovered under `skills/`, in stable (sorted) order. */
   skills: DiscoveredFsSkill[];
   /**
@@ -130,19 +132,26 @@ function toolKey(basename: string): string {
   return basename.replace(/\.(ts|js)$/, '');
 }
 
-async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools']> {
-  if (!(await exists(toolsDir))) {
+/**
+ * Discover default-exporting `.ts`/`.js` modules directly under `dir`, returning
+ * `{ key, path }` entries in stable (sorted) order. Test files, symlinks, and
+ * subdirectories are skipped: a symlinked module could point anywhere on the
+ * build machine and be embedded into generated import code. Shared by the
+ * `tools/` and `scorers/` scanners.
+ */
+async function discoverModuleDir(dir: string): Promise<{ key: string; path: string }[]> {
+  if (!(await exists(dir))) {
     return [];
   }
 
   let entries: string[];
   try {
-    entries = await readdir(toolsDir);
+    entries = await readdir(dir);
   } catch {
     return [];
   }
 
-  const tools: DiscoveredFsAgent['tools'] = [];
+  const modules: { key: string; path: string }[] = [];
   for (const basename of entries.sort()) {
     if (isTestFile(basename)) {
       continue;
@@ -150,18 +159,22 @@ async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools
     if (!TOOL_EXTENSIONS.some(ext => basename.endsWith(ext))) {
       continue;
     }
-    const path = join(toolsDir, basename);
+    const path = join(dir, basename);
     // Use lstat so symlinks are detected (not followed). Skip symlinks and
-    // directories: a symlinked tool file could point anywhere on the build
+    // directories: a symlinked module file could point anywhere on the build
     // machine and be embedded into generated import code.
     const stats = await lstat(path);
     if (stats.isSymbolicLink() || stats.isDirectory()) {
       continue;
     }
-    tools.push({ key: toolKey(basename), path: slash(path) });
+    modules.push({ key: toolKey(basename), path: slash(path) });
   }
 
-  return tools;
+  return modules;
+}
+
+async function discoverTools(toolsDir: string): Promise<DiscoveredFsAgent['tools']> {
+  return discoverModuleDir(toolsDir);
 }
 
 async function discoverProcessors(
@@ -337,6 +350,7 @@ async function discoverAgentDir(
   const workspaceSeedDir = await directoryExists(join(dir, 'workspace'));
   const tools = await discoverTools(join(dir, 'tools'));
   const processors = await discoverProcessors(join(dir, 'processors'));
+  const scorers = await discoverModuleDir(join(dir, 'scorers'));
   const skills = await discoverSkills(join(dir, 'skills'));
   const subagents = await discoverSubagents(dir, depth, onWarn);
 
@@ -351,6 +365,7 @@ async function discoverAgentDir(
     tools,
     inputProcessors: processors.input,
     outputProcessors: processors.output,
+    scorers,
     skills,
     subagents,
   };

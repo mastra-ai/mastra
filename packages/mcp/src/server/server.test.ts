@@ -2611,7 +2611,9 @@ describe('MCPServer - Elicitation', () => {
       message: 'This should fail gracefully',
     });
 
-    // Without a handler, the client does not advertise form elicitation support.
+    // When no elicitation handler is provided, the client does not advertise the
+    // elicitation capability, so the server's elicitInput fails before sending and
+    // the tool returns the error text.
     expect(result.content[0].text).toContain('Client does not support form elicitation');
   });
 
@@ -2697,26 +2699,32 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
-    // Each client registers its own independent handler
-    await Promise.all([
-      elicitationClient1.elicitation.onRequest('elicitation1', client1Handler),
-      elicitationClient2.elicitation.onRequest('elicitation2', client2Handler),
-    ]);
+    // Each client registers its own independent handler. onRequest is async (it
+    // resolves the per-server client), so it must be awaited before listTools()
+    // connects — otherwise the elicitation capability may be registered after
+    // connect(), which the SDK rejects.
+    await elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
+    await elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
 
-    const tools = await elicitationClient1.listTools();
-    const tool = tools['elicitation1_testElicitationTool'];
-    expect(tool).toBeDefined();
-    await tool.execute!({
-      message: 'Please provide your information',
-    });
+    try {
+      const tools = await elicitationClient1.listTools();
+      const tool = tools['elicitation1_testElicitationTool'];
+      expect(tool).toBeDefined();
+      await tool.execute!({
+        message: 'Please provide your information',
+      });
 
-    const tools2 = await elicitationClient2.listTools();
-    const tool2 = tools2['elicitation2_testElicitationTool'];
-    expect(tool2).toBeDefined();
+      const tools2 = await elicitationClient2.listTools();
+      const tool2 = tools2['elicitation2_testElicitationTool'];
+      expect(tool2).toBeDefined();
 
-    // Verify handlers are isolated - they should not interfere with each other
-    expect(client1Handler).toHaveBeenCalled();
-    expect(client2Handler).not.toHaveBeenCalled();
+      // Verify handlers are isolated - they should not interfere with each other
+      expect(client1Handler).toHaveBeenCalled();
+      expect(client2Handler).not.toHaveBeenCalled();
+    } finally {
+      await elicitationClient1.disconnect();
+      await elicitationClient2.disconnect();
+    }
   }, 10000);
 
   it('should support custom timeout in elicitation request options', async () => {

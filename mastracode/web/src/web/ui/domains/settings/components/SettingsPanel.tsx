@@ -15,6 +15,7 @@ import { useAgentControllerSettings } from '../../chat/hooks/useAgentControllerS
 import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
+import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
 import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
@@ -85,6 +86,7 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
             <TabContent value="general">
               <GeneralTab theme={theme} onThemeChange={setTheme} />
+              <IntakeSection />
             </TabContent>
             <TabContent value="model">
               <ModelTab

@@ -11,6 +11,7 @@ import type { LSPConfig } from '@mastra/core/workspace';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { loadSettings } from '../onboarding/settings.js';
 import type { MastraCodeState } from '../schema.js';
+import { isPathWithinRoot } from '../utils/path-security.js';
 import { getPlansDir } from '../utils/plans.js';
 import { SandboxFilesystem } from './sandbox-filesystem.js';
 import { reattachProjectSandbox } from './sandbox-reattach.js';
@@ -49,32 +50,57 @@ function buildSandboxEnv(): NodeJS.ProcessEnv {
 // returns false for symlinks. Tools like `npx skills add` install skills as
 // symlinks, so we need to resolve them. For each symlinked skill directory,
 // we add the real (resolved) parent path as an additional skill scan path.
-function collectSkillPaths(skillsDirs: string[]): string[] {
+function collectSkillPaths(skillsDirs: string[], allowedRoot?: string): string[] {
   const paths: string[] = [];
   const seen = new Set<string>();
+  let realAllowedRoot: string | undefined;
+
+  if (allowedRoot) {
+    try {
+      realAllowedRoot = fs.realpathSync(allowedRoot);
+    } catch {
+      return [];
+    }
+  }
 
   for (const skillsDir of skillsDirs) {
+    const skillsDirExists = fs.existsSync(skillsDir);
+    if (skillsDirExists && realAllowedRoot) {
+      try {
+        const realSkillsDir = fs.realpathSync(skillsDir);
+        if (!isPathWithinRoot(realSkillsDir, realAllowedRoot)) continue;
+      } catch {
+        continue;
+      }
+    }
+
     const resolved = path.resolve(skillsDir);
     if (!seen.has(resolved)) {
       seen.add(resolved);
       paths.push(skillsDir);
     }
 
-    if (!fs.existsSync(skillsDir)) continue;
+    if (!skillsDirExists) continue;
 
     try {
       const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
       for (const entry of entries) {
         if (entry.isSymbolicLink()) {
-          const linkPath = path.join(skillsDir, entry.name);
-          const realPath = fs.realpathSync(linkPath);
-          const stat = fs.statSync(realPath);
-          if (stat.isDirectory()) {
-            const realParent = path.dirname(realPath);
-            if (!seen.has(realParent)) {
-              seen.add(realParent);
-              paths.push(realParent);
+          try {
+            const linkPath = path.join(skillsDir, entry.name);
+            const realPath = fs.realpathSync(linkPath);
+            if (realAllowedRoot && !isPathWithinRoot(realPath, realAllowedRoot)) continue;
+            const stat = fs.statSync(realPath);
+            if (stat.isDirectory()) {
+              const realParent = path.dirname(realPath);
+              if (realAllowedRoot && !isPathWithinRoot(realParent, realAllowedRoot)) continue;
+              if (!seen.has(realParent)) {
+                seen.add(realParent);
+                paths.push(realParent);
+              }
             }
+          } catch {
+            continue;
           }
         }
       }
@@ -100,15 +126,24 @@ export function buildSkillPaths(
   const claudeGlobalSkillsPath = path.join(homeDir, '.claude', 'skills');
   const agentSkillsGlobalPath = path.join(homeDir, '.agents', 'skills');
 
-  return collectSkillPaths([
-    mastraCodeLocalSkillsPath,
-    claudeLocalSkillsPath,
-    agentSkillsLocalPath,
-    mastraCodeGlobalSkillsPath,
-    claudeGlobalSkillsPath,
-    agentSkillsGlobalPath,
-    ...pluginSkillPaths,
-  ]);
+  const paths = [
+    ...collectSkillPaths([mastraCodeLocalSkillsPath, claudeLocalSkillsPath, agentSkillsLocalPath], projectPath),
+    ...collectSkillPaths([mastraCodeGlobalSkillsPath, claudeGlobalSkillsPath, agentSkillsGlobalPath]),
+    ...pluginSkillPaths.flatMap(pluginSkillPath => collectSkillPaths([pluginSkillPath], pluginSkillPath)),
+  ];
+
+  const seenPaths = new Set<string>();
+  return paths.filter(skillPath => {
+    let resolved: string;
+    try {
+      resolved = fs.realpathSync(skillPath);
+    } catch {
+      resolved = path.resolve(skillPath);
+    }
+    if (seenPaths.has(resolved)) return false;
+    seenPaths.add(resolved);
+    return true;
+  });
 }
 
 /**

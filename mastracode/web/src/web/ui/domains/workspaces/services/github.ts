@@ -95,6 +95,16 @@ export function connectGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect`);
 }
 
+/**
+ * Open GitHub's installation page to add/remove accounts and repo access
+ * (full-page redirect). Unlike {@link connectGithub}, this skips the OAuth
+ * identify bounce — for an already-authorized user that bounce completes
+ * instantly and invisibly, which would make the manage button a silent no-op.
+ */
+export function manageGithubConnection(baseUrl: string): void {
+  window.location.assign(`${baseUrl}/auth/github/connect?manage=1`);
+}
+
 /** List repos across the user's installations, optionally filtered by query. */
 export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
   const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
