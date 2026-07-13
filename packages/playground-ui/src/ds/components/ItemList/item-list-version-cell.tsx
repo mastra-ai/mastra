@@ -16,17 +16,17 @@ export function ItemListVersionCell({ version, date, isLatest, isDeleted }: Item
   return (
     <ItemListCell className={cn('grid grid-cols-[1fr_auto] pl-1')}>
       <div
-        className={cn('grid text-neutral3 gap-1 leading-none', {
+        className={cn('grid gap-1 leading-none text-neutral3', {
           'text-neutral4': isLatest,
         })}
       >
         <strong className="font-normal">v. {version}</strong>
-        <em className="text-neutral2 text-ui-sm font-normal">
+        <em className="text-ui-sm font-normal text-neutral2">
           {date ? format(new Date(date), 'MMM d, yyyy HH:mm') : null}
         </em>
       </div>
       {(isLatest || isDeleted) && (
-        <div className="flex gap-1 items-center">
+        <div className="flex items-center gap-1">
           {isLatest && (
             <Tooltip>
               <TooltipTrigger asChild>

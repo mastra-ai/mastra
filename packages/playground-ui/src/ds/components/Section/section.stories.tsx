@@ -16,11 +16,11 @@ type Story = StoryObj<typeof Section>;
 
 export const Default: Story = {
   render: () => (
-    <Section className="w-[500px]">
+    <Section className="w-125">
       <Section.Header>
         <Section.Heading>Section Title</Section.Heading>
       </Section.Header>
-      <div className="p-4 rounded-md border border-border1 bg-surface2">
+      <div className="rounded-md border border-border1 bg-surface2 p-4">
         <p className="text-sm text-neutral5">Section content goes here</p>
       </div>
     </Section>
@@ -29,15 +29,15 @@ export const Default: Story = {
 
 export const WithAction: Story = {
   render: () => (
-    <Section className="w-[500px]">
+    <Section className="w-125">
       <Section.Header>
         <Section.Heading>Agents</Section.Heading>
         <Button size="md">
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
           Add Agent
         </Button>
       </Section.Header>
-      <div className="p-4 rounded-md border border-border1 bg-surface2">
+      <div className="rounded-md border border-border1 bg-surface2 p-4">
         <p className="text-sm text-neutral5">List of agents would go here</p>
       </div>
     </Section>
@@ -46,14 +46,14 @@ export const WithAction: Story = {
 
 export const ConfigurationSection: Story = {
   render: () => (
-    <Section className="w-[500px]">
+    <Section className="w-125">
       <Section.Header>
         <Section.Heading>Configuration</Section.Heading>
         <Button variant="outline" size="md">
           Edit
         </Button>
       </Section.Header>
-      <div className="space-y-3 p-4 rounded-md border border-border1 bg-surface2">
+      <div className="space-y-3 rounded-md border border-border1 bg-surface2 p-4">
         <div className="flex justify-between">
           <span className="text-sm text-neutral3">Model</span>
           <span className="text-sm text-neutral6">GPT-4</span>
@@ -73,12 +73,12 @@ export const ConfigurationSection: Story = {
 
 export const MultipleSections: Story = {
   render: () => (
-    <div className="w-[500px] space-y-8">
+    <div className="w-125 space-y-8">
       <Section>
         <Section.Header>
           <Section.Heading>General</Section.Heading>
         </Section.Header>
-        <div className="p-4 rounded-md border border-border1 bg-surface2">
+        <div className="rounded-md border border-border1 bg-surface2 p-4">
           <p className="text-sm text-neutral5">General settings content</p>
         </div>
       </Section>
@@ -86,7 +86,7 @@ export const MultipleSections: Story = {
         <Section.Header>
           <Section.Heading>Advanced</Section.Heading>
         </Section.Header>
-        <div className="p-4 rounded-md border border-border1 bg-surface2">
+        <div className="rounded-md border border-border1 bg-surface2 p-4">
           <p className="text-sm text-neutral5">Advanced settings content</p>
         </div>
       </Section>
