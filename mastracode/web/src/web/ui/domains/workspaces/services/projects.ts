@@ -263,6 +263,25 @@ export function upsertWorktree(project: Project, worktree: Worktree): Project {
   return updated;
 }
 
+/**
+ * Remove a worktree from a project and persist. If the removed worktree was
+ * selected, selection falls back to the repo root (first worktree). Returns the
+ * updated project.
+ */
+export function removeWorktree(project: Project, worktreePath: string): Project {
+  const remaining = projectWorktrees(project).filter(w => w.worktreePath !== worktreePath);
+  const updated: Project = {
+    ...project,
+    worktrees: remaining,
+    selectedWorktreePath:
+      project.selectedWorktreePath === worktreePath
+        ? remaining[0]?.worktreePath
+        : project.selectedWorktreePath,
+  };
+  updateProject(updated);
+  return updated;
+}
+
 /** Persist the selected worktree for a project and return the updated project. */
 export function selectWorktree(project: Project, worktreePath: string): Project {
   const updated: Project = { ...project, selectedWorktreePath: worktreePath };
