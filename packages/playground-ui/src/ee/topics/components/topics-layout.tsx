@@ -1,5 +1,6 @@
-import { Panel, Group } from 'react-resizable-panels';
+import { Panel } from 'react-resizable-panels';
 import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
+import { PanelGroup } from '@/lib/resize/panel-group';
 import { PanelSeparator } from '@/lib/resize/separator';
 
 export interface TopicsLayoutProps {
@@ -17,7 +18,7 @@ export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = t
       {sidebar ? <aside className="w-88 min-h-0 shrink-0 border-r border-border1">{sidebar}</aside> : null}
       {hasContent ? (
         <main className={contentPadding ? 'min-w-0 flex-1 p-4' : 'min-w-0 flex-1'}>
-          <Group className="size-full min-h-0 min-w-0" direction="horizontal">
+          <PanelGroup className="size-full min-h-0 min-w-0" orientation="horizontal">
             {children ? (
               <Panel id="topic-main" className="min-w-0 pr-2" minSize={35}>
                 {children}
@@ -40,7 +41,7 @@ export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = t
                 </CollapsiblePanel>
               </>
             ) : null}
-          </Group>
+          </PanelGroup>
         </main>
       ) : null}
     </div>
