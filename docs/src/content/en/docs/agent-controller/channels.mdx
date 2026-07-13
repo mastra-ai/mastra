@@ -105,7 +105,7 @@ See [Tool approvals and permissions](/docs/agent-controller/tool-approvals) for 
 
 ## Limits
 
-- Adapters must be constructed manually as shown above. The managed connect flow (`mastra.channels.slack.connect(...)`) provisions channels for agents only.
+- Adapters can be constructed manually as shown above. The managed connect flow (`mastra.channels.slack.connect(...)`) also supports controller-owned installations — call it with an options object (`connect({ id, name })`) to connect a controller that has no registered agent. Adapters without controller support must still be constructed manually.
 - Controller sessions are in-memory objects, so channels-backed controllers need a long-lived server. Serverless deployment isn't supported for controller channels; agent channels support it as described in [Serverless deployment](/docs/capabilities/channels/overview#serverless-deployment).
 - Pending tool approvals don't survive a server restart. An approval card acted on after a restart is ignored as stale.
 - Mode switching from chat (for example, a `/mode` slash command) isn't available yet.
