@@ -25,6 +25,8 @@ import type {
 import { runScorer } from '../evals/hooks';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
+import type { GuardrailsConfig } from '../guardrails';
+import { compileGuardrails } from '../guardrails';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -501,6 +503,7 @@ export class Agent<
   #voice: DynamicArgument<MastraVoice, TRequestContext>;
   #agentChannels: AgentChannels | null = null;
   #workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  #guardrails?: DynamicArgument<GuardrailsConfig | undefined, TRequestContext>;
   #inputProcessors?: DynamicArgument<InputProcessorOrWorkflow[], TRequestContext>;
   #outputProcessors?: DynamicArgument<OutputProcessorOrWorkflow[], TRequestContext>;
   #maxProcessorRetries?: number;
@@ -703,6 +706,10 @@ export class Agent<
       this.#workspace = config.workspace;
     }
 
+    if (config.guardrails !== undefined) {
+      this.#guardrails = config.guardrails;
+    }
+
     if (config.inputProcessors) {
       this.#inputProcessors = config.inputProcessors;
     }
@@ -880,8 +887,30 @@ export class Agent<
    * each processor's `processLLMRequest` method.
    * @internal — used by `DurableAgent` preparation to populate the registry.
    */
-  async __listLLMRequestProcessors(requestContext?: RequestContext): Promise<InputProcessorOrWorkflow[]> {
-    return this.listResolvedLLMRequestProcessors(requestContext);
+  async __listLLMRequestProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedLLMRequestProcessors(requestContext, configuredProcessorOverrides, guardrailOverrides);
+  }
+
+  /** @internal — used by `DurableAgent` preparation to apply per-run overrides. */
+  async __listInputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<InputProcessorOrWorkflow[]> {
+    return this.listResolvedInputProcessors(requestContext, configuredProcessorOverrides, guardrailOverrides);
+  }
+
+  /** @internal — used by `DurableAgent` preparation to apply per-run overrides. */
+  async __listOutputProcessors(
+    requestContext?: RequestContext,
+    configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<OutputProcessorOrWorkflow[]> {
+    return this.listResolvedOutputProcessors(requestContext, configuredProcessorOverrides, guardrailOverrides);
   }
 
   /**
@@ -1407,6 +1436,28 @@ export class Agent<
     });
   }
 
+  private async resolveCompiledGuardrails(
+    requestContext?: RequestContext,
+    guardrailOverrides?: GuardrailsConfig,
+  ): Promise<ReturnType<typeof compileGuardrails>> {
+    const guardrails =
+      guardrailOverrides !== undefined
+        ? guardrailOverrides
+        : this.#guardrails
+          ? typeof this.#guardrails === 'function'
+            ? await this.#guardrails({
+                requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+              })
+            : this.#guardrails
+          : undefined;
+
+    if (guardrails === undefined) {
+      return compileGuardrails(undefined);
+    }
+
+    return compileGuardrails(guardrails, { defaultModel: await this.getModel({ requestContext }) });
+  }
+
   /**
    * Creates and returns a ProcessorRunner with resolved input/output processors.
    * @internal
@@ -1416,17 +1467,27 @@ export class Agent<
     inputProcessorOverrides,
     outputProcessorOverrides,
     errorProcessorOverrides,
+    guardrailOverrides,
     processorStates,
   }: {
     requestContext: RequestContext;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
     errorProcessorOverrides?: ErrorProcessorOrWorkflow[];
+    guardrailOverrides?: GuardrailsConfig;
     processorStates?: Map<string, ProcessorState>;
   }): Promise<ProcessorRunner> {
     // Resolve processors - overrides replace user-configured but auto-derived (memory, skills) are kept
-    const inputProcessors = await this.listResolvedInputProcessors(requestContext, inputProcessorOverrides);
-    const outputProcessors = await this.listResolvedOutputProcessors(requestContext, outputProcessorOverrides);
+    const inputProcessors = await this.listResolvedInputProcessors(
+      requestContext,
+      inputProcessorOverrides,
+      guardrailOverrides,
+    );
+    const outputProcessors = await this.listResolvedOutputProcessors(
+      requestContext,
+      outputProcessorOverrides,
+      guardrailOverrides,
+    );
     const errorProcessors =
       errorProcessorOverrides ??
       (this.#errorProcessors
@@ -1564,6 +1625,7 @@ export class Agent<
   private async listResolvedOutputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: OutputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
   ): Promise<OutputProcessorOrWorkflow[]> {
     // Get configured output processors - use overrides if provided (from generate/stream options),
     // otherwise use agent constructor processors
@@ -1576,22 +1638,27 @@ export class Agent<
             })
           : this.#outputProcessors
         : [];
+    const guardrailProcessors = (await this.resolveCompiledGuardrails(requestContext, guardrailOverrides))
+      .outputProcessors;
+    const configuredWithGuardrails = [...guardrailProcessors, ...configuredProcessors];
 
     // Get memory output processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getOutputProcessors(configuredWithGuardrails, requestContext) : [];
 
     // Get channel output processors (with deduplication) — mirrors the input
     // processor hookup. Channels render the agent's stream to the originating
     // chat platform via this processor; without it, replies never reach Slack.
-    const channelProcessors = this.#agentChannels ? this.#agentChannels.getOutputProcessors(configuredProcessors) : [];
+    const channelProcessors = this.#agentChannels
+      ? this.#agentChannels.getOutputProcessors(configuredWithGuardrails)
+      : [];
     // Combine all processors into a single workflow
     // User-configured processors run first so they can transform chunks
     // (e.g. PII redaction, translation) before the channel renders them.
     // Memory processors run last to persist the final form.
-    const allProcessors = [...configuredProcessors, ...channelProcessors, ...memoryProcessors];
+    const allProcessors = [...configuredWithGuardrails, ...channelProcessors, ...memoryProcessors];
     return this.combineProcessorsIntoWorkflow(allProcessors, `${this.id}-output-processor`);
   }
 
@@ -1602,6 +1669,7 @@ export class Agent<
   private async resolveInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
   ): Promise<InputProcessorOrWorkflow[]> {
     // Get configured input processors - use overrides if provided (from generate/stream options),
     // otherwise use agent constructor processors
@@ -1614,24 +1682,29 @@ export class Agent<
             })
           : this.#inputProcessors
         : [];
+    const guardrailProcessors = (await this.resolveCompiledGuardrails(requestContext, guardrailOverrides))
+      .inputProcessors;
+    const configuredWithGuardrails = [...guardrailProcessors, ...configuredProcessors];
 
     // Get memory input processors (with deduplication)
     // Use getMemory() to ensure storage is injected from Mastra if not explicitly configured
     const memory = await this.getMemory({ requestContext: requestContext || new RequestContext() });
 
-    const memoryProcessors = memory ? await memory.getInputProcessors(configuredProcessors, requestContext) : [];
+    const memoryProcessors = memory ? await memory.getInputProcessors(configuredWithGuardrails, requestContext) : [];
 
     // Get workspace instructions processors (with deduplication)
-    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredProcessors, requestContext);
+    const workspaceProcessors = await this.getWorkspaceInstructionsProcessors(configuredWithGuardrails, requestContext);
 
     // Get skills processors if skills are configured (with deduplication)
-    const skillsProcessors = await this.getSkillsProcessors(configuredProcessors, requestContext);
+    const skillsProcessors = await this.getSkillsProcessors(configuredWithGuardrails, requestContext);
 
     // Get channel input processors (with deduplication)
-    const channelProcessors = this.#agentChannels ? this.#agentChannels.getInputProcessors(configuredProcessors) : [];
+    const channelProcessors = this.#agentChannels
+      ? this.#agentChannels.getInputProcessors(configuredWithGuardrails)
+      : [];
 
     // Get browser context processors (with deduplication)
-    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredProcessors) : [];
+    const browserProcessors = this.#browser ? this.#browser.getInputProcessors(configuredWithGuardrails) : [];
 
     // Memory processors should run first (to fetch history, semantic recall, working memory)
     // Workspace instructions run after memory
@@ -1645,7 +1718,7 @@ export class Agent<
       ...skillsProcessors,
       ...channelProcessors,
       ...browserProcessors,
-      ...configuredProcessors,
+      ...configuredWithGuardrails,
     ];
   }
 
@@ -1657,8 +1730,13 @@ export class Agent<
   private async listResolvedInputProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
   ): Promise<InputProcessorOrWorkflow[]> {
-    const processors = await this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    const processors = await this.resolveInputProcessors(
+      requestContext,
+      configuredProcessorOverrides,
+      guardrailOverrides,
+    );
     return this.combineProcessorsIntoWorkflow(processors, `${this.id}-input-processor`);
   }
 
@@ -1670,8 +1748,9 @@ export class Agent<
   private async listResolvedLLMRequestProcessors(
     requestContext?: RequestContext,
     configuredProcessorOverrides?: InputProcessorOrWorkflow[],
+    guardrailOverrides?: GuardrailsConfig,
   ): Promise<InputProcessorOrWorkflow[]> {
-    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides);
+    return this.resolveInputProcessors(requestContext, configuredProcessorOverrides, guardrailOverrides);
   }
 
   /**
@@ -3893,12 +3972,14 @@ export class Agent<
     requestContext,
     messageList,
     inputProcessorOverrides,
+    guardrailOverrides,
     processorStates,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     inputProcessorOverrides?: InputProcessorOrWorkflow[];
+    guardrailOverrides?: GuardrailsConfig;
     processorStates?: Map<string, ProcessorState>;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
@@ -3914,6 +3995,8 @@ export class Agent<
     if (
       inputProcessorOverrides?.length ||
       this.#inputProcessors ||
+      guardrailOverrides !== undefined ||
+      this.#guardrails ||
       this.#memory ||
       this.#skills ||
       this.#workspace ||
@@ -3924,6 +4007,7 @@ export class Agent<
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
+        guardrailOverrides,
         processorStates,
       });
       try {
@@ -3974,6 +4058,7 @@ export class Agent<
       messageList: MessageList;
       stepNumber?: number;
       inputProcessorOverrides?: InputProcessorOrWorkflow[];
+      guardrailOverrides?: GuardrailsConfig;
       processorStates?: Map<string, ProcessorState>;
       tools?: Record<string, CoreTool>;
       runId?: string;
@@ -3999,6 +4084,7 @@ export class Agent<
       messageList,
       stepNumber = 0,
       inputProcessorOverrides,
+      guardrailOverrides,
       processorStates,
       tools,
       runId,
@@ -4015,10 +4101,18 @@ export class Agent<
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
     let nextTools = tools;
 
-    if (inputProcessorOverrides?.length || this.#inputProcessors || this.#memory || this.#skills) {
+    if (
+      inputProcessorOverrides?.length ||
+      guardrailOverrides !== undefined ||
+      this.#guardrails ||
+      this.#inputProcessors ||
+      this.#memory ||
+      this.#skills
+    ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         inputProcessorOverrides,
+        guardrailOverrides,
         processorStates,
       });
       try {
@@ -4130,11 +4224,13 @@ export class Agent<
     requestContext,
     messageList,
     outputProcessorOverrides,
+    guardrailOverrides,
     ...observabilityContext
   }: {
     requestContext: RequestContext;
     messageList: MessageList;
     outputProcessorOverrides?: OutputProcessorOrWorkflow[];
+    guardrailOverrides?: GuardrailsConfig;
   } & ObservabilityContext): Promise<{
     messageList: MessageList;
     tripwire?: {
@@ -4146,10 +4242,17 @@ export class Agent<
   }> {
     let tripwire: { reason: string; retry?: boolean; metadata?: unknown; processorId?: string } | undefined;
 
-    if (outputProcessorOverrides?.length || this.#outputProcessors || this.#memory) {
+    if (
+      outputProcessorOverrides?.length ||
+      guardrailOverrides !== undefined ||
+      this.#guardrails ||
+      this.#outputProcessors ||
+      this.#memory
+    ) {
       const runner = await this.getProcessorRunner({
         requestContext,
         outputProcessorOverrides,
+        guardrailOverrides,
       });
 
       try {
@@ -6729,24 +6832,30 @@ export class Agent<
       inputProcessors: async ({
         requestContext,
         overrides,
+        guardrailOverrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedInputProcessors(requestContext, overrides),
+        guardrailOverrides?: GuardrailsConfig;
+      }) => this.listResolvedInputProcessors(requestContext, overrides, guardrailOverrides),
       llmRequestInputProcessors: async ({
         requestContext,
         overrides,
+        guardrailOverrides,
       }: {
         requestContext: RequestContext;
         overrides?: InputProcessorOrWorkflow[];
-      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides),
+        guardrailOverrides?: GuardrailsConfig;
+      }) => this.listResolvedLLMRequestProcessors(requestContext, overrides, guardrailOverrides),
       outputProcessors: async ({
         requestContext,
         overrides,
+        guardrailOverrides,
       }: {
         requestContext: RequestContext;
         overrides?: OutputProcessorOrWorkflow[];
-      }) => this.listResolvedOutputProcessors(requestContext, overrides),
+        guardrailOverrides?: GuardrailsConfig;
+      }) => this.listResolvedOutputProcessors(requestContext, overrides, guardrailOverrides),
       errorProcessors: async ({
         requestContext,
         overrides,

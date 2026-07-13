@@ -35,6 +35,9 @@ import {
   slackDemoAgent,
   billingAgent,
   balanceAgent,
+  guardrailsInputDemoAgent,
+  guardrailsStreamingDemoAgent,
+  guardrailsComparisonAgents,
 } from './agents/index';
 import { MCPClient } from '@mastra/mcp';
 import { myMcpServer, myMcpServerTwo, mcpAppsServer } from './mcp/server';
@@ -136,6 +139,9 @@ export const mastra = new Mastra({
     dynamicToolsAgent,
     billingAgent,
     balanceAgent,
+    guardrailsInputDemoAgent,
+    guardrailsStreamingDemoAgent,
+    ...guardrailsComparisonAgents,
     agentThatHarassesYou,
     evalAgent,
     schemaValidatedAgent,

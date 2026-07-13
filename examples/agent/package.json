@@ -64,6 +64,7 @@
     "start-deployed": "npx bun src/with-deployed.ts",
     "start": "npx bun src/index.ts",
     "processor-demo": "npx bun src/processor-demo.ts",
+    "guardrails:test": "vitest run src/mastra/agents/guardrails-shared-policy.test.ts",
     "hitl:approval": "npx tsx src/hitl-approval-recall.ts",
     "mastra:dev": "mastra dev",
     "mastra:build": "mastra build -s",

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, it } from 'vitest';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import type { SerializableDurableOptions, RunRegistryEntry } from './types';
@@ -58,6 +57,8 @@ type ConsumedDuringPreparation =
   | 'requestContext'
   // Version overrides are merged into requestContext during preparation
   | 'versions'
+  // Guardrails are compiled into input/output processors during preparation
+  | 'guardrails'
   // Scorers are resolved from agent.listScorers() during preparation
   | 'scorers'
   // Callbacks are stored on the registry via the workflow engine (onChunk,

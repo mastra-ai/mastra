@@ -174,6 +174,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ? await capabilities.outputProcessors({
             requestContext: result.requestContext!,
             overrides: options.outputProcessors,
+            guardrailOverrides: options.guardrails,
           })
         : options.outputProcessors || capabilities.outputProcessors
       : options.outputProcessors || [];
@@ -202,6 +203,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ? await capabilities.inputProcessors({
             requestContext: result.requestContext!,
             overrides: options.inputProcessors,
+            guardrailOverrides: options.guardrails,
           })
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
@@ -211,6 +213,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         ? await capabilities.llmRequestInputProcessors({
             requestContext: result.requestContext!,
             overrides: options.inputProcessors,
+            guardrailOverrides: options.guardrails,
           })
         : options.inputProcessors || capabilities.llmRequestInputProcessors
       : effectiveInputProcessors;
