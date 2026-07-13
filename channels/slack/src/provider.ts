@@ -873,6 +873,10 @@ export class SlackProvider implements ChannelProvider {
    * already had (including other adapters) and layers this Slack adapter on,
    * then swap it onto the controller via `setChannels`. Mirrors the agent path
    * — a superset merge, not a mutation of the live instance.
+   *
+   * The swap discards the old instance's in-memory `autoApproveResourceIds`
+   * tracking. That's fine: the set is refreshed on every inbound message, and
+   * Slack renders approval buttons anyway so it stays empty here.
    */
   #createAgentControllerChannels(controller: AgentController<any>, adapter: SlackAdapter): AgentControllerChannels {
     const adapterConfig = this.#resolveSlackAdapterConfig();
@@ -1652,11 +1656,16 @@ export class SlackProvider implements ChannelProvider {
     }
 
     // Slash commands run a one-shot agent.generate(). Controller-owned
-    // installations don't have that surface — route their inbound traffic
-    // through @-mentions/messages instead. Full controller slash-command
-    // support (dispatch through a session) is a follow-up.
+    // installations don't have that surface: controller sessions are keyed
+    // per chat thread, and Slack slash-command payloads carry no thread_ts,
+    // so a command can't be mapped to a specific thread's session. Route
+    // controller traffic through @-mentions/messages instead. Session-scoped
+    // command support (e.g. mode switching) is a follow-up.
     if (installation.ownerType === 'agentController') {
-      return c.json({ response_type: 'ephemeral', text: 'Slash commands are not supported for this app yet.' });
+      return c.json({
+        response_type: 'ephemeral',
+        text: 'Slash commands are not supported for this app yet. Mention the bot in a thread to start a session.',
+      });
     }
 
     const agent = this.#resolveAgent(installation.agentId);

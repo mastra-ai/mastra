@@ -67,6 +67,14 @@ export class AgentControllerChannels extends AgentChannels {
    */
   override __setAgent(_agent: Agent<any, any, any, any>): void {}
 
+  /**
+   * @internal No-op override. The missing-channel-tools migration warning
+   * targets standalone agents that lost auto-injected tools on upgrade.
+   * Controller mode agents never had them auto-injected (channels shipped for
+   * controllers after the removal), so a warning here would be pure noise.
+   */
+  override __warnIfChannelToolsMissing(_resolvedToolNames: string[]): void {}
+
   protected override getOwnerId(): string | null {
     return this.controller?.id ?? null;
   }
@@ -115,9 +123,7 @@ export class AgentControllerChannels extends AgentChannels {
     memory: { thread: string; resource: string };
     autoResumeSuspendedTools: true | undefined;
   }): Promise<void> {
-    const { signalContents, attributes, requestContext, thread, autoResumeSuspendedTools } = args;
-    // NOTE: `providerOptions` (per-message metadata stamping) is not carried —
-    // the session signal surface has no slot for it. Recorded v1 follow-up.
+    const { signalContents, attributes, providerOptions, requestContext, thread, autoResumeSuspendedTools } = args;
 
     const session = await this.getSessionForThread(thread);
 
@@ -139,6 +145,7 @@ export class AgentControllerChannels extends AgentChannels {
       ifActive: { attributes },
       ifIdle: { attributes },
       requestContext,
+      providerOptions,
     });
     await result.accepted;
   }

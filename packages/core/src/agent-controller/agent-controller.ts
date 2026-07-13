@@ -1123,11 +1123,17 @@ export class AgentController<TState = {}> {
    * agent plus any per-mode agents via `Agent.setChannels`, and lazily-built
    * mode agents pick it up on their first run via
    * `propagateRuntimeServicesToAgent`.
+   *
+   * Replacing an existing instance is expected on provider reconnect (the
+   * provider rebuilds channels as a superset merge rather than mutating the
+   * live instance), so it logs at debug level only. Note the replaced
+   * instance's in-memory `autoApproveResourceIds` tracking is discarded with
+   * it — harmless, since it is refreshed on every inbound message.
    * @internal
    */
   setChannels(channels: AgentControllerChannels): void {
     if (this.#channels && this.#channels !== channels) {
-      console.warn(`[AgentController:${this.id}] Replacing existing AgentControllerChannels`);
+      this.getMastra()?.getLogger()?.debug(`[AgentController:${this.id}] Replacing existing AgentControllerChannels`);
     }
     this.#channels = channels;
     channels.__setController(this);

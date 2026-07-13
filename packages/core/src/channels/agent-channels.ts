@@ -834,6 +834,34 @@ export class AgentChannels {
     return this.makeChannelTools();
   }
 
+  /** One-time guard for the missing-channel-tools migration warning. */
+  private warnedMissingChannelTools = false;
+
+  /**
+   * One-time migration nudge for the auto-injection removal: core no longer
+   * injects channel tools (send_message, add_reaction, ...) into a
+   * channel-bearing agent's resolved toolset. The Agent calls this after tool
+   * assembly; the first time none of the channel tool names appear in the
+   * resolved toolset, warn so upgrading users discover the explicit opt-in
+   * without reading the changelog.
+   *
+   * @internal
+   */
+  __warnIfChannelToolsMissing(resolvedToolNames: string[], logger?: IMastraLogger): void {
+    if (this.warnedMissingChannelTools) return;
+    if (!this.toolsEnabled) return;
+    const channelToolNames = Object.keys(this.getTools());
+    if (channelToolNames.length === 0) return;
+    const resolved = new Set(resolvedToolNames);
+    if (channelToolNames.some(name => resolved.has(name))) return;
+    this.warnedMissingChannelTools = true;
+    (logger ?? this.logger)?.warn(
+      `[AgentChannels] This agent has chat channels configured, but none of the channel tools (${channelToolNames.join(', ')}) are in its resolved toolset. ` +
+        `Channel tools are no longer auto-injected — pass them to the agent explicitly (e.g. \`tools: { ...channels.getTools() }\`) if the agent should send messages or add reactions from channel runs, ` +
+        `or set \`tools: false\` on the channels config to silence this warning.`,
+    );
+  }
+
   // ---------------------------------------------------------------------------
   // Private
   // ---------------------------------------------------------------------------

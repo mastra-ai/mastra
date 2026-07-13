@@ -5,6 +5,7 @@ import z from 'zod';
 import { Agent } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { createTool } from '../../tools';
@@ -125,6 +126,7 @@ async function createSetup({
   toolDisplay,
   stateSchema,
   resolveSessionProjectPath,
+  agentMemory,
 }: {
   responseText?: string;
   model?: MockLanguageModelV2;
@@ -132,6 +134,8 @@ async function createSetup({
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
   resolveSessionProjectPath?: (args: { resourceId: string }) => string | undefined | Promise<string | undefined>;
+  /** Memory for the mode agent — required for signal persistence assertions. */
+  agentMemory?: MockMemory;
 } = {}) {
   const adapter = createMockAdapter('discord');
   const agent = new Agent({
@@ -140,6 +144,7 @@ async function createSetup({
     model: model ?? createTextStreamModel(responseText),
     instructions: 'You are a test agent.',
     ...(tools ? { tools } : {}),
+    ...(agentMemory ? { memory: agentMemory } : {}),
   });
   const controller = new AgentController({
     workspace: createMockWorkspace(),
@@ -311,6 +316,44 @@ describe('AgentControllerChannels', () => {
       channel_platform: 'discord',
       channel_externalThreadId: 'chan-1:t-meta',
       channel_externalChannelId: 'chan-1',
+    });
+  }, 30_000);
+
+  it('stamps channel providerOptions onto the persisted user message (content.providerMetadata)', async () => {
+    const agentMemory = new MockMemory();
+    const { adapter, controller, mastra, channels } = await createSetup({ agentMemory });
+    const chatThread = createChatThread(adapter, 'chan-1:t-po');
+
+    await (channels as any).processChatMessage(chatThread, createMessage('m-po', 'hello metadata'), mastra);
+    await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'reply' });
+
+    const session = await controller.getSessionByResource('channel:chan-1:t-po');
+    const threadId = session!.thread.getId()!;
+    // Signals persist through the mode agent's memory (not the controller
+    // storage), and land asynchronously — poll until the user signal row shows.
+    const memoryStore = await (agentMemory as any).storage.getStore('memory');
+    let userMessage: any;
+    await waitFor(
+      () => {
+        void memoryStore!.listMessages({ threadId, perPage: 50 }).then(({ messages }: any) => {
+          userMessage = messages.find((m: any) => m.role === 'user' || (m.role === 'signal' && m.type === 'user'));
+        });
+        return userMessage !== undefined;
+      },
+      { what: 'persisted user message' },
+    );
+    // Same stamping contract as the base agent path: platform facts live under
+    // `content.providerMetadata.mastra.channels.<platform>` so UI/query callers
+    // can read author/channel info off the stored message.
+    expect(userMessage.content.providerMetadata).toMatchObject({
+      mastra: {
+        channels: {
+          discord: {
+            messageId: 'm-po',
+            author: { userId: 'user-1', userName: 'caleb', fullName: 'Caleb Barnes' },
+          },
+        },
+      },
     });
   }, 30_000);
 

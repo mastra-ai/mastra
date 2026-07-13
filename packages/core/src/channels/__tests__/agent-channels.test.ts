@@ -127,6 +127,59 @@ describe('AgentChannels', () => {
       expect(toolNames).not.toContain('add_reaction');
       expect(toolNames).not.toContain('remove_reaction');
     });
+
+    it('warns once when a channel-bearing agent resolves a toolset with no channel tools', async () => {
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      const agent = new Agent({
+        id: 'warn-missing-tools',
+        name: 'warn-missing-tools',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+      });
+      agent.setChannels(channels);
+      const warnSpy = vi.spyOn((agent as any).logger, 'warn');
+
+      await agent.getToolsForExecution({});
+      await agent.getToolsForExecution({});
+
+      const migrationWarnings = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('no longer auto-injected'));
+      expect(migrationWarnings).toHaveLength(1);
+    });
+
+    it('does not warn when the channel tools were passed explicitly', async () => {
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') } });
+      const agent = new Agent({
+        id: 'explicit-tools',
+        name: 'explicit-tools',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+        tools: channels.getTools() as any,
+      });
+      agent.setChannels(channels);
+      const warnSpy = vi.spyOn((agent as any).logger, 'warn');
+
+      await agent.getToolsForExecution({});
+
+      const migrationWarnings = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('no longer auto-injected'));
+      expect(migrationWarnings).toHaveLength(0);
+    });
+
+    it('does not warn when channel tools are disabled via tools: false', async () => {
+      const channels = new AgentChannels({ adapters: { discord: createMockAdapter('discord') }, tools: false });
+      const agent = new Agent({
+        id: 'tools-disabled',
+        name: 'tools-disabled',
+        instructions: 'test',
+        model: 'openai/gpt-4o',
+      });
+      agent.setChannels(channels);
+      const warnSpy = vi.spyOn((agent as any).logger, 'warn');
+
+      await agent.getToolsForExecution({});
+
+      const migrationWarnings = warnSpy.mock.calls.filter(([msg]) => String(msg).includes('no longer auto-injected'));
+      expect(migrationWarnings).toHaveLength(0);
+    });
   });
 
   describe('getInputProcessors', () => {

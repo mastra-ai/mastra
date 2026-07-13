@@ -5860,6 +5860,11 @@ export class Agent<
       ...inputProcessorLoadedTools,
     };
 
+    // Migration nudge (warns once): channel tools are no longer auto-injected,
+    // so a channel-bearing agent whose toolset carries none of them likely
+    // relied on the old auto-injection.
+    this.#agentChannels?.__warnIfChannelToolsMissing(Object.keys(allTools), this.logger);
+
     const formattedTools = this.formatTools(allTools);
     return this.wrapToolsWithHooks(formattedTools, this.resolveToolHooks(hooks));
   }
