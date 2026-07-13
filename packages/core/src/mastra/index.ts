@@ -669,6 +669,7 @@ export class Mastra<
 
   #storage?: MastraCompositeStore;
   #storageExplicit = false;
+  #storageDefaulted = false;
   #recoveryConfig: MastraRecoveryConfig = { durableAgents: 'off' };
   #scorers?: TScorers;
   #tools?: TTools;
@@ -1362,11 +1363,12 @@ export class Mastra<
       this.#storageExplicit = true;
     } else {
       storage = new InMemoryStore();
-      this.#logger?.warn(
-        'No `storage` configured on Mastra — falling back to an in-memory store. ' +
-          'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
-          'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
-      );
+      // Defer the "no storage configured" warning (see the deferred emit at the
+      // end of the constructor). File-based routing constructs the Mastra
+      // instance and then synchronously calls `__registerFsStorage`, so warning
+      // eagerly here would fire before the fs `storage.ts` had a chance to
+      // register — making valid file-based storage setups look broken.
+      this.#storageDefaulted = true;
     }
     storage = augmentWithInit(storage);
 
@@ -1422,6 +1424,24 @@ export class Mastra<
     // can look up code-defined agents, editor config, etc. when needed
     // (e.g. filesystem code-mode snapshot filtering).
     storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
+
+    // Emit the in-memory fallback warning on a microtask rather than eagerly in
+    // the constructor. File-based routing runs `new Mastra({})` and then
+    // synchronously calls `__registerFsStorage(...)` (which clears the flag via
+    // `setStorage`), so by the time this microtask runs a valid `storage.ts` has
+    // already been registered and the warning is correctly suppressed. Plain
+    // `new Mastra({})` with no storage still warns.
+    if (this.#storageDefaulted) {
+      queueMicrotask(() => {
+        if (this.#storageDefaulted) {
+          this.#logger?.warn(
+            'No `storage` configured on Mastra — falling back to an in-memory store. ' +
+              'In-memory storage is not durable: all data is lost on restart, and it is not safe for production. ' +
+              'Configure a persistent storage adapter (e.g. @mastra/libsql, @mastra/pg, @mastra/cloudflare).',
+          );
+        }
+      });
+    }
 
     // Register the editor after storage is assigned so code mode can overlay
     // filesystem-backed editor storage while preserving app storage domains.
@@ -4554,6 +4574,9 @@ export class Mastra<
    * ```
    */
   public setStorage(storage: MastraCompositeStore) {
+    // A persistent store is now attached (e.g. via file-based `storage.ts` or a
+    // runtime override), so suppress the deferred in-memory fallback warning.
+    this.#storageDefaulted = false;
     this.#storage = augmentWithInit(storage);
     this.#storage?.__registerMastra?.(this as unknown as Parameters<NonNullable<typeof storage.__registerMastra>>[0]);
     this.#ensureBackgroundTaskManager();
