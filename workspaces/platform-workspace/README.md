@@ -1,11 +1,11 @@
-# @mastra/platform
+# @mastra/platform-workspace
 
 Mastra Platform workspace provider. Gives agents environment-scoped sandbox execution and bucket-backed filesystem access through the Mastra Platform workspace proxy.
 
 ## Installation
 
 ```bash
-npm install @mastra/platform
+npm install @mastra/platform-workspace
 ```
 
 ## Configuration
@@ -28,7 +28,7 @@ Requests to the proxy are authenticated with `Authorization: Bearer <accessToken
 ```typescript
 import { Agent } from '@mastra/core/agent';
 import { Workspace } from '@mastra/core/workspace';
-import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform';
+import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 
 const workspace = new Workspace({
   filesystem: new PlatformFilesystem({
@@ -85,7 +85,7 @@ Pass an existing `sandboxId` to reattach to a live sandbox instead of creating a
 Failures from the proxy raise `PlatformApiError`. Structured `{ error: { message, type } }` payloads from the proxy are parsed into `.code` (machine kind) and `.proxyMessage` (human string); the raw response body stays available on `.body`:
 
 ```typescript
-import { PlatformApiError } from '@mastra/platform';
+import { PlatformApiError } from '@mastra/platform-workspace';
 
 try {
   await fs.readFile('/missing.txt');

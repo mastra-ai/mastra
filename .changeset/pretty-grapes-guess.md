@@ -1,5 +1,5 @@
 ---
-'@mastra/platform': minor
+'@mastra/platform-workspace': minor
 ---
 
 Added Mastra Platform workspace providers for connecting agents to Platform sandboxes and bucket-backed filesystems.
@@ -8,7 +8,7 @@ Added Mastra Platform workspace providers for connecting agents to Platform sand
 
 ```ts
 import { Workspace } from '@mastra/core/workspace';
-import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform';
+import { PlatformFilesystem, PlatformSandbox } from '@mastra/platform-workspace';
 
 const workspace = new Workspace({
   filesystem: new PlatformFilesystem({ bucketName: 'dev-bucket' }),
@@ -23,7 +23,7 @@ const workspace = new Workspace({
 Also exports `platformFilesystemProvider` and `platformSandboxProvider` descriptors for hosts that register providers dynamically through the editor's `FilesystemProvider` / `SandboxProvider` registries:
 
 ```ts
-import { platformFilesystemProvider, platformSandboxProvider } from '@mastra/platform';
+import { platformFilesystemProvider, platformSandboxProvider } from '@mastra/platform-workspace';
 
 registry.registerFilesystem(platformFilesystemProvider);
 registry.registerSandbox(platformSandboxProvider);

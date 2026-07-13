@@ -1,8 +1,8 @@
 ---
-'@mastra/platform': patch
+'@mastra/platform-workspace': patch
 ---
 
-Address code review feedback on the initial `@mastra/platform` release:
+Address code review feedback on the initial `@mastra/platform-workspace` release:
 
 - **`PlatformSandbox.destroy()`** now clears `_sandboxId` and `_createdAt` after the DELETE succeeds. Previous behavior left the stale ID in place, so a follow-up `getInfo()` would still try to GET a deleted resource.
 - **`PlatformSandbox.executeCommand()`** now uses a nullish check when deriving `timeoutSec`, so `{ timeout: 0 }` is sent as `0` instead of being silently dropped by the previous truthy check.
