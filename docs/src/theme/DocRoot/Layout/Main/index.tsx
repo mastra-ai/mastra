@@ -123,7 +123,13 @@ export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: 
     return (
       <main className={clsx('doc-main-container', hiddenSidebarContainer && 'doc-main-container--enhanced')}>
         <div className="doc-chat-layout">
-          <div className={clsx('doc-item-wrapper', hiddenSidebarContainer && 'doc-item-wrapper--enhanced')}>
+          <div
+            className={clsx(
+              'padding-top--md padding-bottom--lg container',
+              'doc-item-wrapper',
+              hiddenSidebarContainer && 'doc-item-wrapper--enhanced',
+            )}
+          >
             {children}
           </div>
         </div>
@@ -136,7 +142,11 @@ export default function DocRootLayoutMain({ hiddenSidebarContainer, children }: 
     <main className={clsx('doc-main-container', hiddenSidebarContainer && 'doc-main-container--enhanced')}>
       <div className="doc-chat-layout">
         <div
-          className={clsx('doc-item-wrapper', hiddenSidebarContainer && 'doc-item-wrapper--enhanced')}
+          className={clsx(
+            'padding-top--md padding-bottom--lg container',
+            'doc-item-wrapper',
+            hiddenSidebarContainer && 'doc-item-wrapper--enhanced',
+          )}
           inert={isModalOpen || undefined}
         >
           {children}
