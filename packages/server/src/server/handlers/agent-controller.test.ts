@@ -14,7 +14,6 @@ import {
   ABORT_AGENT_CONTROLLER_SESSION_ROUTE,
   STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
-  GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
@@ -404,60 +403,6 @@ describe('agent-controller routes', () => {
     });
   });
 
-  describe('GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE', () => {
-    it('returns running: false without creating a session for the resource', async () => {
-      const res = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
-        mastra,
-        controllerId: 'code',
-        resourceId: 'never-opened',
-        sessionScope: '/repo/worktree-idle',
-      } as any);
-      expect(res).toEqual({ running: false });
-
-      // Peek must not seed a session (callers poll this for idle workspaces).
-      const controller = mastra.getAgentController('code')!;
-      await expect(controller.getSessionByResource('never-opened', '/repo/worktree-idle')).resolves.toBeUndefined();
-    });
-
-    it('reflects the live session run state per scope', async () => {
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const scoped = await controller.createSession({
-        resourceId: 'user-run',
-        id: 'user-run::/repo/worktree-a',
-        ownerId: controller.id,
-        scope: '/repo/worktree-a',
-      });
-      scoped.displayState.apply({ type: 'agent_start' } as any);
-
-      const running = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
-        mastra,
-        controllerId: 'code',
-        resourceId: 'user-run',
-        sessionScope: '/repo/worktree-a',
-      } as any);
-      expect(running).toEqual({ running: true });
-
-      // A different scope over the same resource is independent (and unseeded).
-      const other = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
-        mastra,
-        controllerId: 'code',
-        resourceId: 'user-run',
-        sessionScope: '/repo/worktree-b',
-      } as any);
-      expect(other).toEqual({ running: false });
-
-      scoped.displayState.apply({ type: 'agent_end' } as any);
-      const ended = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
-        mastra,
-        controllerId: 'code',
-        resourceId: 'user-run',
-        sessionScope: '/repo/worktree-a',
-      } as any);
-      expect(ended).toEqual({ running: false });
-    });
-  });
-
   describe('SWITCH_AGENT_CONTROLLER_MODE_ROUTE', () => {
     it('switches the active mode', async () => {
       const ack = await SWITCH_AGENT_CONTROLLER_MODE_ROUTE.handler({
@@ -564,6 +509,34 @@ describe('agent-controller routes', () => {
         resourceId: 'user-wt',
       } as any)) as { threads: unknown[] };
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
+      // Thread state comes from the agent thread-stream runtime — the same
+      // per-thread active/idle tracking the signals `ifIdle` path uses.
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-state',
+      } as any);
+      const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-state' });
+      const busy = await session.thread.create({ title: 'busy' });
+
+      const spy = vi
+        .spyOn(Agent.prototype, 'getActiveThreadRunId')
+        .mockImplementation(({ threadId }) => (threadId === busy.id ? 'run-1' : undefined));
+      try {
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-state',
+        } as any)) as { threads: { id: string; state?: string }[] };
+
+        expect(res.threads.find(t => t.id === busy.id)?.state).toBe('active');
+        expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

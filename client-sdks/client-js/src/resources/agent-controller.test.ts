@@ -122,24 +122,6 @@ describe('AgentController Resource', () => {
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1');
   });
 
-  it('peeks the running state without creating a session', async () => {
-    mockJson({ running: true });
-    const res = await client.getAgentController('code').session('user-1').running();
-    expect(res).toEqual({ running: true });
-    const [url, init] = lastCall();
-    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/running');
-    expect(init.method ?? 'GET').toBe('GET');
-  });
-
-  it('carries the session scope on the running peek', async () => {
-    mockJson({ running: false });
-    await client.getAgentController('code').session('user-1', '/repo/worktree-a').running();
-    const [url] = lastCall();
-    expect(url).toBe(
-      'http://localhost:4111/api/agent-controller/code/sessions/user-1/running?sessionScope=%2Frepo%2Fworktree-a',
-    );
-  });
-
   it('switches mode and model', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').switchMode('plan');

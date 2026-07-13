@@ -5,9 +5,10 @@
 'mastra': patch
 ---
 
-Added `session.running()` to the agent controller client — a non-creating peek that reports whether a session is currently executing a run. `session.state()` responses now also include a `running` flag for initial UI hydration.
+Agent controller session state now reports run activity. `session.state()` responses include a `running` flag for initial UI hydration, and `session.listThreads()` results carry a per-thread `state` of `'active'` or `'idle'` so UIs can show which threads are mid-run.
 
 ```ts
 const session = client.getAgentController('code').session(resourceId, scope);
-const { running } = await session.running(); // false when no live session exists
+const { threads } = await session.listThreads({ tags: { projectPath } });
+const busy = threads.filter(t => t.state === 'active');
 ```

@@ -5876,23 +5876,6 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
-  "GET /agent-controller/:controllerId/sessions/:resourceId/running": {
-    "method": "GET",
-    "path": "/agent-controller/:controllerId/sessions/:resourceId/running",
-    "pathParams": [
-      "controllerId",
-      "resourceId"
-    ],
-    "queryParams": [
-      "sessionScope"
-    ],
-    "bodyParams": [],
-    "hasQuery": true,
-    "hasBody": false,
-    "responseShape": {
-      "kind": "single"
-    }
-  },
   "GET /agent-controller/:controllerId/sessions/:resourceId/threads": {
     "method": "GET",
     "path": "/agent-controller/:controllerId/sessions/:resourceId/threads",

@@ -229,6 +229,12 @@ export interface AgentControllerThreadInfo {
    * worktree/scope a thread belongs to when a resourceId is shared.
    */
   tags?: Record<string, string>;
+  /**
+   * Whether a run is currently executing on this thread (`'active'`) or not
+   * (`'idle'`). Present on `listThreads()` results; lets one listing report
+   * activity across every worktree/scope sharing the resourceId.
+   */
+  state?: 'active' | 'idle';
 }
 
 export interface AgentControllerAvailableModel {
@@ -457,16 +463,6 @@ export class AgentControllerSession extends BaseResource {
   /** Get the current mode, model, and thread (for initial UI hydration). */
   state(): Promise<AgentControllerSessionState> {
     return this.request(this.url(this.base()));
-  }
-
-  /**
-   * Peek whether this session is currently executing a run, without creating a
-   * session for the resource/scope (unlike {@link state} / {@link create}).
-   * Safe to poll for activity indicators: a resource/scope with no live
-   * session reports `running: false`.
-   */
-  running(): Promise<{ running: boolean }> {
-    return this.request(this.url(`${this.base()}/running`));
   }
 
   /** Merge key-value pairs into the session state. Existing keys not in the payload are preserved. */

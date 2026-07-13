@@ -60,6 +60,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const runningByPath = useWorkspaceActivity({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath: projectPath || undefined,
     worktreePaths: worktrees.map(worktree => worktree.worktreePath),
     baseUrl,
     enabled: sessionEnabled && activeProject?.source === 'github',

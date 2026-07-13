@@ -97,8 +97,6 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     ),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
-    // Activity peek polled per worktree row; idle by default.
-    http.get(`${API}/sessions/:resourceId/running`, () => HttpResponse.json({ running: false })),
   );
 
   return { stateUpdates };
@@ -177,14 +175,25 @@ describe('WorkspacesSection', () => {
     await waitFor(() => expect(screen.queryByText('Workspaces')).not.toBeInTheDocument());
   });
 
-  it('shows an activity indicator on workspaces whose scoped session is running', async () => {
+  it('shows an activity indicator on workspaces with an active thread', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
+    // One thread listing covers every worktree: each thread carries its
+    // worktree's projectPath tag and a server-annotated run state.
     server.use(
-      http.get(`${API}/sessions/:resourceId/running`, ({ request }) => {
-        const scope = new URL(request.url).searchParams.get('sessionScope');
-        return HttpResponse.json({ running: scope === '/sandbox/mastra-worktrees/feat-ui' });
-      }),
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-main', title: 'Main work', tags: { projectPath: '/sandbox/mastra' }, state: 'idle' },
+            {
+              id: 'thread-feat',
+              title: 'Feature work',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+              state: 'active',
+            },
+          ],
+        }),
+      ),
     );
 
     renderSection();

@@ -1,47 +1,57 @@
-import { useQueries } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 
-/** How often idle-workspace activity is re-checked while the tab is focused. */
+/** How often workspace activity is re-checked while the tab is focused. */
 export const WORKSPACE_ACTIVITY_POLL_MS = 5000;
 
 /**
- * Polls the non-creating `running` peek for each worktree's scoped session and
- * reports which workspaces have an agent run in flight. Worktrees with no live
- * session report `false` (the peek never seeds sessions), so it is safe to
- * poll for every row in the sidebar.
+ * Reports which workspaces have an agent run in flight, from a single thread
+ * listing. Threads are stamped with their worktree's `projectPath` tag and the
+ * server annotates each with its run state (`active`/`idle`) — backed by the
+ * same per-thread tracking the signals `ifIdle` path uses — so one poll covers
+ * every worktree sharing the resourceId instead of a request per row.
  */
 export function useWorkspaceActivity({
   agentControllerId,
   resourceId,
+  projectPath,
   worktreePaths,
   baseUrl,
   enabled,
 }: {
   agentControllerId: string;
   resourceId: string;
+  /** The active worktree's path — the session scope the listing is read through. */
+  projectPath: string | undefined;
   worktreePaths: string[];
   baseUrl?: string;
   enabled: boolean;
 }): Record<string, boolean> {
-  return useQueries({
-    queries: worktreePaths.map(worktreePath => ({
-      queryKey: queryKeys.agentControllerRunning(agentControllerId, resourceId, worktreePath),
-      queryFn: async () => {
-        const { session } = createAgentControllerClient({
-          agentControllerId,
-          resourceId,
-          scope: worktreePath,
-          baseUrl,
-        });
-        return requireAgentControllerSession(session).running();
-      },
-      enabled,
-      refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
-      retry: false,
-    })),
-    combine: results =>
-      Object.fromEntries(worktreePaths.map((path, index) => [path, results[index]?.data?.running === true])),
+  const query = useQuery({
+    queryKey: queryKeys.agentControllerActivity(agentControllerId, resourceId),
+    queryFn: async () => {
+      // A thread listing spans the whole resource regardless of session scope,
+      // so read through the already-live active-worktree session rather than
+      // seeding a new one.
+      const { session } = createAgentControllerClient({
+        agentControllerId,
+        resourceId,
+        scope: projectPath,
+        baseUrl,
+      });
+      return requireAgentControllerSession(session).listThreads();
+    },
+    enabled,
+    refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
+    retry: false,
   });
+  const threads = query.data ?? [];
+  return Object.fromEntries(
+    worktreePaths.map(path => [
+      path,
+      threads.some(thread => thread.tags?.projectPath === path && thread.state === 'active'),
+    ]),
+  );
 }

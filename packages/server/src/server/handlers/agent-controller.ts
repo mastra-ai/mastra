@@ -203,7 +203,6 @@ const sessionStateResponseSchema = z.object({
   tokenUsage: z.record(z.string(), z.unknown()).optional(),
   settings: sessionSettingsSchema.optional(),
 });
-const sessionRunningResponseSchema = z.object({ running: z.boolean() });
 const listModesResponseSchema = z.object({
   modes: z.array(z.object({ id: z.string(), name: z.string().optional() })),
 });
@@ -215,6 +214,8 @@ const listThreadsResponseSchema = z.object({
       updatedAt: z.string().optional(),
       /** The session scoping tags stamped on this thread (e.g. `{ projectPath }`). */
       tags: z.record(z.string(), z.string()).optional(),
+      /** Whether a run is currently executing on this thread ('active') or not ('idle'). */
+      state: z.enum(['active', 'idle']).optional(),
     }),
   ),
 });
@@ -697,32 +698,6 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   },
 });
 
-export const GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE = createRoute({
-  method: 'GET',
-  path: '/agent-controller/:controllerId/sessions/:resourceId/running',
-  responseType: 'json' as const,
-  pathParamSchema: sessionPathParams,
-  queryParamSchema: sessionScopeQuerySchema,
-  responseSchema: sessionRunningResponseSchema,
-  summary: 'Peek whether the session is running',
-  description:
-    'Reports whether an existing session is currently executing a run, without creating a session for the resource/scope (unlike the state route). Returns running: false when no live session exists.',
-  tags: ['AgentController'],
-  requiresAuth: true,
-  requiresPermission: 'agent-controller:read',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope }) => {
-    try {
-      const controller = getAgentControllerOrThrow(mastra, controllerId);
-      // Peek only: a resource/scope with no live session cannot be running, and
-      // this route must not seed sessions (callers poll it for idle workspaces).
-      const session = await controller.getSessionByResource(resourceId, sessionScope);
-      return { running: session?.displayState.get().isRunning === true };
-    } catch (error) {
-      return handleError(error, 'error reading controller session running state');
-    }
-  },
-});
-
 export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/modes',
@@ -796,6 +771,12 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
       const sorted = [...scoped].sort((a, b) => toTime(b) - toTime(a));
       const max = Number(limit);
       const limited = Number.isFinite(max) && max > 0 ? sorted.slice(0, max) : sorted;
+      // Thread run state comes from the agent thread-stream runtime (the same
+      // per-thread active/idle tracking the signals `ifIdle` path uses). It is
+      // keyed by resourceId + threadId, so it covers runs started by any
+      // session on this resource — including sessions scoped to other git
+      // worktrees — letting one listing report activity across all of them.
+      const agent = controller.getCurrentAgent(session);
       return {
         threads: limited.map(t => {
           const threadTags = getTags(t);
@@ -804,6 +785,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
             title: t.title,
             tags: Object.keys(threadTags).length > 0 ? threadTags : undefined,
             updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : undefined,
+            state: agent.getActiveThreadRunId({ resourceId, threadId: t.id }) ? ('active' as const) : ('idle' as const),
           };
         }),
       };
