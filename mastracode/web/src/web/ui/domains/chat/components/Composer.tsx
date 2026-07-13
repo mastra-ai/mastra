@@ -41,8 +41,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, localUser, reset } = useChatTranscript();
   const { composerCommandName, clearComposerCommand, runComposerCommand } = useChatCommands();
 
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
-  const createThreadMutation = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath });
+  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, projectPath, baseUrl, enabled: sessionEnabled };
+  const createThreadMutation = useCreateAgentControllerThreadMutation(hookArgs);
   const sendMutation = useSendAgentControllerMessageMutation(hookArgs);
   const steerMutation = useSteerAgentControllerMutation(hookArgs);
   const abortMutation = useAbortAgentControllerMutation(hookArgs);

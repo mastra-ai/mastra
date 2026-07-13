@@ -18,7 +18,7 @@ export function useAgentControllerSessionInit({
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionInitArgs) {
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
 
   return useQuery({
     queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'],

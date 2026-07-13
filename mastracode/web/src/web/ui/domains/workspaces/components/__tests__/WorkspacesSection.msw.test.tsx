@@ -89,6 +89,12 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     }),
     http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
+    // Entering an empty worktree creates a thread; handle it here so tests
+    // that don't care about the create flow still settle deterministically
+    // (tests that count creates register their own handler on top).
+    http.post(`${API}/sessions/:resourceId/threads`, () =>
+      HttpResponse.json({ id: 'thread-generic', title: 'New thread', resourceId: 'resource-gh' }),
+    ),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
   );
@@ -168,6 +174,8 @@ describe('WorkspacesSection', () => {
       expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' } }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
+    // Let the open-thread flow settle so its requests can't leak into later tests.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
 
   it('opens the most recent thread of the new worktree when switching workspaces', async () => {
@@ -268,6 +276,8 @@ describe('WorkspacesSection', () => {
     await waitFor(() =>
       expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-new' } }),
     );
+    // Let the open-thread flow settle so its requests can't leak into later tests.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
 
   it('shows an error and keeps the current selection when create fails', async () => {
