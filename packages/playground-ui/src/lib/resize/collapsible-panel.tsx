@@ -111,7 +111,6 @@ export const CollapsiblePanel = ({
   ...props
 }: CollapsiblePanelProps) => {
   const [collapsed, setCollapsed] = useState(false);
-  const [motionReady, setMotionReady] = useState(false);
   const panelRef = usePanelRef();
   const elementRef = useRef<HTMLDivElement | null>(null);
   const { endPillTracking, expandButtonRef, stripRef, pillRef, spawnPill, trackPillPosition } = useCollapsedEdgePill({
@@ -142,26 +141,13 @@ export const CollapsiblePanel = ({
       onResize={(size, id, previousSize) => {
         onResize?.(size, id, previousSize);
         if (typeof collapsedSize !== 'number') return;
-        if (previousSize !== undefined) setMotionReady(true);
         setCollapsed(size.inPixels <= collapsedSize);
       }}
     >
       <div
-        inert={collapsed}
-        data-state={collapsed ? 'collapsed' : 'open'}
-        data-direction={direction}
-        style={{
-          minWidth: 'var(--panel-min-w)',
-          opacity: collapsed ? 0 : undefined,
-          translate: collapsed ? (direction === 'left' ? '-100% 0' : '100% 0') : undefined,
-        }}
-        className={cn(
-          'absolute inset-y-0 w-full overflow-hidden',
-          'transition-[opacity,translate] duration-300 ease-out-custom motion-reduce:transition-none',
-          'data-[direction=left]:left-0 data-[direction=right]:right-0',
-          'data-[state=collapsed]:z-10',
-          !motionReady && 'transition-none',
-        )}
+        hidden={collapsed}
+        style={{ minWidth: 'var(--panel-min-w)' }}
+        className={cn('absolute inset-y-0 w-full overflow-hidden', direction === 'left' ? 'left-0' : 'right-0')}
       >
         {children}
       </div>

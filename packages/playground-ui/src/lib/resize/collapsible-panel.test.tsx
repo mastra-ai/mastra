@@ -111,7 +111,7 @@ describe('CollapsiblePanel', () => {
     const { container } = renderPanel();
 
     expect(screen.getByTestId('panel').style.overflow).toBe('hidden');
-    expect(screen.getByTestId('panel-content').parentElement?.dataset.state).toBe('open');
+    expect(screen.getByTestId('panel-content').parentElement?.hasAttribute('hidden')).toBe(false);
     expect(screen.queryByRole('button', { name: 'Expand panel' })).toBeNull();
     expect(container.querySelector('button[aria-hidden="true"]')).toBeNull();
   });
@@ -123,8 +123,7 @@ describe('CollapsiblePanel', () => {
 
     const contentWrapper = screen.getByTestId('panel-content').parentElement;
     expect(screen.getByTestId('panel').style.overflow).toBe('visible');
-    expect(contentWrapper?.dataset.state).toBe('collapsed');
-    expect(contentWrapper?.getAttribute('inert')).toBe('');
+    expect(contentWrapper?.getAttribute('hidden')).toBe('');
 
     fireEvent.click(screen.getByRole('button', { name: 'Expand panel' }));
 
