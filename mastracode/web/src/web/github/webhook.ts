@@ -60,7 +60,8 @@ async function parseGithubWebhook(c: Context): Promise<ParsedGithubWebhook | Git
 
   if (!event) return { status: 400, body: { error: 'bad_request', message: 'Missing x-github-event header' } };
   if (!deliveryId) return { status: 400, body: { error: 'bad_request', message: 'Missing x-github-delivery header' } };
-  if (!signature) return { status: 401, body: { error: 'unauthorized', message: 'Missing x-hub-signature-256 header' } };
+  if (!signature)
+    return { status: 401, body: { error: 'unauthorized', message: 'Missing x-hub-signature-256 header' } };
 
   const rawBody = await c.req.text();
   if (!verifySignature(rawBody, signature, secret)) {

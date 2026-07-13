@@ -422,9 +422,13 @@ describe('webhook route', () => {
 
   it('rejects invalid signatures without logging', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const req = signedGithubWebhookRequest('issues', { action: 'opened' }, {
-      headers: { 'x-hub-signature-256': 'sha256=0000000000000000000000000000000000000000000000000000000000000000' },
-    });
+    const req = signedGithubWebhookRequest(
+      'issues',
+      { action: 'opened' },
+      {
+        headers: { 'x-hub-signature-256': 'sha256=0000000000000000000000000000000000000000000000000000000000000000' },
+      },
+    );
 
     const res = await buildApp(null).request(req);
 
@@ -449,7 +453,9 @@ describe('webhook route', () => {
 
   it('rejects malformed JSON after signature verification', async () => {
     const body = '{';
-    const signature = `sha256=${createHmac('sha256', process.env.GITHUB_APP_WEBHOOK_SECRET ?? '').update(body).digest('hex')}`;
+    const signature = `sha256=${createHmac('sha256', process.env.GITHUB_APP_WEBHOOK_SECRET ?? '')
+      .update(body)
+      .digest('hex')}`;
     const res = await buildApp(null).request('/web/github/webhook', {
       method: 'POST',
       headers: {
