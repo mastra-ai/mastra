@@ -1187,6 +1187,7 @@ export class AgentLegacyHandler {
     const outputProcessorResult = await this.capabilities.__runOutputProcessors({
       requestContext: contextWithMemory || new RequestContext(),
       ...observabilityContext,
+      guardrailOverrides: mergedGenerateOptions.guardrails,
       messageList, // Use the full message list with complete conversation history
     });
 
@@ -1422,6 +1423,7 @@ export class AgentLegacyHandler {
             const outputProcessorResult = await this.capabilities.__runOutputProcessors({
               requestContext,
               ...observabilityContext,
+              guardrailOverrides: mergedStreamOptions.guardrails,
               messageList,
             });
 
@@ -1500,6 +1502,7 @@ export class AgentLegacyHandler {
           const outputProcessorResult = await this.capabilities.__runOutputProcessors({
             requestContext,
             ...observabilityContext,
+            guardrailOverrides: mergedStreamOptions.guardrails,
             messageList,
           });
 

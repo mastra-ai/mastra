@@ -439,13 +439,17 @@ function compileCost(
 
   if (config.tokenLimit !== undefined) {
     const tokenLimit = typeof config.tokenLimit === 'number' ? { limit: config.tokenLimit } : config.tokenLimit;
+    if (tokenLimit.enabled === false) return;
+
     const tokenAction = allowedAction(tokenLimit.action ?? action, ['block'], 'block', 'cost.tokenLimit');
     const processor = new TokenLimiterProcessor({
       limit: tokenLimit.limit,
       encoding: tokenLimit.encoding,
       strategy: 'abort',
     });
-    attachViolationHandler(processor, policy, 'cost', 'tokenLimit', 'input', tokenAction, tokenLimit);
+    attachViolationHandler(processor, policy, 'cost', 'tokenLimit', 'input', tokenAction, {
+      onViolation: tokenLimit.onViolation ?? config.onViolation,
+    });
     inputProcessors.push(
       wrapInput(processor, ['processInputStep'], policy, 'cost', 'tokenLimit', 'input', tokenAction, nextIndex()),
     );

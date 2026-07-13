@@ -1,5 +1,7 @@
+import { simulateReadableStream, MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import type { Processor } from '../../processors';
 import { RequestContext } from '../../request-context';
 import { Agent } from '../agent';
@@ -133,5 +135,73 @@ describe('Agent guardrails', () => {
         reason: expect.stringContaining('Regex filter: blocked content matching patterns: bearer-token'),
       }),
     );
+  });
+
+  it('applies per-call guardrails to legacy structured generate output', async () => {
+    const agent = new Agent({
+      id: 'legacy-structured-guardrail-agent',
+      name: 'Legacy Structured Guardrail Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1 },
+          text: '{"message":"Bearer abcdefghijklmnopqrstuvwxyz"}',
+        }),
+      }),
+    });
+
+    const result = await agent.generateLegacy('test', {
+      output: z.object({ message: z.string() }),
+      guardrails: {
+        privacy: { secrets: { action: 'block', applyTo: 'output' } },
+      },
+    });
+
+    expect(result.tripwire).toEqual(
+      expect.objectContaining({
+        reason: expect.stringContaining('Regex filter: blocked content matching patterns: bearer-token'),
+      }),
+    );
+  });
+
+  it('applies per-call guardrails when legacy streamObject completes', async () => {
+    const onViolation = vi.fn();
+    const agent = new Agent({
+      id: 'legacy-stream-object-guardrail-agent',
+      name: 'Legacy Stream Object Guardrail Agent',
+      instructions: 'test',
+      model: new MockLanguageModelV1({
+        defaultObjectGenerationMode: 'json',
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          stream: simulateReadableStream({
+            chunks: [
+              { type: 'text-delta', textDelta: '{"message":"Bearer abcdefghijklmnopqrstuvwxyz"}' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { promptTokens: 1, completionTokens: 1 },
+              },
+            ],
+          }),
+        }),
+      }),
+    });
+
+    const result = await agent.streamLegacy('test', {
+      output: z.object({ message: z.string() }),
+      guardrails: {
+        privacy: { secrets: { action: 'block', applyTo: 'output' } },
+        onViolation,
+      },
+    });
+
+    for await (const _ of result.partialObjectStream) {
+      // Consume the stream to trigger output processing.
+    }
+    expect(onViolation).toHaveBeenCalledWith(expect.objectContaining({ group: 'privacy', check: 'secrets' }));
   });
 });

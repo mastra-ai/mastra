@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { Processor } from '../processors';
 import { BatchPartsProcessor } from '../processors/processors';
 import { compileGuardrails, GUARDRAIL_SENSITIVITY_THRESHOLDS, resolveGuardrailSensitivityThreshold } from './compile';
 import { defineGuardrailPolicy, evaluateGuardrailPolicy } from './index';
@@ -111,6 +112,32 @@ describe('guardrails', () => {
       expect(() =>
         compileGuardrails({ privacy: { secrets: { action: 'block', applyTo: 'input' } }, cost: { tokenLimit: 50 } }),
       ).not.toThrow();
+    });
+
+    it('does not compile a disabled token limit', () => {
+      const compiled = compileGuardrails({
+        cost: { tokenLimit: { enabled: false, limit: 50 } },
+      });
+
+      expect(compiled.inputProcessors).toEqual([]);
+      expect(compiled.outputProcessors).toEqual([]);
+    });
+
+    it('uses the cost group violation handler for token limits', async () => {
+      const onViolation = vi.fn();
+      const compiled = compileGuardrails({
+        cost: { tokenLimit: 50, onViolation },
+      });
+
+      await (compiled.inputProcessors[0] as Processor).onViolation?.({
+        processorId: 'token-limiter',
+        message: 'Token limit exceeded',
+        detail: undefined,
+      });
+
+      expect(onViolation).toHaveBeenCalledWith(
+        expect.objectContaining({ group: 'cost', check: 'tokenLimit', action: 'block' }),
+      );
     });
 
     it('throws when cost is enabled without an explicit budget', () => {

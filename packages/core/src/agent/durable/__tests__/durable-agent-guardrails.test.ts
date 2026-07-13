@@ -58,4 +58,25 @@ describe('DurableAgent guardrails', () => {
 
     expect(result.registryEntry.tripwire).toBeUndefined();
   });
+
+  it('fails preparation when per-call guardrail compilation fails', async () => {
+    const agent = new Agent({
+      id: 'durable-invalid-guardrails-agent',
+      name: 'Durable Invalid Guardrails Agent',
+      instructions: 'test',
+      model,
+    });
+
+    await expect(
+      prepareForDurableExecution({
+        agent,
+        messages: 'hello',
+        options: {
+          guardrails: {
+            content: { moderation: { action: 'redact' as any } },
+          },
+        },
+      }),
+    ).rejects.toThrow(/content\.moderation does not support action "redact"/);
+  });
 });

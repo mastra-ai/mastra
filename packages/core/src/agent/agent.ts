@@ -27,6 +27,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import type { PubSub } from '../events/pubsub';
 import type { GuardrailsConfig } from '../guardrails';
 import { compileGuardrails } from '../guardrails';
+import { GuardrailResolutionError } from '../guardrails/errors';
 import { resolveModelConfig } from '../llm';
 import type { CoreMessage } from '../llm';
 import { MastraLLMV1 } from '../llm/model';
@@ -1440,22 +1441,26 @@ export class Agent<
     requestContext?: RequestContext,
     guardrailOverrides?: GuardrailsConfig,
   ): Promise<ReturnType<typeof compileGuardrails>> {
-    const guardrails =
-      guardrailOverrides !== undefined
-        ? guardrailOverrides
-        : this.#guardrails
-          ? typeof this.#guardrails === 'function'
-            ? await this.#guardrails({
-                requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
-              })
-            : this.#guardrails
-          : undefined;
+    try {
+      const guardrails =
+        guardrailOverrides !== undefined
+          ? guardrailOverrides
+          : this.#guardrails
+            ? typeof this.#guardrails === 'function'
+              ? await this.#guardrails({
+                  requestContext: (requestContext || new RequestContext()) as RequestContext<TRequestContext>,
+                })
+              : this.#guardrails
+            : undefined;
 
-    if (guardrails === undefined) {
-      return compileGuardrails(undefined);
+      if (guardrails === undefined) {
+        return compileGuardrails(undefined);
+      }
+
+      return compileGuardrails(guardrails, { defaultModel: await this.getModel({ requestContext }) });
+    } catch (error) {
+      throw new GuardrailResolutionError(error);
     }
-
-    return compileGuardrails(guardrails, { defaultModel: await this.getModel({ requestContext }) });
   }
 
   /**

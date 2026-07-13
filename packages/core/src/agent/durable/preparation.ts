@@ -1,5 +1,6 @@
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
 import type { GuardrailsConfig } from '../../guardrails';
+import { GuardrailResolutionError } from '../../guardrails/errors';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { IMastraLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -401,6 +402,9 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     );
     errorProcessors = await typedAgent.listErrorProcessors(requestContext);
   } catch (error) {
+    if (error instanceof GuardrailResolutionError) {
+      throw error;
+    }
     logger?.warn?.(`[DurableAgent] Error resolving processors: ${error}`);
   }
 
