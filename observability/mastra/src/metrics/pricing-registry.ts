@@ -5,7 +5,7 @@ import { PricingModel, PricingTier } from './pricing-model';
 import type { PricingMeter, PricingConditionOperator, PricingConditionField } from './types';
 
 const DATA_FILE_NAME = 'pricing-data.jsonl';
-const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac']);
+const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
 
 type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'iat' | 'oat' | 'ort';
 type MinifiedConditionFieldKey = 'tit';
