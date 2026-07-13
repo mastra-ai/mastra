@@ -1,0 +1,9 @@
+.mastracode-desktop-drag-region {
+  -webkit-app-region: drag;
+  position: fixed;
+  z-index: 20;
+  top: 0;
+  right: 0;
+  left: 72px;
+  height: 36px;
+}

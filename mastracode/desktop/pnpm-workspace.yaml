@@ -1,0 +1,16 @@
+packages:
+  - '.'
+
+# Keep Electron tooling in a local virtual store. electron-vite resolves the
+# `electron` peer from its real path, and pnpm's global virtual store puts that
+# real path outside this standalone desktop root.
+enableGlobalVirtualStore: false
+blockExoticSubdeps: true
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+trustPolicyIgnoreAfter: 43200
+
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+  esbuild: false

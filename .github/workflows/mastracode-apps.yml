@@ -80,3 +80,46 @@ jobs:
           pnpm --dir mastracode/web run check
           pnpm --dir mastracode/web exec vitest run
           pnpm --dir mastracode/web run web:test
+
+  desktop:
+    name: MastraCode Desktop
+    runs-on: starsling-ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
+      NODE_OPTIONS: --max-old-space-size=8192
+      # Electron is never launched here (typecheck, lint, and node unit tests
+      # only), so skip the binary download.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache@v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      - name: Install standalone roots
+        run: |
+          pnpm --dir mastracode/app install --frozen-lockfile
+          pnpm --dir mastracode/web install --frozen-lockfile
+          pnpm --dir mastracode/desktop install --frozen-lockfile
+
+      - name: Build linked monorepo packages
+        run: pnpm --dir mastracode/desktop run prebuild
+
+      - name: Desktop typecheck, lint, tests
+        run: |
+          pnpm --dir mastracode/desktop run check
+          pnpm --dir mastracode/desktop run lint
+          pnpm --dir mastracode/desktop run test
