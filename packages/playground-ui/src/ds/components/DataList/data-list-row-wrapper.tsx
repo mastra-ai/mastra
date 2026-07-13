@@ -21,7 +21,7 @@ export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperP
       <DataListRowWrapperContext.Provider value>
         <div
           ref={ref}
-          className={cn('grid grid-cols-subgrid gap-0 mx-1', ...dataListRowOuterStyles, className)}
+          className={cn('mx-1 grid grid-cols-subgrid gap-0', ...dataListRowOuterStyles, className)}
           {...rest}
         >
           {children}

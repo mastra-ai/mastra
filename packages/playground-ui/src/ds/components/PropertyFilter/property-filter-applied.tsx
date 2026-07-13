@@ -222,7 +222,7 @@ export function PropertyFilterApplied({
   };
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div className="flex flex-wrap items-center gap-2">
       {tokens.map((token, index) => {
         const field = fields.find(f => f.id === token.fieldId);
         if (!field) return null;

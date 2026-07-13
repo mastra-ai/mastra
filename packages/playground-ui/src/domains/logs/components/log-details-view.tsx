@@ -74,22 +74,22 @@ export function LogDetailsView({
 
       {!collapsed && (
         <DataDetailsPanel.Content>
-          <p className="text-ui-md text-neutral4 font-mono wrap-break-word whitespace-pre-wrap">{log.message}</p>
+          <p className="font-mono text-ui-md wrap-break-word whitespace-pre-wrap text-neutral4">{log.message}</p>
 
           {(traceId || spanId) && (
-            <div className={cn('grid gap-2 my-8', '[&>button]:justify-between [&>button]:overflow-hidden')}>
+            <div className={cn('my-8 grid gap-2', '[&>button]:justify-between [&>button]:overflow-hidden')}>
               {traceId && (
-                <ButtonsGroup spacing="close" className="min-w-0 w-full">
+                <ButtonsGroup spacing="close" className="w-full min-w-0">
                   <Button size="md" className="min-w-0 flex-1 overflow-hidden" onClick={() => onTraceClick?.(traceId)}>
                     <ArrowRightIcon />
                     <span>Trace</span>
-                    <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {traceId}</span>
+                    <span className=" ml-auto min-w-0 truncate text-ui-sm text-neutral2"># {traceId}</span>
                   </Button>
                   <CopyButton content={traceId} size="md" tooltip="Copy Trace ID to clipboard" />
                 </ButtonsGroup>
               )}
               {spanId && (
-                <ButtonsGroup spacing="close" className="min-w-0 w-full">
+                <ButtonsGroup spacing="close" className="w-full min-w-0">
                   <Button
                     size="md"
                     className="min-w-0 flex-1 overflow-hidden"
@@ -98,7 +98,7 @@ export function LogDetailsView({
                   >
                     <ArrowRightIcon />
                     <span>Span</span>
-                    <span className=" ml-auto text-ui-sm text-neutral2 min-w-0 truncate"># {spanId}</span>
+                    <span className=" ml-auto min-w-0 truncate text-ui-sm text-neutral2"># {spanId}</span>
                   </Button>
                   <CopyButton content={spanId} size="md" tooltip="Copy Span ID to clipboard" />
                 </ButtonsGroup>

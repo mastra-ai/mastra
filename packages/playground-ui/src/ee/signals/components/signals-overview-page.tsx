@@ -50,7 +50,7 @@ export function SignalClusterCard({ topic, onSelect }: SignalClusterCardProps) {
     >
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex min-w-0 items-start gap-2">
-          <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: clusterColor }} />
+          <span className="mt-2 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: clusterColor }} />
 
           <div>
             <h3 className="text-md font-semibold text-neutral6">{topic.name}</h3>
@@ -60,7 +60,7 @@ export function SignalClusterCard({ topic, onSelect }: SignalClusterCardProps) {
 
         <div className="space-y-1 pt-4 pl-4">
           <div className="flex items-center justify-between">
-            <p className="font-mono text-xs uppercase text-neutral3">Coverage</p>
+            <p className="font-mono text-xs text-neutral3 uppercase">Coverage</p>
             <p className="font-mono text-xs text-neutral3">
               {topic.itemCount} {itemLabel}
             </p>
@@ -93,7 +93,7 @@ function SignalClusterCardSkeleton() {
     <article className="rounded-2xl border border-border1/70 bg-surface2 p-5 shadow-sm" aria-hidden="true">
       <div className="flex h-full min-w-0 flex-col">
         <div className="flex min-w-0 items-start gap-2">
-          <Skeleton className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full" />
+          <Skeleton className="mt-2 size-2.5 shrink-0 rounded-full" />
           <div className="min-w-0 flex-1 space-y-2">
             <Skeleton className="h-4 w-1/2" />
             <Skeleton className="h-3 w-full" />
@@ -162,7 +162,7 @@ export function SignalSection({ entity, catalog, signalName, onSeeDetails, onSel
           onClick={() => onSeeDetails(signalName)}
         >
           See details
-          <ArrowUpRight className="h-4 w-4" aria-hidden="true" />
+          <ArrowUpRight className="size-4" aria-hidden="true" />
         </Button>
       </header>
 

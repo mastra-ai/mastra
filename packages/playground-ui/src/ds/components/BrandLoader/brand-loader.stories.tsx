@@ -72,9 +72,9 @@ export const SuperposedOnLogo: Story = {
             size=&quot;{size}&quot; · {SIZE_PX[size]}px (per-size stroke)
           </span>
           <div className="relative" style={{ width: SIZE_PX[size], aspectRatio: '34 / 21' }}>
-            <LogoWithoutText className="absolute inset-0 h-full w-full text-[#ef4444]/70" aria-hidden />
+            <LogoWithoutText className="absolute inset-0 size-full text-[#ef4444]/70" aria-hidden />
             <div className="absolute inset-0">
-              <BrandLoader size={size} aria-label={`BrandLoader overlay ${size}`} className="h-full w-full" />
+              <BrandLoader size={size} aria-label={`BrandLoader overlay ${size}`} className="size-full" />
             </div>
           </div>
         </div>
@@ -83,9 +83,9 @@ export const SuperposedOnLogo: Story = {
         <div key={px} className="flex flex-col items-center gap-2">
           <span className="text-ui-sm text-neutral3">{px}px (uses lg stroke via className)</span>
           <div className="relative" style={{ width: px, aspectRatio: '34 / 21' }}>
-            <LogoWithoutText className="absolute inset-0 h-full w-full text-[#ef4444]/70" aria-hidden />
+            <LogoWithoutText className="absolute inset-0 size-full text-[#ef4444]/70" aria-hidden />
             <div className="absolute inset-0">
-              <BrandLoader aria-label="BrandLoader overlay" className="h-full w-full" />
+              <BrandLoader aria-label="BrandLoader overlay" className="size-full" />
             </div>
           </div>
         </div>

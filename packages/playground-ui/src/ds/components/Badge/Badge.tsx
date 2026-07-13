@@ -6,19 +6,19 @@ import { Icon } from '../../icons/Icon';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-const badgeVariants = cva('font-mono inline-flex w-fit max-w-full items-center rounded-full border shrink-0', {
+const badgeVariants = cva('inline-flex w-fit max-w-full shrink-0 items-center rounded-full border font-mono', {
   variants: {
     variant: {
-      default: 'text-neutral5 bg-surface4 border-border1',
-      success: 'text-notice-success-fg bg-notice-success/20 border-notice-success/20',
-      error: 'text-notice-destructive-fg bg-notice-destructive/20 border-notice-destructive/20',
-      info: 'text-notice-info-fg bg-notice-info/20 border-notice-info/20',
-      warning: 'text-notice-warning-fg bg-notice-warning/20 border-notice-warning/20',
+      default: 'border-border1 bg-surface4 text-neutral5',
+      success: 'border-notice-success/20 bg-notice-success/20 text-notice-success-fg',
+      error: 'border-notice-destructive/20 bg-notice-destructive/20 text-notice-destructive-fg',
+      info: 'border-notice-info/20 bg-notice-info/20 text-notice-info-fg',
+      warning: 'border-notice-warning/20 bg-notice-warning/20 text-notice-warning-fg',
     },
     size: {
-      md: 'h-badge-default text-ui-sm gap-1',
-      sm: 'h-form-xs text-ui-xs gap-1',
-      xs: 'h-5 text-ui-xs gap-0.5',
+      md: 'h-badge-default gap-1 text-ui-sm',
+      sm: 'h-form-xs gap-1 text-ui-xs',
+      xs: 'h-5 gap-0.5 text-ui-xs',
     },
     withIcon: {
       true: '',
