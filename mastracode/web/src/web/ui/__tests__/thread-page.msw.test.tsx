@@ -87,6 +87,7 @@ function emptySse(): Response {
 
 interface CapturedRequests {
   sessionsCreated: number;
+  streamSubscriptions: number;
   switched: string[];
   created: number;
   deleted: string[];
@@ -109,7 +110,14 @@ function useAgentControllerHandlers({
   switchDelayMsByThread?: Partial<Record<string, number>>;
   failSwitchFor?: string[];
 } = {}): CapturedRequests {
-  const captured: CapturedRequests = { sessionsCreated: 0, switched: [], created: 0, deleted: [], sent: [] };
+  const captured: CapturedRequests = {
+    sessionsCreated: 0,
+    streamSubscriptions: 0,
+    switched: [],
+    created: 0,
+    deleted: [],
+    sent: [],
+  };
   // The bound thread follows successful switches so `GET /sessions/:id` stays authoritative.
   let bound = boundThreadId;
   let stateShouldFail = false;
@@ -149,7 +157,10 @@ function useAgentControllerHandlers({
       }
       return HttpResponse.json({ messages: MESSAGES[threadId] ?? [] });
     }),
-    http.get(`${SESSION}/stream`, () => emptySse()),
+    http.get(`${SESSION}/stream`, () => {
+      captured.streamSubscriptions += 1;
+      return emptySse();
+    }),
     http.post(`${SESSION}/thread`, async ({ request }) => {
       const { threadId } = (await request.json()) as { threadId: string };
       captured.switched.push(threadId);
@@ -277,7 +288,9 @@ describe('MastraCode thread pages', () => {
 
     await expectPathname(router, '/new');
     expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
-    expect(screen.getAllByPlaceholderText(/Ask Mastra Code/)).toHaveLength(1);
+    const composer = screen.getByPlaceholderText(/Ask Mastra Code/);
+    await waitFor(() => expect(composer).not.toBeDisabled());
+    expect(captured.streamSubscriptions).toBe(1);
     expect(captured.created).toBe(0);
   });
 
