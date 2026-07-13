@@ -17,8 +17,12 @@ import { InMemoryServerCache } from '../../../cache/inmemory';
 import { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
+import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
+import type { WorkflowRunState } from '../../../workflows/types';
 import { Agent } from '../../agent';
+import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 
 // ============================================================================
@@ -75,6 +79,42 @@ function createTextModel(text: string) {
       rawCall: { rawPrompt: null, rawSettings: {} },
       warnings: [],
     }),
+  });
+}
+
+async function seedSuspendedRun(
+  store: InMemoryStore,
+  runId: string,
+  agentId: string,
+  memory: { threadId: string; resourceId: string },
+) {
+  const workflows = (await store.getStore('workflows'))!;
+  await workflows.persistWorkflowSnapshot({
+    workflowName: DurableStepIds.AGENTIC_LOOP,
+    runId,
+    resourceId: memory.resourceId,
+    snapshot: {
+      runId,
+      status: 'suspended',
+      value: {},
+      context: {
+        input: {
+          __workflowKind: 'durable-agent',
+          runId,
+          agentId,
+          messageListState: { memoryInfo: memory },
+          requestContextEntries: { tenantId: 'tenant-1' },
+          state: memory,
+        },
+      },
+      activePaths: [],
+      activeStepsPath: {},
+      suspendedPaths: {},
+      resumeLabels: {},
+      serializedStepGraph: [],
+      waitingPaths: {},
+      timestamp: Date.now(),
+    } as WorkflowRunState,
   });
 }
 
@@ -158,6 +198,125 @@ describe('Resume API', () => {
       const result = await durableAgent.resume(requestedRunId, { approved: true });
       expect(result.runId).toBe(requestedRunId);
       result.cleanup();
+    });
+
+    it('rehydrates a missing run registry entry before resuming', async () => {
+      const mockModel = createTextModel('Resumed!');
+      const store = new InMemoryStore();
+
+      const baseAgent = new Agent({
+        id: 'cold-resume-agent',
+        name: 'Cold Resume Agent',
+        instructions: 'Test cold resume rehydration',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { coldResumeAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'cold-resume-run-aaaaaaaa';
+      await seedSuspendedRun(store, runId, durableAgent.id, {
+        threadId: 'cold-thread',
+        resourceId: 'cold-resource',
+      });
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      const result = await durableAgent.resume(runId, { approved: true });
+
+      expect(prepareSpy).toHaveBeenCalledOnce();
+      expect(prepareSpy).toHaveBeenCalledWith(
+        [],
+        expect.objectContaining({
+          runId,
+          memory: { thread: 'cold-thread', resource: 'cold-resource' },
+          requestContext: expect.anything(),
+        }),
+      );
+      expect(prepareSpy.mock.calls[0]?.[1]?.requestContext?.get('tenantId')).toBe('tenant-1');
+      expect(durableAgent.runRegistry.has(runId)).toBe(true);
+      expect(result.runId).toBe(runId);
+      expect(result.threadId).toBe('cold-thread');
+      expect(result.resourceId).toBe('cold-resource');
+      result.cleanup();
+    });
+
+    it('keeps the missing-run error when no persisted snapshot exists', async () => {
+      const baseAgent = new Agent({
+        id: 'missing-cold-resume-agent',
+        name: 'Missing Cold Resume Agent',
+        instructions: 'Test missing cold resume behavior',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({
+        agents: { missingColdResumeAgent: durableAgent },
+        storage: new InMemoryStore(),
+        logger: false,
+      });
+
+      await expect(durableAgent.resume('missing-cold-run', { approved: true })).rejects.toThrow(
+        'No registry entry found for run missing-cold-run. Cannot resume.',
+      );
+    });
+
+    it('does not rehydrate a persisted run owned by another agent', async () => {
+      const store = new InMemoryStore();
+      const baseAgent = new Agent({
+        id: 'snapshot-owner-agent',
+        name: 'Snapshot Owner Agent',
+        instructions: 'Test snapshot ownership',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      void new Mastra({ agents: { snapshotOwnerAgent: durableAgent }, storage: store, logger: false });
+      const runId = 'foreign-cold-run';
+      await seedSuspendedRun(store, runId, 'different-agent', {
+        threadId: 'foreign-thread',
+        resourceId: 'foreign-resource',
+      });
+
+      await expect(durableAgent.resume(runId, { approved: true })).rejects.toThrow(
+        `persisted run belongs to agent "different-agent", not "${durableAgent.id}"`,
+      );
+      expect(durableAgent.runRegistry.has(runId)).toBe(false);
+    });
+
+    it('does not re-prepare a warm run before resuming', async () => {
+      const mockModel = createTextModel('Resumed!');
+
+      const baseAgent = new Agent({
+        id: 'warm-resume-agent',
+        name: 'Warm Resume Agent',
+        instructions: 'Test warm resume behavior',
+        model: mockModel as LanguageModelV2,
+      });
+
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const { runId } = await durableAgent.prepare('Start something');
+      const prepareSpy = vi.spyOn(durableAgent, 'prepare');
+
+      const result = await durableAgent.resume(runId, { approved: true });
+
+      expect(prepareSpy).not.toHaveBeenCalled();
+      expect(result.runId).toBe(runId);
+      result.cleanup();
+    });
+
+    it('forwards approval execution options into the durable resume path', async () => {
+      const baseAgent = new Agent({
+        id: 'approval-options-agent',
+        name: 'Approval Options Agent',
+        instructions: 'Test approval option forwarding',
+        model: createTextModel('Unused') as LanguageModelV2,
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const output = { marker: 'output' };
+      const resumeSpy = vi.spyOn(durableAgent, 'resume').mockResolvedValue({ output } as any);
+      const memory = { thread: 'approval-thread', resource: 'approval-resource' };
+
+      const result = await durableAgent.approveToolCall({ runId: 'approval-run', memory });
+
+      expect(result).toBe(output);
+      expect(resumeSpy).toHaveBeenCalledWith('approval-run', { approved: true }, expect.objectContaining({ memory }));
     });
 
     it('should preserve threadId and resourceId from prepare through resume', async () => {
