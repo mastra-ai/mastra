@@ -16,6 +16,7 @@ import type {
   Experiment,
   ExperimentResult,
   ExperimentReviewCounts,
+  ExperimentTenancyFilters,
   CreateExperimentInput,
   UpdateExperimentInput,
   AddExperimentResultInput,
@@ -24,12 +25,31 @@ import type {
   ListExperimentsOutput,
   ListExperimentResultsInput,
   ListExperimentResultsOutput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import { buildSelectColumns } from '../../db/utils';
+import { cutoffFor, runBatchedDelete } from '../../retention';
+import { buildScopedWhere, tenancyWhere } from '../utils';
+
+const DEFAULT_PRUNE_BATCH_SIZE = 1000;
 
 export class ExperimentsLibSQL extends ExperimentsStorage {
+  /**
+   * An experiment is pruned as a whole unit: when `experiments.completedAt` is
+   * older than the policy, the run and all its `experiment_results` rows are
+   * deleted together (results cascade with their parent, matching
+   * `deleteExperiment`). Results are not an independent retention key. NULL
+   * `completedAt` (still running) is never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    experiments: { table: TABLE_EXPERIMENTS, column: 'completedAt', indexed: true },
+  };
+
   #db: LibSQLDB;
   #client: Client;
 
@@ -90,6 +110,67 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
   async dangerouslyClearAll(): Promise<void> {
     await this.#db.deleteData({ tableName: TABLE_EXPERIMENT_RESULTS });
     await this.#db.deleteData({ tableName: TABLE_EXPERIMENTS });
+  }
+
+  /**
+   * Prune whole experiments older than the `experiments` policy's `maxAge`.
+   *
+   * Each batch selects up to `batchSize` aged experiments and deletes their
+   * `experiment_results` rows and the experiment rows in one transaction —
+   * mirroring `deleteExperiment` — so hitting `maxBatches`/`maxRows` or the
+   * abort signal between batches never leaves a run hollow (parent kept,
+   * results gone). NULL `completedAt` (still running) is excluded by the
+   * `< cutoff` predicate. Bounds count whole experiments, not rows.
+   */
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const policy = policies['experiments'];
+    if (!policy || options?.signal?.aborted) {
+      return policy
+        ? [
+            { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: 0, done: false },
+            { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: 0, done: false },
+          ]
+        : [];
+    }
+
+    // Lazily create the anchor index on first prune (best-effort) so only
+    // deployments that configure retention pay its write/disk overhead.
+    try {
+      await this.#db.ensureIndex({
+        indexName: `idx_retention_${TABLE_EXPERIMENTS}_completedAt`,
+        tableName: TABLE_EXPERIMENTS,
+        column: 'completedAt',
+      });
+    } catch (error) {
+      this.logger?.warn?.(`Failed to ensure retention index on ${TABLE_EXPERIMENTS}(completedAt):`, error);
+    }
+
+    const cutoff = cutoffFor(policy, 'timestamp');
+    const batchSize = policy.batchSize ?? DEFAULT_PRUNE_BATCH_SIZE;
+
+    let childDeleted = 0;
+    const parent = await runBatchedDelete({
+      deleteBatch: async limit => {
+        const { parents, children } = await this.#db.pruneUnitsBatch({
+          parentTable: TABLE_EXPERIMENTS,
+          parentKey: 'id',
+          parentColumn: 'completedAt',
+          childTable: TABLE_EXPERIMENT_RESULTS,
+          childForeignKey: 'experimentId',
+          cutoff,
+          limit,
+        });
+        childDeleted += children;
+        return parents;
+      },
+      batchSize,
+      options,
+    });
+
+    return [
+      { domain: 'experiments', table: TABLE_EXPERIMENT_RESULTS, deleted: childDeleted, done: parent.done },
+      { domain: 'experiments', table: TABLE_EXPERIMENTS, deleted: parent.deleted, done: parent.done },
+    ];
   }
 
   // Helper to transform row to Experiment
@@ -289,11 +370,12 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentById(args: { id: string }): Promise<Experiment | null> {
+  async getExperimentById(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<Experiment | null> {
     try {
+      const scoped = buildScopedWhere('id', args.id, args.filters);
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE id = ?`,
-        args: [args.id],
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENTS)} FROM ${TABLE_EXPERIMENTS} WHERE ${scoped.sql}`,
+        args: scoped.args,
       });
       return result.rows?.[0] ? this.transformExperimentRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
@@ -395,17 +477,24 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperiment(args: { id: string }): Promise<void> {
+  async deleteExperiment(args: { id: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
-      // Delete results first (foreign key semantics)
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId = ?`,
-        args: [args.id],
-      });
-      await this.#client.execute({
-        sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE id = ?`,
-        args: [args.id],
-      });
+      // Tenancy predicate folded into both DELETEs; batch runs as one transaction.
+      // Silent no-op on mismatch.
+      const parentScoped = buildScopedWhere('id', args.id, args.filters);
+      const { conditions, params } = tenancyWhere(args.filters);
+      const cascadeWhere = conditions.length
+        ? `experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')})`
+        : `experimentId = ?`;
+      const cascadeArgs = conditions.length ? [args.id, ...params] : [args.id];
+
+      await this.#client.batch(
+        [
+          { sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${cascadeWhere}`, args: cascadeArgs },
+          { sql: `DELETE FROM ${TABLE_EXPERIMENTS} WHERE ${parentScoped.sql}`, args: parentScoped.args },
+        ],
+        'write',
+      );
     } catch (error) {
       throw new MastraError(
         {
@@ -551,11 +640,15 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async getExperimentResultById(args: { id: string }): Promise<ExperimentResult | null> {
+  async getExperimentResultById(args: {
+    id: string;
+    filters?: ExperimentTenancyFilters;
+  }): Promise<ExperimentResult | null> {
     try {
+      const scoped = buildScopedWhere('id', args.id, args.filters);
       const result = await this.#client.execute({
-        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE id = ?`,
-        args: [args.id],
+        sql: `SELECT ${buildSelectColumns(TABLE_EXPERIMENT_RESULTS)} FROM ${TABLE_EXPERIMENT_RESULTS} WHERE ${scoped.sql}`,
+        args: scoped.args,
       });
       return result.rows?.[0] ? this.transformExperimentResultRow(result.rows[0] as Record<string, unknown>) : null;
     } catch (error) {
@@ -645,8 +738,19 @@ export class ExperimentsLibSQL extends ExperimentsStorage {
     }
   }
 
-  async deleteExperimentResults(args: { experimentId: string }): Promise<void> {
+  async deleteExperimentResults(args: { experimentId: string; filters?: ExperimentTenancyFilters }): Promise<void> {
     try {
+      // Tenancy predicate folded into the DELETE via a scoped parent subquery.
+      // Silent no-op on mismatch.
+      const { conditions, params } = tenancyWhere(args.filters);
+      if (conditions.length) {
+        await this.#client.execute({
+          sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId IN (SELECT id FROM ${TABLE_EXPERIMENTS} WHERE ${['id = ?', ...conditions].join(' AND ')})`,
+          args: [args.experimentId, ...params],
+        });
+        return;
+      }
+
       await this.#client.execute({
         sql: `DELETE FROM ${TABLE_EXPERIMENT_RESULTS} WHERE experimentId = ?`,
         args: [args.experimentId],

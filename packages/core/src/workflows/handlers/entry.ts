@@ -16,6 +16,7 @@ import type {
   StepResult,
   TimeTravelExecutionParams,
   WorkflowRunStatus,
+  WorkflowRunState,
 } from '../types';
 import { getSingleStepEntryId, isSingleStepEntry } from '../utils';
 
@@ -174,33 +175,49 @@ export async function persistStepUpdate(
       return;
     }
 
+    // Guard: never overwrite a `suspended` / `paused` snapshot with a later
+    // `running` update from the same run. During resume the loop transitions
+    // suspended → running mid-execution, and any step-update write would
+    // otherwise clobber the suspend record before the resume actually
+    // completes. The engine tracks its own last-persisted status for this
+    // run (process-local) so we don't need an extra storage read per step.
+    if (workflowStatus === 'running') {
+      const lastPersisted = engine.getLastPersistedStatus(runId);
+      if (lastPersisted === 'suspended' || lastPersisted === 'paused') {
+        return;
+      }
+    }
+
     const requestContextObj = engine.serializeRequestContext(requestContext);
+
+    const snapshot: WorkflowRunState = {
+      runId,
+      status: workflowStatus,
+      value: executionContext.state,
+      context: stepResults as any,
+      activePaths: executionContext.executionPath,
+      stepExecutionPath: executionContext.stepExecutionPath,
+      activeStepsPath: executionContext.activeStepsPath,
+      serializedStepGraph,
+      suspendedPaths: executionContext.suspendedPaths,
+      waitingPaths: {},
+      resumeLabels: executionContext.resumeLabels,
+      result,
+      error,
+      requestContext: requestContextObj,
+      timestamp: Date.now(),
+      // Persist tracing context for span continuity on resume
+      tracingContext,
+    };
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     await workflowsStore?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       resourceId,
-      snapshot: {
-        runId,
-        status: workflowStatus,
-        value: executionContext.state,
-        context: stepResults as any,
-        activePaths: executionContext.executionPath,
-        stepExecutionPath: executionContext.stepExecutionPath,
-        activeStepsPath: executionContext.activeStepsPath,
-        serializedStepGraph,
-        suspendedPaths: executionContext.suspendedPaths,
-        waitingPaths: {},
-        resumeLabels: executionContext.resumeLabels,
-        result,
-        error,
-        requestContext: requestContextObj,
-        timestamp: Date.now(),
-        // Persist tracing context for span continuity on resume
-        tracingContext,
-      },
+      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
     });
+    engine.setLastPersistedStatus(runId, workflowStatus);
   });
 }
 

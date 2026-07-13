@@ -1933,6 +1933,7 @@ export class Workflow<
     this.#options = {
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
       onFinish: options.onFinish,
       onError: options.onError,
@@ -2316,14 +2317,24 @@ export class Workflow<
           };
         } else if (typeof m.template === 'string') {
           a[key] = { template: m.template };
-        } else if (m.initData) {
-          // Serialize the init-data reference as the workflow id; the live entry
-          // (this.stepFlow) keeps the real reference for execution. Stringifying
-          // the workflow object here would walk back into this entry and form a
-          // circular structure.
-          a[key] = { initData: m.initData?.id, path: m.path };
+        } else if (m.initData !== undefined) {
+          // `mapVariable({ initData: <workflow> })` keeps a live Workflow instance
+          // by reference. Serializing it here would deep-walk the whole workflow
+          // (logger, nested step graph, …) into `mapConfig` — a multi-hundred-MB
+          // string that OOMs at .commit() before the length guard below can trim
+          // it (#19018). The execute path only reads `m.initData` for truthiness
+          // (it calls getInitData()), so a slim id reference is behaviourally
+          // identical at runtime. Fall back to `true` so callers using the
+          // sentinel form still round-trip successfully.
+          a[key] = {
+            initData: m.initData?.id ?? true,
+            path: m.path,
+          };
         } else if (m.step) {
-          // Serialize step references as ids (single or array) for the same reason.
+          // Serialize step references as ids (single or array). The live entry
+          // (this.stepFlow) keeps the real reference for execution; stringifying
+          // the Step object here would walk back into the workflow graph and
+          // form a circular structure.
           a[key] = {
             step: Array.isArray(m.step) ? m.step.map((s: any) => s?.id) : m.step?.id,
             path: m.path,
@@ -2709,9 +2720,14 @@ export class Workflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
-      withNestedWorkflows: false,
-    });
+    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+    // transient processor workflows from #17344) cannot have a stored row, so this
+    // existence read would be a guaranteed miss. Skipping it removes one storage
+    // round trip per streamed chunk on the agent output-processor hot path (#19015).
+    const existingRun =
+      shouldPersistSnapshot || options?.runId
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
@@ -2724,26 +2740,29 @@ export class Workflow<
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const initialSnapshot: WorkflowRunState = {
+        runId: runIdToUse,
+        status: 'pending',
+        value: {},
+        // @ts-expect-error - context type mismatch
+        context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
+        activePaths: [],
+        activeStepsPath: {},
+        serializedStepGraph: this.serializedStepGraph,
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        result: undefined,
+        error: undefined,
+        timestamp: Date.now(),
+      };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: {
-          runId: runIdToUse,
-          status: 'pending',
-          value: {},
-          // @ts-expect-error - context type mismatch
-          context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
-          activePaths: [],
-          activeStepsPath: {},
-          serializedStepGraph: this.serializedStepGraph,
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          result: undefined,
-          error: undefined,
-          timestamp: Date.now(),
-        },
+        snapshot: this.#options.pruneSnapshot
+          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+          : initialSnapshot,
       });
     }
 

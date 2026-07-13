@@ -4,7 +4,8 @@ import type { PubSub } from '../../../events';
 import { getSingleStepEntryId } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
-import { stepRunEventType, type ProcessorArgs } from '.';
+import { stepRunEventType } from '.';
+import type { ProcessorArgs } from '.';
 
 export async function processWorkflowParallel(
   {
@@ -52,33 +53,38 @@ export async function processWorkflowParallel(
   }
 
   await Promise.all(
-    step.steps
-      ?.filter(child => pathsToRun[getSingleStepEntryId(child)])
-      .map(async (child, idx) => {
-        return pubsub.publish('workflows', {
-          // Each child is dispatched with its own per-type run event so agent /
-          // tool / mapping children are interpreted explicitly.
-          type: stepRunEventType(child),
+    // Iterate the full steps array and guard inside so `idx` stays the branch's
+    // real index. Filtering first and using the post-filter index would route a
+    // restart to the wrong branch when the active branches are not a zero-based
+    // contiguous prefix (mirrors `processWorkflowConditional` below).
+    step.steps?.map(async (child, idx) => {
+      if (!pathsToRun[getSingleStepEntryId(child)]) {
+        return;
+      }
+      // Each child is dispatched with its own per-type run event so agent /
+      // tool / mapping children are interpreted explicitly.
+      return pubsub.publish('workflows', {
+        type: stepRunEventType(child),
+        runId,
+        data: {
+          workflowId,
           runId,
-          data: {
-            workflowId,
-            runId,
-            executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
-            resumeSteps,
-            stepResults,
-            prevResult,
-            resumeData,
-            timeTravel,
-            restart: restart ? { ...restart, isParallelOrConditionalRestarted: true } : undefined,
-            parentWorkflow,
-            activeStepsPath,
-            requestContext,
-            perStep,
-            state: currentState,
-            outputOptions,
-          },
-        });
-      }),
+          executionPath: restart ? executionPath.slice(0, -1).concat([idx]) : executionPath.concat([idx]),
+          resumeSteps,
+          stepResults,
+          prevResult,
+          resumeData,
+          timeTravel,
+          restart: restart ? { ...restart, isParallelOrConditionalRestarted: true } : undefined,
+          parentWorkflow,
+          activeStepsPath,
+          requestContext,
+          perStep,
+          state: currentState,
+          outputOptions,
+        },
+      });
+    }),
   );
 }
 

@@ -160,6 +160,7 @@ export async function resolveStoredToolProviders(
             toolMeta: cfg.tools ?? {},
             connectionId: connection.connectionId,
             authorId: resolvedAuthorId,
+            scope: connection.scope,
             requestContext,
           });
         } catch (error) {

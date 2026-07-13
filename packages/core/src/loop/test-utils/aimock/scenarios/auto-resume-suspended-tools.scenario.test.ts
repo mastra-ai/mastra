@@ -51,6 +51,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: true,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -161,6 +162,7 @@ describeForAllEngines(
         defaultOptions: {
           autoResumeSuspendedTools: false,
         },
+        engine,
       });
 
       const threadId = randomUUID();
@@ -215,5 +217,5 @@ describeForAllEngines(
       expect(toolExecuted).toBe(false);
     });
   },
-  { skip: ['durable'] },
+  { skip: ['fs'] },
 );

@@ -88,13 +88,17 @@ export { EventedAgent, isEventedAgentClass, type EventedAgentConfig } from './ev
 export { createEventedAgent, isEventedAgent, type CreateEventedAgentOptions } from './create-evented-agent';
 
 // Stream until idle (durable variant)
-export { runDurableStreamUntilIdle, type DurableStreamUntilIdleDeps } from './durable-stream-until-idle';
+export {
+  runDurableStreamUntilIdle,
+  runResumeDurableStreamUntilIdle,
+  type DurableStreamUntilIdleDeps,
+} from './durable-stream-until-idle';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
 
 // Run registry for non-serializable state
-export { RunRegistry, ExtendedRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
 
 // Stream adapter for pubsub-based streaming
 export {

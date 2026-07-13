@@ -1,6 +1,6 @@
 {
   "name": "@internal/llm-recorder",
-  "version": "0.0.44",
+  "version": "0.0.49",
   "description": "LLM response recording and replay for tests",
   "type": "module",
   "private": true,

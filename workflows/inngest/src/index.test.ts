@@ -237,6 +237,119 @@ describe('MastraInngestWorkflow', () => {
     }
   });
 
+  describe.sequential('FGA actor signal', () => {
+    it('bypasses membership resolution for a trusted system actor across a nested-workflow step boundary', async ctx => {
+      const inngest = new Inngest({
+        id: 'mastra',
+        baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
+      });
+
+      const { createWorkflow, createStep } = init(inngest);
+
+      const fgaProvider = {
+        require: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        filterAccessible: vi.fn(),
+      };
+
+      const agent = new Agent({
+        id: 'membership-agent',
+        name: 'Membership Agent',
+        instructions: 'Say ok',
+        model: new MockLanguageModelV2({
+          doGenerate: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            content: [{ type: 'text', text: 'ok' }],
+            warnings: [],
+          }),
+        }),
+      });
+
+      // Inside a durable step, forward the per-call actor + tenant-scoped requestContext
+      // to a nested agent FGA check, exactly as a trusted background workflow would.
+      const callAgentStep = createStep({
+        id: 'call-agent',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ text: z.string() }),
+        execute: async ({ actor, requestContext, mastra }) => {
+          const res = await mastra!.getAgent('membership-agent').generate('hello', { actor, requestContext });
+          return { text: res.text };
+        },
+      });
+
+      const nestedWorkflow = createWorkflow({
+        id: 'nested-actor-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ text: z.string() }),
+        steps: [callAgentStep],
+      })
+        .then(callAgentStep)
+        .commit();
+
+      const workflow = createWorkflow({
+        id: 'actor-parent-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ text: z.string() }),
+        steps: [nestedWorkflow],
+      })
+        .then(nestedWorkflow)
+        .commit();
+
+      const mastra = new Mastra({
+        logger: false,
+        storage: new DefaultStorage({
+          id: 'test-storage',
+          url: ':memory:',
+        }),
+        agents: { 'membership-agent': agent },
+        workflows: {
+          'actor-parent-workflow': workflow,
+        },
+        server: {
+          fga: fgaProvider,
+          apiRoutes: [
+            {
+              path: '/inngest/api',
+              method: 'ALL',
+              createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
+            },
+          ],
+        },
+      });
+
+      const app = await createHonoServer(mastra);
+
+      const srv = (globServer = serve({
+        fetch: app.fetch,
+        port: (ctx as any).handlerPort,
+      }));
+      await resetInngest();
+
+      const requestContext = new RequestContext();
+      requestContext.set('organizationId', 'org-1');
+
+      const run = await workflow.createRun();
+      const result = await run.start({
+        inputData: {},
+        requestContext,
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+      });
+
+      srv.close();
+
+      // The trusted actor bypasses membership resolution at the nested agent FGA check,
+      // which only happens if `actor` survived the parent -> nested-workflow step boundary.
+      expect(fgaProvider.require).not.toHaveBeenCalled();
+      expect(result.status).toBe('success');
+      expect(result.steps['nested-actor-workflow']).toMatchObject({
+        status: 'success',
+        output: { text: 'ok' },
+      });
+    });
+  });
+
   describe.sequential('Basic Workflow Execution', () => {
     it('should be able to bail workflow execution', async ctx => {
       const t0 = Date.now();

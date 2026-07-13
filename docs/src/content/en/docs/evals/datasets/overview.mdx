@@ -49,11 +49,7 @@ const existing = await datasets.get({ id: 'dataset-id' })
 const { datasets: all } = await datasets.list()
 ```
 
-:::info
-
 Visit the [`DatasetsManager` reference](/reference/datasets/datasets-manager) for the full list of methods.
-
-:::
 
 ## Studio
 
@@ -160,7 +156,15 @@ const { items: matches } = await dataset.listItems({
   search: 'Hello',
 })
 
-// List items at a specific version
+// Search and pagination can be combined with a specific version
+const { items: v2Matches } = await dataset.listItems({
+  version: 2,
+  search: 'Hello',
+  page: 0,
+  perPage: 50,
+})
+
+// Version-only snapshot returns a bare DatasetItem[]
 const v2Items = await dataset.listItems({ version: 2 })
 ```
 
@@ -200,13 +204,7 @@ Fetch the exact items that existed at a past version:
 const items = await dataset.listItems({ version: 2 })
 ```
 
-You can also pin experiments to a version, see [running experiments](/docs/evals/datasets/running-experiments).
-
-:::info
-
-Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
-
-:::
+You can also pin experiments to a version, see [running experiments](/docs/evals/datasets/running-experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.
 
 ## Related
 
@@ -214,3 +212,4 @@ Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list o
 - [Scorers overview](/docs/evals/overview)
 - [DatasetsManager reference](/reference/datasets/datasets-manager)
 - [Dataset reference](/reference/datasets/dataset)
+- 📹 [Mastra evals, datasets, and experiments workshop](https://www.youtube.com/watch?v=Vla5LfmOOrM)

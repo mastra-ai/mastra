@@ -1083,3 +1083,78 @@ describe('Workflow (Default Engine Specifics)', () => {
     });
   });
 });
+
+describe('createRun storage existence read (issue #19015)', () => {
+  const ioSchema = z.object({ value: z.string() });
+  const buildStep = () =>
+    createStep({
+      id: 'passthrough',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      execute: async ({ inputData }) => inputData,
+    });
+
+  it('skips the storage read for a transient (non-persisting) workflow with a freshly minted runId', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'transient-createrun-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep())
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'transient-createrun-wf': workflow } });
+
+    const workflowsStore = await storage.getStore('workflows');
+    const readSpy = vi.spyOn(workflowsStore!, 'getWorkflowRunById');
+    const persistSpy = vi.spyOn(workflowsStore!, 'persistWorkflowSnapshot');
+
+    await workflow.createRun();
+
+    // The run id was just generated and the workflow never persists a snapshot, so
+    // the existence read would be a guaranteed miss — it must be short-circuited.
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(persistSpy).not.toHaveBeenCalled();
+  });
+
+  it('still reads storage for a default (persisting) workflow', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'persisting-createrun-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+    })
+      .then(buildStep())
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'persisting-createrun-wf': workflow } });
+
+    const workflowsStore = await storage.getStore('workflows');
+    const readSpy = vi.spyOn(workflowsStore!, 'getWorkflowRunById');
+
+    await workflow.createRun();
+
+    expect(readSpy).toHaveBeenCalled();
+  });
+
+  it('still reads storage for a transient workflow when an explicit runId is provided', async () => {
+    const storage = new MockStore();
+    const workflow = createWorkflow({
+      id: 'transient-explicit-createrun-wf',
+      inputSchema: ioSchema,
+      outputSchema: ioSchema,
+      options: { shouldPersistSnapshot: () => false },
+    })
+      .then(buildStep())
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { 'transient-explicit-createrun-wf': workflow } });
+
+    const workflowsStore = await storage.getStore('workflows');
+    const readSpy = vi.spyOn(workflowsStore!, 'getWorkflowRunById');
+
+    // An explicit runId may reference an existing (resumable) run, so the read must run.
+    await workflow.createRun({ runId: 'explicit-run-id' });
+
+    expect(readSpy).toHaveBeenCalled();
+  });
+});

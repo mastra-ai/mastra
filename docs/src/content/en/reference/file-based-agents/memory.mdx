@@ -1,0 +1,65 @@
+---
+title: "Memory | File-based Agents"
+description: Give a file-based agent persistent memory with a memory.ts module.
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+  - "@mastra/memory"
+---
+
+# Memory
+
+A file-based agent gets [memory](/docs/memory/overview) from a `memory.ts` file that default-exports a [`Memory`](/reference/memory/memory-class) instance. Use this page for the file-based convention; use the memory docs for message history, semantic recall, storage, and processors.
+
+Without `memory.ts` or `config.memory`, the agent has no memory by default. Each `generate()` or `stream()` call starts without remembered conversation state unless you pass the prior context yourself.
+
+## Quickstart
+
+Create `memory.ts` next to the agent's `config.ts`:
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { Memory } from '@mastra/memory'
+
+export default new Memory()
+```
+
+The exported instance becomes the agent's `memory`. If your app configures a storage provider on the main Mastra instance, memory data is stored there. See [storage](/docs/storage/overview) for more information.
+
+Use the same `resource` and `thread` values when calling the agent to continue a conversation:
+
+```typescript title="src/app/weather-chat.ts"
+const response = await weatherAgent.generate('Remember that I prefer Celsius.', {
+  memory: {
+    resource: 'user-123',
+    thread: 'weather-chat',
+  },
+})
+```
+
+## Configure memory
+
+Pass options to `new Memory()` when the default behavior isn't enough.
+
+```typescript title="src/mastra/agents/weather/memory.ts"
+import { Memory } from '@mastra/memory'
+
+export default new Memory({
+  options: {
+    lastMessages: 20,
+    workingMemory: {
+      enabled: true,
+      scope: 'resource',
+    },
+  },
+})
+```
+
+Visit the [`Memory` reference](/reference/memory/memory-class) for constructor options. Use these pages for related memory features:
+
+- [Storage](/docs/storage/overview): configure persistence for memory data.
+- [Semantic recall](/docs/memory/semantic-recall): retrieve relevant past messages by semantic meaning.
+- [Memory processors](/docs/memory/memory-processors): filter, trim, or transform messages before memory adds them to model context.
+
+## Precedence with config
+
+`config.memory` wins over `memory.ts`. If neither is present, the assembled file-based agent has no memory. See [`config.ts` precedence](/reference/file-based-agents/config#precedence) for the full merge table.

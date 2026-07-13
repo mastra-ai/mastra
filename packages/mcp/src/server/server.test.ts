@@ -9,6 +9,8 @@ import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type {
@@ -423,6 +425,9 @@ describe('MCPServer', () => {
       'weather://historical': {
         text: JSON.stringify({ averageHigh: 20, averageLow: 10 }),
       },
+      'weather://ui': {
+        text: '<html><body>widget</body></html>',
+      },
     };
 
     const initialResourcesForTest: Resource[] = [
@@ -443,6 +448,12 @@ describe('MCPServer', () => {
         name: 'Historical Weather Data',
         description: 'Past 30 days weather data',
         mimeType: 'application/json',
+      },
+      {
+        uri: 'weather://ui',
+        name: 'Weather UI Widget',
+        mimeType: 'text/html',
+        _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
       },
     ];
 
@@ -553,6 +564,14 @@ describe('MCPServer', () => {
         code: ErrorCode.InvalidParams,
         message: expect.stringContaining('Resource not found: weather://nonexistent'),
       });
+    });
+
+    it('should preserve resource `_meta` on read contents (MCP Apps CSP)', async () => {
+      const uri = 'weather://ui';
+      const resourceContentResult = (await resourceTestInternalClient.readResource(uri)) as ReadResourceResult;
+      expect(resourceContentResult.contents.length).toBe(1);
+      const content = resourceContentResult.contents[0] as { _meta?: Record<string, unknown> };
+      expect(content._meta).toEqual({ ui: { csp: { connectDomains: ['https://api.example.com'] } } });
     });
   });
 
@@ -1526,6 +1545,212 @@ describe('MCPServer', () => {
       await client.disconnect();
     });
 
+    it('should still return final tool results in serverless JSON response mode (default)', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessJsonServer',
+        version: '1.0.0',
+        tools: {
+          echoTool: {
+            description: 'Echoes the provided message',
+            parameters: z.object({ message: z.string() }),
+            execute: async ({ message }: { message: string }) => ({ echoed: message }),
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Default serverless mode: enableJsonResponse stays true (no streaming opt-in)
+          options: { serverless: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-json-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const result = await client.callTool({ name: 'echoTool', arguments: { message: 'hello' } });
+
+        // Final tool result is still delivered in JSON response mode
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ echoed: 'hello' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
+    it('should deliver notifications/progress to an MCP client onprogress handler in serverless streaming mode', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessStreamingServer',
+        version: '1.0.0',
+        tools: {
+          progressTool: {
+            description: 'Reports progress while working',
+            parameters: z.object({}),
+            execute: async (_args: unknown, context: any) => {
+              const extra = context?.mcp?.extra;
+              const progressToken = extra?._meta?.progressToken;
+              if (progressToken !== undefined && extra?.sendNotification) {
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 1, total: 2 },
+                });
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 2, total: 2 },
+                });
+              }
+              return { result: 'done' };
+            },
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Opt into request-scoped SSE streaming for serverless requests
+          options: { serverless: true, serverlessStreaming: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-streaming-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const progressUpdates: Array<{ progress: number; total?: number }> = [];
+        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+          onprogress: notification =>
+            progressUpdates.push({ progress: notification.progress, total: notification.total }),
+        });
+
+        // The client received the request-scoped progress notifications
+        expect(progressUpdates).toEqual([
+          { progress: 1, total: 2 },
+          { progress: 2, total: 2 },
+        ]);
+
+        // The final tool result is still delivered after the stream completes
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
+    it('should let an explicit enableJsonResponse override serverlessStreaming', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessExplicitJsonServer',
+        version: '1.0.0',
+        tools: {
+          progressTool: {
+            description: 'Reports progress while working',
+            parameters: z.object({}),
+            execute: async (_args: unknown, context: any) => {
+              const extra = context?.mcp?.extra;
+              const progressToken = extra?._meta?.progressToken;
+              if (progressToken !== undefined && extra?.sendNotification) {
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 1, total: 2 },
+                });
+              }
+              return { result: 'done' };
+            },
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // serverlessStreaming requests streaming, but an explicit enableJsonResponse wins
+          options: { serverless: true, serverlessStreaming: true, enableJsonResponse: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-explicit-json-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const progressUpdates: number[] = [];
+        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+          onprogress: notification => progressUpdates.push(notification.progress),
+        });
+
+        // JSON response mode buffers the request, so no progress notifications stream through
+        expect(progressUpdates).toEqual([]);
+
+        // The final tool result is still delivered
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
+    it('should not require or persist an mcp-session-id in serverless streaming mode', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessNoSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { serverless: true, serverlessStreaming: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-no-session-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        // Stateless mode: the server assigns no session, so the client transport has no session ID
+        expect(transport.sessionId).toBeUndefined();
+
+        // Subsequent requests still work without an mcp-session-id
+        const tools = await client.listTools();
+        expect(tools.tools.length).toBeGreaterThan(0);
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
     it('should return 404 when a stale session ID is provided', async () => {
       sessionServer = new MCPServer({
         name: 'StaleSessionServer',
@@ -2386,9 +2611,10 @@ describe('MCPServer - Elicitation', () => {
       message: 'This should fail gracefully',
     });
 
-    // When no elicitation handler is provided, the server's elicitInput should fail
-    // and the tool should return a reject response
-    expect(result.content[0].text).toContain('Method not found');
+    // When no elicitation handler is provided, the client does not advertise the
+    // elicitation capability, so the server's elicitInput fails before sending and
+    // the tool returns the error text.
+    expect(result.content[0].text).toContain('Client does not support form elicitation');
   });
 
   it('should validate elicitation request schema structure', async () => {
@@ -2473,24 +2699,32 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
-    // Each client registers its own independent handler
-    elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
-    elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
+    // Each client registers its own independent handler. onRequest is async (it
+    // resolves the per-server client), so it must be awaited before listTools()
+    // connects — otherwise the elicitation capability may be registered after
+    // connect(), which the SDK rejects.
+    await elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
+    await elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
 
-    const tools = await elicitationClient1.listTools();
-    const tool = tools['elicitation1_testElicitationTool'];
-    expect(tool).toBeDefined();
-    await tool.execute!({
-      message: 'Please provide your information',
-    });
+    try {
+      const tools = await elicitationClient1.listTools();
+      const tool = tools['elicitation1_testElicitationTool'];
+      expect(tool).toBeDefined();
+      await tool.execute!({
+        message: 'Please provide your information',
+      });
 
-    const tools2 = await elicitationClient2.listTools();
-    const tool2 = tools2['elicitation2_testElicitationTool'];
-    expect(tool2).toBeDefined();
+      const tools2 = await elicitationClient2.listTools();
+      const tool2 = tools2['elicitation2_testElicitationTool'];
+      expect(tool2).toBeDefined();
 
-    // Verify handlers are isolated - they should not interfere with each other
-    expect(client1Handler).toHaveBeenCalled();
-    expect(client2Handler).not.toHaveBeenCalled();
+      // Verify handlers are isolated - they should not interfere with each other
+      expect(client1Handler).toHaveBeenCalled();
+      expect(client2Handler).not.toHaveBeenCalled();
+    } finally {
+      await elicitationClient1.disconnect();
+      await elicitationClient2.disconnect();
+    }
   }, 10000);
 
   it('should support custom timeout in elicitation request options', async () => {
@@ -2678,9 +2912,16 @@ describe('MCPServer with Tool Output Schema', () => {
     const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     expect(tool).toBeDefined();
-    // outputSchema is not passed to createTool (MCP SDK validates via AJV internally),
-    // so it won't be on the Mastra tool wrapper
-    expect(tool.outputSchema).toBeUndefined();
+    const documentedSchema = tool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-07' });
+    expect(documentedSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        processedInput: { type: 'string' },
+        timestamp: { type: 'string' },
+      },
+    });
+    // MCP SDK validates output; Mastra schema is documentation-only (always passes).
+    expect(tool.outputSchema?.['~standard'].validate({ not: 'valid' })).toEqual({ value: { not: 'valid' } });
   });
 
   it('should call tool and receive structuredContent', async () => {
@@ -2777,7 +3018,10 @@ describe('MCPServer - Tool Input Validation', () => {
 
     validationClient = new InternalMastraMCPClient({
       name: 'validation-test-client',
-      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`) },
+      // These tests assert the shape of the server's isError validation envelope
+      // (result.isError / result.content), so opt out of the default throw-on-error
+      // behavior and resolve with the raw result instead.
+      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`), onToolError: 'return' },
     });
 
     await validationClient.connect();

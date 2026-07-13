@@ -46,6 +46,8 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
+  // Cron fields must be a valid cron expression (schedule create routes).
+  if (field === 'cron') return '* * * * *';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
   // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
   if (field === 'tags') return '["test-tag"]'; // For observability traces filtering

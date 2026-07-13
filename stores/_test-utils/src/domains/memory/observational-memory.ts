@@ -1292,6 +1292,33 @@ export function createObservationalMemoryTest({ storage }: { storage: MastraStor
         expect(updated?.bufferedObservationChunks?.length ?? 0).toBe(0);
       });
 
+      it('should persist extractor data on buffered chunks', async () => {
+        const input = createSampleOMInput();
+        const record = await memoryStorage.initializeObservationalMemory(input);
+
+        await memoryStorage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            ...createChunk({ observations: 'Buffered with extraction data', messageTokens: 600 }),
+            extractedValues: {
+              'working-memory': { name: 'Tyler', location: 'Vancouver' },
+              'weather-locations': { locations: ['Vancouver'] },
+            },
+            extractionFailures: [{ slug: 'failed-extractor', error: 'failed to parse' }],
+          },
+        });
+
+        const updated = await memoryStorage.getObservationalMemory(input.threadId, input.resourceId);
+        expect(updated?.bufferedObservationChunks).toHaveLength(1);
+        expect(updated?.bufferedObservationChunks?.[0]?.extractedValues).toEqual({
+          'working-memory': { name: 'Tyler', location: 'Vancouver' },
+          'weather-locations': { locations: ['Vancouver'] },
+        });
+        expect(updated?.bufferedObservationChunks?.[0]?.extractionFailures).toEqual([
+          { slug: 'failed-extractor', error: 'failed to parse' },
+        ]);
+      });
+
       it('should make swapBufferedToActive idempotent after activation', async () => {
         const input = createSampleOMInput();
         const record = await memoryStorage.initializeObservationalMemory(input);

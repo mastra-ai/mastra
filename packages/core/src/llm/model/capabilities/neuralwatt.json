@@ -3,9 +3,29 @@
     "Qwen/Qwen3.6-35B-A3B",
     "kimi-k2.5-fast",
     "kimi-k2.6-fast",
+    "kimi-k2.6-flex",
+    "kimi-k2.7-code-flex",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
     "moonshotai/Kimi-K2.7-Code",
+    "qwen3.6-35b-fast"
+  ],
+  "temperature": [
+    "Qwen/Qwen3.5-397B-A17B-FP8",
+    "Qwen/Qwen3.6-35B-A3B",
+    "glm-5.2",
+    "glm-5.2-fast",
+    "glm-5.2-flex",
+    "glm-5.2-short",
+    "glm-5.2-short-fast",
+    "glm-5.2-short-fast-flex",
+    "glm-5.2-short-flex",
+    "kimi-k2.5-fast",
+    "kimi-k2.6-fast",
+    "kimi-k2.6-flex",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.6",
+    "qwen3.5-397b-fast",
     "qwen3.6-35b-fast"
   ]
 }

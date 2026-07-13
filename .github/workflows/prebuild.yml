@@ -21,7 +21,7 @@ jobs:
       has_code: ${{ steps.filter.outputs.has_code }}
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 0
 
@@ -52,7 +52,7 @@ jobs:
 
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
@@ -62,7 +62,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}
@@ -81,6 +81,13 @@ jobs:
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
       test_files: ${{ steps.compute.outputs.test_files }}
+      unit_test_files: ${{ steps.compute.outputs.unit_test_files }}
+      e2e_test_files: ${{ steps.compute.outputs.e2e_test_files }}
+      e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
+      mastracode_e2e_changed: ${{ steps.compute.outputs.mastracode_e2e_changed }}
+      stores_changed: ${{ steps.compute.outputs.stores_changed }}
+      workspaces_changed: ${{ steps.compute.outputs.workspaces_changed }}
+      memory_changed: ${{ steps.compute.outputs.memory_changed }}
       affected_store_tests: ${{ steps.compute.outputs.affected_store_tests }}
       affected_workspace_tests: ${{ steps.compute.outputs.affected_workspace_tests }}
       affected_memory_tests: ${{ steps.compute.outputs.affected_memory_tests }}
@@ -88,7 +95,7 @@ jobs:
       contents: read
     steps:
       - name: Checkout repo
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           fetch-depth: 0
 
@@ -98,70 +105,137 @@ jobs:
       - name: Compute affected test files
         id: compute
         run: |
-          CHANGED=$(git diff --name-only \
+          git diff --name-only \
             "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
-            | grep -E '/src/.*\.(ts|tsx)$' \
+            > /tmp/changed-files.txt
+
+          CHANGED=$(grep -E '/src/.*\.(ts|tsx)$' /tmp/changed-files.txt \
             | grep -vE '__fixtures__|/fixtures/' \
             || true)
 
           if [ -z "$CHANGED" ]; then
-            echo "No src/ changes detected — running full suite."
-            echo "run_full=true" >> $GITHUB_OUTPUT
-            echo "test_files=" >> $GITHUB_OUTPUT
-            echo "affected_store_tests=false" >> $GITHUB_OUTPUT
-            echo "affected_workspace_tests=false" >> $GITHUB_OUTPUT
-            echo "affected_memory_tests=false" >> $GITHUB_OUTPUT
-            exit 0
+            echo "No source file changes found — skipping unit and E2E test selection."
+            printf '{"affectedTests":[],"count":0,"testFiles":1}\n' > /tmp/affected.json
+          else
+            echo "Changed source files:"
+            echo "$CHANGED"
+
+            # Run affected-tests tool
+            echo "$CHANGED" | xargs node scripts/affected-tests.mjs --json > /tmp/affected.json
           fi
 
-          echo "Changed source files:"
-          echo "$CHANGED"
+          # Parse results, split unit/E2E files, and compute downstream gates.
+          node <<'NODE'
+          const fs = require('fs');
+          const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
+          const changedFiles = fs.readFileSync('/tmp/changed-files.txt', 'utf-8').split(/\r?\n/).filter(Boolean);
+          const nonMarkdownChangedFiles = changedFiles.filter(file => !file.endsWith('.md'));
+          const affectedTests = (data.affectedTests || []).sort();
+          const count = data.count || 0;
+          const total = data.testFiles || 1;
+          const ratio = count / total;
+          const hasChangedSource = changedFiles.some(file => /\/src\/.*\.(ts|tsx)$/.test(file) && !/__fixtures__|\/fixtures\//.test(file));
+          const runFull = hasChangedSource && ratio > 0.5;
 
-          # Run affected-tests tool
-          echo "$CHANGED" | xargs node scripts/affected-tests.mjs --json > /tmp/affected.json
+          const output = (line) => fs.appendFileSync(process.env.GITHUB_OUTPUT, line);
+          const outputList = (name, files) => {
+            output(`${name}<<AFFECTED_EOF\n`);
+            output(`${files.join('\n')}${files.length > 0 ? '\n' : ''}`);
+            output('AFFECTED_EOF\n');
+          };
+          const changed = (predicate) => nonMarkdownChangedFiles.some(predicate);
+          const affected = (predicate) => affectedTests.some(predicate);
 
-          # Parse results and apply threshold
-          node -e "
-            const fs = require('fs');
-            const data = JSON.parse(fs.readFileSync('/tmp/affected.json', 'utf-8'));
-            const count = data.count || 0;
-            const total = data.testFiles || 1;
-            const ratio = count / total;
+          const isPackageE2eTest = (file) => file.startsWith('packages/') && (
+            file.includes('.e2e.') ||
+            file.startsWith('packages/evals/src/scorers/llm/') ||
+            file.startsWith('packages/rag/src/')
+          );
+          const isExternalE2eTest = (file) =>
+            file.startsWith('e2e-tests/') || file.startsWith('packages/playground/e2e/');
+          const unitTestFiles = affectedTests.filter(file => !isPackageE2eTest(file) && !isExternalE2eTest(file));
+          const e2eTestFiles = affectedTests.filter(isPackageE2eTest);
 
-            const affectedStoreTests = (data.affectedTests || []).some(file => file.startsWith('stores/'));
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_store_tests=\${affectedStoreTests}\n\`);
+          const affectedStoreTests = affected(file => file.startsWith('stores/'));
+          const affectedWorkspaceTests = affected(file => file.startsWith('workspaces/'));
+          const affectedMemoryTests = affected(file => file.startsWith('packages/memory/integration-tests/'));
 
-            const affectedWorkspaceTests = (data.affectedTests || []).some(file => file.startsWith('workspaces/'));
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_workspace_tests=\${affectedWorkspaceTests}\n\`);
+          const storesChanged = affectedStoreTests || changed(file =>
+            file.startsWith('stores/') ||
+            file === '.github/workflows/test-combined-stores.yml' ||
+            file === '.github/workflows/prebuild.yml'
+          );
+          const workspacesChanged = affectedWorkspaceTests || changed(file =>
+            file.startsWith('workspaces/') ||
+            file === '.github/workflows/test-workspaces.yml' ||
+            file === '.github/workflows/secrets.test-workspaces.yml' ||
+            file === '.github/workflows/prebuild.yml'
+          );
+          const memoryChanged = affectedMemoryTests || changed(file =>
+            file.startsWith('packages/memory/') || file === '.github/workflows/prebuild.yml'
+          );
+          const e2eChanged = affected(isExternalE2eTest) || (runFull && hasChangedSource) || changed(file =>
+            file.startsWith('e2e-tests/') ||
+            file.startsWith('packages/playground/e2e/') ||
+            file === '.github/workflows/e2e-tests.yml' ||
+            file === 'pnpm-lock.yaml'
+          );
+          const mastracodeE2eChanged = changed(file =>
+            file.startsWith('mastracode/') ||
+            file.startsWith('packages/core/') ||
+            file === 'pnpm-lock.yaml' ||
+            file === '.github/workflows/mastracode-e2e.yml'
+          );
 
-            const affectedMemoryTests = (data.affectedTests || []).some(file => file.startsWith('packages/memory/integration-tests/'));
-            fs.appendFileSync(process.env.GITHUB_OUTPUT, \`affected_memory_tests=\${affectedMemoryTests}\n\`);
+          output(`affected_store_tests=${affectedStoreTests}\n`);
+          output(`affected_workspace_tests=${affectedWorkspaceTests}\n`);
+          output(`affected_memory_tests=${affectedMemoryTests}\n`);
+          output(`stores_changed=${storesChanged}\n`);
+          output(`workspaces_changed=${workspacesChanged}\n`);
+          output(`memory_changed=${memoryChanged}\n`);
+          output(`e2e_changed=${e2eChanged}\n`);
+          output(`mastracode_e2e_changed=${mastracodeE2eChanged}\n`);
 
-            console.error(\`Affected: \${count}/\${total} tests (\${(ratio * 100).toFixed(1)}%)\`);
+          console.error(`Affected: ${count}/${total} tests (${(ratio * 100).toFixed(1)}%)`);
+          console.error(`Affected unit/type tests: ${unitTestFiles.length}`);
+          console.error(`Affected package E2E tests: ${e2eTestFiles.length}`);
 
-            if (ratio > 0.5) {
-              console.error('Above 50% threshold — running full suite.');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_full=true\n');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'test_files=\n');
-            } else {
-              console.error(\`Running \${count} affected tests.\`);
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'run_full=false\n');
-              // Write multiline output using heredoc syntax
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'test_files<<AFFECTED_EOF\n');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, data.affectedTests.join('\n') + '\n');
-              fs.appendFileSync(process.env.GITHUB_OUTPUT, 'AFFECTED_EOF\n');
-            }
-          "
+          if (runFull) {
+            console.error('Above 50% threshold — running full suite.');
+            output('run_full=true\n');
+            output('test_files=\n');
+            output('unit_test_files=\n');
+            output('e2e_test_files=\n');
+          } else {
+            console.error(`Running ${count} affected tests.`);
+            output('run_full=false\n');
+            outputList('test_files', affectedTests);
+            outputList('unit_test_files', unitTestFiles);
+            outputList('e2e_test_files', e2eTestFiles);
+          }
+          NODE
 
       - name: Save affected-tests outputs for downstream workflow
         if: always()
         env:
+          E2E_CHANGED: ${{ steps.compute.outputs.e2e_changed }}
+          MASTRACODE_E2E_CHANGED: ${{ steps.compute.outputs.mastracode_e2e_changed }}
+          STORES_CHANGED: ${{ steps.compute.outputs.stores_changed }}
+          WORKSPACES_CHANGED: ${{ steps.compute.outputs.workspaces_changed }}
+          MEMORY_CHANGED: ${{ steps.compute.outputs.memory_changed }}
+          AFFECTED_STORE_TESTS: ${{ steps.compute.outputs.affected_store_tests }}
           AFFECTED_WORKSPACE_TESTS: ${{ steps.compute.outputs.affected_workspace_tests }}
           AFFECTED_MEMORY_TESTS: ${{ steps.compute.outputs.affected_memory_tests }}
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           mkdir -p /tmp/affected-outputs
+          echo "$E2E_CHANGED" > /tmp/affected-outputs/e2e_changed.txt
+          echo "$MASTRACODE_E2E_CHANGED" > /tmp/affected-outputs/mastracode_e2e_changed.txt
+          echo "$STORES_CHANGED" > /tmp/affected-outputs/stores_changed.txt
+          echo "$WORKSPACES_CHANGED" > /tmp/affected-outputs/workspaces_changed.txt
+          echo "$MEMORY_CHANGED" > /tmp/affected-outputs/memory_changed.txt
+          echo "$AFFECTED_STORE_TESTS" > /tmp/affected-outputs/affected_store_tests.txt
           echo "$AFFECTED_WORKSPACE_TESTS" > /tmp/affected-outputs/affected_workspace_tests.txt
           echo "$AFFECTED_MEMORY_TESTS" > /tmp/affected-outputs/affected_memory_tests.txt
           echo "$BASE_SHA" > /tmp/affected-outputs/base_sha.txt
@@ -169,7 +243,7 @@ jobs:
 
       - name: Upload affected-tests artifact
         if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: affected-tests-outputs
           path: /tmp/affected-outputs/
@@ -187,48 +261,17 @@ jobs:
       head_sha: ${{ github.event.pull_request.head.sha }}
       base_ref: ${{ github.event.pull_request.base.ref }}
       has_code: ${{ needs.changes.outputs.has_code }}
-      test_files: ${{ needs.affected-tests.outputs.test_files }}
+      unit_test_files: ${{ needs.affected-tests.outputs.unit_test_files }}
+      e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  e2e-check-changes:
-    name: Detect E2E changes
-    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: changes
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      e2e-changed: ${{ steps.filter.outputs.e2e }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-
-      - name: Check for changes that require e2e tests
-        uses: dorny/paths-filter@v3
-        id: filter
-        with:
-          base: ${{ github.event.pull_request.base.ref }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          filters: |
-            e2e:
-              - 'packages/**'
-              - 'e2e-tests/**'
-              - 'stores/**'
-              - 'client-sdks/**'
-              - 'deployers/**'
-              - 'server-adapters/**'
-              - '.github/workflows/e2e-tests.yml'
-              - '!**/*.md'
-
   e2e-tests:
     name: E2E Tests
-    needs: [changes, e2e-check-changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.e2e-check-changes.outputs.e2e-changed == 'true' && needs.prebuild.result == 'success'
+    needs: [changes, affected-tests, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.e2e_changed == 'true' && needs.prebuild.result == 'success'
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
@@ -238,39 +281,10 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  mastracode-e2e-check-changes:
-    name: Detect Mastra Code E2E changes
-    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: changes
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      mastracode-e2e-changed: ${{ steps.filter.outputs.mastracode_e2e }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-
-      - name: Check for changes that require Mastra Code E2E
-        uses: dorny/paths-filter@d1c1ffe0248fe513906c8e24db8ea791d46f8590 # v3.0.3
-        id: filter
-        with:
-          base: ${{ github.event.pull_request.base.ref }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          filters: |
-            mastracode_e2e:
-              - 'mastracode/**'
-              - 'packages/core/**'
-              - 'pnpm-lock.yaml'
-              - '.github/workflows/mastracode-e2e.yml'
-              - '!**/*.md'
-
   mastracode-e2e:
     name: Mastra Code E2E
-    needs: [changes, mastracode-e2e-check-changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.mastracode-e2e-check-changes.outputs.mastracode-e2e-changed == 'true' && needs.prebuild.result == 'success'
+    needs: [changes, affected-tests, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.prebuild.result == 'success'
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
@@ -280,56 +294,10 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  combined-stores-check-changes:
-    name: Detect stores changes
-    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: [changes, affected-tests]
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      stores-changed: ${{ steps.check.outputs.stores-changed }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-
-      - name: Check for stores changes
-        id: check
-        env:
-          AFFECTED_STORE_TESTS: ${{ needs.affected-tests.outputs.affected_store_tests }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          STORES_CHANGED=false
-
-          # Run when the affected-tests graph found store test files impacted
-          if [ "$AFFECTED_STORE_TESTS" = "true" ]; then
-            STORES_CHANGED=true
-          fi
-
-          # Direct path fallback for changes not covered by the affected-test graph
-          # (store packages/configs, CI workflow edits). Core storage/vector source
-          # changes are already caught by the affected-tests graph via cross-package
-          # alias resolution, so they are not duplicated here.
-          # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
-          DIRECT=$(git diff --name-only \
-            "$BASE_SHA...$HEAD_SHA" \
-            | grep -vE '\.md$' \
-            | grep -E '^(stores/|\.github/workflows/test-combined-stores\.yml|\.github/workflows/prebuild\.yml)' \
-            || true)
-
-          if [ -n "$DIRECT" ]; then
-            STORES_CHANGED=true
-          fi
-
-          echo "stores-changed=$STORES_CHANGED" >> "$GITHUB_OUTPUT"
-
   combined-stores-tests:
     name: Combined Store Tests
-    needs: [changes, combined-stores-check-changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.combined-stores-check-changes.outputs.stores-changed == 'true' && needs.prebuild.result == 'success'
+    needs: [changes, affected-tests, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.prebuild.result == 'success'
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
@@ -344,56 +312,10 @@ jobs:
       ABHI_CLOUDFLARE_API_TOKEN: ${{ secrets.ABHI_CLOUDFLARE_API_TOKEN }}
       ABHI_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.ABHI_CLOUDFLARE_ACCOUNT_ID }}
 
-  workspace-check-changes:
-    name: Detect workspace changes
-    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: [changes, affected-tests]
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      workspaces-changed: ${{ steps.check.outputs.workspaces-changed }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-
-      - name: Check for workspace changes
-        id: check
-        env:
-          AFFECTED_WORKSPACE_TESTS: ${{ needs.affected-tests.outputs.affected_workspace_tests }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          WORKSPACES_CHANGED=false
-
-          # Run when the affected-tests graph found workspace test files impacted
-          if [ "$AFFECTED_WORKSPACE_TESTS" = "true" ]; then
-            WORKSPACES_CHANGED=true
-          fi
-
-          # Direct path fallback for changes not covered by the affected-test graph
-          # (workspace packages/configs, CI workflow edits). Core source changes that
-          # affect workspace tests are already caught by the affected-tests graph via
-          # cross-package alias resolution, so they are not duplicated here.
-          # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
-          DIRECT=$(git diff --name-only \
-            "$BASE_SHA...$HEAD_SHA" \
-            | grep -vE '\.md$' \
-            | grep -E '^(workspaces/|\.github/workflows/test-workspaces\.yml|\.github/workflows/secrets\.test-workspaces\.yml|\.github/workflows/prebuild\.yml)' \
-            || true)
-
-          if [ -n "$DIRECT" ]; then
-            WORKSPACES_CHANGED=true
-          fi
-
-          echo "workspaces-changed=$WORKSPACES_CHANGED" >> "$GITHUB_OUTPUT"
-
   workspace-tests:
     name: Workspace Tests
-    needs: [changes, workspace-check-changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.workspace-check-changes.outputs.workspaces-changed == 'true' && needs.prebuild.result == 'success'
+    needs: [changes, affected-tests, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.prebuild.result == 'success'
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
@@ -403,57 +325,10 @@ jobs:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
 
-  memory-check-changes:
-    name: Detect memory changes
-    if: github.repository == 'mastra-ai/mastra' && needs.changes.outputs.has_code == 'true'
-    needs: [changes, affected-tests]
-    runs-on: starsling-ubuntu-24.04
-    timeout-minutes: 10
-    outputs:
-      memory-changed: ${{ steps.check.outputs.memory-changed }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
-        with:
-          fetch-depth: 0
-
-      - name: Check for memory changes
-        id: check
-        env:
-          AFFECTED_MEMORY_TESTS: ${{ needs.affected-tests.outputs.affected_memory_tests }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          MEMORY_CHANGED=false
-
-          # Run when the affected-tests graph found memory integration test files impacted
-          if [ "$AFFECTED_MEMORY_TESTS" = "true" ]; then
-            MEMORY_CHANGED=true
-          fi
-
-          # Direct path fallback for changes not covered by the affected-test graph
-          # (memory package configs, integration test setup/config, CI workflow edits).
-          # Core source changes that affect memory integration tests are already caught
-          # by the affected-tests graph via cross-package alias resolution, so they are
-          # not duplicated here.
-          # Ignore markdown-only changes so docs/changelog-only edits don't trigger.
-          DIRECT=$(git diff --name-only \
-            "$BASE_SHA...$HEAD_SHA" \
-            | grep -vE '\.md$' \
-            | grep -E '^(packages/memory/|\.github/workflows/prebuild\.yml)' \
-            || true)
-
-          if [ -n "$DIRECT" ]; then
-            MEMORY_CHANGED=true
-          fi
-
-          echo "memory-changed=$MEMORY_CHANGED" >> "$GITHUB_OUTPUT"
-
   memory-test:
     name: Memory Tests
-    needs: [memory-check-changes, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.memory-check-changes.outputs.memory-changed == 'true' && needs.prebuild.result == 'success'
+    needs: [affected-tests, prebuild]
+    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success'
     runs-on: starsling-ubuntu-24.04
     permissions:
       contents: read
@@ -474,7 +349,7 @@ jobs:
           --health-retries 5
 
       redis:
-        image: redis:7
+        image: redis:8
         ports:
           - 6379:6379
 
@@ -484,7 +359,7 @@ jobs:
       TURBO_CACHE: remote:r
 
     steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
@@ -493,7 +368,7 @@ jobs:
 
       - name: Cache turbo build setup
         if: ${{ env.TURBO_TOKEN == '' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ github.sha }}

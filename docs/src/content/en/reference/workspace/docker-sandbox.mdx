@@ -7,13 +7,7 @@ packages:
 
 # DockerSandbox
 
-Executes commands inside Docker containers on the local machine. Uses long-lived containers with `docker exec` for command execution. Targets local development, CI/CD, air-gapped deployments, and cost-sensitive scenarios where cloud sandboxes are unnecessary.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Executes commands inside Docker containers on the local machine. Uses long-lived containers with `docker exec` for command execution. Targets local development, CI/CD, air-gapped deployments, and cost-sensitive scenarios where cloud sandboxes are unnecessary. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Installation
 
@@ -39,6 +33,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'dev-agent',
   name: 'dev-agent',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,

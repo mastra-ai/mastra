@@ -160,6 +160,7 @@ import { Agent } from '@mastra/core/agent'
 import { PIIDetector } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'private-agent',
   name: 'private-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -188,6 +189,7 @@ import { Agent } from '@mastra/core/agent'
 import { BatchPartsProcessor, PIIDetector } from '@mastra/core/processors'
 
 export const agent = new Agent({
+  id: 'output-pii-agent',
   name: 'output-pii-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',

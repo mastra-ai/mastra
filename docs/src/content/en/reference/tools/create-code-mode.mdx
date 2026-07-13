@@ -1,5 +1,5 @@
 ---
-title: "Reference: createCodeMode() | Tools & MCP"
+title: "Reference: createCodeMode() | Tools and MCP"
 description: "API reference for createCodeMode(), used to run multi-tool computations in a sandbox."
 packages:
   - "@mastra/core"
@@ -47,6 +47,7 @@ const { tool, instructions } = createCodeMode({
 })
 
 export const shopAgent = new Agent({
+  id: 'shop-assistant',
   name: 'shop-assistant',
   instructions: ['You are a helpful shopping assistant.', instructions],
   model: '__GATEWAY_OPENAI_MODEL__',

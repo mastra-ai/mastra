@@ -198,8 +198,11 @@ import type {
   ScheduleResponse,
   ListScheduleTriggersParams,
   ListScheduleTriggersResponse,
+  CreateScheduleInput,
+  UpdateScheduleInput,
+  RunScheduleResponse,
 } from './types';
-import { base64RequestContext, parseClientRequestContext, requestContextQueryString } from './utils';
+import { base64RequestContext, buildTenancyQuery, parseClientRequestContext, requestContextQueryString } from './utils';
 
 export class MastraClient extends BaseResource {
   private observability: Observability;
@@ -622,10 +625,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
     if (_filters) {
@@ -670,10 +673,10 @@ export class MastraClient extends BaseResource {
     if (logLevel) {
       searchParams.set('logLevel', logLevel);
     }
-    if (page) {
+    if (page !== undefined) {
       searchParams.set('page', String(page));
     }
-    if (perPage) {
+    if (perPage !== undefined) {
       searchParams.set('perPage', String(perPage));
     }
 
@@ -1781,10 +1784,16 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Gets a single dataset by ID
+   * Gets a single dataset by ID. Optionally scope the lookup to a specific
+   * tenant organization/project — the server returns 404 if the dataset does
+   * not belong to the given tenant.
    */
-  public getDataset(datasetId: string): Promise<DatasetRecord> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`);
+  public getDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<DatasetRecord> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`);
   }
 
   /**
@@ -1795,21 +1804,30 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Updates a dataset
+   * Updates a dataset. Tenancy fields, when provided, scope the existence
+   * check on the server side so that a caller can only update datasets that
+   * belong to the given tenant.
    */
   public updateDataset(params: UpdateDatasetParams): Promise<DatasetRecord> {
-    const { datasetId, ...body } = params;
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+    const { datasetId, organizationId, projectId, ...body } = params;
+    const qs = buildTenancyQuery({ organizationId, projectId });
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'PATCH',
       body,
     });
   }
 
   /**
-   * Deletes a dataset
+   * Deletes a dataset. When tenancy fields are supplied, the server only
+   * deletes the dataset if it belongs to the given tenant (silent no-op
+   * otherwise).
    */
-  public deleteDataset(datasetId: string): Promise<{ success: boolean }> {
-    return this.request(`/datasets/${encodeURIComponent(datasetId)}`, {
+  public deleteDataset(
+    datasetId: string,
+    tenancy?: { organizationId?: string; projectId?: string },
+  ): Promise<{ success: boolean }> {
+    const qs = buildTenancyQuery(tenancy);
+    return this.request(`/datasets/${encodeURIComponent(datasetId)}${qs}`, {
       method: 'DELETE',
     });
   }
@@ -2209,12 +2227,18 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Lists workflow schedules with optional filtering by workflowId or status.
+   * Lists schedules — agent schedules and workflow schedules — with optional
+   * filtering by agentId, workflowId, or status. Agent schedules can
+   * additionally be filtered by threadId, resourceId, or name.
    */
   public listSchedules(params: ListSchedulesParams = {}): Promise<ListSchedulesResponse> {
     const searchParams = new URLSearchParams();
+    if (params.agentId) searchParams.set('agentId', params.agentId);
     if (params.workflowId) searchParams.set('workflowId', params.workflowId);
     if (params.status) searchParams.set('status', params.status);
+    if (params.threadId) searchParams.set('threadId', params.threadId);
+    if (params.resourceId) searchParams.set('resourceId', params.resourceId);
+    if (params.name) searchParams.set('name', params.name);
     const qs = searchParams.toString();
     return this.request(`/schedules${qs ? `?${qs}` : ''}`);
   }
@@ -2224,6 +2248,56 @@ export class MastraClient extends BaseResource {
    */
   public getSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}`);
+  }
+
+  /**
+   * Creates a schedule. Pass `agentId` (plus `prompt`) to schedule an agent,
+   * or `workflowId` (plus optional `inputData`) to schedule a workflow.
+   * By default each call creates a new schedule with a random id
+   * (`agent_<uuid>` for agents, `schedule_<uuid>` for workflows) — pass `id`
+   * to choose a stable id instead; creating one with an id that already
+   * exists throws.
+   *
+   * Trigger (fire) history is read through `listScheduleTriggers(schedule.id)`.
+   */
+  public createSchedule(options: CreateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules`, {
+      method: 'POST',
+      body: options,
+    });
+  }
+
+  /**
+   * Patches an existing schedule. Fields apply to the matching target type;
+   * agent-only fields on a workflow schedule are rejected. `threadId` /
+   * `resourceId` are immutable — to retarget, delete and recreate.
+   */
+  public updateSchedule(scheduleId: string, patch: UpdateScheduleInput): Promise<ScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'PATCH',
+      body: patch,
+    });
+  }
+
+  /**
+   * Deletes a schedule.
+   */
+  public deleteSchedule(scheduleId: string): Promise<{ message: string }> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
+   * Fires a schedule manually, out-of-band from the cron schedule. Behaves
+   * like a scheduled fire but does not advance `nextFireAt`. The returned
+   * `claimId` is the trigger row's runId — look it up via
+   * `listScheduleTriggers(scheduleId)`.
+   */
+  public runSchedule(scheduleId: string): Promise<RunScheduleResponse> {
+    return this.request(`/schedules/${encodeURIComponent(scheduleId)}/run`, {
+      method: 'POST',
+    });
   }
 
   /**

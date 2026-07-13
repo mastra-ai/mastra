@@ -1,6 +1,6 @@
 import { createClient } from '@libsql/client';
 import type { Client } from '@libsql/client';
-import type { StorageDomains } from '@mastra/core/storage';
+import type { RetentionConfig, StorageDomains } from '@mastra/core/storage';
 import { MastraCompositeStore } from '@mastra/core/storage';
 
 import { DEFAULT_CONNECTION_TIMEOUT_MS } from './db';
@@ -129,6 +129,13 @@ export type LibSQLBaseConfig = {
    * // No auto-init, tables must already exist
    */
   disableInit?: boolean;
+  /**
+   * Opt-in, table-granular, age-based retention policies. Declare per-table
+   * `maxAge` per domain (e.g. `{ memory: { messages: { maxAge: '30d' } } }`);
+   * unset tables are kept forever. Wire `storage.prune()` to your own cron to
+   * apply them. See {@link RetentionConfig}.
+   */
+  retention?: RetentionConfig;
 };
 
 export type LibSQLConfig =
@@ -173,7 +180,7 @@ export class LibSQLStore extends MastraCompositeStore {
     if (!config.id || typeof config.id !== 'string' || config.id.trim() === '') {
       throw new Error('LibSQLStore: id must be provided and cannot be empty.');
     }
-    super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit });
+    super({ id: config.id, name: `LibSQLStore`, disableInit: config.disableInit, retention: config.retention });
 
     this.maxRetries = config.maxRetries ?? 5;
     this.initialBackoffMs = config.initialBackoffMs ?? 100;

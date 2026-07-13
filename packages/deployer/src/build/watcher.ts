@@ -24,14 +24,15 @@ export async function getInputOptions(
       enableEsmShim: true,
       externals: true,
     },
-  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions } = {},
+    analysisEntries = [entryFile],
+  }: { sourcemap?: boolean; bundlerOptions?: BundlerOptions; analysisEntries?: string[] } = {},
 ) {
   const closestPkgJson = pkg.up({ cwd: dirname(entryFile) });
   const projectRoot = closestPkgJson ? dirname(slash(closestPkgJson)) : slash(process.cwd());
   const { workspaceMap, workspaceRoot } = await getWorkspaceInformation({ mastraEntryFile: entryFile });
 
   const analyzeEntryResult = await analyzeBundle(
-    [entryFile],
+    analysisEntries,
     entryFile,
     {
       outputDir: posix.join(process.cwd(), '.mastra', '.build'),
