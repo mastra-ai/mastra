@@ -32,9 +32,8 @@ Create `src/mastra/agents/coding-agent.ts`. The prompt describes the current pro
 import { basename } from 'node:path'
 import { buildBasePrompt, createCodingAgent } from '@mastra/core/coding-agent'
 
-// highlight-next-line
 export const projectPath = process.cwd()
-const model = '__GATEWAY_OPENAI_MODEL_MINI__'
+const model = '__GATEWAY_OPENAI_MODEL__'
 
 const instructions = buildBasePrompt({
   projectPath,
@@ -155,7 +154,9 @@ export async function createCodingAgentSession() {
 }
 ```
 
-This example uses one mode and disables the controller's additional built-in tools so the agent exposes only its workspace capabilities. It also omits storage, so the conversation lasts only for the current process. You can add storage later when you want to resume sessions.
+This example uses one mode and disables the controller's additional built-in tools so the introductory UI can focus on workspace execution. This is a tutorial simplification, not a production recommendation. In a production application, enable the built-in tools your product needs and implement their UI flows: interactive tools such as `ask_user` and `submit_plan` suspend until your interface resumes them, while task and subagent tools have their own lifecycle events. See [tool approvals and suspensions](/docs/agent-controller/tool-approvals).
+
+The example also omits storage, so the conversation lasts only for the current process. You can add storage later when you want to resume sessions.
 
 ## Build the terminal UI
 
