@@ -10,7 +10,7 @@ import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';
 import { ChatMessageBoundary, ChatSessionBoundary } from './context/ChatSessionProvider';
 import { useGlobalShortcuts } from './hooks/useGlobalShortcuts';
-import { useRouteThreadSync } from './hooks/useRouteThreadSync';
+import { useRouteThreadSync } from '../../../../shared/hooks/useRouteThreadSync';
 
 const threadComposerContainerClass = 'w-full px-3 md:px-5';
 const threadComposerInnerClass = 'mx-auto w-full max-w-[80ch]';
@@ -28,11 +28,7 @@ export function ThreadPage() {
       onSidebarClose={() => overlays.close('sidebar')}
       main={
         <ChatSessionBoundary threadId={threadId}>
-          {activeProject ? (
-            <ThreadPageMain />
-          ) : (
-            <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />
-          )}
+          {activeProject ? <ThreadPageMain /> : <EmptyProjectState onOpenProjects={() => overlays.open('projects')} />}
           <ChatOverlays />
         </ChatSessionBoundary>
       }

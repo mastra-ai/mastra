@@ -2,8 +2,8 @@ import type { AgentControllerEvent } from '@mastra/client-js';
 import { useState } from 'react';
 import { createAgentControllerClient } from '../services/agentControllerClient';
 import { useAgentControllerEvents } from './useAgentControllerEvents';
-import { useAgentControllerSessionInit } from './useAgentControllerSessionInit';
-import { useAgentControllerSessionSync } from './useAgentControllerSessionSync';
+import { useAgentControllerSessionInit } from '../../../../../shared/hooks/useAgentControllerSessionInit';
+import { useAgentControllerSessionSync } from '../../../../../shared/hooks/useAgentControllerSessionSync';
 
 export type ConnectionStatus = 'connecting' | 'ready' | 'reconnecting' | 'error';
 type SseConnectionState = 'never' | 'connected' | 'dropped';

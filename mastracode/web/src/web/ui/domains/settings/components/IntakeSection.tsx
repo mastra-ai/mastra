@@ -5,12 +5,12 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { useToast } from '../../../ui';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../factory/hooks/useIntakeConfig';
-import { useLinearProjectsQuery, useLinearStatusQuery } from '../../factory/hooks/useLinearData';
+import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../../shared/hooks/useIntakeConfig';
+import { useLinearProjectsQuery, useLinearStatusQuery } from '../../../../../shared/hooks/useLinearData';
 import { connectLinear } from '../../factory/services/linear';
 import type { LinearProject } from '../../factory/services/linear';
 import type { IntakeConfig } from '../../factory/services/intake';
-import { useProjectsQuery } from '../../workspaces/hooks/useProjects';
+import { useProjectsQuery } from '../../../../../shared/hooks/useProjects';
 
 /**
  * Toggle `id` in the selection list. `null` means "nothing selected" (nothing

@@ -10,8 +10,8 @@ import { useLocation, useNavigate } from 'react-router';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useToast } from '../../../ui';
-import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
-import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../chat/hooks/useAgentControllerThreads';
+import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
+import { AGENT_CONTROLLER_THREAD_PAGE_SIZE } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { useActiveProjectContext } from '../context/ActiveProjectProvider';
@@ -20,7 +20,7 @@ import {
   useCreateWorkspaceMutation,
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
-} from '../hooks/useWorkspaces';
+} from '../../../../../shared/hooks/useWorkspaces';
 import type { Worktree } from '../services/projects';
 
 /**

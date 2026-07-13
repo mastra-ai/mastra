@@ -12,14 +12,14 @@ import { useChatModels } from '../context/useChatModels';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useRunChatCommand } from '../context/useRunChatCommand';
-import { useSetAgentControllerGoalMutation } from '../hooks/useAgentControllerGoalMutations';
+import { useSetAgentControllerGoalMutation } from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import {
   useAbortAgentControllerMutation,
   useFollowUpAgentControllerMutation,
   useSendAgentControllerMessageMutation,
   useSteerAgentControllerMutation,
-} from '../hooks/useAgentControllerRunMutations';
-import { useCreateAgentControllerThreadMutation } from '../hooks/useAgentControllerThreadMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
+import { useCreateAgentControllerThreadMutation } from '../../../../../shared/hooks/useAgentControllerThreadMutations';
 import { matchCommands } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
@@ -79,7 +79,9 @@ export function Composer({ variant = 'inline', draft: controlledDraft, onDraftCh
       role: 'user',
       content: [{ type: 'text', text }],
     };
-    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [message]);
+    queryClient.setQueryData(queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId), [
+      message,
+    ]);
   };
 
   const send = async (text: string) => {
@@ -188,50 +190,50 @@ export function Composer({ variant = 'inline', draft: controlledDraft, onDraftCh
 
   return (
     <form onSubmit={onSubmit} className="relative flex w-full flex-col gap-2">
-        <ComposerInput
-          ref={inputRef}
-          value={draft}
-          onChange={event => updateDraft(event.target.value)}
-          onKeyDown={onComposerKeyDown}
-          placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
-          disabled={disabled}
-          composerVariant={variant}
-          aria-label="Message"
-        />
-        {showSuggestions && (
-          <div className="absolute bottom-full mb-2 w-full rounded-md border border-border1 bg-surface3 p-1 shadow-lg">
-            {suggestions.map((command, index) => (
-              <button
-                key={command.name}
-                type="button"
-                className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm ${index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3'}`}
-                onMouseDown={event => {
-                  event.preventDefault();
-                  applyCommandDraft(command.name);
-                }}
-              >
-                <span>/{command.name}</span>
-                <span>{command.description}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        <div className="absolute bottom-2 right-2 flex items-center gap-1">
-          {busy && (
-            <Button
+      <ComposerInput
+        ref={inputRef}
+        value={draft}
+        onChange={event => updateDraft(event.target.value)}
+        onKeyDown={onComposerKeyDown}
+        placeholder={busy ? 'Steer the agent…' : 'Ask Mastra Code…'}
+        disabled={disabled}
+        composerVariant={variant}
+        aria-label="Message"
+      />
+      {showSuggestions && (
+        <div className="absolute bottom-full mb-2 w-full rounded-md border border-border1 bg-surface3 p-1 shadow-lg">
+          {suggestions.map((command, index) => (
+            <button
+              key={command.name}
               type="button"
-              variant="outline"
-              size="icon-sm"
-              onClick={() => void abortMutation.mutateAsync()}
-              aria-label="Abort"
+              className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-ui-sm ${index === activeSuggestion ? 'bg-surface4 text-icon6' : 'text-icon3'}`}
+              onMouseDown={event => {
+                event.preventDefault();
+                applyCommandDraft(command.name);
+              }}
             >
-              <Square size={14} />
-            </Button>
-          )}
-          <Button type="submit" size="icon-sm" disabled={disabled || !draft.trim()} aria-label="Send message">
-            <ArrowUp size={16} />
-          </Button>
+              <span>/{command.name}</span>
+              <span>{command.description}</span>
+            </button>
+          ))}
         </div>
+      )}
+      <div className="absolute bottom-2 right-2 flex items-center gap-1">
+        {busy && (
+          <Button
+            type="button"
+            variant="outline"
+            size="icon-sm"
+            onClick={() => void abortMutation.mutateAsync()}
+            aria-label="Abort"
+          >
+            <Square size={14} />
+          </Button>
+        )}
+        <Button type="submit" size="icon-sm" disabled={disabled || !draft.trim()} aria-label="Send message">
+          <ArrowUp size={16} />
+        </Button>
+      </div>
     </form>
   );
 }

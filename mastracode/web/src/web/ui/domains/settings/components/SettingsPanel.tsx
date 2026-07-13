@@ -10,9 +10,9 @@ import { useToast } from '../../../ui';
 import { useChatModels } from '../../chat/context/useChatModels';
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
-import { useAgentControllerModels } from '../../chat/hooks/useAgentControllerModels';
-import { useAgentControllerSettings } from '../../chat/hooks/useAgentControllerSettings';
-import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
+import { useAgentControllerModels } from '../../../../../shared/hooks/useAgentControllerModels';
+import { useAgentControllerSettings } from '../../../../../shared/hooks/useAgentControllerSettings';
+import { useSetAgentControllerStateMutation } from '../../../../../shared/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
 import { IntakeSection } from './IntakeSection';
@@ -51,7 +51,13 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const { activeModelId, setModel } = useChatModels();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const { toast } = useToast();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, projectPath, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const modelsQuery = useAgentControllerModels(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);

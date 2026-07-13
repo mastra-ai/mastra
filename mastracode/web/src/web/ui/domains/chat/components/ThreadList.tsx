@@ -17,8 +17,8 @@ import {
   useCloneAgentControllerThreadMutation,
   useDeleteAgentControllerThreadMutation,
   useRenameAgentControllerThreadMutation,
-} from '../hooks/useAgentControllerThreadMutations';
-import { useAgentControllerThreads } from '../hooks/useAgentControllerThreads';
+} from '../../../../../shared/hooks/useAgentControllerThreadMutations';
+import { useAgentControllerThreads } from '../../../../../shared/hooks/useAgentControllerThreads';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 const MAX_THREADS = 5;

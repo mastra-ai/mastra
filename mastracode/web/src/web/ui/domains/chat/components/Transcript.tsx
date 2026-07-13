@@ -19,7 +19,7 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
-} from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {

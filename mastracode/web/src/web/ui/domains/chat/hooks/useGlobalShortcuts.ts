@@ -4,7 +4,7 @@ import { useActiveProjectContext } from '../../workspaces';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { useAbortAgentControllerMutation } from './useAgentControllerRunMutations';
+import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 
 export function useGlobalShortcuts() {
   const overlays = useOverlays();

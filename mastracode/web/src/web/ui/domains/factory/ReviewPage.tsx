@@ -7,8 +7,8 @@ import { SkeletonRows } from '../../ui';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
-import { useProjectPullRequestsQuery } from './hooks/useFactoryData';
-import { useStartFactoryRun } from './hooks/useStartFactoryRun';
+import { useProjectPullRequestsQuery } from '../../../../shared/hooks/useFactoryData';
+import { useStartFactoryRun } from '../../../../shared/hooks/useStartFactoryRun';
 import type { GithubPullRequest } from './services/factory';
 
 /** Factory › Review: the project's open, non-draft pull requests. */

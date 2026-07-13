@@ -9,7 +9,7 @@ import {
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
   useSetAgentControllerGoalMutation,
-} from '../hooks/useAgentControllerGoalMutations';
+} from '../../../../../shared/hooks/useAgentControllerGoalMutations';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 import { ComposerInput } from './ComposerInput';

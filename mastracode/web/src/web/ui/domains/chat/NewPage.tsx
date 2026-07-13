@@ -7,7 +7,7 @@ import { Sidebar } from '../../Sidebar';
 import { ChatLayout, FolderIcon } from '../../ui';
 import type { Project } from '../workspaces';
 import { EmptyProjectState, useActiveProjectContext } from '../workspaces';
-import { deriveProjectPath } from '../workspaces/hooks/useWorkspaces';
+import { deriveProjectPath } from '../../../../shared/hooks/useWorkspaces';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatOverlays } from './components/ChatOverlays';
 import { ComposerPanel } from './components/ComposerPanel';

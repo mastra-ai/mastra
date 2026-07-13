@@ -5,8 +5,8 @@ import {
   useClearAgentControllerGoalMutation,
   usePauseAgentControllerGoalMutation,
   useResumeAgentControllerGoalMutation,
-} from '../hooks/useAgentControllerGoalMutations';
-import { useAbortAgentControllerMutation } from '../hooks/useAgentControllerRunMutations';
+} from '../../../../../shared/hooks/useAgentControllerGoalMutations';
+import { useAbortAgentControllerMutation } from '../../../../../shared/hooks/useAgentControllerRunMutations';
 import { SLASH_COMMANDS } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { useChatModes } from './useChatModes';
@@ -75,7 +75,9 @@ export function useRunChatCommand() {
         return;
       }
       case 'think':
-        pushNotice('Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.');
+        pushNotice(
+          'Extended thinking: steer the agent with "think step by step" or switch to a thinking-capable model.',
+        );
         return;
       case 'om':
         pushNotice(`Observational memory phase: ${omPhase}`);
