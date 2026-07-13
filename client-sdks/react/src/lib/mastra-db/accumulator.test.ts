@@ -299,6 +299,14 @@ const fileChunkPlain = (mimeType: string, data: string): ChunkType =>
     payload: { mimeType, data, base64: false },
   }) as unknown as ChunkType;
 
+const fileChunkBinary = (mimeType: string, data: Uint8Array): ChunkType =>
+  ({
+    type: 'file',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: { mimeType, data },
+  }) as unknown as ChunkType;
+
 const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkType =>
   ({
     type: 'is-task-complete',
@@ -909,6 +917,19 @@ describe('accumulateChunk - content', () => {
       type: 'file',
       mimeType: 'text/plain',
       data: 'data:text/plain,hello%20world',
+    });
+  });
+
+  it('file with large Uint8Array binary data does not overflow the call stack', () => {
+    const bytes = new Uint8Array(200_000);
+    bytes.fill(0x41);
+    const out = reduce([startChunk(), fileChunkBinary('application/octet-stream', bytes)]);
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    const expectedBase64 = Buffer.from(bytes).toString('base64');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'application/octet-stream',
+      data: `data:application/octet-stream;base64,${expectedBase64}`,
     });
   });
 

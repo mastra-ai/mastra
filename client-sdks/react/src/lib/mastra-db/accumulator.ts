@@ -45,6 +45,15 @@ type StreamChunk = {
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
 
+const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+};
+
 const withParts = (message: MastraDBMessage, parts: MastraMessagePart[]): MastraDBMessage => ({
   ...message,
   content: {
@@ -1275,7 +1284,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
           ? `data:${chunk.payload.mimeType};base64,${chunk.payload.data}`
           : `data:${chunk.payload.mimeType},${encodeURIComponent(chunk.payload.data)}`;
       } else {
-        const base64 = btoa(String.fromCharCode(...chunk.payload.data));
+        const base64 = uint8ArrayToBase64(chunk.payload.data);
         data = `data:${chunk.payload.mimeType};base64,${base64}`;
       }
 
