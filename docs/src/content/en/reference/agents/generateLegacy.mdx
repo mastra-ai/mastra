@@ -21,6 +21,12 @@ The `.generateLegacy()` method is the legacy version of the agent generation API
 await agent.generateLegacy('message for agent')
 ```
 
+## Processor retry support
+
+`generateLegacy()` doesn't run error processors or `maxProcessorRetries`. It uses the legacy AI SDK generation path instead.
+
+Scorer judges with V1 model adapters call `generateLegacy()`. They don't receive the coordinated `StreamErrorRetryProcessor` budget available to V2+ scorer judges. Use a V2+ judge model when you need error-processor retries. The legacy `maxRetries` option remains separate and defaults to `2`.
+
 ## Parameters
 
 <PropertiesTable

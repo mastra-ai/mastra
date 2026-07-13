@@ -1,7 +1,10 @@
+import { APICallError } from '@internal/ai-sdk-v5';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
 import { SpanType } from '../observability';
+import { StreamErrorRetryProcessor } from '../processors';
 import { createMockModel } from '../test-utils/llm-mock';
 import { createScorer } from './base';
 import {
@@ -24,6 +27,73 @@ const createTestData = () => ({
     return { input: this.userInput, output: this.agentOutput };
   },
 });
+
+type JudgeModelResponse = Error | string;
+
+function createJudgeModel(responses: JudgeModelResponse[]) {
+  let callCount = 0;
+  const prompts: unknown[] = [];
+
+  const model = new MockLanguageModelV2({
+    doGenerate: async () => {
+      throw new Error('Unexpected non-streaming judge call');
+    },
+    doStream: async ({ prompt }) => {
+      prompts.push(prompt);
+      const response = responses[callCount] ?? responses.at(-1);
+      callCount += 1;
+      if (response instanceof Error) throw response;
+
+      return {
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'response-metadata', id: 'judge-response', modelId: 'judge-model', timestamp: new Date(0) },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: response },
+          { type: 'text-end', id: 'text-1' },
+          {
+            type: 'finish',
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          },
+        ]),
+      };
+    },
+  });
+
+  return { model, getCallCount: () => callCount, getPrompts: () => prompts };
+}
+
+function createProviderError(statusCode: number, isRetryable: boolean, message = 'provider failed'): APICallError {
+  const error = new APICallError({
+    message,
+    url: 'https://api.example.com/v1/responses',
+    requestBodyValues: {},
+    statusCode,
+    responseHeaders: { 'retry-after': '1', 'x-request-id': 'request-123' },
+    isRetryable,
+  });
+  Object.assign(error, { requestId: 'request-123' });
+  return error;
+}
+
+function findAPICallError(error: unknown): APICallError | undefined {
+  const visited = new WeakSet<object>();
+  let candidate = error;
+
+  while (candidate && typeof candidate === 'object') {
+    if (APICallError.isInstance(candidate) || ('statusCode' in candidate && 'isRetryable' in candidate)) {
+      return candidate as APICallError;
+    }
+    if (visited.has(candidate)) return undefined;
+    visited.add(candidate);
+    candidate = 'cause' in candidate ? candidate.cause : undefined;
+  }
+
+  return undefined;
+}
 
 function createMockSpan(traceId: string, type: SpanType) {
   const span: any = {
@@ -428,6 +498,195 @@ describe('createScorer', () => {
         expect(errorProcessors).not.toContain(scorerLevelErrorProcessor);
       } finally {
         streamSpy.mockRestore();
+      }
+    });
+
+    it.each([408, 429, 500])(
+      'retries a retryable V2 judge HTTP %s request within the failed scorer step',
+      async statusCode => {
+        const { model, getCallCount } = createJudgeModel([
+          createProviderError(statusCode, true, 'transient provider failure'),
+          JSON.stringify({ score: 1 }),
+        ]);
+        const scorer = createScorer({
+          id: `v2-judge-retry-${statusCode}-scorer`,
+          name: 'v2-judge-retry-scorer',
+          description: 'Retries only the failed V2 judge generation',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+            maxProcessorRetries: 2,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+        expect(getCallCount()).toBe(2);
+      },
+    );
+
+    it('does not retry a V2 judge request when processor configuration is omitted', async () => {
+      const { model, getCallCount } = createJudgeModel([createProviderError(429, true, 'rate limited')]);
+      const scorer = createScorer({
+        id: 'v2-judge-no-retry-scorer',
+        name: 'v2-judge-no-retry-scorer',
+        description: 'Leaves V2 judge retries disabled without an error processor',
+        judge: { model, instructions: 'Test instructions' },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).rejects.toBeDefined();
+      expect(getCallCount()).toBe(1);
+    });
+
+    it.each([
+      ['authentication failure', 401, 'authentication failed'],
+      ['invalid request', 400, 'invalid request'],
+      ['context-length failure', 400, 'maximum context length exceeded'],
+    ])('does not retry terminal V2 judge %s', async (_description, statusCode, message) => {
+      const { model, getCallCount } = createJudgeModel([createProviderError(statusCode, false, message)]);
+      const scorer = createScorer({
+        id: `v2-judge-terminal-${statusCode}-${message}`,
+        name: 'v2-judge-terminal-scorer',
+        description: 'Fails terminal V2 judge errors immediately',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          maxProcessorRetries: 2,
+        },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).rejects.toBeDefined();
+      expect(getCallCount()).toBe(1);
+    });
+
+    it('retries a narrowly matched V2 judge network error', async () => {
+      const networkError = Object.assign(new Error('socket hung up'), { code: 'ECONNRESET' });
+      const { model, getCallCount } = createJudgeModel([networkError, JSON.stringify({ score: 1 })]);
+      const scorer = createScorer({
+        id: 'v2-judge-network-retry-scorer',
+        name: 'v2-judge-network-retry-scorer',
+        description: 'Retries a narrowly matched V2 judge network error',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [
+            new StreamErrorRetryProcessor({
+              maxRetries: 2,
+              matchers: [
+                error => typeof error === 'object' && error !== null && 'code' in error && error.code === 'ECONNRESET',
+              ],
+            }),
+          ],
+          maxProcessorRetries: 2,
+        },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+      expect(getCallCount()).toBe(2);
+    });
+
+    it('caps exhausted V2 judge retries and preserves provider context', async () => {
+      const providerError = createProviderError(503, true, 'service unavailable');
+      const { model, getCallCount } = createJudgeModel([providerError, providerError, providerError]);
+      const scorer = createScorer({
+        id: 'v2-judge-retry-exhaustion-scorer',
+        name: 'v2-judge-retry-exhaustion-scorer',
+        description: 'Preserves exhausted V2 judge provider errors',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          maxProcessorRetries: 2,
+        },
+      }).generateScore({
+        description: 'score',
+        createPrompt: () => 'score this',
+      });
+
+      const error = await scorer.run(testData.scoringInput).catch(error => error);
+
+      expect(getCallCount()).toBe(3);
+      expect(findAPICallError(error)).toMatchObject({
+        statusCode: 503,
+        requestId: 'request-123',
+        isRetryable: true,
+        responseHeaders: { 'retry-after': '1', 'x-request-id': 'request-123' },
+      });
+    });
+
+    it('does not rerun a successful score step when the reason step retries', async () => {
+      const { model, getCallCount, getPrompts } = createJudgeModel([
+        JSON.stringify({ score: 1 }),
+        createProviderError(429, true, 'rate limited while generating reason'),
+        'The score is supported by the output.',
+      ]);
+      const scorer = createScorer({
+        id: 'v2-judge-reason-retry-scorer',
+        name: 'v2-judge-reason-retry-scorer',
+        description: 'Retries only the failed reason step',
+        judge: {
+          model,
+          instructions: 'Test instructions',
+          errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          maxProcessorRetries: 2,
+        },
+      })
+        .generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        })
+        .generateReason({
+          description: 'reason',
+          createPrompt: () => 'explain this score',
+        });
+
+      await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({
+        score: 1,
+        reason: 'The score is supported by the output.',
+      });
+      expect(getCallCount()).toBe(3);
+
+      const serializedPrompts = getPrompts().map(prompt => JSON.stringify(prompt));
+      expect(serializedPrompts.filter(prompt => prompt.includes('score this'))).toHaveLength(1);
+      expect(serializedPrompts.filter(prompt => prompt.includes('explain this score'))).toHaveLength(2);
+    });
+
+    it('routes V1 judges through generateLegacy without error processors', async () => {
+      const model = createMockModel({ mockText: { score: 1 }, version: 'v1' });
+      const errorProcessor = { id: 'v1-error-processor', processAPIError: vi.fn(() => ({ retry: true })) };
+      const generateLegacySpy = vi
+        .spyOn(Agent.prototype, 'generateLegacy')
+        .mockRejectedValueOnce(createProviderError(429, true));
+      try {
+        const scorer = createScorer({
+          id: 'v1-legacy-judge-scorer',
+          description: 'V1 scorer judges bypass error processors',
+          judge: {
+            model,
+            instructions: 'Return a score.',
+            errorProcessors: [errorProcessor],
+            maxProcessorRetries: 2,
+          },
+        }).generateScore({ description: 'score', createPrompt: () => 'score this' });
+
+        await expect(scorer.run(testData.scoringInput)).rejects.toThrow('provider failed');
+        expect(generateLegacySpy).toHaveBeenCalledTimes(1);
+        expect(errorProcessor.processAPIError).not.toHaveBeenCalled();
+      } finally {
+        generateLegacySpy.mockRestore();
       }
     });
 
