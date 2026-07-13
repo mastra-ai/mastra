@@ -926,7 +926,7 @@ For `agent.generate()`, the result exposes the same information as `result.tripw
 
 `abort` accepts a second options argument:
 
-- `retry: true` asks the agent to retry instead of ending. Retries require `maxProcessorRetries` to be set on the agent or call.
+- `retry: true` asks the agent to retry instead of ending. Input and output processor retries require `maxProcessorRetries` to be set on the agent or call.
 - `metadata` attaches structured data to the `tripwire` chunk so downstream consumers can branch on categories like `pii`, `quality`, or `moderation`.
 
 ## API error handling
