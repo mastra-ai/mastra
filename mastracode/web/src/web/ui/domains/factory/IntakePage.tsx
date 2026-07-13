@@ -298,11 +298,11 @@ function linearIssueBranch(issue: LinearIssue): string {
 }
 
 function linearIssuePrompt(issue: LinearIssue): string {
-  return `Use the understand-issue skill to investigate Linear issue ${issue.identifier}: "${issue.title}" (${issue.url}).`;
+  return `Use the understand-issue skill to investigate Linear issue ${issue.identifier}: "${issue.title}" (${issue.url}). Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
 }
 
 function linearIssueCustomPrompt(issue: LinearIssue, instructions: string): string {
-  return `Regarding Linear issue ${issue.identifier}: "${issue.title}" (${issue.url}). ${instructions}`;
+  return `Regarding Linear issue ${issue.identifier}: "${issue.title}" (${issue.url}) — fetch its full details with the linear_get_issue tool. ${instructions}`;
 }
 
 function LinearIssueList() {

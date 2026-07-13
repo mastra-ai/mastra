@@ -303,3 +303,102 @@ export async function listActiveLinearIssues(
     nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
   };
 }
+
+export interface LinearIssueComment {
+  author: string | null;
+  body: string;
+  createdAt: string;
+}
+
+/** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
+export interface LinearIssueDetail extends LinearIssue {
+  /** Markdown body of the issue, or `null` when empty. */
+  description: string | null;
+  /** Discussion comments, oldest first. */
+  comments: LinearIssueComment[];
+}
+
+const ISSUE_COMMENTS_PAGE_SIZE = 50;
+
+interface IssueDetailQueryData {
+  issue: {
+    id: string;
+    identifier: string;
+    title: string;
+    description: string | null;
+    url: string;
+    priorityLabel: string;
+    createdAt: string;
+    updatedAt: string;
+    state: { name: string; type: string };
+    assignee: { name: string } | null;
+    team: { key: string } | null;
+    labels: { nodes: Array<{ name: string }> };
+    comments: { nodes: Array<{ body: string; createdAt: string; user: { name: string } | null }> };
+  } | null;
+}
+
+/**
+ * Fetch one issue with its description and comments. `idOrIdentifier` accepts
+ * both the Linear UUID and the human key (`ENG-123`). Returns `null` when the
+ * issue doesn't exist (Linear reports it as an "Entity not found" error).
+ */
+export async function fetchLinearIssueDetail(
+  accessToken: string,
+  idOrIdentifier: string,
+): Promise<LinearIssueDetail | null> {
+  let data: IssueDetailQueryData;
+  try {
+    data = await linearGraphql<IssueDetailQueryData>(
+      accessToken,
+      `query IssueDetail($id: String!, $commentsFirst: Int!) {
+        issue(id: $id) {
+          id
+          identifier
+          title
+          description
+          url
+          priorityLabel
+          createdAt
+          updatedAt
+          state { name type }
+          assignee { name }
+          team { key }
+          labels { nodes { name } }
+          comments(first: $commentsFirst) { nodes { body createdAt user { name } } }
+        }
+      }`,
+      { id: idOrIdentifier, commentsFirst: ISSUE_COMMENTS_PAGE_SIZE },
+    );
+  } catch (err) {
+    // Linear surfaces unknown ids/identifiers as a GraphQL "Entity not found"
+    // error rather than a null node — map that to "issue doesn't exist".
+    if (err instanceof Error && /entity not found/i.test(err.message)) return null;
+    throw err;
+  }
+  const issue = data.issue;
+  if (!issue) return null;
+  const comments = [...issue.comments.nodes].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description?.trim() ? issue.description : null,
+    url: issue.url,
+    state: issue.state.name,
+    stateType: issue.state.type,
+    priorityLabel: issue.priorityLabel,
+    assignee: issue.assignee?.name ?? null,
+    team: issue.team?.key ?? null,
+    labels: issue.labels.nodes.map(label => label.name),
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+    comments: comments.map(comment => ({
+      author: comment.user?.name ?? null,
+      body: comment.body,
+      createdAt: comment.createdAt,
+    })),
+  };
+}
