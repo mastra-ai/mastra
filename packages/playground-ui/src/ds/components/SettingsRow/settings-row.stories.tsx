@@ -16,8 +16,8 @@ function ThemeOptionLabel({ option }: { option: (typeof THEME_OPTIONS)[number] }
   const { Icon } = option;
 
   return (
-    <span className="inline-flex min-w-0 max-w-full items-center gap-2">
-      <Icon aria-hidden="true" className="h-4 w-4 shrink-0 opacity-70" />
+    <span className="inline-flex max-w-full min-w-0 items-center gap-2">
+      <Icon aria-hidden="true" className="size-4 shrink-0 opacity-70" />
       <span className="min-w-0 truncate">{option.label}</span>
     </span>
   );
@@ -47,7 +47,7 @@ export const WithSelect: Story = {
       <SettingsRow label="Theme mode" htmlFor="theme">
         <Select defaultValue="dark">
           <SelectTrigger id="theme" className="w-full sm:w-48">
-            <SelectValue className="inline-flex min-w-0 max-w-full items-center" />
+            <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
           </SelectTrigger>
           <SelectContent>
             {THEME_OPTIONS.map(option => (
@@ -72,7 +72,7 @@ export const WithDescription: Story = {
       >
         <Select defaultValue="dark">
           <SelectTrigger id="theme" className="w-full sm:w-48">
-            <SelectValue className="inline-flex min-w-0 max-w-full items-center" />
+            <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
           </SelectTrigger>
           <SelectContent>
             {THEME_OPTIONS.map(option => (
@@ -104,7 +104,7 @@ export const Stacked: Story = {
         <SettingsRow label="Theme mode" description="Choose how the studio appears." htmlFor="theme">
           <Select defaultValue="dark">
             <SelectTrigger id="theme" className="w-full sm:w-48">
-              <SelectValue className="inline-flex min-w-0 max-w-full items-center" />
+              <SelectValue className="inline-flex max-w-full min-w-0 items-center" />
             </SelectTrigger>
             <SelectContent>
               {THEME_OPTIONS.map(option => (

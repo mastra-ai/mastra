@@ -28,7 +28,13 @@ export function useAgentControllerConnection({
   const [sseConnectionState, setSseConnectionState] = useState<SseConnectionState>('never');
   const sseConnected = sseConnectionState === 'connected';
   const hasEverConnected = sseConnectionState !== 'never';
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({
+    agentControllerId,
+    resourceId,
+    scope: projectPath,
+    baseUrl,
+    enabled,
+  });
   const initQuery = useAgentControllerSessionInit({ agentControllerId, resourceId, projectPath, baseUrl, enabled });
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,

@@ -17,9 +17,9 @@ export function ItemListStatusCell({ status }: ItemListStatusCellProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className={cn('flex items-center justify-center w-10 relative bg-transparent h-full')}>
+        <div className={cn('relative flex h-full w-10 items-center justify-center bg-transparent')}>
           <div
-            className={cn('w-2 h-2 rounded-full', {
+            className={cn('size-2 rounded-full', {
               'bg-green-600': ['success', 'completed'].includes(status),
               'bg-red-700': ['error', 'failed'].includes(status),
               'bg-yellow-500': ['pending', 'running'].includes(status),

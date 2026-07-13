@@ -20,6 +20,7 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../hooks/useAgentControllerRunMutations';
+import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
@@ -216,7 +217,8 @@ function ToolCard({
   }, [forceExpanded]);
   const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
   const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
-  const resultText = tool.status !== 'running' && tool.result !== undefined ? stringify(tool.result) : undefined;
+  const resultText =
+    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
   const edit = editArgs(tool.toolName, tool.args);
 
   return (
@@ -567,9 +569,15 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // ---------------------------------------------------------------------------
 
 export function Transcript() {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
   const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
 

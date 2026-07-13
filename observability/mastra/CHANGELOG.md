@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.16.1-alpha.0
+
+### Patch Changes
+
+- Fixed storage exporters to report persistence failures immediately and retry failed batches automatically with the configured exponential backoff. ([#19259](https://github.com/mastra-ai/mastra/pull/19259))
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+
 ## 1.16.0
 
 ### Minor Changes
