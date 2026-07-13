@@ -12,7 +12,7 @@ export interface ObservabilityTestConfig {
   testNameSuffix?: string;
 
   /**
-   * Name of the test agent represented by the seeded trace
+   * Name of the test agent to use for generating traces
    */
   agentName?: string;
 }
@@ -25,7 +25,8 @@ export interface ObservabilityTestConfig {
  * The tests automatically:
  * - Get baseUrl from vitest's inject()
  * - Create a MastraClient
- * - Reset and deterministically seed observability storage before tests
+ * - Reset storage before tests
+ * - Generate traces by calling an agent
  */
 export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
   const { testNameSuffix, agentName = 'testAgent' } = config;
@@ -41,12 +42,27 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
       baseUrl = inject('baseUrl');
       client = new MastraClient({ baseUrl, retries: 0 });
 
-      // Reset and seed only observability so parallel suites cannot clear each other's data.
-      const res = await fetch(`${baseUrl}/e2e/reset-observability?agentName=${encodeURIComponent(agentName)}`, {
-        method: 'POST',
-      });
-      if (!res.ok) {
-        throw new Error(`reset-observability failed: ${res.status} ${res.statusText}`);
+      // Reset storage to start fresh
+      try {
+        const res = await fetch(`${baseUrl}/e2e/reset-storage`, { method: 'POST' });
+        if (!res.ok) {
+          throw new Error(`reset-storage failed: ${res.status} ${res.statusText}`);
+        }
+      } catch (e) {
+        console.warn('Could not reset storage, continuing anyway:', e);
+      }
+
+      // Generate some traces by calling an agent
+      // This will create observability data we can query
+      try {
+        const agent = client.getAgent(agentName);
+        await agent.generate([{ role: 'user', content: 'Hello, just testing!' }]);
+
+        // Wait a bit for the trace to be persisted
+        // The batch-with-updates strategy has a 5 second flush interval
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      } catch (e) {
+        console.warn('Could not generate agent trace, some tests may fail:', e);
       }
 
       // Seed scores and feedback for those endpoints
@@ -55,7 +71,7 @@ export function createObservabilityTests(config: ObservabilityTestConfig = {}) {
         const listResponse = await client.listTraces({ pagination: { page: 0, perPage: 1 } });
         if (!listResponse.spans?.length) {
           throw new Error(
-            'No traces found after observability seed — cannot seed scores/feedback without real trace data',
+            'No traces found after agent generation — cannot seed scores/feedback without real trace data',
           );
         }
         const traceId = listResponse.spans[0].traceId;

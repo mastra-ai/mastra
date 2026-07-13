@@ -86,7 +86,6 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       { Memory },
       { createWorkflow, createStep },
       { createTool },
-      { EntityType, SpanType },
       { z },
     ] = await Promise.all([
       import('@mastra/core/mastra'),
@@ -99,7 +98,6 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       import('@mastra/memory'),
       import('@mastra/core/workflows'),
       import('@mastra/core/tools'),
-      import('@mastra/core/observability'),
       import('zod'),
     ]);
 
@@ -181,29 +179,14 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
 
     addWorkflow.then(addStep).commit();
 
-    const testAgentId = 'testAgent';
-
     // Create a simple test agent with memory and tools
     const testAgent = new Agent({
-      id: testAgentId,
-      name: testAgentId,
+      id: 'testAgent',
+      name: 'testAgent',
       instructions: 'You are a helpful test assistant.',
       model: 'openai/gpt-4.1-mini',
       memory,
       tools: { calculator: calculatorTool, greeter: greeterTool },
-    });
-
-    const observability = new Observability({
-      configs: {
-        default: {
-          serviceName,
-          exporters: [
-            // Use realtime strategy for tests to ensure spans are persisted immediately
-            // (default batch strategy has 5 second flush interval which is too slow for tests)
-            new MastraStorageExporter({ strategy: 'realtime' }),
-          ],
-        },
-      },
     });
 
     // Create Mastra instance with observability configured
@@ -213,51 +196,32 @@ export function createTestServerSetup(config: TestServerSetupConfig) {
       vectors: { testVector },
       workflows: { 'add-workflow': addWorkflow },
       tools: { calculator: calculatorTool, greeter: greeterTool },
-      observability,
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName,
+            exporters: [
+              // Use realtime strategy for tests to ensure spans are persisted immediately
+              // (default batch strategy has 5 second flush interval which is too slow for tests)
+              new MastraStorageExporter({ strategy: 'realtime' }),
+            ],
+          },
+        },
+      }),
       server: {
         apiRoutes: [
-          registerApiRoute('/e2e/reset-observability', {
+          registerApiRoute('/e2e/reset-storage', {
             method: 'POST',
             handler: async c => {
-              const seededAgentId = c.req.query('agentName') || testAgentId;
               const observabilityStore = await storage.getStore('observability');
-              if (!observabilityStore) {
-                return c.json({ message: 'Observability storage unavailable' }, 500);
+              if (observabilityStore) {
+                await observabilityStore.dangerouslyClearAll();
               }
-
-              await observabilityStore.dangerouslyClearAll();
-
-              const observabilityInstance = observability.getDefaultInstance();
-              if (!observabilityInstance) {
-                return c.json({ message: 'Observability instance unavailable' }, 500);
-              }
-
-              const span = observabilityInstance.startSpan({
-                type: SpanType.AGENT_RUN,
-                name: 'client-js-e2e-agent-run',
-                entityType: EntityType.AGENT,
-                entityId: seededAgentId,
-                entityName: seededAgentId,
-                attributes: {
-                  instructions: 'You are a helpful test assistant.',
-                },
-              });
-              span.end();
-              await observability.flush();
-
-              return c.json({ message: 'Observability storage reset and seeded' }, 200);
-            },
-          }),
-          registerApiRoute('/e2e/reset-memory', {
-            method: 'POST',
-            handler: async c => {
               const memoryStore = await storage.getStore('memory');
-              if (!memoryStore) {
-                return c.json({ message: 'Memory storage unavailable' }, 500);
+              if (memoryStore) {
+                await memoryStore.dangerouslyClearAll();
               }
-
-              await memoryStore.dangerouslyClearAll();
-              return c.json({ message: 'Memory storage reset' }, 200);
+              return c.json({ message: 'Storage reset' }, 200);
             },
           }),
         ],
