@@ -20,6 +20,7 @@ import type {
   DatasetTenancyFilters,
 } from '../../types';
 import { StorageDomain } from '../base';
+import { validateDatasetItemExternalId } from './identity';
 
 /**
  * Abstract base class for datasets storage domain.
@@ -116,24 +117,9 @@ export abstract class DatasetsStorage extends StorageDomain {
    * Subclasses implement _doAddItem which handles SCD-2 versioning internally.
    */
   async addItem(args: AddDatasetItemInput): Promise<DatasetItem> {
-    const dataset = await this.getDatasetById({ id: args.datasetId, filters: args.filters });
-    if (!dataset) {
-      throw new Error(`Dataset not found: ${args.datasetId}`);
-    }
-
-    // Validate against schemas if enabled
-    const validator = getSchemaValidator();
-    const cacheKey = `dataset:${args.datasetId}`;
-
-    if (dataset.inputSchema) {
-      validator.validate(args.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
-    }
-
-    if (dataset.groundTruthSchema && args.groundTruth !== undefined) {
-      validator.validate(args.groundTruth, dataset.groundTruthSchema, 'groundTruth', `${cacheKey}:output`);
-    }
-
-    return this._doAddItem(args);
+    const { datasetId, filters, ...item } = args;
+    const [result] = await this.batchInsertItems({ datasetId, filters, items: [item] });
+    return result!;
   }
 
   /** Subclasses implement actual storage add logic with SCD-2 versioning */
@@ -212,6 +198,7 @@ export abstract class DatasetsStorage extends StorageDomain {
     const cacheKey = `dataset:${input.datasetId}`;
 
     for (const itemData of input.items) {
+      validateDatasetItemExternalId(itemData.externalId);
       if (dataset.inputSchema) {
         validator.validate(itemData.input, dataset.inputSchema, 'input', `${cacheKey}:input`);
       }
