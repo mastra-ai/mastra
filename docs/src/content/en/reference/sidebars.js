@@ -383,7 +383,7 @@ const sidebars = {
       type: 'category',
       label: 'Guardrails',
       collapsed: true,
-      items: [{ type: 'doc', id: 'guardrails/guardrails', label: 'Guardrails' }],
+      items: [{ type: 'doc', id: 'guardrails/index', label: 'Guardrails' }],
     },
     {
       type: 'category',
