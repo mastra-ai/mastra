@@ -97,13 +97,7 @@ function WorkspacePage({ workspaceId }: { workspaceId: string }) {
   const pagination = usePagination(search.total);
   const selection = useSelection();
 
-  return (
-    <WorkspaceView
-      search={search}
-      pagination={pagination}
-      selection={selection}
-    />
-  );
+  return <WorkspaceView search={search} pagination={pagination} selection={selection} />;
 }
 ```
 
