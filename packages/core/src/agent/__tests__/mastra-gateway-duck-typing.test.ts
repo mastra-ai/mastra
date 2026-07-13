@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 
-describe('memory gateway duck typing', () => {
+describe('mastra gateway duck typing', () => {
   it('does not warn when model exposes a mastra gatewayId without being a ModelRouterLanguageModel instance', async () => {
     const warn = vi.fn();
 

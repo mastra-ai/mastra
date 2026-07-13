@@ -106,7 +106,7 @@ export function resolveModel(
 
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
-  const mgApiKey = MastraCodeGateway.getMemoryGatewayApiKey();
+  const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
   const gateway = createMastraCodeGateway({

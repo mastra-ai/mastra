@@ -11,6 +11,7 @@ export * from './hooks/useEnsureRepoMaterialized';
 export * from './hooks/useGithubGitOps';
 export * from './hooks/useGithubRepos';
 export * from './hooks/useGithubStatus';
+export * from './hooks/useProjectSettings';
 export * from './hooks/useProjects';
 export * from './hooks/useWorkspaces';
 export * from './services/github';

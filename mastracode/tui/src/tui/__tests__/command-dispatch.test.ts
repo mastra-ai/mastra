@@ -13,7 +13,7 @@ const mocks = vi.hoisted(() => ({
   handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
   handleOMCommand: vi.fn().mockResolvedValue(undefined),
-  handleMemoryGatewayCommand: vi.fn().mockResolvedValue(undefined),
+  handleMastraGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
@@ -53,7 +53,7 @@ vi.mock('../commands/index.js', () => ({
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
   handleUpdateCommand: vi.fn(),
-  handleMemoryGatewayCommand: mocks.handleMemoryGatewayCommand,
+  handleMastraGatewayCommand: mocks.handleMastraGatewayCommand,
   handleApiKeysCommand: vi.fn(),
   handlePluginsCommand: mocks.handlePluginsCommand,
   handleFeedbackCommand: vi.fn(),
@@ -93,7 +93,7 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
     mocks.handleOMCommand.mockClear();
-    mocks.handleMemoryGatewayCommand.mockClear();
+    mocks.handleMastraGatewayCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
@@ -160,16 +160,19 @@ describe('dispatchSlashCommand models routing', () => {
     expect(mocks.handleOMCommand).toHaveBeenCalledTimes(2);
     expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(1, ctx);
     expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(2, ctx);
-    expect(mocks.handleMemoryGatewayCommand).not.toHaveBeenCalled();
+    expect(mocks.handleMastraGatewayCommand).not.toHaveBeenCalled();
   });
 
-  it('keeps /memory-gateway routed separately from Observational Memory settings', async () => {
+  it('routes /gateway and the legacy /memory-gateway alias separately from Observational Memory settings', async () => {
     const state = { customSlashCommands: [] } as any;
     const ctx = {} as any;
 
+    expect(await dispatchSlashCommand('/gateway', state, () => ctx)).toBe(true);
     expect(await dispatchSlashCommand('/memory-gateway', state, () => ctx)).toBe(true);
 
-    expect(mocks.handleMemoryGatewayCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleMastraGatewayCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleMastraGatewayCommand).toHaveBeenNthCalledWith(1, ctx);
+    expect(mocks.handleMastraGatewayCommand).toHaveBeenNthCalledWith(2, ctx);
     expect(mocks.handleOMCommand).not.toHaveBeenCalled();
   });
 
