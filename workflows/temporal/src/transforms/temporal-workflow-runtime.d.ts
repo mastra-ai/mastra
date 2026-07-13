@@ -35,4 +35,4 @@ export class TemporalExecutionEngine {
   }): Promise<WorkflowExecutionResult>;
 }
 
-export function createWorkflow(workflowId: string): WorkflowRuntime;
+export function createWorkflow(workflowId: string, options?: { startToCloseTimeout?: string }): WorkflowRuntime;

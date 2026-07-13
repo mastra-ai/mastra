@@ -144,6 +144,7 @@ const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: 
   branch: opts.branch,
   baseBranch: opts.baseBranch,
 }));
+const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
@@ -171,6 +172,7 @@ vi.mock('./sandbox', () => {
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
+    removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -334,6 +336,7 @@ beforeEach(() => {
   materializeRepo.mockClear();
   reattachProjectSandbox.mockClear();
   ensureWorktree.mockClear();
+  removeWorktree.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -905,6 +908,97 @@ describe('worktree route', () => {
     const app = buildApp({ workosId: 'u1' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    expect(tables.worktrees).toHaveLength(1);
+  });
+});
+
+describe('worktree delete route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBe(401);
+  });
+
+  it('400s on an invalid branch name', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'bad branch!',
+    });
+    expect(res.status).toBe(400);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('404s for a worktree that was never created', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'feat/unknown',
+    });
+    expect(res.status).toBe(404);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it("404s for another user's worktree", async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const res = await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(404);
+    expect(removeWorktree).not.toHaveBeenCalled();
+    expect(tables.worktrees).toHaveLength(1);
+  });
+
+  it('400s when the worktree row points at the repo root checkout', async () => {
+    seedMaterializedProject();
+    tables.worktrees.push({
+      id: 'wt-root',
+      orgId: 'org1',
+      userId: 'u1',
+      githubProjectId: 'p1',
+      branch: 'main',
+      baseBranch: 'main',
+      worktreePath: '/workspace/hello',
+    });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'main',
+    });
+    expect(res.status).toBe(400);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('removes the checkout, deletes the row, and returns the path', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    expect(tables.worktrees).toHaveLength(1);
+
+    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({
+      removed: true,
+      branch: 'feat/x',
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(removeWorktree).toHaveBeenCalledOnce();
+    expect(removeWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      branch: 'feat/x',
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(tables.worktrees).toHaveLength(0);
+  });
+
+  it('keeps the row when the sandbox removal fails', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    removeWorktree.mockRejectedValueOnce(
+      Object.assign(new Error('git worktree remove failed'), { name: 'WorktreeError', code: 'worktree-failed' }),
+    );
+
+    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBeGreaterThanOrEqual(400);
     expect(tables.worktrees).toHaveLength(1);
   });
 });

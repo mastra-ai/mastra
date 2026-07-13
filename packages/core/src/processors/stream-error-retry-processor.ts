@@ -24,6 +24,12 @@ export type StreamErrorRetryProcessorOptions = {
   maxRetries?: number;
   matchers?: StreamErrorRetryMatcherEntry[];
   /**
+   * Retry unknown errors that are not matched by provider metadata, built-in
+   * matchers, or custom matchers. Known authorization failures are excluded.
+   * Uses the processor-level `maxRetries` and `delayMs`. Defaults to false.
+   */
+  retryUnknownErrors?: boolean;
+  /**
    * Optional delay (ms) to wait before signaling a retry. Accepts a number or an
    * async function evaluated with the current error args. Negative/non-finite
    * values are clamped to 0. Defaults to 0 (retry immediately), preserving the
@@ -43,6 +49,13 @@ const RETRYABLE_OPENAI_ERROR_CODES = [
   'overloaded',
 ];
 const OPENAI_RETRY_MESSAGE_PATTERN = /you can retry your request/i;
+const TERMINAL_AUTHORIZATION_ERROR_CODES = new Set([
+  'access_denied',
+  'authentication_error',
+  'forbidden',
+  'invalid_api_key',
+  'permission_denied',
+]);
 const DEFAULT_MATCHERS = [isRetryableOpenAIResponsesStreamError];
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -130,6 +143,36 @@ function isRetryableProviderMetadata(error: unknown): boolean {
   return retryable === true;
 }
 
+function isKnownTerminalAuthorizationError(error: unknown): boolean {
+  const visited = new WeakSet<object>();
+
+  function visit(candidate: unknown): boolean {
+    if (!isRecord(candidate)) return false;
+    if (visited.has(candidate)) return false;
+    visited.add(candidate);
+
+    const statusCode = candidate.statusCode ?? candidate.status;
+    if (statusCode === 401 || statusCode === 403) return true;
+
+    const code = getStringProperty(candidate, 'code') ?? getStringProperty(candidate, 'type');
+    if (code && TERMINAL_AUTHORIZATION_ERROR_CODES.has(code.trim().toLowerCase())) return true;
+
+    const responseBody = getStringProperty(candidate, 'responseBody');
+    let parsedResponseBody: unknown;
+    if (responseBody) {
+      try {
+        parsedResponseBody = JSON.parse(responseBody);
+      } catch {
+        // Ignore non-JSON provider response bodies.
+      }
+    }
+
+    return visit(candidate.error) || visit(candidate.data) || visit(parsedResponseBody) || visit(candidate.cause);
+  }
+
+  return visit(error);
+}
+
 type MatchedPolicy = { maxRetries?: number; delayMs?: StreamErrorRetryDelayMs };
 
 function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMatcherConfig {
@@ -174,19 +217,23 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
 
   readonly #maxRetries: number;
   readonly #entries: StreamErrorRetryMatcherConfig[];
+  readonly #retryUnknownErrors: boolean;
   readonly #delayMs: StreamErrorRetryDelayMs | undefined;
 
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     const defaultEntries: StreamErrorRetryMatcherConfig[] = DEFAULT_MATCHERS.map(m => ({ match: m }));
     this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
+    this.#retryUnknownErrors = options.retryUnknownErrors ?? false;
     this.#delayMs = options.delayMs;
   }
 
   async processAPIError(args: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     const { error, retryCount, abortSignal } = args;
 
-    const policy = findMatchingPolicy(error, this.#entries);
+    const matchedPolicy = findMatchingPolicy(error, this.#entries);
+    const policy =
+      matchedPolicy ?? (this.#retryUnknownErrors && !isKnownTerminalAuthorizationError(error) ? {} : undefined);
     if (!policy) return;
 
     const effectiveMaxRetries = policy.maxRetries ?? this.#maxRetries;

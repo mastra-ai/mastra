@@ -7,7 +7,7 @@ description: React performance optimization guidelines from Mastra Engineering. 
 
 ## Overview
 
-Routing and priority guide for React performance and quality, containing 25 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
+Routing and priority guide for React performance and quality, containing 26 rules across 9 categories. Rule files hold the detailed explanations, examples, review smells, and impact metrics.
 
 ## When to Apply
 
@@ -67,6 +67,7 @@ Rules are prioritized by impact:
 **Component Structure:**
 
 - One domain component/hook per file, one responsibility each — split bloated components (`structure-single-responsibility`)
+- Keep component, hook, function, and utility APIs narrow: split oversized props, arguments, and return objects into focused units composed at the component level; wrapping the same values in one object is not a fix (`structure-narrow-apis`)
 - Use PascalCase components for JSX-returning helpers; keep lowercase helpers for non-JSX values (`structure-component-naming`)
 - Derive props/params instead of accepting a value computable from another arg (`structure-derive-dont-duplicate`)
 - Extract complex derived logic into named locals plus predicates or pure helpers with early returns: oversized conditions, nested ternaries, fallback chains, and `let`-based render prep are code smells (`structure-complex-derived-logic`)
@@ -120,5 +121,5 @@ grep -l "Tanstack" references/rules/
 - `rendering-*` - DOM rendering performance (2 rules)
 - `js-*` - JavaScript micro-optimizations (3 rules)
 - `types-*` - Type-safety / no-`as`-cast and no-`null` rules (2 rules)
-- `structure-*` - Component/hook structure (6 rules)
+- `structure-*` - Component/hook/function/utility structure (7 rules)
 - `testing-*` - BDD tests + mock-only-the-network policy + no className implementation-mirror assertions (2 rules)

@@ -10,6 +10,7 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
 import { Mastra } from '../mastra';
@@ -572,6 +573,86 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       // Clean up spy
       consoleErrorSpy.mockRestore();
+    });
+  });
+
+  describe('non-retryable workflow failures', () => {
+    it('does not retry workflow steps that throw MastraNonRetryableError', async () => {
+      let calls = 0;
+
+      const fatalStep = createStep({
+        id: 'fatal-step',
+        execute: async () => {
+          calls++;
+          throw new MastraNonRetryableError('permanent failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'non-retryable-fatal-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [fatalStep],
+      });
+      workflow.then(fatalStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'non-retryable-fatal-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(calls).toBe(1);
+
+      const stepResult = result.steps['fatal-step'];
+      expect(stepResult?.status).toBe('failed');
+      expect(stepResult?.nonRetryable).toBe(true);
+    });
+
+    it('retries workflow steps that throw transient errors until attempts are exhausted', async () => {
+      let calls = 0;
+
+      const transientStep = createStep({
+        id: 'transient-step',
+        execute: async () => {
+          calls++;
+          throw new Error('transient failure');
+        },
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+      });
+
+      const workflow = createWorkflow({
+        id: 'retryable-transient-workflow',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        retryConfig: { attempts: 3, delay: 0 },
+        steps: [transientStep],
+      });
+      workflow.then(transientStep).commit();
+
+      new Mastra({
+        logger: false,
+        storage: testStorage,
+        workflows: { 'retryable-transient-workflow': workflow },
+      });
+
+      const run = await workflow.createRun();
+      const result = await run.start({ inputData: {} });
+
+      expect(result.status).toBe('failed');
+      expect(calls).toBe(4);
+
+      const stepResult = result.steps['transient-step'];
+      expect(stepResult?.status).toBe('failed');
+      expect(stepResult?.nonRetryable).toBeUndefined();
     });
   });
 

@@ -92,13 +92,13 @@ export function MemoryStudioPanel({
   const selectedOMRecordId = replayRecordId ?? manualSelectionInRange;
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden">
+    <div className="flex size-full flex-col overflow-hidden">
       <div className="flex shrink-0 items-center gap-2 border-b border-border1 px-3 py-2.5">
         <Button type="button" variant="ghost" size="icon-sm" tooltip="Back to memory" onClick={() => onClose?.()}>
           <ArrowLeftIcon />
         </Button>
         <span className="flex min-w-0 items-center gap-1.5 text-neutral6">
-          <MemoryIcon className="h-4 w-4 shrink-0" />
+          <MemoryIcon className="size-4 shrink-0" />
           <Txt as="span" variant="ui-sm" className="font-medium">
             Observational memory
           </Txt>
@@ -113,7 +113,7 @@ export function MemoryStudioPanel({
         </div>
       ) : (
         <div className="grid min-h-0 flex-1 grid-rows-[1fr_auto] overflow-hidden">
-          <div className="min-h-0 flex flex-col overflow-hidden">
+          <div className="flex min-h-0 flex-col overflow-hidden">
             <ObservationDetailView
               records={visibleRecords}
               selectedRecordId={selectedOMRecordId}

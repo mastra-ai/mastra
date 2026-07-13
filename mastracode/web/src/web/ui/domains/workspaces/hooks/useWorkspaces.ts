@@ -3,12 +3,28 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
 import { useToast } from '../../../ui/toast';
-import { createWorktree } from '../services/github';
+import { createWorktree, deleteWorktree } from '../services/github';
 import type { Project, Worktree } from '../services/projects';
-import { loadProjects, projectWorktrees, selectedWorktree, selectWorktree, upsertWorktree } from '../services/projects';
+import {
+  loadProjects,
+  projectWorktrees,
+  removeWorktree,
+  selectedWorktree,
+  selectWorktree,
+  upsertWorktree,
+} from '../services/projects';
 
 export interface WorkspaceSession {
   setState: (updates: Record<string, unknown>) => Promise<unknown>;
+}
+
+/**
+ * The slice of the agent-controller session the delete mutation needs to
+ * cascade a worktree deletion onto the threads that ran inside it.
+ */
+export interface WorkspaceThreadSession {
+  listThreads: (opts: { limit?: number; tags?: Record<string, string> }) => Promise<Array<{ id: string }>>;
+  deleteThread: (threadId: string) => Promise<unknown>;
 }
 
 interface AgentControllerThreadsScope {
@@ -107,5 +123,59 @@ export function useCreateWorkspaceMutation(
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
     onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
+  });
+}
+
+/**
+ * Delete a worktree: removes the sandbox checkout + branch server-side, deletes
+ * every thread that ran inside it, drops it from the stored project, and — when
+ * the deleted worktree was selected — rebinds the session to the fallback
+ * selection (repo root). Destructive; callers confirm with the user first.
+ */
+export function useDeleteWorkspaceMutation(
+  project: Project | null | undefined,
+  session: WorkspaceSession | null | undefined,
+  threadSession: WorkspaceThreadSession | null | undefined,
+  scope?: AgentControllerThreadsScope,
+) {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (worktree: Worktree) => {
+      if (!project?.githubProjectId) throw new Error('No GitHub project selected');
+      await deleteWorktree(baseUrl, project.githubProjectId, worktree.branch);
+
+      // Cascade: delete the threads scoped to this worktree. Re-list between
+      // rounds since the page size caps each fetch; bail after a sane number
+      // of rounds so a server hiccup can't loop forever.
+      if (threadSession) {
+        for (let round = 0; round < 20; round++) {
+          const threads = await threadSession.listThreads({
+            limit: 50,
+            tags: { projectPath: worktree.worktreePath },
+          });
+          if (threads.length === 0) break;
+          for (const thread of threads) await threadSession.deleteThread(thread.id);
+        }
+      }
+
+      const wasSelected = selectedWorktree(latestProject(project))?.worktreePath === worktree.worktreePath;
+      const updated = removeWorktree(latestProject(project), worktree.worktreePath);
+      if (wasSelected) {
+        const fallback = deriveProjectPath(updated);
+        if (fallback) await session?.setState({ projectPath: fallback });
+      }
+      return { updated, removedPath: worktree.worktreePath, wasSelected };
+    },
+    onSuccess: ({ updated, removedPath }) => {
+      invalidateWorkspaceQueries(queryClient, updated, scope);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.agentControllerThreads(scope?.agentControllerId, scope?.resourceId, removedPath),
+      });
+      toast('Workspace deleted');
+    },
+    onError: error => toast(error instanceof Error ? error.message : 'Failed to delete workspace', 'error'),
   });
 }

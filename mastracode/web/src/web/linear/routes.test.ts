@@ -40,6 +40,15 @@ vi.mock('../github/db', () => ({
         },
       }),
     }),
+    update: (table: any) => ({
+      set: (vals: any) => ({
+        where: async (cond: any) => {
+          for (const row of connections) {
+            if (matches(table, row, cond)) Object.assign(row, vals);
+          }
+        },
+      }),
+    }),
   }),
 }));
 
@@ -59,7 +68,16 @@ vi.mock('../github/config', () => ({
   },
 }));
 
-const exchangeLinearOAuthCode = vi.fn(async () => 'linear-token');
+const exchangeLinearOAuthCode = vi.fn(async () => ({
+  accessToken: 'linear-token',
+  refreshToken: 'linear-refresh',
+  expiresAt: new Date('2026-07-14T00:00:00Z'),
+}));
+const refreshLinearAccessToken = vi.fn(async () => ({
+  accessToken: 'linear-token-2',
+  refreshToken: 'linear-refresh-2',
+  expiresAt: new Date('2026-07-15T00:00:00Z'),
+}));
 const fetchLinearWorkspace = vi.fn(async () => ({ name: 'Acme', urlKey: 'acme' }));
 const listLinearProjects = vi.fn(async () => [
   { id: 'proj-1', name: 'Q3 Roadmap', state: 'started', teams: [{ id: 'team-1', key: 'ENG', name: 'Engineering' }] },
@@ -88,6 +106,7 @@ vi.mock('./client', () => ({
   buildLinearAuthorizeUrl: (state: string, redirectUri: string) =>
     `https://linear.app/oauth/authorize?state=${state}&redirect_uri=${encodeURIComponent(redirectUri)}`,
   exchangeLinearOAuthCode: (...args: any[]) => exchangeLinearOAuthCode(...(args as [])),
+  refreshLinearAccessToken: (...args: any[]) => refreshLinearAccessToken(...(args as [])),
   fetchLinearWorkspace: (...args: any[]) => fetchLinearWorkspace(...(args as [])),
   listLinearProjects: (...args: any[]) => listLinearProjects(...(args as [])),
   listActiveLinearIssues: (token: string, after?: string, projectIds?: string[]) =>
@@ -138,14 +157,18 @@ function buildApp(user: { workosId: string; organizationId?: string | null } | n
   return app;
 }
 
-const connect = () =>
+const connect = (overrides: Record<string, any> = {}) =>
   connections.push({
     id: 'conn-1',
     orgId: 'org1',
     userId: 'u1',
     accessToken: 'linear-token',
+    refreshToken: 'linear-refresh',
+    // Unexpired by default; tests override to simulate expiry.
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000),
     workspaceName: 'Acme',
     workspaceUrlKey: 'acme',
+    ...overrides,
   });
 
 beforeEach(() => {
@@ -160,6 +183,7 @@ beforeEach(() => {
   listActiveLinearIssues.mockClear();
   listLinearProjects.mockClear();
   exchangeLinearOAuthCode.mockClear();
+  refreshLinearAccessToken.mockClear();
   fetchLinearWorkspace.mockClear();
 });
 
@@ -219,7 +243,13 @@ describe('callback route', () => {
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toBe('/?linear=connected');
     expect(exchangeLinearOAuthCode).toHaveBeenCalledWith('abc', 'http://localhost:4111/auth/linear/callback');
-    expect(connections[0]).toMatchObject({ orgId: 'org1', accessToken: 'linear-token', workspaceName: 'Acme' });
+    expect(connections[0]).toMatchObject({
+      orgId: 'org1',
+      accessToken: 'linear-token',
+      refreshToken: 'linear-refresh',
+      expiresAt: new Date('2026-07-14T00:00:00Z'),
+      workspaceName: 'Acme',
+    });
   });
 
   it('replaces an existing connection for the org', async () => {
@@ -325,6 +355,54 @@ describe('issues route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
     expect(res.status).toBe(404);
     expect(listActiveLinearIssues).not.toHaveBeenCalled();
+  });
+
+  it('refreshes an expired access token and persists the rotated token set', async () => {
+    connect({ expiresAt: new Date(Date.now() - 1000) });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(200);
+    expect(refreshLinearAccessToken).toHaveBeenCalledWith('linear-refresh');
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token-2', undefined, ['proj-1']);
+    expect(connections[0]).toMatchObject({
+      accessToken: 'linear-token-2',
+      refreshToken: 'linear-refresh-2',
+      expiresAt: new Date('2026-07-15T00:00:00Z'),
+    });
+  });
+
+  it('does not refresh an unexpired token', async () => {
+    connect();
+    await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(refreshLinearAccessToken).not.toHaveBeenCalled();
+    expect(listActiveLinearIssues).toHaveBeenCalledWith('linear-token', undefined, ['proj-1']);
+  });
+
+  it('409s with linear_reauth_required when the token is expired and has no refresh token', async () => {
+    connect({ expiresAt: new Date(Date.now() - 1000), refreshToken: null });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+    expect(listActiveLinearIssues).not.toHaveBeenCalled();
+  });
+
+  it('409s with linear_reauth_required when the refresh grant is rejected', async () => {
+    connect({ expiresAt: new Date(Date.now() - 1000) });
+    const err = new Error('Linear token refresh failed (400)');
+    (err as any).status = 400;
+    refreshLinearAccessToken.mockRejectedValueOnce(err);
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
+  });
+
+  it('409s with linear_reauth_required when Linear rejects the access token', async () => {
+    connect();
+    const err = new Error('Linear API request failed (401)');
+    (err as any).status = 401;
+    listActiveLinearIssues.mockRejectedValueOnce(err);
+    const res = await buildApp({ workosId: 'u1' }).request('/web/linear/issues');
+    expect(res.status).toBe(409);
+    expect(await res.json()).toMatchObject({ error: 'linear_reauth_required' });
   });
 
   it('502s when the Linear API fails', async () => {

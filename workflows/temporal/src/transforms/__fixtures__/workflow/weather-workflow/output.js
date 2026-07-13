@@ -164,15 +164,13 @@ class TemporalExecutionEngine {
     }
   }
 }
-function createWorkflow(workflowId) {
+function createWorkflow(workflowId, options) {
   const stepFlow = [];
   let autoId = 0;
   const nextId = prefix => `${prefix}_${autoId++}`;
   const workflow = async startArgs => {
     const engine = new TemporalExecutionEngine({
-      options: {
-        startToCloseTimeout: '1 minute'
-      }
+      options
     });
     return engine.execute({
       workflowId,
