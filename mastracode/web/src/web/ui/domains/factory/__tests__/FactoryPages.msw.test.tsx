@@ -18,6 +18,8 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/web-ui
 import type { GithubStatus, Project } from '../../workspaces';
 import { createAppRoutes } from '../../../router';
 import type { GithubIssue, GithubPullRequest } from '../services/factory';
+import type { IntakeConfig } from '../services/intake';
+import type { LinearIssue, LinearStatus } from '../services/linear';
 
 const API = `${TEST_BASE_URL}/api/agent-controller/code`;
 const RESOURCE_ID = 'resource-gh';
@@ -120,10 +122,54 @@ const notConnectedStatus: GithubStatus = {
   reason: 'not_connected',
 };
 
-function useAppHandlers(githubStatus: GithubStatus) {
+/** Both sources selected so GitHub/Linear specs see data by default. */
+const defaultIntakeConfig: IntakeConfig = {
+  github: { enabled: true, projectIds: [GITHUB_PROJECT_ID] },
+  linear: { enabled: true, projectIds: ['lin-proj-1'] },
+};
+
+/** Linear stays out of the way unless a spec opts in. */
+const linearDisabledStatus: LinearStatus = { enabled: false, connected: false, workspace: null };
+
+const linearConnectedStatus: LinearStatus = {
+  enabled: true,
+  connected: true,
+  workspace: { name: 'Acme', urlKey: 'acme' },
+  reason: 'ready',
+};
+
+const linearIssues: LinearIssue[] = [
+  {
+    id: 'lin-1',
+    identifier: 'ENG-42',
+    title: 'Fix intake sync',
+    url: 'https://linear.app/acme/issue/ENG-42',
+    state: 'Todo',
+    stateType: 'unstarted',
+    priorityLabel: 'High',
+    assignee: 'ada',
+    team: 'ENG',
+    labels: ['bug'],
+    createdAt: '2026-07-01T00:00:00Z',
+    updatedAt: '2026-07-02T00:00:00Z',
+  },
+];
+
+interface AppHandlerOptions {
+  intakeConfig?: IntakeConfig;
+  linearStatus?: LinearStatus;
+}
+
+function useAppHandlers(githubStatus: GithubStatus, options: AppHandlerOptions = {}) {
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
     http.get(`${TEST_BASE_URL}/web/github/status`, () => HttpResponse.json(githubStatus)),
+    http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+      HttpResponse.json({ config: options.intakeConfig ?? defaultIntakeConfig }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+      HttpResponse.json(options.linearStatus ?? linearDisabledStatus),
+    ),
     http.post(`${API}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: THREAD_ID }),
     ),
@@ -147,9 +193,10 @@ function renderAt(
   initialEntry: string,
   project: Project = githubProject,
   githubStatus: GithubStatus = connectedStatus,
+  options: AppHandlerOptions = {},
 ) {
   seedActiveProject(project);
-  useAppHandlers(githubStatus);
+  useAppHandlers(githubStatus, options);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [initialEntry] });
   renderWithProviders(<RouterProvider router={router} />, client);
@@ -266,6 +313,189 @@ describe('Factory Intake page', () => {
   });
 });
 
+describe('Factory Intake page — Linear source', () => {
+  const emptyGithubIssues = () =>
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues: [], nextPage: null }),
+      ),
+    );
+
+  it('given Linear is connected, when Linear is picked in the source rail, then its issues render in the list column', async () => {
+    emptyGithubIssues();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json({ issues: linearIssues, nextCursor: null }),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
+
+    // Both sources appear in the rail; GitHub is selected by default.
+    const rail = await screen.findByRole('navigation', { name: 'Intake sources' });
+    expect(within(rail).getByRole('button', { name: /^GitHub/ })).toBeInTheDocument();
+    expect(await screen.findByText('No open issues.')).toBeInTheDocument();
+
+    await userEvent.click(within(rail).getByRole('button', { name: /^Linear/ }));
+
+    const list = await screen.findByRole('list', { name: 'Linear issues' });
+    expect(within(list).getByRole('link')).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42');
+    expect(within(list).getByText('Fix intake sync')).toBeInTheDocument();
+    expect(within(list).getByText(/ENG-42 · Todo · ada/)).toBeInTheDocument();
+    // Switching sources swaps the list column: the GitHub panel is gone.
+    expect(screen.queryByText('No open issues.')).not.toBeInTheDocument();
+  });
+
+  it('given Linear is enabled but not connected, when Linear is picked in the source rail, then a connect prompt renders', async () => {
+    emptyGithubIssues();
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      linearStatus: { enabled: true, connected: false, workspace: null, reason: 'not_connected' },
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Linear/ }));
+
+    expect(await screen.findByText('Connect a Linear workspace to see its issues here.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Linear issues' })).not.toBeInTheDocument();
+  });
+
+  it('given the Linear feature is disabled on the server, when visiting /factory/intake, then Linear is absent from the source rail', async () => {
+    emptyGithubIssues();
+    renderAt('/factory/intake');
+
+    expect(await screen.findByText('No open issues.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Linear/ })).not.toBeInTheDocument();
+  });
+
+  it('given no GitHub selection at all, then a not-selected hint renders and no issues are fetched', async () => {
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: null },
+        linear: { enabled: false, projectIds: null },
+      },
+    });
+
+    expect(await screen.findByText(/isn't selected as a GitHub intake source/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Open issues' })).not.toBeInTheDocument();
+  });
+
+  it('given the Linear authorization expired, when Linear is picked, then a reconnect notice renders instead of an error', async () => {
+    emptyGithubIssues();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json(
+          { error: 'linear_reauth_required', message: 'Linear authorization expired.' },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Linear/ }));
+
+    expect(
+      await screen.findByText('Linear authorization expired. Reconnect to keep syncing issues.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Linear issues' })).not.toBeInTheDocument();
+  });
+
+  it('given Linear is connected but no projects are selected, then a pick-projects hint renders and no issues are fetched', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues: [], nextPage: null }),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: [GITHUB_PROJECT_ID] },
+        linear: { enabled: true, projectIds: null },
+      },
+      linearStatus: linearConnectedStatus,
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Linear/ }));
+
+    expect(
+      await screen.findByText('No Linear projects selected. Pick them in Settings › General.'),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Linear issues' })).not.toBeInTheDocument();
+  });
+
+  it('given an explicit GitHub selection that excludes the active project, then a not-selected hint renders instead of issues', async () => {
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: ['some-other-project'] },
+        linear: { enabled: false, projectIds: null },
+      },
+    });
+
+    expect(await screen.findByText(/isn't selected as a GitHub intake source/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Open issues' })).not.toBeInTheDocument();
+  });
+
+  it('given an explicit GitHub selection that includes the active project, then its issues render', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: true, projectIds: [GITHUB_PROJECT_ID, 'some-other-project'] },
+        linear: { enabled: false, projectIds: null },
+      },
+    });
+
+    const list = await screen.findByRole('list', { name: 'Open issues' });
+    expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
+    expect(screen.queryByText(/isn't selected as a GitHub intake source/)).not.toBeInTheDocument();
+  });
+
+  it('given GitHub intake is disabled in settings, when visiting /factory/intake, then Linear is the default source and GitHub is absent from the rail', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json({ issues: linearIssues, nextCursor: null }),
+      ),
+    );
+    renderAt('/factory/intake', githubProject, connectedStatus, {
+      intakeConfig: {
+        github: { enabled: false, projectIds: null },
+        linear: { enabled: true, projectIds: ['lin-proj-1'] },
+      },
+      linearStatus: linearConnectedStatus,
+    });
+
+    // Linear is the only source, so its list renders without any clicking.
+    expect(await screen.findByRole('list', { name: 'Linear issues' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^GitHub/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Open issues' })).not.toBeInTheDocument();
+  });
+
+  it('given a Linear issue, when Investigate is clicked, then a worktree, thread, and understand-issue prompt are created', async () => {
+    emptyGithubIssues();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/issues`, () =>
+        HttpResponse.json({ issues: linearIssues, nextCursor: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-linear-eng-42');
+    const { router } = renderAt('/factory/intake', githubProject, connectedStatus, {
+      linearStatus: linearConnectedStatus,
+    });
+
+    await userEvent.click(await screen.findByRole('button', { name: /^Linear/ }));
+    await screen.findByRole('list', { name: 'Linear issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'Investigate ENG-42' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/linear-eng-42' });
+    expect(captured.threadTitles).toEqual(['ENG-42: Fix intake sync']);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('understand-issue skill');
+    expect(captured.messages[0]!.message).toContain('https://linear.app/acme/issue/ENG-42');
+  });
+});
+
 describe('Factory Review page', () => {
   it('given open pull requests, when visiting /factory/review, then they render with branch metadata', async () => {
     server.use(
@@ -368,6 +598,105 @@ describe('Factory investigate flow', () => {
     expect(captured.messages).toHaveLength(1);
     expect(captured.messages[0]!.message).toContain('understand-pr skill');
     expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
+  });
+
+  it('given an issue, when a custom prompt is submitted from the action menu, then the run starts with the typed prompt', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    const form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    await userEvent.type(
+      within(form).getByRole('textbox', { name: 'Prompt for issue #12' }),
+      'Write a failing test first',
+    );
+    await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('Write a failing test first');
+    expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/12');
+    expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
+  });
+
+  it('given a pull request, when a custom prompt is submitted from the action menu, then the run starts with the typed prompt and checkout context', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
+        HttpResponse.json({ pullRequests, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-pr-34');
+    const { router } = renderAt('/factory/review');
+
+    await screen.findByRole('list', { name: 'Open pull requests' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for pull request #34' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    const form = await screen.findByRole('form', { name: 'Custom prompt for pull request #34' });
+    await userEvent.type(
+      within(form).getByRole('textbox', { name: 'Prompt for pull request #34' }),
+      'Check for security issues only',
+    );
+    await userEvent.click(within(form).getByRole('button', { name: 'Run' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('Check for security issues only');
+    expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
+    expect(captured.messages[0]!.message).not.toContain('understand-pr skill');
+  });
+
+  it('given an empty custom prompt, when Run is clicked, then the run does not start', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    const form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    expect(within(form).getByRole('button', { name: 'Run' })).toBeDisabled();
+    expect(captured.worktree).toBeUndefined();
+    expect(captured.messages).toHaveLength(0);
+  });
+
+  it('given a typed custom prompt, when the popover is cancelled and reopened, then the prompt is cleared', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues, nextPage: null }),
+      ),
+    );
+    renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    let form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    await userEvent.type(within(form).getByRole('textbox', { name: 'Prompt for issue #12' }), 'Discarded draft');
+    await userEvent.click(within(form).getByRole('button', { name: 'Cancel' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Custom prompt…' }));
+
+    form = await screen.findByRole('form', { name: 'Custom prompt for issue #12' });
+    expect(within(form).getByRole('textbox', { name: 'Prompt for issue #12' })).toHaveValue('');
   });
 
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no thread is created', async () => {

@@ -364,9 +364,11 @@ const sidebars = {
       items: [
         { type: 'doc', id: 'file-based-agents/config', label: 'config.ts' },
         { type: 'doc', id: 'file-based-agents/instructions', label: 'Instructions' },
+        { type: 'doc', id: 'file-based-agents/logger', label: 'Logger' },
         { type: 'doc', id: 'file-based-agents/memory', label: 'Memory' },
         { type: 'doc', id: 'file-based-agents/observability', label: 'Observability' },
         { type: 'doc', id: 'file-based-agents/processors', label: 'Processors' },
+        { type: 'doc', id: 'file-based-agents/scorers', label: 'Scorers' },
         { type: 'doc', id: 'file-based-agents/server', label: 'Server' },
         { type: 'doc', id: 'file-based-agents/skills', label: 'Skills' },
         { type: 'doc', id: 'file-based-agents/storage', label: 'Storage' },

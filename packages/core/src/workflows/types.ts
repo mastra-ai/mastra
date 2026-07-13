@@ -105,6 +105,8 @@ export type StepFailure<P, R, S, T> = {
   metadata?: StepMetadata;
   /** Tripwire data when step failed due to processor rejection */
   tripwire?: StepTripwireInfo;
+  /** Step failure marked as non-retryable (MastraNonRetryableError). */
+  nonRetryable?: true;
 };
 
 export type StepSuspended<P, S, T> = {

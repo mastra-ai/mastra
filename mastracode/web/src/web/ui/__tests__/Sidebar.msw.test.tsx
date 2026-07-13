@@ -255,10 +255,12 @@ describe('Sidebar', () => {
 
       const activeWorktree = await screen.findByRole('button', { name: 'main' });
       const thread = await screen.findByText('First thread');
-      expect(activeWorktree.parentElement).toContainElement(thread);
+      // The row button sits inside a hover-group wrapper; nested threads render
+      // as a sibling of that wrapper inside the worktree's container.
+      expect(activeWorktree.parentElement?.parentElement).toContainElement(thread);
 
       const inactiveWorktree = screen.getByRole('button', { name: 'feat-ui' });
-      expect(inactiveWorktree.parentElement).not.toContainElement(thread);
+      expect(inactiveWorktree.parentElement?.parentElement).not.toContainElement(thread);
     });
 
     it('does not render a flat thread list outside the Workspaces section', async () => {
