@@ -7,23 +7,25 @@ description: Classify and route a GitHub issue, post/update an issue triage comm
 
 Classify one open GitHub issue, post/update an issue triage comment, and manage the issue's auto-triage lifecycle labels.
 
-Use this skill when `gh-triage` delegates an issue, when a GitHub `issues.opened` webhook starts an automatic run, or when a maintainer starts/continues issue triage from the Factory Triage page.
+Use this skill when `gh-triage` delegates an issue, when a GitHub `issues.opened` webhook starts automatic classification, or when a maintainer manually classifies an untriaged issue from Intake.
+
+This skill is **comment-and-label only**. It classifies and routes issues by posting/updating one GitHub issue comment and applying labels. It must not create sessions, threads, branches, worktrees, PRs, commits, or Maintainer's Triage Notes.
 
 ## Label Policy
 
 The exact label names for this lifecycle are:
 
-- `auto-triaged` — issue entered the automatic triage queue.
-- `in-triage` — active maintainer/agent triage work has started.
-- `needs-approval` — triage/review output is ready but needs maintainer approval.
+- `auto-triaged` — issue was processed by automatic/manual auto-triage classification.
+- `in-triage` — active maintainer/agent triage work has started from the Triage page.
+- `triage:needs-approval` — classification found a path that needs maintainer approval/prep before action.
 - `done` — triage lifecycle is complete.
 
 Rules:
 
-- Add `auto-triaged` to every newly auto-processed issue before or alongside the triage output.
-- Add `in-triage` when beginning active issue investigation or continuing triage work.
-- Add `needs-approval` when the next action requires maintainer approval.
-- Add `done` when the issue triage lifecycle is complete.
+- Add `auto-triaged` to every auto-processed issue before or alongside the triage output.
+- Add routing labels that help the Triage page choose the next action. Use `triage:needs-approval` when the next action requires maintainer approval.
+- When adding `triage:needs-approval`, do not also add redundant lifecycle labels unless they are explicitly useful for the issue state.
+- Do not add `in-triage` from automatic classification; it is for explicit maintainer-started Triage page work.
 - Do not remove lifecycle labels unless the user explicitly asks or the issue is being moved to a later lifecycle state in the same run.
 - After successfully posting/updating the triage output, remove `status: needs triage` if present.
 
@@ -34,6 +36,7 @@ Rules:
 - Triage must always end with one GitHub-visible output: an issue comment. Do not create or update a Maintainer's Triage Note for issue triage.
 - Stop on non-open issues unless the user explicitly asks for a note.
 - Stop if the author is a core contributor (`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`) unless the user explicitly asks for triage.
+- Do not create sessions, threads, branches, worktrees, PRs, commits, or Factory runs.
 - Do not modify code, assignees, milestones, branches, issue state, or unrelated labels.
 - Do not invent evidence. Say what was not checked.
 - In `--headless`, classify, post the selected triage output, apply labels, and exit.
@@ -110,7 +113,7 @@ Output: issue comment only. Include likely area, known evidence, missing-but-non
 
 ### 3. Post/update output and labels
 
-- Case A: post/update the issue comment, add/update lifecycle labels as needed, remove `status: needs triage` if present, and stop.
-- Cases C-E: post/update the issue comment, add/update lifecycle labels as needed, remove `status: needs triage` if present, and stop unless the user explicitly asks to continue.
+- Case A: post/update the issue comment, add `auto-triaged`, add any useful routing labels, remove `status: needs triage` if present, and stop.
+- Cases C-E: post/update the issue comment, add `auto-triaged`, add any useful routing labels, remove `status: needs triage` if present, and stop unless the user explicitly asks to continue.
 - If posting automatically, replace lettered options with a short summary of what was posted and the next step, then stop.
-- If interactive approval is needed before posting, add `needs-approval` and stop with concise lettered options.
+- If interactive approval is needed before posting, add `triage:needs-approval` and stop with concise lettered options.

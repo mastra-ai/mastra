@@ -78,7 +78,7 @@ const triageIssues: GithubIssue[] = [
   },
   {
     ...issues[1]!,
-    labels: ['auto-triaged', 'needs-approval'],
+    labels: ['auto-triaged', 'triage:needs-approval'],
   },
 ];
 
@@ -588,9 +588,9 @@ describe('Factory Triage page', () => {
     expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
     expect(within(list).getByText('Improve docs')).toBeInTheDocument();
     expect(within(list).getAllByText('auto-triaged')).toHaveLength(2);
-    expect(within(list).getByText('needs-approval')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Run triage issue #12' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Prepare approval issue #15' })).toBeInTheDocument();
+    expect(within(list).getByText('triage:needs-approval')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Investigate issue #12' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Prepare approval #15' })).toBeInTheDocument();
   });
 
   it('given no auto-triaged issues, when the page resolves, then an empty message renders', async () => {
@@ -606,10 +606,44 @@ describe('Factory Triage page', () => {
 });
 
 describe('Factory investigate flow', () => {
-  it('given an issue, when Investigate is clicked, then a worktree, thread, and understand-issue prompt are created and the app navigates to the new thread', async () => {
+  it('given an issue without auto-triaged, when Triage issue is selected from the action menu, then it shows pending feedback and stays on Intake', async () => {
+    const triageRequests: Record<string, unknown>[] = [];
+    let resolveTriage!: () => void;
+    const triageStarted = new Promise<void>(resolve => {
+      resolveTriage = resolve;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, ({ request }) => {
+        const label = new URL(request.url).searchParams.get('label');
+        return HttpResponse.json({ issues: label === 'auto-triaged' ? triageIssues : issues, nextPage: null });
+      }),
+      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/12/triage`, async ({ request }) => {
+        triageRequests.push((await request.json()) as Record<string, unknown>);
+        await triageStarted;
+        return HttpResponse.json({ ok: true }, { status: 202 });
+      }),
+    );
+    const { router } = renderAt('/factory/intake');
+
+    await screen.findByRole('list', { name: 'Open issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'More actions for issue #12' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Triage issue' }));
+
+    expect(await screen.findByRole('button', { name: 'Investigate issue #12' })).toHaveTextContent('Starting…');
+    expect(triageRequests[0]).toMatchObject({
+      title: 'Fix flaky test',
+      url: 'https://github.com/mastra-ai/mastra/issues/12',
+      labels: ['bug'],
+    });
+    resolveTriage();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Investigate issue #12' })).not.toHaveTextContent('Starting…'));
+    expect(router.state.location.pathname).toBe('/factory/intake');
+  });
+
+  it('given an auto-triaged issue in intake, when Investigate is clicked, then the existing investigation flow is preserved', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
-        HttpResponse.json({ issues, nextPage: null }),
+        HttpResponse.json({ issues: triageIssues, nextPage: null }),
       ),
     );
     const captured = useFactoryRunHandlers('factory-issue-12');
@@ -626,25 +660,46 @@ describe('Factory investigate flow', () => {
     expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/12');
   });
 
-  it('given an auto-triaged issue, when Run triage is clicked, then a worktree, thread, and triage-issue prompt are created', async () => {
+  it('given an auto-triaged issue, when Investigate issue is clicked from Triage, then a worktree, thread, and understand-issue prompt are created', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
         HttpResponse.json({ issues: triageIssues, nextPage: null }),
       ),
     );
-    const captured = useFactoryRunHandlers('factory-triage-12');
+    const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/triage');
 
     await screen.findByRole('list', { name: 'Auto-triaged issues' });
-    await userEvent.click(screen.getByRole('button', { name: 'Run triage issue #12' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Investigate issue #12' }));
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
-    expect(captured.worktree).toMatchObject({ branch: 'factory/triage-12' });
-    expect(captured.threadTitles).toEqual(['Triage #12: Fix flaky test']);
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(captured.threadTitles).toEqual(['Issue #12: Fix flaky test']);
     expect(captured.messages).toHaveLength(1);
-    expect(captured.messages[0]!.message).toContain('triage-issue skill');
+    expect(captured.messages[0]!.message).toContain('understand-issue skill');
     expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/12');
-    expect(captured.messages[0]!.message).toContain('auto-triaged');
+    expect(captured.messages[0]!.message).toContain('Current triage labels: auto-triaged.');
+  });
+
+  it('given an issue needing approval, when Prepare approval is clicked from Triage, then a worktree, thread, and approval prompt are created', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues`, () =>
+        HttpResponse.json({ issues: triageIssues, nextPage: null }),
+      ),
+    );
+    const captured = useFactoryRunHandlers('factory-issue-15');
+    const { router } = renderAt('/factory/triage');
+
+    await screen.findByRole('list', { name: 'Auto-triaged issues' });
+    await userEvent.click(screen.getByRole('button', { name: 'Prepare approval #15' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-15' });
+    expect(captured.threadTitles).toEqual(['Issue #15: Improve docs']);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('Prepare maintainer approval next steps');
+    expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/15');
+    expect(captured.messages[0]!.message).toContain('triage:needs-approval');
   });
 
   it('given a pull request, when Review is clicked, then a worktree, thread, and understand-pr prompt are created and the app navigates to the new thread', async () => {

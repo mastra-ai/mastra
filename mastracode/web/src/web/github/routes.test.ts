@@ -64,21 +64,24 @@ vi.mock('./db', () => {
   return { getAppDb: () => makeDb() };
 });
 
-const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
-  issues: [
-    {
-      number: 12,
-      title: 'Fix flaky test',
-      url: 'https://github.com/octo/hello/issues/12',
-      author: 'ada',
-      labels: ['bug'],
-      comments: 3,
-      createdAt: '2026-07-01T00:00:00Z',
-      updatedAt: '2026-07-02T00:00:00Z',
-    },
-  ],
-  nextPage: null as number | null,
-}));
+const listRepoOpenIssues = vi.fn(
+  async (_installationId: number, _repoFullName: string, _page: number, _options?: { label?: string }) => ({
+    issues: [
+      {
+        number: 12,
+        title: 'Fix flaky test',
+        url: 'https://github.com/octo/hello/issues/12',
+        author: 'ada',
+        labels: ['bug'],
+        comments: 3,
+        createdAt: '2026-07-01T00:00:00Z',
+        updatedAt: '2026-07-02T00:00:00Z',
+      },
+    ],
+    nextPage: null as number | null,
+  }),
+);
+const addIssueLabels = vi.fn(async (_installationId: number, _repoFullName: string, _issueNumber: number, _labels: string[]) => {});
 const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
   pullRequests: [
     {
@@ -125,6 +128,8 @@ vi.mock('./client', () => ({
       : null,
   ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
+  addIssueLabels: (installationId: number, repoFullName: string, issueNumber: number, labels: string[]) =>
+    addIssueLabels(installationId, repoFullName, issueNumber, labels),
   listRepoOpenIssues: (installationId: number, repoFullName: string, page: number, options?: { label?: string }) =>
     listRepoOpenIssues(installationId, repoFullName, page, options),
   listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
@@ -316,7 +321,7 @@ sandboxesRef = githubProjectSandboxes;
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  options: { startIssueTriageRun?: (input: any) => Promise<void> } = {},
+  options: { classifyIssueForTriage?: (input: any) => Promise<void> } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -352,6 +357,7 @@ beforeEach(() => {
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  addIssueLabels.mockClear();
   listRepoOpenIssues.mockClear();
   listRepoOpenPullRequests.mockClear();
 });
@@ -377,10 +383,10 @@ function signedGithubWebhookRequest(event: string, payload: Record<string, unkno
 }
 
 describe('webhook route', () => {
-  it('accepts a valid signed issues event, logs normalized metadata, and starts issue triage', async () => {
+  it('accepts a valid signed issues event, logs normalized metadata, and classifies issue triage', async () => {
     const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const startIssueTriageRun = vi.fn(async () => {});
-    const res = await buildApp(null, { startIssueTriageRun }).request(
+    const classifyIssueForTriage = vi.fn(async () => {});
+    const res = await buildApp(null, { classifyIssueForTriage }).request(
       signedGithubWebhookRequest('issues', {
         action: 'opened',
         repository: { full_name: 'octo/hello' },
@@ -407,7 +413,7 @@ describe('webhook route', () => {
       sender: 'ada',
       installationId: 99,
     });
-    expect(startIssueTriageRun).toHaveBeenCalledWith({
+    expect(classifyIssueForTriage).toHaveBeenCalledWith({
       repository: 'octo/hello',
       issueNumber: 12,
       issueTitle: 'Fix flaky test',
@@ -957,6 +963,13 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'auto-triaged' });
   });
 
+  it('forwards the triage needs-approval label filter', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=triage%3Aneeds-approval');
+    expect(res.status).toBe(200);
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'triage:needs-approval' });
+  });
+
   it('400s on an unsupported label filter', async () => {
     seedMaterializedProject();
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=needs-approval');
@@ -978,6 +991,45 @@ describe('issues route', () => {
     const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
     expect(res.status).toBe(502);
     expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
+  });
+
+  it('classifies issue triage for the project repo without returning a thread', async () => {
+    seedMaterializedProject();
+    const classifyIssueForTriage = vi.fn(async () => {});
+    const res = await buildApp({ workosId: 'u1' }, { classifyIssueForTriage }).request(
+      '/web/github/projects/p1/issues/12/triage',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          title: 'Fix flaky test',
+          url: 'https://github.com/octo/hello/issues/12',
+          labels: ['bug', 'auto-triaged', ''],
+        }),
+      },
+    );
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(classifyIssueForTriage).toHaveBeenCalledWith({
+      repository: 'octo/hello',
+      issueNumber: 12,
+      issueTitle: 'Fix flaky test',
+      issueUrl: 'https://github.com/octo/hello/issues/12',
+      labels: ['bug', 'auto-triaged'],
+      installationId: 7,
+    });
+  });
+
+  it('uses the default label-only classification seam for manual triage', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues/12/triage', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'Fix flaky test', url: 'https://github.com/octo/hello/issues/12', labels: [] }),
+    });
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(addIssueLabels).toHaveBeenCalledWith(7, 'octo/hello', 12, ['auto-triaged']);
   });
 });
 

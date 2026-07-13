@@ -13,7 +13,7 @@ import type { GithubIssue } from './services/factory';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
 const IN_TRIAGE_LABEL = 'in-triage';
-const NEEDS_APPROVAL_LABEL = 'needs-approval';
+const NEEDS_APPROVAL_LABEL = 'triage:needs-approval';
 const DONE_LABEL = 'done';
 
 /** Factory › Triage: GitHub issues currently labeled auto-triaged. */
@@ -25,33 +25,44 @@ export function TriagePage() {
   );
 }
 
-function triageBranch(issue: GithubIssue): string {
-  return `factory/triage-${issue.number}`;
+function issueBranch(issue: GithubIssue): string {
+  return `factory/issue-${issue.number}`;
 }
 
-function triagePrompt(issue: GithubIssue): string {
+function issueLabels(issue: GithubIssue): string {
+  return issue.labels.length > 0 ? issue.labels.join(', ') : 'none';
+}
+
+function investigatePrompt(issue: GithubIssue): string {
   return [
-    `Use the triage-issue skill in headless mode for GitHub issue #${issue.number}: "${issue.title}" (${issue.url}).`,
-    `Current labels: ${issue.labels.length > 0 ? issue.labels.join(', ') : 'none'}.`,
-    'Post or update the GitHub issue triage comment only; do not create a Maintainer\'s Triage Note.',
-    'Apply the triage-issue lifecycle label policy as needed.',
+    `Use the understand-issue skill to investigate GitHub issue #${issue.number}: "${issue.title}" (${issue.url}).`,
+    `Current triage labels: ${issueLabels(issue)}.`,
+    'Use the existing triage issue comment as context when it is present.',
+  ].join(' ');
+}
+
+function approvalPrompt(issue: GithubIssue): string {
+  return [
+    `Prepare maintainer approval next steps for GitHub issue #${issue.number}: "${issue.title}" (${issue.url}).`,
+    `Current labels: ${issueLabels(issue)}.`,
+    'Read the existing triage issue comment as context, validate what approval is needed, and summarize recommended maintainer next steps.',
   ].join(' ');
 }
 
 function triageCustomPrompt(issue: GithubIssue, instructions: string): string {
-  return [
-    `Regarding GitHub issue #${issue.number}: "${issue.title}" (${issue.url}).`,
-    `Current labels: ${issue.labels.length > 0 ? issue.labels.join(', ') : 'none'}.`,
-    instructions,
-  ].join(' ');
+  return [`Regarding GitHub issue #${issue.number}: "${issue.title}" (${issue.url}).`, `Current labels: ${issueLabels(issue)}.`, instructions].join(
+    ' ',
+  );
 }
 
-function actionForIssue(issue: GithubIssue): { label: string; status: string; disabled: boolean } {
+function actionForIssue(issue: GithubIssue): { label: string; status: string; disabled: boolean; prompt: string } {
   const labels = new Set(issue.labels);
-  if (labels.has(DONE_LABEL)) return { label: 'View result', status: 'Done', disabled: true };
-  if (labels.has(NEEDS_APPROVAL_LABEL)) return { label: 'Prepare approval', status: 'Needs approval', disabled: false };
-  if (labels.has(IN_TRIAGE_LABEL)) return { label: 'Continue triage', status: 'In triage', disabled: false };
-  return { label: 'Run triage', status: 'Ready for triage', disabled: false };
+  if (labels.has(DONE_LABEL)) return { label: 'View result', status: 'Done', disabled: true, prompt: investigatePrompt(issue) };
+  if (labels.has(NEEDS_APPROVAL_LABEL)) {
+    return { label: 'Prepare approval', status: 'Needs approval', disabled: false, prompt: approvalPrompt(issue) };
+  }
+  if (labels.has(IN_TRIAGE_LABEL)) return { label: 'Investigate issue', status: 'In triage', disabled: false, prompt: investigatePrompt(issue) };
+  return { label: 'Investigate issue', status: 'Ready for investigation', disabled: false, prompt: investigatePrompt(issue) };
 }
 
 function TriageIssueList({ githubProjectId }: { githubProjectId: string }) {
@@ -90,13 +101,13 @@ function TriageIssueList({ githubProjectId }: { githubProjectId: string }) {
               issue={issue}
               actionLabel={action.label}
               status={action.status}
-              starting={start.isPending && start.variables?.branch === triageBranch(issue)}
+              starting={start.isPending && start.variables?.branch === issueBranch(issue)}
               disabled={!enabled || start.isPending || action.disabled}
               onRun={prompt =>
                 start.mutate({
-                  branch: triageBranch(issue),
-                  threadTitle: `Triage #${issue.number}: ${issue.title}`,
-                  prompt: prompt === undefined ? triagePrompt(issue) : triageCustomPrompt(issue, prompt),
+                  branch: issueBranch(issue),
+                  threadTitle: `Issue #${issue.number}: ${issue.title}`,
+                  prompt: prompt === undefined ? action.prompt : triageCustomPrompt(issue, prompt),
                 })
               }
             />
@@ -149,7 +160,7 @@ function TriageIssueRow({
       </a>
       <FactoryItemActions
         actionLabel={actionLabel}
-        itemLabel={`issue #${issue.number}`}
+        itemLabel={`#${issue.number}`}
         starting={starting}
         disabled={disabled}
         onAction={() => onRun()}

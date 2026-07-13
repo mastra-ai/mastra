@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
 import { getGithubWebhookSecret } from './config';
 
-export interface GithubWebhookTriageRunInput {
+export interface GithubIssueTriageClassificationInput {
   repository: string;
   issueNumber: number;
   issueTitle: string;
@@ -13,7 +13,7 @@ export interface GithubWebhookTriageRunInput {
 }
 
 export interface GithubWebhookHandlerOptions {
-  startIssueTriageRun?: (input: GithubWebhookTriageRunInput) => Promise<void>;
+  classifyIssueForTriage?: (input: GithubIssueTriageClassificationInput) => Promise<void>;
 }
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
@@ -115,7 +115,7 @@ function getLabels(value: unknown): string[] {
     .filter((label): label is string => Boolean(label));
 }
 
-function getIssueTriageRunInput(parsed: ParsedGithubWebhook): GithubWebhookTriageRunInput | null {
+function getIssueTriageClassificationInput(parsed: ParsedGithubWebhook): GithubIssueTriageClassificationInput | null {
   if (parsed.event !== 'issues' || getString(parsed.payload.action) !== 'opened') return null;
   const repository = getString(getObject(parsed.payload.repository)?.full_name);
   const issue = getObject(parsed.payload.issue);
@@ -170,18 +170,16 @@ export async function handleGithubWebhook(
   const metadata = normalizeGithubWebhookMetadata(parsed);
   console.log('[GitHub Webhook]', metadata);
 
-  const issueTriageRun = getIssueTriageRunInput(parsed);
-  if (issueTriageRun && options.startIssueTriageRun) {
-    try {
-      await options.startIssueTriageRun(issueTriageRun);
-    } catch (error) {
-      console.error('[GitHub Webhook] Failed to start issue triage run', {
+  const issueClassification = getIssueTriageClassificationInput(parsed);
+  if (issueClassification && options.classifyIssueForTriage) {
+    void options.classifyIssueForTriage(issueClassification).catch((error: unknown) => {
+      console.error('[GitHub Webhook] Failed to classify issue for triage', {
         deliveryId: metadata.deliveryId,
         repository: metadata.repository,
         issueNumber: metadata.issueNumber,
         error: error instanceof Error ? error.message : String(error),
       });
-    }
+    });
   }
 
   return { status: 202, body: { ok: true } };

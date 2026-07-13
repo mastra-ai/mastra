@@ -10,7 +10,7 @@ import { SkeletonRows } from '../../ui';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
-import { useProjectIssuesQuery } from './hooks/useFactoryData';
+import { useProjectIssuesQuery, useStartIssueTriageMutation } from './hooks/useFactoryData';
 import { useIntakeConfigQuery } from './hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearData';
 import { useStartFactoryRun } from './hooks/useStartFactoryRun';
@@ -184,6 +184,8 @@ function LinearConnectNotice({ message }: { message?: string }) {
 
 // ── GitHub ───────────────────────────────────────────────────────────────
 
+const AUTO_TRIAGED_LABEL = 'auto-triaged';
+
 function issueBranch(issue: GithubIssue): string {
   return `factory/issue-${issue.number}`;
 }
@@ -196,8 +198,13 @@ function issueCustomPrompt(issue: GithubIssue, instructions: string): string {
   return `Regarding GitHub issue #${issue.number}: "${issue.title}" (${issue.url}). ${instructions}`;
 }
 
+function needsAutoTriage(issue: GithubIssue): boolean {
+  return !issue.labels.includes(AUTO_TRIAGED_LABEL);
+}
+
 function IssueList({ githubProjectId }: { githubProjectId: string }) {
   const issues = useProjectIssuesQuery(githubProjectId);
+  const triage = useStartIssueTriageMutation(githubProjectId);
   const { start, enabled } = useStartFactoryRun();
 
   if (issues.isPending) return <SkeletonRows label="Loading issues" rows={5} rowClassName="h-12 w-full" />;
@@ -223,22 +230,31 @@ function IssueList({ githubProjectId }: { githubProjectId: string }) {
           {start.error instanceof Error ? start.error.message : 'Failed to start investigation'}
         </Notice>
       )}
+      {triage.isError && (
+        <Notice variant="destructive">
+          {triage.error instanceof Error ? triage.error.message : 'Failed to start issue triage'}
+        </Notice>
+      )}
       <ul className="m-0 flex list-none flex-col gap-1 p-0" aria-label="Open issues">
-        {issues.data.map(issue => (
-          <IssueRow
-            key={issue.number}
-            issue={issue}
-            starting={start.isPending && start.variables?.branch === issueBranch(issue)}
-            disabled={!enabled || start.isPending}
-            onRun={prompt =>
-              start.mutate({
-                branch: issueBranch(issue),
-                threadTitle: `Issue #${issue.number}: ${issue.title}`,
-                prompt: prompt === undefined ? issuePrompt(issue) : issueCustomPrompt(issue, prompt),
-              })
-            }
-          />
-        ))}
+        {issues.data.map(issue => {
+          const triageStarting = triage.isPending && triage.variables?.number === issue.number;
+          return (
+            <IssueRow
+              key={issue.number}
+              issue={issue}
+              starting={(start.isPending && start.variables?.branch === issueBranch(issue)) || triageStarting}
+              disabled={!enabled || start.isPending || triage.isPending}
+              onRun={prompt =>
+                start.mutate({
+                  branch: issueBranch(issue),
+                  threadTitle: `Issue #${issue.number}: ${issue.title}`,
+                  prompt: prompt === undefined ? issuePrompt(issue) : issueCustomPrompt(issue, prompt),
+                })
+              }
+              onTriage={needsAutoTriage(issue) ? () => triage.mutate(issue) : undefined}
+            />
+          );
+        })}
       </ul>
       <LoadMoreSentinel
         hasNextPage={issues.hasNextPage}
@@ -255,12 +271,15 @@ function IssueRow({
   starting,
   disabled,
   onRun,
+  onTriage,
 }: {
   issue: GithubIssue;
   starting: boolean;
   disabled: boolean;
-  /** Start a run; `undefined` = default Investigate, string = custom prompt. */
+  /** Start an investigation run; `undefined` = default issue action, string = custom prompt. */
   onRun: (prompt?: string) => void;
+  /** Start a triage run for issues that have not been auto-triaged yet. */
+  onTriage?: () => void;
 }) {
   return (
     <li className="flex items-start gap-2.5 rounded-md px-2 py-2 transition hover:bg-surface3">
@@ -285,6 +304,7 @@ function IssueRow({
         starting={starting}
         disabled={disabled}
         onAction={() => onRun()}
+        extraActions={onTriage ? [{ label: 'Triage issue', onAction: onTriage }] : undefined}
         onRunPrompt={prompt => onRun(prompt)}
       />
     </li>

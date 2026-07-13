@@ -33,6 +33,7 @@ import { streamSSE } from 'hono/streaming';
 import { ensureWebAuthUser, getWebAuthUser, webAuthTenant } from '../auth';
 import type { WebAuthTenant } from '../auth';
 import {
+  addIssueLabels,
   buildInstallUrl,
   buildOAuthIdentifyUrl,
   exchangeOAuthCode,
@@ -47,7 +48,7 @@ import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyS
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
 import { handleGithubWebhook } from './webhook';
-import type { GithubWebhookTriageRunInput } from './webhook';
+import type { GithubIssueTriageClassificationInput } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
@@ -79,8 +80,8 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
-  /** Server-side run seam used by GitHub webhooks to start automatic issue triage. */
-  startIssueTriageRun?: (input: GithubWebhookTriageRunInput) => Promise<void>;
+  /** Classification-only seam used by GitHub webhooks and manual Intake triage. */
+  classifyIssueForTriage?: (input: GithubIssueTriageClassificationInput) => Promise<void>;
 }
 
 /** Validate an `owner/name` repo full name. */
@@ -142,10 +143,28 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
+const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'triage:needs-approval', 'done']);
+
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;
-  if (raw === 'auto-triaged') return raw;
+  if (VALID_ISSUE_LABEL_FILTERS.has(raw)) return raw;
   return null;
+}
+
+function parseIssueNumberParam(raw: string | undefined): number | null {
+  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
+  const issueNumber = Number(raw);
+  return Number.isSafeInteger(issueNumber) && issueNumber > 0 ? issueNumber : null;
+}
+
+function parseStringList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+async function defaultClassifyIssueForTriage(input: GithubIssueTriageClassificationInput): Promise<void> {
+  // TODO: replace this label-only fallback with the headless triage-issue skill runner once a non-session seam exists.
+  await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
 }
 
 /**
@@ -229,12 +248,14 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     return routes;
   }
 
+  const classifyIssueForTriage = options.classifyIssueForTriage ?? defaultClassifyIssueForTriage;
+
   routes.push(
     registerApiRoute('/web/github/webhook', {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c), { startIssueTriageRun: options.startIssueTriageRun });
+        const result = await handleGithubWebhook(loose(c), { classifyIssueForTriage });
         return c.json(result.body, result.status);
       },
     }),
@@ -551,6 +572,43 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             502,
           );
         }
+      },
+    }),
+  );
+
+  // ── Manually classify issue triage using the same classification seam as webhooks ──
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/issues/:number/triage', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        const issueNumber = parseIssueNumberParam(c.req.param('number'));
+        if (issueNumber === null) return c.json({ error: 'invalid_issue_number' }, 400);
+
+        let body: { title?: unknown; url?: unknown; labels?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 5000) {
+          return c.json({ error: 'invalid_title' }, 400);
+        }
+        if (typeof body.url !== 'string' || body.url.trim().length === 0 || body.url.length > 2048) {
+          return c.json({ error: 'invalid_url' }, 400);
+        }
+
+        await classifyIssueForTriage({
+          repository: loaded.project.repoFullName,
+          issueNumber,
+          issueTitle: body.title,
+          issueUrl: body.url,
+          labels: parseStringList(body.labels),
+          installationId: loaded.project.installationId,
+        });
+        return c.json({ ok: true }, 202);
       },
     }),
   );
