@@ -1226,6 +1226,9 @@ export class DurableAgent<
         typeof persisted.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
+      if (snapshot?.status !== 'suspended') {
+        throw new Error('This workflow run was not suspended');
+      }
       const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
       if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
         throw new MastraError({
