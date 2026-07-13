@@ -528,6 +528,32 @@ describe('createScorer', () => {
       },
     );
 
+    describe('given a V2 judge with an error processor but no agent retry cap', () => {
+      it('retries until the processor retry limit is reached', async () => {
+        const { model, getCallCount } = createJudgeModel([
+          createProviderError(429, true, 'rate limited'),
+          createProviderError(429, true, 'rate limited'),
+          JSON.stringify({ score: 1 }),
+        ]);
+        const scorer = createScorer({
+          id: 'v2-judge-default-processor-cap-scorer',
+          name: 'v2-judge-default-processor-cap-scorer',
+          description: 'Uses the runtime error-processor retry cap when no agent cap is configured',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 2, maxRetryAfterMs: 0 })],
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await expect(scorer.run(testData.scoringInput)).resolves.toMatchObject({ score: 1 });
+        expect(getCallCount()).toBe(3);
+      });
+    });
+
     it('does not retry a V2 judge request when processor configuration is omitted', async () => {
       const { model, getCallCount } = createJudgeModel([createProviderError(429, true, 'rate limited')]);
       const scorer = createScorer({
