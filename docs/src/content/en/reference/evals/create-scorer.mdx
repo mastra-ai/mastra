@@ -111,14 +111,14 @@ const scorer = createScorer({
             type: 'Processor[]',
             isOptional: true,
             description:
-              'Error processors for the internal V2+ judge agent. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`. V1 judges use `generateLegacy()` and do not run error processors.',
+              'Error processors for judge models that use Mastra’s current generation API. These implement `processAPIError` and can inspect LLM API rejections and signal a retry, e.g. `StreamErrorRetryProcessor`. Legacy model adapters use `generateLegacy()` and do not run error processors.',
           },
           {
             name: 'maxProcessorRetries',
             type: 'number',
             isOptional: true,
             description:
-              'Maximum number of times error processors can retry one V2+ judge generation. The runtime defaults to 10 when errorProcessors are configured without this value. Set it explicitly to bound the retry budget.',
+              'Maximum number of times error processors can retry one judge generation. The runtime defaults to 10 when errorProcessors are configured without this value. Set it explicitly to bound the retry budget.',
           },
         ],
       },
@@ -147,9 +147,9 @@ The judge only runs for steps defined as **prompt objects** (`preprocess`, `anal
 
 When a prompt-object step runs, its structured LLM output is stored in the corresponding result field (`preprocessStepResult`, `analyzeStepResult`, or the value consumed by `calculateScore` in `generateScore`).
 
-## Retry V2+ judge requests
+## Retry judge requests
 
-Use the existing judge `errorProcessors` configuration to retry transient failures inside the failed V2+ judge request. This doesn't retry the scorer workflow, trace target, batch item, score write, or a completed scorer step.
+Use the existing judge `errorProcessors` configuration to retry transient failures inside a failed judge request. This doesn't retry the scorer workflow, trace target, batch item, score write, or a completed scorer step.
 
 `@mastra/core` `1.49.0` doesn't include scorer error-processor configuration. Upgrade to a version with scorer processor support, or backport that focused change, before using this configuration.
 
@@ -200,7 +200,7 @@ Avoid adding outer scorer or workflow retries. Avoid combining a nonzero model r
 
 A step's `judge` configuration overrides scorer-level judge fields. Processor arrays replace the scorer-level arrays. Omit `maxProcessorRetries` in the step configuration to inherit the scorer-level numeric cap.
 
-Coordinated processor retries require a V2+ judge model adapter. V1 judges call [`generateLegacy()`](/reference/agents/generateLegacy), bypass error processors, and use that API's separate AI SDK `maxRetries` default of `2`.
+Coordinated processor retries require a judge model that uses Mastra’s current generation API. Legacy model adapters call [`generateLegacy()`](/reference/agents/generateLegacy), bypass error processors, and use that API's separate AI SDK `maxRetries` default of `2`.
 
 ## Type safety
 
