@@ -1,4 +1,4 @@
-import type { Context, Handler, MiddlewareHandler } from 'hono';
+import type { Handler, MiddlewareHandler } from 'hono';
 import type { DescribeRouteOptions } from 'hono-openapi';
 import { MastraError, ErrorDomain, ErrorCategory } from '../error';
 import type { Mastra } from '../mastra';
@@ -53,7 +53,7 @@ type RegisterApiRouteOptions<P extends string> = {
     P,
     ParamsFromPath<P>
   >;
-  createHandler?: (c: Context) => Promise<ApiRouteHandler>;
+  createHandler?: (opts: { mastra: Mastra }) => Promise<ApiRouteHandler>;
   middleware?: MiddlewareHandler | MiddlewareHandler[];
   /**
    * Route-specific CORS configuration.

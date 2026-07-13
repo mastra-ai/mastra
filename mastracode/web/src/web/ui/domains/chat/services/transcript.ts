@@ -8,6 +8,7 @@ import type {
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 
 import { toMastraDBMessage } from './agent-controller-message-accumulator';
+import { stripAnsi } from './ansi';
 
 /**
  * Transcript model + reducer.
@@ -307,7 +308,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         },
       );
     case 'shell_output':
-      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + event.output }));
+      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
