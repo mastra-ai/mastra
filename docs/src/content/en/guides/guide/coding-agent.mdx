@@ -1,0 +1,122 @@
+---
+title: "Guide: Building a coding agent"
+description: Build a coding agent that can inspect and edit files in a local Mastra workspace.
+---
+
+# Building a coding agent
+
+In this guide, you'll build a coding agent that works inside your local Mastra project. You'll learn how to create coding instructions with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt), configure an agent with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent), and register it with Mastra.
+
+## Prerequisites
+
+- Node.js `v22.13.0` or later installed
+- An API key from a supported [Model Provider](/models)
+- An existing Mastra project. Follow the [installation guide](/guides/getting-started/quickstart) if needed.
+
+## Create the coding agent
+
+Create `src/mastra/agents/coding-agent.ts`. The prompt describes the current project and maps the prompt's generic tool names to the tools supplied by the default workspace.
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { basename } from 'node:path'
+import { buildBasePrompt, createCodingAgent } from '@mastra/core/coding-agent'
+
+const projectPath = process.cwd()
+const model = '__GATEWAY_OPENAI_MODEL_MINI__'
+
+// highlight-start
+const instructions = buildBasePrompt({
+  projectPath,
+  projectName: basename(projectPath),
+  platform: process.platform,
+  date: new Date().toISOString().slice(0, 10),
+  mode: 'build',
+  modelId: model,
+  productName: 'My Coding Agent',
+  coAuthorName: 'My Coding Agent',
+  coAuthorEmail: 'coding-agent@example.com',
+  toolGuidance: `# Workspace tools
+- Use mastra_workspace_read_file for view.
+- Use mastra_workspace_list_files for find_files.
+- Use mastra_workspace_grep for search_content.
+- Use mastra_workspace_execute_command for execute_command.
+- Use mastra_workspace_write_file, mastra_workspace_edit_file, and mastra_workspace_file_stat for writing, editing, and inspecting file metadata.
+- Use only the workspace tools provided to you. Do not attempt unavailable capabilities.`,
+})
+// highlight-end
+
+// highlight-start
+export const codingAgent = createCodingAgent({
+  id: 'coding-agent',
+  name: 'Coding Agent',
+  model,
+  instructions,
+  basePath: projectPath,
+})
+// highlight-end
+```
+
+Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` sets the directory that the workspace can access. Any configuration you pass to the factory takes precedence over its defaults.
+
+## Register the coding agent
+
+Register the returned agent like any other Mastra agent in `src/mastra/index.ts`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+// highlight-next-line
+import { codingAgent } from './agents/coding-agent'
+
+export const mastra = new Mastra({
+  // highlight-next-line
+  agents: { codingAgent },
+})
+```
+
+## Add a workspace file
+
+When you run the development server, its working directory is `src/mastra/public`. Add a file there for the agent to inspect:
+
+```md title="src/mastra/public/project-notes.md"
+# Project notes
+
+Name: Acme support portal
+Status: In development
+Owner: Platform team
+```
+
+## Test the coding agent
+
+Start the development server:
+
+```bash npm2yarn
+npm run dev
+```
+
+Open [Studio](/docs/studio/overview), select **Coding Agent**, and enter:
+
+```text
+Inspect project-notes.md and report the project name, status, and owner. Do not modify files.
+```
+
+The agent reads `project-notes.md` from the configured workspace and reports what it finds without changing the file. Model wording may vary, but the response should resemble:
+
+```md
+- Project name: Acme support portal
+- Status: In development
+- Owner: Platform team
+```
+
+## Next steps
+
+You can extend this coding agent to:
+
+- Add project-specific instructions for testing and code style
+- Supply extra agent tools for services outside the local workspace
+- Configure a different `basePath` for a dedicated project directory
+
+Learn more:
+
+- [`createCodingAgent()` reference](/reference/coding-agent/create-coding-agent)
+- [`buildBasePrompt()` reference](/reference/coding-agent/build-base-prompt)
+- [Workspace overview](/docs/workspace/overview)
