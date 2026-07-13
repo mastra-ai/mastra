@@ -27,6 +27,7 @@ import {
   durableAgenticOutputSchema,
   baseIterationStateSchema,
   createBaseIterationStateUpdate,
+  resolveDurableToolCallConcurrency,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -128,8 +129,9 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
   const goalStep = createDurableGoalStep();
 
   // Create the single iteration workflow (LLM -> Tool Calls -> Mapping)
-  // Note: foreach runs with concurrency: 1 (sequential) because tool approval
-  // and suspension require sequential execution to properly handle suspend/resume.
+  // Note: tool-call foreach concurrency is resolved per run at execution time
+  // (see resolveDurableToolCallConcurrency) — approval/suspend flows force
+  // sequential execution; otherwise the run's `toolCallConcurrency` applies.
   // The workflow is created once at startup and reused for all runs.
   const singleIterationWorkflow = createWorkflow({
     id: DurableStepIds.AGENTIC_EXECUTION,
@@ -203,8 +205,21 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       },
       { id: 'extract-tool-calls' },
     )
-    // Step 3: Execute each tool call individually (with suspend support)
-    .foreach(toolCallStep)
+    // Step 3: Execute each tool call individually (with suspend support).
+    // Concurrency is resolved per run from the serialized iteration state:
+    // approval/suspend-capable tool sets run sequentially, everything else
+    // honors the run's `toolCallConcurrency` (default 10). The workflow graph
+    // is shared across runs, so this must be a resolver — never a mutated
+    // shared options object.
+    .foreach(toolCallStep, {
+      concurrency: ({ getInitData }) => {
+        const state = getInitData() as IterationState | undefined;
+        return resolveDurableToolCallConcurrency({
+          options: state?.options,
+          toolsMetadata: state?.toolsMetadata,
+        });
+      },
+    })
     // Step 4: Collect tool results and bundle with LLM output for mapping step
     .map(
       async ({ inputData, getStepResult, getInitData }) => {

@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Honor `toolCallConcurrency` on the Inngest durable engine. `createInngestDurableAgenticWorkflow` called `.foreach(toolCallStep)` without a concurrency option, so parallel tool calls always ran sequentially regardless of `toolCallConcurrency`. Concurrency is now resolved per iteration (default 10, forced to 1 when the run requires tool approval or a called tool can suspend / requires approval) and passed to the tool-call foreach — matching `@mastra/core`. Fixes #19317.
+Fixed durable agents on the Inngest engine ignoring `toolCallConcurrency` — parallel tool calls always ran one at a time. Tool calls now run concurrently up to the run's `toolCallConcurrency` (default 10). Concurrency is forced to 1 when the run requires tool approval or any tool requires approval or can suspend, so approval and suspend/resume flows keep working. The concurrency is resolved from the run's own state at execution time, so it stays correct across Inngest replays and concurrent runs. Fixes #19317.

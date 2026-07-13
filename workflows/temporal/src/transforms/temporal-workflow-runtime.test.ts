@@ -134,6 +134,31 @@ describe('temporal workflow runtime helper module', () => {
     });
   });
 
+  it('executes foreach entries with a concurrency resolver evaluated per run', async () => {
+    const map = vi.fn(async ({ inputData }) => ({ value: inputData.value + 10 }));
+    proxyActivities.mockReturnValue({ map });
+
+    const resolverCalls: { inputData: unknown; initData: unknown }[] = [];
+    const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
+    const workflow = createWorkflow('foreach-resolver-workflow')
+      .foreach('map', {
+        concurrency: (ctx: { inputData: unknown; getInitData: () => unknown }) => {
+          resolverCalls.push({ inputData: ctx.inputData, initData: ctx.getInitData() });
+          return 2;
+        },
+      })
+      .commit();
+    const input = [{ value: 1 }, { value: 2 }, { value: 3 }];
+    const result = await workflow({ inputData: input });
+
+    expect(map).toHaveBeenCalledTimes(3);
+    expect(result).toMatchObject({
+      result: [{ value: 11 }, { value: 12 }, { value: 13 }],
+    });
+    // Resolver is invoked at execution time with the foreach input and the run's init data.
+    expect(resolverCalls).toEqual([{ inputData: input, initData: input }]);
+  });
+
   it('executes conditional entries for truthy conditions only', async () => {
     const isSmall = vi.fn(async () => true);
     const isLarge = vi.fn(async () => false);
