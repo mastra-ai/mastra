@@ -1139,21 +1139,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-result': {
                     const payload = rawChunk.payload as any;
-                    // Patch deferred provider-executed tool results inline (mirrors non-durable loop).
-                    if (payload.result != null) {
-                      const resultToolDef = resolveToolDef(payload.toolName);
-                      messageList.updateToolInvocation({
-                        type: 'tool-invocation',
-                        toolInvocation: {
-                          state: 'result',
-                          toolCallId: payload.toolCallId,
-                          toolName: payload.toolName,
-                          args: payload.args,
-                          result: payload.result,
-                        },
-                        providerExecuted: inferProviderExecuted(payload.providerExecuted, resultToolDef),
-                      });
-                    }
                     // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
                     const providerEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
                     if (providerEntry && !providerEntry.ended) {
