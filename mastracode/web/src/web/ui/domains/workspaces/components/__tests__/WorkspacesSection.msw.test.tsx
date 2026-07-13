@@ -2,13 +2,15 @@
  * BDD coverage for the propless `WorkspacesSection`.
  *
  * The section reads the active project from `useActiveProjectContext` and the
- * agent session from `useChatSession`, so the spec renders it inside the real
+ * agent session from focused chat hooks, so the spec renders it inside the real
  * provider stack and asserts worktree selection through the MSW-captured
  * session-state requests instead of a session spy.
  */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import type { ReactNode } from 'react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
@@ -99,15 +101,23 @@ function seedActiveProject(project: Project) {
   localStorage.setItem('mastracode-active-project', project.id);
 }
 
-function renderSection() {
+function LocationProbe() {
+  const location = useLocation();
+  return <span data-testid="location">{location.pathname}</span>;
+}
+
+function renderSection(children?: ReactNode, initialPath = '/') {
   return renderWithProviders(
-    <ToastProvider>
-      <ActiveProjectProvider>
-        <ChatSessionProvider>
-          <WorkspacesSection />
-        </ChatSessionProvider>
-      </ActiveProjectProvider>
-    </ToastProvider>,
+    <MemoryRouter initialEntries={[initialPath]}>
+      <ToastProvider>
+        <ActiveProjectProvider>
+          <ChatSessionProvider>
+            <WorkspacesSection>{children}</WorkspacesSection>
+            <LocationProbe />
+          </ChatSessionProvider>
+        </ActiveProjectProvider>
+      </ToastProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -121,6 +131,21 @@ describe('WorkspacesSection', () => {
     expect(await screen.findByText('Workspaces')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'main' })).toHaveAttribute('aria-current', 'true');
     expect(screen.getByRole('button', { name: 'feat-ui' })).not.toHaveAttribute('aria-current');
+  });
+
+  it('nests children under the active worktree row', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+
+    renderSection(<div data-testid="nested-threads">Threads</div>);
+
+    const activeRow = await screen.findByRole('button', { name: 'main' });
+    const nested = screen.getByTestId('nested-threads');
+    // The row button sits inside a hover-group wrapper; nested children render
+    // as a sibling of that wrapper inside the worktree's container.
+    expect(activeRow.parentElement?.parentElement).toContainElement(nested);
+    const inactiveRow = screen.getByRole('button', { name: 'feat-ui' });
+    expect(inactiveRow.parentElement?.parentElement).not.toContainElement(nested);
   });
 
   it('does not render for local projects', async () => {
@@ -143,6 +168,76 @@ describe('WorkspacesSection', () => {
       expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' } }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
+  });
+
+  it('opens the most recent thread of the new worktree when switching workspaces', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-old', title: 'Old', resourceId: 'resource-gh', updatedAt: '2026-06-01T00:00:00.000Z' },
+            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection(undefined, '/threads/thread-test');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+  });
+
+  it('opens the most recent thread of the new worktree when switching from /new', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-latest', title: 'Latest', resourceId: 'resource-gh', updatedAt: '2026-06-09T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    );
+    renderSection(undefined, '/new');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-latest'));
+  });
+
+  it('creates and opens a thread when the new worktree has none', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    let created = 0;
+    server.use(
+      http.post(`${API}/sessions/:resourceId/threads`, () => {
+        created += 1;
+        return HttpResponse.json({ id: 'thread-fresh', title: 'New thread', resourceId: 'resource-gh' });
+      }),
+    );
+    renderSection(undefined, '/threads/thread-test');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-fresh'));
+    expect(created).toBe(1);
+  });
+
+  it('stays on non-thread routes when switching workspaces', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    renderSection(undefined, '/factory/intake');
+
+    await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'feat-ui' })).toHaveAttribute('aria-current', 'true'),
+    );
+    expect(screen.getByTestId('location')).toHaveTextContent('/factory/intake');
   });
 
   it('creates a new workspace and selects it', async () => {
@@ -195,5 +290,88 @@ describe('WorkspacesSection', () => {
     // Only the provider's initial project-path sync may write state — never a failed create.
     const paths = stateUpdates.map(update => (update.state as { projectPath?: string })?.projectPath);
     expect(paths.filter(path => path !== '/sandbox/mastra')).toEqual([]);
+  });
+
+  it('offers a delete action on feature worktrees but not the repo root', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    renderSection();
+
+    await screen.findByRole('button', { name: 'feat-ui' });
+    // One actions menu (feat-ui); the root workspace has none.
+    expect(screen.getAllByRole('button', { name: 'Workspace actions' })).toHaveLength(1);
+  });
+
+  it('deletes a worktree after confirmation, cascading its threads', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    let deletedBranch: unknown;
+    const deletedThreads: string[] = [];
+    let listRequests = 0;
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, ({ request }) => {
+        const url = new URL(request.url);
+        // The cascade lists threads scoped to the deleted worktree; return one
+        // thread on the first scoped call, none afterwards.
+        if (url.searchParams.get('tags') === JSON.stringify({ projectPath: '/sandbox/mastra-worktrees/feat-ui' })) {
+          listRequests += 1;
+          return HttpResponse.json({
+            threads: listRequests === 1 ? [{ id: 'thread-doomed', title: 'Doomed', resourceId: 'resource-gh' }] : [],
+          });
+        }
+        return HttpResponse.json({ threads: [] });
+      }),
+      http.delete(`${API}/sessions/:resourceId/threads/:threadId`, ({ params }) => {
+        deletedThreads.push(String(params.threadId));
+        return HttpResponse.json({ ok: true });
+      }),
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+        deletedBranch = ((await request.json()) as { branch: string }).branch;
+        return HttpResponse.json({
+          removed: true,
+          branch: 'feat-ui',
+          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        });
+      }),
+    );
+    renderSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Workspace actions' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Delete workspace?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(deletedBranch).toBe('feat-ui'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument());
+    expect(deletedThreads).toEqual(['thread-doomed']);
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
+  });
+
+  it('keeps the worktree when the delete confirmation is cancelled', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    let deleteCalled = false;
+    server.use(
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () => {
+        deleteCalled = true;
+        return HttpResponse.json({
+          removed: true,
+          branch: 'feat-ui',
+          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        });
+      }),
+    );
+    renderSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Workspace actions' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete workspace?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workspace?' })).not.toBeInTheDocument());
+    expect(deleteCalled).toBe(false);
+    expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
   });
 });

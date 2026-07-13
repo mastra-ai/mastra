@@ -7363,6 +7363,60 @@ export interface PostAgentsAgentIdResumeStream_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/recover
+// ============================================================================
+export type PostAgentsAgentIdRecover_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdRecover_Body = {
+  runId: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
+      }
+    | undefined;
+};
+
+export type PostAgentsAgentIdRecover_Response = any;
+
+export type PostAgentsAgentIdRecover_Request = Simplify<
+  (PostAgentsAgentIdRecover_PathParams extends never ? {} : { params: PostAgentsAgentIdRecover_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdRecover_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdRecover_Body
+        ? { body?: PostAgentsAgentIdRecover_Body }
+        : { body: PostAgentsAgentIdRecover_Body })
+>;
+
+export interface PostAgentsAgentIdRecover_RouteContract {
+  pathParams: PostAgentsAgentIdRecover_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdRecover_Body;
+  request: PostAgentsAgentIdRecover_Request;
+  response: PostAgentsAgentIdRecover_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/approve-tool-call-generate
 // ============================================================================
 export type PostAgentsAgentIdApproveToolCallGenerate_PathParams = {
@@ -13311,6 +13365,7 @@ export type GetObservabilityTraces_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -13520,6 +13575,7 @@ export type GetObservabilityTraces_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -13729,6 +13785,7 @@ export type GetObservabilityTracesLight_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -13902,6 +13959,7 @@ export type GetObservabilityTracesLight_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14027,6 +14085,7 @@ export type GetObservabilityBranches_QueryParams = {
             | 'processor_run'
             | 'tool_call'
             | 'client_tool_call'
+            | 'provider_tool_call'
             | 'workflow_run'
             | 'workflow_step'
             | 'workflow_conditional'
@@ -14216,6 +14275,7 @@ export type GetObservabilityBranches_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14409,6 +14469,7 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14595,6 +14656,7 @@ export type GetObservabilityTracesTraceId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14775,6 +14837,7 @@ export type GetObservabilityTracesTraceIdLight_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -14876,6 +14939,7 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
       | 'processor_run'
       | 'tool_call'
       | 'client_tool_call'
+      | 'provider_tool_call'
       | 'workflow_run'
       | 'workflow_step'
       | 'workflow_conditional'
@@ -15186,6 +15250,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
           | 'processor_run'
           | 'tool_call'
           | 'client_tool_call'
+          | 'provider_tool_call'
           | 'workflow_run'
           | 'workflow_step'
           | 'workflow_conditional'
@@ -92572,6 +92637,7 @@ export interface RouteTypes {
   'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
+  'POST /agents/:agentId/recover': PostAgentsAgentIdRecover_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
   'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
@@ -93161,6 +93227,9 @@ export interface Client {
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
+  '/agents/:agentId/recover': {
+    POST: PostAgentsAgentIdRecover_RouteContract;
   };
   '/agents/:agentId/resume-stream': {
     POST: PostAgentsAgentIdResumeStream_RouteContract;

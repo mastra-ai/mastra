@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { RequestContext } from '../di';
-import { MastraError, ErrorDomain, ErrorCategory } from '../error';
+import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../error';
 import type { PubSub } from '../events';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { DefaultExecutionEngine } from './default';
@@ -1322,5 +1322,48 @@ describe('DefaultExecutionEngine.deserializeRequestContext', () => {
 
     expect(result).toBeInstanceOf(RequestContext);
     expect(result.size()).toBe(0);
+  });
+});
+
+describe('DefaultExecutionEngine.executeStepWithRetry', () => {
+  it('does not retry when the step throws MastraNonRetryableError', async () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.fatal',
+      async () => {
+        calls++;
+        throw new MastraNonRetryableError('permanent failure');
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(1);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.nonRetryable).toBe(true);
+      expect(result.error.error.message).toBe('permanent failure');
+    }
+  });
+
+  it('retries transient errors until retry attempts are exhausted', async () => {
+    const engine = new DefaultExecutionEngine({ mastra: undefined });
+    let calls = 0;
+
+    const result = await engine.executeStepWithRetry(
+      'workflow.test.step.transient',
+      async () => {
+        calls++;
+        throw new Error('transient failure');
+      },
+      { retries: 3, delay: 0, workflowId: 'test-workflow', runId: 'test-run' },
+    );
+
+    expect(calls).toBe(4);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.nonRetryable).toBeUndefined();
+    }
   });
 });

@@ -7,6 +7,7 @@
  */
 import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -76,6 +77,11 @@ function useAgentControllerHandlers(events: AgentControllerEvent[] = []) {
     http.get(`${SESSION}/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${SESSION}/threads`, () => HttpResponse.json({ threads: [] })),
     http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () => HttpResponse.json({ messages: [] })),
+    http.post(`${SESSION}/goal`, () => HttpResponse.json({})),
+    http.put(`${SESSION}/goal`, () => HttpResponse.json({})),
+    http.delete(`${SESSION}/goal`, () => HttpResponse.json({})),
+    http.post(`${SESSION}/tool-approval`, () => HttpResponse.json({})),
+    http.post(`${SESSION}/tool-suspension`, () => HttpResponse.json({})),
     http.get(`${SESSION}/stream`, () => sse(events)),
   );
 }
@@ -90,7 +96,7 @@ function renderMessageList() {
           path="/threads/:threadId"
           element={
             <ActiveProjectProvider>
-              <ChatSessionProvider>
+              <ChatSessionProvider threadId={THREAD_ID}>
                 <ChatMessageList />
               </ChatSessionProvider>
             </ActiveProjectProvider>
@@ -142,6 +148,28 @@ describe('ChatMessageList', () => {
     expect(screen.getByText('Thinking…')).toBeInTheDocument();
   });
 
+  it('given a persisted status part without text, then no empty notice bubble renders', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${SESSION}/threads/${THREAD_ID}/messages`, () =>
+        HttpResponse.json({
+          messages: [
+            { id: 'status-1', role: 'assistant', content: [{ type: 'om_compaction' }] },
+            { id: 'status-2', role: 'assistant', content: [{ type: 'om_summary', text: 'Memory updated' }] },
+          ],
+        }),
+      ),
+    );
+    renderMessageList();
+
+    // The status part with text renders as a notice…
+    await waitFor(() => expect(screen.getByText('Memory updated')).toBeInTheDocument());
+    // …the text-less one renders nothing instead of an empty bubble.
+    const notices = document.querySelectorAll('.bg-notice-info\\/20');
+    expect(notices).toHaveLength(1);
+  });
+
   it('given the session fails to connect, then it shows the disconnected notice', async () => {
     seedProject();
     useAgentControllerHandlers();
@@ -165,5 +193,116 @@ describe('ChatMessageList', () => {
 
     await waitFor(() => expect(screen.getByText('Ship the refactor')).toBeInTheDocument());
     expect(screen.getByText('1/5')).toBeInTheDocument();
+  });
+
+  it('hides the goal panel when no goal is set', async () => {
+    seedProject();
+    useAgentControllerHandlers([{ type: 'agent_start' }]);
+    renderMessageList();
+
+    // Wait for the stream to be consumed, then assert no goal UI is present —
+    // goals are started via the /goal slash command, not an always-on form.
+    await waitFor(() => expect(screen.getByLabelText('Agent is working')).toBeInTheDocument());
+    expect(screen.queryByPlaceholderText('Set a goal objective…')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Set Goal' })).not.toBeInTheDocument();
+  });
+
+  it('pauses, resumes, and clears a displayed goal through the agent controller', async () => {
+    seedProject();
+    const goal = { objective: 'Ship the refactor', iteration: 1, maxRuns: 5, passed: false };
+    useAgentControllerHandlers([{ type: 'goal_evaluation', payload: { ...goal, status: 'active' } }]);
+    const updates: unknown[] = [];
+    let clearCount = 0;
+    server.use(
+      http.put(`${SESSION}/goal`, async ({ request }) => {
+        updates.push(await request.json());
+        return HttpResponse.json({});
+      }),
+      http.delete(`${SESSION}/goal`, () => {
+        clearCount += 1;
+        return HttpResponse.json({});
+      }),
+    );
+    const user = userEvent.setup();
+    renderMessageList();
+
+    await user.click(await screen.findByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(updates).toEqual([{ status: 'paused' }]));
+    await user.click(screen.getByRole('button', { name: 'Clear' }));
+    await waitFor(() => expect(clearCount).toBe(1));
+  });
+
+  it('resumes a paused goal through the agent controller', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      {
+        type: 'goal_evaluation',
+        payload: { objective: 'Ship the refactor', status: 'paused', iteration: 1, maxRuns: 5, passed: false },
+      },
+    ]);
+    let body: unknown;
+    server.use(
+      http.put(`${SESSION}/goal`, async ({ request }) => {
+        body = await request.json();
+        return HttpResponse.json({});
+      }),
+    );
+    const user = userEvent.setup();
+    renderMessageList();
+
+    await user.click(await screen.findByRole('button', { name: 'Resume' }));
+    await waitFor(() => expect(body).toEqual({ status: 'active' }));
+  });
+
+  it('responds to approval and plan suspension prompts, then removes them', async () => {
+    seedProject();
+    useAgentControllerHandlers([
+      { type: 'tool_approval_required', toolCallId: 'tool-call-1', toolName: 'write_file', args: { path: 'test.ts' } },
+      { type: 'tool_approval_required', toolCallId: 'tool-call-3', toolName: 'request_access', args: { path: '/tmp' } },
+      {
+        type: 'tool_suspended',
+        toolCallId: 'tool-call-2',
+        toolName: 'submit_plan',
+        args: {},
+        suspendPayload: { plan: { title: 'Refactor the chat', summary: 'Split the transcript UI.' } },
+      },
+    ]);
+    const approvals: unknown[] = [];
+    const suspensions: unknown[] = [];
+    server.use(
+      http.post(`${SESSION}/tool-approval`, async ({ request }) => {
+        approvals.push(await request.json());
+        return HttpResponse.json({});
+      }),
+      http.post(`${SESSION}/tool-suspension`, async ({ request }) => {
+        suspensions.push(await request.json());
+        return HttpResponse.json({});
+      }),
+    );
+    const user = userEvent.setup();
+    renderMessageList();
+
+    await user.click(await screen.findByRole('button', { name: 'Approve write_file' }));
+    await waitFor(() => expect(approvals).toEqual([{ toolCallId: 'tool-call-1', approved: true }]));
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Tool approval for write_file' })).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Decline request_access' }));
+    await waitFor(() =>
+      expect(approvals).toEqual([
+        { toolCallId: 'tool-call-1', approved: true },
+        { toolCallId: 'tool-call-3', approved: false },
+      ]),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('group', { name: 'Tool approval for request_access' })).not.toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Approve the plan and switch to build' }));
+    await waitFor(() =>
+      expect(suspensions).toEqual([{ toolCallId: 'tool-call-2', resumeData: { action: 'approved' } }]),
+    );
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Plan approval' })).not.toBeInTheDocument());
   });
 });

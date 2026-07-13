@@ -77,6 +77,7 @@ export type ScenarioName =
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'
+  | 'login-preserves-model-pack'
   | 'modal-and-shell'
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
@@ -96,6 +97,7 @@ export type ScenarioName =
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'
   | 'om-pack-startup-restore'
+  | 'om-status-indicator'
   | 'om-threshold-persistence'
   | 'quiet-settings'
   | 'quiet-tool-history-parity'
@@ -128,6 +130,7 @@ export type ScenarioName =
   | 'task-inline-transitions'
   | 'task-patch-tools'
   | 'task-progress-events'
+  | 'terminal-resize-reflow'
   | 'task-prompt-context-next-turn'
   | 'thread-history'
   | 'tool-history-reload'
@@ -151,6 +154,7 @@ export type McE2eTerminal = {
   getByText: (text: string | RegExp, options?: { full?: boolean; strict?: boolean }) => any;
   flushInput?: () => Promise<void>;
   keyCtrlC: () => void;
+  resize: (columns: number, rows: number) => void;
   serialize: () => { view: string };
   submit: (text: string) => void;
   write: (text: string) => void;

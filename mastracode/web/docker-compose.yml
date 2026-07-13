@@ -12,7 +12,10 @@
 # src/web/.env.example.
 services:
   app-db:
-    image: postgres:18
+    # pgvector build of the official postgres image — agent memory (recall +
+    # observational memory) stores embeddings in this database and needs the
+    # `vector` extension available.
+    image: pgvector/pgvector:pg18
     container_name: mastracode-web-db
     ports:
       - '54329:5432'
@@ -21,7 +24,9 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
       POSTGRES_DB: ${POSTGRES_DB:-mastracode_web}
     volumes:
-      - mastracode-web-pgdata:/var/lib/postgresql/data
+      # postgres:18+ images require the mount at /var/lib/postgresql (data
+      # lives in a version-specific subdirectory to support pg_upgrade).
+      - mastracode-web-pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mastracode_web}']
       interval: 5s

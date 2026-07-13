@@ -137,14 +137,23 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
     outputSchema: iterationStateSchema,
     options: {
       shouldPersistSnapshot: params => {
-        // We need a persisted snapshot record to support `resumeStream()`.
-        // - Create the initial record early ("pending")
-        // - Update it when execution is suspended ("paused"/"suspended")
-        // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+        // We need a persisted snapshot record to support both:
+        //  - `resumeStream()` after a suspend (records with status
+        //    `pending` / `paused` / `suspended`)
+        //  - boot-time recovery of orphaned RUNNING runs after a process
+        //    restart, via `DurableAgent.recoverActiveRuns()` — this requires
+        //    the row to actually be stamped `running` while the loop is
+        //    in-flight (issue #19056).
+        //
+        // The engine's persist path guards against overwriting a `suspended`
+        // / `paused` snapshot with a later `running` update from the same
+        // run (see `persistStepUpdate` in workflows/handlers/entry.ts), so
+        // it is safe to return true for `running` here.
         return (
           params.workflowStatus === 'pending' ||
           params.workflowStatus === 'paused' ||
-          params.workflowStatus === 'suspended'
+          params.workflowStatus === 'suspended' ||
+          params.workflowStatus === 'running'
         );
       },
       // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -263,14 +272,14 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
       outputSchema: durableAgenticOutputSchema,
       options: {
         shouldPersistSnapshot: params => {
-          // We need a persisted snapshot record to support `resumeStream()`.
-          // - Create the initial record early ("pending")
-          // - Update it when execution is suspended ("paused"/"suspended")
-          // Avoid persisting "running" snapshots so we don't overwrite an existing suspended snapshot.
+          // See the singleIterationWorkflow comment above — same policy for
+          // the outer loop. The persist path guards against overwriting a
+          // suspended snapshot with running.
           return (
             params.workflowStatus === 'pending' ||
             params.workflowStatus === 'paused' ||
-            params.workflowStatus === 'suspended'
+            params.workflowStatus === 'suspended' ||
+            params.workflowStatus === 'running'
           );
         },
         // Agent-loop snapshots are pure resume artifacts — strip everything a
@@ -660,6 +669,37 @@ export function createDurableAgenticWorkflow(options?: DurableAgenticWorkflowOpt
               );
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error persisting messages: ${error}`);
+            }
+          }
+
+          // Thread title generation (executeOnFinish equivalent).
+          // The non-durable `#executeOnFinish` generates a thread title from the first user
+          // message when `memory.options.generateTitle` is set. That branch was never ported
+          // to the durable path, so `generateTitle` silently never fired for durable/evented
+          // agents (and Inngest). The `generateThreadTitle` closure — parked on the registry
+          // entry during preparation, where the agent instance is in scope — runs it here.
+          //
+          // Kept OUTSIDE the `!observationalMemory` guard above: OM handles its own message
+          // persistence, but title generation is orthogonal and should still run when OM is on.
+          // Non-serializable (a closure), so like the other registry closures it only fires for
+          // in-process durable runs; cross-process engines (Inngest after a restart) skip it.
+          if (
+            registryEntry?.generateThreadTitle &&
+            durableState?.threadId &&
+            durableState?.resourceId &&
+            !durableState.memoryConfig?.readOnly
+          ) {
+            try {
+              await registryEntry.generateThreadTitle({
+                threadId: durableState.threadId,
+                resourceId: durableState.resourceId,
+                memoryConfig: durableState.memoryConfig,
+                messageListState: state.messageListState,
+                requestContext,
+                tracingContext,
+              });
+            } catch (error) {
+              logger?.warn?.(`[DurableAgent] Error generating thread title: ${error}`);
             }
           }
 

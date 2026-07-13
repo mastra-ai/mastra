@@ -118,6 +118,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai-router',
+          label: 'AI-ROUTER',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -198,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/blueclaw',
+          label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -258,6 +268,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/daoxe',
+          label: 'DaoXE',
+        },
+        {
+          type: 'doc',
           id: 'providers/databricks',
           label: 'Databricks',
         },
@@ -275,6 +290,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/ebcloud',
+          label: 'EBCloud',
+        },
+        {
+          type: 'doc',
+          id: 'providers/empiriolabs',
+          label: 'EmpirioLabs AI',
         },
         {
           type: 'doc',
@@ -358,6 +383,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/inferx',
+          label: 'InferX',
+        },
+        {
+          type: 'doc',
           id: 'providers/io-net',
           label: 'IO.NET',
         },
@@ -423,6 +453,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/lynkr',
+          label: 'Lynkr',
+        },
+        {
+          type: 'doc',
           id: 'providers/meganova',
           label: 'Meganova',
         },
@@ -460,6 +495,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/moark',
           label: 'Moark',
+        },
+        {
+          type: 'doc',
+          id: 'providers/model-oracle-ai',
+          label: 'Model Oracle AI',
         },
         {
           type: 'doc',
@@ -563,6 +603,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/pioneer',
+          label: 'Pioneer',
+        },
+        {
+          type: 'doc',
           id: 'providers/poe',
           label: 'Poe',
         },
@@ -639,12 +684,22 @@ const sidebars = {
         {
           type: 'doc',
           id: 'providers/stepfun',
-          label: 'StepFun',
+          label: 'StepFun (China)',
         },
         {
           type: 'doc',
           id: 'providers/stepfun-ai',
-          label: 'StepFun AI',
+          label: 'StepFun (Global)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-step-plan',
+          label: 'StepFun Step Plan (China)',
+        },
+        {
+          type: 'doc',
+          id: 'providers/stepfun-ai-step-plan',
+          label: 'StepFun Step Plan (Global)',
         },
         {
           type: 'doc',
@@ -705,6 +760,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/umans-ai-coding-plan',
           label: 'Umans AI Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/unorouter',
+          label: 'UnoRouter',
         },
         {
           type: 'doc',

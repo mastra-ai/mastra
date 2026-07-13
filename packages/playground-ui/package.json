@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "40.0.2-alpha.3",
+  "version": "40.1.0-alpha.6",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -190,6 +190,7 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "eslint-plugin-storybook": "^10.4.2",
+    "eslint-plugin-tailwindcss": "^4.1.0",
     "jsdom": "^26.1.0",
     "msw": "^2.12.11",
     "react": "catalog:",

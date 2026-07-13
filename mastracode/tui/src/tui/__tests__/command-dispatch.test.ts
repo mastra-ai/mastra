@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   handleGithubCommand: vi.fn().mockResolvedValue(undefined),
   handleReportIssueCommand: vi.fn().mockResolvedValue(undefined),
   handleMcpCommand: vi.fn().mockResolvedValue(undefined),
+  handleOMCommand: vi.fn().mockResolvedValue(undefined),
+  handleMemoryGatewayCommand: vi.fn().mockResolvedValue(undefined),
   handlePluginsCommand: vi.fn().mockResolvedValue(undefined),
   processSlashCommand: vi.fn().mockResolvedValue('custom output'),
   startGoalWithDefaults: vi.fn().mockResolvedValue(undefined),
@@ -42,7 +44,7 @@ vi.mock('../commands/index.js', () => ({
   handleModelsPackCommand: mocks.handleModelsPackCommand,
   handleCustomProvidersCommand: mocks.handleCustomProvidersCommand,
   handleSubagentsCommand: vi.fn(),
-  handleOMCommand: vi.fn(),
+  handleOMCommand: mocks.handleOMCommand,
   handleSettingsCommand: vi.fn(),
   handleLoginCommand: vi.fn(),
   handleReviewCommand: vi.fn(),
@@ -51,7 +53,7 @@ vi.mock('../commands/index.js', () => ({
   handleBrowserCommand: vi.fn(),
   handleThemeCommand: vi.fn(),
   handleUpdateCommand: vi.fn(),
-  handleMemoryGatewayCommand: vi.fn(),
+  handleMemoryGatewayCommand: mocks.handleMemoryGatewayCommand,
   handleApiKeysCommand: vi.fn(),
   handlePluginsCommand: mocks.handlePluginsCommand,
   handleFeedbackCommand: vi.fn(),
@@ -90,6 +92,8 @@ describe('dispatchSlashCommand models routing', () => {
     mocks.handleGithubCommand.mockClear();
     mocks.handleReportIssueCommand.mockClear();
     mocks.handleMcpCommand.mockClear();
+    mocks.handleOMCommand.mockClear();
+    mocks.handleMemoryGatewayCommand.mockClear();
     mocks.handlePluginsCommand.mockClear();
     mocks.processSlashCommand.mockClear();
     mocks.startGoalWithDefaults.mockClear();
@@ -144,6 +148,29 @@ describe('dispatchSlashCommand models routing', () => {
       resourceId: 'resource-1',
       mode: 'build',
     });
+  });
+
+  it('routes /memory and /om through the same Observational Memory handler', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    expect(await dispatchSlashCommand('/memory', state, () => ctx)).toBe(true);
+    expect(await dispatchSlashCommand('/om', state, () => ctx)).toBe(true);
+
+    expect(mocks.handleOMCommand).toHaveBeenCalledTimes(2);
+    expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(1, ctx);
+    expect(mocks.handleOMCommand).toHaveBeenNthCalledWith(2, ctx);
+    expect(mocks.handleMemoryGatewayCommand).not.toHaveBeenCalled();
+  });
+
+  it('keeps /memory-gateway routed separately from Observational Memory settings', async () => {
+    const state = { customSlashCommands: [] } as any;
+    const ctx = {} as any;
+
+    expect(await dispatchSlashCommand('/memory-gateway', state, () => ctx)).toBe(true);
+
+    expect(mocks.handleMemoryGatewayCommand).toHaveBeenCalledWith(ctx);
+    expect(mocks.handleOMCommand).not.toHaveBeenCalled();
   });
 
   it('treats /models:pack as unknown command', async () => {

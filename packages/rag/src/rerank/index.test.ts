@@ -2,7 +2,7 @@ import { cohere } from '@ai-sdk/cohere';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CohereRelevanceScorer } from './relevance';
 
-import { rerank } from '.';
+import { rerank, rerankWithScorer } from '.';
 
 vi.spyOn(CohereRelevanceScorer.prototype, 'getRelevanceScore').mockImplementation(async () => {
   return 1;
@@ -146,5 +146,39 @@ describe('rerank', () => {
     const { scoreSpread1, scoreSpread2 } = getScoreSpreads(results, rerankedResults);
     expect(scoreSpread1).toBe(0.20000000000000007);
     expect(scoreSpread2).toBe(0.18000000000000016);
+  });
+
+  it('should mark the rerank span as errored when scoring fails', async () => {
+    const error = new Error('scorer failed');
+    const span = {
+      end: vi.fn(),
+      error: vi.fn(),
+    };
+    const currentSpan = {
+      createChildSpan: vi.fn(() => span),
+    };
+    const scorer = {
+      getRelevanceScore: vi.fn().mockRejectedValue(error),
+    };
+    const results = [{ id: '1', metadata: { text: 'Test result 1' }, score: 0.5 }];
+
+    await expect(
+      rerankWithScorer({
+        results,
+        query: 'test query',
+        scorer,
+        options: {
+          topK: 1,
+          observabilityContext: {
+            tracingContext: {
+              currentSpan,
+            },
+          } as any,
+        },
+      }),
+    ).rejects.toThrow(error);
+
+    expect(span.error).toHaveBeenCalledWith({ error, endSpan: true });
+    expect(span.end).not.toHaveBeenCalled();
   });
 });

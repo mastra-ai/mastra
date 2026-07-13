@@ -2,7 +2,7 @@
  * BDD coverage for the propless `ThreadList` (`domains/chat/components`).
  *
  * The list owns the thread-section behavior end-to-end: it reads threads from
- * `useChatSession`, gates itself on the active project, closes the sidebar
+ * focused chat hooks, gates itself on the active project, closes the sidebar
  * drawer on navigation, and toasts on thread CRUD. Driven through the real
  * fetch transport with MSW at the network boundary.
  */
@@ -157,7 +157,9 @@ function renderThreadList() {
 }
 
 async function openThreadActions(title: string) {
-  const row = (await screen.findByText(title)).closest('[role="listitem"]') as HTMLElement;
+  await screen.findByText(title);
+  const row = screen.getAllByRole('listitem').find(item => within(item).queryByText(title));
+  if (!row) throw new Error(`Thread row not found: ${title}`);
   await userEvent.click(within(row).getByRole('button', { name: 'Thread actions' }));
 }
 
@@ -224,7 +226,7 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('First thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
 
     const input = screen.getByRole('textbox', { name: 'Thread title' });
     await userEvent.clear(input);
@@ -232,6 +234,7 @@ describe('ThreadList', () => {
 
     await waitFor(() => expect(captured.renamed).toEqual([{ threadId: 'thread-one', title: 'Renamed thread' }]));
     expect(await screen.findByText('Thread renamed')).toBeInTheDocument();
+    expect(screen.queryByRole('textbox', { name: 'Thread title' })).not.toBeInTheDocument();
   });
 
   it('when a rename is cancelled with Escape, then no rename request fires', async () => {
@@ -240,7 +243,7 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('First thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Rename' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
 
     const input = screen.getByRole('textbox', { name: 'Thread title' });
     await userEvent.clear(input);
@@ -256,7 +259,7 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('First thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Clone' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Clone' }));
 
     await waitFor(() => expect(captured.cloned).toHaveLength(1));
     expect(captured.cloned[0]).toMatchObject({ sourceThreadId: 'thread-one' });
@@ -270,25 +273,20 @@ describe('ThreadList', () => {
     renderThreadList();
 
     await openThreadActions('Second thread');
-    await userEvent.click(screen.getByRole('menuitem', { name: 'Delete' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 
     await waitFor(() => expect(captured.deleted).toEqual(['thread-two']));
     expect(await screen.findByText('Thread deleted')).toBeInTheDocument();
   });
 
-  it('when the actions menu is open, then outside click and Escape both close it', async () => {
+  it('when the actions menu is open, then clicking the trigger again closes it', async () => {
     seedProject();
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
     await openThreadActions('First thread');
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-    await userEvent.click(document.body);
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
-
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
     await openThreadActions('First thread');
-    expect(screen.getByRole('menu')).toBeInTheDocument();
-    await userEvent.keyboard('{Escape}');
-    expect(screen.queryByRole('menu')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });
 });

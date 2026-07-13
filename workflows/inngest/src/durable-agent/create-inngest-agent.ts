@@ -596,7 +596,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: {},
+        requestContext: workflowInput.requestContextEntries ?? {},
         tracingOptions,
       },
     });
@@ -986,7 +986,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: {},
+              requestContext: snapshot?.requestContext ?? {},
               stepResults: snapshot?.context,
               resume: {
                 steps,
