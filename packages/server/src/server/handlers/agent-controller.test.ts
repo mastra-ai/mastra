@@ -233,6 +233,22 @@ describe('agent-controller routes', () => {
       expect(spy).toHaveBeenCalledWith({ content: 'hello', requestContext });
     });
 
+    it('forwards files to session.sendMessage', async () => {
+      const session = await getRouteSession('user-rc');
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+      const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+      await SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-rc',
+        message: 'see attached',
+        files,
+      } as any);
+
+      expect(spy).toHaveBeenCalledWith({ content: 'see attached', files, requestContext: undefined });
+    });
+
     it('forwards requestContext to session.steer', async () => {
       const session = await getRouteSession('user-rc');
       const spy = vi.spyOn(session, 'steer').mockResolvedValue(undefined);

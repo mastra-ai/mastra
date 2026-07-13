@@ -66,6 +66,15 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'hello' });
   });
 
+  it('sends a message with file attachments', async () => {
+    mockJson({ ok: true });
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+    await client.getAgentController('code').session('user-1').sendMessage('see attached', { files });
+    const [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/messages');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
+  });
+
   it('aborts the in-flight run', async () => {
     mockJson({ ok: true });
     await client.getAgentController('code').session('user-1').abort();

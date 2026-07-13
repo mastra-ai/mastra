@@ -94,7 +94,19 @@ const createSessionBodySchema = z.object({
   tags: z.record(z.string(), z.string()).optional(),
   sessionScope: z.string().optional(),
 });
-const sendMessageBodySchema = z.object({ message: z.string() });
+const sendMessageBodySchema = z.object({
+  message: z.string(),
+  // Optional attachments (e.g. pasted images). `data` is base64-encoded.
+  files: z
+    .array(
+      z.object({
+        data: z.string(),
+        mediaType: z.string(),
+        filename: z.string().optional(),
+      }),
+    )
+    .optional(),
+});
 const steerBodySchema = z.object({ message: z.string() });
 const toolApprovalBodySchema = z.object({
   toolCallId: z.string(),
@@ -448,14 +460,14 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, requestContext }) => {
+  handler: async ({ mastra, controllerId, resourceId, sessionScope, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
       const session = await getSession(controller, resourceId, { scope: sessionScope });
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
       // plain agent message route).
-      void session.sendMessage({ content: message, requestContext });
+      void session.sendMessage({ content: message, files, requestContext });
       return { ok: true };
     } catch (error) {
       return handleError(error, 'error sending controller message');
