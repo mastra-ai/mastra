@@ -61,14 +61,17 @@ const searchHighlightField = StateField.define<DecorationSet>({
 });
 
 const searchHighlightTheme = EditorView.baseTheme({
-  // Non-active matches: a faint wash so the current match clearly stands out against them.
+  // All matches get the same faint wash; it must stay translucent so syntax colors (green strings
+  // in both themes share a hue with --accent1) keep enough contrast to remain readable.
   '.cm-search-match': {
     backgroundColor: 'color-mix(in srgb, var(--accent1) 35%, transparent)',
     borderRadius: 'var(--radius-sm)',
   },
-  // The current match the user is parked on: a strong, near-solid accent fill.
+  // The current match is marked with a ring instead of a stronger fill, so the text underneath
+  // never loses contrast in either light or dark mode.
   '.cm-search-match-current': {
-    backgroundColor: 'color-mix(in srgb, var(--accent1) 85%, transparent)',
+    backgroundColor: 'color-mix(in srgb, var(--accent1) 35%, transparent)',
+    outline: '1.5px solid var(--accent1)',
     borderRadius: 'var(--radius-sm)',
   },
 });
