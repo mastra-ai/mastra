@@ -571,4 +571,192 @@ describe('handlePluginsCommand', () => {
     expect(ctx.showInfo).toHaveBeenCalledWith('Installed plugin acme.foo.');
     expect(ctx.showError).not.toHaveBeenCalled();
   });
+
+  it('filters configure options by isEnabled and renders callbacks as actions', async () => {
+    const plugin = {
+      id: 'acme.slack',
+      name: 'Slack',
+      scope: 'global',
+      source: 'local',
+      specifier: '../slack',
+      enabled: true,
+      status: 'active',
+      path: '../slack',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: ['slack_status'],
+      configSchema: {
+        authenticate: {
+          type: 'callback',
+          label: 'Authenticate',
+          description: 'Connect Slack',
+          isEnabled: (ctx: any) => ctx.config.connected !== true,
+          run: vi.fn(async () => undefined),
+        },
+        disconnect: {
+          type: 'callback',
+          label: 'Disconnect',
+          isEnabled: (ctx: any) => ctx.config.connected === true,
+          run: vi.fn(async () => undefined),
+        },
+        connected: { type: 'boolean', isEnabled: () => false },
+        broken: {
+          type: 'string',
+          isEnabled: () => {
+            throw new Error('boom');
+          },
+        },
+        prompt: { type: 'string', label: 'Prompt' },
+      },
+      configValues: {},
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [plugin]),
+      setConfigValue: vi.fn(async () => undefined),
+      setConfigValues: vi.fn(async () => undefined),
+    };
+    modal.askModalQuestion.mockResolvedValueOnce(null);
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn() } },
+      showInfo: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.slack']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+
+    const question = modal.askModalQuestion.mock.calls[0]?.[1] as any;
+    const labels = question.options.map((option: any) => option.label);
+    // connected (isEnabled: false), broken (throwing predicate → fail closed),
+    // and disconnect (connected !== true) are hidden.
+    expect(labels).toEqual(['Authenticate', 'Prompt']);
+    const authDescription = question.options[0].description as string;
+    expect(authDescription).toContain('action');
+    expect(authDescription).toContain('Connect Slack');
+    expect(authDescription).not.toContain('current:');
+  });
+
+  it('runs a callback option and persists its config patch via one setConfigValues call', async () => {
+    const run = vi.fn(async () => ({
+      message: 'Connected as caleb',
+      config: { connected: true, notInSchema: 'dropped', authenticate: 'dropped' },
+    }));
+    const stalePlugin = {
+      id: 'acme.slack',
+      name: 'Slack',
+      scope: 'global',
+      source: 'local',
+      specifier: '../slack',
+      enabled: true,
+      status: 'active',
+      path: '../slack',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: ['slack_status'],
+      configSchema: {
+        authenticate: {
+          type: 'callback',
+          label: 'Authenticate',
+          isEnabled: (ctx: any) => ctx.config.connected !== true,
+          run,
+        },
+        connected: { type: 'boolean', isEnabled: () => false },
+      },
+      configValues: {},
+    };
+    const freshPlugin = { ...stalePlugin, configValues: { connected: true } };
+    let patched = false;
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [patched ? freshPlugin : stalePlugin]),
+      setConfigValue: vi.fn(async () => undefined),
+      setConfigValues: vi.fn(async () => {
+        patched = true;
+      }),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Authenticate')
+      // Re-entered configure flow after the callback; close it.
+      .mockResolvedValueOnce(null);
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.slack']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(run).toHaveBeenCalledWith({ config: {} });
+    // One batch call; keys outside the schema and callback-typed keys are dropped.
+    expect(pluginManager.setConfigValues).toHaveBeenCalledTimes(1);
+    expect(pluginManager.setConfigValues).toHaveBeenCalledWith('acme.slack', 'global', { connected: true });
+    expect(pluginManager.setConfigValue).not.toHaveBeenCalled();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Connected as caleb');
+    // Configure re-rendered from the fresh plugin: Authenticate is now hidden.
+    const reentered = modal.askModalQuestion.mock.calls[1]?.[1] as any;
+    expect(reentered.options.map((option: any) => option.label)).toEqual([]);
+    expect(ctx.showError).not.toHaveBeenCalled();
+  });
+
+  it('reports a callback error and persists nothing', async () => {
+    const run = vi.fn(async () => {
+      throw new Error('browser closed');
+    });
+    const plugin = {
+      id: 'acme.slack',
+      name: 'Slack',
+      scope: 'global',
+      source: 'local',
+      specifier: '../slack',
+      enabled: true,
+      status: 'active',
+      path: '../slack',
+      entry: 'src/index.ts',
+      tools: {},
+      toolNames: [],
+      configSchema: {
+        authenticate: { type: 'callback', label: 'Authenticate', run },
+        connected: { type: 'boolean', isEnabled: () => false },
+      },
+      configValues: {},
+    };
+    const pluginManager = {
+      reload: vi.fn(async () => undefined),
+      getLoadedPlugins: vi.fn(() => [plugin]),
+      setConfigValue: vi.fn(async () => undefined),
+      setConfigValues: vi.fn(async () => undefined),
+    };
+    modal.askModalQuestion
+      .mockResolvedValueOnce('Authenticate')
+      // Returned to the configure screen after the error; close it.
+      .mockResolvedValueOnce(null);
+    const ctx = {
+      pluginManager,
+      state: { ui: { hideOverlay: vi.fn() } },
+      showInfo: vi.fn(),
+      showError: vi.fn(),
+    } as any;
+
+    await handlePluginsCommand(ctx, ['acme.slack']);
+    const detail = overlay.showModalOverlay.mock.calls[0]?.[1] as any;
+    const actions = detail.children.find((child: any) => Array.isArray(child.items));
+    actions.onSelect({ value: 'configure' });
+    await new Promise(resolve => setImmediate(resolve));
+    await new Promise(resolve => setImmediate(resolve));
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(pluginManager.setConfigValues).not.toHaveBeenCalled();
+    expect(pluginManager.setConfigValue).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('Authenticate failed: browser closed');
+  });
 });

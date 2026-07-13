@@ -37,6 +37,8 @@ export type LoadedPlugin = ScopedInstalledPluginRecord & {
   instructions?: string;
   status: PluginStatus;
   error?: string;
+  /** Result of the plugin's init() hook. In-memory only — may hold live objects; never persisted. */
+  initState?: unknown;
   tools: MastraCodePluginTools;
   renderConfigs?: Record<string, MastraCodeToolRenderConfig>;
   toolNames: string[];

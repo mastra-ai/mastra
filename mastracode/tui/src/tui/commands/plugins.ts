@@ -253,9 +253,24 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
   showModalOverlay(ctx.state.ui, modal, { maxHeight: '80%' });
 }
 
+function isConfigOptionEnabled(plugin: LoadedPlugin, key: string, option: MastraCodePluginConfigOption): boolean {
+  if (typeof option.isEnabled !== 'function') return true;
+  try {
+    return option.isEnabled({ config: plugin.configValues ?? {} }) === true;
+  } catch (error) {
+    // Fail closed: a throwing predicate hides the option.
+    process.stderr.write(
+      `Plugin "${plugin.id}" config option "${key}" isEnabled threw: ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return false;
+  }
+}
+
 async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugin): Promise<void> {
   if (!ctx.pluginManager || !plugin.configSchema) return;
-  const entries = Object.entries(plugin.configSchema);
+  const entries = Object.entries(plugin.configSchema).filter(([key, option]) =>
+    isConfigOptionEnabled(plugin, key, option),
+  );
   const selected = await askModalQuestion(ctx.state.ui, {
     question: `Configure ${plugin.name ?? plugin.id}:`,
     options: entries.map(([key, option]) => ({
@@ -275,6 +290,10 @@ async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugi
     return;
   }
   const [key, option] = entry;
+  if (option.type === 'callback') {
+    await runPluginConfigCallback(ctx, plugin, key, option);
+    return;
+  }
   const value = await askPluginConfigValue(ctx, plugin, key, option);
   if (value === undefined) {
     await configurePluginFlow(ctx, plugin);
@@ -288,11 +307,61 @@ async function configurePluginFlow(ctx: SlashCommandContext, plugin: LoadedPlugi
   }
 }
 
+async function runPluginConfigCallback(
+  ctx: SlashCommandContext,
+  plugin: LoadedPlugin,
+  key: string,
+  option: Extract<MastraCodePluginConfigOption, { type: 'callback' }>,
+): Promise<void> {
+  if (!ctx.pluginManager) return;
+  const label = option.label ?? key;
+  ctx.showInfo(`Running ${label}…`);
+  try {
+    const result = await option.run({ config: plugin.configValues ?? {} });
+    const patch = filterCallbackConfigPatch(plugin, result?.config);
+    if (patch) {
+      await ctx.pluginManager.setConfigValues(plugin.id, plugin.scope, patch);
+    }
+    if (result?.message) {
+      ctx.showInfo(result.message);
+    }
+  } catch (error) {
+    reportPluginMutationError(ctx, label, error);
+    await configurePluginFlow(ctx, plugin);
+    return;
+  }
+  // Re-fetch: the held plugin reference has stale configValues after reload.
+  const fresh = ctx.pluginManager
+    .getLoadedPlugins()
+    .find(candidate => candidate.id === plugin.id && candidate.scope === plugin.scope);
+  await configurePluginFlow(ctx, fresh ?? plugin);
+}
+
+function filterCallbackConfigPatch(
+  plugin: LoadedPlugin,
+  config: Record<string, MastraCodePluginConfigValue> | undefined,
+): Record<string, MastraCodePluginConfigValue> | undefined {
+  if (!config) return undefined;
+  const schema = plugin.configSchema ?? {};
+  const patch: Record<string, MastraCodePluginConfigValue> = {};
+  let hasKeys = false;
+  for (const [key, value] of Object.entries(config)) {
+    const option = schema[key];
+    if (!option || option.type === 'callback') continue;
+    patch[key] = value;
+    hasKeys = true;
+  }
+  return hasKeys ? patch : undefined;
+}
+
 function formatConfigDescription(
   key: string,
   option: MastraCodePluginConfigOption,
   value: MastraCodePluginConfigValue,
 ): string {
+  if (option.type === 'callback') {
+    return `action · ${option.description ?? key}`;
+  }
   const current = value === undefined ? '(unset)' : String(value);
   return `${option.type} · ${option.description ?? key} · current: ${current}`;
 }

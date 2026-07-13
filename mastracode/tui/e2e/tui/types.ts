@@ -63,6 +63,7 @@ export type ScenarioName =
   | 'plugins-github-install-missing-package-manager'
   | 'plugins-github-poll-update'
   | 'plugins-blocked-config'
+  | 'plugins-callback-config'
   | 'plugins-scaffold-install-tool'
   | 'plugins-assets-loading'
   | 'plugins-command-ui'

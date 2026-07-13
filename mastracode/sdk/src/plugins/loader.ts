@@ -66,6 +66,7 @@ export async function loadPluginRecord(
       pluginDir,
       config: configValues,
     };
+    const initState = typeof plugin.init === 'function' ? await plugin.init({ config: configValues }) : undefined;
     const { tools, renderConfigs } = await resolvePluginTools(plugin, context);
     const instructions = await resolvePluginInstructions(plugin, context);
 
@@ -76,6 +77,7 @@ export async function loadPluginRecord(
       description: plugin.description,
       instructions,
       status: 'active',
+      initState,
       tools,
       renderConfigs,
       toolNames: Object.keys(tools).sort(),
@@ -161,6 +163,10 @@ function validatePluginExport(value: unknown): MastraCodePlugin {
     throw new Error('Plugin tools must be an object or function');
   }
 
+  if (plugin.init !== undefined && typeof plugin.init !== 'function') {
+    throw new Error('Plugin init must be a function');
+  }
+
   return plugin;
 }
 
@@ -173,7 +179,7 @@ async function resolvePluginTools(
   if (!entries || typeof entries !== 'object' || Array.isArray(entries)) {
     throw new Error('Plugin tools function must return an object');
   }
-  return normalizePluginToolEntries(entries);
+  return normalizePluginToolEntries(plugin.id, entries, context.config);
 }
 
 async function resolvePluginInstructions(
@@ -190,7 +196,11 @@ async function resolvePluginInstructions(
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): {
+function normalizePluginToolEntries(
+  pluginId: string,
+  entries: MastraCodePluginToolEntries,
+  configValues: MastraCodePluginConfigValues,
+): {
   tools: MastraCodePluginTools;
   renderConfigs: Record<string, MastraCodeToolRenderConfig>;
 } {
@@ -199,6 +209,22 @@ function normalizePluginToolEntries(entries: MastraCodePluginToolEntries): {
   for (const [name, entry] of Object.entries(entries)) {
     if (!isToolEntryObject(entry)) {
       throw new Error(`Plugin tool "${name}" must be an object with a tool property`);
+    }
+    if (entry.isEnabled !== undefined && typeof entry.isEnabled !== 'function') {
+      // Fail-closed: a malformed gate hides the tool instead of exposing it.
+      process.stderr.write(`Plugin "${pluginId}" tool "${name}" has a non-function isEnabled; tool disabled\n`);
+      continue;
+    }
+    if (typeof entry.isEnabled === 'function') {
+      // Fail-closed: a throwing predicate hides the tool instead of exposing it or failing the load.
+      try {
+        if (!entry.isEnabled({ config: configValues })) continue;
+      } catch (error) {
+        process.stderr.write(
+          `Plugin "${pluginId}" tool "${name}" isEnabled threw (${error instanceof Error ? error.message : String(error)}); tool disabled\n`,
+        );
+        continue;
+      }
     }
     tools[name] = entry.tool;
     if (entry.render) renderConfigs[name] = entry.render;
@@ -218,12 +244,30 @@ function validatePluginConfigSchema(schema: unknown): MastraCodePluginConfigSche
   for (const [key, option] of Object.entries(schema)) {
     if (!option || typeof option !== 'object' || Array.isArray(option)) continue;
     const record = option as Record<string, unknown>;
+    if ('isEnabled' in record && record.isEnabled !== undefined && typeof record.isEnabled !== 'function') continue;
+    const isEnabled =
+      typeof record.isEnabled === 'function'
+        ? (record.isEnabled as NonNullable<MastraCodePluginConfigSchema[string]['isEnabled']>)
+        : undefined;
+    if (record.type === 'callback') {
+      if (typeof record.run !== 'function') continue;
+      if ('default' in record && record.default !== undefined) continue;
+      validated[key] = {
+        type: 'callback',
+        run: record.run as Extract<MastraCodePluginConfigSchema[string], { type: 'callback' }>['run'],
+        ...(typeof record.label === 'string' ? { label: record.label } : {}),
+        ...(typeof record.description === 'string' ? { description: record.description } : {}),
+        ...(isEnabled ? { isEnabled } : {}),
+      };
+      continue;
+    }
     if (record.type !== 'model' && record.type !== 'boolean' && record.type !== 'string') continue;
     validated[key] = {
       type: record.type,
       ...(typeof record.label === 'string' ? { label: record.label } : {}),
       ...(typeof record.description === 'string' ? { description: record.description } : {}),
       ...(typeof record.default === 'string' || typeof record.default === 'boolean' ? { default: record.default } : {}),
+      ...(isEnabled ? { isEnabled } : {}),
     };
   }
   return Object.keys(validated).length > 0 ? validated : undefined;
@@ -236,6 +280,7 @@ function resolvePluginConfigValues(
   const values: MastraCodePluginConfigValues = {};
   if (!schema) return values;
   for (const [key, option] of Object.entries(schema)) {
+    if (option.type === 'callback') continue;
     const value = recordValues?.[key];
     if (option.type === 'boolean') {
       values[key] = typeof value === 'boolean' ? value : typeof option.default === 'boolean' ? option.default : false;

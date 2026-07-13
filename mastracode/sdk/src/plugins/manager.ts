@@ -81,6 +81,18 @@ export class PluginManager {
     return this.pluginTools;
   }
 
+  /** Init state per active plugin id, for exposure under PLUGIN_STATE_KEY on request context. */
+  getPluginInitStates(): Record<string, unknown> {
+    const states: Record<string, unknown> = {};
+    for (const plugin of this.loadedPlugins) {
+      if (plugin.status !== 'active' || plugin.initState === undefined) continue;
+      if (!(plugin.id in states)) {
+        states[plugin.id] = plugin.initState;
+      }
+    }
+    return states;
+  }
+
   getToolRenderConfig(toolName: string) {
     return this.toolRenderConfigs.get(toolName);
   }
@@ -410,12 +422,22 @@ export class PluginManager {
     await this.reload();
   }
 
+  private assertNotCallbackConfigKey(pluginId: string, scope: PluginScope, key: string): void {
+    const plugin = this.loadedPlugins.find(loaded => loaded.id === pluginId && loaded.scope === scope);
+    // Defense in depth only: when no schema is available (plugin load failed or
+    // schema absent), skip the check and allow the write.
+    if (plugin?.configSchema?.[key]?.type === 'callback') {
+      throw new Error(`Config option "${key}" of plugin "${pluginId}" is a callback and stores no value`);
+    }
+  }
+
   async setConfigValue(
     pluginId: string,
     scope: PluginScope,
     key: string,
     value: MastraCodePluginConfigValue,
   ): Promise<void> {
+    this.assertNotCallbackConfigKey(pluginId, scope, key);
     const paths = getPluginScopePaths(scope, this.options);
     const registry = loadPluginRegistry(paths.registryPath);
     const record = registry.plugins[pluginId];
@@ -427,6 +449,34 @@ export class PluginManager {
       delete config[key];
     } else {
       config[key] = value;
+    }
+    const nextRecord = { ...record, config: Object.keys(config).length > 0 ? config : undefined };
+    savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, nextRecord));
+    await this.reload();
+  }
+
+  /** Apply a multi-key config patch with one registry write and one reload. */
+  async setConfigValues(
+    pluginId: string,
+    scope: PluginScope,
+    patch: Record<string, MastraCodePluginConfigValue>,
+  ): Promise<void> {
+    for (const key of Object.keys(patch)) {
+      this.assertNotCallbackConfigKey(pluginId, scope, key);
+    }
+    const paths = getPluginScopePaths(scope, this.options);
+    const registry = loadPluginRegistry(paths.registryPath);
+    const record = registry.plugins[pluginId];
+    if (!record) {
+      throw new Error(`Plugin "${pluginId}" is not installed in ${scope} scope`);
+    }
+    const config = { ...(record.config ?? {}) };
+    for (const [key, value] of Object.entries(patch)) {
+      if (value === undefined || value === '') {
+        delete config[key];
+      } else {
+        config[key] = value;
+      }
     }
     const nextRecord = { ...record, config: Object.keys(config).length > 0 ? config : undefined };
     savePluginRegistry(paths.registryPath, setPluginRecord(registry, pluginId, nextRecord));
