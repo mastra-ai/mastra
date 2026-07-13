@@ -2,10 +2,9 @@
 import { existsSync } from 'node:fs';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { homedir } from 'node:os';
+import { getAppDataDir } from '@mastra/code-sdk/utils/project';
 
-const SETTINGS_PATH =
-  process.env.MASTRACODE_SETTINGS_PATH || join(homedir(), 'Library/Application Support/mastracode/settings.json');
+const SETTINGS_PATH = process.env.MASTRACODE_SETTINGS_PATH || join(getAppDataDir(), 'settings.json');
 const PROVIDER_NAME = 'Render Smoke';
 const PROVIDER_URL = process.env.RENDER_SMOKE_URL || 'http://localhost:8787/v1';
 const PROVIDER_API_KEY = process.env.RENDER_SMOKE_API_KEY || 'test';

@@ -4,6 +4,7 @@ export class RenderScheduler {
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lastRenderAt = 0;
   private pending = false;
+  private disposed = false;
 
   constructor(
     private readonly render: () => void,
@@ -12,7 +13,7 @@ export class RenderScheduler {
   ) {}
 
   request(): void {
-    if (this.pending) return;
+    if (this.disposed || this.pending) return;
 
     const elapsed = this.now() - this.lastRenderAt;
     const delay = Math.max(0, this.intervalMs - elapsed);
@@ -24,6 +25,8 @@ export class RenderScheduler {
   }
 
   flush(): void {
+    if (this.disposed) return;
+
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
@@ -33,6 +36,7 @@ export class RenderScheduler {
   }
 
   dispose(): void {
+    this.disposed = true;
     if (this.timer) {
       clearTimeout(this.timer);
       this.timer = undefined;
@@ -42,6 +46,7 @@ export class RenderScheduler {
 
   private run(): void {
     this.pending = false;
+    if (this.disposed) return;
     this.lastRenderAt = this.now();
     this.render();
   }

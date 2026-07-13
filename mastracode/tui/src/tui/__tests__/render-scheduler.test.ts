@@ -55,6 +55,21 @@ describe('RenderScheduler', () => {
     vi.useRealTimers();
   });
 
+  it('ignores requests and flushes after disposal', () => {
+    vi.useFakeTimers();
+    const render = vi.fn();
+    const scheduler = new RenderScheduler(render);
+
+    scheduler.request();
+    scheduler.dispose();
+    scheduler.request();
+    scheduler.flush();
+    vi.runAllTimers();
+
+    expect(render).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('uses only the scheduler when one is present', () => {
     const legacyRender = vi.fn();
     const scheduler = { request: vi.fn(), flush: vi.fn() } as unknown as RenderScheduler;

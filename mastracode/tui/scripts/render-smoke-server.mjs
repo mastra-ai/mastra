@@ -6,6 +6,19 @@ const DELAY_MS = Number(process.env.DELAY_MS || 25);
 const CHUNK_SIZE = Number(process.env.CHUNK_SIZE || 48);
 const LARGE_SIZE = Number(process.env.LARGE_SIZE || 60_000);
 
+if (!Number.isInteger(PORT) || PORT < 1 || PORT > 65_535) {
+  throw new Error('PORT must be an integer between 1 and 65535');
+}
+if (!Number.isFinite(DELAY_MS) || DELAY_MS < 0) {
+  throw new Error('DELAY_MS must be a non-negative number');
+}
+if (!Number.isInteger(CHUNK_SIZE) || CHUNK_SIZE <= 0) {
+  throw new Error('CHUNK_SIZE must be a positive integer');
+}
+if (!Number.isInteger(LARGE_SIZE) || LARGE_SIZE <= 0) {
+  throw new Error('LARGE_SIZE must be a positive integer');
+}
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -240,7 +253,7 @@ const server = http.createServer(async (req, res) => {
   res.end();
 });
 
-server.listen(PORT, () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`Mastra Code Render Smoke mock listening on http://localhost:${PORT}/v1`);
   console.log('Prompts: "write", "edit", "command output", or "quoted command"');
   console.log(`LARGE_SIZE=${LARGE_SIZE} CHUNK_SIZE=${CHUNK_SIZE} DELAY_MS=${DELAY_MS}`);

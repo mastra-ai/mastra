@@ -168,7 +168,11 @@ export class CustomEditor extends Editor {
   private lastPromptWasInvisible = false;
 
   private requestEditorRender(): void {
-    this.requestRender?.() ?? this.tui.requestRender();
+    if (this.requestRender) {
+      this.requestRender();
+      return;
+    }
+    this.tui.requestRender();
   }
 
   constructor(tui: TUI, theme: EditorTheme) {

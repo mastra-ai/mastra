@@ -972,6 +972,21 @@ Test plan:
     expect(output).toContain(chalk.white("'done'"));
   });
 
+  it('closes double quotes after an even run of backslashes', () => {
+    const command = 'echo "path\\\\" && then';
+    const component = new ToolExecutionComponentEnhanced(
+      'execute_command',
+      { command },
+      { quietDisplayMode: 'quiet', collapsedByDefault: true },
+      ui,
+    );
+
+    const output = component.render(100).join('\n');
+    expect(stripAnsi(output)).toContain(command);
+    expect(output).toContain(chalk.white('"path\\\\"'));
+    expect(output).toContain(chalk.blue('then'));
+  });
+
   it('highlights shell control words and numbers outside quoted strings', () => {
     const command = 'for item in 1 2 3; do echo "while 99"; done';
     const component = new ToolExecutionComponentEnhanced(

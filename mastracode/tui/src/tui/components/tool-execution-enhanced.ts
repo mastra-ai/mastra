@@ -549,14 +549,17 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
     for (let index = 0; index < line.length; index++) {
       const char = line[index]!;
-      const previous = index > 0 ? line[index - 1] : undefined;
 
       if (activeQuote) {
         quoted += char;
-        if (
-          previous !== '\\' &&
-          ((activeQuote === 'single' && char === "'") || (activeQuote === 'double' && char === '"'))
-        ) {
+        let precedingBackslashes = 0;
+        for (let cursor = index - 1; cursor >= 0 && line[cursor] === '\\'; cursor--) {
+          precedingBackslashes++;
+        }
+        const closesQuote =
+          (activeQuote === 'single' && char === "'") ||
+          (activeQuote === 'double' && char === '"' && precedingBackslashes % 2 === 0);
+        if (closesQuote) {
           flushQuoted();
           activeQuote = undefined;
         }
