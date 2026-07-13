@@ -14,7 +14,7 @@ import {
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../useWorkspaces';
-import type { WorkspaceSession, WorkspaceThreadSession } from '../useWorkspaces';
+import type { WorkspaceThreadSession } from '../useWorkspaces';
 
 const ORIGIN = TEST_BASE_URL;
 const PROJECT_ID = 'project-gh';
@@ -40,10 +40,6 @@ function saveProject(project: Project) {
   saveProjects([project]);
 }
 
-function sessionStub() {
-  return { setState: vi.fn<WorkspaceSession['setState']>().mockResolvedValue(undefined) };
-}
-
 describe('workspaces query hooks', () => {
   it('reads GitHub project worktrees through React Query', async () => {
     saveProject(rootProject);
@@ -54,14 +50,13 @@ describe('workspaces query hooks', () => {
     expect(result.current.data?.worktrees.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
   });
 
-  it('selects a workspace, persists it, rebinds the session projectPath, and refreshes projects consumers', async () => {
+  it('selects a workspace, persists it, and refreshes projects consumers', async () => {
     saveProject(rootProject);
-    const session = sessionStub();
 
     const { result, client } = renderHookWithProviders(() => {
       const projects = useProjectsQuery();
       const workspaces = useWorkspacesQuery(rootProject);
-      const selectWorkspace = useSelectWorkspaceMutation(rootProject, session, {
+      const selectWorkspace = useSelectWorkspaceMutation(rootProject, {
         agentControllerId: 'code',
         resourceId: rootProject.resourceId,
       });
@@ -75,7 +70,6 @@ describe('workspaces query hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(session.setState).toHaveBeenCalledWith({ projectPath: '/sandbox/mastra-worktrees/feat-ui' });
     expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui');
     await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-ui'));
     await waitFor(() =>
@@ -85,7 +79,6 @@ describe('workspaces query hooks', () => {
 
   it('creates a workspace, persists it, selects it, and refetches the workspaces query', async () => {
     saveProject(rootProject);
-    const session = sessionStub();
     let received: unknown;
 
     server.use(
@@ -102,7 +95,7 @@ describe('workspaces query hooks', () => {
 
     const { result, client } = renderHookWithProviders(() => {
       const workspaces = useWorkspacesQuery(rootProject);
-      const createWorkspace = useCreateWorkspaceMutation(rootProject, session, {
+      const createWorkspace = useCreateWorkspaceMutation(rootProject, {
         agentControllerId: 'code',
         resourceId: rootProject.resourceId,
       });
@@ -117,7 +110,6 @@ describe('workspaces query hooks', () => {
     await waitForMutationsIdle(client);
 
     expect(received).toEqual({ branch: 'feat-new' });
-    expect(session.setState).toHaveBeenCalledWith({ projectPath: '/sandbox/mastra-worktrees/feat-new' });
     await waitFor(() => expect(result.current.workspaces.data?.selected?.branch).toBe('feat-new'));
     expect(result.current.workspaces.data?.worktrees.map(worktree => worktree.branch)).toEqual([
       'main',
@@ -128,7 +120,6 @@ describe('workspaces query hooks', () => {
 
   it('keeps the current selection when creating a workspace fails', async () => {
     saveProject(rootProject);
-    const session = sessionStub();
 
     server.use(
       http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree`, () =>
@@ -136,7 +127,7 @@ describe('workspaces query hooks', () => {
       ),
     );
 
-    const { result } = renderHookWithProviders(() => useCreateWorkspaceMutation(rootProject, session));
+    const { result } = renderHookWithProviders(() => useCreateWorkspaceMutation(rootProject));
 
     await act(async () => {
       await expect(result.current.mutateAsync('bad branch')).rejects.toMatchObject({
@@ -145,12 +136,10 @@ describe('workspaces query hooks', () => {
     });
 
     expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra');
-    expect(session.setState).not.toHaveBeenCalled();
   });
 
-  it('deletes a workspace, cascades its threads, and rebinds the session when it was selected', async () => {
+  it('deletes a workspace, cascades its threads, and falls back the stored selection when it was selected', async () => {
     saveProject({ ...rootProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui' });
-    const session = sessionStub();
     let received: unknown;
 
     server.use(
@@ -180,7 +169,7 @@ describe('workspaces query hooks', () => {
 
     const project = loadProjects()[0]!;
     const { result, client } = renderHookWithProviders(() =>
-      useDeleteWorkspaceMutation(project, session, threadSession, {
+      useDeleteWorkspaceMutation(project, threadSession, {
         agentControllerId: 'code',
         resourceId: project.resourceId,
       }),
@@ -197,7 +186,6 @@ describe('workspaces query hooks', () => {
 
     expect(received).toEqual({ branch: 'feat-ui' });
     expect(deletedThreads).toEqual(['thread-1', 'thread-2']);
-    expect(session.setState).toHaveBeenCalledWith({ projectPath: '/sandbox/mastra' });
     const stored = loadProjects()[0]!;
     expect(stored.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
     expect(stored.selectedWorktreePath).toBe('/sandbox/mastra');
@@ -205,7 +193,6 @@ describe('workspaces query hooks', () => {
 
   it('keeps threads and the stored worktree when the server delete fails', async () => {
     saveProject(rootProject);
-    const session = sessionStub();
 
     server.use(
       http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () =>
@@ -218,9 +205,7 @@ describe('workspaces query hooks', () => {
       deleteThread: vi.fn(async () => {}),
     };
 
-    const { result } = renderHookWithProviders(() =>
-      useDeleteWorkspaceMutation(rootProject, session, threadSession),
-    );
+    const { result } = renderHookWithProviders(() => useDeleteWorkspaceMutation(rootProject, threadSession));
 
     await act(async () => {
       await expect(
@@ -234,12 +219,10 @@ describe('workspaces query hooks', () => {
 
     expect(threadSession.deleteThread).not.toHaveBeenCalled();
     expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
-    expect(session.setState).not.toHaveBeenCalled();
   });
 
-  it('does not rebind the session when deleting an unselected workspace', async () => {
+  it('keeps the stored selection when deleting an unselected workspace', async () => {
     saveProject(rootProject); // selected: /sandbox/mastra (root)
-    const session = sessionStub();
 
     server.use(
       http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () =>
@@ -252,9 +235,7 @@ describe('workspaces query hooks', () => {
       deleteThread: vi.fn(async () => {}),
     };
 
-    const { result, client } = renderHookWithProviders(() =>
-      useDeleteWorkspaceMutation(rootProject, session, threadSession),
-    );
+    const { result, client } = renderHookWithProviders(() => useDeleteWorkspaceMutation(rootProject, threadSession));
 
     await act(async () => {
       await result.current.mutateAsync({
@@ -265,7 +246,6 @@ describe('workspaces query hooks', () => {
     });
     await waitForMutationsIdle(client);
 
-    expect(session.setState).not.toHaveBeenCalled();
     expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
     expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra');
   });

@@ -29,8 +29,15 @@ export const queryKeys = {
     ['agent-controller', agentControllerId ?? null, 'models'] as const,
   agentControllerModes: (agentControllerId: string | undefined) =>
     ['agent-controller', agentControllerId ?? null, 'modes'] as const,
-  agentControllerSession: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null] as const,
+  // Sessions are scoped per worktree (projectPath), so every session-derived key
+  // includes the projectPath — two worktrees over the same resourceId are
+  // independent sessions with independent state.
+  agentControllerSession: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) =>
+    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, projectPath ?? null] as const,
   // Keep connection state outside agentControllerSession: mutation hooks invalidate that prefix,
   // and a sync refetch would bump dataUpdatedAt and wipe the live transcript.
   agentControllerConnection: (
@@ -38,22 +45,34 @@ export const queryKeys = {
     resourceId: string | undefined,
     projectPath: string | undefined,
   ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
-  agentControllerSettings: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'settings'] as const,
-  agentControllerPermissions: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'permissions'] as const,
+  agentControllerSettings: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'settings'] as const,
+  agentControllerPermissions: (
+    agentControllerId: string | undefined,
+    resourceId: string | undefined,
+    projectPath: string | undefined,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'permissions'] as const,
   agentControllerThreads: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId), 'threads', projectPath ?? null] as const,
+  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
+  // Thread ids are unique across the resource, so messages are keyed by threadId
+  // alone (no projectPath) — caches survive worktree switches and seeding does
+  // not need to know the thread's scope.
   agentControllerThreadMessages: (
     agentControllerId: string | undefined,
     resourceId: string | undefined,
     threadId: string | undefined,
   ) =>
     [
-      ...queryKeys.agentControllerSession(agentControllerId, resourceId),
+      'agent-controller',
+      agentControllerId ?? null,
+      'sessions',
+      resourceId ?? null,
       'threads',
       threadId ?? null,
       'messages',

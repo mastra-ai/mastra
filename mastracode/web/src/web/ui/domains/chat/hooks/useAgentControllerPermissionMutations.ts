@@ -7,6 +7,7 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../s
 interface AgentControllerPermissionMutationArgs {
   agentControllerId: string;
   resourceId: string;
+  projectPath?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -14,18 +15,19 @@ interface AgentControllerPermissionMutationArgs {
 export function useSetPermissionForCategoryMutation({
   agentControllerId,
   resourceId,
+  projectPath,
   baseUrl = '',
   enabled = true,
 }: AgentControllerPermissionMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope: projectPath, baseUrl, enabled });
 
   return useMutation({
     mutationFn: ({ category, policy }: { category: ToolCategory; policy: PermissionPolicy }) =>
       requireAgentControllerSession(session).setPermissionForCategory(category, policy),
     onSuccess: () =>
       queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId),
+        queryKey: queryKeys.agentControllerPermissions(agentControllerId, resourceId, projectPath),
       }),
   });
 }

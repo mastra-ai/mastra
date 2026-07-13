@@ -4,9 +4,7 @@ import { useNavigate } from 'react-router';
 
 import { useApiConfig } from '../../../../../shared/api/config';
 import { queryKeys } from '../../../../../shared/api/keys';
-import { useSendAgentControllerMessageMutation } from '../../chat/hooks/useAgentControllerRunMutations';
-import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
-import { useCreateAgentControllerThreadMutation } from '../../chat/hooks/useAgentControllerThreadMutations';
+import { createAgentControllerClient, requireAgentControllerSession } from '../../chat/services/agentControllerClient';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
@@ -26,9 +24,10 @@ export interface StartFactoryRunInput {
  * item's branch, create a fresh thread in that workspace, send the kickoff
  * prompt, and navigate to the new thread.
  *
- * Mirrors the Composer's `/new` flow (create thread → send → seed message
- * cache → navigate) on top of the WorkspacesSection worktree flow (create
- * worktree → select it → point the session's `projectPath` at it).
+ * Sessions are scoped per worktree, so the run targets the NEW worktree's own
+ * session (created here with its `projectPath` tag) instead of repointing the
+ * currently active one — parallel Factory runs over the same project stay
+ * independent and never abort each other.
  */
 export function useStartFactoryRun() {
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
@@ -36,21 +35,31 @@ export function useStartFactoryRun() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
-  const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
-  const workspaceSession = { setState: (updates: Record<string, unknown>) => setStateMutation.mutateAsync(updates) };
-  const createWorkspace = useCreateWorkspaceMutation(activeProject, workspaceSession, {
+  const createWorkspace = useCreateWorkspaceMutation(activeProject, {
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
   });
-  const createThread = useCreateAgentControllerThreadMutation(hookArgs);
-  const send = useSendAgentControllerMessageMutation(hookArgs);
 
   const mutation = useMutation({
     mutationFn: async ({ branch, threadTitle, prompt }: StartFactoryRunInput) => {
       const updatedProject = await createWorkspace.mutateAsync(branch);
-      const thread = await createThread.mutateAsync(threadTitle);
-      await send.mutateAsync(prompt);
+      const projectPath = deriveProjectPath(updatedProject);
+      if (!projectPath) throw new Error('Could not resolve the new worktree path');
+
+      // Address the new worktree's own session; create it up front so a
+      // brand-new scope is seeded with its projectPath tag before the thread
+      // is created in it.
+      const { session } = createAgentControllerClient({
+        agentControllerId: AGENT_CONTROLLER_ID,
+        resourceId,
+        scope: projectPath,
+        baseUrl,
+        enabled: sessionEnabled,
+      });
+      const scopedSession = requireAgentControllerSession(session);
+      await scopedSession.create({ tags: { projectPath } });
+      const thread = await scopedSession.createThread(threadTitle);
+      await scopedSession.sendMessage(prompt);
 
       // Seed the thread's message cache so the prompt renders immediately when
       // the thread page mounts, before the server transcript catches up.
@@ -63,9 +72,9 @@ export function useStartFactoryRun() {
         message,
       ]);
       // The thread now exists under the new worktree's project path; refresh
-      // that thread list (createThread invalidated the pre-switch path).
+      // its thread list so the sidebar shows it once the UI lands there.
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, deriveProjectPath(updatedProject)),
+        queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, resourceId, projectPath),
       });
       return thread.id;
     },

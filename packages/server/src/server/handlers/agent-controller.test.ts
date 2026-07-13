@@ -100,6 +100,81 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('scoped sessions (sessionScope)', () => {
+    // One resourceId can be shared across git worktrees; a `sessionScope`
+    // addresses an independent session per scope so parallel worktrees don't
+    // collide on one run loop / thread binding.
+    it('creates independent sessions for the same resourceId under different scopes', async () => {
+      const a = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threadId?: string };
+      const b = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-b',
+        tags: { projectPath: '/repo/worktree-b' },
+      } as any)) as { threadId?: string };
+
+      expect(a.threadId).toBeDefined();
+      expect(b.threadId).toBeDefined();
+      expect(b.threadId).not.toBe(a.threadId);
+
+      // Get-or-create still holds within one scope.
+      const aAgain = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threadId?: string };
+      expect(aAgain.threadId).toBe(a.threadId);
+    });
+
+    it('routes with a sessionScope address the scoped session, not the unscoped one', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+      } as any);
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any);
+
+      // Switch the scoped session's mode; the unscoped session must not move.
+      await SWITCH_AGENT_CONTROLLER_MODE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        modeId: 'plan',
+      } as any);
+
+      const scoped = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+      } as any)) as { modeId: string };
+      const unscoped = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+      } as any)) as { modeId: string };
+
+      expect(scoped.modeId).toBe('plan');
+      expect(unscoped.modeId).toBe('build');
+    });
+  });
+
   describe('ABORT_AGENT_CONTROLLER_SESSION_ROUTE', () => {
     it('acks an abort on an idle session', async () => {
       const res = await ABORT_AGENT_CONTROLLER_SESSION_ROUTE.handler({
