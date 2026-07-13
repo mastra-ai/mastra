@@ -55,7 +55,9 @@ export function buildLinearAuthorizeUrl(state: string, redirectUri: string): str
   url.searchParams.set('client_id', config.clientId);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'read');
+  // `comments:create` lets the agent's linear_create_comment tool post
+  // comments; everything else the integration does is read-only.
+  url.searchParams.set('scope', 'read,comments:create');
   url.searchParams.set('state', state);
   url.searchParams.set('prompt', 'consent');
   return url.toString();
@@ -72,6 +74,8 @@ export interface LinearTokenSet {
   refreshToken: string | null;
   /** Null when Linear reported no `expires_in`. */
   expiresAt: Date | null;
+  /** Scopes granted to the token as reported by Linear; null when omitted. */
+  scope: string | null;
 }
 
 /** POST to Linear's token endpoint and normalize the response. */
@@ -92,7 +96,12 @@ async function requestLinearTokens(params: Record<string, string>, label: string
     (err as { status?: number }).status = res.status;
     throw err;
   }
-  const body = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+  const body = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+  };
   if (!body.access_token) {
     throw new Error(`Linear ${label} returned no access token.`);
   }
@@ -100,6 +109,7 @@ async function requestLinearTokens(params: Record<string, string>, label: string
     accessToken: body.access_token,
     refreshToken: body.refresh_token ?? null,
     expiresAt: typeof body.expires_in === 'number' ? new Date(Date.now() + body.expires_in * 1000) : null,
+    scope: body.scope ?? null,
   };
 }
 
@@ -129,7 +139,16 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
     body: JSON.stringify({ query, variables }),
   });
   if (!res.ok) {
-    const err = new Error(`Linear API request failed (${res.status})`);
+    // Linear returns GraphQL errors (validation, missing scopes, …) with a
+    // 400 status — surface the actual message instead of just the code.
+    let detail: string | null = null;
+    try {
+      const errBody = (await res.json()) as { errors?: Array<{ message?: string }> };
+      detail = errBody.errors?.[0]?.message ?? null;
+    } catch {
+      // Non-JSON error body; fall back to the status code alone.
+    }
+    const err = new Error(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`);
     (err as { status?: number }).status = res.status;
     throw err;
   }

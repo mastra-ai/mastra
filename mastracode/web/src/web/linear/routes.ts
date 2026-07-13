@@ -201,6 +201,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
               accessToken: tokens.accessToken,
               refreshToken: tokens.refreshToken,
               expiresAt: tokens.expiresAt,
+              scope: tokens.scope,
               workspaceName: workspace.name,
               workspaceUrlKey: workspace.urlKey,
             })
@@ -211,6 +212,7 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions = {}): ApiRo
                 accessToken: tokens.accessToken,
                 refreshToken: tokens.refreshToken,
                 expiresAt: tokens.expiresAt,
+                scope: tokens.scope,
                 workspaceName: workspace.name,
                 workspaceUrlKey: workspace.urlKey,
                 updatedAt: new Date(),

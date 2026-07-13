@@ -82,6 +82,7 @@ function seedConnection(overrides: Record<string, any> = {}): void {
     accessToken: 'linear-token',
     refreshToken: 'linear-refresh',
     expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    scope: 'read,comments:create',
     ...overrides,
   });
 }
@@ -120,6 +121,22 @@ describe('buildLinearAgentTools — exposure gating', () => {
     const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
     expect(tools).toHaveProperty('linear_get_issue');
     expect(tools).toHaveProperty('linear_create_comment');
+  });
+
+  it('withholds linear_create_comment when the connection scope is read-only', async () => {
+    seedProject();
+    seedConnection({ scope: 'read' });
+    const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_get_issue');
+    expect(tools).not.toHaveProperty('linear_create_comment');
+  });
+
+  it('treats legacy connections without a recorded scope as read-only', async () => {
+    seedProject();
+    seedConnection({ scope: null });
+    const tools = await buildLinearAgentTools({ requestContext: requestContextFor(PROJECT_ID) });
+    expect(tools).toHaveProperty('linear_get_issue');
+    expect(tools).not.toHaveProperty('linear_create_comment');
   });
 
   it('exposes nothing when the org has not connected Linear', async () => {

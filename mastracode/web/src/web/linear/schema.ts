@@ -22,8 +22,13 @@ export const linearConnections = pgTable(
     orgId: text('org_id').notNull(),
     /** Stable WorkOS user id of whoever connected it (audit only). */
     userId: text('user_id').notNull(),
-    /** Linear OAuth access token (workspace-scoped, `read`). Server-side only. */
+    /** Linear OAuth access token (workspace-scoped). Server-side only. */
     accessToken: text('access_token').notNull(),
+    /**
+     * Scopes Linear granted to the token (e.g. `read,comments:create`). Null
+     * for connections created before scope tracking — treated as read-only.
+     */
+    scope: text('scope'),
     /**
      * Linear OAuth refresh token. Linear access tokens expire (24h) and refresh
      * tokens rotate on every exchange, so this is rewritten after each refresh.
@@ -65,5 +70,6 @@ CREATE TABLE IF NOT EXISTS linear_connections (
 );
 ALTER TABLE linear_connections ADD COLUMN IF NOT EXISTS refresh_token text;
 ALTER TABLE linear_connections ADD COLUMN IF NOT EXISTS expires_at timestamptz;
+ALTER TABLE linear_connections ADD COLUMN IF NOT EXISTS scope text;
 CREATE UNIQUE INDEX IF NOT EXISTS linear_connections_org_unique ON linear_connections (org_id);
 `;

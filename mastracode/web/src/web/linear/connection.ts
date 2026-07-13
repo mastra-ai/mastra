@@ -46,9 +46,21 @@ export async function persistLinearTokens(orgId: string, tokens: LinearTokenSet)
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
       expiresAt: tokens.expiresAt,
+      // Refresh responses may omit scope; keep the recorded grant in that case.
+      ...(tokens.scope !== null ? { scope: tokens.scope } : {}),
       updatedAt: new Date(),
     })
     .where(eq(linearConnections.orgId, orgId));
+}
+
+/**
+ * Whether the connection's token can post issue comments. Legacy rows without
+ * a recorded scope were minted with `read` only, so they count as read-only
+ * until the org reconnects Linear.
+ */
+export function canPostLinearComments(connection: LinearConnectionRow): boolean {
+  const scopes = (connection.scope ?? '').split(/[\s,]+/).filter(Boolean);
+  return scopes.some(scope => scope === 'comments:create' || scope === 'write' || scope === 'admin');
 }
 
 /**

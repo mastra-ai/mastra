@@ -23,7 +23,12 @@ import { getAppDb } from '../github/db';
 import { githubProjects } from '../github/schema';
 import { createLinearIssueComment, fetchLinearIssueDetail } from './client';
 import { isLinearFeatureEnabled } from './config';
-import { getFreshLinearAccessToken, LinearReauthRequiredError, loadLinearConnection } from './connection';
+import {
+  canPostLinearComments,
+  getFreshLinearAccessToken,
+  LinearReauthRequiredError,
+  loadLinearConnection,
+} from './connection';
 
 /**
  * A project's org never changes, so the resourceId → orgId mapping is cached
@@ -32,9 +37,15 @@ import { getFreshLinearAccessToken, LinearReauthRequiredError, loadLinearConnect
  */
 const orgIdByResourceId = new Map<string, string | null>();
 
-/** Re-check "is Linear connected" for an org at most this often. */
+/** Re-check the org's Linear connection (and its scopes) at most this often. */
 const CONNECTION_TTL_MS = 60_000;
-const connectionCheckByOrg = new Map<string, { connected: boolean; checkedAt: number }>();
+interface ConnectionCheck {
+  connected: boolean;
+  /** Whether the granted OAuth scope allows posting issue comments. */
+  canComment: boolean;
+  checkedAt: number;
+}
+const connectionCheckByOrg = new Map<string, ConnectionCheck>();
 
 async function resolveOrgId(resourceId: string): Promise<string | null> {
   const cached = orgIdByResourceId.get(resourceId);
@@ -55,12 +66,17 @@ async function resolveOrgId(resourceId: string): Promise<string | null> {
   return orgId;
 }
 
-async function isLinearConnected(orgId: string): Promise<boolean> {
+async function checkLinearConnection(orgId: string): Promise<ConnectionCheck> {
   const cached = connectionCheckByOrg.get(orgId);
-  if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached.connected;
-  const connected = (await loadLinearConnection(orgId)) !== null;
-  connectionCheckByOrg.set(orgId, { connected, checkedAt: Date.now() });
-  return connected;
+  if (cached && Date.now() - cached.checkedAt < CONNECTION_TTL_MS) return cached;
+  const connection = await loadLinearConnection(orgId);
+  const check: ConnectionCheck = {
+    connected: connection !== null,
+    canComment: connection !== null && canPostLinearComments(connection),
+    checkedAt: Date.now(),
+  };
+  connectionCheckByOrg.set(orgId, check);
+  return check;
 }
 
 /** Test hook: clear the org/connection caches between specs. */
@@ -122,6 +138,12 @@ function createLinearCommentTool(orgId: string) {
       if (!connection) {
         return { error: 'Linear is not connected for this project. Connect Linear in Settings to post comments.' };
       }
+      if (!canPostLinearComments(connection)) {
+        return {
+          error:
+            'The Linear connection does not have comment permissions. Reconnect Linear in Settings to grant them.',
+        };
+      }
       try {
         const accessToken = await getFreshLinearAccessToken(connection);
         const comment = await createLinearIssueComment(accessToken, issue.trim(), body);
@@ -156,10 +178,14 @@ export async function buildLinearAgentTools({
 
   const orgId = await resolveOrgId(resourceId);
   if (!orgId) return {};
-  if (!(await isLinearConnected(orgId))) return {};
+  const check = await checkLinearConnection(orgId);
+  if (!check.connected) return {};
 
   return {
     linear_get_issue: createLinearGetIssueTool(orgId),
-    linear_create_comment: createLinearCommentTool(orgId),
+    // Only offered when the granted OAuth scope allows posting comments —
+    // connections made before `comments:create` was requested are read-only
+    // until the org reconnects Linear.
+    ...(check.canComment ? { linear_create_comment: createLinearCommentTool(orgId) } : {}),
   };
 }
