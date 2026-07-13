@@ -15,7 +15,7 @@ In this guide, you'll build a coding agent that works inside your local Mastra p
 
 ## Create the coding agent
 
-Create `src/mastra/agents/coding-agent.ts`. The prompt describes the current project and maps the prompt's generic tool names to the tools supplied by the default workspace.
+Create `src/mastra/agents/coding-agent.ts`. The prompt describes the current workspace and maps the prompt's generic tool names to the tools supplied by the default workspace.
 
 ```typescript title="src/mastra/agents/coding-agent.ts"
 import { basename } from 'node:path'
@@ -56,7 +56,7 @@ export const codingAgent = createCodingAgent({
 // highlight-end
 ```
 
-Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` sets the directory that the workspace can access. Any configuration you pass to the factory takes precedence over its defaults.
+Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` sets the directory that the workspace can access. In this development-server example, `process.cwd()` resolves to `src/mastra/public`, so the agent is limited to that workspace directory. Any configuration you pass to the factory takes precedence over its defaults.
 
 ## Register the coding agent
 
@@ -75,7 +75,7 @@ export const mastra = new Mastra({
 
 ## Add a workspace file
 
-When you run the development server, its working directory is `src/mastra/public`. Add a file there for the agent to inspect:
+When you run the development server, its working directory is `src/mastra/public`. Add a file there for the agent to inspect. Files in the [public folder](/docs/deployment/mastra-server#public-folder) are served as static assets, so use only non-sensitive test data and don't store source code, credentials, or private project context there.
 
 ```md title="src/mastra/public/project-notes.md"
 # Project notes

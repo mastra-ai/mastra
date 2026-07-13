@@ -266,6 +266,11 @@ const sidebars = {
           items: [
             {
               type: 'doc',
+              id: 'guide/coding-agent',
+              label: 'Workspace: Coding Agent',
+            },
+            {
+              type: 'doc',
               id: 'guide/dev-assistant',
               label: 'Workspace: Dev Assistant',
             },
