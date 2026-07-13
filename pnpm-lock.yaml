@@ -4011,8 +4011,8 @@ importers:
   packages/core:
     dependencies:
       '@a2a-js/sdk':
-        specifier: ~0.3.13
-        version: 0.3.13(@grpc/grpc-js@1.14.4)(express@5.2.1)
+        specifier: ~0.3.14
+        version: 0.3.14(@grpc/grpc-js@1.14.4)(express@5.2.1)
       '@ai-sdk/provider-utils-v5':
         specifier: npm:@ai-sdk/provider-utils@3.0.28
         version: '@ai-sdk/provider-utils@3.0.28(zod@4.4.3)'
@@ -9281,8 +9281,8 @@ packages:
       graphql:
         optional: true
 
-  '@a2a-js/sdk@0.3.13':
-    resolution: {integrity: sha512-BZr0f9JVNQs3GKOM9xINWCh6OKIJWZFPyqqVqTym5mxO2Eemc6I/0zL7zWnljHzGdaf5aZQyQN5xa6PSH62q+A==}
+  '@a2a-js/sdk@0.3.14':
+    resolution: {integrity: sha512-F6Ew1AtPzCLhTn8h9yiqTe7DiDf6XVrSnq9V1YqSl9eWqPm6anMveTiKdCSb/76cW0YiJc24rNaUrVezFFHbqQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.10.2
@@ -29752,7 +29752,7 @@ snapshots:
     optionalDependencies:
       graphql: 16.14.0
 
-  '@a2a-js/sdk@0.3.13(@grpc/grpc-js@1.14.4)(express@5.2.1)':
+  '@a2a-js/sdk@0.3.14(@grpc/grpc-js@1.14.4)(express@5.2.1)':
     dependencies:
       uuid: 11.1.1
     optionalDependencies:
