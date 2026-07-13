@@ -25,7 +25,7 @@ export const Default: Story = {
       <PopoverContent>
         <div className="grid gap-4">
           <div className="space-y-2">
-            <h4 className="font-medium leading-none">Dimensions</h4>
+            <h4 className="leading-none font-medium">Dimensions</h4>
             <p className="text-sm text-neutral3">Set the dimensions for the layer.</p>
           </div>
           <div className="grid gap-2">
@@ -49,13 +49,13 @@ export const WithIconTrigger: Story = {
     <Popover>
       <PopoverTrigger asChild>
         <Button variant="ghost" size="md">
-          <Settings className="h-4 w-4" />
+          <Settings className="size-4" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80">
         <div className="grid gap-4">
           <div className="space-y-2">
-            <h4 className="font-medium leading-none">Settings</h4>
+            <h4 className="leading-none font-medium">Settings</h4>
             <p className="text-sm text-neutral3">Manage your preferences.</p>
           </div>
         </div>

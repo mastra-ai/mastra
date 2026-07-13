@@ -141,9 +141,11 @@ describe('WorkspacesSection', () => {
 
     const activeRow = await screen.findByRole('button', { name: 'main' });
     const nested = screen.getByTestId('nested-threads');
-    expect(activeRow.parentElement).toContainElement(nested);
+    // The row button sits inside a hover-group wrapper; nested children render
+    // as a sibling of that wrapper inside the worktree's container.
+    expect(activeRow.parentElement?.parentElement).toContainElement(nested);
     const inactiveRow = screen.getByRole('button', { name: 'feat-ui' });
-    expect(inactiveRow.parentElement).not.toContainElement(nested);
+    expect(inactiveRow.parentElement?.parentElement).not.toContainElement(nested);
   });
 
   it('does not render for local projects', async () => {
@@ -288,5 +290,88 @@ describe('WorkspacesSection', () => {
     // Only the provider's initial project-path sync may write state — never a failed create.
     const paths = stateUpdates.map(update => (update.state as { projectPath?: string })?.projectPath);
     expect(paths.filter(path => path !== '/sandbox/mastra')).toEqual([]);
+  });
+
+  it('offers a delete action on feature worktrees but not the repo root', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    renderSection();
+
+    await screen.findByRole('button', { name: 'feat-ui' });
+    // One actions menu (feat-ui); the root workspace has none.
+    expect(screen.getAllByRole('button', { name: 'Workspace actions' })).toHaveLength(1);
+  });
+
+  it('deletes a worktree after confirmation, cascading its threads', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    let deletedBranch: unknown;
+    const deletedThreads: string[] = [];
+    let listRequests = 0;
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, ({ request }) => {
+        const url = new URL(request.url);
+        // The cascade lists threads scoped to the deleted worktree; return one
+        // thread on the first scoped call, none afterwards.
+        if (url.searchParams.get('tags') === JSON.stringify({ projectPath: '/sandbox/mastra-worktrees/feat-ui' })) {
+          listRequests += 1;
+          return HttpResponse.json({
+            threads: listRequests === 1 ? [{ id: 'thread-doomed', title: 'Doomed', resourceId: 'resource-gh' }] : [],
+          });
+        }
+        return HttpResponse.json({ threads: [] });
+      }),
+      http.delete(`${API}/sessions/:resourceId/threads/:threadId`, ({ params }) => {
+        deletedThreads.push(String(params.threadId));
+        return HttpResponse.json({ ok: true });
+      }),
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, async ({ request }) => {
+        deletedBranch = ((await request.json()) as { branch: string }).branch;
+        return HttpResponse.json({
+          removed: true,
+          branch: 'feat-ui',
+          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        });
+      }),
+    );
+    renderSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Workspace actions' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Delete workspace?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
+
+    await waitFor(() => expect(deletedBranch).toBe('feat-ui'));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'feat-ui' })).not.toBeInTheDocument());
+    expect(deletedThreads).toEqual(['thread-doomed']);
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main']);
+  });
+
+  it('keeps the worktree when the delete confirmation is cancelled', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    let deleteCalled = false;
+    server.use(
+      http.post(`${ORIGIN}/web/github/projects/${GITHUB_PROJECT_ID}/worktree/delete`, () => {
+        deleteCalled = true;
+        return HttpResponse.json({
+          removed: true,
+          branch: 'feat-ui',
+          worktreePath: '/sandbox/mastra-worktrees/feat-ui',
+        });
+      }),
+    );
+    renderSection();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Workspace actions' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Delete' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Delete workspace?' });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Delete workspace?' })).not.toBeInTheDocument());
+    expect(deleteCalled).toBe(false);
+    expect(screen.getByRole('button', { name: 'feat-ui' })).toBeInTheDocument();
+    expect(loadProjects()[0]?.worktrees?.map(worktree => worktree.branch)).toEqual(['main', 'feat-ui']);
   });
 });

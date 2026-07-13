@@ -1,3 +1,4 @@
+import type * as PiTui from '@earendil-works/pi-tui';
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 
 const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(() => ({
@@ -6,7 +7,8 @@ const { visibleWidthMock, chalkRgbMock, applyGradientSweepMock } = vi.hoisted(()
   applyGradientSweepMock: vi.fn((value: string) => value),
 }));
 
-vi.mock('@earendil-works/pi-tui', () => ({
+vi.mock('@earendil-works/pi-tui', async importOriginal => ({
+  ...(await importOriginal<typeof PiTui>()),
   visibleWidth: visibleWidthMock,
 }));
 
@@ -36,11 +38,6 @@ vi.mock('../components/obi-loader.js', () => ({
   applyGradientSweep: applyGradientSweepMock,
 }));
 
-vi.mock('../components/om-progress.js', () => ({
-  formatObservationStatus: vi.fn(() => ''),
-  formatReflectionStatus: vi.fn(() => ''),
-}));
-
 vi.mock('../theme.js', () => ({
   theme: {
     fg: (_tone: string, value: string) => value,
@@ -52,17 +49,24 @@ vi.mock('../theme.js', () => ({
     blue: '#3b82f6',
     specialGray: '#6b7280',
   },
+  mastraBrand: {
+    blue: '#2563eb',
+  },
   extendedColors: {
     skyBlue: '#0ea5e9',
+    lightCyan: '#22d3ee',
+    indigo: '#6366f1',
   },
-  tintHex: (_color: string, _amount: number) => '#111111',
+  tintHex: (color: string, amount: number) => {
+    const channels = [1, 3, 5].map(offset => Math.floor(parseInt(color.slice(offset, offset + 2), 16) * amount));
+    return `#${channels.map(channel => channel.toString(16).padStart(2, '0')).join('')}`;
+  },
   getThemeMode: () => 'dark',
   ensureContrast: (_color: string) => _color,
   TUI_MIN_CONTRAST: 5.5,
   getTermWidth: () => process.stdout.columns || 200,
 }));
 
-import { formatObservationStatus, formatReflectionStatus } from '../components/om-progress.js';
 import { updateStatusLine } from '../status-line.js';
 
 function createState() {
@@ -72,7 +76,19 @@ function createState() {
   const session = {
     displayState: {
       get: vi.fn(() => ({
-        omProgress: { status: 'idle' },
+        omProgress: {
+          status: 'idle',
+          pendingTokens: 30_000,
+          threshold: 80_000,
+          thresholdPercent: 37.5,
+          observationTokens: 30_000,
+          reflectionThreshold: 40_000,
+          reflectionThresholdPercent: 75,
+          buffered: {
+            observations: { projectedMessageRemoval: 2_000 },
+            reflection: { status: 'complete', inputObservationTokens: 5_000, observationTokens: 3_000 },
+          },
+        },
         bufferingMessages: false,
         bufferingObservations: false,
       })),
@@ -125,9 +141,8 @@ describe('updateStatusLine', () => {
   beforeEach(() => {
     visibleWidthMock.mockClear();
     chalkRgbMock.mockClear();
-    vi.mocked(formatObservationStatus).mockReturnValue('');
-    vi.mocked(formatReflectionStatus).mockReturnValue('');
     applyGradientSweepMock.mockClear();
+    applyGradientSweepMock.mockImplementation((value: string) => value);
     process.stdout.columns = 200;
   });
 
@@ -210,7 +225,19 @@ describe('updateStatusLine', () => {
     expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s ×');
   });
 
-  it('shows the active GitHub PR subscription beside the thread path', () => {
+  it('shows the active GitHub PR subscription beside the thread title', () => {
+    const state = createState();
+    state.currentThreadTitle = 'Simplify the OM status indicator';
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('PR#17439 Simplify the OM status indicator');
+    expect(rendered).not.toContain('feat/mc-queueing-ux');
+  });
+
+  it('shows the active GitHub PR subscription without status noise', () => {
     const state = createState();
     state.activeGithubPrSubscriptions = [
       {
@@ -230,10 +257,28 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('updated');
   });
 
-  it('does not animate the GitHub PR subscription during unrelated agent activity', () => {
+  it('keeps the PR label within the available width when truncating a long thread title', () => {
     const state = createState();
+    state.currentThreadTitle = 'A very long thread title that must be truncated';
     state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
-    state.gradientAnimator = {
+    process.stdout.columns = 70;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(visibleWidthMock(rendered)).toBeLessThanOrEqual(70);
+    expect(rendered).toContain('PR#17439');
+    expect(rendered).toContain('60/120k');
+    expect(rendered).not.toContain('━━━━━━━━━━');
+  });
+
+  it('shows the PR label without a thread title or branch and uses orange for high priority', () => {
+    const state = createState();
+    state.currentThreadTitle = undefined;
+    state.projectInfo.gitBranch = undefined;
+    state.activeGithubPrSubscriptions = [{ prNumber: 17439, lastNotificationPriority: 'high' }];
+    state.githubPrPollingActive = true;
+    state.githubPrGradientAnimator = {
       isRunning: vi.fn(() => true),
       getOffset: vi.fn(() => 0.5),
       getFadeProgress: vi.fn(() => 0),
@@ -241,15 +286,11 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).not.toHaveBeenCalledWith(
-      'PR#17439',
-      expect.anything(),
-      expect.anything(),
-      expect.anything(),
-    );
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).toContain('PR#17439');
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('PR#17439', 0.5, '#f97316', 0);
   });
 
-  it('animates the GitHub PR subscription while GitHub polling is running', () => {
+  it('animates the GitHub PR subscription only while GitHub polling is running', () => {
     const state = createState();
     state.activeGithubPrSubscriptions = [{ prNumber: 17439 }];
     state.githubPrPollingActive = true;
@@ -269,8 +310,7 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).not.toContain('PR#');
+    expect(state.statusLine.setText.mock.calls[0]?.[0]).not.toContain('PR#');
   });
 
   it('preserves the gateway prefix when compacting gateway-backed model ids', () => {
@@ -306,7 +346,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('fireworks/kimi-k2.6');
+    expect(rendered).toContain('kimi-k2.6');
     expect(rendered).not.toContain('fireworks-ai/accounts/fireworks/models/');
     expect(rendered).not.toContain('kimi-k2p6');
   });
@@ -353,16 +393,20 @@ describe('updateStatusLine', () => {
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
-  it('uses abbreviated long branch before truncating path and dropping branch context', () => {
+  it('shows the thread title in the center and abbreviates it when needed', () => {
     const state = createState();
+    state.currentThreadTitle = 'A much longer generated thread title that should appear';
     state.projectInfo.gitBranch = 'feature/super-long-branch-name-for-status-footer-e2e-regression-shield-extra-long';
     process.stdout.columns = 80;
 
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('feature/supe..tra-long');
-    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux…');
+    expect(rendered).toContain('A much longe..d appear');
+    expect(rendered).toContain('60/120k');
+    expect(rendered).not.toContain('━━━━━━━━━━');
+    expect(rendered).not.toContain('feature/super-long-branch');
+    expect(rendered).not.toContain('mastra--feat-mc-queueing-ux');
   });
 
   it('shows active goal duration instead of attempt count', () => {
@@ -384,10 +428,39 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('pursuing goal (1hr10m)');
+    expect(rendered).toContain('goal 1hr10m');
+    expect(rendered).not.toContain('· goal');
     expect(rendered).not.toContain('goal attempt');
     expect(rendered).not.toContain('1/20');
     vi.useRealTimers();
+  });
+
+  it('places goal after run duration, hides a matching goal time, and puts throughput before context', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-15T12:00:30.000Z'));
+    const state = createState();
+    state.agentRunStartedAt = Date.parse('2026-05-15T12:00:00.000Z');
+    state.tokensPerSec = 80;
+    state.goalManager = {
+      getGoal: vi.fn(() => ({
+        status: 'active',
+        startedAt: '2026-05-15T12:00:00.000Z',
+      })),
+    };
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0] as string;
+    expect(rendered).toContain('30s · goal');
+    expect(rendered).not.toContain('goal <1m');
+    expect(rendered).toMatch(/ 80 t\/s\s+━━━━━━━━━━/);
+    expect(rendered).not.toContain('tok/s');
+
+    state.tokensPerSec = 120;
+    updateStatusLine(state);
+    const renderedOver100 = state.statusLine.setText.mock.calls[1]?.[0] as string;
+    expect(renderedOver100).toMatch(/120 t\/s\s+━━━━━━━━━━/);
+    expect(renderedOver100.indexOf(state.projectInfo.gitBranch)).toBe(rendered.indexOf(state.projectInfo.gitBranch));
   });
 
   it('freezes active goal duration while waiting for user input', () => {
@@ -407,12 +480,12 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('pursuing goal (10m)');
+    expect(rendered).toContain('goal 10m');
     expect(rendered).not.toContain('6hr10m');
     vi.useRealTimers();
   });
 
-  it('uses a compact active goal duration label on narrow screens', () => {
+  it('keeps the concise active goal duration label on narrow screens', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-15T12:00:00.000Z'));
     const state = createState();
@@ -431,14 +504,13 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('goal (2days3hr)');
-    expect(rendered).not.toContain('pursuing goal');
+    expect(rendered).toContain('goal 2days3hr');
+    expect(rendered).not.toContain('pursuing');
+    expect(rendered).not.toContain('(');
     vi.useRealTimers();
   });
 
   it('keeps judge status ahead of OM and long model details on narrow screens', () => {
-    vi.mocked(formatObservationStatus).mockReturnValue('msg 100%');
-    vi.mocked(formatReflectionStatus).mockReturnValue('mem 100%');
     const state = createState();
     state.controller.session.displayState.get.mockReturnValue({
       omProgress: { status: 'observing' },
@@ -463,8 +535,110 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('j');
     expect(rendered).toContain('gpt-5.4-mini');
     expect(rendered).not.toContain('observe');
-    expect(rendered).not.toContain('msg 100%');
-    expect(rendered).not.toContain('mem 100%');
+    expect(rendered).not.toContain('━');
     expect(rendered).not.toContain('claude-sonnet-4-20250514');
+  });
+
+  it('renders one unified context indicator with combined totals and savings', () => {
+    const state = createState();
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('━━━━━━━━━━  60/120k↓ ');
+    expect(rendered.indexOf('feat/mc-queueing-ux')).toBeLessThan(rendered.indexOf('━━━━━━━━━━'));
+    expect(rendered).toMatch(/━━━━━━━━━━  60\/120k↓ $/);
+    expect(rendered).not.toContain('messages');
+    expect(rendered).not.toContain('memory');
+  });
+
+  it('keeps the indicator anchored when the savings arrow disappears', () => {
+    const state = createState();
+    updateStatusLine(state);
+    const withSavings = state.statusLine.setText.mock.calls[0]?.[0] as string;
+
+    const displayState = state.session.displayState.get();
+    displayState.omProgress.buffered.observations.projectedMessageRemoval = 0;
+    displayState.omProgress.buffered.reflection.inputObservationTokens = 3_000;
+    displayState.omProgress.buffered.reflection.observationTokens = 3_000;
+    state.session.displayState.get.mockReturnValue(displayState);
+    state.statusLine.setText.mockClear();
+    updateStatusLine(state);
+    const withoutSavings = state.statusLine.setText.mock.calls[0]?.[0] as string;
+
+    expect(withoutSavings).not.toContain('↓');
+    expect(withoutSavings.indexOf('━━━━━━━━━━')).toBe(withSavings.indexOf('━━━━━━━━━━'));
+    expect(visibleWidthMock(withoutSavings)).toBe(visibleWidthMock(withSavings));
+  });
+
+  it('drops only the context bar before core status content at 60 columns', () => {
+    const state = createState();
+    process.stdout.columns = 60;
+
+    updateStatusLine(state);
+
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('feat/mc-que');
+    expect(rendered).toContain('60/120k');
+    expect(rendered).not.toContain('━━━━━━━━━━');
+  });
+
+  it('animates only the message segment while keeping the middle, model, badge, and text static', () => {
+    const state = createState();
+    state.controller.listModes.mockReturnValue([
+      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
+      { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
+    ]);
+    const displayState = state.session.displayState.get();
+    state.session.displayState.get.mockReturnValue({ ...displayState, bufferingMessages: true });
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+    applyGradientSweepMock.mockImplementation((value: string) => `<sweep>${value}</sweep>`);
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#00ff00', 0);
+    const rendered = state.statusLine.setText.mock.calls[0]?.[0];
+    expect(rendered).toContain('━━<sweep>━━━</sweep>━━━━━  60/120k↓ ');
+  });
+
+  it('animates only the memory segment', () => {
+    const state = createState();
+    const displayState = state.session.displayState.get();
+    state.session.displayState.get.mockReturnValue({ ...displayState, bufferingObservations: true });
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.25),
+      getFadeProgress: vi.fn(() => 0.1),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
+    expect(applyGradientSweepMock).toHaveBeenCalledWith('━━', 0.25, '#2563eb', 0.1);
+  });
+
+  it('animates both occupied segments independently when both buffers are active', () => {
+    const state = createState();
+    const displayState = state.session.displayState.get();
+    state.session.displayState.get.mockReturnValue({
+      ...displayState,
+      bufferingMessages: true,
+      bufferingObservations: true,
+    });
+    state.gradientAnimator = {
+      isRunning: vi.fn(() => true),
+      getOffset: vi.fn(() => 0.5),
+      getFadeProgress: vi.fn(() => 0),
+    };
+
+    updateStatusLine(state);
+
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
+    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual(['━━', '━━━']);
   });
 });
