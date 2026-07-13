@@ -37,11 +37,18 @@ function useSessionInvalidation({ agentControllerId, resourceId, projectPath }: 
   };
 }
 
+export interface SendAgentControllerMessageInput {
+  text: string;
+  /** Base64-encoded attachments (e.g. pasted images) forwarded to the controller session. */
+  files?: Array<{ data: string; mediaType: string; filename?: string }>;
+}
+
 export function useSendAgentControllerMessageMutation(args: AgentControllerRunMutationArgs) {
   const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
-    mutationFn: (text: string) => requireAgentControllerSession(session).sendMessage(text),
+    mutationFn: ({ text, files }: SendAgentControllerMessageInput) =>
+      requireAgentControllerSession(session).sendMessage(files?.length ? { content: text, files } : { content: text }),
     onSuccess: invalidateSession,
   });
 }
