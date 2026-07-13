@@ -493,6 +493,7 @@ describe('Factory Intake page — Linear source', () => {
     expect(captured.messages).toHaveLength(1);
     expect(captured.messages[0]!.message).toContain('understand-issue skill');
     expect(captured.messages[0]!.message).toContain('https://linear.app/acme/issue/ENG-42');
+    expect(captured.messages[0]!.message).toContain('linear_get_issue');
   });
 });
 
