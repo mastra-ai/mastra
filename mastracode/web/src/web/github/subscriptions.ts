@@ -39,6 +39,8 @@ export interface PullRequestSubscriptionTarget {
   pullRequestNumber: number;
 }
 
+export type GithubWebhookPullRequestTarget = Omit<PullRequestSubscriptionTarget, 'orgId'>;
+
 function normalizedScope(scope: string | undefined): string {
   return scope ?? '';
 }
@@ -154,6 +156,26 @@ export async function listPullRequestSubscriptions(
         eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
       ),
     );
+}
+
+export async function listPullRequestSubscriptionsForWebhook(
+  input: GithubWebhookPullRequestTarget,
+  db: AppDb = getAppDb(),
+): Promise<GithubSignalSubscriptionRow[]> {
+  return db
+    .select()
+    .from(githubSignalSubscriptions)
+    .where(
+      and(
+        eq(githubSignalSubscriptions.installationId, input.installationId),
+        eq(githubSignalSubscriptions.repoId, input.repoId),
+        eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
+      ),
+    );
+}
+
+export async function retirePullRequestSubscription(id: string, db: AppDb = getAppDb()): Promise<void> {
+  await db.delete(githubSignalSubscriptions).where(eq(githubSignalSubscriptions.id, id));
 }
 
 export async function retirePullRequestSubscriptions(

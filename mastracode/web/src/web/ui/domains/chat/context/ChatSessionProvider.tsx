@@ -20,7 +20,9 @@ export function ChatSessionProvider({ children, threadId }: { children: ReactNod
   const { activeProject, resourceId, sessionEnabled } = useActiveProjectContext();
   const { baseUrl } = useApiConfig();
   const projectPath = deriveProjectPath(activeProject);
-  const sessionContextValue = { resourceId, sessionEnabled, projectPath, baseUrl };
+  const projectState =
+    activeProject?.source === 'github' ? { githubProjectId: activeProject.githubProjectId } : undefined;
+  const sessionContextValue = { resourceId, sessionEnabled, projectPath, projectState, baseUrl };
 
   return (
     <ChatSessionContext.Provider value={sessionContextValue}>

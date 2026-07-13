@@ -4,6 +4,7 @@ export interface ChatSessionContextApi {
   resourceId: string;
   sessionEnabled: boolean;
   projectPath?: string;
+  projectState?: Record<string, unknown>;
   baseUrl: string;
 }
 

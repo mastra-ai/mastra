@@ -205,6 +205,8 @@ export interface MastraCodeConfig {
   disableHooks?: boolean;
   /** Disable plugin discovery/loading. Default: false */
   disablePlugins?: boolean;
+  /** Disable the polling-based GitHub signal provider even when enabled in global settings. Default: false */
+  disableGithubSignals?: boolean;
   /** Override the plugin manager. Primarily useful for tests or embedding. */
   pluginManager?: PluginManager;
   /**
@@ -503,61 +505,62 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // well after controller is constructed (line ~692). Explicit type annotations
   // on githubSignals, codeAgent, modes, and controller break the circular
   // inference chain this forward reference would otherwise create.
-  const githubSignals: GithubSignals | undefined = globalSettings.signals?.experimentalGithubSignals
-    ? new GithubSignals({
-        cwd: project.rootPath,
-        gitcrawlCommand:
-          process.env.MASTRACODE_GITCRAWL_BIN ??
-          process.env.GITCRAWL_BIN ??
-          process.env.MASTRACODE_GITCRAWL_COMMAND ??
-          process.env.GITCRAWL_COMMAND,
-        getNotificationStreamOptions: async ({ resourceId, threadId }) => {
-          // Run the woken notification as the session that owns the target
-          // resource so it uses that session's model/mode/state. Fall back to
-          // the current session only when no session owns the resource yet.
-          const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
-          // A long-running system must be able to drive work unattended, so a
-          // target session without an explicit model selection falls back to a
-          // real model rather than failing the run: the current session's live
-          // selection (what the user actually picked), then the mode's default.
-          const modeId = session.mode.get();
-          const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
-          const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
-          const requestContext = new RequestContext();
-          const agentControllerContext: AgentControllerRequestContext = {
-            controllerId: controller.id,
-            state: session.state.get(),
-            getState: () => session.state.get(),
-            setState: updates => session.state.set(updates),
-            threadId,
-            resourceId,
-            session: {
-              id: session.identity.getId(),
-              ownerId: session.identity.getOwnerId(),
-              modeId,
-              modelId,
-              state: {
-                get: () => session.state.get(),
-                set: updates => session.state.set(updates),
-                update: updater => session.state.update(updater),
+  const githubSignals: GithubSignals | undefined =
+    globalSettings.signals?.experimentalGithubSignals && !config?.disableGithubSignals
+      ? new GithubSignals({
+          cwd: project.rootPath,
+          gitcrawlCommand:
+            process.env.MASTRACODE_GITCRAWL_BIN ??
+            process.env.GITCRAWL_BIN ??
+            process.env.MASTRACODE_GITCRAWL_COMMAND ??
+            process.env.GITCRAWL_COMMAND,
+          getNotificationStreamOptions: async ({ resourceId, threadId }) => {
+            // Run the woken notification as the session that owns the target
+            // resource so it uses that session's model/mode/state. Fall back to
+            // the current session only when no session owns the resource yet.
+            const session = (await controller.getSessionByResource(resourceId)) ?? activeSession!;
+            // A long-running system must be able to drive work unattended, so a
+            // target session without an explicit model selection falls back to a
+            // real model rather than failing the run: the current session's live
+            // selection (what the user actually picked), then the mode's default.
+            const modeId = session.mode.get();
+            const defaultModeModelId = controller.listModes().find(mode => mode.id === modeId)?.defaultModelId;
+            const modelId = session.model.get() || activeSession?.model.get() || defaultModeModelId || '';
+            const requestContext = new RequestContext();
+            const agentControllerContext: AgentControllerRequestContext = {
+              controllerId: controller.id,
+              state: session.state.get(),
+              getState: () => session.state.get(),
+              setState: updates => session.state.set(updates),
+              threadId,
+              resourceId,
+              session: {
+                id: session.identity.getId(),
+                ownerId: session.identity.getOwnerId(),
+                modeId,
+                modelId,
+                state: {
+                  get: () => session.state.get(),
+                  set: updates => session.state.set(updates),
+                  update: updater => session.state.update(updater),
+                },
               },
-            },
-            workspace: controller.getWorkspace(),
-            getSubagentModelId: params => session.subagents.model.get(params ?? {}),
-          };
-          requestContext.set('controller', agentControllerContext);
+              workspace: controller.getWorkspace(),
+              getSubagentModelId: params => session.subagents.model.get(params ?? {}),
+            };
+            requestContext.set('controller', agentControllerContext);
 
-          return {
-            memory: { thread: threadId, resource: resourceId },
-            requestContext,
-            maxSteps: 1000,
-            savePerStep: false,
-            requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
-            modelSettings: { temperature: 1 },
-          };
-        },
-      })
-    : undefined;
+            return {
+              memory: { thread: threadId, resource: resourceId },
+              requestContext,
+              maxSteps: 1000,
+              savePerStep: false,
+              requireToolApproval: (session.state.get() as Record<string, unknown>).yolo !== true,
+              modelSettings: { temperature: 1 },
+            };
+          },
+        })
+      : undefined;
   const codeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',

@@ -193,6 +193,29 @@ describe('GitHub signal subscription store', () => {
     expect(forThread[0]?.sessionId).toBe('session-a');
   });
 
+  it('supports installation-scoped webhook lookup and per-target retirement', async () => {
+    const { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription, subscribeToPullRequest } =
+      await import('./subscriptions');
+    const first = await subscribeToPullRequest(baseInput, fake.db);
+    const second = await subscribeToPullRequest(
+      { ...baseInput, sessionId: 'session-c', threadId: 'thread-c' },
+      fake.db,
+    );
+
+    const matches = await listPullRequestSubscriptionsForWebhook(
+      {
+        installationId: baseInput.installationId,
+        repoId: baseInput.repoId,
+        pullRequestNumber: baseInput.pullRequestNumber,
+      },
+      fake.db,
+    );
+    expect(matches.map(row => row.id)).toEqual([first.id, second.id]);
+
+    await retirePullRequestSubscription(first.id, fake.db);
+    expect(fake.subscriptions.map(row => row.id)).toEqual([second.id]);
+  });
+
   it('retires all subscriptions for one pull request', async () => {
     const { listPullRequestSubscriptions, retirePullRequestSubscriptions, subscribeToPullRequest } =
       await import('./subscriptions');

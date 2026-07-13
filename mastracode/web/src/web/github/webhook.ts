@@ -1,9 +1,18 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import type { MountedMastraCode } from '@mastra/code-sdk';
+import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
+import type { GithubSignalSubscriptionRow } from './schema';
+import {
+  listPullRequestSubscriptionsForWebhook,
+  retirePullRequestSubscription,
+  type GithubWebhookPullRequestTarget,
+} from './subscriptions';
 import { getGithubWebhookSecret } from './config';
 
 const SUPPORTED_GITHUB_WEBHOOK_EVENTS = new Set([
   'issues',
+  'issue_comment',
   'pull_request',
   'pull_request_review',
   'pull_request_review_comment',
@@ -14,6 +23,7 @@ export interface GithubWebhookMetadata {
   action?: string;
   deliveryId: string;
   repository?: string;
+  repositoryId?: number;
   issueNumber?: number;
   pullRequestNumber?: number;
   sender?: string;
@@ -30,6 +40,25 @@ export type GithubWebhookResult =
   | { status: 202; body: { ok: true; ignored?: true } }
   | { status: 400; body: { error: 'bad_request'; message: string } }
   | { status: 401; body: { error: 'unauthorized'; message: string } };
+
+export interface GithubWebhookNotification {
+  action: string;
+  kind: string;
+  priority: NotificationPriority;
+  summary: string;
+  terminal: boolean;
+  metadata: GithubWebhookMetadata & { pullRequestNumber: number; repositoryId: number; installationId: number };
+  payload: Record<string, unknown>;
+}
+
+export interface GithubWebhookDispatchDependencies {
+  controller: MountedMastraCode['controller'];
+  listSubscriptions?: (
+    target: GithubWebhookPullRequestTarget,
+  ) => Promise<GithubSignalSubscriptionRow[]>;
+  retireSubscription?: (id: string) => Promise<void>;
+  onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
+}
 
 function normalizeHeader(value: string | undefined | null): string | null {
   if (!value) return null;
@@ -94,6 +123,10 @@ function getNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function getBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): GithubWebhookMetadata {
   const { event, deliveryId, payload } = parsed;
   const repository = getObject(payload.repository);
@@ -101,20 +134,185 @@ export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): Git
   const pullRequest = getObject(payload.pull_request);
   const sender = getObject(payload.sender);
   const installation = getObject(payload.installation);
+  const issuePullRequest = getObject(issue?.pull_request);
 
   return {
     event,
     action: getString(payload.action),
     deliveryId,
     repository: getString(repository?.full_name),
+    repositoryId: getNumber(repository?.id),
     issueNumber: getNumber(issue?.number),
-    pullRequestNumber: getNumber(pullRequest?.number),
+    pullRequestNumber:
+      getNumber(pullRequest?.number) ?? (event === 'issue_comment' && issuePullRequest ? getNumber(issue?.number) : undefined),
     sender: getString(sender?.login),
     installationId: getNumber(installation?.id),
   };
 }
 
-export async function handleGithubWebhook(c: Context): Promise<GithubWebhookResult> {
+function notificationSummary(metadata: GithubWebhookMetadata, label: string): string {
+  const actor = metadata.sender ? `${metadata.sender} ` : '';
+  return `${actor}${label} on ${metadata.repository}#${metadata.pullRequestNumber}`;
+}
+
+export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhookNotification | undefined {
+  const metadata = normalizeGithubWebhookMetadata(parsed);
+  const { event, payload } = parsed;
+  const action = metadata.action;
+  if (!action || !metadata.repositoryId || !metadata.installationId || !metadata.pullRequestNumber || !metadata.repository) {
+    return undefined;
+  }
+
+  let priority: NotificationPriority;
+  let kind: string;
+  let label: string;
+  let terminal = false;
+
+  if (event === 'pull_request_review' && action === 'submitted') {
+    const state = getString(getObject(payload.review)?.state)?.toLowerCase().replaceAll('_', '-');
+    priority = state === 'approved' || state === 'changes-requested' ? 'urgent' : 'high';
+    kind = state === 'approved' ? 'review-approved' : state === 'changes-requested' ? 'review-changes-requested' : 'review-submitted';
+    label = state === 'approved' ? 'approved the pull request' : state === 'changes-requested' ? 'requested changes' : 'submitted a review';
+  } else if (event === 'pull_request' && action === 'closed') {
+    const merged = getBoolean(getObject(payload.pull_request)?.merged) === true;
+    priority = 'urgent';
+    kind = merged ? 'pull-request-merged' : 'pull-request-closed';
+    label = merged ? 'merged the pull request' : 'closed the pull request';
+    terminal = true;
+  } else if (event === 'issue_comment' && action === 'created') {
+    priority = 'high';
+    kind = 'issue-comment-created';
+    label = 'commented';
+  } else if (event === 'pull_request_review_comment' && action === 'created') {
+    priority = 'high';
+    kind = 'review-comment-created';
+    label = 'left a review comment';
+  } else if (event === 'pull_request' && action === 'reopened') {
+    priority = 'high';
+    kind = 'pull-request-reopened';
+    label = 'reopened the pull request';
+  } else if (event === 'pull_request_review' && action === 'dismissed') {
+    priority = 'high';
+    kind = 'review-dismissed';
+    label = 'dismissed a review';
+  } else if (
+    event === 'pull_request' &&
+    ['synchronize', 'ready_for_review', 'converted_to_draft', 'assigned', 'unassigned', 'review_requested', 'review_request_removed'].includes(
+      action,
+    )
+  ) {
+    priority = 'medium';
+    kind = `pull-request-${action.replaceAll('_', '-')}`;
+    label = action.replaceAll('_', ' ');
+  } else if (
+    event === 'pull_request' &&
+    ['edited', 'labeled', 'unlabeled', 'milestoned', 'demilestoned'].includes(action)
+  ) {
+    priority = 'low';
+    kind = `pull-request-${action.replaceAll('_', '-')}`;
+    label = action.replaceAll('_', ' ');
+  } else {
+    return undefined;
+  }
+
+  return {
+    action,
+    kind,
+    priority,
+    summary: notificationSummary(metadata, label),
+    terminal,
+    metadata: {
+      ...metadata,
+      pullRequestNumber: metadata.pullRequestNumber,
+      repositoryId: metadata.repositoryId,
+      installationId: metadata.installationId,
+    },
+    payload,
+  };
+}
+
+async function resolveSubscriptionSession(
+  controller: MountedMastraCode['controller'],
+  subscription: GithubSignalSubscriptionRow,
+) {
+  const scope = subscription.sessionScope || undefined;
+  let session = await controller.getSessionByResource(subscription.resourceId, scope);
+  if (!session) {
+    const tags = {
+      githubProjectId: subscription.githubProjectId,
+      ...(scope ? { projectPath: scope } : {}),
+    };
+    session = await controller.createSession({
+      id: subscription.sessionId,
+      ownerId: subscription.ownerId,
+      resourceId: subscription.resourceId,
+      scope,
+      tags,
+    });
+  }
+  if (session.thread.getId() !== subscription.threadId) {
+    await session.thread.switch({ threadId: subscription.threadId, emitEvent: false });
+  }
+  if (session.thread.getId() !== subscription.threadId) {
+    throw new Error(`Session ${subscription.sessionId} did not bind thread ${subscription.threadId}.`);
+  }
+  return session;
+}
+
+export async function dispatchGithubWebhook(
+  parsed: ParsedGithubWebhook,
+  dependencies: GithubWebhookDispatchDependencies,
+): Promise<{ delivered: number; failed: number; ignored: boolean }> {
+  const notification = classifyGithubWebhook(parsed);
+  if (!notification) return { delivered: 0, failed: 0, ignored: true };
+
+  const target = {
+    installationId: notification.metadata.installationId,
+    repoId: notification.metadata.repositoryId,
+    pullRequestNumber: notification.metadata.pullRequestNumber,
+  };
+  const listSubscriptions = dependencies.listSubscriptions ?? listPullRequestSubscriptionsForWebhook;
+  const retireSubscription = dependencies.retireSubscription ?? retirePullRequestSubscription;
+  const subscriptions = await listSubscriptions(target);
+  let delivered = 0;
+  let failed = 0;
+
+  for (const subscription of subscriptions) {
+    try {
+      const session = await resolveSubscriptionSession(dependencies.controller, subscription);
+      const result = await session.sendNotificationSignal({
+        source: 'github',
+        kind: notification.kind,
+        summary: notification.summary,
+        priority: notification.priority,
+        payload: notification.payload,
+        sourceId: parsed.deliveryId,
+        dedupeKey: `${parsed.deliveryId}:${subscription.sessionId}:${subscription.threadId}`,
+        coalesceKey: `github:${subscription.repoId}:pull-request:${subscription.pullRequestNumber}`,
+        metadata: {
+          event: notification.metadata.event,
+          action: notification.action,
+          repository: notification.metadata.repository,
+          pullRequestNumber: notification.metadata.pullRequestNumber,
+          deliveryId: parsed.deliveryId,
+        },
+      });
+      await Promise.all([result.persisted, result.accepted].filter(Boolean));
+      if (notification.terminal) await retireSubscription(subscription.id);
+      delivered += 1;
+    } catch (error) {
+      failed += 1;
+      dependencies.onTargetError?.(subscription, error);
+    }
+  }
+
+  return { delivered, failed, ignored: false };
+}
+
+export async function handleGithubWebhook(
+  c: Context,
+  dependencies?: GithubWebhookDispatchDependencies,
+): Promise<GithubWebhookResult> {
   const parsed = await parseGithubWebhook(c);
   if ('status' in parsed) return parsed;
 
@@ -122,6 +320,14 @@ export async function handleGithubWebhook(c: Context): Promise<GithubWebhookResu
     return { status: 202, body: { ok: true, ignored: true } };
   }
 
-  console.log('[GitHub Webhook]', normalizeGithubWebhookMetadata(parsed));
-  return { status: 202, body: { ok: true } };
+  if (!dependencies) {
+    console.log('[GitHub Webhook]', normalizeGithubWebhookMetadata(parsed));
+    return { status: 202, body: { ok: true } };
+  }
+
+  const result = await dispatchGithubWebhook(parsed, dependencies);
+  if (result.failed > 0) {
+    console.warn(`[GitHub Webhook] ${result.failed} subscribed target(s) failed for delivery ${parsed.deliveryId}.`);
+  }
+  return { status: 202, body: { ok: true, ...(result.ignored ? { ignored: true as const } : {}) } };
 }

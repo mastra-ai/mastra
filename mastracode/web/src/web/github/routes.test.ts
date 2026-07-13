@@ -25,8 +25,9 @@ interface Tables {
   projects: Array<Record<string, any>>;
   sandboxes: Array<Record<string, any>>;
   worktrees: Array<Record<string, any>>;
+  subscriptions: Array<Record<string, any>>;
 }
-const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [] };
+const tables: Tables = { installations: [], projects: [], sandboxes: [], worktrees: [], subscriptions: [] };
 
 vi.mock('./db', () => {
   // Minimal chainable drizzle-like stub keyed off the table object identity.
@@ -237,6 +238,7 @@ function tableKind(table: any): keyof Tables {
   if (table === installationsRef) return 'installations';
   if (table === worktreesRef) return 'worktrees';
   if (table === sandboxesRef) return 'sandboxes';
+  if (table === subscriptionsRef) return 'subscriptions';
   return 'projects';
 }
 // We can't import the actual schema objects easily into the closure used by the
@@ -244,6 +246,7 @@ function tableKind(table: any): keyof Tables {
 let installationsRef: any;
 let worktreesRef: any;
 let sandboxesRef: any;
+let subscriptionsRef: any;
 
 // Drizzle columns carry their snake_case DB `.name`, but our fake rows use the
 // camelCase JS keys. Build a DB-name → JS-key map per table so predicates match.
@@ -308,13 +311,14 @@ function deleteRows(table: any, cond?: any): void {
 
 // Resolve schema refs after import.
 import { listInstallationRepos, listUserInstallations } from './client';
-import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
+import { githubInstallations, githubProjectSandboxes, githubSignalSubscriptions, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
 sandboxesRef = githubProjectSandboxes;
+subscriptionsRef = githubSignalSubscriptions;
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string } | null) {
+function buildApp(user: { workosId: string; organizationId?: string } | null, controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller']) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) {
@@ -325,7 +329,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null) {
     }
     await next();
   });
-  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111' }));
+  mountApiRoutes(app as any, buildGithubRoutes({ baseUrl: 'http://localhost:4111', controller }));
   return app;
 }
 
@@ -334,6 +338,7 @@ beforeEach(() => {
   tables.projects = [];
   tables.sandboxes = [];
   tables.worktrees = [];
+  tables.subscriptions = [];
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
@@ -424,6 +429,53 @@ describe('webhook route', () => {
       sender: 'grace',
       installationId: 99,
     });
+  });
+
+  it('dispatches a verified PR webhook through the configured controller', async () => {
+    const sendNotificationSignal = vi.fn(async () => ({ record: { id: 'notification-1' }, decision: { action: 'deliver' } }));
+    const session = {
+      thread: { getId: () => 'thread-1', switch: vi.fn() },
+      sendNotificationSignal,
+    };
+    const controller = {
+      getSessionByResource: vi.fn(async () => session),
+      createSession: vi.fn(),
+    } as unknown as NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'];
+    tables.subscriptions.push({
+      id: 'subscription-1',
+      orgId: 'org1',
+      installationId: 7,
+      githubProjectId: 'project-1',
+      repoId: 99,
+      repoFullName: 'octo/hello',
+      pullRequestNumber: 34,
+      sessionId: 'session-1',
+      ownerId: 'owner-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      sessionScope: '/worktrees/a',
+      source: 'explicit-tool',
+    });
+
+    const res = await buildApp(null, controller).request(
+      signedGithubWebhookRequest('issue_comment', {
+        action: 'created',
+        repository: { id: 99, full_name: 'octo/hello' },
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/repos/octo/hello/pulls/34' } },
+        sender: { login: 'grace' },
+        installation: { id: 7 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(controller!.getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
+    expect(sendNotificationSignal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priority: 'high',
+        dedupeKey: 'delivery-1:session-1:thread-1',
+      }),
+    );
   });
 
   it('rejects invalid signatures without logging', async () => {

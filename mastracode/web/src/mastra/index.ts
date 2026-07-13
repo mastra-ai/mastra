@@ -94,6 +94,7 @@ const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undef
 // (local libSQL file).
 const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
+  disableGithubSignals: true,
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
     : {}),

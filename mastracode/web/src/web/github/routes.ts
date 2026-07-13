@@ -11,6 +11,7 @@
  * so the SPA can cleanly hide all GitHub UI.
  */
 
+import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import { and, eq } from 'drizzle-orm';
@@ -79,6 +80,8 @@ export interface MountGithubRoutesOptions {
   baseUrl?: string;
   /** Explicit OAuth callback URI; defaults to `<baseUrl>/auth/github/callback`. */
   redirectUri?: string;
+  /** Controller used to route verified webhook notifications to exact subscribed sessions. */
+  controller?: MountedMastraCode['controller'];
 }
 
 function pullRequestNumberFromUrl(value: string, expectedRepo: string): number | undefined {
@@ -240,7 +243,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        const result = await handleGithubWebhook(loose(c));
+        const result = await handleGithubWebhook(
+          loose(c),
+          options.controller
+            ? {
+                controller: options.controller,
+                onTargetError: (subscription, error) => {
+                  console.warn(
+                    `[GitHub Webhook] Delivery failed for subscription ${subscription.id} (${subscription.resourceId}/${subscription.threadId}).`,
+                    error,
+                  );
+                },
+              }
+            : undefined,
+        );
         return c.json(result.body, result.status);
       },
     }),

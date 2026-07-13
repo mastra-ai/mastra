@@ -197,7 +197,7 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
   return [
     ...buildFsRoutes({ root: deps.fsRoot }),
     ...buildConfigRoutes({ controller: deps.controller, authStorage: deps.authStorage }),
-    ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin }) : []),
+    ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin, controller: deps.controller }) : []),
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
   ];
