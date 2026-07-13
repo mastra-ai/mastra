@@ -284,7 +284,10 @@ export class BatchPartsProcessor implements Processor<'batch-parts'> {
 }
 
 function findSentenceBoundaryIndex(text: string): number | null {
-  if (/\n\s*$/u.test(text) && text.trim().length > 0) return text.length;
+  const lastNewlineIndex = text.lastIndexOf('\n');
+  if (lastNewlineIndex >= 0 && text.slice(lastNewlineIndex + 1).trim().length === 0 && text.trim().length > 0) {
+    return text.length;
+  }
 
   for (let index = 0; index < text.length; index++) {
     const char = text[index];
@@ -319,13 +322,51 @@ function findSectionBoundaryIndex(text: string): number | null {
   const fenceEndIndex = findClosedFenceEndIndex(text);
   if (fenceEndIndex !== null) return fenceEndIndex;
 
-  const listBlockBoundaryMatch = /(?:^|\n)\s*(?:[-*+]\s+|\d+\.\s+)\S[\s\S]*?\n\s*\n/u.exec(text);
-  if (listBlockBoundaryMatch) return text.length;
-
-  const blankLineMatch = /\n\s*\n/u.exec(text);
-  if (blankLineMatch) return text.length;
+  if (hasListBlockBoundary(text)) return text.length;
+  if (hasBlankLine(text)) return text.length;
 
   return null;
+}
+
+function hasListBlockBoundary(text: string): boolean {
+  let foundListItem = false;
+  const lines = text.split('\n');
+
+  for (let index = 0; index < lines.length - 1; index++) {
+    const line = lines[index]!;
+    if (isListItemLine(line)) {
+      foundListItem = true;
+    } else if (foundListItem && index > 0 && line.trim().length === 0) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function isListItemLine(line: string): boolean {
+  const content = line.trimStart();
+  const first = content[0];
+  if ((first === '-' || first === '*' || first === '+') && /\s/u.test(content[1] ?? '')) {
+    return content.slice(2).trim().length > 0;
+  }
+
+  let index = 0;
+  while (isDigit(content[index])) index++;
+  return (
+    index > 0 &&
+    content[index] === '.' &&
+    /\s/u.test(content[index + 1] ?? '') &&
+    content.slice(index + 2).trim().length > 0
+  );
+}
+
+function hasBlankLine(text: string): boolean {
+  const lines = text.split('\n');
+  for (let index = 1; index < lines.length - 1; index++) {
+    if (lines[index]!.trim().length === 0) return true;
+  }
+  return false;
 }
 
 function findClosedFenceEndIndex(text: string): number | null {
