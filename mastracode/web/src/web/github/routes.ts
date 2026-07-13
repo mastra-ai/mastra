@@ -46,6 +46,7 @@ import {
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyState } from './config';
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
+import { handleGithubWebhook } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
@@ -217,6 +218,17 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   if (!isGithubFeatureEnabled()) {
     return routes;
   }
+
+  routes.push(
+    registerApiRoute('/web/github/webhook', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const result = await handleGithubWebhook(loose(c));
+        return c.json(result.body, result.status);
+      },
+    }),
+  );
 
   const redirectUri = options.redirectUri ?? `${(options.baseUrl ?? '').replace(/\/$/, '')}/auth/github/callback`;
 
