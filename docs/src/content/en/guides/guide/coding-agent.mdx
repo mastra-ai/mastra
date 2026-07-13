@@ -1,11 +1,11 @@
 ---
 title: "Guide: Building a coding agent"
-description: Build a coding agent that can inspect and edit files in a local Mastra workspace.
+description: Build the foundation for your own interactive coding agent with Mastra.
 ---
 
 # Building a coding agent
 
-In this guide, you'll build a coding agent that works inside your local Mastra project. You'll learn how to create coding instructions with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt), configure an agent with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent), and register it with Mastra.
+In this guide, you'll build the foundation for your own interactive coding agent—an application in the same category as Mastra Code, Claude Code, or Codex. You'll create branded coding instructions with [`buildBasePrompt()`](/reference/coding-agent/build-base-prompt), configure the agent and its local workspace with [`createCodingAgent()`](/reference/coding-agent/create-coding-agent), and register it with Mastra. After testing the agent's core behavior in Studio, you'll see how to connect it to a terminal UI or another application.
 
 ## Prerequisites
 
@@ -56,7 +56,7 @@ export const codingAgent = createCodingAgent({
 // highlight-end
 ```
 
-Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` sets the directory that the workspace can access. In this development-server example, `process.cwd()` resolves to `src/mastra/public`, so the agent is limited to that workspace directory. Any configuration you pass to the factory takes precedence over its defaults.
+Replace the branding values with the name and co-author details for your agent. `createCodingAgent()` supplies a local filesystem and sandbox workspace, along with defaults for recovering from transient provider errors. The `basePath` scopes the filesystem tools and sets the initial working directory for commands. It isn't an operating-system security boundary: the default local sandbox runs commands directly on the host without isolation, so commands can access paths outside that directory. In this development-server example, `process.cwd()` resolves to `src/mastra/public`, so the filesystem tools use that directory. Any configuration you pass to the factory takes precedence over its defaults.
 
 ## Register the coding agent
 
@@ -107,16 +107,29 @@ The agent reads `project-notes.md` from the configured workspace and reports wha
 - Owner: Platform team
 ```
 
+## Take the agent beyond Studio
+
+Studio is a convenient place to verify the agent, but it isn't the required interface. `createCodingAgent()` returns a standard Mastra `Agent`, so you can connect the same agent to a terminal, desktop, or web application.
+
+A terminal UI can collect the user's input and conversation history, pass them to [`codingAgent.stream()`](/reference/streaming/agents/stream), render `textStream` as it arrives, and inspect `fullStream` to display tool activity. Set `basePath` to the project the user opens. If the terminal process starts in that project directory, the existing `process.cwd()` value already provides that path.
+
+The default local workspace is intended for trusted local development. It exposes file-writing tools and host command execution without isolation. Before accepting untrusted prompts or distributing the agent to other users, add [sandbox isolation](/docs/workspace/sandbox) and a [tool permission or approval policy](/docs/agents/agent-approval). When you use the `Agent` directly, your application owns these safety controls.
+
+You can import the agent directly into a Node.js terminal application. If the interface runs as a separate process, keep the agent registered with Mastra and call it through the [Client SDK Agents API](/reference/client-js/agents). In that architecture, the server controls `basePath` and can access only projects available on its filesystem. Selecting a directory in a remote client doesn't upload or mount it, so your server must map each user to an available project and validate that mapping.
+
+For a richer collaborative product with persistent sessions, tool approvals, modes, and UI event state, see the [AgentController overview](/docs/agent-controller/overview). AgentController is currently a beta feature; the direct `Agent` streaming path remains available when you want to build the application runtime yourself.
+
 ## Next steps
 
-You can extend this coding agent to:
+You can extend this foundation to:
 
 - Add project-specific instructions for testing and code style
 - Supply extra agent tools for services outside the local workspace
-- Configure a different `basePath` for a dedicated project directory
+- Build a terminal interface that shows streaming text and workspace tool activity
 
 Learn more:
 
 - [`createCodingAgent()` reference](/reference/coding-agent/create-coding-agent)
 - [`buildBasePrompt()` reference](/reference/coding-agent/build-base-prompt)
+- [`Agent.stream()` reference](/reference/streaming/agents/stream)
 - [Workspace overview](/docs/workspace/overview)
