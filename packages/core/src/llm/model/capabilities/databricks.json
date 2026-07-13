@@ -21,6 +21,9 @@
     "databricks-gpt-5-4-mini",
     "databricks-gpt-5-4-nano",
     "databricks-gpt-5-5",
+    "databricks-gpt-5-6-luna",
+    "databricks-gpt-5-6-sol",
+    "databricks-gpt-5-6-terra",
     "databricks-gpt-5-mini",
     "databricks-gpt-5-nano",
     "databricks-kimi-k2-7-code"
