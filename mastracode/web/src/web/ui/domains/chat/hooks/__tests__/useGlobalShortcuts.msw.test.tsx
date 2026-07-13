@@ -150,6 +150,18 @@ describe('useGlobalShortcuts', () => {
     expectOverlay('shortcuts', 'closed');
   });
 
+  it('given Cmd/Ctrl+K is pressed, when a retained overlay is open, then it stays open', async () => {
+    seedProject();
+    useAgentControllerHandlers();
+    renderProbe(THREAD_ID);
+    await ready();
+
+    await userEvent.click(screen.getByRole('button', { name: 'open settings' }));
+    await userEvent.keyboard('{Control>}k{/Control}');
+
+    expectOverlay('settings', 'open');
+  });
+
   it('given several overlays are open, when Escape is pressed repeatedly, then they close in priority order shortcuts → settings → sidebar', async () => {
     seedProject();
     useAgentControllerHandlers();

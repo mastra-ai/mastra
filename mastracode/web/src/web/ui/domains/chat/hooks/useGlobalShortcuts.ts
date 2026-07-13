@@ -19,11 +19,6 @@ export function useGlobalShortcuts() {
   });
 
   useKeyDown({
-    'k': e => {
-      if (!e.metaKey && !e.ctrlKey) return;
-      e.preventDefault();
-      overlays.toggle('palette');
-    },
     '?': e => {
       const target = e.target as HTMLElement | null;
       const typing = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA' || target?.isContentEditable;
@@ -34,10 +29,6 @@ export function useGlobalShortcuts() {
     escape: () => {
       const projectsForcedOpen = overlays.isOpen('projects') || projects.length === 0;
       if (projectsForcedOpen) return;
-      if (overlays.isOpen('palette')) {
-        overlays.close('palette');
-        return;
-      }
       if (overlays.isOpen('shortcuts')) {
         overlays.close('shortcuts');
         return;
