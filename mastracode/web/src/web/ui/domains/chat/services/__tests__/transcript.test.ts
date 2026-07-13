@@ -122,3 +122,30 @@ describe('transcript reducer message entries', () => {
   });
 
 });
+
+describe('transcript reducer error notices', () => {
+  function errorNoticeText(event: Record<string, unknown>): string {
+    const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
+    const notice = state.entries.find(entry => entry.kind === 'notice');
+    if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
+    return notice.text;
+  }
+
+  it('renders a string error payload verbatim', () => {
+    expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
+  });
+
+  it('renders the message from an object error payload', () => {
+    expect(errorNoticeText({ error: { message: 'model quota exhausted' } })).toBe('model quota exhausted');
+  });
+
+  it('falls back to errorType when the payload has no message', () => {
+    expect(errorNoticeText({ error: {}, errorType: 'provider' })).toBe(
+      'Run failed (provider). Check the server logs for details.',
+    );
+  });
+
+  it('falls back to a generic hint when the payload is empty', () => {
+    expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
+  });
+});

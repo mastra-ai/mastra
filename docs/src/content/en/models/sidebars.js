@@ -118,6 +118,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/ai-router',
+          label: 'AI-ROUTER',
+        },
+        {
+          type: 'doc',
           id: 'providers/aihubmix',
           label: 'AIHubMix',
         },
@@ -198,6 +203,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/blueclaw',
+          label: 'Blue Claw',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -258,6 +268,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/daoxe',
+          label: 'DaoXE',
+        },
+        {
+          type: 'doc',
           id: 'providers/databricks',
           label: 'Databricks',
         },
@@ -275,6 +290,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/dinference',
           label: 'DInference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/empiriolabs',
+          label: 'EmpirioLabs AI',
         },
         {
           type: 'doc',
@@ -355,6 +375,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/inference',
           label: 'Inference',
+        },
+        {
+          type: 'doc',
+          id: 'providers/inferx',
+          label: 'InferX',
         },
         {
           type: 'doc',
@@ -463,6 +488,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/model-oracle-ai',
+          label: 'Model Oracle AI',
+        },
+        {
+          type: 'doc',
           id: 'providers/modelscope',
           label: 'ModelScope',
         },
@@ -560,6 +590,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/perplexity-agent',
           label: 'Perplexity Agent',
+        },
+        {
+          type: 'doc',
+          id: 'providers/pioneer',
+          label: 'Pioneer',
         },
         {
           type: 'doc',
@@ -705,6 +740,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/umans-ai-coding-plan',
           label: 'Umans AI Coding Plan',
+        },
+        {
+          type: 'doc',
+          id: 'providers/unorouter',
+          label: 'UnoRouter',
         },
         {
           type: 'doc',

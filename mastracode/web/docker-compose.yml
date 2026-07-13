@@ -21,6 +21,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-pass}
       POSTGRES_DB: ${POSTGRES_DB:-mastracode_web}
     volumes:
+      # postgres:18+ images require the mount at /var/lib/postgresql (data
+      # lives in a version-specific subdirectory to support pg_upgrade).
       - mastracode-web-pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mastracode_web}']

@@ -7363,6 +7363,60 @@ export interface PostAgentsAgentIdResumeStream_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /agents/:agentId/recover
+// ============================================================================
+export type PostAgentsAgentIdRecover_PathParams = {
+  /** Unique identifier for the agent */
+  agentId: string;
+};
+
+export type PostAgentsAgentIdRecover_Body = {
+  runId: string;
+  requestContext?:
+    | {
+        [key: string]: any;
+      }
+    | undefined;
+  versions?:
+    | {
+        agents?:
+          | {
+              [key: string]:
+                | {
+                    versionId: string;
+                  }
+                | {
+                    status: 'draft' | 'published';
+                  };
+            }
+          | undefined;
+        defaultStatus?: ('draft' | 'published') | undefined;
+      }
+    | undefined;
+};
+
+export type PostAgentsAgentIdRecover_Response = any;
+
+export type PostAgentsAgentIdRecover_Request = Simplify<
+  (PostAgentsAgentIdRecover_PathParams extends never ? {} : { params: PostAgentsAgentIdRecover_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostAgentsAgentIdRecover_Body extends never
+      ? {}
+      : {} extends PostAgentsAgentIdRecover_Body
+        ? { body?: PostAgentsAgentIdRecover_Body }
+        : { body: PostAgentsAgentIdRecover_Body })
+>;
+
+export interface PostAgentsAgentIdRecover_RouteContract {
+  pathParams: PostAgentsAgentIdRecover_PathParams;
+  queryParams: never;
+  body: PostAgentsAgentIdRecover_Body;
+  request: PostAgentsAgentIdRecover_Request;
+  response: PostAgentsAgentIdRecover_Response;
+  responseType: 'stream';
+}
+
+// ============================================================================
 // Route: POST /agents/:agentId/approve-tool-call-generate
 // ============================================================================
 export type PostAgentsAgentIdApproveToolCallGenerate_PathParams = {
@@ -92572,6 +92626,7 @@ export interface RouteTypes {
   'GET /agents/:agentId/suspended-runs': GetAgentsAgentIdSuspendedRuns_RouteContract;
   'POST /agents/:agentId/decline-tool-call': PostAgentsAgentIdDeclineToolCall_RouteContract;
   'POST /agents/:agentId/resume-stream': PostAgentsAgentIdResumeStream_RouteContract;
+  'POST /agents/:agentId/recover': PostAgentsAgentIdRecover_RouteContract;
   'POST /agents/:agentId/approve-tool-call-generate': PostAgentsAgentIdApproveToolCallGenerate_RouteContract;
   'POST /agents/:agentId/decline-tool-call-generate': PostAgentsAgentIdDeclineToolCallGenerate_RouteContract;
   'POST /agents/:agentId/approve-network-tool-call': PostAgentsAgentIdApproveNetworkToolCall_RouteContract;
@@ -93161,6 +93216,9 @@ export interface Client {
   };
   '/agents/:agentId/queue-message': {
     POST: PostAgentsAgentIdQueueMessage_RouteContract;
+  };
+  '/agents/:agentId/recover': {
+    POST: PostAgentsAgentIdRecover_RouteContract;
   };
   '/agents/:agentId/resume-stream': {
     POST: PostAgentsAgentIdResumeStream_RouteContract;

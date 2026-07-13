@@ -56,9 +56,43 @@ vi.mock('./db', () => {
     update: (table: any) => ({
       set: (vals: any) => ({ where: async () => updateRows(table, vals) }),
     }),
+    delete: (table: any) => ({
+      where: async (cond: any) => deleteRows(table, cond),
+    }),
   });
   return { getAppDb: () => makeDb() };
 });
+
+const listRepoOpenIssues = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+  issues: [
+    {
+      number: 12,
+      title: 'Fix flaky test',
+      url: 'https://github.com/octo/hello/issues/12',
+      author: 'ada',
+      labels: ['bug'],
+      comments: 3,
+      createdAt: '2026-07-01T00:00:00Z',
+      updatedAt: '2026-07-02T00:00:00Z',
+    },
+  ],
+  nextPage: null as number | null,
+}));
+const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
+  pullRequests: [
+    {
+      number: 34,
+      title: 'Add factory pages',
+      url: 'https://github.com/octo/hello/pull/34',
+      author: 'grace',
+      baseBranch: 'main',
+      headBranch: 'feat/factory',
+      createdAt: '2026-07-03T00:00:00Z',
+      updatedAt: '2026-07-04T00:00:00Z',
+    },
+  ],
+  nextPage: null as number | null,
+}));
 
 vi.mock('./client', () => ({
   buildInstallUrl: (state: string) => `https://github.com/apps/test/installations/new?state=${state}`,
@@ -90,6 +124,10 @@ vi.mock('./client', () => ({
       : null,
   ),
   mintInstallationToken: vi.fn(async () => 'install-token'),
+  listRepoOpenIssues: (installationId: number, repoFullName: string, page: number) =>
+    listRepoOpenIssues(installationId, repoFullName, page),
+  listRepoOpenPullRequests: (installationId: number, repoFullName: string, page: number) =>
+    listRepoOpenPullRequests(installationId, repoFullName, page),
 }));
 
 const ensureProjectSandbox = vi.fn(async (_row: any, onProgress?: (e: any) => void) => {
@@ -147,6 +185,7 @@ vi.mock('./sandbox', () => {
 let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
+  getGithubFeatureDiagnostics: () => ({}),
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
@@ -253,8 +292,13 @@ function insertIfAbsent(table: any, vals: any, opts: any): any | undefined {
 function updateRows(table: any, vals: any): void {
   for (const row of tables[tableKind(table)]) Object.assign(row, vals);
 }
+function deleteRows(table: any, cond?: any): void {
+  const kind = tableKind(table);
+  tables[kind] = tables[kind].filter(row => !matches(table, row, cond)) as any;
+}
 
 // Resolve schema refs after import.
+import { listInstallationRepos, listUserInstallations } from './client';
 import { githubInstallations, githubProjectSandboxes, githubWorktrees } from './schema';
 installationsRef = githubInstallations;
 worktreesRef = githubWorktrees;
@@ -293,6 +337,8 @@ beforeEach(() => {
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
+  listRepoOpenIssues.mockClear();
+  listRepoOpenPullRequests.mockClear();
 });
 
 afterEach(() => {
@@ -323,17 +369,121 @@ describe('status route', () => {
   });
 });
 
+describe('repos route', () => {
+  const install = (installationId: number, accountLogin: string) => {
+    tables.installations.push({ orgId: 'org1', userId: 'u1', installationId, accountLogin, accountType: 'User' });
+  };
+
+  // The `./client` mock's default implementation must survive these tests
+  // (clearAllMocks does not restore implementations).
+  const defaultImpl = async (installationId: number) => [
+    {
+      id: 99,
+      fullName: 'octo/hello',
+      name: 'hello',
+      owner: 'octo',
+      defaultBranch: 'main',
+      private: false,
+      installationId,
+    },
+  ];
+  afterEach(() => {
+    vi.mocked(listInstallationRepos).mockImplementation(defaultImpl);
+  });
+
+  it('prunes installations GitHub no longer knows (404) and keeps listing the rest', async () => {
+    install(7, 'octo');
+    install(8, 'stale');
+    vi.mocked(listInstallationRepos).mockImplementation(async (installationId: number) => {
+      if (installationId === 8) {
+        throw Object.assign(new Error('Not Found'), { status: 404 });
+      }
+      return defaultImpl(installationId);
+    });
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.repos).toHaveLength(1);
+    expect(json.repos[0].fullName).toBe('octo/hello');
+    // The stale row is gone; the live one remains.
+    expect(tables.installations.map(i => i.installationId)).toEqual([7]);
+    expect(String(errorSpy.mock.calls[0]![0])).toContain('stale GitHub installation 8');
+    errorSpy.mockRestore();
+  });
+
+  it('does not prune on non-404 errors', async () => {
+    install(7, 'octo');
+    vi.mocked(listInstallationRepos).mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
+
+    // Hono's default onError turns the rethrown error into a 500.
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/repos');
+    expect(res.status).toBe(500);
+    expect(tables.installations).toHaveLength(1);
+  });
+});
+
 describe('auth scoping', () => {
   it('401s when no user is present', async () => {
     const res = await buildApp(null).request('/web/github/repos');
     expect(res.status).toBe(401);
   });
+
+  // Platform-adapter topology: custom apiRoutes run on an isolated sub-app
+  // context where the outer gate's stashed user is invisible. The routes must
+  // resolve the session cookie themselves (ensureWebAuthUser), not rely on the
+  // gate's c.set(...).
+  describe('without the gate (isolated custom-route context)', () => {
+    it('status resolves the session from the cookie', async () => {
+      cookieUser = { workosId: 'u1' };
+      tables.installations.push({
+        orgId: 'org1',
+        userId: 'u1',
+        installationId: 7,
+        accountLogin: 'octo',
+        accountType: 'User',
+      });
+      const res = await buildApp(null).request('/web/github/status');
+      expect(res.status).toBe(200);
+      const json = await res.json();
+      expect(json.enabled).toBe(true);
+      expect(json.connected).toBe(true);
+    });
+
+    it('org-tenant routes resolve the session from the cookie', async () => {
+      cookieUser = { workosId: 'u1' };
+      const res = await buildApp(null).request('/web/github/repos');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ repos: [] });
+    });
+
+    it('status still 401s with auth_required when there is no session', async () => {
+      cookieUser = null;
+      const res = await buildApp(null).request('/web/github/status');
+      expect(res.status).toBe(401);
+      expect(await res.json()).toEqual({ error: 'unauthorized', reason: 'auth_required' });
+    });
+  });
 });
 
 describe('connect + callback', () => {
-  it('redirects connect to the install URL with a signed state', async () => {
+  it('redirects connect to the OAuth identify URL with a signed state', async () => {
+    // Identify-first: the install page dead-ends for already-installed apps,
+    // so connect verifies the user via OAuth and lets the callback decide
+    // whether an install is actually needed.
     const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect');
     expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+  });
+
+  it('redirects connect?manage=1 straight to the install URL', async () => {
+    // "Manage GitHub connection" must land on GitHub's installation page —
+    // the identify bounce completes invisibly for already-authorized users.
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/connect?manage=1');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/installations/new');
     expect(res.headers.get('location')).toContain('state=state.org1.u1');
   });
 
@@ -388,6 +538,27 @@ describe('connect + callback', () => {
     // No code → bounce through OAuth identify, persist nothing.
     expect(res.status).toBe(302);
     expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it("bounces a GitHub settings 'Save' redirect (no state) through OAuth identify", async () => {
+    // Updating an existing installation redirects here with installation_id +
+    // setup_action but no signed state. Re-sync via a fresh identify bounce
+    // instead of erroring out.
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/auth/github/callback?installation_id=7&setup_action=update',
+    );
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/login/oauth/authorize');
+    expect(res.headers.get('location')).toContain('state=state.org1.u1');
+    expect(tables.installations).toHaveLength(0);
+  });
+
+  it('redirects a verified user with no installations to the install URL', async () => {
+    vi.mocked(listUserInstallations).mockResolvedValueOnce([]);
+    const res = await buildApp({ workosId: 'u1' }).request('/auth/github/callback?state=state.org1.u1&code=abc');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('/installations/new');
     expect(tables.installations).toHaveLength(0);
   });
 });
@@ -576,6 +747,108 @@ function postJson(app: ReturnType<typeof buildApp>, path: string, body: unknown)
     body: JSON.stringify(body),
   });
 }
+
+describe('issues route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(401);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('403s for a personal (no-org) account', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1', organizationId: undefined }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(403);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(404);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('lists open issues for the project repo', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.issues).toHaveLength(1);
+    expect(json.issues[0]).toMatchObject({ number: 12, title: 'Fix flaky test', labels: ['bug'] });
+    expect(json.nextPage).toBeNull();
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('forwards the requested page and echoes the next page', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockResolvedValueOnce({ issues: [], nextPage: 3 });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=2');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ issues: [], nextPage: 3 });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 2);
+  });
+
+  it('400s on a malformed page param', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?page=zero');
+    expect(res.status).toBe(400);
+    expect(listRepoOpenIssues).not.toHaveBeenCalled();
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    listRepoOpenIssues.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed', message: 'GitHub unavailable' });
+  });
+});
+
+describe('prs route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(401);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(404);
+    expect(listRepoOpenPullRequests).not.toHaveBeenCalled();
+  });
+
+  it('lists open pull requests for the project repo', async () => {
+    seedMaterializedProject();
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json.pullRequests).toHaveLength(1);
+    expect(json.pullRequests[0]).toMatchObject({ number: 34, title: 'Add factory pages', headBranch: 'feat/factory' });
+    expect(json.nextPage).toBeNull();
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 1);
+  });
+
+  it('forwards the requested page and echoes the next page', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockResolvedValueOnce({ pullRequests: [], nextPage: 4 });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs?page=3');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ pullRequests: [], nextPage: 4 });
+    expect(listRepoOpenPullRequests).toHaveBeenCalledWith(7, 'octo/hello', 3);
+  });
+
+  it('502s when GitHub is unavailable', async () => {
+    seedMaterializedProject();
+    listRepoOpenPullRequests.mockRejectedValueOnce(new Error('GitHub unavailable'));
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/prs');
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'github_fetch_failed' });
+  });
+});
 
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {

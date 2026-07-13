@@ -54,6 +54,7 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
 
     expect(resolveToolsVNext).toHaveBeenCalledTimes(1);
     expect(resolveToolsVNext.mock.calls[0]![0].authorId).toBe('user_abc');
+    expect(resolveToolsVNext.mock.calls[0]![0].scope).toBe('caller-supplied');
   });
 
   it("falls back to 'default' for caller-supplied scope when resourceId is missing", async () => {
@@ -67,6 +68,7 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
 
     expect(resolveToolsVNext).toHaveBeenCalledTimes(1);
     expect(resolveToolsVNext.mock.calls[0]![0].authorId).toBe('default');
+    expect(resolveToolsVNext.mock.calls[0]![0].scope).toBe('caller-supplied');
   });
 
   it('uses SHARED_BUCKET_ID as authorId for shared scope', async () => {
@@ -78,6 +80,7 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
 
     expect(resolveToolsVNext).toHaveBeenCalledTimes(1);
     expect(resolveToolsVNext.mock.calls[0]![0].authorId).toBe(SHARED_BUCKET_ID);
+    expect(resolveToolsVNext.mock.calls[0]![0].scope).toBe('shared');
   });
 
   it('forwards caller authorId as authorId for per-author scope', async () => {
@@ -89,6 +92,7 @@ describe('resolveStoredToolProviders — resolveConnectionAuthorId branches', ()
 
     expect(resolveToolsVNext).toHaveBeenCalledTimes(1);
     expect(resolveToolsVNext.mock.calls[0]![0].authorId).toBe('author_xyz');
+    expect(resolveToolsVNext.mock.calls[0]![0].scope).toBe('per-author');
   });
 });
 

@@ -1,5 +1,75 @@
 # @mastra/playground-ui
 
+## 40.1.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/client-js@1.31.2-alpha.6
+  - @mastra/core@1.51.0-alpha.6
+  - @mastra/react@1.2.5-alpha.6
+
+## 40.1.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+  - @mastra/client-js@1.31.2-alpha.5
+  - @mastra/react@1.2.5-alpha.5
+
+## 40.1.0-alpha.4
+
+### Minor Changes
+
+- Added a shared composable `Plan` component for rendering markdown plan previews with status, copy, action slots, and collapsed-content controls. ([#19155](https://github.com/mastra-ai/mastra/pull/19155))
+
+  ```tsx
+  import {
+    Plan,
+    PlanBody,
+    PlanContent,
+    PlanControls,
+    PlanCopyButton,
+    PlanHeader,
+    PlanHeaderActions,
+    PlanIntro,
+    PlanLabel,
+    PlanMain,
+    PlanPath,
+    PlanTitle,
+  } from '@mastra/playground-ui/components/ai/plan';
+
+  <Plan>
+    <PlanHeader>
+      <PlanLabel />
+      <PlanHeaderActions>
+        <PlanCopyButton content={planMarkdown} />
+      </PlanHeaderActions>
+    </PlanHeader>
+    <PlanBody>
+      <PlanIntro>
+        <PlanTitle>Review migration plan</PlanTitle>
+        <PlanPath>/workspace/.mastracode/plans/migration.md</PlanPath>
+      </PlanIntro>
+      <PlanMain>
+        <PlanContent>{planMarkdown}</PlanContent>
+        <PlanControls />
+      </PlanMain>
+    </PlanBody>
+  </Plan>;
+  ```
+
+### Patch Changes
+
+- Improved command dialogs with accessible labels and keyboard wrapping. ([#19229](https://github.com/mastra-ai/mastra/pull/19229))
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`031931a`](https://github.com/mastra-ai/mastra/commit/031931a715405fb90759b1903c9c25cbf05994af), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+  - @mastra/memory@1.23.0-alpha.3
+  - @mastra/client-js@1.31.2-alpha.4
+  - @mastra/react@1.2.5-alpha.4
+
 ## 40.0.2-alpha.3
 
 ### Patch Changes

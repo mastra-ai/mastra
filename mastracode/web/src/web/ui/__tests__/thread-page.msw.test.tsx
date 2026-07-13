@@ -116,6 +116,9 @@ function useAgentControllerHandlers({
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () => new Response(null, { status: 404 })),
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({ enabled: true, connected: false, installations: [] }),
+    ),
     http.post(`${API}/sessions`, () => {
       captured.sessionsCreated += 1;
       return HttpResponse.json({ controllerId: 'code', resourceId: RESOURCE_ID, threadId: bound });
@@ -330,16 +333,13 @@ describe('MastraCode thread pages', () => {
     await expectPathname(router, '/new');
   });
 
-  it('given an unknown thread deep link, then the URL falls back to /new with an error notice in route state', async () => {
+  it('given an invalid thread deep link in the current scope, then it reports the failure and returns to /new', async () => {
     const captured = useAgentControllerHandlers({ failSwitchFor: ['nope'] });
     const { router } = renderRoutes('/threads/nope');
 
     await expectPathname(router, '/new');
-    await waitFor(() =>
-      expect((router.state.location.state as { routeErrorNotice?: string } | null)?.routeErrorNotice).toMatch(
-        /Failed to switch thread/,
-      ),
-    );
+    expect(await screen.findByRole('heading', { name: 'What do you want to work on?' })).toBeInTheDocument();
+    expect(screen.getByText('Failed to switch thread: thread nope was not found')).toBeInTheDocument();
     expect(captured.switched).not.toContain('nope');
   });
 });

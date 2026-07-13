@@ -10,8 +10,7 @@
  *   - `server.apiRoutes`   — the custom `/web/*` routes (fs / config / github),
  *                            already migrated off `/api`, `requiresAuth: false`.
  *   - `server.middleware`  — the WorkOS auth gate (bare handler, runs first) and
- *                            the tenant dispatcher (`/api/*`, retargets
- *                            `c.set('mastra', tenantMastra)` per request).
+ *                            the same-origin SPA static middleware.
  *   - `server.cors`        — the SPA is hosted separately (static host / CDN),
  *                            so cross-origin credentialed requests are allowed
  *                            for the configured origin(s).
@@ -31,10 +30,14 @@
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
+import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
-import { TenantDispatcher } from '../web/tenant-server.js';
-import { assertRemoteTenantDbIfRequired } from '../web/tenant-storage.js';
-import { assembleWebApiRoutes, resolveGithubReady } from '../web/web-surface.js';
+import {
+  assembleWebApiRoutes,
+  resolveGithubReady,
+  resolveIntakeReady,
+  resolveLinearReady,
+} from '../web/web-surface.js';
 
 const CONTROLLER_ID = 'code';
 
@@ -59,21 +62,13 @@ const allowedOrigins = (process.env.MASTRACODE_ALLOWED_ORIGINS ?? '')
 // soft (see resolveGithubReady).
 const githubReady = await resolveGithubReady();
 
-const webAuthEnabled = isWebAuthEnabled();
+// Linear intake readiness, same fail-soft pattern as GitHub.
+const linearReady = await resolveLinearReady();
 
-// One tenant dispatcher for the process lifetime (owns the LRU/idle-evicted
-// per-`(org,user)` cache). Constructed at module scope so it survives across
-// requests — it must NOT live inside the discarded local `serve()` bootstrap.
-let tenantDispatcher: TenantDispatcher | undefined;
-if (webAuthEnabled) {
-  // Fail loud if a remote tenant DB is required (multi-replica / ephemeral
-  // platform FS) but only local-file tenant DBs are configured.
-  assertRemoteTenantDbIfRequired();
-  tenantDispatcher = new TenantDispatcher({
-    baseConfig: {},
-    controllerId: CONTROLLER_ID,
-  });
-}
+// Intake source configuration (Settings › Intake) — needs at least one source.
+const intakeReady = await resolveIntakeReady(githubReady || linearReady);
+
+const webAuthEnabled = isWebAuthEnabled();
 
 const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
 
@@ -84,44 +79,51 @@ const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undef
 // Build the real production controller (agents, modes, tools, memory, OM, MCP,
 // providers) — identical to the terminal app — and register it on a Mastra whose
 // `server` config owns the whole web surface. The deployer generates its Hono
-// server from THIS instance, so the gate, dispatcher, custom routes, and CORS
-// all ride along.
+// server from THIS instance, so the gate, custom routes, and CORS all ride along.
+//
+// Agent state (threads, messages, memory, OM, recall vectors) lives in the
+// single app Postgres (`APP_DATABASE_URL`) alongside the github/app tables —
+// one shared DB for all users, separated by `resourceId` scoping. Without
+// `APP_DATABASE_URL` (bare local dev) the default storage resolution applies
+// (local libSQL file).
 const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
+  ...(process.env.APP_DATABASE_URL
+    ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
+    : {}),
   buildApiRoutes: ({ controller, authStorage }) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
     // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.
     ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
     // Custom `/web/*` routes (fs / config / github).
-    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady }),
+    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady, linearReady, intakeReady }),
   ],
   buildServerConfig: () => {
     const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+    // Log route errors with method/path/stack and answer with structured JSON
+    // instead of an opaque `Internal Server Error`. Applied by the deployer to
+    // both the top-level app and the custom-route sub-app.
+    const onError = { onError: handleServerError };
     // Same-origin SPA: when a vite build is present (see resolveUiDistDir),
     // serve it at `/` from this server. Mounted last so the auth gate (when
     // enabled) covers it; it always passes `/api`, `/web`, `/auth` through.
     const uiDist = resolveUiDistDir();
     const spa = uiDist ? [createSpaStaticMiddleware(uiDist)] : [];
     if (!webAuthEnabled || !authProvider) {
-      // Auth disabled: no gate, no per-tenant isolation. SPA + CORS only.
-      return { ...(spa.length ? { middleware: spa } : {}), ...cors };
+      // Auth disabled: no gate. SPA + CORS only.
+      return { ...(spa.length ? { middleware: spa } : {}), ...cors, ...onError };
     }
 
     // Ordered middleware. The deployer applies these AFTER its context
     // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
     //   1. gate  — validates the WorkOS session, stashes the user, and 401s /
     //              redirects unauthenticated requests. Skips public `/auth/*`.
-    //   2. tenant — for authenticated `/api/*`, forwards to the user's isolated
-    //              tenant Mastra app (its own libSQL storage/vector pair).
-    //   3. spa   — serves the built UI for everything the server doesn't own.
+    //   2. spa   — serves the built UI for everything the server doesn't own.
     return {
-      middleware: [
-        createWebAuthGate(authProvider),
-        { path: '/api/*', handler: tenantDispatcher!.middleware() },
-        ...spa,
-      ],
+      middleware: [createWebAuthGate(authProvider), ...spa],
       ...cors,
+      ...onError,
     };
   },
 });
