@@ -411,10 +411,11 @@ describe('Factory Board — Intake candidates', () => {
     expect(within(intake).queryByText('Add factory pages')).not.toBeInTheDocument();
   });
 
-  it('given a source filter, when a pill is toggled, then only matching cards and candidates stay visible', async () => {
+  it('given GitHub and Linear intake sources, when the swimlane source pill is toggled, then only that feed\u2019s candidates render', async () => {
     useBoardHandlers({
       issues,
       pullRequests,
+      linearIssues,
       workItems: [
         makeWorkItem({
           id: 'wi-1',
@@ -425,45 +426,48 @@ describe('Factory Board — Intake candidates', () => {
         }),
       ],
     });
-    renderAt('/factory/board');
+    renderAt('/factory/board', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
 
+    // GitHub is the default feed: its issues show, Linear's don't.
     const intake = await screen.findByTestId('board-column-intake');
     await within(intake).findByText('Fix flaky test');
+    expect(within(intake).queryByText('Fix intake sync')).not.toBeInTheDocument();
 
-    const filters = screen.getByRole('group', { name: 'Filter by source' });
-    await userEvent.click(within(filters).getByRole('button', { name: 'Pull requests' }));
+    const sources = within(intake).getByRole('group', { name: 'Intake source' });
+    await userEvent.click(within(sources).getByRole('button', { name: 'Linear' }));
 
-    // Only the PR candidate survives the filter.
-    expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
+    // Only the Linear feed's candidates remain in Intake.
+    expect(await within(column('intake')).findByText('Fix intake sync')).toBeInTheDocument();
     expect(within(column('intake')).queryByText('Fix flaky test')).not.toBeInTheDocument();
-    expect(within(column('execute')).queryByText('Linear card')).not.toBeInTheDocument();
-
-    await userEvent.click(within(filters).getByRole('button', { name: 'Linear' }));
-    expect(within(column('execute')).getByText('Linear card')).toBeInTheDocument();
-    expect(within(column('review')).queryByText('Add factory pages')).not.toBeInTheDocument();
-
-    await userEvent.click(within(filters).getByRole('button', { name: 'All' }));
-    expect(within(column('intake')).getByText('Fix flaky test')).toBeInTheDocument();
+    // The switch only affects the Intake feed: PRs and persisted cards stay.
     expect(within(column('review')).getByText('Add factory pages')).toBeInTheDocument();
     expect(within(column('execute')).getByText('Linear card')).toBeInTheDocument();
+
+    await userEvent.click(within(sources).getByRole('button', { name: 'GitHub' }));
+    expect(await within(column('intake')).findByText('Fix flaky test')).toBeInTheDocument();
+    expect(within(column('intake')).queryByText('Fix intake sync')).not.toBeInTheDocument();
   });
 
-  it('given Linear is connected and selected, when the Board renders, then Linear issues appear as candidates', async () => {
+  it('given Linear is connected and selected, when the Linear feed is picked, then Linear issues appear as candidates', async () => {
     useBoardHandlers({ linearIssues });
     renderAt('/factory/board', githubProject, connectedStatus, { linearStatus: linearConnectedStatus });
 
     const intake = await screen.findByTestId('board-column-intake');
+    const sources = await within(intake).findByRole('group', { name: 'Intake source' });
+    await userEvent.click(within(sources).getByRole('button', { name: 'Linear' }));
     expect(await within(intake).findByText('Fix intake sync')).toBeInTheDocument();
     expect(within(intake).getByText(/ENG-42/)).toBeInTheDocument();
   });
 
-  it('given the Linear feature is disabled, when the Board renders, then no Linear candidates appear', async () => {
+  it('given the Linear feature is disabled, when the Board renders, then no Linear candidates or source switch appear', async () => {
     useBoardHandlers({ issues, linearIssues });
     renderAt('/factory/board');
 
     const intake = await screen.findByTestId('board-column-intake');
     expect(await within(intake).findByText('Fix flaky test')).toBeInTheDocument();
     expect(within(intake).queryByText('Fix intake sync')).not.toBeInTheDocument();
+    // A single active feed needs no switcher.
+    expect(within(intake).queryByRole('group', { name: 'Intake source' })).not.toBeInTheDocument();
   });
 
   it('given a work item exists for an issue, when the Board renders, then the candidate is deduped by source key', async () => {
@@ -768,6 +772,8 @@ describe('Factory Board — investigate flow', () => {
     });
 
     const intake = await screen.findByTestId('board-column-intake');
+    const sources = await within(intake).findByRole('group', { name: 'Intake source' });
+    await userEvent.click(within(sources).getByRole('button', { name: 'Linear' }));
     await within(intake).findByText('Fix intake sync');
     await userEvent.click(within(intake).getByRole('button', { name: 'Investigate Fix intake sync' }));
 

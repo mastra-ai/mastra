@@ -39,15 +39,17 @@ function stageLabel(stage: string): string {
   return BOARD_STAGES.find(s => s.id === stage)?.label ?? stage;
 }
 
-/** Source filter pills above the columns. */
-type SourceFilter = 'all' | WorkItemSource;
+/**
+ * Candidate feeds the Intake swimlane can browse. Only one paginated list is
+ * shown at a time; when both are configured a pill switcher inside the column
+ * picks the active one.
+ */
+const INTAKE_SOURCES = [
+  { id: 'github', label: 'GitHub' },
+  { id: 'linear', label: 'Linear' },
+] as const;
 
-const SOURCE_FILTERS: Array<{ id: SourceFilter; label: string }> = [
-  { id: 'all', label: 'All' },
-  { id: 'github-issue', label: 'Issues' },
-  { id: 'github-pr', label: 'Pull requests' },
-  { id: 'linear-issue', label: 'Linear' },
-];
+type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
 
 /**
  * Stage list after moving a card out of `from` into `to`. Other concurrent
@@ -271,34 +273,41 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const linearReady =
     (config?.linear.enabled ?? false) && linearConnected && (config?.linear.projectIds?.length ?? 0) > 0;
 
-  const issues = useProjectIssuesQuery(githubEnabled && githubSelected ? githubProjectId : undefined);
+  // The Intake swimlane browses one candidate feed at a time; a pill switcher
+  // inside the column picks between GitHub and Linear when both are set up.
+  const githubIntakeActive = githubEnabled && githubSelected;
+  const [intakeSource, setIntakeSource] = useState<IntakeSource>('github');
+  const showIntakeSourceSwitch = githubIntakeActive && linearReady;
+  const activeIntakeSource: IntakeSource | null = showIntakeSourceSwitch
+    ? intakeSource
+    : githubIntakeActive
+      ? 'github'
+      : linearReady
+        ? 'linear'
+        : null;
+
+  // Only the active intake feed fetches; the other feed loads on switch.
+  const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
   const pulls = useProjectPullRequestsQuery(githubProjectId);
-  const linearIssues = useLinearIssuesQuery(linearReady);
+  const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
   const upsert = useUpsertWorkItemMutation(githubProjectId);
   const update = useUpdateWorkItemMutation(githubProjectId);
   const remove = useDeleteWorkItemMutation(githubProjectId);
   const { start, enabled: runEnabled } = useStartFactoryRun();
 
-  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
-
   const workItems = useMemo(() => items.data ?? [], [items.data]);
 
-  // Live candidates minus anything already on the board (any stage). The
-  // dedupe runs before the source filter so filtered views stay consistent.
+  // Live candidates minus anything already on the board (any stage).
   const candidates = useMemo(() => {
     const known = new Set(workItems.map(item => item.sourceKey).filter(Boolean));
     const all: BoardCandidate[] = [
-      ...(issues.data ?? []).map(issueCandidate),
+      ...(activeIntakeSource === 'github' ? (issues.data ?? []).map(issueCandidate) : []),
       ...(pulls.data ?? []).map(pullRequestCandidate),
-      ...(linearIssues.data ?? []).map(linearCandidate),
+      ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
     ];
     return all.filter(candidate => !known.has(candidate.sourceKey));
-  }, [workItems, issues.data, pulls.data, linearIssues.data]);
-
-  const visibleItems = sourceFilter === 'all' ? workItems : workItems.filter(item => item.source === sourceFilter);
-  const visibleCandidates =
-    sourceFilter === 'all' ? candidates : candidates.filter(candidate => candidate.source === sourceFilter);
+  }, [workItems, issues.data, pulls.data, linearIssues.data, activeIntakeSource]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
@@ -337,27 +346,29 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
           {mutationError instanceof Error ? mutationError.message : 'Board action failed'}
         </Notice>
       )}
-      <div role="group" aria-label="Filter by source" className="flex items-center gap-1">
-        {SOURCE_FILTERS.map(filter => (
-          <button
-            key={filter.id}
-            type="button"
-            aria-pressed={sourceFilter === filter.id}
-            onClick={() => setSourceFilter(filter.id)}
-            className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
-              sourceFilter === filter.id
-                ? 'border-accent1 bg-surface4 text-icon6'
-                : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
-            }`}
-          >
-            {filter.label}
-          </button>
-        ))}
-      </div>
       <div className="flex gap-3 overflow-x-auto pb-2" aria-label="Board columns">
         {BOARD_STAGES.map(stage => (
           <BoardColumn key={stage.id} stage={stage.id} label={stage.label} onDrop={handleDrop}>
-            {visibleItems
+            {stage.id === 'intake' && showIntakeSourceSwitch && (
+              <div role="group" aria-label="Intake source" className="flex items-center gap-1 pb-1">
+                {INTAKE_SOURCES.map(source => (
+                  <button
+                    key={source.id}
+                    type="button"
+                    aria-pressed={intakeSource === source.id}
+                    onClick={() => setIntakeSource(source.id)}
+                    className={`rounded-full border px-2.5 py-0.5 text-ui-xs transition ${
+                      intakeSource === source.id
+                        ? 'border-accent1 bg-surface4 text-icon6'
+                        : 'border-border1 bg-transparent text-icon3 hover:text-icon5'
+                    }`}
+                  >
+                    {source.label}
+                  </button>
+                ))}
+              </div>
+            )}
+            {workItems
               .filter(item => item.stages.includes(stage.id))
               .map(item => (
                 <WorkItemCard
@@ -385,7 +396,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                   onRemove={() => remove.mutate(item.id)}
                 />
               ))}
-            {visibleCandidates
+            {candidates
               .filter(candidate => candidate.column === stage.id)
               .map(candidate => (
                 <CandidateCard
@@ -413,7 +424,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                 />
               ))}
             {stage.id === 'intake' && (
-              <IntakeColumnExtras issues={issues} linearIssues={linearIssues} linearReady={linearReady} />
+              <IntakeColumnExtras source={activeIntakeSource} issues={issues} linearIssues={linearIssues} />
             )}
             {stage.id === 'review' && <ReviewColumnExtras pulls={pulls} />}
           </BoardColumn>
@@ -626,25 +637,30 @@ function CandidateCard({
 
 // ── Per-column candidate extras (loading, reauth, pagination) ───────────────
 
-/** Intake column tail: loading state, Linear reauth notice, issue pagination. */
+/**
+ * Intake column tail for the ACTIVE candidate feed: loading state, Linear
+ * reauth notice, and pagination. Only one feed is browsed at a time, so only
+ * its states render.
+ */
 function IntakeColumnExtras({
+  source,
   issues,
   linearIssues,
-  linearReady,
 }: {
+  source: IntakeSource | null;
   issues: ReturnType<typeof useProjectIssuesQuery>;
   linearIssues: ReturnType<typeof useLinearIssuesQuery>;
-  linearReady: boolean;
 }) {
   const { baseUrl } = useApiConfig();
-  const loading =
-    (issues.isPending && issues.fetchStatus !== 'idle') ||
-    (linearIssues.isPending && linearIssues.fetchStatus !== 'idle');
+  if (source === null) return null;
+  const feed = source === 'github' ? issues : linearIssues;
 
   return (
     <>
-      {loading && <SkeletonRows label="Loading intake candidates" rows={3} rowClassName="h-12 w-full" />}
-      {linearReady && linearIssues.isError && isLinearReauthError(linearIssues.error) && (
+      {feed.isPending && feed.fetchStatus !== 'idle' && (
+        <SkeletonRows label="Loading intake candidates" rows={3} rowClassName="h-12 w-full" />
+      )}
+      {source === 'linear' && linearIssues.isError && isLinearReauthError(linearIssues.error) && (
         <div className="flex flex-col gap-2 p-1">
           <Txt as="span" variant="ui-xs" className="text-icon3">
             Linear authorization expired. Reconnect to keep syncing issues.
@@ -655,12 +671,9 @@ function IntakeColumnExtras({
         </div>
       )}
       <LoadMoreSentinel
-        hasNextPage={Boolean(issues.hasNextPage || linearIssues.hasNextPage)}
-        isFetchingNextPage={Boolean(issues.isFetchingNextPage || linearIssues.isFetchingNextPage)}
-        onLoadMore={() => {
-          if (issues.hasNextPage) void issues.fetchNextPage();
-          if (linearIssues.hasNextPage) void linearIssues.fetchNextPage();
-        }}
+        hasNextPage={Boolean(feed.hasNextPage)}
+        isFetchingNextPage={Boolean(feed.isFetchingNextPage)}
+        onLoadMore={() => void feed.fetchNextPage()}
         label="Load more candidates"
       />
     </>
