@@ -910,7 +910,7 @@
     "@ai-sdk/togetherai-v6": "npm:@ai-sdk/togetherai@2.0.64",
     "@ai-sdk/xai-v6": "npm:@ai-sdk/xai@3.0.106",
     "@ast-grep/napi": "^0.40.5",
-    "@babel/core": "^7.29.7",
+    "@babel/core": "^8.0.1",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
