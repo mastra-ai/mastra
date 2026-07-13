@@ -1,5 +1,6 @@
 import type { AgentControllerMessage } from '@mastra/client-js';
 import type { ReactNode } from 'react';
+import { useEffect } from 'react';
 
 import { useAgentControllerTranscript } from '../hooks/useAgentControllerTranscript';
 import type { TranscriptState } from '../services/transcript';
@@ -42,6 +43,23 @@ function ChatTranscriptValueProvider({
 }) {
   const connection = useChatConnection();
   const { transcript, reset, syncState, localUser, resolvePrompt, pushNotice } = transcriptApi;
+
+  // Hydrate the run flag from the authoritative `session.state()` snapshot so
+  // attaching to a session that's already mid-run (page load, worktree switch,
+  // SSE reconnect) shows the working indicator immediately. Live events own
+  // the flag from then on via agent_start/agent_end/display_state_changed.
+  const stateRunning = connection.state?.running;
+  const stateUpdatedAt = connection.stateUpdatedAt;
+  useEffect(() => {
+    if (typeof stateRunning !== 'boolean') return;
+    syncState({
+      omProgress: connection.state?.omProgress,
+      tokenUsage: connection.state?.tokenUsage,
+      running: stateRunning,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-apply only when a fresh snapshot lands
+  }, [stateRunning, stateUpdatedAt]);
+
   const effectiveTranscript: TranscriptState = {
     ...transcript,
     threadId: transcript.threadId ?? threadId ?? connection.createdThreadId,

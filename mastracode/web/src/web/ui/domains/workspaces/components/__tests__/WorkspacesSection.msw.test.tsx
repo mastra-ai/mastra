@@ -97,6 +97,8 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     ),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
+    // Activity peek polled per worktree row; idle by default.
+    http.get(`${API}/sessions/:resourceId/running`, () => HttpResponse.json({ running: false })),
   );
 
   return { stateUpdates };
@@ -161,6 +163,22 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     await waitFor(() => expect(screen.queryByText('Workspaces')).not.toBeInTheDocument());
+  });
+
+  it('shows an activity indicator on workspaces whose scoped session is running', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/running`, ({ request }) => {
+        const scope = new URL(request.url).searchParams.get('sessionScope');
+        return HttpResponse.json({ running: scope === '/sandbox/mastra-worktrees/feat-ui' });
+      }),
+    );
+
+    renderSection();
+
+    expect(await screen.findByRole('status', { name: 'Agent working in feat-ui' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Agent working in main' })).not.toBeInTheDocument();
   });
 
   it('selects a workspace row and rebinds the session to its worktree path', async () => {

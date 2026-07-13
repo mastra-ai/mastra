@@ -14,6 +14,7 @@ import {
   ABORT_AGENT_CONTROLLER_SESSION_ROUTE,
   STREAM_AGENT_CONTROLLER_SESSION_ROUTE,
   GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE,
+  GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE,
   LIST_AGENT_CONTROLLER_MODES_ROUTE,
   LIST_AGENT_CONTROLLER_THREADS_ROUTE,
   SWITCH_AGENT_CONTROLLER_MODE_ROUTE,
@@ -381,9 +382,79 @@ describe('agent-controller routes', () => {
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
-      } as any)) as { modeId: string; threadId?: string };
+      } as any)) as { modeId: string; threadId?: string; running?: boolean };
       expect(res.modeId).toBe('build');
       expect(typeof res.threadId).toBe('string');
+      // Idle session: hydration snapshot reports not running.
+      expect(res.running).toBe(false);
+    });
+
+    it('reports running: true while a run is active', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      session.displayState.apply({ type: 'agent_start' } as any);
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { running?: boolean };
+      expect(res.running).toBe(true);
+    });
+  });
+
+  describe('GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE', () => {
+    it('returns running: false without creating a session for the resource', async () => {
+      const res = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'never-opened',
+        sessionScope: '/repo/worktree-idle',
+      } as any);
+      expect(res).toEqual({ running: false });
+
+      // Peek must not seed a session (callers poll this for idle workspaces).
+      const controller = mastra.getAgentController('code')!;
+      await expect(controller.getSessionByResource('never-opened', '/repo/worktree-idle')).resolves.toBeUndefined();
+    });
+
+    it('reflects the live session run state per scope', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const scoped = await controller.createSession({
+        resourceId: 'user-run',
+        id: 'user-run::/repo/worktree-a',
+        ownerId: controller.id,
+        scope: '/repo/worktree-a',
+      });
+      scoped.displayState.apply({ type: 'agent_start' } as any);
+
+      const running = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-run',
+        sessionScope: '/repo/worktree-a',
+      } as any);
+      expect(running).toEqual({ running: true });
+
+      // A different scope over the same resource is independent (and unseeded).
+      const other = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-run',
+        sessionScope: '/repo/worktree-b',
+      } as any);
+      expect(other).toEqual({ running: false });
+
+      scoped.displayState.apply({ type: 'agent_end' } as any);
+      const ended = await GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-run',
+        sessionScope: '/repo/worktree-a',
+      } as any);
+      expect(ended).toEqual({ running: false });
     });
   });
 

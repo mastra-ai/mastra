@@ -22,6 +22,7 @@ import {
   useSelectWorkspaceMutation,
   useWorkspacesQuery,
 } from '../hooks/useWorkspaces';
+import { useWorkspaceActivity } from '../hooks/useWorkspaceActivity';
 import type { Worktree } from '../services/projects';
 
 /**
@@ -53,10 +54,17 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
   });
   const deleteWorkspace = useDeleteWorkspaceMutation(activeProject, session, scope);
   const [confirmDelete, setConfirmDelete] = useState<Worktree | null>(null);
+  const worktrees = workspaces.data?.worktrees ?? [];
+  const runningByPath = useWorkspaceActivity({
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    worktreePaths: worktrees.map(worktree => worktree.worktreePath),
+    baseUrl,
+    enabled: sessionEnabled && activeProject?.source === 'github',
+  });
 
   if (activeProject?.source !== 'github') return null;
 
-  const worktrees = workspaces.data?.worktrees ?? [];
   const selectedPath = workspaces.data?.selected?.worktreePath;
   const pending = createWorkspace.isPending || selectWorkspace.isPending || deleteWorkspace.isPending;
 
@@ -197,6 +205,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
               <WorkspaceRow
                 worktree={worktree}
                 active={active}
+                running={runningByPath[worktree.worktreePath] === true}
                 disabled={pending}
                 onSelect={() =>
                   selectWorkspace.mutate(worktree.worktreePath, {
@@ -272,12 +281,14 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
 function WorkspaceRow({
   worktree,
   active,
+  running,
   disabled,
   onSelect,
   onDelete,
 }: {
   worktree: Worktree;
   active: boolean;
+  running: boolean;
   disabled: boolean;
   onSelect: () => void;
   onDelete?: () => void;
@@ -294,6 +305,14 @@ function WorkspaceRow({
       >
         <GitBranch size={13} />
         <span className="truncate">{worktree.branch}</span>
+        {running && (
+          <span
+            role="status"
+            aria-label={`Agent working in ${worktree.branch}`}
+            title="Agent working"
+            className="ml-auto size-2 shrink-0 animate-pulse rounded-full bg-accent1 group-hover:opacity-0"
+          />
+        )}
       </button>
       {onDelete && (
         <DropdownMenu>

@@ -91448,6 +91448,7 @@ export type GetAgentControllerControllerIdSessionsResourceId_Response = {
   threadId?: string | undefined;
   modeId: string;
   modelId: string;
+  running?: boolean | undefined;
   omProgress?:
     | {
         status: string;
@@ -91494,6 +91495,43 @@ export interface GetAgentControllerControllerIdSessionsResourceId_RouteContract 
   body: never;
   request: GetAgentControllerControllerIdSessionsResourceId_Request;
   response: GetAgentControllerControllerIdSessionsResourceId_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /agent-controller/:controllerId/sessions/:resourceId/running
+// ============================================================================
+export type GetAgentControllerControllerIdSessionsResourceIdRunning_PathParams = {
+  controllerId: string;
+  resourceId: string;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdRunning_QueryParams = {
+  sessionScope?: string | undefined;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdRunning_Response = {
+  running: boolean;
+};
+
+export type GetAgentControllerControllerIdSessionsResourceIdRunning_Request = Simplify<
+  (GetAgentControllerControllerIdSessionsResourceIdRunning_PathParams extends never
+    ? {}
+    : { params: GetAgentControllerControllerIdSessionsResourceIdRunning_PathParams }) &
+    (GetAgentControllerControllerIdSessionsResourceIdRunning_QueryParams extends never
+      ? {}
+      : {} extends GetAgentControllerControllerIdSessionsResourceIdRunning_QueryParams
+        ? { query?: GetAgentControllerControllerIdSessionsResourceIdRunning_QueryParams }
+        : { query: GetAgentControllerControllerIdSessionsResourceIdRunning_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetAgentControllerControllerIdSessionsResourceIdRunning_RouteContract {
+  pathParams: GetAgentControllerControllerIdSessionsResourceIdRunning_PathParams;
+  queryParams: GetAgentControllerControllerIdSessionsResourceIdRunning_QueryParams;
+  body: never;
+  request: GetAgentControllerControllerIdSessionsResourceIdRunning_Request;
+  response: GetAgentControllerControllerIdSessionsResourceIdRunning_Response;
   responseType: 'json';
 }
 
@@ -93184,6 +93222,7 @@ export interface RouteTypes {
   'GET /agent-controller/:controllerId/models': GetAgentControllerControllerIdModels_RouteContract;
   'POST /agent-controller/:controllerId/sessions': PostAgentControllerControllerIdSessions_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId': GetAgentControllerControllerIdSessionsResourceId_RouteContract;
+  'GET /agent-controller/:controllerId/sessions/:resourceId/running': GetAgentControllerControllerIdSessionsResourceIdRunning_RouteContract;
   'GET /agent-controller/:controllerId/sessions/:resourceId/threads': GetAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
   'POST /agent-controller/:controllerId/sessions/:resourceId/threads': PostAgentControllerControllerIdSessionsResourceIdThreads_RouteContract;
   'DELETE /agent-controller/:controllerId/sessions/:resourceId/threads/:threadId': DeleteAgentControllerControllerIdSessionsResourceIdThreadsThreadId_RouteContract;
@@ -93337,6 +93376,9 @@ export interface Client {
   };
   '/agent-controller/:controllerId/sessions/:resourceId/resources': {
     GET: GetAgentControllerControllerIdSessionsResourceIdResources_RouteContract;
+  };
+  '/agent-controller/:controllerId/sessions/:resourceId/running': {
+    GET: GetAgentControllerControllerIdSessionsResourceIdRunning_RouteContract;
   };
   '/agent-controller/:controllerId/sessions/:resourceId/state': {
     PUT: PutAgentControllerControllerIdSessionsResourceIdState_RouteContract;

@@ -202,6 +202,49 @@ describe('transcript reducer message entries', () => {
   });
 });
 
+describe('transcript reducer run flag', () => {
+  it('hydrates running from the initial session snapshot', () => {
+    expect(createInitialTranscript({ running: true }).running).toBe(true);
+    expect(createInitialTranscript({}).running).toBe(false);
+  });
+
+  it('folds isRunning from display_state_changed into running', () => {
+    const started = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'display_state_changed', displayState: { isRunning: true } },
+    });
+    expect(started.running).toBe(true);
+
+    // A snapshot without the flag must not clear a live indicator.
+    const unchanged = transcriptReducer(started, {
+      type: 'event',
+      event: { type: 'display_state_changed', displayState: {} },
+    });
+    expect(unchanged.running).toBe(true);
+
+    const ended = transcriptReducer(unchanged, {
+      type: 'event',
+      event: { type: 'display_state_changed', displayState: { isRunning: false } },
+    });
+    expect(ended.running).toBe(false);
+  });
+
+  it('applies running from syncState only when present', () => {
+    const synced = transcriptReducer(initialTranscript, { type: 'syncState', running: true });
+    expect(synced.running).toBe(true);
+
+    // Older servers omit running from the state snapshot — keep the local flag.
+    const preserved = transcriptReducer(synced, { type: 'syncState' });
+    expect(preserved.running).toBe(true);
+  });
+
+  it('resets running from the provided snapshot', () => {
+    const running = transcriptReducer(initialTranscript, { type: 'reset', running: true });
+    expect(running.running).toBe(true);
+    expect(transcriptReducer(running, { type: 'reset' }).running).toBe(false);
+  });
+});
+
 describe('transcript reducer error notices', () => {
   function errorNoticeText(event: Record<string, unknown>): string {
     const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });

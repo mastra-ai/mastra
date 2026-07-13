@@ -197,10 +197,13 @@ const sessionStateResponseSchema = z.object({
   threadId: z.string().optional(),
   modeId: z.string(),
   modelId: z.string(),
+  /** Whether the agent is currently executing a run (for initial UI hydration). */
+  running: z.boolean().optional(),
   omProgress: omProgressSummarySchema.optional(),
   tokenUsage: z.record(z.string(), z.unknown()).optional(),
   settings: sessionSettingsSchema.optional(),
 });
+const sessionRunningResponseSchema = z.object({ running: z.boolean() });
 const listModesResponseSchema = z.object({
   modes: z.array(z.object({ id: z.string(), name: z.string().optional() })),
 });
@@ -668,6 +671,7 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
         threadId: session.thread.getId() ?? undefined,
         modeId: session.mode.get(),
         modelId: session.model.get(),
+        running: ds.isRunning === true,
         omProgress: {
           status: om.status,
           pendingTokens: om.pendingTokens,
@@ -689,6 +693,32 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
       };
     } catch (error) {
       return handleError(error, 'error reading controller session state');
+    }
+  },
+});
+
+export const GET_AGENT_CONTROLLER_SESSION_RUNNING_ROUTE = createRoute({
+  method: 'GET',
+  path: '/agent-controller/:controllerId/sessions/:resourceId/running',
+  responseType: 'json' as const,
+  pathParamSchema: sessionPathParams,
+  queryParamSchema: sessionScopeQuerySchema,
+  responseSchema: sessionRunningResponseSchema,
+  summary: 'Peek whether the session is running',
+  description:
+    'Reports whether an existing session is currently executing a run, without creating a session for the resource/scope (unlike the state route). Returns running: false when no live session exists.',
+  tags: ['AgentController'],
+  requiresAuth: true,
+  requiresPermission: 'agent-controller:read',
+  handler: async ({ mastra, controllerId, resourceId, sessionScope }) => {
+    try {
+      const controller = getAgentControllerOrThrow(mastra, controllerId);
+      // Peek only: a resource/scope with no live session cannot be running, and
+      // this route must not seed sessions (callers poll it for idle workspaces).
+      const session = await controller.getSessionByResource(resourceId, sessionScope);
+      return { running: session?.displayState.get().isRunning === true };
+    } catch (error) {
+      return handleError(error, 'error reading controller session running state');
     }
   },
 });
