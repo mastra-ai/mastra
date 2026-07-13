@@ -37,7 +37,7 @@ function getCommands(modes: number): HelpEntry[] {
     { key: '/subagents', description: 'Configure subagent models' },
     { key: '/permissions', description: 'Tool approval permissions' },
     { key: '/settings', description: 'Notifications, YOLO, thinking' },
-    { key: '/om', description: 'Configure Observational Memory' },
+    { key: '/memory', description: 'Configure Observational Memory (/om alias)' },
     { key: '/review', description: 'Review a GitHub pull request' },
     { key: '/report-issue', description: 'Open or browse mastracode issues' },
     { key: '/cost', description: 'Token usage and costs' },

@@ -13,7 +13,7 @@ const SURFACES: { token: string; label: string; className: string }[] = [
 function SurfaceFrame({ className, label, children }: { className: string; label: string; children: ReactNode }) {
   return (
     <div className={`rounded-2xl border border-border1 p-5 ${className}`}>
-      <p className="mb-4 text-ui-xs uppercase tracking-wide text-neutral3">{label}</p>
+      <p className="mb-4 text-ui-xs tracking-wide text-neutral3 uppercase">{label}</p>
       {children}
     </div>
   );
@@ -56,7 +56,7 @@ function RadioStateGrid({ idPrefix }: { idPrefix: string }) {
         id={`${idPrefix}-focus`}
         label={`${idPrefix} focus preview`}
         checked
-        className="border-neutral5/60 outline outline-1 outline-offset-2 outline-neutral5/55"
+        className="border-neutral5/60 outline-1 outline-offset-2 outline-neutral5/55 outline-solid"
       />
       <RadioPreview id={`${idPrefix}-disabled`} label={`${idPrefix} disabled`} disabled />
       <RadioPreview id={`${idPrefix}-disabled-selected`} label={`${idPrefix} disabled selected`} checked disabled />
@@ -119,7 +119,7 @@ export const AllStates: Story = {
     layout: 'centered',
   },
   render: () => (
-    <div className="grid min-w-[28rem] gap-4 rounded-lg border border-border1 bg-surface2 p-4">
+    <div className="grid min-w-md gap-4 rounded-lg border border-border1 bg-surface2 p-4">
       <RadioStateGrid idPrefix="all-states" />
     </div>
   ),

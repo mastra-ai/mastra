@@ -52,7 +52,7 @@ values
 
     await runtime.waitForScreenText(/Switched to: E2E persisted goal fixture/i, terminal, 8_000);
     await runtime.waitForScreenText(/Seeded goal reload assistant turn/i, terminal, 8_000);
-    await runtime.waitForScreenText(/pursuing goal/i, terminal, 8_000);
+    await runtime.waitForScreenText(/▐[^▌]+▌.*\bgoal(?:\s+<1m)?/i, terminal, 8_000);
 
     terminal.submit('/goal status');
     await runtime.waitForScreenText(

@@ -100,6 +100,81 @@ describe('agent-controller routes', () => {
     });
   });
 
+  describe('scoped sessions (sessionScope)', () => {
+    // One resourceId can be shared across git worktrees; a `sessionScope`
+    // addresses an independent session per scope so parallel worktrees don't
+    // collide on one run loop / thread binding.
+    it('creates independent sessions for the same resourceId under different scopes', async () => {
+      const a = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threadId?: string };
+      const b = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-b',
+        tags: { projectPath: '/repo/worktree-b' },
+      } as any)) as { threadId?: string };
+
+      expect(a.threadId).toBeDefined();
+      expect(b.threadId).toBeDefined();
+      expect(b.threadId).not.toBe(a.threadId);
+
+      // Get-or-create still holds within one scope.
+      const aAgain = (await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any)) as { threadId?: string };
+      expect(aAgain.threadId).toBe(a.threadId);
+    });
+
+    it('routes with a sessionScope address the scoped session, not the unscoped one', async () => {
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+      } as any);
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        tags: { projectPath: '/repo/worktree-a' },
+      } as any);
+
+      // Switch the scoped session's mode; the unscoped session must not move.
+      await SWITCH_AGENT_CONTROLLER_MODE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+        modeId: 'plan',
+      } as any);
+
+      const scoped = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+        sessionScope: '/repo/worktree-a',
+      } as any)) as { modeId: string };
+      const unscoped = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-wt',
+      } as any)) as { modeId: string };
+
+      expect(scoped.modeId).toBe('plan');
+      expect(unscoped.modeId).toBe('build');
+    });
+  });
+
   describe('ABORT_AGENT_CONTROLLER_SESSION_ROUTE', () => {
     it('acks an abort on an idle session', async () => {
       const res = await ABORT_AGENT_CONTROLLER_SESSION_ROUTE.handler({
@@ -327,9 +402,25 @@ describe('agent-controller routes', () => {
         mastra,
         controllerId: 'code',
         resourceId: 'user-1',
-      } as any)) as { modeId: string; threadId?: string };
+      } as any)) as { modeId: string; threadId?: string; running?: boolean };
       expect(res.modeId).toBe('build');
       expect(typeof res.threadId).toBe('string');
+      // Idle session: hydration snapshot reports not running.
+      expect(res.running).toBe(false);
+    });
+
+    it('reports running: true while a run is active', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-1', id: 'user-1', ownerId: controller.id });
+      session.displayState.apply({ type: 'agent_start' } as any);
+
+      const res = (await GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-1',
+      } as any)) as { running?: boolean };
+      expect(res.running).toBe(true);
     });
   });
 
@@ -439,6 +530,34 @@ describe('agent-controller routes', () => {
         resourceId: 'user-wt',
       } as any)) as { threads: unknown[] };
       expect(all.threads.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it('annotates each thread with its run state (active while a run executes, idle otherwise)', async () => {
+      // Thread state comes from the agent thread-stream runtime — the same
+      // per-thread active/idle tracking the signals `ifIdle` path uses.
+      await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        resourceId: 'user-state',
+      } as any);
+      const session = await mastra.getAgentController('code')!.createSession({ resourceId: 'user-state' });
+      const busy = await session.thread.create({ title: 'busy' });
+
+      const spy = vi
+        .spyOn(Agent.prototype, 'getActiveThreadRunId')
+        .mockImplementation(({ threadId }) => (threadId === busy.id ? 'run-1' : undefined));
+      try {
+        const res = (await LIST_AGENT_CONTROLLER_THREADS_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          resourceId: 'user-state',
+        } as any)) as { threads: { id: string; state?: string }[] };
+
+        expect(res.threads.find(t => t.id === busy.id)?.state).toBe('active');
+        expect(res.threads.filter(t => t.id !== busy.id).every(t => t.state === 'idle')).toBe(true);
+      } finally {
+        spy.mockRestore();
+      }
     });
   });
 

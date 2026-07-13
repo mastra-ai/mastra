@@ -1,8 +1,8 @@
 import {
   loadSettings,
   saveSettings,
-  MEMORY_GATEWAY_PROVIDER,
-  MEMORY_GATEWAY_DEFAULT_URL,
+  MASTRA_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_DEFAULT_URL,
 } from '@mastra/code-sdk/onboarding/settings';
 import { GatewayRegistry } from '@mastra/core/llm';
 import { askModalQuestion } from '../modal-question.js';
@@ -36,7 +36,7 @@ async function refreshGatewayModels(ctx: SlashCommandContext): Promise<void> {
   }
 }
 
-export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Promise<void> {
+export async function handleMastraGatewayCommand(ctx: SlashCommandContext): Promise<void> {
   const authStorage = ctx.authStorage;
   if (!authStorage) {
     ctx.showError('Auth storage not available');
@@ -44,10 +44,10 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   }
 
   // Resolve effective state from storage + env
-  const currentKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  const currentKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
   const settings = loadSettings();
   const effectiveUrl =
-    settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? MEMORY_GATEWAY_DEFAULT_URL;
+    settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? MASTRA_GATEWAY_DEFAULT_URL;
 
   if (currentKey) {
     const masked = currentKey.length > 6 ? `****${currentKey.slice(-4)}` : '****';
@@ -68,23 +68,23 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
     // ESC with no key — abort; ESC with existing key — proceed to URL prompt
     if (!currentKey) return;
   } else if (keyAnswer.toLowerCase() === 'clear') {
-    authStorage.remove(`apikey:${MEMORY_GATEWAY_PROVIDER}`);
+    authStorage.remove(`apikey:${MASTRA_GATEWAY_PROVIDER}`);
     delete process.env['MASTRA_GATEWAY_API_KEY'];
     delete process.env['MASTRA_GATEWAY_URL'];
     settings.memoryGateway = {};
     saveSettings(settings);
     await refreshGatewayModels(ctx);
-    ctx.showInfo('Memory gateway cleared. Memory mode changes take effect on next restart.');
+    ctx.showInfo('Gateway cleared. Memory mode changes take effect on next restart.');
     return;
   } else if (keyAnswer.length > 0) {
-    authStorage.setStoredApiKey(MEMORY_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
+    authStorage.setStoredApiKey(MASTRA_GATEWAY_PROVIDER, keyAnswer, 'MASTRA_GATEWAY_API_KEY');
   }
 
   const urlChoice = await askSelect(ctx, 'Gateway URL', [
     {
-      label: MEMORY_GATEWAY_DEFAULT_URL,
-      value: MEMORY_GATEWAY_DEFAULT_URL,
-      description: effectiveUrl === MEMORY_GATEWAY_DEFAULT_URL ? 'current' : 'hosted default',
+      label: MASTRA_GATEWAY_DEFAULT_URL,
+      value: MASTRA_GATEWAY_DEFAULT_URL,
+      description: effectiveUrl === MASTRA_GATEWAY_DEFAULT_URL ? 'current' : 'hosted default',
     },
     {
       label: 'http://localhost:4111',
@@ -99,7 +99,7 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
 
   const urlAnswer = urlChoice;
 
-  if (urlAnswer && urlAnswer !== MEMORY_GATEWAY_DEFAULT_URL) {
+  if (urlAnswer && urlAnswer !== MASTRA_GATEWAY_DEFAULT_URL) {
     settings.memoryGateway = { baseUrl: urlAnswer };
     process.env['MASTRA_GATEWAY_URL'] = urlAnswer;
   } else {
@@ -109,5 +109,5 @@ export async function handleMemoryGatewayCommand(ctx: SlashCommandContext): Prom
   saveSettings(settings);
   await refreshGatewayModels(ctx);
 
-  ctx.showInfo('Memory gateway configured. Memory mode changes take effect on next restart.');
+  ctx.showInfo('Gateway configured. Memory mode changes take effect on next restart.');
 }

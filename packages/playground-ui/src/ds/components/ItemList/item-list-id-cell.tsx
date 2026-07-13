@@ -8,5 +8,5 @@ export type ItemListIdCellProps = {
 
 export function ItemListIdCell({ id, className, isShortened = true }: ItemListIdCellProps) {
   const displayId = isShortened ? id.slice(0, 8) : id;
-  return <div className={cn('text-neutral2 py-[0.6rem] text-ui-md truncate', className)}>{displayId}</div>;
+  return <div className={cn('truncate py-[0.6rem] text-ui-md text-neutral2', className)}>{displayId}</div>;
 }

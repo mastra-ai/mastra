@@ -16,7 +16,7 @@ export function DataPanelSectionHeading({ icon, className, children }: DataPanel
   return (
     <div
       className={cn(
-        'flex items-center gap-1.5 text-ui-sm uppercase tracking-widest text-neutral2 [&>svg]:size-3.5',
+        'flex items-center gap-1.5 text-ui-sm tracking-widest text-neutral2 uppercase [&>svg]:size-3.5',
         className,
       )}
     >

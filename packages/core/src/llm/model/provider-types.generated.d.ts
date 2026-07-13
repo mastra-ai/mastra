@@ -762,6 +762,7 @@ export type ProviderModelsMap = {
     'whisper-large-v3',
   ];
   readonly drun: readonly ['public/deepseek-r1', 'public/deepseek-v3', 'public/minimax-m25'];
+  readonly ebcloud: readonly ['DeepSeek-V4-Flash', 'DeepSeek-V4-Pro', 'GLM-5.1', 'Kimi-K2.6'];
   readonly 'alibaba-token-plan-cn': readonly [
     'MiniMax-M2.5',
     'deepseek-v3.2',
@@ -1294,6 +1295,9 @@ export type ProviderModelsMap = {
     'openai/gpt-5.4-nano',
     'openai/gpt-5.5',
     'openai/gpt-5.5-pro',
+    'openai/gpt-5.6-luna',
+    'openai/gpt-5.6-sol',
+    'openai/gpt-5.6-terra',
     'qwen/qwen3.6-flash',
     'qwen/qwen3.6-plus',
     'qwen/qwen3.7-max',
@@ -1307,6 +1311,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.1',
     'z-ai/glm-5.2',
   ];
+  readonly 'stepfun-ai-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash'];
   readonly lmstudio: readonly ['openai/gpt-oss-20b', 'qwen/qwen3-30b-a3b-2507', 'qwen/qwen3-coder-30b'];
   readonly poolside: readonly ['poolside/laguna-m.1', 'poolside/laguna-xs-2.1', 'poolside/laguna-xs.2'];
   readonly zenifra: readonly ['alibaba/qwen3.6-35b-a3b'];
@@ -2579,6 +2584,7 @@ export type ProviderModelsMap = {
     'minimax-m2.5',
     'tc-code-latest',
   ];
+  readonly lynkr: readonly ['lynkr-auto'];
   readonly freemodel: readonly [
     'claude-fable-5',
     'claude-haiku-4-5-20251001',
@@ -4135,6 +4141,7 @@ export type ProviderModelsMap = {
     'z-ai/glm-5.1',
   ];
   readonly 'abliteration-ai': readonly ['abliterated-model'];
+  readonly 'stepfun-step-plan': readonly ['step-3.5-flash', 'step-3.5-flash-2603', 'step-3.7-flash', 'step-router-v1'];
   readonly xpersona: readonly ['claude-fable-5', 'xpersona-frieren-coder', 'xpersona-gpt-5.5'];
   readonly baseten: readonly [
     'deepseek-ai/DeepSeek-V4-Pro',

@@ -8,6 +8,7 @@ import type {
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
 
 import { toMastraDBMessage } from './agent-controller-message-accumulator';
+import { stripAnsi } from './ansi';
 
 /**
  * Transcript model + reducer.
@@ -203,10 +204,11 @@ type Action =
       threadId?: string;
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
+      running?: boolean;
     }
   | {
       /**
-       * Patch transcript-owned metadata (OM/usage) from an authoritative
+       * Patch transcript-owned metadata (OM/usage/running) from an authoritative
        * `session.state()` fetch without touching the timeline or thread binding.
        * Used after thread switches, where the state fetch can resolve *after*
        * history hydration — it must never wipe already-rendered entries.
@@ -214,6 +216,11 @@ type Action =
       type: 'syncState';
       omProgress?: AgentControllerOMProgress;
       usage?: UsageSnapshot;
+      /**
+       * Whether the agent is mid-run per the server snapshot. Only applied when
+       * present — an older server that omits it must not clear a live indicator.
+       */
+      running?: boolean;
     };
 
 export function transcriptReducer(state: TranscriptState, action: Action): TranscriptState {
@@ -224,12 +231,16 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         threadId: action.threadId,
         omProgress: action.omProgress,
         usage: action.usage,
+        running: action.running ?? false,
       };
     case 'syncState':
+      // Fields absent from the snapshot are preserved, so a running-only sync
+      // (or a stale snapshot) never rolls back live OM progress/usage.
       return {
         ...state,
-        omProgress: action.omProgress,
-        usage: action.usage,
+        omProgress: action.omProgress ?? state.omProgress,
+        usage: action.usage ?? state.usage,
+        running: action.running ?? state.running,
       };
     case 'localUser':
       return {
@@ -307,7 +318,7 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         },
       );
     case 'shell_output':
-      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + event.output }));
+      return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -415,11 +426,12 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
       return { ...state, entries };
     }
 
-    // Thread lifecycle.
+    // Thread lifecycle events are surfaced by the sidebar (query invalidation)
+    // and toasts, not as transcript notices — a worktree deletion can cascade
+    // over many threads and would otherwise spam the open conversation.
     case 'thread_created':
-      return pushNotice(state, 'info', `Created thread: ${event.thread.title || event.thread.id}`);
     case 'thread_deleted':
-      return pushNotice(state, 'info', `Deleted thread ${event.threadId}`);
+      return state;
 
     // Usage tracking.
     case 'usage_update': {
@@ -460,6 +472,9 @@ function applyEvent(state: TranscriptState, raw: AgentControllerEvent): Transcri
         ...state,
         omProgress: ds.omProgress ?? state.omProgress,
         usage: (ds.tokenUsage as UsageSnapshot | undefined) ?? state.usage,
+        // Canonical run flag: keeps the working indicator honest even when the
+        // paired agent_start/agent_end event was missed (e.g. attach mid-run).
+        running: typeof ds.isRunning === 'boolean' ? ds.isRunning : state.running,
       };
     }
 
@@ -531,13 +546,22 @@ export function createInitialTranscript({
   threadId,
   omProgress,
   usage,
+  running,
 }: {
   messages?: AgentControllerMessage[];
   threadId?: string;
   omProgress?: AgentControllerOMProgress;
   usage?: UsageSnapshot;
+  running?: boolean;
 } = {}): TranscriptState {
-  return { ...initialTranscript, entries: messagesToEntries(messages), threadId, omProgress, usage };
+  return {
+    ...initialTranscript,
+    entries: messagesToEntries(messages),
+    threadId,
+    omProgress,
+    usage,
+    running: running ?? false,
+  };
 }
 
 function messagesToEntries(messages: AgentControllerMessage[]): TimelineEntry[] {
