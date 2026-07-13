@@ -22,7 +22,9 @@ function makeMockModel() {
     doStream: async () =>
       ({
         stream: convertArrayToReadableStream([
-          { type: 'text-delta', textDelta: 'hi' },
+          { type: 'text-start', id: 'text-1' },
+          { type: 'text-delta', id: 'text-1', delta: 'hi' },
+          { type: 'text-end', id: 'text-1' },
           { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } },
         ]),
         rawCall: { rawPrompt: null, rawSettings: {} },
