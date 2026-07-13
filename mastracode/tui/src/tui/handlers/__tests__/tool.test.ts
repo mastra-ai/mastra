@@ -7,13 +7,19 @@ import {
   handleShellOutput,
   handleToolEnd,
   handleToolInputDelta,
+  handleToolInputEnd,
   handleToolInputStart,
   handleToolUpdate,
 } from '../tool.js';
 
+async function flushParserMicrotasks(): Promise<void> {
+  for (let i = 0; i < 10; i++) {
+    await Promise.resolve();
+  }
+}
+
 async function flushParser(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  await flushParserMicrotasks();
   await new Promise(resolve => setTimeout(resolve, 100));
 }
 
@@ -115,6 +121,22 @@ describe('tool event handlers', () => {
 
     expect(appendStreamingOutput).not.toHaveBeenCalled();
     expect(requestRender).not.toHaveBeenCalled();
+  });
+
+  it('flushes latest parsed tool args when input streaming ends before the apply timer fires', async () => {
+    vi.useFakeTimers();
+    const { ctx, updateArgs, refresh, requestRender } = createContext('');
+
+    handleToolInputDelta(ctx, 'call-1', '{"path":"src/final.ts","query":"final args"}');
+    await flushParserMicrotasks();
+
+    expect(updateArgs).not.toHaveBeenCalled();
+
+    handleToolInputEnd(ctx, 'call-1');
+
+    expect(updateArgs).toHaveBeenCalledWith({ path: 'src/final.ts', query: 'final args' }, false);
+    expect(refresh).toHaveBeenCalledOnce();
+    expect(requestRender).toHaveBeenCalledOnce();
   });
 
   it('feeds streamed delta fragments into the pending tool component incrementally', async () => {

@@ -689,15 +689,20 @@ function applyParsedToolArgs(
   requestRender(state);
 }
 
+function flushLatestParsedToolArgs(ctx: EventHandlerContext, toolCallId: string): void {
+  const parser = toolInputParsers.get(toolCallId);
+  if (!parser || parser.closed || !parser.latestArgs) return;
+
+  const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
+  if (!buffer) return;
+  applyParsedToolArgs(ctx, toolCallId, buffer.toolName, parser.latestArgs);
+}
+
 function scheduleParsedToolArgsApply(ctx: EventHandlerContext, toolCallId: string, parser: ToolInputParserState): void {
   if (parser.applyTimer) return;
   parser.applyTimer = setTimeout(() => {
     parser.applyTimer = undefined;
-    if (parser.closed || !parser.latestArgs) return;
-
-    const buffer = ctx.state.session.displayState.get().toolInputBuffers.get(toolCallId);
-    if (!buffer) return;
-    applyParsedToolArgs(ctx, toolCallId, buffer.toolName, parser.latestArgs);
+    flushLatestParsedToolArgs(ctx, toolCallId);
   }, DEFAULT_RENDER_COALESCE_MS);
 }
 
@@ -741,7 +746,8 @@ export function handleToolInputDelta(ctx: EventHandlerContext, toolCallId: strin
 /**
  * Clean up the input buffer when tool input streaming ends.
  */
-export function handleToolInputEnd(_ctx: EventHandlerContext, toolCallId: string): void {
+export function handleToolInputEnd(ctx: EventHandlerContext, toolCallId: string): void {
+  flushLatestParsedToolArgs(ctx, toolCallId);
   closeToolInputParser(toolCallId);
 }
 
