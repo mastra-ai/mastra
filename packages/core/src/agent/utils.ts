@@ -105,7 +105,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     const result = await agent.stream(prompt, streamOptions);
     void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     const object = await result.object;
-    if (object === undefined) {
+    if (!object) {
       throw new MastraError({
         id: 'STRUCTURED_OUTPUT_OBJECT_UNDEFINED',
         domain: ErrorDomain.AGENT,
