@@ -24,7 +24,7 @@ export function MatchNav({ current, total, onNext, onPrevious, className }: Matc
       <span
         aria-live="polite"
         aria-label={`${total === 0 ? 0 : current} of ${total} matches`}
-        className="text-neutral3 text-ui-xs tabular-nums whitespace-nowrap select-none px-1"
+        className="px-1 text-ui-xs whitespace-nowrap text-neutral3 tabular-nums select-none"
       >
         {formatMatchCounter(current, total)}
       </span>

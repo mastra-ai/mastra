@@ -85,11 +85,10 @@ function searchHighlightExtension(): Extension {
 // Pushes the given match ranges (and which one is active) into a CodeMirror view and scrolls the
 // active match into view. Shared by live searches and by re-highlighting a freshly mounted editor.
 function dispatchMatchHighlights(view: EditorView, ranges: MatchRange[], activeIndex: number) {
+  const active = ranges[activeIndex];
   view.dispatch({
     effects: setSearchMatches.of({ ranges, activeIndex }),
-    ...(ranges.length > 0
-      ? { selection: { anchor: ranges[activeIndex].from, head: ranges[activeIndex].to }, scrollIntoView: true }
-      : {}),
+    ...(active ? { selection: { anchor: active.from, head: active.to }, scrollIntoView: true } : {}),
   });
 }
 

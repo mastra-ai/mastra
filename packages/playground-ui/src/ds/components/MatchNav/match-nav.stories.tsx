@@ -55,10 +55,10 @@ function WithHookDemo() {
   const nav = useMatchNavigation({ matches });
 
   return (
-    <div className="flex flex-col gap-3 w-64">
+    <div className="flex w-64 flex-col gap-3">
       <div className="flex items-center gap-2">
         <input
-          className="border border-border1 rounded-md px-2 py-1 text-ui-sm w-full"
+          className="w-full rounded-md border border-border1 px-2 py-1 text-ui-sm"
           value={query}
           placeholder="Filter items..."
           onChange={e => setQuery(e.target.value)}
@@ -71,7 +71,7 @@ function WithHookDemo() {
           const matchIndex = matches.indexOf(item);
           const isActive = matchIndex !== -1 && matchIndex === nav.activeIndex;
           return (
-            <li key={item} className={isActive ? 'bg-accent1/35 rounded-sm px-1' : 'px-1'}>
+            <li key={item} className={isActive ? 'rounded-sm bg-accent1/35 px-1' : 'px-1'}>
               {item}
             </li>
           );

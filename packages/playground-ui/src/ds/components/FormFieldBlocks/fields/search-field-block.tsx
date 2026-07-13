@@ -151,7 +151,7 @@ export function SearchFieldBlock({
               size === 'lg' && 'size-5',
             )}
           />
-          <div className="absolute top-1/2 right-0 -translate-y-1/2 flex items-center">
+          <div className="absolute top-1/2 right-0 flex -translate-y-1/2 items-center">
             {hasMatchNav && (
               <MatchNav current={currentMatch ?? 0} total={matchCount} onNext={onNext} onPrevious={onPrev} />
             )}
