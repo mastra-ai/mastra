@@ -6257,15 +6257,7 @@ export class Agent<
    * Used by resumeStream and resumeGenerate to fail fast at the agent boundary.
    * @internal
    */
-  async #loadAgenticLoopSnapshotOrThrow({
-    runId,
-    method,
-    toolCallId,
-  }: {
-    runId: string;
-    method: string;
-    toolCallId?: string;
-  }) {
+  async #loadAgenticLoopSnapshotOrThrow({ runId, method }: { runId: string; method: string }) {
     const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
     const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
     const existingSnapshot = await waitForSuspendedSnapshot(workflowsStore, 'agentic-loop', runId);
@@ -6288,27 +6280,6 @@ export class Agent<
           hasStorage,
         },
       });
-    }
-
-    if (toolCallId !== undefined) {
-      const suspendedToolCallIds = this.#getSuspendedToolCalls(existingSnapshot)
-        .map(toolCall => toolCall.toolCallId)
-        .filter((id): id is string => Boolean(id));
-      if (!suspendedToolCallIds.includes(toolCallId)) {
-        throw new MastraError({
-          id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `Agent "${this.name}" ${method}() cannot resume tool call "${toolCallId}" because it is not suspended.`,
-          details: {
-            agentName: this.name,
-            method,
-            runId,
-            toolCallId,
-            suspendedToolCallIds: suspendedToolCallIds.join(','),
-          },
-        });
-      }
     }
 
     return existingSnapshot;
@@ -6362,6 +6333,36 @@ export class Agent<
     }
 
     return toolCalls;
+  }
+
+  #validateSuspendedToolCallTarget({
+    snapshot,
+    toolCallId,
+    runId,
+    method,
+  }: {
+    snapshot: WorkflowRunState;
+    toolCallId: string | undefined;
+    runId: string;
+    method: string;
+  }) {
+    if (toolCallId === undefined) return;
+
+    const isSuspended = this.#getSuspendedToolCalls(snapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+    if (!isSuspended) {
+      throw new MastraError({
+        id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: `Agent "${this.name}" ${method}() cannot resume tool call "${toolCallId}" because it is not suspended.`,
+        details: {
+          agentName: this.name,
+          method,
+          runId,
+          toolCallId,
+        },
+      });
+    }
   }
 
   /**
@@ -8253,7 +8254,6 @@ export class Agent<
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
       runId,
       method: 'resumeStream',
-      toolCallId: streamOptions?.toolCallId,
     });
     const snapshotMemoryInfo = this.#getSnapshotMemoryInfo(existingSnapshot);
 
@@ -8272,6 +8272,12 @@ export class Agent<
       runId: mergedStreamOptions.runId,
       snapshotMemoryInfo,
       actor,
+    });
+    this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: streamOptions?.toolCallId,
+      runId,
+      method: 'resumeStream',
     });
 
     const llm = await this.getLLM({
@@ -8419,7 +8425,6 @@ export class Agent<
     const existingSnapshot = await this.#loadAgenticLoopSnapshotOrThrow({
       runId,
       method: 'resumeGenerate',
-      toolCallId: options?.toolCallId,
     });
     await this.#requireAgentExecutionFGA({
       requestContext: mergedOptions.requestContext,
@@ -8427,6 +8432,12 @@ export class Agent<
       runId: mergedOptions.runId,
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
+    });
+    this.#validateSuspendedToolCallTarget({
+      snapshot: existingSnapshot,
+      toolCallId: options?.toolCallId,
+      runId,
+      method: 'resumeGenerate',
     });
 
     const llm = await this.getLLM({
