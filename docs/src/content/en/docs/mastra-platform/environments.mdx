@@ -45,9 +45,11 @@ All `mastra env` commands resolve their project from `MASTRA_PROJECT_ID`, the `-
 
 An environment resolves its variables from three scopes:
 
-1. **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
-1. **Environment variables**: Stored on one environment through the dashboard. Use these for values that differ between environments, like API keys for staging vs production services.
-1. **Project variables**: Stored on the project and shared by all environments.
+- **Managed variables**: Injected by attached [hosted databases](/docs/mastra-platform/database) (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
+- **Environment-scoped variables**: Stored on one environment through the dashboard. Use these for values that differ between environments, like API keys for staging and production services.
+- **Project-scoped variables**: Stored on the project and shared by all environments.
+
+Environment-scoped and project-scoped variables together are the stored variables described on the [Deploy](/docs/mastra-platform/deploy#environment-variables) page.
 
 Variables are applied when a deploy starts. To apply changed variables to a running service without a full redeploy:
 
@@ -72,7 +74,7 @@ Each row shows the deploy status, environment, timestamp, and which deploy is cu
 
 ## Isolate an environment's data
 
-By default a hosted database attached to the project is shared by all environments. For real isolation between production and staging data, attach a database scoped to a single environment:
+By default a hosted database attached to the project is shared by all environments. To isolate production data from staging data, attach a database scoped to a single environment:
 
 ```bash
 mastra env db create staging --kind turso

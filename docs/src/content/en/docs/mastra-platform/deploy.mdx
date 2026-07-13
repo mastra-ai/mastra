@@ -50,7 +50,7 @@ A local `.env` file is optional. Environment variables stored on the platform ar
     mastra env db create --kind turso
     ```
 
-    Provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, so there is nothing to copy into an `.env` file.
+    Provisioning takes a few seconds. The database's connection variables are injected into your deploys automatically, with nothing to copy into an `.env` file.
   </StepItem>
 
   <StepItem>
@@ -118,9 +118,9 @@ mastra lint --preflight
 
 Deploys resolve environment variables from three sources:
 
-1. **Managed variables**: Injected by platform resources like hosted databases (for example `TURSO_DATABASE_URL`). Always present, never defined by you.
-1. **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
-1. **Local env files**: An explicit `--env-file`, or ambient `.env` / `.env.local` files, layered on top at deploy time.
+- **Managed variables**: Injected by platform resources like hosted databases (for example `TURSO_DATABASE_URL`). The platform defines these, and you can't edit them.
+- **Stored variables**: Saved on the project or environment through the dashboard. Used as-is on every deploy with no local file needed.
+- **Local env files**: An explicit `--env-file`, or ambient `.env` and `.env.local` files, layered on top at deploy time.
 
 ```bash
 mastra deploy --env staging --env-file .env.staging

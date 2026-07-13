@@ -1,6 +1,6 @@
 ---
 title: "Hosted databases | Mastra platform"
-description: Provision managed Turso (LibSQL) and Postgres databases from your platform project settings and connect them to your Mastra project with no manual configuration.
+description: Provision managed Turso (LibSQL) and Postgres databases from the CLI or your platform project settings and connect them to your Mastra project with no manual configuration.
 ---
 
 import Steps from "@site/src/components/Steps";
@@ -24,7 +24,7 @@ Use a hosted database when your project needs durable storage that's managed by 
 
 ## Providers
 
-Hosted databases are available through three providers. Pick one when you attach a database from project settings. Mastra provisions it with the provider, stores credentials securely, and injects connection details as runtime environment variables when the database is ready. Wire those variables into the matching Mastra storage adapter in your code.
+Hosted databases are available through three providers. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
 
 Each provider injects a fixed set of variable names, and those names must be unique across the project. In practice this means one database per provider — for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
 
