@@ -29,11 +29,10 @@ import type { Worktree } from '../services/projects';
  * Sidebar section listing a GitHub project's worktrees.
  *
  * Threads are scoped to the worktree they run in, so callers can pass the
- * thread list as `children`. It only renders nested under the main-branch
- * workspace (or after the list when no worktree is selected yet, which falls
- * back to the main scope): feature worktrees hold a single conversation, so
- * the workspace row itself is the entry point and no thread list (titles,
- * rename, new-thread) is shown for them.
+ * thread list as `children`; it renders nested under the active worktree row
+ * (or after the list when no worktree is selected yet). Feature worktrees
+ * hold a single conversation, so the thread list renders read-only for them
+ * (title only — no rename/clone/delete or new-thread controls).
  */
 export function WorkspacesSection({ children }: { children?: ReactNode }) {
   const { baseUrl } = useApiConfig();
@@ -202,10 +201,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
       <div className="flex flex-col gap-1">
         {worktrees.map(worktree => {
           const active = worktree.worktreePath === selectedPath;
-          // Feature worktrees hold a single conversation, so only the
-          // main-branch workspace nests the multi-thread list.
-          const isMainWorkspace = worktree.worktreePath === activeProject.sandboxWorkdir;
-          const nested = active && isMainWorkspace && Boolean(children);
+          const nested = active && Boolean(children);
           return (
             <div key={worktree.worktreePath} className="flex flex-col gap-1">
               <WorkspaceRow
