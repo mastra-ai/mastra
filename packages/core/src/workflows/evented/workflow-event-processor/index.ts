@@ -1549,7 +1549,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (stepResult.status === 'failed') {
       const retries = step.step.retries ?? workflow.retryConfig.attempts ?? 0;
-      if (retryCount >= retries) {
+      if (retryCount >= retries || stepResult.nonRetryable) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
           runId,
