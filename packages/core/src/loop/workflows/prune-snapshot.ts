@@ -211,7 +211,18 @@ export function pruneAgentLoopSnapshot({ snapshot }: { snapshot: WorkflowRunStat
   const context: WorkflowRunState['context'] = {} as WorkflowRunState['context'];
   for (const [key, value] of Object.entries(snapshot.context ?? {})) {
     if (key === 'input') {
-      context.input = stripHeavyIterationFields(value ?? undefined) as Record<string, any> | undefined;
+      // `stripHeavyIterationFields` drops every `__`-prefixed key on the input
+      // object, but the durable-agent workflow input carries a
+      // `__workflowKind: 'durable-agent'` literal that identifies the snapshot
+      // as recoverable (see `DurableAgent.recover` / `listActiveRuns`). Restore
+      // it after pruning when the original input declared it — the strip is
+      // still what drops heavy state like `__streamState`.
+      const strippedInput = stripHeavyIterationFields(value ?? undefined) as Record<string, any> | undefined;
+      const originalKind = isPlainObject(value) ? (value as Record<string, any>).__workflowKind : undefined;
+      if (strippedInput && typeof originalKind === 'string') {
+        strippedInput.__workflowKind = originalKind;
+      }
+      context.input = strippedInput;
     } else {
       context[key] = pruneStepResult(value as Record<string, any>) as any;
     }

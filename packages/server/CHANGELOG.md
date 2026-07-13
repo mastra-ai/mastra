@@ -1,5 +1,42 @@
 # @mastra/server
 
+## 1.51.0-alpha.6
+
+### Patch Changes
+
+- Added HTTP and client bindings for recovering an interrupted durable agent run. ([#19191](https://github.com/mastra-ai/mastra/pull/19191))
+
+  **What changed**
+  - `@mastra/server`: new `POST /agents/:agentId/recover` route. Given the id of a durable agent run that was interrupted by a deploy or crash, the server picks the run back up from where it left off and streams the rest of the response to the caller. Non-durable agents are rejected, and callers can only recover runs that belong to them (same permission and ownership rules as resuming a suspended run).
+  - `@mastra/client-js`: new `agent.recover({ runId })` method that reads that stream from the browser or Node. It behaves the same as `agent.resumeStream()` — you get back a readable stream of the agent's remaining response.
+
+  **Why**
+
+  The underlying core API for recovering an interrupted durable agent run could previously only be called from server-side code. This adds the standard HTTP + client surface so operators can reattach to an interrupted run from a dashboard, an admin tool, or any other client, using the same auth and ownership rules as the rest of the agents API.
+
+  **Usage**
+
+  ```ts
+  const stream = await mastraClient.getAgent('support').recover({ runId: 'run-abc123' });
+  for await (const chunk of stream) {
+    // render or forward the remaining agent output
+  }
+  ```
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/core@1.51.0-alpha.6
+
+## 1.51.0-alpha.5
+
+### Patch Changes
+
+- Fixed streamed agent-controller error events losing their message: Error instances are now flattened before serialization so clients see the real failure reason instead of a generic "Error". ([#19258](https://github.com/mastra-ai/mastra/pull/19258))
+
+- The tool provider authorize handler now falls back to the provider's `defaultScope` when a request does not specify a connection `scope`. Precedence is: explicit request `scope`, then the provider's `defaultScope`, then `'per-author'`. This lets a provider configured with `defaultScope: 'caller-supplied'` produce per-tenant connections through the Agent Builder connect flow, which does not send a scope. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+
 ## 1.51.0-alpha.4
 
 ### Patch Changes
