@@ -5682,6 +5682,9 @@ importers:
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.110
         version: '@ai-sdk/openai@2.0.110(zod@4.4.3)'
+      '@internal/auth':
+        specifier: workspace:*
+        version: link:../_internals/auth
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core

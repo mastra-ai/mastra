@@ -77,6 +77,8 @@ export type SandboxFactory = (opts: {
   env?: Record<string, string>;
   /** Idle teardown window (minutes). The provider stops the VM after this idle period. */
   idleTimeoutMinutes?: number;
+  /** Stable per-(project,user) checkpoint key for providers that support snapshot restore. */
+  checkpointName?: string;
 }) => MaterializationSandbox;
 
 /**
@@ -188,11 +190,12 @@ export class SandboxBudgetError extends Error {
 }
 
 /** Railway-backed sandbox, optionally reattaching by id. */
-const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes }) =>
+const railwayFactory: SandboxFactory = ({ providerSandboxId, env, idleTimeoutMinutes, checkpointName }) =>
   new RailwaySandbox({
     ...(providerSandboxId ? { sandboxId: providerSandboxId } : {}),
     ...(env ? { env } : {}),
     ...(idleTimeoutMinutes !== undefined ? { idleTimeoutMinutes } : {}),
+    ...(checkpointName ? { checkpointName } : {}),
   });
 
 /** Local host-process sandbox (single-user dev; no tenant isolation). */
@@ -229,6 +232,17 @@ async function readProviderSandboxId(sandbox: MaterializationSandbox): Promise<s
 }
 
 /**
+ * Stable checkpoint key for the per-(repo project,user) sandbox binding. The
+ * GitHub project row is one repo per org, and the user id keeps each user's
+ * sandbox snapshot isolated while still restoring across provider VM ids.
+ */
+export function sandboxCheckpointName(row: Pick<GithubProjectSandboxRow, 'githubProjectId' | 'userId'>): string {
+  const raw = `${row.githubProjectId}-${row.userId}`;
+  const safe = raw.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+  return `mastracode-web-${safe}`;
+}
+
+/**
  * Provision a new sandbox (persisting its provider id on first open) or
  * reattach to the stored one. Returns a started, live sandbox.
  */
@@ -237,6 +251,7 @@ export async function ensureProjectSandbox(
   onProgress?: ProgressFn,
 ): Promise<MaterializationSandbox> {
   const idleTimeoutMinutes = getSandboxIdleMinutes();
+  const checkpointName = sandboxCheckpointName(row);
 
   // Reattach path: if we have a stored sandbox id, try to reattach. The VM may
   // have been torn down by the provider's idle GC (or otherwise died), in which
@@ -244,7 +259,7 @@ export async function ensureProjectSandbox(
   // fresh sandbox so the next open succeeds instead of being permanently wedged.
   if (row.sandboxId) {
     reportProgress(onProgress, { phase: 'reattaching', message: 'Reconnecting to your sandbox…' });
-    const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes });
+    const reattached = sandboxFactory({ providerSandboxId: row.sandboxId, idleTimeoutMinutes, checkpointName });
     try {
       await reattached.start();
       return reattached;
@@ -264,7 +279,7 @@ export async function ensureProjectSandbox(
   }
 
   reportProgress(onProgress, { phase: 'provisioning', message: 'Provisioning a new sandbox…' });
-  const sandbox = sandboxFactory({ idleTimeoutMinutes });
+  const sandbox = sandboxFactory({ idleTimeoutMinutes, checkpointName });
   await sandbox.start();
   liveSandboxCount += 1;
 

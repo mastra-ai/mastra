@@ -33,6 +33,7 @@ import {
   resolveGitIdentity,
   runWorktreeSetup,
   safeBranchDir,
+  sandboxCheckpointName,
   setSandboxFactory,
   shellQuote,
   withInstallToken,
@@ -178,6 +179,20 @@ describe('computeSandboxWorkdir', () => {
   });
 });
 
+describe('sandboxCheckpointName', () => {
+  it('derives a stable per-repo-project, per-user checkpoint key', () => {
+    expect(sandboxCheckpointName(makeRow({ githubProjectId: 'proj_123', userId: 'user_456' }))).toBe(
+      'mastracode-web-proj_123-user_456',
+    );
+  });
+
+  it('sanitizes characters outside Railway-safe checkpoint names', () => {
+    expect(sandboxCheckpointName(makeRow({ githubProjectId: 'proj/one', userId: 'user:two' }))).toBe(
+      'mastracode-web-proj-one-user-two',
+    );
+  });
+});
+
 describe('ensureProjectSandbox', () => {
   it('provisions a new sandbox and persists the provider id on first open', async () => {
     const sandbox = new FakeSandbox();
@@ -192,7 +207,7 @@ describe('ensureProjectSandbox', () => {
 
   it('reattaches to the stored sandbox id without re-persisting', async () => {
     const sandbox = new FakeSandbox();
-    let factoryArgs: { providerSandboxId?: string } | undefined;
+    let factoryArgs: { providerSandboxId?: string; checkpointName?: string } | undefined;
     setSandboxFactory(opts => {
       factoryArgs = opts;
       return sandbox;
@@ -201,13 +216,14 @@ describe('ensureProjectSandbox', () => {
     await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-existing' }));
 
     expect(factoryArgs?.providerSandboxId).toBe('railway-vm-existing');
+    expect(factoryArgs?.checkpointName).toBe('mastracode-web-proj-1-user-1');
     expect(dbUpdates).toEqual([]);
   });
 
-  it('passes the idle timeout to the provider on provision', async () => {
+  it('passes the idle timeout and checkpoint name to the provider on provision', async () => {
     process.env.MASTRACODE_SANDBOX_IDLE_MINUTES = '15';
     const sandbox = new FakeSandbox();
-    let factoryArgs: { idleTimeoutMinutes?: number } | undefined;
+    let factoryArgs: { idleTimeoutMinutes?: number; checkpointName?: string } | undefined;
     setSandboxFactory(opts => {
       factoryArgs = opts;
       return sandbox;
@@ -216,6 +232,7 @@ describe('ensureProjectSandbox', () => {
     await ensureProjectSandbox(makeRow({ sandboxId: null }));
 
     expect(factoryArgs?.idleTimeoutMinutes).toBe(15);
+    expect(factoryArgs?.checkpointName).toBe('mastracode-web-proj-1-user-1');
   });
 
   it('re-provisions and clears the stale id when reattach to a dead sandbox fails', async () => {
@@ -226,16 +243,19 @@ describe('ensureProjectSandbox', () => {
     const fresh = new FakeSandbox();
     fresh.providerId = 'railway-vm-new';
 
-    const provided: Array<string | undefined> = [];
+    const provided: Array<{ providerSandboxId?: string; checkpointName?: string }> = [];
     setSandboxFactory(opts => {
-      provided.push(opts.providerSandboxId);
+      provided.push({ providerSandboxId: opts.providerSandboxId, checkpointName: opts.checkpointName });
       return opts.providerSandboxId ? dead : fresh;
     });
 
     const result = await ensureProjectSandbox(makeRow({ sandboxId: 'railway-vm-dead' }));
 
-    // First call reattaches (dead), second provisions fresh.
-    expect(provided).toEqual(['railway-vm-dead', undefined]);
+    // First call reattaches (dead), second provisions fresh from the same checkpoint.
+    expect(provided).toEqual([
+      { providerSandboxId: 'railway-vm-dead', checkpointName: 'mastracode-web-proj-1-user-1' },
+      { providerSandboxId: undefined, checkpointName: 'mastracode-web-proj-1-user-1' },
+    ]);
     expect(result).toBe(fresh);
     expect(fresh.startCount).toBe(1);
     // The stale id is cleared, then the new provider id persisted.
