@@ -549,7 +549,12 @@ export async function dev({
     await mirrorFsAgentWorkspaces(mastraDir, join(dotMastraPath, 'output'));
   }
 
-  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools);
+  const watcher = await bundler.watch(entryFile, dotMastraPath, discoveredTools, {
+    mastraDir,
+    userEntryFile,
+    outputDirectory: dotMastraPath,
+    preparedEntry: fsAgents,
+  });
 
   await startServer(
     join(dotMastraPath, 'output'),
