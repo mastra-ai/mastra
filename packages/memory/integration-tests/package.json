@@ -31,24 +31,24 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@faker-js/faker": "^9.9.0",
-    "@internal/llm-recorder": "workspace:*",
-    "@internal/test-utils": "workspace:*",
+    "@faker-js/faker": "^10.5.0",
+    "@internal/llm-recorder": "latest",
+    "@internal/test-utils": "latest",
     "@mastra/core": "*",
     "@testing-library/react": "^16.3.2",
-    "@types/jsdom": "^27.0.0",
+    "@types/jsdom": "^28.0.3",
     "@types/json-schema": "^7.0.15",
-    "@types/node": "22.19.20",
+    "@types/node": "22.20.0",
     "ai": "^4.2.2",
     "ai-v5": "npm:ai@^5.0.179",
     "ai-v6": "npm:ai@latest",
     "execa": "^9.6.1",
-    "jsdom": "^26.1.0",
+    "jsdom": "^29.1.1",
     "mastra": "*",
-    "next": "^15.5.12",
+    "next": "^16.2.10",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.9"
   }
 }

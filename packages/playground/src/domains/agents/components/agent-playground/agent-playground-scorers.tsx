@@ -1,11 +1,11 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { Calculator, CheckCircle2, Loader2 } from 'lucide-react';
+import { Calculator, CheckCircle2, Loader2, SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import { useWatch } from 'react-hook-form';
@@ -70,7 +70,17 @@ export function AgentPlaygroundScorers(_props: AgentPlaygroundScorersProps) {
           </Txt>
         </div>
         {scorerList.length > 5 && (
-          <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers..." />
+          <InputGroup variant="outline">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search scorers"
+              placeholder="Search scorers..."
+              onChange={event => setSearch(event.target.value)}
+            />
+          </InputGroup>
         )}
       </div>
 

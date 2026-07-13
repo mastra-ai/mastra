@@ -30,7 +30,9 @@ import {
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RECOVER_ROUTE,
   SEND_TOOL_APPROVAL_ROUTE,
+  LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
@@ -868,7 +870,7 @@ describe('Agent Routes Authorization', () => {
   describe('RESUME_STREAM_ROUTE', () => {
     async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
       const workflowsStore = await storage.getStore('workflows');
-      await workflowsStore.persistWorkflowSnapshot({
+      await workflowsStore?.persistWorkflowSnapshot({
         workflowName: 'agentic-loop',
         runId,
         resourceId,
@@ -883,6 +885,7 @@ describe('Agent Routes Authorization', () => {
           suspendedPaths: {},
           resumeLabels: {},
           waitingPaths: {},
+          timestamp: Date.now(),
         },
       });
     }
@@ -1155,6 +1158,147 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result).toBe(expectedStream);
+    });
+  });
+
+  describe('RECOVER_ROUTE', () => {
+    async function persistDurableAgenticLoopRun({
+      runId,
+      resourceId,
+      status = 'running',
+    }: {
+      runId: string;
+      resourceId?: string;
+      status?: 'running' | 'suspended' | 'pending';
+    }) {
+      const workflowsStore = await storage.getStore('workflows');
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: 'durable-agentic-loop',
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status,
+          value: {},
+          context: {},
+          activePaths: [],
+          activeStepsPath: {},
+          serializedStepGraph: [],
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+    }
+
+    it('should return 400 when runId is missing', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+        } as any),
+      ).rejects.toThrow(new HTTPException(400, { message: 'Run id is required' }));
+    });
+
+    it('should return 400 when the target agent is not a durable agent', async () => {
+      const requestContext = createContextWithReservedKeys({});
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'test-run-id',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(400, {
+          message: 'Agent does not support recover. Only durable agents (createDurableAgent) can recover runs.',
+        }),
+      );
+    });
+
+    it('should return 403 when runId belongs to a different resource', async () => {
+      // Add a recover method to make the agent look durable.
+      (mockAgent as any).recover = vi.fn();
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-owned-by-b', resourceId: 'user-b' });
+
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          runId: 'recover-run-owned-by-b',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: workflow run belongs to a different resource' }),
+      );
+
+      delete (mockAgent as any).recover;
+    });
+
+    it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
+      const expectedStream = new ReadableStream();
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
+      (mockAgent as any).recover = recoverMock;
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-1' });
+
+      const requestContext = createContextWithReservedKeys({});
+      const abortController = new AbortController();
+
+      const result = await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: abortController.signal,
+        runId: 'recover-run-1',
+      } as any);
+
+      expect(recoverMock).toHaveBeenCalledWith('recover-run-1', { abortSignal: abortController.signal });
+      expect(result).toBe(expectedStream);
+
+      delete (mockAgent as any).recover;
+    });
+
+    it('should stash version overrides on requestContext before calling agent.recover()', async () => {
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockAgent as any).recover = recoverMock;
+
+      await persistDurableAgenticLoopRun({ runId: 'recover-run-versions' });
+
+      const requestContext = createContextWithReservedKeys({});
+
+      await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        runId: 'recover-run-versions',
+        versions: {
+          agents: {
+            'sub-agent': { versionId: 'version-1' },
+          },
+        },
+      } as any);
+
+      expect(requestContext.get(MASTRA_VERSIONS_KEY)).toEqual({
+        agents: {
+          'sub-agent': { versionId: 'version-1' },
+        },
+        defaultStatus: 'published',
+      });
+
+      delete (mockAgent as any).recover;
     });
   });
 
@@ -1550,6 +1694,124 @@ describe('Agent Routes Authorization', () => {
           toolCallId: 'tool-call-123',
         }),
       );
+    });
+
+    it('should list suspended runs with filters passed through', async () => {
+      const run = {
+        runId: 'run-123',
+        status: 'suspended',
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        suspendedAt: new Date(),
+        toolCalls: [
+          { toolCallId: 'tool-call-123', toolName: 'findUserTool', args: { name: 'Dero' }, requiresApproval: true },
+        ],
+      };
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [run], total: 1 }));
+      await mockMemory.createThread({
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        title: 'Thread 123',
+      });
+
+      const fromDate = new Date('2026-01-01');
+      const result = await LIST_SUSPENDED_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: new RequestContext(),
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        perPage: 10,
+        page: 0,
+      } as any);
+
+      expect(result).toEqual({ runs: [run], total: 1 });
+      expect((mockAgent as any).listSuspendedRuns).toHaveBeenCalledWith({
+        threadId: 'thread-123',
+        resourceId: 'resource-123',
+        fromDate,
+        toDate: undefined,
+        perPage: 10,
+        page: 0,
+      });
+    });
+
+    it('should scope suspended-run listing to context resource and thread values', async () => {
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      await mockMemory.createThread({
+        threadId: 'thread-a',
+        resourceId: 'user-a',
+        title: 'Thread A',
+      });
+
+      await LIST_SUSPENDED_RUNS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'thread-a' }),
+        threadId: 'client-thread-ignored',
+        resourceId: 'user-b',
+      } as any);
+
+      expect((mockAgent as any).listSuspendedRuns).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId: 'thread-a', resourceId: 'user-a' }),
+      );
+    });
+
+    it('should return 403 when listing suspended runs for a thread owned by a different resource', async () => {
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      await mockMemory.createThread({
+        threadId: 'suspended-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Thread B',
+      });
+
+      await expect(
+        LIST_SUSPENDED_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'suspended-thread-owned-by-b',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+
+      expect((mockAgent as any).listSuspendedRuns).not.toHaveBeenCalled();
+    });
+
+    it('should return 403 when a thread filter is requested but the agent has no memory', async () => {
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+      const getMemorySpy = vi.spyOn(mockAgent, 'getMemory').mockResolvedValue(undefined as any);
+
+      await expect(
+        LIST_SUSPENDED_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'some-thread',
+        } as any),
+      ).rejects.toThrow(
+        new HTTPException(403, {
+          message: 'Access denied: agent has no memory configured to validate thread ownership',
+        }),
+      );
+
+      expect((mockAgent as any).listSuspendedRuns).not.toHaveBeenCalled();
+      getMemorySpy.mockRestore();
+    });
+
+    it('should return 403 when a thread filter is requested but the thread does not exist', async () => {
+      (mockAgent as any).listSuspendedRuns = vi.fn(async () => ({ runs: [], total: 0 }));
+
+      await expect(
+        LIST_SUSPENDED_RUNS_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          threadId: 'nonexistent-thread',
+        } as any),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread not found' }));
+
+      expect((mockAgent as any).listSuspendedRuns).not.toHaveBeenCalled();
     });
 
     it('should send a signal using context resource and thread values', async () => {

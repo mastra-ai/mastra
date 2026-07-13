@@ -71,7 +71,7 @@ const parseSources = (annotations: GatewayAnnotation[] = []) => {
 
 export const webSearchTool = createTool({
   id: 'web_search',
-  description: 'Search the web through Mastra Gateway and return a concise answer with source URLs.',
+  description: 'Search the web through the Gateway and return a concise answer with source URLs.',
   inputSchema: z.object({
     query: z.string().describe('A targeted web search query.'),
   }),

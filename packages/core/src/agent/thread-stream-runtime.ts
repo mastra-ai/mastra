@@ -570,9 +570,7 @@ export class AgentThreadStreamRuntime {
       });
     };
 
-    const shouldStartBroadcastOnRegister = !!Object.getOwnPropertyDescriptor(output, 'fullStream')?.value;
-
-    return { output, createSubscriberStream: createStream, startBroadcast: start, shouldStartBroadcastOnRegister };
+    return { output, createSubscriberStream: createStream, startBroadcast: start };
   }
 
   #getThreadTarget(options?: { memory?: AgentExecutionOptions<any>['memory']; requestContext?: RequestContext }) {
@@ -840,7 +838,6 @@ export class AgentThreadStreamRuntime {
       output: outputForSubscribers,
       createSubscriberStream,
       startBroadcast,
-      shouldStartBroadcastOnRegister,
     } = this.#withBroadcastStream(output, pubsub, key, streamId);
     const record: AgentThreadRunRecord<OUTPUT> = {
       agent,
@@ -867,9 +864,13 @@ export class AgentThreadStreamRuntime {
       streamId,
       streamSeq,
     });
-    if (shouldStartBroadcastOnRegister) {
-      void registered.then(startBroadcast, startBroadcast);
-    }
+    // Always drive the run's stream to completion, even when no caller consumes
+    // the returned output (e.g. a fire-and-forget schedule wake). The broadcast
+    // tee buffers every part, so a later/external subscriber still replays the
+    // full stream; without this pump the run never reaches a terminal state and
+    // its active-run record + thread lease would never release, permanently
+    // wedging the thread.
+    void registered.then(startBroadcast, startBroadcast);
     this.#watchThreadRunCompletion(state, pubsub, key, record);
     return registered;
   }
@@ -1753,9 +1754,15 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && activeRecord.agent.id === agent.id) {
         runId = activeRecord.runId;
       } else if (activeRunId && !activeRecord) {
-        // A run can be reserved before its stream record is registered. Keep the reserved
-        // id so early follow-ups still attach to the run that is starting.
-        runId = activeRunId;
+        if (state.threadKeysByRunId.get(activeRunId) === key) {
+          // A run can be reserved before its stream record is registered. Keep the reserved
+          // id so early follow-ups still attach to the run that is starting.
+          runId = activeRunId;
+        } else {
+          // Stale cross-pod entry. Clean it up from the local map, then let the lease decide
+          state.activeThreadRunIds.delete(key);
+          state.activeThreadStreamIds.delete(key);
+        }
       }
     }
 

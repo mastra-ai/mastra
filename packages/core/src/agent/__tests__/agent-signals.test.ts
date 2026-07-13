@@ -2768,6 +2768,7 @@ describe('Agent signals', () => {
       pubsub,
     );
 
+    await pubsub.acquireLease('remote-resource\u0000remote-thread', 'remote-run-1', 15000);
     ownerRuntime.registerRun(
       owner,
       output,
@@ -2806,8 +2807,69 @@ describe('Agent signals', () => {
 
     finishRun();
     await waitForRemoteRun;
+    await pubsub.releaseLease('remote-resource\u0000remote-thread', 'remote-run-1');
     ownerSubscription.unsubscribe();
     senderSubscription.unsubscribe();
+  });
+
+  it('wakes a new run instead of delivering to a stale remote active run id', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const ownerRuntime = new AgentThreadStreamRuntime();
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const owner = new Agent({
+      id: 'stale-remote-signal-agent',
+      name: 'Stale Remote Signal Owner Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('owner response'),
+    });
+    const sender = new Agent({
+      id: 'stale-remote-signal-agent',
+      name: 'Stale Remote Signal Sender Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+    });
+    let finishRun!: () => void;
+    const output = {
+      runId: 'stale-remote-run-1',
+      status: 'running',
+      fullStream: (async function* () {})(),
+      _waitUntilFinished: () => new Promise<void>(resolve => (finishRun = resolve)),
+    } as any;
+
+    const senderSubscription = await senderRuntime.subscribeToThread(
+      sender,
+      {
+        resourceId: 'stale-remote-resource',
+        threadId: 'stale-remote-thread',
+      },
+      pubsub,
+    );
+    await pubsub.acquireLease('stale-remote-resource\u0000stale-remote-thread', 'stale-remote-run-1', 15000);
+    ownerRuntime.registerRun(
+      owner,
+      output,
+      {
+        runId: 'stale-remote-run-1',
+        memory: { resource: 'stale-remote-resource', thread: 'stale-remote-thread' },
+      } as any,
+      pubsub,
+    );
+    await waitForCondition(() => senderSubscription.activeRunId() === 'stale-remote-run-1');
+
+    senderSubscription.unsubscribe();
+    finishRun();
+    await nextTick();
+    await pubsub.releaseLease('stale-remote-resource\u0000stale-remote-thread', 'stale-remote-run-1');
+
+    const result = senderRuntime.sendSignal(
+      sender,
+      { type: 'user-message', contents: 'stale remote follow-up' },
+      { resourceId: 'stale-remote-resource', threadId: 'stale-remote-thread' },
+      pubsub,
+    );
+
+    await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
+    await expect(result.accepted).resolves.not.toMatchObject({ runId: 'stale-remote-run-1' });
   });
 
   it('grants the wake output to exactly one runtime when two race to wake an idle thread', async () => {
@@ -3672,6 +3734,54 @@ describe('Agent signals', () => {
     expect(JSON.stringify(prompts[0])).toContain('thread targeted follow up');
 
     subscription.unsubscribe();
+  });
+
+  it('completes a signal-started run that no caller subscribes to or consumes', async () => {
+    // Regression: a fire-and-forget wake (e.g. an agent schedule) starts a thread run
+    // but never subscribes to or consumes the returned stream. The runtime must
+    // still drive the stream to completion on its own so the run reaches a
+    // terminal state and its active-run record releases. If it does not, the
+    // thread stays wedged and every later signal coalesces into the stuck run.
+    const agent = new Agent({
+      id: 'unconsumed-wake-agent',
+      name: 'Unconsumed Wake Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unconsumed response'),
+    });
+
+    const resourceId = 'unconsumed-wake-user';
+    const threadId = 'unconsumed-wake-thread';
+
+    // Wake the thread without subscribing or consuming the resulting stream.
+    const accepted = await agent.sendSignal(
+      { type: 'user-message', contents: 'wake without a consumer' },
+      {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } },
+      },
+    ).accepted;
+    expect(accepted.action).toBe('wake');
+    const runId = 'runId' in accepted ? accepted.runId : undefined;
+    expect(runId).toBeTruthy();
+    expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBe(runId);
+
+    // With no consumer, the run must still finish and release the active-run record.
+    await waitForCondition(() => agent.getActiveThreadRunId({ resourceId, threadId }) === undefined, 2000);
+    expect(agent.getActiveThreadRunId({ resourceId, threadId })).toBeUndefined();
+
+    // A follow-up wake now starts a fresh run rather than coalescing into a stuck one.
+    const followUp = await agent.sendSignal(
+      { type: 'user-message', contents: 'second wake after first completed' },
+      {
+        resourceId,
+        threadId,
+        ifIdle: { streamOptions: { memory: { resource: resourceId, thread: threadId } } },
+      },
+    ).accepted;
+    expect(followUp.action).toBe('wake');
+    const followUpRunId = 'runId' in followUp ? followUp.runId : undefined;
+    expect(followUpRunId).not.toBe(runId);
   });
 
   it('preserves active interjections sent immediately after repeated idle signal-started runs', async () => {

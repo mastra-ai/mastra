@@ -1,5 +1,34 @@
 # @mastra/auth-workos
 
+## 1.6.3-alpha.0
+
+### Patch Changes
+
+- Added `mapUserToResourceId` to `MastraAuthWorkosOptions` so it can be set directly in the `MastraAuthWorkos` constructor. This maps an authenticated user to a resource id that multi-tenant tool providers use to bucket connected accounts (for example, Composio's `caller-supplied` scope). Previously the option was consumed at runtime but missing from the typed constructor surface, forcing a post-construction property assignment. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+## 1.6.2
+
+### Patch Changes
+
+- Updated dependencies [[`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed)]:
+  - @mastra/auth@1.1.2
+
+## 1.6.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`705ff39`](https://github.com/mastra-ai/mastra/commit/705ff3969e57214ff2fdaf3815d751dd558886ed)]:
+  - @mastra/auth@1.1.2-alpha.0
+
+## 1.6.1
+
+### Patch Changes
+
+- Improved auth package builds by removing the direct core dependency from auth providers while preserving the existing public auth APIs. ([#17142](https://github.com/mastra-ai/mastra/pull/17142))
+
+- Updated dependencies [[`5c0df77`](https://github.com/mastra-ai/mastra/commit/5c0df776c40efa420f8c07a2f3ee66010296618e)]:
+  - @mastra/auth@1.1.1
+
 ## 1.6.1-alpha.0
 
 ### Patch Changes

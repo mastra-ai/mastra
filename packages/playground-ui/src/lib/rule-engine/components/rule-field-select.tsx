@@ -48,7 +48,7 @@ const FieldLevelSelect: React.FC<FieldLevelSelectProps> = ({
   return (
     <div className={cn('relative', className)}>
       <Select value={value} onValueChange={onChange}>
-        <SelectTrigger className="min-w-[140px] text-neutral6 bg-surface4" size="sm">
+        <SelectTrigger className="min-w-35 bg-surface4 text-neutral6" size="sm">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -98,6 +98,7 @@ export const RuleFieldSelect: React.FC<RuleFieldSelectProps> = ({ schema, value,
     let currentPath = '';
     for (let i = 0; i < pathSegments.length; i++) {
       const segment = pathSegments[i];
+      if (segment === undefined) break;
       currentPath = currentPath ? `${currentPath}.${segment}` : segment;
 
       const fieldOption = getFieldOptionAtPath(schema, currentPath);

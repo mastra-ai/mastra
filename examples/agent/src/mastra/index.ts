@@ -71,7 +71,7 @@ const externalMcpClient = new MCPClient({
 });
 import { lessComplexWorkflow, myWorkflow } from './workflows';
 import { refundWorkflow } from './workflows/refund-workflow';
-import { heartbeatWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
+import { tickWorkflow, multiCadenceWorkflow } from './workflows/scheduled';
 import {
   chefModelV2Agent,
   networkAgent,
@@ -79,14 +79,17 @@ import {
   agentWithBranchingModeration,
   agentWithSequentialModeration,
   supervisorAgent,
+  durableSupervisorAgent,
   subscriptionOrchestratorAgent,
   cryptoResearchAgent,
+  durableCryptoResearchAgent,
 } from './agents/model-v2-agent';
 import { myWorkflowX, nestedWorkflow, findUserWorkflow } from './workflows/other';
 import { moderationProcessor } from './agents/model-v2-agent';
 import {
   moderatedAssistantAgent,
   agentWithProcessorWorkflow,
+  durableAgentWithProcessorWorkflow,
   contentModerationWorkflow,
   simpleAssistantAgent,
   agentWithBranchingWorkflow,
@@ -100,8 +103,10 @@ import {
   stepLoggerProcessor,
 } from './processors/index';
 import { gatewayAgent } from './agents/gateway';
+import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
+import { approvalDemoAgent } from './agents/approval-demo-agent';
 
 const libsqlStore = new LibSQLStore({
   id: 'mastra-storage',
@@ -120,6 +125,8 @@ const storage = new MastraCompositeStore({
 export const mastra = new Mastra({
   agents: {
     gatewayAgent,
+    askUserAgent,
+    approvalDemoAgent,
     chefAgent,
     chefAgentResponses,
     codeOverrideEditableAgent,
@@ -138,14 +145,17 @@ export const mastra = new Mastra({
     networkAgent,
     moderatedAssistantAgent,
     agentWithProcessorWorkflow,
+    durableAgentWithProcessorWorkflow,
     simpleAssistantAgent,
     agentWithBranchingWorkflow,
     agentWithAdvancedModeration,
     agentWithBranchingModeration,
     agentWithSequentialModeration,
     supervisorAgent,
+    durableSupervisorAgent,
     subscriptionOrchestratorAgent,
     cryptoResearchAgent,
+    durableCryptoResearchAgent,
     slackDemoAgent,
     codeModeAgent,
     clinicDirectAgent,
@@ -175,7 +185,7 @@ export const mastra = new Mastra({
     contentModerationWorkflow,
     advancedModerationWorkflow,
     findUserWorkflow,
-    heartbeatWorkflow,
+    tickWorkflow,
     multiCadenceWorkflow,
     refundWorkflow,
   },

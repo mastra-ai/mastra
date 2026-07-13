@@ -1,8 +1,11 @@
-import { CollapsiblePanel, PanelDrawer, PanelSeparator } from '@mastra/playground-ui';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
+import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
+import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
+import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
+import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Panel, useDefaultLayout, Group } from 'react-resizable-panels';
+import { Panel, useDefaultLayout } from 'react-resizable-panels';
 
 export interface WorkflowLayoutProps {
   workflowId: string;
@@ -53,7 +56,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
       <div className="absolute inset-0 min-w-0 overflow-y-auto">{children}</div>
 
       {leftSlot && (
-        <Group
+        <PanelGroup
           className="pointer-events-none absolute inset-0 z-10 h-full min-h-0 w-full min-w-0 bg-transparent"
           defaultLayout={defaultLayout}
           onLayoutChange={onLayoutChange}
@@ -73,11 +76,11 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
           </CollapsiblePanel>
           <PanelSeparator />
           <Panel id="left-overlay-filler" className="pointer-events-none min-w-0 bg-transparent" />
-        </Group>
+        </PanelGroup>
       )}
 
       {rightSlot && (
-        <Group
+        <PanelGroup
           className="pointer-events-none absolute inset-0 z-10 h-full min-h-0 w-full min-w-0 bg-transparent"
           defaultLayout={defaultLayout}
           onLayoutChange={onLayoutChange}
@@ -96,7 +99,7 @@ export const WorkflowLayout = ({ workflowId, children, leftSlot, rightSlot }: Wo
           >
             {rightSlot}
           </CollapsiblePanel>
-        </Group>
+        </PanelGroup>
       )}
     </div>
   );

@@ -59,6 +59,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { findUserTool },
         memory: new MockMemory(),
+        engine,
       });
 
       // First call: model calls the tool, tool suspends
@@ -139,6 +140,7 @@ describeForAllEngines(
       const shared = await createSharedAgent(getMock(), {
         tools: { editTool },
         memory: new MockMemory(),
+        engine,
       });
 
       // First call: tool suspends
@@ -174,5 +176,5 @@ describeForAllEngines(
       expect(toolCompleted).toBe(false);
     });
   },
-  { skip: ['durable'] },
+  { skip: ['fs'] },
 );

@@ -70,6 +70,7 @@ const { tool, instructions } = createCodeMode({
 })
 
 const agent = new Agent({
+  id: 'shop-assistant',
   name: 'shop-assistant',
   instructions: ['You are a helpful shopping assistant.', instructions],
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -102,11 +103,7 @@ For `createCodeMode()` to work well, keep these tips in mind:
 - Keep tools focused, so each does one thing well and the model composes them in code.
 - Code mode helps most when calls can be parallelized with `Promise.all`.
 
-:::note
-
 Visit the [`createCodeMode()` reference](/reference/tools/create-code-mode) for configuration options, return values, result shape, and instructions inspection.
-
-:::
 
 ## Scoping tools across multiple code tools
 
@@ -128,6 +125,7 @@ const inventory = createCodeMode({
 })
 
 const agent = new Agent({
+  id: 'ops-assistant',
   name: 'ops-assistant',
   instructions: ['You are an ops assistant.', sales.instructions, inventory.instructions],
   model: '__GATEWAY_OPENAI_MODEL__',

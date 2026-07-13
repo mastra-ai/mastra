@@ -5,6 +5,7 @@ import { AIV5Adapter } from '@mastra/core/agent/message-list';
 import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { TaskItem } from '@mastra/core/signals';
 import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -16,6 +17,11 @@ import {
 } from '../lib/mastra-db';
 import type { MastraDBMessageMetadata } from '../lib/mastra-db';
 import { useMastraClient } from '../mastra-client-context';
+import {
+  extractLatestTasksFromMessages,
+  extractTasksFromSignalChunk,
+  extractTasksFromToolResultChunk,
+} from './extract-tasks';
 import { extractRunIdFromMessages } from './extractRunIdFromMessages';
 import { convertSignalDataToBase64String } from './signal-data';
 import type { ClientToolsInput, ModelSettings } from './types';
@@ -290,6 +296,7 @@ export const useChat = ({
   const _threadSubscriptionPromiseRef = useRef<Promise<void> | null>(null);
   const _threadSignalsUnsupportedRef = useRef(false);
   const [messages, setMessages] = useState<MastraDBMessage[]>([]);
+  const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [toolCallApprovals, setToolCallApprovals] = useState<{
     [toolCallId: string]: { status: 'approved' | 'declined' };
   }>({});
@@ -305,6 +312,7 @@ export const useChat = ({
   useEffect(() => {
     const formattedMessages = resolveInitialMessages(initialMessages ?? []);
     setMessages(formattedMessages);
+    setTasks(extractLatestTasksFromMessages(formattedMessages));
     pendingToolApprovalIdsRef.current = extractPendingToolApprovalIdsFromMessages(formattedMessages);
     setIsAwaitingToolApproval(pendingToolApprovalIdsRef.current.size > 0);
     _currentRunId.current = extractRunIdFromMessages(formattedMessages);
@@ -398,6 +406,11 @@ export const useChat = ({
     async (chunk: ChunkType, onChunk?: (chunk: ChunkType) => Promise<void>) => {
       setMessages(prev => accumulateChunk({ chunk, conversation: prev, metadata: { mode: 'stream' } }));
 
+      const signalTasks = extractTasksFromSignalChunk(chunk);
+      if (signalTasks !== undefined) setTasks(signalTasks);
+      const toolTasks = extractTasksFromToolResultChunk(chunk);
+      if (toolTasks !== undefined) setTasks(toolTasks);
+
       if (
         chunk.type === 'data-user-message' &&
         isDataChunk(chunk) &&
@@ -447,6 +460,16 @@ export const useChat = ({
       _threadSubscriptionAbortRef.current = subscriptionAbort;
       _threadSubscriptionKeyRef.current = subscriptionKey;
 
+      // Release the cached subscription state, but only while this attempt
+      // still owns it — a newer attempt cleans up after itself.
+      const releaseSubscriptionRefs = () => {
+        if (_threadSubscriptionAbortRef.current !== subscriptionAbort) return;
+        _threadSubscriptionRef.current = null;
+        _threadSubscriptionAbortRef.current = null;
+        _threadSubscriptionKeyRef.current = undefined;
+        _threadSubscriptionPromiseRef.current = null;
+      };
+
       const clientWithAbort = new MastraClient({
         ...baseClient!.options,
         abortSignal: subscriptionAbort.signal,
@@ -477,25 +500,20 @@ export const useChat = ({
               if (_threadSubscriptionRef.current === subscription) {
                 _threadSubscriptionRef.current = null;
               }
-              if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-                _threadSubscriptionAbortRef.current = null;
-                _threadSubscriptionKeyRef.current = undefined;
-                _threadSubscriptionPromiseRef.current = null;
-              }
+              releaseSubscriptionRefs();
             });
         })
         .catch(error => {
+          // Release on every failure so the next call retries with a fresh
+          // fetch instead of re-awaiting this rejected promise. Without this,
+          // an aborted mount-time subscribe strands the channel and the reply
+          // never arrives until reload (issue #18768).
+          releaseSubscriptionRefs();
+
           if (isThreadSignalUnsupportedError(error)) {
             markThreadSignalsUnsupported();
-            if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-              _threadSubscriptionRef.current = null;
-              _threadSubscriptionAbortRef.current = null;
-              _threadSubscriptionKeyRef.current = undefined;
-              _threadSubscriptionPromiseRef.current = null;
-            }
             return;
           }
-
           if (!isAbortError(error)) {
             console.error('[useChat] Thread subscription failed', error);
             setIsRunning(false);
@@ -888,7 +906,7 @@ export const useChat = ({
     _requestContext.current = undefined;
   };
 
-  const approveToolCall = async (toolCallId: string) => {
+  const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
     const onChunk = _onChunk.current;
     const currentRunId = _currentRunId.current;
 
@@ -906,6 +924,7 @@ export const useChat = ({
           threadId,
           toolCallId,
           approved: true,
+          ...(resumeData !== undefined ? { resumeData } : {}),
           requestContext: _requestContext.current,
         });
         pendingToolApprovalIdsRef.current.delete(toolCallId);
@@ -1136,12 +1155,19 @@ export const useChat = ({
       setMessages(s => [...s, dbUserMessage]);
     }
 
-    if (mode === 'generate') {
-      await generate({ ...args, coreUserMessages });
-    } else if (mode === 'stream') {
-      await stream({ ...args, coreUserMessages, signalId, clientMessageId });
-    } else if (mode === 'network') {
-      await network({ ...args, coreUserMessages });
+    try {
+      if (mode === 'generate') {
+        await generate({ ...args, coreUserMessages });
+      } else if (mode === 'stream') {
+        await stream({ ...args, coreUserMessages, signalId, clientMessageId });
+      } else if (mode === 'network') {
+        await network({ ...args, coreUserMessages });
+      }
+    } catch (error) {
+      // A failed send (subscription setup, request, or stream) must not leave
+      // the chat stranded in a "running" state until reload (issue #18768).
+      setIsRunning(false);
+      throw error;
     }
   };
 
@@ -1151,6 +1177,7 @@ export const useChat = ({
     isRunning,
     isAwaitingToolApproval,
     messages,
+    tasks,
     approveToolCall,
     declineToolCall,
     approveToolCallGenerate,

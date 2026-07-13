@@ -46,6 +46,8 @@ export function generateContextualValue(fieldName?: string): string {
   if (field === 'entitytype') return 'AGENT';
   if (field === 'entityid') return 'test-agent';
   if (field === 'role') return 'user';
+  // Cron fields must be a valid cron expression (schedule create routes).
+  if (field === 'cron') return '* * * * *';
   if (field === 'fields') return 'result'; // For workflow execution result field filtering (status is always included)
   // JSON-encoded query params (wrapped with wrapSchemaForQueryParams)
   if (field === 'tags') return '["test-tag"]'; // For observability traces filtering
@@ -372,7 +374,7 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':toolId')) params.toolId = 'test-tool';
   if (route.path.includes(':threadId')) params.threadId = 'test-thread';
   if (route.path.includes(':conversationId')) params.conversationId = 'test-thread';
-  if (route.path.includes(':harnessId')) params.harnessId = 'test-harness';
+  if (route.path.includes(':controllerId')) params.controllerId = 'test-controller';
   if (route.path.includes(':responseId')) params.responseId = 'test-response';
   if (route.path.includes(':resourceId')) params.resourceId = 'test-resource';
   if (route.path.includes(':modelConfigId')) params.modelConfigId = 'id1';

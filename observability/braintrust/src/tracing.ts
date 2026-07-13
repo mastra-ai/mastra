@@ -72,6 +72,7 @@ const SPAN_TYPE_EXCEPTIONS: Partial<Record<SpanType, string>> = {
   [SpanType.MODEL_GENERATION]: 'llm',
   [SpanType.TOOL_CALL]: 'tool',
   [SpanType.MCP_TOOL_CALL]: 'tool',
+  [SpanType.PROVIDER_TOOL_CALL]: 'tool',
   [SpanType.WORKFLOW_CONDITIONAL_EVAL]: 'function',
   [SpanType.WORKFLOW_WAIT_EVENT]: 'function',
 };

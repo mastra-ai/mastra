@@ -1,4 +1,6 @@
-import { useObservationalMemory, useMemoryThreadMessages } from '@mastra/playground-ui';
+import type { MastraDBMessage } from '@mastra/core/agent/message-list';
+import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
+import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, render } from '@testing-library/react';
@@ -8,7 +10,7 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { useChatRunning, useChatSend } from '../chat-context';
+import { useChatMessages, useChatRunning, useChatSend } from '../chat-context';
 import { ChatProvider } from '../chat-provider';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { server } from '@/test/msw-server';
@@ -67,6 +69,45 @@ const omObservationEndStream = () =>
 
 const omObservationEndResponse = () =>
   new HttpResponse(omObservationEndStream(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+
+const omObservationWithExtractionStream = () =>
+  new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const encoder = new TextEncoder();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            type: 'data-om-observation-start',
+            data: { cycleId: 'cycle-1', operationType: 'observation' },
+          })}\n\n`,
+        ),
+      );
+      controller.enqueue(
+        encoder.encode(
+          `data: ${JSON.stringify({
+            type: 'data-om-observation-end',
+            data: {
+              cycleId: 'cycle-1',
+              operationType: 'observation',
+              tokensObserved: 12,
+              tokensKept: 4,
+              extractedValues: { priority: 'high' },
+              extractionFailures: [{ slug: 'status', error: 'missing value' }],
+            },
+          })}\n\n`,
+        ),
+      );
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'finish', payload: {} })}\n\n`));
+      controller.close();
+    },
+  });
+
+const omObservationWithExtractionResponse = () =>
+  new HttpResponse(omObservationWithExtractionStream(), {
+    status: 200,
+    headers: { 'content-type': 'text/event-stream' },
+  });
 
 const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
@@ -345,6 +386,212 @@ describe('ChatProvider', () => {
     // With a supported model + thread signals enabled + a threadId, the composer
     // may send while streaming.
     expect(canSendValues.at(-1)).toBe(true);
+  });
+
+  it('completes persisted buffering markers on reload when buffer status already has the finished chunk', async () => {
+    const renderSnapshots: MastraDBMessage[][] = [];
+    const MessagesProbe = () => {
+      renderSnapshots.push(useChatMessages());
+      return null;
+    };
+
+    const initialMessages = [
+      {
+        id: 'msg-buffering-start',
+        role: 'assistant',
+        createdAt: new Date('2026-05-29T00:00:00.000Z'),
+        threadId: 'thread-1',
+        resourceId: 'agent-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-buffering-start',
+              data: {
+                cycleId: 'cycle-reload',
+                operationType: 'observation',
+                recordId: 'record-1',
+                threadId: 'thread-1',
+              },
+            },
+          ],
+          metadata: {},
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const bufferStatusRequests: string[] = [];
+    server.use(
+      ...baseHandlers([]),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
+        bufferStatusRequests.push(request.url);
+        return HttpResponse.json({
+          record: {
+            bufferedObservationChunks: [
+              {
+                cycleId: 'cycle-reload',
+                messageTokens: 120,
+                tokenCount: 40,
+                observations: ['remembered after reload'],
+                extractedValues: { priority: 'high' },
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
+            <MessagesProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+
+    expect(bufferStatusRequests).toHaveLength(1);
+
+    const latestMessages = renderSnapshots.at(-1) ?? [];
+    const omPart = latestMessages
+      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
+      .find(part => (part as { toolCallId?: string }).toolCallId === 'om-buffering-cycle-reload') as
+      | { state?: string; output?: { omData?: Record<string, unknown> } }
+      | undefined;
+
+    expect(omPart?.state).toBe('output-available');
+    expect(omPart?.output?.omData?.observations).toEqual(['remembered after reload']);
+    expect(omPart?.output?.omData?.extractedValues).toEqual({ priority: 'high' });
+  });
+
+  it('restores buffered extraction fields on reload when the persisted buffering-end has no extraction payload', async () => {
+    const renderSnapshots: MastraDBMessage[][] = [];
+    const MessagesProbe = () => {
+      renderSnapshots.push(useChatMessages());
+      return null;
+    };
+
+    const initialMessages = [
+      {
+        id: 'msg-buffering-terminal',
+        role: 'assistant',
+        createdAt: new Date('2026-05-29T00:00:00.000Z'),
+        threadId: 'thread-1',
+        resourceId: 'agent-1',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'data-om-buffering-start',
+              data: {
+                cycleId: 'cycle-terminal-reload',
+                operationType: 'observation',
+                recordId: 'record-1',
+                threadId: 'thread-1',
+              },
+            },
+            {
+              type: 'data-om-buffering-end',
+              data: {
+                cycleId: 'cycle-terminal-reload',
+                operationType: 'observation',
+                observations: ['persisted observation'],
+              },
+            },
+          ],
+          metadata: {},
+        },
+      },
+    ] satisfies MastraDBMessage[];
+
+    const bufferStatusRequests: string[] = [];
+    server.use(
+      ...baseHandlers([]),
+      http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: { observationalMemory: true } })),
+      http.post(`${BASE_URL}/api/memory/observational-memory/buffer-status`, ({ request }) => {
+        bufferStatusRequests.push(request.url);
+        return HttpResponse.json({
+          record: {
+            bufferedObservationChunks: [
+              {
+                cycleId: 'cycle-terminal-reload',
+                messageTokens: 219,
+                tokenCount: 81,
+                observations: ['persisted observation'],
+                extractedValues: { workingMemory: { location: 'Vancouver' } },
+              },
+            ],
+          },
+        });
+      }),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={initialMessages}>
+            <MessagesProbe />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    });
+
+    expect(bufferStatusRequests).toHaveLength(1);
+
+    const latestMessages = renderSnapshots.at(-1) ?? [];
+    const omData = latestMessages
+      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
+      .map(part => (part as { output?: { omData?: unknown } }).output?.omData)
+      .find(Boolean) as { extractedValues?: unknown } | undefined;
+
+    expect(omData?.extractedValues).toEqual({ workingMemory: { location: 'Vancouver' } });
+  });
+
+  it('keeps streamed OM extraction data on the rendered chat marker while refreshing panel queries', async () => {
+    const renderSnapshots: MastraDBMessage[][] = [];
+    const MessagesProbe = () => {
+      renderSnapshots.push(useChatMessages());
+      return null;
+    };
+
+    server.use(
+      ...baseHandlers([]),
+      http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => omObservationWithExtractionResponse()),
+    );
+
+    await act(async () => {
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <MessagesProbe />
+            <SendOnMount text="trigger OM extraction" />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    });
+
+    await act(async () => {
+      await new Promise(resolve => setTimeout(resolve, 120));
+    });
+
+    const latestMessages = renderSnapshots.at(-1) ?? [];
+    const omData = latestMessages
+      .flatMap(message => (Array.isArray(message.content?.parts) ? message.content.parts : []))
+      .map(part => (part as { output?: { omData?: unknown } }).output?.omData)
+      .find(Boolean) as { extractedValues?: unknown; extractionFailures?: unknown } | undefined;
+
+    expect(omData?.extractedValues).toEqual({ priority: 'high' });
+    expect(omData?.extractionFailures).toEqual([{ slug: 'status', error: 'missing value' }]);
   });
 
   it('refetches the memory timeline panel queries (scoped to the thread) on an OM observation-end event', async () => {

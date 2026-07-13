@@ -20,7 +20,7 @@ For a complete working example, see the [`mastra-chat`](https://github.com/thesy
 
 ## Integration guide
 
-Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` chat surface to it through the AG-UI protocol.
+Embed Mastra in your Next.js API route and connect an OpenUI `<AgentInterface />` chat surface to it through the AG-UI protocol.
 
 <Steps>
   <StepItem>
@@ -166,33 +166,25 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
   </StepItem>
 
   <StepItem>
-    Wire the OpenUI `<FullScreen />` chat surface to the route. Set `streamProtocol` to `agUIAdapter()` so OpenUI knows to parse AG-UI events.
+    Wire the OpenUI `<AgentInterface />` chat surface to the route. Build an `llm` adapter with `fetchLLM()` and set `streamAdapter` to `agUIAdapter()` so OpenUI knows to parse AG-UI events.
 
-    ```tsx title="src/app/page.tsx" {5,11-13,20}
+    ```tsx title="src/app/page.tsx" {5,8-11,17}
     'use client'
 
     import '@openuidev/react-ui/components.css'
 
-    import { agUIAdapter } from '@openuidev/react-headless'
-    import { FullScreen } from '@openuidev/react-ui'
+    import { AgentInterface, agUIAdapter, fetchLLM } from '@openuidev/react-ui'
     import { openuiChatLibrary } from '@openuidev/react-ui/genui-lib'
+
+    const llm = fetchLLM({
+      url: '/api/chat',
+      streamAdapter: agUIAdapter(),
+    })
 
     export default function Page() {
       return (
         <div className="relative h-screen w-screen overflow-hidden">
-          <FullScreen
-            processMessage={async ({ messages, threadId, abortController }) => {
-              return fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ messages, threadId }),
-                signal: abortController.signal,
-              })
-            }}
-            streamProtocol={agUIAdapter()}
-            componentLibrary={openuiChatLibrary}
-            agentName="OpenUI + Mastra Chat"
-          />
+          <AgentInterface llm={llm} componentLibrary={openuiChatLibrary} />
         </div>
       )
     }
@@ -217,7 +209,7 @@ Embed Mastra in your Next.js API route and connect an OpenUI `<FullScreen />` ch
 OpenUI consumes the [AG-UI protocol](https://docs.ag-ui.com), a transport-agnostic stream of typed events for AI agents. `@ag-ui/mastra` translates a Mastra `Agent` into this protocol:
 
 - The server calls `agent.run({ messages, threadId, runId, ... })` and serializes each emitted event as an SSE message.
-- The client passes `streamProtocol={agUIAdapter()}` to `<FullScreen />`, which parses the SSE stream into the internal events that drive OpenUI Lang rendering.
+- The client passes `fetchLLM({ streamAdapter: agUIAdapter() })` to `<AgentInterface />`, which parses the SSE stream into the internal events that drive OpenUI Lang rendering.
 
 `threadId` ties a conversation together across requests, and `runId` identifies a single execution. Generate a fresh `runId` per request and persist `threadId` on the client.
 
@@ -232,11 +224,11 @@ OpenUI generates UI from a component library. The library defines which componen
 - `openuiChatLibrary`: components for chat interfaces (cards, forms, tables, charts).
 - `openuiDashboardLibrary`: components for dashboards and data-heavy surfaces.
 
-Pass the library to `<FullScreen componentLibrary={...} />` to make its components available to the model.
+Pass the library to `<AgentInterface componentLibrary={...} />` to make its components available to the model.
 
 ### Customizing the library
 
-To restrict or extend the output, define your own library in `src/library.ts` and export a subset of components. Pass that library to `<FullScreen />` and regenerate the system prompt whenever the library changes:
+To restrict or extend the output, define your own library in `src/library.ts` and export a subset of components. Pass that library to `<AgentInterface />` and regenerate the system prompt whenever the library changes:
 
 ```bash npm2yarn
 npx @openuidev/cli generate src/library.ts --out src/generated/system-prompt.txt

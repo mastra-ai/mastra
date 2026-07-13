@@ -1,5 +1,5 @@
 ---
-title: "Reference: MCPClient | Tools & MCP"
+title: "Reference: MCPClient | Tools and MCP"
 description: API Reference for MCPClient - A class for managing multiple Model Context Protocol servers and their tools.
 packages:
   - "@mastra/core"
@@ -705,6 +705,28 @@ mcpClient.prompts.onListChanged('myWeatherServer', () => {
 })
 ```
 
+### `tools` Property
+
+The `MCPClient` instance has a `tools` property for subscribing to tool list change notifications. To fetch tools, use `listTools()` or `listToolsets()`.
+
+#### `tools.onListChanged(serverName: string, handler: () => void)`
+
+Sets a notification handler that will be called when the list of available tools changes on a specific server (for example, when the server adds or removes tools at runtime).
+
+```typescript prettier:false
+async onListChanged(serverName: string, handler: () => void): Promise<void>
+```
+
+Example:
+
+```typescript
+await mcpClient.tools.onListChanged('myWeatherServer', async () => {
+  console.log('Tool list changed on myWeatherServer.')
+  // You should re-fetch the tools
+  // const tools = await mcpClient.listTools();
+})
+```
+
 ### `progress` Property
 
 The `MCPClient` instance has a `progress` property for subscribing to progress notifications emitted by MCP servers while tools execute.
@@ -1168,6 +1190,7 @@ const mcpClient = new MCPClient({
 
 // Use with an agent — requestContext is automatically forwarded
 const agent = new Agent({
+  id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant.',
   model: openai('gpt-5.4'),

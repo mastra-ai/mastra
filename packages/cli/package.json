@@ -1,6 +1,6 @@
 {
   "name": "mastra",
-  "version": "1.16.0-alpha.3",
+  "version": "1.19.0-alpha.7",
   "license": "Apache-2.0",
   "description": "cli for mastra",
   "type": "module",
@@ -52,7 +52,7 @@
   "dependencies": {
     "@babel/parser": "^7.29.7",
     "@babel/types": "^7.29.7",
-    "@clack/prompts": "^1.1.0",
+    "@clack/prompts": "^1.7.0",
     "@expo/devcert": "^1.2.1",
     "@mastra/deployer": "workspace:^",
     "@mastra/loggers": "workspace:^",
@@ -99,7 +99,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.50.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

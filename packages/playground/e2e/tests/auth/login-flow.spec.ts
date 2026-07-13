@@ -21,7 +21,7 @@ test.describe('Login Flow', () => {
     await resetStorage();
   });
 
-  test.describe('Unauthenticated Access Redirect', () => {
+  test.describe('when an unauthenticated user requests a protected page', () => {
     test('unauthenticated user sees login prompt on protected page', async ({ page }) => {
       await setupUnauthenticated(page);
       await page.goto('/agents');
@@ -95,7 +95,7 @@ test.describe('Login Flow', () => {
     });
   });
 
-  test.describe('Successful Login', () => {
+  test.describe('when a user logs in with valid credentials', () => {
     test('successful login shows authenticated content', async ({ page }) => {
       // Start unauthenticated
       await setupUnauthenticated(page);
@@ -173,7 +173,7 @@ test.describe('Login Flow', () => {
     });
   });
 
-  test.describe('Invalid Credentials', () => {
+  test.describe('when a user logs in with invalid credentials', () => {
     test('shows error for invalid credentials login attempt', async ({ page }) => {
       // Set up credentials login with mock error response
       await setupMockAuth(page, {
@@ -234,7 +234,7 @@ test.describe('Login Flow', () => {
     });
   });
 
-  test.describe('Session Persistence', () => {
+  test.describe('when a logged-in session is reloaded', () => {
     test('authenticated state persists after page reload', async ({ page }) => {
       // Set up authenticated state
       await setupAdminAuth(page);
@@ -281,7 +281,7 @@ test.describe('Login Flow', () => {
     });
   });
 
-  test.describe('Login State in UI', () => {
+  test.describe('when a user is logged in', () => {
     test('authenticated user sees main application content', async ({ page }) => {
       await setupAdminAuth(page);
       await page.goto('/agents');
@@ -332,7 +332,7 @@ test.describe('Login Flow', () => {
     });
   });
 
-  test.describe('Sign Up Link', () => {
+  test.describe('when the login page shows the sign up link', () => {
     test('sign up link is visible when sign up is enabled', async ({ page }) => {
       await setupMockAuth(page, {
         authenticated: false,
@@ -376,7 +376,7 @@ test.describe('Login Flow', () => {
     });
   });
 
-  test.describe('Auth Not Configured', () => {
+  test.describe('when auth is not configured', () => {
     test('shows appropriate message when auth is disabled', async ({ page }) => {
       await setupMockAuth(page, {
         enabled: false,

@@ -114,7 +114,7 @@ export function TracesVolumeCardView({
               value={activeTab}
               onValueChange={setActiveTab}
               defaultTab="agents"
-              className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
+              className="grid h-full grid-rows-[auto_1fr] overflow-y-auto"
             >
               <TabList>
                 <Tab value="agents">Agents</Tab>

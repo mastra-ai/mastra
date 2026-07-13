@@ -619,4 +619,67 @@ describe('AutoExtractedMetrics', () => {
 
     expect(emittedMetrics[0]!.metric.labels).toEqual({ status: 'ok' });
   });
+
+  it('should fall back to the configured model when responseModel has no pricing match', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'openrouter',
+        model: 'anthropic/claude-sonnet-4-6',
+        responseModel: 'anthropic/claude-4.6-sonnet-20260217',
+        usage: { inputTokens: 100, outputTokens: 50 },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const inputTokens = emittedMetrics.find(m => m.metric.name === 'mastra_model_total_input_tokens');
+    expect(inputTokens!.metric.costContext?.costMetadata).not.toHaveProperty('error', 'no_matching_model');
+    expect(inputTokens!.metric.costContext?.costMetadata).toHaveProperty(
+      'pricing_id',
+      'openrouter-anthropic-claude-sonnet-4-6',
+    );
+  });
+
+  it('should estimate costs for Bedrock inference-profile model ids', () => {
+    setup();
+    const span = createMockSpan({
+      type: SpanType.MODEL_GENERATION,
+      endTime: new Date('2026-01-01T00:00:01Z'),
+      attributes: {
+        provider: 'amazon-bedrock',
+        model: 'us.anthropic.claude-sonnet-4-6',
+        responseModel: 'us.anthropic.claude-sonnet-4-6',
+        usage: {
+          inputTokens: 1_150,
+          outputTokens: 100,
+          inputDetails: { text: 1_000, cacheRead: 100, cacheWrite: 50 },
+          outputDetails: { text: 100 },
+        },
+      },
+    });
+
+    vi.spyOn(PricingRegistry, 'getGlobal').mockReturnValue(pricingRegistry);
+
+    emitAutoExtractedMetrics(span, createMetricsContext(span));
+
+    const costContexts = emittedMetrics.flatMap(event => (event.metric.costContext ? [event.metric.costContext] : []));
+    expect(costContexts).toHaveLength(6);
+    expect(costContexts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          costMetadata: expect.objectContaining({ pricing_id: 'amazon-bedrock-claude-sonnet-4-6' }),
+        }),
+      ]),
+    );
+    expect(costContexts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ costMetadata: expect.objectContaining({ error: 'no_matching_model' }) }),
+      ]),
+    );
+  });
 });

@@ -35,9 +35,13 @@ Observational memory lets the agent learn long-lived facts from past conversatio
 
 ## Observational memory model
 
-Observational memory runs an Observer and Reflector model on top of every conversation. The default model is `__GATEWAY_GOOGLE_MODEL__`, which requires a `GOOGLE_API_KEY` environment variable in any environment where the Builder agent will run. Mastra also falls back to `GOOGLE_GENERATIVE_AI_API_KEY`.
+Observational memory runs an Observer and Reflector model on top of every conversation. For Agent Builder agents, the default model is `__GATEWAY_OPENAI_MODEL_MINI__`, which requires an `OPENAI_API_KEY` environment variable in any environment where the Builder agent will run.
 
-To use a different model, set `observationalMemory.model` to any model ID supported by the Mastra model router (and provide the matching provider credentials):
+:::note
+This default applies only to agents created through the Agent Builder. Core (non-builder) agents configured with `observationalMemory: true` keep the framework default `__GATEWAY_GOOGLE_MODEL_FLASH__` (which uses `GOOGLE_API_KEY`, falling back to `GOOGLE_GENERATIVE_AI_API_KEY`).
+:::
+
+To use a different model, set `observationalMemory.model` to any model ID supported by the Mastra model router (and provide the matching provider credentials). An explicit model always wins over the Builder default:
 
 ```typescript title="src/mastra/index.ts"
 new MastraEditor({

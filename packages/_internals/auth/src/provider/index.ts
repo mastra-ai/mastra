@@ -26,7 +26,45 @@ export interface MastraAuthProviderOptions<TUser = unknown> {
   public?: MastraAuthConfig['public'];
 }
 
-export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase {
+/**
+ * Structural description of the public surface of a `MastraAuthProvider`.
+ *
+ * Auth provider packages bundle their own copy of the `MastraAuthProvider`
+ * declaration, so provider class types cannot be compared nominally across
+ * package boundaries — `#private`/`protected` members would make otherwise
+ * identical copies mutually unassignable. Positions that accept user-supplied
+ * providers (e.g. `server.auth`, `CompositeAuth`) accept this interface
+ * instead of the class.
+ *
+ * Note: methods intentionally use method syntax (not property syntax) so they
+ * are checked bivariantly — providers with a narrower `TUser` must remain
+ * assignable to `IMastraAuthProvider<unknown>`.
+ */
+export interface IMastraAuthProvider<TUser = unknown> {
+  name?: string;
+  /**
+   * Protected paths for the auth provider
+   */
+  protected?: MastraAuthConfig['protected'];
+  /**
+   * Public paths for the auth provider
+   */
+  public?: MastraAuthConfig['public'];
+  /**
+   * Authenticate a token and return the payload
+   */
+  authenticateToken(token: string, request: MastraAuthRequest): Promise<TUser | null>;
+  /**
+   * Authorize a user for a path and method
+   */
+  authorizeUser(user: TUser, request: MastraAuthRequest): Promise<boolean> | boolean;
+  /**
+   * Map an authenticated user to a memory resource id
+   */
+  mapUserToResourceId?(user: TUser): string | undefined | null;
+}
+
+export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
   public protected?: MastraAuthConfig['protected'];
   public public?: MastraAuthConfig['public'];
   public mapUserToResourceId?(user: TUser): string | undefined | null;
@@ -111,11 +149,11 @@ export class CompositeAuth
   extends MastraAuthProvider
   implements ISSOProvider<User>, ISessionProvider<Session>, IUserProvider<User>
 {
-  private providers: MastraAuthProvider[];
-  private authenticatedProviderByObject = new WeakMap<object, MastraAuthProvider>();
-  private authenticatedProviderByPrimitive = new Map<PrimitiveAuthUser, MastraAuthProvider>();
+  private providers: IMastraAuthProvider[];
+  private authenticatedProviderByObject = new WeakMap<object, IMastraAuthProvider>();
+  private authenticatedProviderByPrimitive = new Map<PrimitiveAuthUser, IMastraAuthProvider>();
 
-  constructor(providers: MastraAuthProvider[]) {
+  constructor(providers: IMastraAuthProvider[]) {
     const combinedPublic = providers.flatMap(provider => provider.public ?? []);
     const combinedProtected = providers.flatMap(provider => provider.protected ?? []);
 
@@ -149,7 +187,7 @@ export class CompositeAuth
       this.getUsers = undefined as any;
     }
     // Proxy credentials provider methods if any inner provider supports them.
-    const credProvider = this.findProvider(isCredentialsProvider as (p: unknown) => p is MastraAuthProvider) as any;
+    const credProvider = this.findProvider(isCredentialsProvider as (p: unknown) => p is IMastraAuthProvider) as any;
     if (credProvider) {
       (this as any).signIn = credProvider.signIn.bind(credProvider);
       if (typeof credProvider.signUp === 'function') {
@@ -179,7 +217,7 @@ export class CompositeAuth
     return this.providers.find(check) as T | undefined;
   }
 
-  private rememberAuthenticatedProvider(user: unknown, provider: MastraAuthProvider): void {
+  private rememberAuthenticatedProvider(user: unknown, provider: IMastraAuthProvider): void {
     if (isObjectLike(user)) {
       this.authenticatedProviderByObject.set(user, provider);
       return;
@@ -188,7 +226,7 @@ export class CompositeAuth
     this.authenticatedProviderByPrimitive.set(user as PrimitiveAuthUser, provider);
   }
 
-  private takeAuthenticatedProvider(user: unknown): MastraAuthProvider | undefined {
+  private takeAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
     if (isObjectLike(user)) {
       const provider = this.authenticatedProviderByObject.get(user);
       this.authenticatedProviderByObject.delete(user);

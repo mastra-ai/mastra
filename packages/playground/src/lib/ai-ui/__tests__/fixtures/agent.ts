@@ -21,3 +21,7 @@ export const v2Agent: GetAgentResponse = {
 export const memoryDisabled: GetMemoryStatusResponse = {
   result: false,
 };
+
+export const memoryEnabled: GetMemoryStatusResponse = {
+  result: true,
+};

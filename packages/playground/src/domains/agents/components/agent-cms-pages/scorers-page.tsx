@@ -1,14 +1,15 @@
-import type { RuleGroup } from '@mastra/playground-ui';
 import { EntityName, EntityDescription, EntityContent, Entity } from '@mastra/playground-ui/components/Entity';
 import { Input } from '@mastra/playground-ui/components/Input';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
 import { Label } from '@mastra/playground-ui/components/Label';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
-import { Searchbar } from '@mastra/playground-ui/components/Searchbar';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
+import { SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
@@ -113,7 +114,17 @@ export function ScorersPage() {
             <SubSectionHeader title="Available Scorers" icon={<JudgeIcon />} />
           </Section.Header>
 
-          <Searchbar onSearch={setSearch} label="Search scorers" placeholder="Search scorers" />
+          <InputGroup variant="outline">
+            <InputGroupAddon align="inline-start">
+              <SearchIcon />
+            </InputGroupAddon>
+            <InputGroupInput
+              type="search"
+              aria-label="Search scorers"
+              placeholder="Search scorers"
+              onChange={event => setSearch(event.target.value)}
+            />
+          </InputGroup>
 
           {filteredOptions.length > 0 && (
             <div className="flex flex-col gap-1">

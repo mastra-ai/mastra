@@ -1,5 +1,4 @@
 import type { DraggableProvidedDragHandleProps } from '@hello-pangea/dnd';
-import type { JsonSchema } from '@mastra/playground-ui';
 import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { ContentBlock } from '@mastra/playground-ui/components/ContentBlocks';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
@@ -8,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/c
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
 import { GripVertical, X, ExternalLink, ChevronDown } from 'lucide-react';
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
@@ -213,7 +213,8 @@ const RefBlockContent = ({
               value={localContent}
               onChange={handleContentChange}
               placeholder="Referenced block is empty..."
-              className="border-none rounded-none bg-transparent min-h-12"
+              variant="embedded"
+              className="min-h-12"
               language="markdown"
               highlightVariables
               showCopyButton={false}

@@ -7,13 +7,7 @@ packages:
 
 # E2BSandbox
 
-Executes commands in isolated [E2B](https://e2b.dev) cloud sandboxes. Provides secure, ephemeral environments with support for mounting cloud storage.
-
-:::info
-
-For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
-
-:::
+Executes commands in isolated [E2B](https://e2b.dev) cloud sandboxes. Provides secure, ephemeral environments with support for mounting cloud storage. For interface details, see [WorkspaceSandbox interface](/reference/workspace/sandbox).
 
 ## Installation
 
@@ -38,6 +32,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'dev-agent',
   name: 'dev-agent',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,

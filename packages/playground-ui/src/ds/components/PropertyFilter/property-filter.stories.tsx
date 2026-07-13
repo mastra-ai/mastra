@@ -160,15 +160,18 @@ export const PickMultiPanelMulti: Story = {
           tokens={tokens}
           onChange={(fieldId, value) => {
             const shouldRemove = value === undefined || (Array.isArray(value) && value.length === 0);
-            if (shouldRemove) setTokens(prev => prev.filter(t => t.fieldId !== fieldId));
-            else
-              setTokens(prev => {
-                const existing = prev.findIndex(t => t.fieldId === fieldId);
-                if (existing === -1) return [...prev, { fieldId, value: value! }];
-                const next = [...prev];
-                next[existing] = { fieldId, value: value! };
-                return next;
-              });
+            if (shouldRemove) {
+              setTokens(prev => prev.filter(t => t.fieldId !== fieldId));
+              return;
+            }
+
+            setTokens(prev => {
+              const existing = prev.findIndex(t => t.fieldId === fieldId);
+              if (existing === -1) return [...prev, { fieldId, value }];
+              const next = [...prev];
+              next[existing] = { fieldId, value };
+              return next;
+            });
           }}
         />
       </div>

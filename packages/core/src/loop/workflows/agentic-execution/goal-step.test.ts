@@ -58,7 +58,34 @@ async function runGoalStep(
 
   const mastra: any = {
     generateId: () => `id-${Math.random().toString(36).slice(2)}`,
-    getStorage: () => ({ getStore: (_: string) => store }),
+    getStorage: () => ({
+      getStore: (name: string) => {
+        if (name === 'workflows') {
+          return {
+            getWorkflowRunById: vi.fn().mockResolvedValue(null),
+            deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
+            persistWorkflowSnapshot: vi.fn().mockResolvedValue(undefined),
+          };
+        }
+        return store;
+      },
+    }),
+    getLogger: () => undefined,
+    getServer: () => undefined,
+    getMemory: () => undefined,
+    getWorkspace: () => undefined,
+    getVersionOverrides: () => undefined,
+    listGateways: () => [],
+    addTool: vi.fn(),
+    addProcessor: vi.fn(),
+    addProcessorConfiguration: vi.fn(),
+    __registerInternalWorkflow: vi.fn(),
+    __unregisterInternalWorkflow: vi.fn(),
+    __hasInternalWorkflow: vi.fn(),
+    __getInternalWorkflow: vi.fn(),
+    __getRunScope: vi.fn(),
+    __createRunScope: vi.fn(),
+    observability: { addScore: vi.fn(), getSelectedInstance: vi.fn() },
   };
 
   const messageList: any = {
@@ -153,11 +180,11 @@ describe('goal step waiting semantics', () => {
         dbMessages: [
           {
             role: 'user',
-            content: [{ type: 'text', text: 'Please continue after answering this.' }],
+            content: { format: 2, parts: [{ type: 'text', text: 'Please continue after answering this.' }] },
           },
           {
             role: 'assistant',
-            content: [{ type: 'text', text: 'Answered the user and kept working.' }],
+            content: { format: 2, parts: [{ type: 'text', text: 'Answered the user and kept working.' }] },
           },
         ],
       });
@@ -207,7 +234,6 @@ describe('goal step waiting semantics', () => {
         const activityChunks = goalChunks.filter(c => c.payload.activity?.length);
         expect(activityChunks.map(c => c.payload.activity[0])).toEqual([
           { type: 'tool-call', name: 'read', message: 'read packages/core/src/agent/goal/scorer.ts' },
-          { type: 'tool-result', name: 'read', message: 'read packages/core/src/agent/goal/scorer.ts' },
           { type: 'reason', message: 'need' },
           { type: 'reason', message: 'need verification' },
         ]);

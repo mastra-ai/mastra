@@ -38,12 +38,23 @@
     "explorations/**",
     ".github/scripts",
     "templates/**",
-    "**/examples/**",
     "**/_examples/**",
     ".claude/skills/**/assets/**/package.json",
     "e2e-tests/**/template/package.json"
   ],
   "packageRules": [
+    {
+      "description": "Disable all dependency updates in examples (Renovate previously ignored these via ignorePaths)",
+      "matchFileNames": ["examples/**/package.json"],
+      "enabled": false
+    },
+    {
+      "description": "Allow zod updates in examples (kept in sync with the catalog to prevent version collision with workspace-linked @mastra packages that caused TS2589/OOM)",
+      "matchFileNames": ["examples/**/package.json"],
+      "matchPackageNames": ["zod"],
+      "enabled": true,
+      "groupName": "Schema"
+    },
     {
       "matchDepTypes": ["engines"],
       "enabled": false
@@ -170,9 +181,10 @@
     },
     {
       "groupName": "AI SDK Examples",
-      "description": "Leave example apps eligible for all AI SDK update types",
+      "description": "Allow all AI SDK update types in examples",
       "matchFileNames": ["examples/**/package.json"],
-      "matchSourceUrls": ["https://github.com/vercel/ai"]
+      "matchSourceUrls": ["https://github.com/vercel/ai"],
+      "enabled": true
     },
     {
       "groupName": "Assistant UI",
@@ -408,6 +420,11 @@
       "matchPackageNames": ["@modelcontextprotocol/*"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"]
+    },
+    {
+      "description": "Disable @opencode-ai/plugin updates. Newer plugin versions pull effect@4.0.0-beta.83, which pnpm rejects as a trust downgrade under trustPolicy: no-downgrade. The plugin is exact-pinned to 1.14.48 (effect@4.0.0-beta.59) until upstream publishes a version that does not trigger ERR_PNPM_TRUST_DOWNGRADE.",
+      "matchPackageNames": ["@opencode-ai/plugin"],
+      "enabled": false
     },
     {
       "groupName": "OpenCode",
