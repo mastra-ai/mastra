@@ -50,6 +50,21 @@ function toMastraMessageParts(content: AgentControllerMessageContent[]): MastraM
         });
         break;
       }
+      case 'image':
+        if (part.data && part.mimeType) {
+          parts.push({ type: 'file', data: part.data, mimeType: part.mimeType });
+        }
+        break;
+      case 'file':
+        if (part.data && part.mediaType) {
+          parts.push({
+            type: 'file',
+            data: part.data,
+            mimeType: part.mediaType,
+            ...(part.filename ? { filename: part.filename } : {}),
+          });
+        }
+        break;
       case 'tool_result': {
         const toolCallId = part.id ?? '';
         const existingIndex = toolPartIndexById.get(toolCallId);
@@ -99,7 +114,7 @@ function toMastraMessageParts(content: AgentControllerMessageContent[]): MastraM
 }
 
 function isHarnessMetadataContent(part: AgentControllerMessageContent): boolean {
-  return !['text', 'thinking', 'tool_call', 'tool_result'].includes(part.type);
+  return !['text', 'thinking', 'tool_call', 'tool_result', 'image', 'file'].includes(part.type);
 }
 
 function toStatusText(part: AgentControllerMessageContent): string | null {

@@ -6004,6 +6004,7 @@ export const API_ROUTE_METADATA = {
       "sessionScope"
     ],
     "bodyParams": [
+      "files",
       "message"
     ],
     "hasQuery": true,
