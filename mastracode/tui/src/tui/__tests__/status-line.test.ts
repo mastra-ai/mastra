@@ -389,7 +389,7 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('judge');
     expect(rendered).toContain('openai/gpt-5.4-mini');
     expect(rendered).not.toContain('goal');
-    expect(rendered).not.toContain('claude-sonnet-4-20250514');
+    expect(rendered).not.toContain('anthropic/claude-sonnet-4-20250514');
     expect(chalkRgbMock).toHaveBeenCalledWith(53, 117, 221);
   });
 
@@ -536,7 +536,7 @@ describe('updateStatusLine', () => {
     expect(rendered).toContain('gpt-5.4-mini');
     expect(rendered).not.toContain('observe');
     expect(rendered).not.toContain('━');
-    expect(rendered).not.toContain('claude-sonnet-4-20250514');
+    expect(rendered).not.toContain('anthropic/claude-sonnet-4-20250514');
   });
 
   it('renders one unified context indicator with combined totals and savings', () => {
@@ -583,8 +583,9 @@ describe('updateStatusLine', () => {
     expect(rendered).not.toContain('━━━━━━━━━━');
   });
 
-  it('animates only the message segment while keeping the middle, model, badge, and text static', () => {
+  it('keeps the provider animation active while animating the message segment', () => {
     const state = createState();
+    process.stdout.columns = 200;
     state.controller.listModes.mockReturnValue([
       { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
       { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
@@ -600,14 +601,23 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
+    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual([
+      'anthropic/claude-sonnet-4-20250514',
+      '━━━',
+    ]);
     expect(applyGradientSweepMock).toHaveBeenCalledWith('━━━', 0.5, '#00ff00', 0);
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('━━<sweep>━━━</sweep>━━━━━  60/120k↓ ');
   });
 
-  it('animates only the memory segment', () => {
+  it('keeps the provider animation active while animating the memory segment', () => {
     const state = createState();
+    process.stdout.columns = 200;
+    state.controller.listModes.mockReturnValue([
+      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
+      { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
+    ]);
     const displayState = state.session.displayState.get();
     state.session.displayState.get.mockReturnValue({ ...displayState, bufferingObservations: true });
     state.gradientAnimator = {
@@ -618,12 +628,21 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).toHaveBeenCalledTimes(1);
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
+    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual([
+      'anthropic/claude-sonnet-4-20250514',
+      '━━',
+    ]);
     expect(applyGradientSweepMock).toHaveBeenCalledWith('━━', 0.25, '#2563eb', 0.1);
   });
 
-  it('animates both occupied segments independently when both buffers are active', () => {
+  it('keeps the provider animation active while animating both occupied segments', () => {
     const state = createState();
+    process.stdout.columns = 200;
+    state.controller.listModes.mockReturnValue([
+      { id: 'build', name: 'build', metadata: { color: '#00ff00' } },
+      { id: 'plan', name: 'plan', metadata: { color: '#0000ff' } },
+    ]);
     const displayState = state.session.displayState.get();
     state.session.displayState.get.mockReturnValue({
       ...displayState,
@@ -638,7 +657,11 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(state);
 
-    expect(applyGradientSweepMock).toHaveBeenCalledTimes(2);
-    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual(['━━', '━━━']);
+    expect(applyGradientSweepMock).toHaveBeenCalledTimes(3);
+    expect(applyGradientSweepMock.mock.calls.map(call => call[0])).toEqual([
+      'anthropic/claude-sonnet-4-20250514',
+      '━━',
+      '━━━',
+    ]);
   });
 });
