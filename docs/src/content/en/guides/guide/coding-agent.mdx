@@ -203,6 +203,7 @@ export async function startCodingAgentTui(terminal: Terminal = new ProcessTermin
   const showError = (error: unknown) => {
     output.setText(`Error: ${error instanceof Error ? error.message : String(error)}`)
     busy = false
+    pendingApproval = undefined
     tui.requestRender()
   }
 
