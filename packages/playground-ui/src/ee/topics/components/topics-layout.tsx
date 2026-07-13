@@ -15,10 +15,10 @@ export function TopicsLayout({ sidebar, children, tracePanel, contentPadding = t
 
   return (
     <div className="flex h-full min-h-0 bg-surface2 text-neutral4">
-      {sidebar ? <aside className="min-h-0 w-[22rem] shrink-0 border-r border-border1">{sidebar}</aside> : null}
+      {sidebar ? <aside className="w-88 min-h-0 shrink-0 border-r border-border1">{sidebar}</aside> : null}
       {hasContent ? (
         <main className={contentPadding ? 'min-w-0 flex-1 p-4' : 'min-w-0 flex-1'}>
-          <PanelGroup className="h-full min-h-0 w-full min-w-0" orientation="horizontal">
+          <PanelGroup className="size-full min-h-0 min-w-0" orientation="horizontal">
             {children ? (
               <Panel id="topic-main" className="min-w-0 pr-2" minSize={35}>
                 {children}

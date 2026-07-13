@@ -160,7 +160,7 @@ export interface PlanTitleProps extends Omit<ComponentProps<typeof Txt>, 'as' | 
 
 export function PlanTitle({ children, className, ...props }: PlanTitleProps) {
   return (
-    <Txt {...props} as="h3" variant="header-sm" className={cn('font-semibold text-neutral7', className)}>
+    <Txt {...props} as="h3" variant="header-sm" className={cn('text-neutral7 font-semibold', className)}>
       {children}
     </Txt>
   );
@@ -186,7 +186,7 @@ export function PlanPath({ children, className, ...props }: PlanPathProps) {
       variant="ui-xs"
       font="mono"
       title={children}
-      className={cn('max-w-full overflow-hidden truncate text-neutral3', className)}
+      className={cn('max-w-full truncate overflow-hidden text-neutral3', className)}
     >
       {getFileName(children)}
     </Txt>
@@ -234,7 +234,7 @@ export function PlanFile({ children, className, ...props }: PlanFileProps) {
       <Txt as="p" variant="ui-xs" className="mb-2 text-neutral3">
         Plan file
       </Txt>
-      <Txt as="p" variant="ui-sm" className="break-all font-mono text-neutral6">
+      <Txt as="p" variant="ui-sm" className="font-mono break-all text-neutral6">
         {children}
       </Txt>
     </div>

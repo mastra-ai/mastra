@@ -95,16 +95,28 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
   });
   if (!res.ok) {
     let message = `Request failed (${res.status})`;
+    let code: string | undefined;
     try {
       const body = (await res.json()) as { error?: string; message?: string };
+      code = body.error;
       if (body.message) message = body.message;
       else if (body.error) message = body.error;
     } catch {
       /* ignore non-JSON */
     }
-    throw new Error(message);
+    const err = new Error(message);
+    (err as { code?: string }).code = code;
+    throw err;
   }
   return (await res.json()) as T;
+}
+
+/**
+ * True when the server reported that the org's Linear authorization is no
+ * longer valid (expired/revoked token) and OAuth must be redone.
+ */
+export function isLinearReauthError(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === 'linear_reauth_required';
 }
 
 /** List one cursor page of the workspace's active issues. */

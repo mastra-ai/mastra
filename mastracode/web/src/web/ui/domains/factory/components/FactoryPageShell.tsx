@@ -12,6 +12,8 @@ import type { Project } from '../../workspaces';
 interface FactoryPageShellProps {
   title: string;
   description: string;
+  /** Max-width utility for the content column (defaults to `max-w-3xl`). */
+  maxWidthClassName?: string;
   /** Renders the page body once a GitHub-backed project is active. */
   children: (project: Project & { githubProjectId: string }) => ReactNode;
 }
@@ -22,7 +24,12 @@ interface FactoryPageShellProps {
  * comes from GitHub, so local projects and disconnected GitHub states get an
  * explanatory notice instead of a broken empty list.
  */
-export function FactoryPageShell({ title, description, children }: FactoryPageShellProps) {
+export function FactoryPageShell({
+  title,
+  description,
+  maxWidthClassName = 'max-w-3xl',
+  children,
+}: FactoryPageShellProps) {
   const overlays = useOverlays();
   const { activeProject } = useActiveProjectContext();
   const isGithubProject = activeProject?.source === 'github' && Boolean(activeProject.githubProjectId);
@@ -37,7 +44,7 @@ export function FactoryPageShell({ title, description, children }: FactoryPageSh
       content={
         activeProject ? (
           <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6 md:px-6">
-            <div className="mx-auto flex w-full max-w-3xl flex-col gap-4">
+            <div className={`mx-auto flex w-full flex-col gap-4 ${maxWidthClassName}`}>
               <header className="flex flex-col gap-1">
                 <h1 className="m-0 text-xl text-icon6">{title}</h1>
                 <Txt as="p" variant="ui-sm" className="m-0 text-icon3">

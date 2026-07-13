@@ -21,19 +21,19 @@ const nestedExpandedItemClasses = (level: number) => {
  */
 export const navItemClasses = ({ isActive, isCollapsed, isFeatured, level = 0 }: ItemStyleOptions = {}) =>
   cn(
-    'flex cursor-pointer items-center text-ui-md text-neutral3 rounded-lg h-9 min-w-0 whitespace-nowrap',
-    'transition-all duration-normal ease-out-custom motion-reduce:transition-none',
-    '[&_svg]:w-4 [&_svg]:h-4 [&_svg]:shrink-0 [&_svg]:text-neutral3/70 [&_svg]:transition-colors [&_svg]:duration-normal motion-reduce:[&_svg]:transition-none',
+    'flex h-9 min-w-0 cursor-pointer items-center rounded-lg text-ui-md whitespace-nowrap text-neutral3',
+    'duration-normal transition-all ease-out-custom motion-reduce:transition-none',
+    '[&_svg]:duration-normal [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-neutral3/70 [&_svg]:transition-colors motion-reduce:[&_svg]:transition-none',
     'hover:bg-sidebar-nav-hover hover:text-neutral6 [&:hover_svg]:text-neutral5',
-    'focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:shadow-focus-ring',
+    'focus-visible:shadow-focus-ring focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:outline-hidden',
     !isCollapsed && nestedExpandedItemClasses(level),
-    isCollapsed && 'w-full p-0 justify-center',
+    isCollapsed && 'w-full justify-center p-0',
     isActive &&
-      'text-neutral6 bg-sidebar-nav-active hover:bg-sidebar-nav-active hover:text-neutral6 [&_svg]:text-neutral6 [&:hover_svg]:text-neutral6',
+      'bg-sidebar-nav-active text-neutral6 hover:bg-sidebar-nav-active hover:text-neutral6 [&_svg]:text-neutral6 [&:hover_svg]:text-neutral6',
     isCollapsed && !isActive && '[&_svg]:text-neutral3',
-    isFeatured && 'my-2 bg-accent1Dark hover:bg-accent1Darker text-accent1 hover:text-accent1 border border-accent1/30',
+    isFeatured && 'my-2 border border-accent1/30 bg-accent1Dark text-accent1 hover:bg-accent1Darker hover:text-accent1',
     isFeatured &&
-      'dark:bg-accent1 dark:hover:bg-accent1/90 dark:text-black dark:hover:text-black dark:border-transparent',
+      'dark:border-transparent dark:bg-accent1 dark:text-black dark:hover:bg-accent1/90 dark:hover:text-black',
     isFeatured &&
-      '[&_svg]:text-accent1 [&:hover_svg]:text-accent1 dark:[&_svg]:text-black/75 dark:[&:hover_svg]:text-black',
+      '[&_svg]:text-accent1 dark:[&_svg]:text-black/75 [&:hover_svg]:text-accent1 dark:[&:hover_svg]:text-black',
   );

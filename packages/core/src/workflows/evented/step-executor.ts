@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { TripWire } from '../../agent/trip-wire';
 import { MastraBase } from '../../base';
 import type { RequestContext } from '../../di';
-import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
+import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
@@ -325,6 +325,7 @@ export class StepExecutor extends MastraBase {
         status: 'failed',
         endedAt,
         error: errorInstance,
+        ...(error instanceof MastraNonRetryableError && { nonRetryable: true as const }),
         // Preserve TripWire data as plain object for proper serialization
         // Important: Check `error` not `errorInstance` because getErrorFromUnknown
         // converts the error and loses the prototype chain

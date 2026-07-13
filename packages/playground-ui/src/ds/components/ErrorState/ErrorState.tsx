@@ -8,14 +8,14 @@ export type ErrorStateProps = {
 
 export function ErrorState({ title, message, action }: ErrorStateProps) {
   return (
-    <div className="flex items-center justify-center h-[30vh]">
-      <div className="flex flex-col items-center justify-center text-center py-10 px-6">
+    <div className="flex h-[30vh] items-center justify-center">
+      <div className="flex flex-col items-center justify-center px-6 py-10 text-center">
         <div className="mb-4">
-          <CircleXIcon className="h-8 w-8 text-red-900" />
+          <CircleXIcon className="size-8 text-red-900" />
         </div>
-        <h3 className="font-medium text-neutral4 text-ui-md">{title}</h3>
-        <p className="mt-1.5 text-neutral2 text-ui-md max-w-md">{message}</p>
-        {action && <div className="pt-4 flex items-center justify-center">{action}</div>}
+        <h3 className="text-ui-md font-medium text-neutral4">{title}</h3>
+        <p className="mt-1.5 max-w-md text-ui-md text-neutral2">{message}</p>
+        {action && <div className="flex items-center justify-center pt-4">{action}</div>}
       </div>
     </div>
   );

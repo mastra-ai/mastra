@@ -2,6 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { CircleDot } from 'lucide-react';
+import { useState } from 'react';
 
 import { useApiConfig } from '../../../../shared/api/config';
 import { relativeTime } from '../../../../shared/lib/date';
@@ -15,27 +16,45 @@ import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearDat
 import { useStartFactoryRun } from './hooks/useStartFactoryRun';
 import type { GithubIssue } from './services/factory';
 import type { LinearIssue } from './services/linear';
-import { connectLinear } from './services/linear';
+import { connectLinear, isLinearReauthError } from './services/linear';
 
 /**
  * Factory › Intake: open issues from the configured intake sources.
  *
- * Both sources sync only the projects explicitly picked in Settings › General
- * › Intake sources: GitHub shows the active project's issues when it's
- * selected, and Linear shows the selected projects' active issues (narrowed
- * server-side). Nothing is synced until something is picked.
+ * The page is a two-column layout: a source rail on the left (one entry per
+ * enabled source) and the selected source's paginated issue list on the
+ * right. Both sources sync only the projects explicitly picked in Settings ›
+ * General › Intake sources: GitHub shows the active project's issues when
+ * it's selected, and Linear shows the selected projects' active issues
+ * (narrowed server-side). Nothing is synced until something is picked.
  */
 export function IntakePage() {
   return (
-    <FactoryPageShell title="Intake" description="Open issues from your configured sources.">
+    <FactoryPageShell
+      title="Intake"
+      description="Open issues from your configured sources."
+      maxWidthClassName="max-w-4xl"
+    >
       {project => <IntakeSources githubProjectId={project.githubProjectId} />}
     </FactoryPageShell>
   );
 }
 
+type IntakeSourceId = 'github' | 'linear';
+
+interface IntakeSourceEntry {
+  id: IntakeSourceId;
+  label: string;
+  /** Dot color hinting at the source brand (layout-level accent choice). */
+  dotClassName: string;
+  /** Short status line shown under the label when the source needs attention. */
+  hint?: string;
+}
+
 function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
   const configQuery = useIntakeConfigQuery();
   const linearStatusQuery = useLinearStatusQuery();
+  const [selectedSource, setSelectedSource] = useState<IntakeSourceId | null>(null);
 
   if (configQuery.isPending) return <SkeletonRows label="Loading intake sources" rows={5} rowClassName="h-12 w-full" />;
 
@@ -51,7 +70,25 @@ function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
   const linearConnected = Boolean(linearFeature && linearStatusQuery.data?.connected);
   const showLinear = linearEnabled && linearFeature;
 
-  if (!githubEnabled && !showLinear) {
+  const sources: IntakeSourceEntry[] = [];
+  if (githubEnabled) {
+    sources.push({
+      id: 'github',
+      label: 'GitHub',
+      dotClassName: 'bg-accent1',
+      hint: githubSelected ? undefined : 'Not selected',
+    });
+  }
+  if (showLinear) {
+    sources.push({
+      id: 'linear',
+      label: 'Linear',
+      dotClassName: 'bg-accent3',
+      hint: !linearConnected ? 'Not connected' : linearSelectedCount === 0 ? 'No projects selected' : undefined,
+    });
+  }
+
+  if (sources.length === 0) {
     return (
       <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
         No intake sources are enabled. Turn them on in Settings › General.
@@ -59,52 +96,84 @@ function IntakeSources({ githubProjectId }: { githubProjectId: string }) {
     );
   }
 
+  // Fall back to the first visible source when nothing (or a now-hidden
+  // source) is selected.
+  const activeSource = sources.find(s => s.id === selectedSource)?.id ?? sources[0].id;
+
   return (
-    <div className="flex flex-col gap-8">
-      {githubEnabled && (
-        <section className="flex flex-col gap-3" aria-label="GitHub issues">
-          <SourceHeading label="GitHub" />
-          {githubSelected ? (
-            <IssueList githubProjectId={githubProjectId} />
-          ) : (
-            <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-              This project isn&apos;t selected as a GitHub intake source. Pick it in Settings › General.
-            </Txt>
-          )}
-        </section>
-      )}
-      {showLinear && (
-        <section className="flex flex-col gap-3" aria-label="Linear issues">
-          <SourceHeading label="Linear" />
-          {!linearConnected ? (
-            <LinearConnectNotice />
-          ) : linearSelectedCount === 0 ? (
-            <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
-              No Linear projects selected. Pick them in Settings › General.
-            </Txt>
-          ) : (
-            <LinearIssueList />
-          )}
-        </section>
-      )}
+    <div className="flex flex-col gap-6 md:flex-row md:gap-8">
+      <nav aria-label="Intake sources" className="flex shrink-0 flex-row gap-1 md:w-44 md:flex-col">
+        {sources.map(source => (
+          <SourceNavButton
+            key={source.id}
+            source={source}
+            active={activeSource === source.id}
+            onSelect={() => setSelectedSource(source.id)}
+          />
+        ))}
+      </nav>
+      <div className="min-w-0 flex-1">
+        {activeSource === 'github' ? (
+          <section className="flex flex-col gap-3" aria-label="GitHub issues">
+            {githubSelected ? (
+              <IssueList githubProjectId={githubProjectId} />
+            ) : (
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+                This project isn&apos;t selected as a GitHub intake source. Pick it in Settings › General.
+              </Txt>
+            )}
+          </section>
+        ) : (
+          <section className="flex flex-col gap-3" aria-label="Linear issues">
+            {!linearConnected ? (
+              <LinearConnectNotice />
+            ) : linearSelectedCount === 0 ? (
+              <Txt as="p" variant="ui-sm" className="m-0 text-icon3">
+                No Linear projects selected. Pick them in Settings › General.
+              </Txt>
+            ) : (
+              <LinearIssueList />
+            )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
 
-function SourceHeading({ label }: { label: string }) {
+function SourceNavButton({
+  source,
+  active,
+  onSelect,
+}: {
+  source: IntakeSourceEntry;
+  active: boolean;
+  onSelect: () => void;
+}) {
   return (
-    <Txt as="h2" variant="ui-sm" className="m-0 font-medium uppercase tracking-wide text-icon3">
-      {label}
-    </Txt>
+    <button
+      type="button"
+      aria-current={active || undefined}
+      onClick={onSelect}
+      className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-left transition ${
+        active ? 'bg-surface4' : 'hover:bg-surface3'
+      }`}
+    >
+      <span className={`size-2 shrink-0 rounded-full ${source.dotClassName}`} aria-hidden />
+      <span className="flex min-w-0 flex-col">
+        <span className={`truncate text-ui-sm ${active ? 'text-icon6' : 'text-icon4'}`}>{source.label}</span>
+        {source.hint && <span className="truncate text-ui-xs text-icon3">{source.hint}</span>}
+      </span>
+    </button>
   );
 }
 
-function LinearConnectNotice() {
+function LinearConnectNotice({ message }: { message?: string }) {
   const { baseUrl } = useApiConfig();
   return (
     <div className="flex items-center gap-3">
       <Txt as="span" variant="ui-sm" className="text-icon3">
-        Connect a Linear workspace to see its issues here.
+        {message ?? 'Connect a Linear workspace to see its issues here.'}
       </Txt>
       <Button size="xs" onClick={() => connectLinear(baseUrl)}>
         Connect Linear
@@ -242,6 +311,10 @@ function LinearIssueList() {
 
   if (issues.isPending) return <SkeletonRows label="Loading Linear issues" rows={5} rowClassName="h-12 w-full" />;
   if (issues.isError) {
+    // An expired/revoked authorization isn't a dead end — offer the OAuth flow.
+    if (isLinearReauthError(issues.error)) {
+      return <LinearConnectNotice message="Linear authorization expired. Reconnect to keep syncing issues." />;
+    }
     return (
       <Notice variant="destructive">
         {issues.error instanceof Error ? issues.error.message : 'Failed to load Linear issues'}
