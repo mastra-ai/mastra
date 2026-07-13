@@ -67,7 +67,9 @@ function makeLargeCommand() {
 }
 
 function makeQuotedCommand() {
-  const parts = [`if [ -f package.json ]; then echo "quoted if then fi ${'TEXT '.repeat(40)}" && printf 'single quoted && || ; ${'MORE '.repeat(40)}' || echo fallback; fi > /tmp/render-smoke-command.txt && node -e "`];
+  const parts = [
+    `if [ -f package.json ]; then echo "quoted if then fi ${'TEXT '.repeat(40)}" && printf 'single quoted && || ; ${'MORE '.repeat(40)}' || echo fallback; fi > /tmp/render-smoke-command.txt && node -e "`,
+  ];
   let size = parts.join('').length;
   for (let i = 0; size < LARGE_SIZE; i++) {
     const part = `console.log('QUOTED_COMMAND_${String(i).padStart(5, '0')} && || if then fi');`;
@@ -106,7 +108,9 @@ async function streamToolCall(res, { id, toolName, args }) {
       object: 'chat.completion.chunk',
       created,
       model: 'render-smoke',
-      choices: [{ index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: part } }] }, finish_reason: null }],
+      choices: [
+        { index: 0, delta: { tool_calls: [{ index: 0, function: { arguments: part } }] }, finish_reason: null },
+      ],
     });
     if (DELAY_MS > 0) await sleep(DELAY_MS);
   }
@@ -154,7 +158,12 @@ async function streamText(res, text) {
 const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && (req.url === '/v1/models' || req.url === '/models')) {
     res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ object: 'list', data: [{ id: 'render-smoke', object: 'model', created: 0, owned_by: 'local' }] }));
+    res.end(
+      JSON.stringify({
+        object: 'list',
+        data: [{ id: 'render-smoke', object: 'model', created: 0, owned_by: 'local' }],
+      }),
+    );
     return;
   }
 
@@ -222,7 +231,10 @@ const server = http.createServer(async (req, res) => {
       },
     });
   } else {
-    await streamText(res, 'Render Smoke ready. Send a prompt containing write, edit, command, quoted command, shell highlight, or output.');
+    await streamText(
+      res,
+      'Render Smoke ready. Send a prompt containing write, edit, command, quoted command, shell highlight, or output.',
+    );
   }
 
   res.end();
