@@ -274,9 +274,7 @@ export function removeWorktree(project: Project, worktreePath: string): Project 
     ...project,
     worktrees: remaining,
     selectedWorktreePath:
-      project.selectedWorktreePath === worktreePath
-        ? remaining[0]?.worktreePath
-        : project.selectedWorktreePath,
+      project.selectedWorktreePath === worktreePath ? remaining[0]?.worktreePath : project.selectedWorktreePath,
   };
   updateProject(updated);
   return updated;
