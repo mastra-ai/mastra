@@ -119,7 +119,9 @@ trustPolicyExclude:
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
-  cookie: '>=1.1.1'
+  # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
+  # which breaks react-router's build when renovate's pnpm dedupe floats it up.
+  cookie: '>=1.1.1 <2'
   tmp: '>=0.2.6'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'

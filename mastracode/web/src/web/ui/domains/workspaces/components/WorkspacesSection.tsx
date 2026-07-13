@@ -198,9 +198,7 @@ export function WorkspacesSection({ children }: { children?: ReactNode }) {
                   })
                 }
                 onDelete={
-                  worktree.worktreePath === activeProject.sandboxWorkdir
-                    ? undefined
-                    : () => setConfirmDelete(worktree)
+                  worktree.worktreePath === activeProject.sandboxWorkdir ? undefined : () => setConfirmDelete(worktree)
                 }
               />
               {nested && <div className="ml-[15px] flex flex-col border-l border-border1 pl-2">{children}</div>}

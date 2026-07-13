@@ -218,9 +218,7 @@ describe('workspaces query hooks', () => {
       deleteThread: vi.fn(async () => {}),
     };
 
-    const { result } = renderHookWithProviders(() =>
-      useDeleteWorkspaceMutation(rootProject, session, threadSession),
-    );
+    const { result } = renderHookWithProviders(() => useDeleteWorkspaceMutation(rootProject, session, threadSession));
 
     await act(async () => {
       await expect(
