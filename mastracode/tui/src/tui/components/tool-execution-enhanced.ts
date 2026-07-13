@@ -51,8 +51,7 @@ const COMPACT_TOOL_COLOR = mastra.orange;
 const COMPACT_TOOL_ARGS_BG = '#141414';
 const QUIET_TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
 const QUIET_CODE_PREVIEW_MAX_CHARS = 2_000;
-const QUIET_SHELL_COMMAND_PREVIEW_TRUNCATE_AT_CHARS = 2_000;
-const QUIET_SHELL_COMMAND_PREVIEW_MAX_CHARS = 500;
+const QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
 
 function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
@@ -583,11 +582,14 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const lines: string[] = [];
     let current = '';
     let currentWidth = 0;
+    let highlightedChars = 0;
     let quote: 'single' | 'double' | undefined;
 
     const pushCurrent = () => {
-      const highlighted = this.highlightQuietShellCommandLine(current, quote);
-      lines.push(highlighted.line);
+      const highlightLength = Math.min(current.length, QUIET_SHELL_COMMAND_HIGHLIGHT_MAX_CHARS - highlightedChars);
+      const highlighted = this.highlightQuietShellCommandLine(current.slice(0, highlightLength), quote);
+      lines.push(highlighted.line + current.slice(highlightLength));
+      highlightedChars += highlightLength;
       quote = highlighted.quote;
       current = '';
       currentWidth = 0;
@@ -764,11 +766,6 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
       this.getLatestCodePreview('old_str') ||
       this.getLatestCodePreview('old_string')
     );
-  }
-
-  private getQuietShellCommandPreview(command: string): string {
-    if (!this.isPartial || command.length <= QUIET_SHELL_COMMAND_PREVIEW_TRUNCATE_AT_CHARS) return command;
-    return `…${command.slice(-QUIET_SHELL_COMMAND_PREVIEW_MAX_CHARS)}`;
   }
 
   private getLatestCodePreview(key: string): string {
@@ -1399,11 +1396,10 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     // Strip "cd $CWD && " from the start since we show cwd in the footer
     const cdPattern = /^cd\s+[^\s]+\s+&&\s+/;
     command = command.replace(cdPattern, '');
-    const displayCommand = this.getQuietShellCommandPreview(command);
 
     // Extract tail value from command (e.g., "| tail -5" or "| tail -n 5")
     let maxStreamLines: number | undefined;
-    const tailMatch = displayCommand.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
+    const tailMatch = command.match(/\|\s*tail\s+(?:-n\s+)?(-?\d+)\s*$/);
     if (tailMatch) {
       maxStreamLines = Math.abs(parseInt(tailMatch[1]!, 10));
     }
@@ -1434,7 +1430,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
         this.contentBox.addChild(new Text(`${border('├')}${border(horizontal)}${border('┤')}`, 0, 0));
       }
       const footerWrapWidth = Math.max(1, contentWidth - 4);
-      const footerLines = this.wrapQuietShellCommand(displayCommand, footerWrapWidth);
+      const footerLines = this.wrapQuietShellCommand(command, footerWrapWidth);
       const footerSuffixWidth = visibleWidth(footerSuffix);
       footerLines.forEach((footerLine, index) => {
         const prefix = index === 0 ? footerPrompt : '  ';

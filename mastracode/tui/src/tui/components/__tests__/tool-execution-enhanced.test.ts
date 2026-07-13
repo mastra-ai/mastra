@@ -925,21 +925,23 @@ Test plan:
     expect(output).toContain(theme.fg('toolArgs', '-f'));
   });
 
-  it('shows a rolling tail for large partial quiet shell command footers', () => {
-    const command = `node -e "${'START '.repeat(600)}${'MIDDLE '.repeat(600)}"`;
+  it('shows the full growing shell command while bounding syntax highlighting', () => {
+    const command = `printf START-${'x'.repeat(2_100)}-then-LATEST`;
     const component = new ToolExecutionComponentEnhanced(
       'execute_command',
-      { command },
+      { command: 'printf START-' },
       { quietDisplayMode: 'quiet', collapsedByDefault: true },
       ui,
     );
 
-    component.updateArgs({ command: `${command}${'LATEST '.repeat(20)}` }, true);
+    component.updateArgs({ command }, true);
 
-    const visible = stripAnsi(component.render(100).join('\n'));
-    expect(visible).toContain('…');
+    const output = component.render(100).join('\n');
+    const visible = stripAnsi(output);
+    expect(visible).toContain('START-');
     expect(visible).toContain('LATEST');
-    expect(visible).not.toContain('START');
+    expect(visible).not.toContain('…');
+    expect(output).not.toContain(chalk.blue('then'));
   });
 
   it('keeps shell keywords inside quoted strings highlighted as strings', () => {
