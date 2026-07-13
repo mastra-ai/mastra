@@ -55,7 +55,9 @@ export function buildLinearAuthorizeUrl(state: string, redirectUri: string): str
   url.searchParams.set('client_id', config.clientId);
   url.searchParams.set('redirect_uri', redirectUri);
   url.searchParams.set('response_type', 'code');
-  url.searchParams.set('scope', 'read');
+  // `comments:create` lets the agent's linear_create_comment tool post
+  // comments; everything else the integration does is read-only.
+  url.searchParams.set('scope', 'read,comments:create');
   url.searchParams.set('state', state);
   url.searchParams.set('prompt', 'consent');
   return url.toString();
@@ -72,6 +74,8 @@ export interface LinearTokenSet {
   refreshToken: string | null;
   /** Null when Linear reported no `expires_in`. */
   expiresAt: Date | null;
+  /** Scopes granted to the token as reported by Linear; null when omitted. */
+  scope: string | null;
 }
 
 /** POST to Linear's token endpoint and normalize the response. */
@@ -92,7 +96,12 @@ async function requestLinearTokens(params: Record<string, string>, label: string
     (err as { status?: number }).status = res.status;
     throw err;
   }
-  const body = (await res.json()) as { access_token?: string; refresh_token?: string; expires_in?: number };
+  const body = (await res.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    scope?: string;
+  };
   if (!body.access_token) {
     throw new Error(`Linear ${label} returned no access token.`);
   }
@@ -100,6 +109,7 @@ async function requestLinearTokens(params: Record<string, string>, label: string
     accessToken: body.access_token,
     refreshToken: body.refresh_token ?? null,
     expiresAt: typeof body.expires_in === 'number' ? new Date(Date.now() + body.expires_in * 1000) : null,
+    scope: body.scope ?? null,
   };
 }
 
@@ -129,7 +139,16 @@ async function linearGraphql<T>(accessToken: string, query: string, variables?: 
     body: JSON.stringify({ query, variables }),
   });
   if (!res.ok) {
-    const err = new Error(`Linear API request failed (${res.status})`);
+    // Linear returns GraphQL errors (validation, missing scopes, …) with a
+    // 400 status — surface the actual message instead of just the code.
+    let detail: string | null = null;
+    try {
+      const errBody = (await res.json()) as { errors?: Array<{ message?: string }> };
+      detail = errBody.errors?.[0]?.message ?? null;
+    } catch {
+      // Non-JSON error body; fall back to the status code alone.
+    }
+    const err = new Error(`Linear API request failed (${res.status})${detail ? `: ${detail}` : ''}`);
     (err as { status?: number }).status = res.status;
     throw err;
   }
@@ -302,4 +321,202 @@ export async function listActiveLinearIssues(
     })),
     nextCursor: pageInfo.hasNextPage ? pageInfo.endCursor : null,
   };
+}
+
+export interface LinearIssueComment {
+  author: string | null;
+  body: string;
+  createdAt: string;
+}
+
+/** Full issue payload for agent context: everything in {@link LinearIssue} plus description and discussion. */
+export interface LinearIssueDetail extends LinearIssue {
+  /** Markdown body of the issue, or `null` when empty. */
+  description: string | null;
+  /** Discussion comments, oldest first. */
+  comments: LinearIssueComment[];
+}
+
+const ISSUE_COMMENTS_PAGE_SIZE = 50;
+/** Hard stop for comment pagination so a misbehaving cursor can't loop forever. */
+const ISSUE_COMMENTS_MAX_PAGES = 20;
+
+interface IssueCommentNode {
+  body: string;
+  createdAt: string;
+  user: { name: string } | null;
+}
+
+interface IssueCommentsPage {
+  nodes: IssueCommentNode[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
+
+interface IssueDetailQueryData {
+  issue: {
+    id: string;
+    identifier: string;
+    title: string;
+    description: string | null;
+    url: string;
+    priorityLabel: string;
+    createdAt: string;
+    updatedAt: string;
+    state: { name: string; type: string };
+    assignee: { name: string } | null;
+    team: { key: string } | null;
+    labels: { nodes: Array<{ name: string }> };
+    comments: IssueCommentsPage;
+  } | null;
+}
+
+interface IssueCommentsQueryData {
+  issue: { comments: IssueCommentsPage } | null;
+}
+
+/** Follow `comments.pageInfo` until exhausted so long discussions aren't truncated. */
+async function fetchRemainingIssueComments(
+  accessToken: string,
+  issueId: string,
+  firstPage: IssueCommentsPage,
+): Promise<IssueCommentNode[]> {
+  const nodes = [...firstPage.nodes];
+  let { hasNextPage, endCursor } = firstPage.pageInfo;
+  for (let page = 1; hasNextPage && endCursor && page < ISSUE_COMMENTS_MAX_PAGES; page++) {
+    const data = await linearGraphql<IssueCommentsQueryData>(
+      accessToken,
+      `query IssueComments($id: String!, $first: Int!, $after: String!) {
+        issue(id: $id) {
+          comments(first: $first, after: $after) {
+            nodes { body createdAt user { name } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: issueId, first: ISSUE_COMMENTS_PAGE_SIZE, after: endCursor },
+    );
+    const comments = data.issue?.comments;
+    if (!comments) break;
+    nodes.push(...comments.nodes);
+    ({ hasNextPage, endCursor } = comments.pageInfo);
+  }
+  return nodes;
+}
+
+/**
+ * Fetch one issue with its description and comments. `idOrIdentifier` accepts
+ * both the Linear UUID and the human key (`ENG-123`). Returns `null` when the
+ * issue doesn't exist (Linear reports it as an "Entity not found" error).
+ */
+export async function fetchLinearIssueDetail(
+  accessToken: string,
+  idOrIdentifier: string,
+): Promise<LinearIssueDetail | null> {
+  let data: IssueDetailQueryData;
+  try {
+    data = await linearGraphql<IssueDetailQueryData>(
+      accessToken,
+      `query IssueDetail($id: String!, $commentsFirst: Int!) {
+        issue(id: $id) {
+          id
+          identifier
+          title
+          description
+          url
+          priorityLabel
+          createdAt
+          updatedAt
+          state { name type }
+          assignee { name }
+          team { key }
+          labels { nodes { name } }
+          comments(first: $commentsFirst) {
+            nodes { body createdAt user { name } }
+            pageInfo { hasNextPage endCursor }
+          }
+        }
+      }`,
+      { id: idOrIdentifier, commentsFirst: ISSUE_COMMENTS_PAGE_SIZE },
+    );
+  } catch (err) {
+    // Linear surfaces unknown ids/identifiers as a GraphQL "Entity not found"
+    // error rather than a null node — map that to "issue doesn't exist".
+    if (err instanceof Error && /entity not found/i.test(err.message)) return null;
+    throw err;
+  }
+  const issue = data.issue;
+  if (!issue) return null;
+  const allComments = await fetchRemainingIssueComments(accessToken, issue.id, issue.comments);
+  const comments = allComments.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    description: issue.description?.trim() ? issue.description : null,
+    url: issue.url,
+    state: issue.state.name,
+    stateType: issue.state.type,
+    priorityLabel: issue.priorityLabel,
+    assignee: issue.assignee?.name ?? null,
+    team: issue.team?.key ?? null,
+    labels: issue.labels.nodes.map(label => label.name),
+    createdAt: issue.createdAt,
+    updatedAt: issue.updatedAt,
+    comments: comments.map(comment => ({
+      author: comment.user?.name ?? null,
+      body: comment.body,
+      createdAt: comment.createdAt,
+    })),
+  };
+}
+
+/** The comment created by {@link createLinearIssueComment}. */
+export interface LinearCreatedComment {
+  id: string;
+  url: string;
+}
+
+interface IssueIdQueryData {
+  issue: { id: string } | null;
+}
+
+interface CommentCreateMutationData {
+  commentCreate: { success: boolean; comment: { id: string; url: string } | null };
+}
+
+/**
+ * Post a comment on an issue. `idOrIdentifier` accepts both the Linear UUID
+ * and the human key (`ENG-123`) — the identifier is resolved to a UUID first
+ * because `commentCreate` only accepts UUIDs. Returns `null` when the issue
+ * doesn't exist.
+ */
+export async function createLinearIssueComment(
+  accessToken: string,
+  idOrIdentifier: string,
+  body: string,
+): Promise<LinearCreatedComment | null> {
+  let issueId: string;
+  try {
+    const data = await linearGraphql<IssueIdQueryData>(
+      accessToken,
+      `query IssueId($id: String!) { issue(id: $id) { id } }`,
+      { id: idOrIdentifier },
+    );
+    if (!data.issue) return null;
+    issueId = data.issue.id;
+  } catch (err) {
+    if (err instanceof Error && /entity not found/i.test(err.message)) return null;
+    throw err;
+  }
+  const data = await linearGraphql<CommentCreateMutationData>(
+    accessToken,
+    `mutation CommentCreate($input: CommentCreateInput!) {
+      commentCreate(input: $input) { success comment { id url } }
+    }`,
+    { input: { issueId, body } },
+  );
+  if (!data.commentCreate.success || !data.commentCreate.comment) {
+    throw new Error('Linear did not accept the comment.');
+  }
+  return data.commentCreate.comment;
 }
