@@ -218,7 +218,8 @@ describe('ThreadList', () => {
 
     // The title still shows for context…
     expect(await screen.findByText('First thread')).toBeInTheDocument();
-    // …but there is no way to create, rename, clone, or delete threads.
+    // …but no "Threads" header/count and no way to create, rename, clone, or delete threads.
+    expect(screen.queryByText('Threads')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
   });

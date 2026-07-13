@@ -42,7 +42,8 @@ export function ThreadList() {
   if (!activeProject) return null;
 
   // Feature worktrees hold a single conversation: show its title for context,
-  // but offer no rename/clone/delete actions and no way to create more threads.
+  // but no "Threads" header/count, no rename/clone/delete actions, and no way
+  // to create more threads.
   const readOnly =
     activeProject.source === 'github' && Boolean(projectPath) && projectPath !== activeProject.sandboxWorkdir;
 
@@ -58,7 +59,7 @@ export function ThreadList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <ThreadListHeader threadCount={threads.length} readOnly={readOnly} />
+      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -99,7 +100,7 @@ function useThreadHookArgs() {
   };
 }
 
-function ThreadListHeader({ threadCount, readOnly }: { threadCount: number; readOnly: boolean }) {
+function ThreadListHeader({ threadCount }: { threadCount: number }) {
   const overlays = useOverlays();
   const navigate = useNavigate();
 
@@ -113,19 +114,17 @@ function ThreadListHeader({ threadCount, readOnly }: { threadCount: number; read
           </Badge>
         )}
       </Txt>
-      {!readOnly && (
-        <Button
-          variant="ghost"
-          size="icon-sm"
-          aria-label="New thread"
-          onClick={() => {
-            overlays.close('sidebar');
-            void navigate('/new');
-          }}
-        >
-          <Plus size={15} />
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="New thread"
+        onClick={() => {
+          overlays.close('sidebar');
+          void navigate('/new');
+        }}
+      >
+        <Plus size={15} />
+      </Button>
     </div>
   );
 }
