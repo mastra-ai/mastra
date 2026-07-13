@@ -260,8 +260,7 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
       "additionalProperties": false,
       "properties": {
         "age": {
-          "maximum": 120,
-          "minimum": 0,
+          "description": "constraints: greater than or equal to 0, lower than or equal to 120",
           "type": "number",
         },
         "email": {
@@ -303,25 +302,21 @@ exports[`MetaSchemaCompatLayer > Snapshot Tests - Full JSON Schema Output > shou
   "properties": {
     "frequencyPenalty": {
       "default": 0,
-      "maximum": 2,
-      "minimum": -2,
+      "description": "constraints: greater than or equal to -2, lower than or equal to 2",
       "type": "number",
     },
     "maxTokens": {
-      "description": "Maximum tokens to generate",
-      "maximum": 4096,
-      "minimum": 1,
+      "description": "Maximum tokens to generate
+constraints: greater than or equal to 1, lower than or equal to 4096",
       "type": "integer",
     },
     "temperature": {
-      "description": "Sampling temperature",
-      "maximum": 1,
-      "minimum": 0,
+      "description": "Sampling temperature
+constraints: greater than or equal to 0, lower than or equal to 1",
       "type": "number",
     },
     "topP": {
-      "maximum": 1,
-      "minimum": 0,
+      "description": "constraints: greater than or equal to 0, lower than or equal to 1",
       "type": "number",
     },
   },
@@ -1157,9 +1152,8 @@ exports[`MetaSchemaCompatLayer > processZodType - Number Constraints > should ha
   "additionalProperties": false,
   "properties": {
     "count": {
-      "description": "A count field",
-      "maximum": 100,
-      "minimum": 1,
+      "description": "A count field
+constraints: greater than or equal to 1, lower than or equal to 100",
       "type": "number",
     },
   },
@@ -1176,13 +1170,10 @@ exports[`MetaSchemaCompatLayer > processZodType - Number Constraints > should ha
   "additionalProperties": false,
   "properties": {
     "age": {
-      "maximum": 120,
-      "minimum": 0,
+      "description": "constraints: greater than or equal to 0, lower than or equal to 120",
       "type": "number",
     },
     "score": {
-      "maximum": 9007199254740991,
-      "minimum": -9007199254740991,
       "type": "integer",
     },
   },

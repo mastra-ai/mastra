@@ -1,5 +1,41 @@
 # @mastra/inngest
 
+## 1.8.2-alpha.1
+
+### Patch Changes
+
+- Fix `ToolNotFoundError` for workspace/skill tools (`skill`, `skill_read`, `skill_search`, `mastra_workspace_*`) when a durable agent's steps execute on a cross-process engine (e.g. the `@mastra/inngest` `connect()` worker). ([#19331](https://github.com/mastra-ai/mastra/pull/19331))
+
+  The durable tool-call step resolved tools only from the per-process `globalRunRegistry` plus Mastra-instance-level tools, while the sibling LLM-execution step already rebuilds the full toolset from the agent via `resolveRuntimeDependencies`/`getToolsForExecution`. On a worker process the registry is empty, so the model could _call_ `skill` (the LLM step saw it) but the tool-call step rejected it with `ToolNotFoundError`. The tool-call step now falls back to rebuilding the toolset from the agent (`rebuildRunToolsFromMastra`) when the registry misses, resolving workspace/skill tools symmetrically cross-process.
+
+  `resolveRuntimeDependencies` also now rebuilds `inputProcessors`/`outputProcessors` (and writes the rebuilt tools + processors back into `globalRunRegistry`) when the registry entry is a cross-process placeholder, so the `SkillsProcessor` and `WorkspaceInstructionsProcessor` run cross-process too — restoring the available-skills list and workspace instructions in the system prompt on the worker.
+
+  Placeholder registry entries are detected via a new explicit `RunRegistryEntry.isPlaceholder` flag (set by `@mastra/inngest` when seeding resume-segment entries) or the absence of a live model instance — never by an empty `tools` map, which is a legitimate state for agents configured without tools.
+
+  Fixes #19330.
+
+- Fixed durable agents on the Inngest engine ignoring `toolCallConcurrency` — parallel tool calls always ran one at a time. Tool calls now run concurrently up to the run's `toolCallConcurrency` (default 10). Concurrency is forced to 1 when the run requires tool approval or any tool in the step's effective active tool set requires approval or can suspend, so approval and suspend/resume flows keep working. The concurrency is resolved from the run's own state at execution time, so it stays correct across Inngest replays and concurrent runs. Fixes #19317. ([#19329](https://github.com/mastra-ai/mastra/pull/19329))
+
+- Add MastraNonRetryableError for workflow steps to signal permanent failures and skip retries ([#19321](https://github.com/mastra-ai/mastra/pull/19321))
+
+  ```ts
+  import { MastraNonRetryableError } from '@mastra/core/error';
+
+  throw new MastraNonRetryableError('Invalid template ID');
+  ```
+
+- Updated dependencies [[`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2)]:
+  - @mastra/core@1.51.0-alpha.7
+
+## 1.8.2-alpha.0
+
+### Patch Changes
+
+- Fixed Inngest durable agents and workflows so request context values are preserved when runs start, resume, and invoke nested workflows. Previously the trigger and resume events sent an empty request context, so tools, processors, and dynamic resolvers inside a durable run could not see values the caller set (for example tenant or user IDs). ([#19223](https://github.com/mastra-ai/mastra/pull/19223))
+
+- Updated dependencies [[`a5c6337`](https://github.com/mastra-ai/mastra/commit/a5c6337d23c7686c81a32ce62f550f610543a240), [`8b97958`](https://github.com/mastra-ai/mastra/commit/8b979589f9aa59ba67cac565949475f2ffeb4ac3), [`8410541`](https://github.com/mastra-ai/mastra/commit/84105412c60ecd3bb33a9838146f59c4b588228f), [`01b338c`](https://github.com/mastra-ai/mastra/commit/01b338c56271f0219606710e3e8b26dee27ac6c2), [`8b7361d`](https://github.com/mastra-ai/mastra/commit/8b7361d35de68b80d05d30a74e0c69e7218fd612), [`c43f3a9`](https://github.com/mastra-ai/mastra/commit/c43f3a9d1efde99b38789364ba4d0ba670f430e3)]:
+  - @mastra/core@1.51.0-alpha.4
+
 ## 1.8.1
 
 ### Patch Changes

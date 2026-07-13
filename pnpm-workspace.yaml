@@ -1,5 +1,6 @@
 packages:
-  - mastracode
+  - mastracode/sdk
+  - mastracode/tui
   - docs
   - packages/_vendored/*
   - packages/_internals/*
@@ -118,7 +119,9 @@ trustPolicyExclude:
 overrides:
   typescript: ^6.0.3
   '@types/node': 22.19.15
-  cookie: '>=1.1.1'
+  # Capped below 2: cookie@2 renamed parse/serialize to parseCookie/stringifyCookie,
+  # which breaks react-router's build when renovate's pnpm dedupe floats it up.
+  cookie: '>=1.1.1 <2'
   tmp: '>=0.2.6'
   jsondiffpatch: '>=0.7.3'
   ssri: '>=6.0.2'
@@ -183,8 +186,8 @@ overrides:
   http-proxy-middleware@>=0.16.0 <2.0.10: 2.0.10
   launch-editor@<2.14.1: 2.14.1
   mdast-util-to-hast@>=13.0.0 <13.2.1: 13.2.1
-  '@babel/core@>=7.0.0 <7.29.6': 7.29.6
-  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.4
+  '@babel/core@>=7.0.0 <7.29.6': 7.29.7
+  '@babel/plugin-transform-modules-systemjs@>=7.12.0 <7.29.4': 7.29.7
   dompurify@>=3.0.0 <3.4.11: 3.4.11
   '@tootallnate/once@<3.0.1': ^3.0.1
   '@codemirror/lang-jinja': ^6.0.1

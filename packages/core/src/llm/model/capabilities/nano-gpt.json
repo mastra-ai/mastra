@@ -272,6 +272,8 @@
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
     "nvidia/nemotron-3-super-120b-a12b",
     "nvidia/nemotron-3-super-120b-a12b:thinking",
-    "nvidia/nvidia-nemotron-nano-9b-v2"
+    "nvidia/nvidia-nemotron-nano-9b-v2",
+    "poolside/laguna-m.1",
+    "poolside/laguna-xs.2"
   ]
 }

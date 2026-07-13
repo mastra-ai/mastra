@@ -282,6 +282,18 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           }
 
+          // When the finish reason is 'abort', also fire onAbort so
+          // consumers see it — the abort was handled gracefully (clean
+          // return from llm-execution) rather than crashing the workflow,
+          // so the separate ABORT event never fires.
+          if (onAbort && (data.stepResult?.reason as string) === 'abort') {
+            try {
+              await onAbort({ steps: (data.output?.steps ?? []) as unknown[] });
+            } catch (callbackError) {
+              logError(`[DurableAgentStream] onAbort (from FINISH) callback error:`, callbackError);
+            }
+          }
+
           // When the finish reason is 'error', also fire onError so
           // consumers see it — the error was handled gracefully (bail
           // response) rather than crashing the workflow, so the ERROR

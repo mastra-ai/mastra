@@ -7,7 +7,7 @@ packages:
 
 # SlackProvider
 
-`SlackProvider` is the managed path for connecting agents to Slack. Register it on `Mastra.channels` and it provisions Slack apps via the Manifest API, runs the OAuth install flow, rotates configuration tokens, and routes Slack events to your agents. Use it when you want Mastra to own app creation and installation. For the lower-level path where you create the Slack app and configure scopes and webhooks yourself, use [`createSlackAdapter`](/docs/agents/channels) on the agent's `channels.adapters` instead.
+`SlackProvider` is the managed path for connecting agents to Slack. Register it on `Mastra.channels` and it provisions Slack apps via the Manifest API, runs the OAuth install flow, rotates configuration tokens, and routes Slack events to your agents. Use it when you want Mastra to own app creation and installation. For the lower-level path where you create the Slack app and configure scopes and webhooks yourself, use [`createSlackAdapter`](/docs/capabilities/channels/slack) on the agent's `channels.adapters` instead.
 
 ## Usage example
 
@@ -305,7 +305,7 @@ slack.setBaseUrl('https://abc123.trycloudflare.com')
 
 #### `initialize()`
 
-Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Does not auto-provision new apps; use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
+Recreates a `SlackAdapter` for each active installation in storage and injects `AgentChannels` into the corresponding agent so it receives Slack events on startup. Doesn't auto-provision new apps; use `connect()` to create one. Mastra calls this automatically, so you rarely call it directly.
 
 ```typescript
 await slack.initialize()
@@ -358,5 +358,5 @@ const result = await slack.connect('support-agent')
 ## Related
 
 - [ChannelProvider](/reference/channels/channel-provider): the interface `SlackProvider` implements
-- [Channels](/docs/agents/channels): concepts, platform setup, and the `createSlackAdapter` path
+- [Channels](/docs/capabilities/channels/overview): concepts, platform setup, and the `createSlackAdapter` path
 - [Channels reference](/reference/agents/channels): the `channels` config on the `Agent` constructor

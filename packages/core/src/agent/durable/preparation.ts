@@ -151,7 +151,7 @@ export interface PreparationResult<_OUTPUT = undefined> {
  * Options for preparation phase
  */
 export interface PreparationOptions<OUTPUT = undefined> {
-  /** The agent instance */
+  /** The agent instance (wrapped agent — used for config resolution: tools, model, instructions, memory) */
   agent: Agent<string, any, OUTPUT>;
   /** User messages to process */
   messages: MessageListInput;
@@ -167,6 +167,18 @@ export interface PreparationOptions<OUTPUT = undefined> {
   mastra?: Mastra;
   /** Method type */
   methodType?: AgentMethodType;
+  /**
+   * The public-facing agent ID (the DurableAgent wrapper's ID).
+   * Used for spans, background tasks, scorers, and all identification visible to Studio.
+   * Falls back to `agent.id` if not provided.
+   */
+  durableAgentId?: string;
+  /**
+   * The public-facing agent name (the DurableAgent wrapper's name).
+   * Used for spans, background tasks, scorers, and all identification visible to Studio.
+   * Falls back to `agent.name` if not provided.
+   */
+  durableAgentName?: string;
 }
 
 /**
@@ -196,7 +208,15 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     logger,
     mastra,
     methodType = 'stream',
+    durableAgentId,
+    durableAgentName,
   } = options;
+
+  // Public-facing identity: use the durable wrapper's ID/name for all
+  // external-facing identification (spans, background tasks, scorers, Studio).
+  // Fall back to the wrapped agent's ID/name when called outside the durable wrapper.
+  const publicAgentId = durableAgentId ?? agent.id;
+  const publicAgentName = durableAgentName ?? agent.name ?? agent.id;
 
   const typedAgent = agent as unknown as DurablePreparationAgent;
 
@@ -376,10 +396,10 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     typeof (agent as any).getTracingPolicy === 'function' ? (agent as any).getTracingPolicy() : undefined;
   const agentSpan = getOrCreateSpan({
     type: SpanType.AGENT_RUN,
-    name: `agent run: '${agent.id}'`,
+    name: `agent run: '${publicAgentId}'`,
     entityType: EntityType.AGENT,
-    entityId: agent.id,
-    entityName: agent.name,
+    entityId: publicAgentId,
+    entityName: publicAgentName,
     input: messages,
     attributes: {
       conversationId: threadId,
@@ -400,7 +420,6 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     requestContext,
     mastra,
   });
-
   // Run processInput (once, before execution) if we have any processors.
   // The MastraMemory context (thread + memoryConfig) was already established
   // above, before processor resolution, so processors that need it (working
@@ -414,7 +433,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
         outputProcessors,
         errorProcessors,
         logger: logger as any,
-        agentName: agent.name,
+        agentName: publicAgentName,
         processorStates,
       });
       await runner.runInputProcessors(
@@ -432,7 +451,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
           processorId: error.processorId,
         };
         logger?.warn?.('Input processor tripwire triggered', {
-          agent: agent.name,
+          agent: publicAgentName,
           reason: error.message,
           processorId: error.processorId,
           retry: error.options?.retry,
@@ -557,8 +576,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 13. Create serialized workflow input
   const workflowInput = createWorkflowInput({
     runId,
-    agentId: agent.id,
-    agentName: agent.name,
+    agentId: publicAgentId,
+    agentName: publicAgentName,
     messageList,
     tools,
     model,
@@ -659,6 +678,62 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     // Signal drain — the closure reads from AgentThreadStreamRuntime's queues.
     // Non-serializable; cross-process engines lose it and signals go undelivered.
     drainPendingSignals: scope => typedAgent.__getDrainPendingSignals()(runId, scope),
+    // Thread title generation — mirrors the non-durable `#executeOnFinish` branch,
+    // which was never ported to the durable finish step (so `generateTitle` never
+    // fired for durable/evented agents). Parked here because the agent instance is
+    // in scope; the durable finish step invokes it after the run completes. No-op
+    // when the merged config has no `generateTitle` or the thread already has a
+    // title. Non-serializable — cross-process engines skip title generation.
+    generateThreadTitle: memory
+      ? async ({ threadId, resourceId, memoryConfig, messageListState, requestContext: rc, tracingContext }) => {
+          // Re-read the thread so a title written mid-run isn't regenerated, and so we only
+          // generate on the first turn (mirrors the non-durable `!thread.title` guard).
+          const thread = await memory.getThreadById?.({ threadId });
+          const mergedConfig = memory.getMergedThreadConfig?.(memoryConfig);
+          const { shouldGenerate, model, instructions, minMessages } = agent.resolveTitleGenerationConfig(
+            mergedConfig?.generateTitle as Parameters<typeof agent.resolveTitleGenerationConfig>[0],
+          );
+          if (!shouldGenerate || thread?.title) return;
+
+          const titleMessageList = new MessageList().deserialize(messageListState);
+          const uiMessages = titleMessageList.get.all.ui();
+          const coreMessages = titleMessageList.get.all.core();
+          if (coreMessages.length < (minMessages ?? 1)) return;
+
+          const userMessage = agent.getMostRecentUserMessage(uiMessages);
+          if (!userMessage) return;
+
+          const title = await agent.genTitle(
+            userMessage,
+            rc ?? new RequestContext(),
+            createObservabilityContext(tracingContext),
+            model,
+            instructions,
+            uiMessages,
+          );
+          if (!title) return;
+
+          // Title-only late write. Prefer updateThread when the thread record
+          // already exists so its original createdAt is preserved (createThread
+          // rebuilds the record with a fresh createdAt). Fall back to createThread
+          // for the first-turn case where the record may not be persisted yet.
+          if (thread) {
+            await memory.updateThread({
+              id: threadId,
+              title,
+              metadata: thread.metadata ?? {},
+              memoryConfig,
+            });
+          } else {
+            await memory.createThread({
+              threadId,
+              resourceId,
+              memoryConfig,
+              title,
+            });
+          }
+        }
+      : undefined,
     // Signal messages already in the messageList at run start (from persisted
     // history). Echoed as data-signal parts on the first LLM step so the client
     // sees them without refetching. Spliced once, never re-emitted.
