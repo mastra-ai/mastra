@@ -998,6 +998,24 @@ export function createDurableToolCallStep() {
               }
             }
 
+            const isPreviouslyRunning = await bgTask.checkIfRunning({
+              toolCallId,
+              runId,
+              agentId: initData.agentId,
+              threadId: state?.threadId,
+              resourceId: state?.resourceId,
+              toolName,
+            });
+
+            if (isPreviouslyRunning) {
+              const task = await bgTask.restart();
+              return {
+                ...typedInput,
+                args: cleanedArgs,
+                result: `Background task restarted. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+              };
+            }
+
             const { task, fallbackToSync } = await bgTask.dispatch();
 
             if (!fallbackToSync) {

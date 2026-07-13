@@ -98,7 +98,7 @@ export class BackgroundTaskManager {
 
     // Worker: subscribes with group so only one worker processes each task.
     this.workerCallback = async (event: Event, ack?: () => Promise<void>) => {
-      if (event.type === 'task.dispatch') {
+      if (event.type === 'task.dispatch' || event.type === 'task.restart') {
         await this.handleDispatch(event);
       } else if (event.type === 'task.resume') {
         await this.handleResume(event);
@@ -403,6 +403,47 @@ export class BackgroundTaskManager {
     return task;
   }
 
+  /**
+   * Restarts a previously running task. The tool executor is re-registered via
+   * `registerTaskContext(taskId, ...)` because the original
+   * registration is gone (e.g. process restart) — the manager doesn't
+   * rehydrate executor closures from storage.
+   *
+   */
+  async restart(taskId: string, context?: TaskContext): Promise<BackgroundTask> {
+    if (!this.#mastra) {
+      throw new Error('Mastra is not registered with this manager');
+    }
+
+    if (this.initPromise) await this.initPromise;
+
+    const storage = await this.getStorage();
+    const task = await storage.getTask(taskId);
+    if (!task) {
+      throw new Error(`Task not found: ${taskId}`);
+    }
+    if (task.status !== 'running') {
+      throw new Error(`Cannot restart task in status '${task.status}' (expected 'running')`);
+    }
+
+    if (context) {
+      this.registerTaskContext(task.id, context);
+    }
+
+    const canRun = await this.checkConcurrency(task.agentId);
+    if (!canRun) {
+      // Restart sits outside the queue/fallback-sync paths — there's no
+      // synchronous caller to fall back to, and silently leaving the task
+      // running hides the failure from the caller. Throw and let the
+      // caller retry once a slot frees.
+      throw new Error(`Concurrency limit reached, cannot restart task "${taskId}" — retry once a slot is available`);
+    }
+
+    await this.dispatch(task, true);
+
+    return task;
+  }
+
   async getTask(taskId: string): Promise<BackgroundTask | null> {
     const storage = await this.getStorage();
     return storage.getTask(taskId);
@@ -690,7 +731,7 @@ export class BackgroundTaskManager {
 
   // --- Internal ---
 
-  private async dispatch(task: BackgroundTask): Promise<void> {
+  private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {
     // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
     // exactly one worker handles the task. `handleDispatch` flips the
     // task to running and starts the per-task workflow run.
@@ -707,24 +748,32 @@ export class BackgroundTaskManager {
         timeoutMs: task.timeoutMs,
         maxRetries: task.maxRetries,
         runId: task.runId,
+        isRestart,
       },
       runId: task.id,
     });
   }
 
   /**
-   * Handles a task.dispatch event. Returns true if the message was nacked (for retry).
+   * Handles a task.dispatch and task.restart events.
+   * Both events are similar, but the latter is used to restart a running task.
    */
-  private async handleDispatch(event: Event): Promise<boolean> {
-    const { taskId } = event.data;
+  private async handleDispatch(event: Event): Promise<void> {
+    const { taskId, isRestart } = event.data;
     const deliveryAttempt = event.deliveryAttempt ?? 1;
-    let nacked = false;
 
     const storage = await this.getStorage();
     const task = await storage.getTask(taskId);
     if (!task || task.status === 'cancelled') {
       this.deregisterTaskContext(taskId);
-      return false;
+      return;
+    }
+
+    if (isRestart && task.status !== 'running') {
+      // Either gone or already done/cancelled by another worker. Drop the
+      // event silently — the worker group ensures exactly-once delivery, but
+      // the task may have moved on between publish and pickup.
+      return;
     }
 
     await storage.updateTask(taskId, { status: 'running', startedAt: new Date(), retryCount: deliveryAttempt - 1 });
@@ -739,24 +788,26 @@ export class BackgroundTaskManager {
     if (this.#mastra) {
       if (runningTask) void this.runLocalExecutionHook(runningTask);
       const workflow = this.#mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const prevWorkflowRun = isRestart ? await workflow.getWorkflowRunById(taskId) : undefined;
+      const shouldRestart = isRestart && prevWorkflowRun?.status === 'running';
       const run = await workflow.createRun({ runId: taskId });
-      void run
-        .start({ inputData: { taskId } })
+      const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
+      void runPromise
         .then(result => {
           if (result.status !== 'suspended') {
             void workflow.deleteWorkflowRunById(taskId);
           }
         })
         .catch(err => {
-          this.#mastra?.getLogger?.()?.error(`background-task workflow start failed for ${taskId}:`, err);
+          this.#mastra
+            ?.getLogger?.()
+            ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
         })
         .finally(() => {
           // Free the concurrency slot once the run terminates.
           void this.drainPending();
         });
     }
-
-    return nacked;
   }
 
   /**
