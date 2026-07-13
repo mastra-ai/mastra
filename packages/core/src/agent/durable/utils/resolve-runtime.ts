@@ -62,6 +62,16 @@ export interface ResolvedRuntimeDependencies {
 }
 
 /**
+ * Build a SaveQueueManager for a run's memory, or `undefined` when no memory
+ * is configured. Shared by `resolveRuntimeDependencies` and
+ * `rebuildRunToolsFromMastra` so the construction lives in one place.
+ */
+function makeSaveQueueManager(memory: MastraMemory | undefined, mastra?: Mastra): SaveQueueManager | undefined {
+  if (!memory) return undefined;
+  return new SaveQueueManager({ logger: mastra?.getLogger?.(), memory });
+}
+
+/**
  * Options for resolving runtime dependencies
  */
 export interface ResolveRuntimeOptions {
@@ -229,13 +239,7 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   }
 
   // 3. Get or create SaveQueueManager
-  let saveQueueManager: SaveQueueManager | undefined;
-  if (memory) {
-    saveQueueManager = new SaveQueueManager({
-      logger: mastra?.getLogger?.(),
-      memory,
-    });
-  }
+  const saveQueueManager = makeSaveQueueManager(memory, mastra);
 
   // 4. Reconstruct _internal for compatibility with existing code
   const _internal = resolveInternalState({
@@ -319,11 +323,7 @@ export async function rebuildRunToolsFromMastra(options: {
 
     const memory = await (agent as any).getMemory?.({ requestContext: resolveRequestContext });
     const workspace = await (agent as any).getWorkspace?.({ requestContext: resolveRequestContext });
-
-    let saveQueueManager: SaveQueueManager | undefined;
-    if (memory) {
-      saveQueueManager = new SaveQueueManager({ logger: mastra.getLogger?.(), memory });
-    }
+    const saveQueueManager = makeSaveQueueManager(memory, mastra);
 
     // Write back so sibling steps in this process reuse the rebuilt tools.
     const existing = globalRunRegistry.get(runId);
