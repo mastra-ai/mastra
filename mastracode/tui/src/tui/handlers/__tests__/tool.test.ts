@@ -1,11 +1,43 @@
+import { Container } from '@earendil-works/pi-tui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { clearToolInputParsers, handleToolInputDelta, handleToolInputStart, handleToolUpdate } from '../tool.js';
+import {
+  clearPendingShellOutputs,
+  clearToolInputParsers,
+  handleShellOutput,
+  handleToolEnd,
+  handleToolInputDelta,
+  handleToolInputStart,
+  handleToolUpdate,
+} from '../tool.js';
 
 async function flushParser(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise(resolve => setTimeout(resolve, 100));
+}
+
+function createShellOutputContext() {
+  const appendStreamingOutput = vi.fn();
+  const updateResult = vi.fn();
+  const requestRender = vi.fn();
+  const component = { appendStreamingOutput, updateResult };
+  const session = { displayState: { get: () => ({ toolInputBuffers: new Map() }) } };
+  const ctx = {
+    state: {
+      controller: { session },
+      session,
+      pendingTools: new Map([['call-1', component]]),
+      pendingTaskToolIds: new Set(),
+      pendingSubagents: new Map(),
+      pendingAskUserComponents: new Map(),
+      pendingSubmitPlanComponents: new Map(),
+      chatContainer: new Container(),
+      ui: { requestRender },
+    },
+  } as any;
+
+  return { ctx, appendStreamingOutput, updateResult, requestRender };
 }
 
 function createContext(bufferText: string | undefined, toolName = 'view') {
@@ -40,6 +72,49 @@ function createContext(bufferText: string | undefined, toolName = 'view') {
 describe('tool event handlers', () => {
   afterEach(() => {
     clearToolInputParsers();
+    clearPendingShellOutputs();
+    vi.useRealTimers();
+  });
+
+  it('clears pending shell output without appending or rendering before the timer fires', () => {
+    vi.useFakeTimers();
+    const { ctx, appendStreamingOutput, requestRender } = createShellOutputContext();
+
+    handleShellOutput(ctx, 'call-1', 'partial output', 'stdout');
+    clearPendingShellOutputs();
+    vi.advanceTimersByTime(1000);
+
+    expect(appendStreamingOutput).not.toHaveBeenCalled();
+    expect(requestRender).not.toHaveBeenCalled();
+  });
+
+  it('keeps shell-output cleanup safe when no output is pending', () => {
+    expect(() => clearPendingShellOutputs()).not.toThrow();
+  });
+
+  it('flushes pending shell output on normal tool end', () => {
+    vi.useFakeTimers();
+    const { ctx, appendStreamingOutput, updateResult, requestRender } = createShellOutputContext();
+
+    handleShellOutput(ctx, 'call-1', 'hello ', 'stdout');
+    handleShellOutput(ctx, 'call-1', 'world', 'stdout');
+    handleToolEnd(ctx, 'call-1', { content: 'done' }, false);
+
+    expect(appendStreamingOutput).toHaveBeenCalledWith('hello world');
+    expect(updateResult).toHaveBeenCalled();
+    expect(requestRender).toHaveBeenCalled();
+  });
+
+  it('does not append cleared shell output after abort/error lifecycle cleanup', () => {
+    vi.useFakeTimers();
+    const { ctx, appendStreamingOutput, requestRender } = createShellOutputContext();
+
+    handleShellOutput(ctx, 'call-1', 'stale output', 'stderr');
+    clearPendingShellOutputs();
+    vi.advanceTimersByTime(1000);
+
+    expect(appendStreamingOutput).not.toHaveBeenCalled();
+    expect(requestRender).not.toHaveBeenCalled();
   });
 
   it('feeds streamed delta fragments into the pending tool component incrementally', async () => {

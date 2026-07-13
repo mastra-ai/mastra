@@ -57,6 +57,13 @@ interface PendingShellOutput {
 
 const pendingShellOutputs = new Map<string, PendingShellOutput>();
 
+export function clearPendingShellOutputs(): void {
+  for (const pending of pendingShellOutputs.values()) {
+    clearTimeout(pending.timer);
+  }
+  pendingShellOutputs.clear();
+}
+
 type JsonObject = Record<string, unknown>;
 
 class AsyncStringQueue implements AsyncIterable<string> {

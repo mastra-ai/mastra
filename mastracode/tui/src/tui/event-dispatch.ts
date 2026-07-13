@@ -40,6 +40,7 @@ import {
   handleToolInputDelta,
   handleToolInputEnd,
   handleToolEnd,
+  clearPendingShellOutputs,
   clearToolInputParsers,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
@@ -66,6 +67,7 @@ export async function dispatchEvent(
   switch (event.type) {
     case 'agent_start':
       clearToolInputParsers();
+      clearPendingShellOutputs();
       // Reset tokens/sec at the start of a new turn (not at the end) so the
       // last turn's reading stays visible while idle — short single-step turns
       // would otherwise zero it before it could be read.
@@ -94,8 +96,10 @@ export async function dispatchEvent(
       state.decodeStartedAt = 0;
       ectx.updateStatusLine();
       if (event.reason === 'aborted') {
+        clearPendingShellOutputs();
         handleAgentAborted(ectx);
       } else if (event.reason === 'error') {
+        clearPendingShellOutputs();
         handleAgentError(ectx);
       } else {
         handleAgentEnd(ectx);
