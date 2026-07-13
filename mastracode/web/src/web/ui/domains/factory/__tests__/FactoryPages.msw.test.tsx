@@ -833,6 +833,52 @@ describe('Factory Board — investigate flow', () => {
     ]);
   });
 
+  it('given a repeat run on the same item, when the worktree session already has a thread, then the prompt lands on that thread instead of creating a new one', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-pr',
+          title: 'Add factory pages',
+          source: 'github-pr',
+          sourceKey: 'github-pr:34',
+          url: 'https://github.com/mastra-ai/mastra/pull/34',
+          stages: ['review'],
+          metadata: { number: 34, headBranch: 'feat/factory-pages', baseBranch: 'main' },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-pr-34');
+    const { router } = renderAt('/factory/board');
+    // The worktree session resumes a real (titled) thread from a previous run.
+    // Registered after renderAt so it takes precedence over the default empty
+    // thread list from useAppHandlers (MSW resolves newest-first).
+    server.use(
+      http.get(`${SESSION}/threads`, () =>
+        HttpResponse.json({
+          threads: [{ id: THREAD_ID, resourceId: RESOURCE_ID, title: 'PR #34: Add factory pages' }],
+        }),
+      ),
+      http.post(`${SESSION}/thread`, () => HttpResponse.json({ ok: true })),
+    );
+
+    await screen.findByTestId('board-column-review');
+    await userEvent.click(within(column('review')).getByRole('button', { name: 'Actions for Add factory pages' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Start review' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/threads/${THREAD_ID}`));
+    // No new thread was created — the resumed thread carried the follow-up run.
+    expect(captured.threadTitles).toEqual([]);
+    expect(captured.messages).toHaveLength(1);
+    expect(captured.messages[0]!.message).toContain('understand-pr skill');
+    expect(state.patches).toMatchObject([
+      {
+        id: 'wi-pr',
+        stages: ['review'],
+        sessions: { review: { branch: 'factory/pr-34', threadId: THREAD_ID } },
+      },
+    ]);
+  });
+
   it('given the worktree call fails, when Investigate is clicked, then an error notice renders and no work item is filed', async () => {
     const state = useBoardHandlers({ issues });
     server.use(
