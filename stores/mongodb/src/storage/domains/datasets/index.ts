@@ -13,7 +13,6 @@ import {
   calculatePagination,
   safelyParseJSON,
   ensureDate,
-  planDatasetItemBatch,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -836,7 +835,7 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
                 .find({ datasetId: input.datasetId, externalId: { $in: externalIds } }, { session })
                 .sort({ datasetVersion: 1 })
                 .toArray();
-        const plan = planDatasetItemBatch(
+        const plan = this.planDatasetItemBatch(
           input.items,
           historyRows.map(row => this.transformItemRowFull(row)),
           randomUUID,

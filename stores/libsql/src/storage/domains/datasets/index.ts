@@ -15,7 +15,6 @@ import {
   normalizePerPage,
   safelyParseJSON,
   ensureDate,
-  planDatasetItemBatch,
 } from '@mastra/core/storage';
 import type {
   DatasetRecord,
@@ -1113,7 +1112,7 @@ export class DatasetsLibSQL extends DatasetsStorage {
                 args: [input.datasetId, ...externalIds],
               })
             : { rows: [] };
-          const plan = planDatasetItemBatch(
+          const plan = this.planDatasetItemBatch(
             input.items,
             historyResult.rows.map(row => this.transformItemRowFull(row)),
             () => crypto.randomUUID(),

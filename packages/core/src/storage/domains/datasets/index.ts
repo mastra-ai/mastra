@@ -1,3 +1,3 @@
 export * from './base';
-export * from './identity';
+export { DatasetItemIdentityConflictError } from './identity';
 export * from './inmemory';

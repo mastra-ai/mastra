@@ -12,7 +12,6 @@ import {
   TABLE_EXPERIMENTS,
   TABLE_EXPERIMENT_RESULTS,
   TABLE_SCHEMAS,
-  planDatasetItemBatch,
 } from '@mastra/core/storage';
 import type {
   AddDatasetItemInput,
@@ -1145,7 +1144,7 @@ export class DatasetsSpanner extends DatasetsStorage {
               });
               historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
             }
-            const plan = planDatasetItemBatch(input.items, historyRows, randomUUID);
+            const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
             const resolved = new Map<string, DatasetItem>(plan.existingCurrentItems);
             if (plan.inserts.length > 0) {
               const now = new Date();

@@ -20,7 +20,8 @@ import type {
   DatasetTenancyFilters,
 } from '../../types';
 import { StorageDomain } from '../base';
-import { validateDatasetItemExternalId } from './identity';
+import { planDatasetItemBatch as createDatasetItemBatchPlan, validateDatasetItemExternalId } from './identity';
+import type { DatasetItemBatchPlan } from './identity';
 
 /**
  * Abstract base class for datasets storage domain.
@@ -208,6 +209,14 @@ export abstract class DatasetsStorage extends StorageDomain {
     }
 
     return this._doBatchInsertItems(input);
+  }
+
+  protected planDatasetItemBatch(
+    items: BatchInsertItemsInput['items'],
+    historyRows: DatasetItemRow[],
+    createId: () => string,
+  ): DatasetItemBatchPlan {
+    return createDatasetItemBatchPlan(items, historyRows, createId);
   }
 
   /** Subclasses implement batch insert with SCD-2 versioning */

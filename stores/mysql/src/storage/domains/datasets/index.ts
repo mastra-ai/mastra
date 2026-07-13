@@ -12,7 +12,6 @@ import {
   DATASET_VERSIONS_SCHEMA,
   DatasetsStorage,
   calculatePagination,
-  planDatasetItemBatch,
   normalizePerPage,
 } from '@mastra/core/storage';
 import type {
@@ -1178,7 +1177,7 @@ export class DatasetsMySQL extends DatasetsStorage {
         historyRows = rows.map(row => this.mapItemFull(row));
       }
 
-      const plan = planDatasetItemBatch(input.items, historyRows, randomUUID);
+      const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
       if (plan.inserts.length === 0) {
         await connection.commit();
         return plan.resolvedIds.map(id => plan.existingCurrentItems.get(id)!);
