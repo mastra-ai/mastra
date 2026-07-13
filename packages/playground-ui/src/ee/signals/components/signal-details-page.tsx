@@ -43,7 +43,7 @@ export function SignalClusterSidebar({
 }: SignalClusterSidebarProps) {
   return (
     <aside
-      className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4"
+      className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 py-4 pr-4"
       aria-label={ariaLabel}
     >
       <ul className="space-y-1" role={multiple ? 'group' : undefined}>
@@ -56,12 +56,12 @@ export function SignalClusterSidebar({
                 role={multiple ? 'checkbox' : undefined}
                 aria-checked={multiple ? selected : undefined}
                 aria-pressed={multiple ? undefined : selected}
-                className="group cursor-pointer w-full rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface3 aria-pressed:bg-surface3 aria-checked:bg-surface3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent1"
+                className="group w-full cursor-pointer rounded-xl px-3 py-2 text-left transition-colors hover:bg-surface3 focus-visible:ring-2 focus-visible:ring-accent1 focus-visible:outline-none aria-checked:bg-surface3 aria-pressed:bg-surface3"
                 onClick={() => onTopicSelect(topic.topicId)}
               >
                 <span className="flex items-start gap-2">
                   <span
-                    className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', multiple && !selected && 'invisible')}
+                    className={cn('mt-1.5 size-2 shrink-0 rounded-full', multiple && !selected && 'invisible')}
                     style={{ backgroundColor: clusterColor(topic.topicId) }}
                   />
                   <span className="min-w-0 space-y-1">
@@ -104,11 +104,11 @@ function SignalTraceListSkeleton({ rows = 8 }: { rows?: number }) {
 
 function SignalClusterSidebarSkeleton({ rows = 5 }: { rows?: number }) {
   return (
-    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 pr-4 py-4" aria-hidden="true">
+    <aside className="min-h-0 w-72 shrink-0 overflow-y-auto border-r border-border1/60 py-4 pr-4" aria-hidden="true">
       <ul className="space-y-1">
         {Array.from({ length: rows }).map((_, index) => (
           <li key={index} className="flex items-start gap-2 px-3 py-2">
-            <Skeleton className="mt-1.5 h-2 w-2 shrink-0 rounded-full" />
+            <Skeleton className="mt-1.5 size-2 shrink-0 rounded-full" />
             <div className="min-w-0 flex-1 space-y-1.5">
               <Skeleton className="h-4 w-1/2" />
               <Skeleton className="h-3 w-full" />
@@ -165,7 +165,7 @@ export function SignalTraceListTab({
 
   return (
     <section
-      className="grid grid-rows-[auto_1fr] min-h-0 gap-4 h-full overflow-y-auto"
+      className="grid h-full min-h-0 grid-rows-[auto_1fr] gap-4 overflow-y-auto"
       aria-label="Topic trace summaries"
     >
       <InputGroup variant="outline">
@@ -185,7 +185,7 @@ export function SignalTraceListTab({
 
       <DataList
         columns="minmax(12rem,1fr)"
-        className="min-h-0 h-full overflow-y-auto rounded-lg border border-border1/60"
+        className="h-full min-h-0 overflow-y-auto rounded-lg border border-border1/60"
       >
         <DataList.Top>
           <DataList.TopCells>
@@ -242,7 +242,7 @@ export function SignalClusterTraceList({
   return (
     <div className="flex h-full min-w-0 gap-6 overflow-y-auto">
       <SignalClusterSidebar topics={topics} selectedTopicIds={[selectedTopicId]} onTopicSelect={onTopicSelect} />
-      <div className="min-w-0 flex-1 overflow-y-auto h-full py-4">
+      <div className="h-full min-w-0 flex-1 overflow-y-auto py-4">
         <SignalTraceListTab
           examples={examples}
           loading={examplesLoading}

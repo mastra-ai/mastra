@@ -26,7 +26,7 @@ export const Circle: Story = {
 
 export const Card: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 p-4 border border-border1 rounded-lg w-dropdown-max-height">
+    <div className="flex w-dropdown-max-height flex-col gap-3 rounded-lg border border-border1 p-4">
       <Skeleton className="h-32 w-full rounded-lg" />
       <Skeleton className="h-4 w-3/4" />
       <Skeleton className="h-4 w-1/2" />
@@ -36,9 +36,9 @@ export const Card: Story = {
 
 export const ListItem: Story = {
   render: () => (
-    <div className="flex items-center gap-3 p-3 w-dropdown-max-height">
-      <Skeleton className="h-10 w-10 rounded-full" />
-      <div className="flex flex-col gap-2 flex-1">
+    <div className="flex w-dropdown-max-height items-center gap-3 p-3">
+      <Skeleton className="size-10 rounded-full" />
+      <div className="flex flex-1 flex-col gap-2">
         <Skeleton className="h-4 w-3/4" />
         <Skeleton className="h-3 w-1/2" />
       </div>
@@ -48,12 +48,12 @@ export const ListItem: Story = {
 
 export const TableRows: Story = {
   render: () => (
-    <div className="flex flex-col gap-3 w-[400px]">
+    <div className="w-100 flex flex-col gap-3">
       {[1, 2, 3].map(i => (
         <div key={i} className="flex items-center gap-3">
-          <Skeleton className="h-4 w-[100px]" />
+          <Skeleton className="w-25 h-4" />
           <Skeleton className="h-4 w-[150px]" />
-          <Skeleton className="h-4 w-[80px]" />
+          <Skeleton className="h-4 w-20" />
         </div>
       ))}
     </div>
@@ -62,7 +62,7 @@ export const TableRows: Story = {
 
 export const TextBlock: Story = {
   render: () => (
-    <div className="flex flex-col gap-2 w-dropdown-max-height">
+    <div className="flex w-dropdown-max-height flex-col gap-2">
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-full" />
       <Skeleton className="h-4 w-3/4" />

@@ -51,8 +51,8 @@ export const WithCustomContent: Story = {
         <EntityName>Production Database</EntityName>
         <EntityDescription>PostgreSQL • 2.5GB</EntityDescription>
         <div className="mt-2 flex gap-2">
-          <span className="text-xs bg-surface4 px-2 py-1 rounded">Active</span>
-          <span className="text-xs bg-surface4 px-2 py-1 rounded">Primary</span>
+          <span className="rounded bg-surface4 px-2 py-1 text-xs">Active</span>
+          <span className="rounded bg-surface4 px-2 py-1 text-xs">Primary</span>
         </div>
       </EntityContent>
     </Entity>
@@ -61,7 +61,7 @@ export const WithCustomContent: Story = {
 
 export const EntityList: Story = {
   render: () => (
-    <div className="flex flex-col gap-2 w-dropdown-max-height">
+    <div className="flex w-dropdown-max-height flex-col gap-2">
       <Entity onClick={() => console.log('Agent 1 clicked')}>
         <EntityIcon>
           <Bot />
@@ -97,7 +97,7 @@ export const EntityList: Story = {
 
 export const MinimalEntity: Story = {
   render: () => (
-    <Entity className="w-[200px]">
+    <Entity className="w-50">
       <EntityContent>
         <EntityName>Simple Entity</EntityName>
       </EntityContent>

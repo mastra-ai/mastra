@@ -13,16 +13,16 @@ import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
   cn(
-    'flex w-full text-neutral6 border bg-transparent',
-    'transition-all duration-normal ease-out-custom',
-    'placeholder:text-neutral2 placeholder:transition-opacity placeholder:duration-normal',
+    'flex w-full border bg-transparent text-neutral6',
+    'duration-normal transition-all ease-out-custom',
+    'placeholder:duration-normal placeholder:text-neutral2 placeholder:transition-opacity',
     'focus:placeholder:opacity-70',
     // type="number": hide native browser spinner arrows (they clip the pill).
     // For incrementable numeric inputs, compose <InputGroup> with +/- buttons
     // instead — see the NumberWithStepper story. WebKit uses the spin-button
     // pseudo-elements; Firefox needs `appearance: textfield` on the input.
-    '[&::-webkit-outer-spin-button]:appearance-none [&::-webkit-outer-spin-button]:m-0',
-    '[&::-webkit-inner-spin-button]:appearance-none [&::-webkit-inner-spin-button]:m-0',
+    '[&::-webkit-outer-spin-button]:m-0 [&::-webkit-outer-spin-button]:appearance-none',
+    '[&::-webkit-inner-spin-button]:m-0 [&::-webkit-inner-spin-button]:appearance-none',
     '[&[type=number]]:[appearance:textfield]',
     // type="search": drop WebKit's native clear button so the DS owns the search chrome.
     // Compose an <InputGroup> with an InputGroupButton to add a clear control.
