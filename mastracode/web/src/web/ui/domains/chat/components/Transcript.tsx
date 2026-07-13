@@ -569,9 +569,15 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // ---------------------------------------------------------------------------
 
 export function Transcript() {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
   const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
 
@@ -712,7 +718,7 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
       return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
     },
-    File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
+    File: (part: FilePart) => <FileAttachment part={part} />,
   };
 
   const status = statusMetadata(entry);
@@ -722,6 +728,16 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
+}
+
+function FileAttachment({ part }: { part: FilePart }) {
+  if (part.mimeType?.startsWith('image/')) {
+    const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
+    return (
+      <img src={src} alt="Attached image" className="my-1.5 max-h-80 max-w-full rounded-md border border-border1" />
+    );
+  }
+  return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {

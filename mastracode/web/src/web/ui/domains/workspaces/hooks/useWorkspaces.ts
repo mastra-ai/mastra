@@ -14,10 +14,6 @@ import {
   upsertWorktree,
 } from '../services/projects';
 
-export interface WorkspaceSession {
-  setState: (updates: Record<string, unknown>) => Promise<unknown>;
-}
-
 /**
  * The slice of the agent-controller session the delete mutation needs to
  * cascade a worktree deletion onto the threads that ran inside it.
@@ -81,28 +77,21 @@ export function useWorkspacesQuery(project: Project | null | undefined) {
   });
 }
 
-export function useSelectWorkspaceMutation(
-  project: Project | null | undefined,
-  session: WorkspaceSession | null | undefined,
-  scope?: AgentControllerThreadsScope,
-) {
+export function useSelectWorkspaceMutation(project: Project | null | undefined, scope?: AgentControllerThreadsScope) {
   const queryClient = useQueryClient();
   return useMutation({
+    // Sessions are scoped per worktree, so selecting a worktree only updates
+    // the stored project — the UI re-derives the scope and addresses that
+    // worktree's own session (no rebinding of the previous session's state).
     mutationFn: async (worktreePath: string) => {
       if (!project) throw new Error('No active project');
-      const updated = selectWorktree(latestProject(project), worktreePath);
-      await session?.setState({ projectPath: worktreePath });
-      return updated;
+      return selectWorktree(latestProject(project), worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
   });
 }
 
-export function useCreateWorkspaceMutation(
-  project: Project | null | undefined,
-  session: WorkspaceSession | null | undefined,
-  scope?: AgentControllerThreadsScope,
-) {
+export function useCreateWorkspaceMutation(project: Project | null | undefined, scope?: AgentControllerThreadsScope) {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -117,9 +106,7 @@ export function useCreateWorkspaceMutation(
         worktreePath: result.worktreePath,
         baseBranch: result.baseBranch,
       };
-      const updated = selectWorktree(upsertWorktree(latestProject(project), worktree), worktree.worktreePath);
-      await session?.setState({ projectPath: worktree.worktreePath });
-      return updated;
+      return selectWorktree(upsertWorktree(latestProject(project), worktree), worktree.worktreePath);
     },
     onSuccess: updated => invalidateWorkspaceQueries(queryClient, updated, scope),
     onError: error => toast(error instanceof Error ? error.message : 'Failed to create workspace', 'error'),
@@ -129,12 +116,12 @@ export function useCreateWorkspaceMutation(
 /**
  * Delete a worktree: removes the sandbox checkout + branch server-side, deletes
  * every thread that ran inside it, drops it from the stored project, and — when
- * the deleted worktree was selected — rebinds the session to the fallback
- * selection (repo root). Destructive; callers confirm with the user first.
+ * the deleted worktree was selected — falls back to the repo-root selection
+ * (the UI re-derives the scope and addresses that worktree's own session).
+ * Destructive; callers confirm with the user first.
  */
 export function useDeleteWorkspaceMutation(
   project: Project | null | undefined,
-  session: WorkspaceSession | null | undefined,
   threadSession: WorkspaceThreadSession | null | undefined,
   scope?: AgentControllerThreadsScope,
 ) {
@@ -163,10 +150,6 @@ export function useDeleteWorkspaceMutation(
 
       const wasSelected = selectedWorktree(latestProject(project))?.worktreePath === worktree.worktreePath;
       const updated = removeWorktree(latestProject(project), worktree.worktreePath);
-      if (wasSelected) {
-        const fallback = deriveProjectPath(updated);
-        if (fallback) await session?.setState({ projectPath: fallback });
-      }
       return { updated, removedPath: worktree.worktreePath, wasSelected };
     },
     onSuccess: ({ updated, removedPath }) => {

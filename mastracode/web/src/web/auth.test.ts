@@ -94,6 +94,7 @@ function buildApp() {
   const app = new Hono();
   const enabled = mountWebAuth(app, { redirectUri: 'http://localhost:4111/auth/callback' });
   app.get('*', c => c.text('ok'));
+  app.post('*', c => c.text('ok'));
   return { app, enabled };
 }
 
@@ -161,6 +162,25 @@ describe('mountWebAuth gate (enabled)', () => {
     const { app } = buildApp();
 
     const res = await app.request('/web/projects', { headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: 'unauthorized' });
+  });
+
+  it('lets unauthenticated GitHub webhook deliveries reach the route handler', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/web/github/webhook', { method: 'POST', headers: { Accept: 'application/json' } });
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe('ok');
+    expect(mockAuthenticate).not.toHaveBeenCalled();
+  });
+
+  it('does not bypass auth for non-POST GitHub webhook requests', async () => {
+    mockAuthenticate.mockResolvedValue(null);
+    const { app } = buildApp();
+
+    const res = await app.request('/web/github/webhook', { method: 'GET', headers: { Accept: 'application/json' } });
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: 'unauthorized' });
   });
