@@ -18,12 +18,10 @@ export function createMemoryTests(config: MemoryTestConfig = {}) {
       baseUrl = inject('baseUrl');
       client = new MastraClient({ baseUrl, retries: 0 });
 
-      // Reset storage once before the suite to avoid interfering with
-      // other test suites (e.g., observability) that share the same server.
-      try {
-        await fetch(`${baseUrl}/e2e/reset-storage`, { method: 'POST' });
-      } catch {
-        // ignore
+      // Reset only memory so parallel suites cannot clear each other's data.
+      const res = await fetch(`${baseUrl}/e2e/reset-memory`, { method: 'POST' });
+      if (!res.ok) {
+        throw new Error(`reset-memory failed: ${res.status} ${res.statusText}`);
       }
     });
 
