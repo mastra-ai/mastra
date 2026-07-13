@@ -1,0 +1,131 @@
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { afterEach, describe, expect, it } from 'vitest';
+import { Mastra } from '../../mastra';
+import { MockStore } from '../../storage';
+import { Agent } from '../agent';
+
+/**
+ * Regression test for background sub-agents in library mode.
+ *
+ * When Mastra is used as a library (`new Mastra(...)` without `mastra start`),
+ * nothing calls `startWorkers()`. A backgrounded sub-agent delegation would be
+ * dispatched and picked up (status `running`) but never complete, because the
+ * workers that drive execution to completion were never started.
+ *
+ * The fix lazily starts workers in the agent execution path when a background
+ * task manager exists, so dispatched tasks complete without the user ever
+ * calling `startWorkers()` themselves.
+ */
+describe('background sub-agents in library mode (no explicit startWorkers)', () => {
+  let mastra: Mastra | undefined;
+
+  afterEach(async () => {
+    await mastra?.backgroundTaskManager?.shutdown();
+    await mastra?.stopWorkers();
+    mastra = undefined;
+  });
+
+  function supervisorModel() {
+    let call = 0;
+    return new MockLanguageModelV2({
+      doStream: async () => {
+        call++;
+        if (call === 1) {
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 's1', modelId: 'mock', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'call-1',
+                toolName: 'agent-helper',
+                input: JSON.stringify({ prompt: 'hi' }),
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        }
+        return {
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 's2', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 't' },
+            { type: 'text-delta', id: 't', delta: 'done' },
+            { type: 'text-end', id: 't' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        };
+      },
+    });
+  }
+
+  function makeSubAgent() {
+    return new Agent({
+      id: 'helper',
+      name: 'helper',
+      description: 'A helper sub-agent.',
+      instructions: 'Say hello.',
+      model: new MockLanguageModelV2({
+        doStream: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'a1', modelId: 'mock', timestamp: new Date(0) },
+            { type: 'text-start', id: 'x' },
+            { type: 'text-delta', id: 'x', delta: 'Hello from the sub-agent.' },
+            { type: 'text-end', id: 'x' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+          ]),
+        }),
+      }),
+    });
+  }
+
+  it('runs a backgrounded sub-agent delegation to completion', async () => {
+    const supervisor = new Agent({
+      id: 'supervisor',
+      name: 'supervisor',
+      instructions: 'Delegate to the helper sub-agent.',
+      model: supervisorModel(),
+      agents: { helper: makeSubAgent() },
+      // Opt the delegation into background dispatch.
+      backgroundTasks: { tools: { helper: { enabled: true } } },
+    });
+
+    mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true },
+      agents: { supervisor },
+    });
+
+    const manager = mastra.backgroundTaskManager;
+    expect(manager).toBeDefined();
+
+    const stream = await supervisor.stream('Please delegate.', { maxSteps: 3 });
+    for await (const _ of stream.fullStream) {
+      // drain
+    }
+
+    // The dispatched task must reach a terminal state without anyone calling
+    // startWorkers(). Before the fix it stayed `running` forever.
+    let status: string | undefined;
+    for (let i = 0; i < 50; i++) {
+      const { tasks } = await manager!.listTasks({});
+      status = tasks[0]?.status;
+      if (status === 'completed' || status === 'failed') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    expect(status).toBe('completed');
+  }, 15000);
+});

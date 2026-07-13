@@ -889,6 +889,11 @@ export class Mastra<
     return this.#backgroundTaskManager;
   }
 
+  /** @internal Whether `startWorkers()` has been called at least once. */
+  get __workersStarted() {
+    return this.#workersStarted;
+  }
+
   /**
    * Returns the workflow scheduler owned by the SchedulerWorker,
    * or undefined if the scheduler is not enabled / not yet started.

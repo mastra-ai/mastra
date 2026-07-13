@@ -16,8 +16,10 @@ import { Agent } from '../agent';
  * The fix makes `toModelOutput` use the placeholder string directly when `output` is a string, so
  * the tool message always carries non-empty content.
  *
- * The background manager workers are intentionally NOT started, so the dispatched task stays pending
- * and the supervisor's continuation turn carries the placeholder (the buggy path), deterministically.
+ * The supervisor's continuation turn always carries the placeholder (the buggy path): the delegation
+ * is dispatched fire-and-forget, so the tool result seen by the model is the placeholder regardless
+ * of whether the background task completes later. (Workers now auto-start lazily in library mode,
+ * so the task may complete in the background — that does not affect what turn 2 sees.)
  */
 describe('sub-agent background dispatch tool content', () => {
   const storage = new MockStore();
