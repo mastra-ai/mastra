@@ -4,8 +4,8 @@ import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { StreamInternal } from '../../../loop/types';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
-import type { ProcessorState } from '../../../processors';
 import type {
+  ProcessorState,
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
@@ -123,14 +123,21 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // On a cross-process engine (e.g. the @mastra/inngest connect() worker) the
   // durable steps run in a DIFFERENT process than the one that prepared the run,
   // so this process's registry has either no entry or a minimal placeholder
-  // (see @mastra/inngest resume(): `{ tools: {}, model: undefined }`). In that
-  // case we MUST rebuild tools / processors / model from the agent registered on
-  // the Mastra instance — otherwise per-request closure tools (workspace/skill
-  // tools) and per-request processors (SkillsProcessor, WorkspaceInstructions)
-  // silently drop cross-process. Treat an entry lacking real tools as "needs
-  // rehydration" rather than trusting it blindly.
+  // (see @mastra/inngest resume(): `{ isPlaceholder: true, tools: {}, model:
+  // undefined }`). In that case we MUST rebuild tools / processors / model from
+  // the agent registered on the Mastra instance — otherwise per-request closure
+  // tools (workspace/skill tools) and per-request processors (SkillsProcessor,
+  // WorkspaceInstructions) silently drop cross-process.
+  //
+  // IMPORTANT: an empty `tools` map is NOT a placeholder signal — agents with
+  // zero tools legitimately register `{ tools: {} }` in-process. Placeholders
+  // are detected by the explicit `isPlaceholder` flag or by the absence of a
+  // real model instance (every in-process seeding site stores the live model;
+  // placeholders and metadata-only stubs do not).
   const globalEntry = globalRunRegistry.get(runId);
-  const hasUsableTools = !!globalEntry && Object.keys(globalEntry.tools ?? {}).length > 0;
+  const registryModel = globalEntry?.model as (MastraLanguageModel & { __metadataOnly?: boolean }) | undefined;
+  const hasHydratedEntry =
+    !!globalEntry && globalEntry.isPlaceholder !== true && !!registryModel && registryModel.__metadataOnly !== true;
   let tools: Record<string, CoreTool> = globalEntry?.tools ?? {};
   let model: MastraLanguageModel = globalEntry?.model as MastraLanguageModel;
   let modelList: RegistryModelListEntry[] | undefined = globalEntry?.modelList;
@@ -143,9 +150,10 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   let processorStates: Map<string, ProcessorState> | undefined = globalEntry?.processorStates;
   let rehydratedFromMastra = false;
 
-  // If the registry entry already carries real tools we trust it wholesale
-  // (in-process / same-process resume). Otherwise fall through and rebuild.
-  if (hasUsableTools) {
+  // If the registry entry is a real (non-placeholder) in-process entry we
+  // trust it wholesale (in-process / same-process resume). Otherwise fall
+  // through and rebuild from the Mastra instance.
+  if (hasHydratedEntry) {
     logger?.debug?.(`[DurableAgent:${agentId}] Using model and tools from global registry for run ${runId}`);
   } else if (mastra) {
     try {
@@ -220,6 +228,9 @@ export async function resolveRuntimeDependencies(options: ResolveRuntimeOptions)
   // populated in-process entry.
   if (rehydratedFromMastra) {
     const rebuilt: Partial<RunRegistryEntry> = {
+      // The entry now carries real runtime state — drop the placeholder mark
+      // so sibling steps in this process trust it instead of rebuilding.
+      isPlaceholder: false,
       tools,
       model,
       modelList,

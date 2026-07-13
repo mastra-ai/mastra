@@ -87,7 +87,7 @@ describe('durable tool-call cross-process workspace tool resolution', () => {
   });
 
   it('still emits ToolNotFoundError when the Mastra rebuild also has no such tool', async () => {
-    globalRunRegistry.set(RUN_ID, { tools: {}, model: {} as any } as any); // empty placeholder (inngest resume path)
+    globalRunRegistry.set(RUN_ID, { isPlaceholder: true, tools: {}, model: undefined as any } as any); // placeholder (inngest resume path)
     vi.mocked(resolveRuntime.rebuildRunToolsFromMastra).mockResolvedValueOnce({
       tools: { skill: { id: 'skill', execute: vi.fn() } as any },
       workspace: undefined,
