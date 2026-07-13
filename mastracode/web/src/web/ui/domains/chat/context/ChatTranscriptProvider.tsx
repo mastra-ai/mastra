@@ -11,7 +11,13 @@ import { ChatTranscriptContext } from './ChatTranscriptContext';
 import type { ChatTranscriptApi } from './ChatTranscriptContext';
 import { useChatConnection } from './useChatConnection';
 
-export function ChatTranscriptProvider({ children, initialMessages }: { children: ReactNode; initialMessages?: AgentControllerMessage[] }) {
+export function ChatTranscriptProvider({
+  children,
+  initialMessages,
+}: {
+  children: ReactNode;
+  initialMessages?: AgentControllerMessage[];
+}) {
   const transcriptApi = useAgentControllerTranscript({ initialMessages });
   const [runtime, dispatchRuntime] = useReducer(runtimeReducer, initialChatRuntime);
   const onEvent = (event: Parameters<typeof transcriptApi.onEvent>[0]) => {

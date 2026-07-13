@@ -679,7 +679,11 @@ describe('ChatSessionProvider', () => {
         { type: 'agent_start' },
         {
           type: 'message_update',
-          message: { id: 'first-project-message', role: 'assistant', content: [{ type: 'text', text: 'First project response' }] },
+          message: {
+            id: 'first-project-message',
+            role: 'assistant',
+            content: [{ type: 'text', text: 'First project response' }],
+          },
         },
         { type: 'usage_update', usage: { completionTokens: 12, totalTokens: 12 } },
         { type: 'om_observation_start' },

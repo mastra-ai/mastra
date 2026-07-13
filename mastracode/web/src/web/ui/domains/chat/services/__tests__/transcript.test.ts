@@ -120,7 +120,6 @@ describe('transcript reducer message entries', () => {
       },
     ]);
   });
-
 });
 
 describe('transcript reducer error notices', () => {

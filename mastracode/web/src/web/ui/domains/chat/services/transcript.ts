@@ -326,7 +326,9 @@ function describeErrorEvent(event: { error: { message?: string } | string; error
  * and tool calls in content order, so we emit the running text and each tool
  * call (matched to its result) as part of the same assistant entry.
  */
-export function createInitialTranscript({ messages = [] }: { messages?: AgentControllerMessage[] } = {}): TranscriptState {
+export function createInitialTranscript({
+  messages = [],
+}: { messages?: AgentControllerMessage[] } = {}): TranscriptState {
   return { ...initialTranscript, entries: messagesToEntries(messages) };
 }
 

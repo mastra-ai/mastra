@@ -19,7 +19,15 @@ type ChatLayoutProps = {
  * frame: sidebar column, mobile backdrop, header bar, scrollable content
  * region, and pinned footer. No domain hooks — callers fill the slots.
  */
-export function ChatLayout({ sidebar, header, content, main, footer, sidebarOpen = false, onSidebarClose }: ChatLayoutProps) {
+export function ChatLayout({
+  sidebar,
+  header,
+  content,
+  main,
+  footer,
+  sidebarOpen = false,
+  onSidebarClose,
+}: ChatLayoutProps) {
   const backdropVisibilityClass = sidebarOpen ? 'opacity-100' : 'pointer-events-none opacity-0';
 
   return (

@@ -16,10 +16,6 @@ type ComposerInputProps = ComponentPropsWithoutRef<typeof Textarea> & {
 
 export const ComposerInput = forwardRef<HTMLTextAreaElement, ComposerInputProps>(
   ({ composerVariant = 'inline', className, ...props }, ref) => (
-    <Textarea
-      ref={ref}
-      {...props}
-      className={cn(composerVariantClass[composerVariant], className)}
-    />
+    <Textarea ref={ref} {...props} className={cn(composerVariantClass[composerVariant], className)} />
   ),
 );

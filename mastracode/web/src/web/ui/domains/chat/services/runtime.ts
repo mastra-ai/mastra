@@ -1,4 +1,9 @@
-import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMProgress, KnownAgentControllerEvent } from '@mastra/client-js';
+import type {
+  AgentControllerEvent,
+  AgentControllerMessage,
+  AgentControllerOMProgress,
+  KnownAgentControllerEvent,
+} from '@mastra/client-js';
 
 export interface UsageSnapshot {
   promptTokens?: number;
@@ -56,7 +61,10 @@ export function runtimeReducer(state: ChatRuntimeState, event: AgentControllerEv
         const decodeSeconds = (Date.now() - state._decodeStartedAt) / 1000;
         if (decodeSeconds > 0) {
           const instantaneous = stepTokens / decodeSeconds;
-          tokensPerSec = state.tokensPerSec > 0 ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec) : Math.round(instantaneous);
+          tokensPerSec =
+            state.tokensPerSec > 0
+              ? Math.round(0.3 * instantaneous + 0.7 * state.tokensPerSec)
+              : Math.round(instantaneous);
         }
       }
       return { ...state, usage, tokensPerSec, _decodeStartedAt: 0 };

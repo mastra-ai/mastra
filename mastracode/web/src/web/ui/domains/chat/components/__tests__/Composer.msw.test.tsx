@@ -188,7 +188,9 @@ describe('Composer', () => {
       await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('total: 60'));
 
       await userEvent.type(input, '/om{Enter}');
-      await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent('Observational memory phase: observing'));
+      await waitFor(() =>
+        expect(screen.getByLabelText('Notices')).toHaveTextContent('Observational memory phase: observing'),
+      );
 
       await userEvent.type(input, '/settings{Enter}');
       await waitFor(() => expect(screen.getByLabelText('Notices')).toHaveTextContent(`Thread: ${THREAD_ID}`));
@@ -226,5 +228,4 @@ describe('Composer', () => {
       expect(onSend).not.toHaveBeenCalled();
     });
   });
-
 });
