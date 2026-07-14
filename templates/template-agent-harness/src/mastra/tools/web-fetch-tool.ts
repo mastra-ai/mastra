@@ -20,6 +20,7 @@ export const webFetchTool = createTool({
         'user-agent': 'Mastra Workspace Agent/1.0',
         accept: 'text/html,text/plain,application/json,application/xml;q=0.9,*/*;q=0.8',
       },
+      signal: AbortSignal.timeout(15_000),
     });
     const text = await response.text();
 
