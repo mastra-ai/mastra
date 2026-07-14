@@ -1,5 +1,78 @@
 # mastracode
 
+## 0.31.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59)]:
+  - @mastra/core@1.51.0-alpha.11
+  - @mastra/code-sdk@0.1.0-alpha.11
+
+## 0.31.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad)]:
+  - @mastra/core@1.51.0-alpha.10
+  - @mastra/schema-compat@1.3.4-alpha.2
+  - @mastra/code-sdk@0.1.0-alpha.10
+  - @mastra/mcp@1.14.0-alpha.0
+  - @mastra/memory@1.23.0-alpha.4
+
+## 0.31.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies [[`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8)]:
+  - @mastra/core@1.51.0-alpha.9
+  - @mastra/code-sdk@0.1.0-alpha.9
+
+## 0.31.0-alpha.9
+
+### Patch Changes
+
+- Improved Mastra Code responsiveness while tool inputs and command output stream. ([#19376](https://github.com/mastra-ai/mastra/pull/19376))
+
+- dependencies updates: ([#16699](https://github.com/mastra-ai/mastra/pull/16699))
+  - Updated dependency [`@ai-sdk/amazon-bedrock@^3.0.105` ↗︎](https://www.npmjs.com/package/@ai-sdk/amazon-bedrock/v/3.0.105) (from `^3.0.102`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.92` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.92) (from `^3.0.82`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.80` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.80) (from `^3.0.63`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-compatible@^2.0.56` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-compatible/v/2.0.56) (from `^2.0.47`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.219` ↗︎](https://www.npmjs.com/package/ai/v/6.0.219) (from `^6.0.176`, in `dependencies`)
+
+- dependencies updates: ([#19385](https://github.com/mastra-ai/mastra/pull/19385))
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.96` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.96) (from `^3.0.92`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.84` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.84) (from `^3.0.80`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-compatible@^2.0.59` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-compatible/v/2.0.59) (from `^2.0.56`, in `dependencies`)
+  - Updated dependency [`ai@^6.0.224` ↗︎](https://www.npmjs.com/package/ai/v/6.0.224) (from `^6.0.219`, in `dependencies`)
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`c3a6638`](https://github.com/mastra-ai/mastra/commit/c3a6638c791ab839c52a3250ba90420c6259ae56), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/code-sdk@0.1.0-alpha.8
+  - @mastra/core@1.51.0-alpha.8
+
+## 0.31.0-alpha.8
+
+### Patch Changes
+
+- Renamed the gateway setup confirmation messages to say "Gateway" instead of "Memory gateway" and added `/gateway` as an alias for the existing `/memory-gateway` setup command. ([#18691](https://github.com/mastra-ai/mastra/pull/18691))
+
+- Improved Observational Memory settings by adding the `/memory` command and clarifying what each token setting counts. ([#19293](https://github.com/mastra-ai/mastra/pull/19293))
+
+- Simplified the observational memory context indicator in the TUI footer. ([#19260](https://github.com/mastra-ai/mastra/pull/19260))
+
+- Updated dependencies [[`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`ae510ef`](https://github.com/mastra-ai/mastra/commit/ae510ef404f760d1b34eb25e99d5e6a9e9fcbdba), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`5ad8d04`](https://github.com/mastra-ai/mastra/commit/5ad8d045d2f0363690f9752180e0934beca9f33a), [`2eb656e`](https://github.com/mastra-ai/mastra/commit/2eb656ecb64671d4a95e3c94bf507ce6a0ef9e3b), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669)]:
+  - @mastra/core@1.51.0-alpha.7
+  - @mastra/code-sdk@0.1.0-alpha.7
+  - @mastra/observability@1.16.1-alpha.1
+  - @mastra/mcp@1.14.0-alpha.0
+
+## 0.31.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/core@1.51.0-alpha.6
+  - @mastra/code-sdk@0.1.0-alpha.6
+
 ## 0.31.0-alpha.6
 
 ### Patch Changes

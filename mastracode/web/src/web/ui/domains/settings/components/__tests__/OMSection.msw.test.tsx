@@ -71,6 +71,18 @@ describe('OMSection', () => {
       const obs = (await screen.findByDisplayValue('1000')) as HTMLInputElement;
       expect(obs).toBeInTheDocument();
       expect(screen.getByDisplayValue('2000')).toBeInTheDocument();
+      expect(screen.getByText('Messages before observation')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Message tokens before the Observer runs. More means a larger message window per observation.',
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText('Observations before reflection')).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          'Accumulated observation tokens before the Reflector compresses them. More means less frequent compression.',
+        ),
+      ).toBeInTheDocument();
     });
   });
 

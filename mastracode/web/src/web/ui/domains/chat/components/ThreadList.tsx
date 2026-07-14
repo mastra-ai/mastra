@@ -41,6 +41,12 @@ export function ThreadList() {
 
   if (!activeProject) return null;
 
+  // Feature worktrees hold a single conversation: show its title for context,
+  // but no "Threads" header/count, no rename/clone/delete actions, and no way
+  // to create more threads.
+  const readOnly =
+    activeProject.source === 'github' && Boolean(projectPath) && projectPath !== activeProject.sandboxWorkdir;
+
   const threads = threadsQuery.data ?? [];
   const activeThreadId = routeThreadId;
   const sortedThreads = [...threads]
@@ -53,7 +59,7 @@ export function ThreadList() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
-      <ThreadListHeader threadCount={threads.length} />
+      {!readOnly && <ThreadListHeader threadCount={threads.length} />}
       <div role="list" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
         {sortedThreads.length === 0 && (
           <Txt as="div" variant="ui-sm" className="px-2 py-3 text-icon3">
@@ -68,6 +74,7 @@ export function ThreadList() {
               key={thread.id}
               thread={thread}
               active={thread.id === activeThreadId}
+              readOnly={readOnly}
               onStartRename={() => setRenamingId(thread.id)}
             />
           ),
@@ -158,10 +165,12 @@ function RenameThreadRow({ thread, onDone }: { thread: AgentControllerThreadInfo
 function ThreadRow({
   thread,
   active,
+  readOnly,
   onStartRename,
 }: {
   thread: AgentControllerThreadInfo;
   active: boolean;
+  readOnly: boolean;
   onStartRename: () => void;
 }) {
   const hookArgs = useThreadHookArgs();
@@ -205,28 +214,30 @@ function ThreadRow({
         <span className="truncate text-ui-sm text-icon6">{thread.title || 'Untitled thread'}</span>
         <span className="text-ui-xs text-icon3">{relativeTime(thread.updatedAt ?? thread.createdAt ?? '')}</span>
       </button>
-      <DropdownMenu>
-        <DropdownMenu.Trigger
-          render={
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label="Thread actions"
-              className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
-            >
-              <MoreHorizontal size={15} />
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end" className="min-w-28">
-          <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
-          <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
-          <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
-            Delete
-          </DropdownMenu.Item>
-        </DropdownMenu.Content>
-      </DropdownMenu>
+      {!readOnly && (
+        <DropdownMenu>
+          <DropdownMenu.Trigger
+            render={
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Thread actions"
+                className="absolute right-1 top-1 opacity-0 group-hover:opacity-100 data-[popup-open]:opacity-100"
+              >
+                <MoreHorizontal size={15} />
+              </Button>
+            }
+          />
+          <DropdownMenu.Content align="end" className="min-w-28">
+            <DropdownMenu.Item onClick={onStartRename}>Rename</DropdownMenu.Item>
+            <DropdownMenu.Item onClick={() => void cloneThread()}>Clone</DropdownMenu.Item>
+            <DropdownMenu.Item variant="destructive" onClick={() => void deleteThread()}>
+              Delete
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu>
+      )}
     </div>
   );
 }

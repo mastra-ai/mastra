@@ -1,5 +1,15 @@
 # @mastra/schema-compat
 
+## 1.3.4-alpha.2
+
+### Patch Changes
+
+- Fixed a crash when converting Zod v4 schemas containing `z.record(...)` through `applyCompatLayer` with any provider compat layer attached (e.g. `GoogleSchemaCompatLayer`, `OpenAISchemaCompatLayer`). ([#17052](https://github.com/mastra-ai/mastra/pull/17052))
+
+  The record patch is now applied in `toStandardSchema` before the `StandardSchemaWithJSON` short-circuit, so it covers Zod >= 4.2 (which natively exposes `~standard.jsonSchema` and bypasses the Zod v4 adapter) as well as older Zod v4 versions that go through the adapter. Affects Zod 4.0.0–4.3.x; the underlying `z.record()` bug is fixed upstream in Zod 4.4.0.
+
+  Fixes [#17051](https://github.com/mastra-ai/mastra/issues/17051).
+
 ## 1.3.4-alpha.1
 
 ### Patch Changes

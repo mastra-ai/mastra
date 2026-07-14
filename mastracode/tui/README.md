@@ -88,7 +88,7 @@ Select a suggestion with arrow keys and press Tab to insert it.
 | `/custom-providers` | Manage custom OpenAI-compatible providers/models                            |
 | `/mode`             | Switch agent mode                                                           |
 | `/subagents`        | Configure subagent model defaults                                           |
-| `/om`               | Configure Observational Memory models                                       |
+| `/memory`           | Configure Observational Memory (`/om` alias)                                |
 | `/think`            | Set thinking level (Anthropic)                                              |
 | `/judge`            | Configure the default judge model and max attempts for goals                |
 | `/goal`             | Start or manage an autonomous goal                                          |

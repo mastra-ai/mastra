@@ -1,5 +1,110 @@
 # mastra
 
+## 1.19.0-alpha.12
+
+### Patch Changes
+
+- Updated dependencies [[`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59)]:
+  - @mastra/core@1.51.0-alpha.11
+  - @mastra/deployer@1.51.0-alpha.11
+
+## 1.19.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`4adc391`](https://github.com/mastra-ai/mastra/commit/4adc3911075249c352bb4832d2471922826344de), [`b486abf`](https://github.com/mastra-ai/mastra/commit/b486abfa2a7528c6f527e4015c819ea9fa54aaad)]:
+  - @mastra/core@1.51.0-alpha.10
+  - @mastra/deployer@1.51.0-alpha.10
+
+## 1.19.0-alpha.10
+
+### Patch Changes
+
+- Fixed the default project scaffold failing the deploy preflight check. New projects now read the database URL from TURSO_DATABASE_URL when it is set (for example from a hosted database created with `mastra env db create`) and fall back to a local file during development, so the first `mastra deploy` is no longer blocked by a local storage path error. ([#19395](https://github.com/mastra-ai/mastra/pull/19395))
+
+## 1.19.0-alpha.9
+
+### Minor Changes
+
+- Added `mastra env vars pull [environment]` to download the full set of env vars an environment actually deploys with — vars stored on the environment (for example, added in the dashboard's environment editor) merged with project-level vars. Managed vars from attached databases are listed as comments (names only) since their values are platform-managed secrets. ([#19400](https://github.com/mastra-ai/mastra/pull/19400))
+
+  ```bash
+  mastra env vars pull staging --output .env.staging
+  ```
+
+  Previously the only pull command, `mastra server env pull`, silently read project-level vars only, so vars added through the dashboard were missing from the pulled file. That command now prints a note about its scope and points to `mastra env vars pull`.
+
+### Patch Changes
+
+- Rename `mastra env db detach` to `mastra env db delete` and make the confirmation prompt state that the database and all of its data are permanently deleted with the provider. The old name described a non-destructive unlink, but the operation deprovisions the Turso/Neon database — data included. The `detach` name is reserved for a future true non-destructive detach. ([#19402](https://github.com/mastra-ai/mastra/pull/19402))
+
+- Fix three deploy/env usability papercuts: `mastra deploy staging` now fails fast with "Did you mean: mastra deploy --env staging" instead of silently deploying to production, the preflight block message names the exact unblock command (`mastra env db create --kind turso`/`neon` based on the missing variable), and 400 validation errors now show the field name and valid options instead of a bare "invalid fields". ([#19403](https://github.com/mastra-ai/mastra/pull/19403))
+
+- Updated dependencies [[`edce8d2`](https://github.com/mastra-ai/mastra/commit/edce8d2769f19e27a05737c627af2d765472a4f8)]:
+  - @mastra/core@1.51.0-alpha.9
+  - @mastra/deployer@1.51.0-alpha.9
+
+## 1.19.0-alpha.8
+
+### Patch Changes
+
+- Added image attachment support to agent controller chat. You can now send images (and other files) with a message, and the Mastra Code web chat lets you attach, paste, or drag-and-drop images which render inline in the transcript. ([#19368](https://github.com/mastra-ai/mastra/pull/19368))
+
+  ```ts
+  await session.sendMessage({
+    content: 'What is in this screenshot?',
+    files: [{ data: base64Png, mediaType: 'image/png', filename: 'screenshot.png' }],
+  });
+  ```
+
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/core@1.51.0-alpha.8
+  - @mastra/deployer@1.51.0-alpha.8
+
+## 1.19.0-alpha.7
+
+### Patch Changes
+
+- Added an optional session scope to the agent controller API so clients can address independent sessions that share one resource (for example one session per git worktree). ([#19357](https://github.com/mastra-ai/mastra/pull/19357))
+
+  Session routes now accept a `sessionScope` query parameter, and `AgentController.session()` in the client accepts a scope that travels on every request:
+
+  ```ts
+  const controller = client.getAgentController('code');
+
+  // Address the worktree's own session instead of the shared one:
+  const session = controller.session('repo-123', '/worktrees/feature-a');
+  await session.create({ tags: { projectPath: '/worktrees/feature-a' } });
+  await session.sendMessage('hello');
+  ```
+
+  Requests without a scope behave exactly as before.
+
+- Fix file-based agent `instructions.md` hot reload in dev. ([#19359](https://github.com/mastra-ai/mastra/pull/19359))
+
+- Added run activity reporting to agent controller sessions. `session.state()` responses include a `running` flag so UIs can show a working indicator immediately when attaching to a session that is already mid-run, and each thread returned by `session.listThreads()` carries a `state` of `'active'` or `'idle'` (backed by the same per-thread run tracking that signal `ifIdle` delivery uses), so one listing can power activity indicators across every worktree or scope sharing a resource instead of polling each session: ([#19357](https://github.com/mastra-ai/mastra/pull/19357))
+
+  ```ts
+  const session = client.getAgentController('code').session(resourceId);
+
+  const { running } = await session.state(); // is the session mid-run?
+
+  const threads = await session.listThreads({ tags: { projectPath } });
+  const busy = threads.filter(thread => thread.state === 'active');
+  ```
+
+- Updated dependencies [[`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2)]:
+  - @mastra/core@1.51.0-alpha.7
+  - @mastra/deployer@1.51.0-alpha.7
+
+## 1.19.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/core@1.51.0-alpha.6
+  - @mastra/deployer@1.51.0-alpha.6
+
 ## 1.19.0-alpha.5
 
 ### Patch Changes

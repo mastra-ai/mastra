@@ -7,36 +7,54 @@ import { createAgentControllerClient, requireAgentControllerSession } from '../s
 interface AgentControllerRunMutationArgs {
   agentControllerId: string;
   resourceId: string;
+  projectPath?: string;
   baseUrl?: string;
   enabled?: boolean;
 }
 
-function useSessionInvalidation({ agentControllerId, resourceId }: AgentControllerRunMutationArgs) {
+function toClientArgs({
+  agentControllerId,
+  resourceId,
+  projectPath,
+  baseUrl,
+  enabled,
+}: AgentControllerRunMutationArgs) {
+  return { agentControllerId, resourceId, scope: projectPath, baseUrl, enabled };
+}
+
+function useSessionInvalidation({ agentControllerId, resourceId, projectPath }: AgentControllerRunMutationArgs) {
   const queryClient = useQueryClient();
   return async () => {
     await Promise.all([
       queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId),
+        queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, projectPath),
       }),
       queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId),
+        queryKey: queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath),
         exact: true,
       }),
     ]);
   };
 }
 
+export interface SendAgentControllerMessageInput {
+  text: string;
+  /** Base64-encoded attachments (e.g. pasted images) forwarded to the controller session. */
+  files?: Array<{ data: string; mediaType: string; filename?: string }>;
+}
+
 export function useSendAgentControllerMessageMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
+  const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
-    mutationFn: (text: string) => requireAgentControllerSession(session).sendMessage(text),
+    mutationFn: ({ text, files }: SendAgentControllerMessageInput) =>
+      requireAgentControllerSession(session).sendMessage(files?.length ? { content: text, files } : { content: text }),
     onSuccess: invalidateSession,
   });
 }
 
 export function useSteerAgentControllerMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
+  const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: (text: string) => requireAgentControllerSession(session).steer(text),
@@ -45,7 +63,7 @@ export function useSteerAgentControllerMutation(args: AgentControllerRunMutation
 }
 
 export function useFollowUpAgentControllerMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
+  const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: (text: string) => requireAgentControllerSession(session).followUp(text),
@@ -54,7 +72,7 @@ export function useFollowUpAgentControllerMutation(args: AgentControllerRunMutat
 }
 
 export function useAbortAgentControllerMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
+  const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: () => requireAgentControllerSession(session).abort(),
@@ -63,7 +81,7 @@ export function useAbortAgentControllerMutation(args: AgentControllerRunMutation
 }
 
 export function useApproveAgentControllerToolMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
+  const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: ({ toolCallId, approved }: { toolCallId: string; approved: boolean }) =>
@@ -73,7 +91,7 @@ export function useApproveAgentControllerToolMutation(args: AgentControllerRunMu
 }
 
 export function useRespondAgentControllerSuspensionMutation(args: AgentControllerRunMutationArgs) {
-  const { session } = createAgentControllerClient(args);
+  const { session } = createAgentControllerClient(toClientArgs(args));
   const invalidateSession = useSessionInvalidation(args);
   return useMutation({
     mutationFn: ({ toolCallId, resumeData }: { toolCallId: string; resumeData: string | string[] | PlanResume }) =>

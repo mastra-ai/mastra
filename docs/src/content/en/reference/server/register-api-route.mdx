@@ -47,8 +47,9 @@ registerApiRoute("/items/:itemId", { ... })
   },
   {
     name: 'createHandler',
-    type: '(c: Context) => Promise<Handler>',
-    description: 'Async factory function to create the handler. Use either `handler` or `createHandler`, not both.',
+    type: '({ mastra }: { mastra: Mastra }) => Promise<ApiRouteHandler>',
+    description:
+      'Async factory that receives the Mastra instance and returns the route handler. Runs once at server startup, so it can perform one-time setup. Use either `handler` or `createHandler`, not both.',
     isOptional: true,
   },
   {
@@ -303,12 +304,13 @@ For routes that need async initialization:
 ```typescript
 registerApiRoute('/dynamic', {
   method: 'GET',
-  createHandler: async c => {
-    // Perform async setup
+  createHandler: async ({ mastra }) => {
+    // Perform one-time async setup
     const config = await loadConfig()
+    const agent = mastra.getAgent('weatherAgent')
 
     return async c => {
-      return c.json({ config })
+      return c.json({ config, agent: agent.name })
     }
   },
 })
