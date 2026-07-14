@@ -23,6 +23,7 @@ vi.mock('../display.js', () => ({
   notify: vi.fn(),
 }));
 
+import { dispatchEvent } from '../event-dispatch.js';
 import { GOAL_JUDGE_INPUT_LOCK_MESSAGE } from '../goal-input-lock.js';
 import { handleAgentAborted, handleAgentEnd, handleGoalEvaluation } from '../handlers/agent-lifecycle.js';
 import type { EventHandlerContext } from '../handlers/types.js';
@@ -571,6 +572,153 @@ describe('MastraTUI queueing', () => {
     expect(state.pendingFollowUpMessages).toEqual([]);
     expect(state.pendingSlashCommands).toEqual([]);
     expect(ctx.updateStatusLine).toHaveBeenCalledTimes(6);
+  });
+
+  it('awaits external objective hydration before rendering each goal chunk', async () => {
+    const order: string[] = [];
+    let releaseSync!: () => void;
+    const syncGate = new Promise<void>(resolve => {
+      releaseSync = resolve;
+    });
+    const state = createQueueState({
+      goalManager: {
+        syncFromThread: vi.fn(async () => {
+          order.push('sync-start');
+          await syncGate;
+          order.push('sync-end');
+          return { status: 'synced', replaced: true };
+        }),
+        applyEvaluation: vi.fn(() => order.push('apply')),
+        getGoal: vi.fn(() => ({
+          id: 'external-goal',
+          status: 'active',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    const dispatched = dispatchEvent(
+      { type: 'goal_evaluation', payload: createGoalPayload({ status: 'active' }) } as any,
+      ctx,
+      state,
+    );
+    await Promise.resolve();
+    expect(order).toEqual(['sync-start']);
+
+    releaseSync();
+    await dispatched;
+
+    expect(order).toEqual(['sync-start', 'sync-end', 'apply']);
+  });
+
+  it('hydrates pending, activity, and completed chunks before applying external goal status', async () => {
+    const applyEvaluation = vi.fn();
+    const syncFromThread = vi.fn().mockResolvedValue({ status: 'synced', replaced: false });
+    const state = createQueueState({
+      goalManager: {
+        syncFromThread,
+        applyEvaluation,
+        getGoal: vi.fn(() => ({
+          id: 'external-goal',
+          status: 'active',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    await dispatchEvent({ type: 'goal_evaluation', payload: createGoalPayload({ pending: true }) } as any, ctx, state);
+    await dispatchEvent(
+      {
+        type: 'goal_evaluation',
+        payload: createGoalPayload({
+          pending: true,
+          activity: [{ type: 'tool-call', name: 'read', message: 'read' }],
+        } as any),
+      } as any,
+      ctx,
+      state,
+    );
+    await dispatchEvent(
+      { type: 'goal_evaluation', payload: createGoalPayload({ iteration: 2, status: 'active' }) } as any,
+      ctx,
+      state,
+    );
+    await dispatchEvent(
+      { type: 'goal_evaluation', payload: createGoalPayload({ iteration: 3, status: 'done', passed: true }) } as any,
+      ctx,
+      state,
+    );
+
+    expect(syncFromThread).toHaveBeenCalledTimes(4);
+    expect(applyEvaluation).toHaveBeenNthCalledWith(1, { runsUsed: 2, status: 'active' });
+    expect(applyEvaluation).toHaveBeenNthCalledWith(2, { runsUsed: 3, status: 'done' });
+  });
+
+  it('does not correlate a same-text external replacement with a plan-started goal', async () => {
+    const switchMode = vi.fn().mockResolvedValue({ accepted: true });
+    let currentGoalId = 'plan-goal-original';
+    const state = createQueueState({
+      planStartedGoalId: 'plan-goal-original',
+      session: { mode: { switch: switchMode } } as any,
+      goalManager: {
+        syncFromThread: vi.fn(async () => {
+          currentGoalId = 'external-replacement';
+          return { status: 'synced', replaced: true };
+        }),
+        applyEvaluation: vi.fn(),
+        getGoal: vi.fn(() => ({
+          id: currentGoalId,
+          objective: 'same objective text',
+          status: 'done',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 2,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    await dispatchEvent(
+      { type: 'goal_evaluation', payload: createGoalPayload({ iteration: 2, status: 'done', passed: true }) } as any,
+      ctx,
+      state,
+    );
+
+    expect(switchMode).not.toHaveBeenCalled();
+    expect(state.planStartedGoalId).toBe('plan-goal-original');
+  });
+
+  it('reports objective read errors without skipping evaluation rendering', async () => {
+    const applyEvaluation = vi.fn();
+    const state = createQueueState({
+      goalManager: {
+        syncFromThread: vi.fn().mockResolvedValue({ status: 'read-error', error: new Error('storage unavailable') }),
+        applyEvaluation,
+        getGoal: vi.fn(() => ({
+          id: 'rendering-goal',
+          status: 'active',
+          judgeModelId: '__GATEWAY_OPENAI_MODEL__',
+          turnsUsed: 1,
+          maxTurns: 20,
+        })),
+      } as any,
+    });
+    const ctx = createQueueContext(state);
+
+    await dispatchEvent(
+      { type: 'goal_evaluation', payload: createGoalPayload({ iteration: 2, status: 'active' }) } as any,
+      ctx,
+      state,
+    );
+
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to synchronize objective state: storage unavailable');
+    expect(applyEvaluation).toHaveBeenCalledWith({ runsUsed: 2, status: 'active' });
   });
 
   it('adds goal activity to the active judge display while pending', () => {

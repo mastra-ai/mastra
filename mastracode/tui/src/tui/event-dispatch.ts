@@ -444,6 +444,10 @@ export async function dispatchEvent(
     }
 
     case 'goal_evaluation': {
+      const sync = await state.goalManager.syncFromThread(state);
+      if (sync.status === 'read-error') {
+        ectx.showError(`Failed to synchronize objective state: ${sync.error.message}`);
+      }
       handleGoalEvaluation(ectx, event.payload);
       break;
     }
