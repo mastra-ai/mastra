@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 1.51.0-alpha.13
+
+### Minor Changes
+
+- Added atomic caller-defined dataset IDs for idempotent dataset creation across built-in storage adapters. Supplying `id` to `mastra.datasets.create()` now creates the dataset once and resolves compatible retries to the persisted record; incompatible immutable identity fields throw `DATASET_ID_CONFLICT`. ([#19370](https://github.com/mastra-ai/mastra/pull/19370))
+
+- Added the authoritative session scope to agent controller request context for scoped session integrations. ([#19446](https://github.com/mastra-ai/mastra/pull/19446))
+
+  ```ts
+  const controllerContext = requestContext.get('controller');
+  console.log(controllerContext?.scope);
+  ```
+
+- Added caller-defined dataset item identities for safe retries across all dataset storage adapters. ([#19384](https://github.com/mastra-ai/mastra/pull/19384))
+
+  Dataset items can now include an `externalId` when calling `addItem` or `addItems`:
+
+  ```ts
+  await dataset.addItem({
+    externalId: 'source-item-123',
+    input: { prompt: 'Hello' },
+  });
+  ```
+
+  Retrying with the same identity and payload returns the existing item. Reusing an identity with different content returns a typed conflict, including during concurrent writes. Updates and deletes preserve the identity, Spanner retries transactions without changing the outcome, and MySQL batch writes now preserve every supported dataset item field.
+
+### Patch Changes
+
+- Fixed parallel sub-agent approvals so they can be handled in any order. listSuspendedRuns() now returns each pending sub-agent call, and approving one resumes that specific call instead of using another call’s suspended state. ([#19450](https://github.com/mastra-ai/mastra/pull/19450))
+
 ## 1.51.0-alpha.12
 
 ### Minor Changes
