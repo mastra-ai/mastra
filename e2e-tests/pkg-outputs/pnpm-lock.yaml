@@ -9,7 +9,7 @@ importers:
   .:
     dependencies:
       form-data:
-        specifier: ^2.5.5
+        specifier: ^2.5.6
         version: 2.5.6
     devDependencies:
       '@manypkg/get-packages':
@@ -19,7 +19,7 @@ importers:
         specifier: ^2.0.3
         version: 2.0.3
       tinyglobby:
-        specifier: ^0.2.16
+        specifier: ^0.2.17
         version: 0.2.17
       vitest:
         specifier: ^4.1.8

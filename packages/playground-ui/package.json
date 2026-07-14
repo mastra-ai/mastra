@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "41.0.0-alpha.7",
+  "version": "41.0.0-alpha.8",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -138,8 +138,8 @@
     "@lezer/highlight": "^1.2.3",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tanstack/react-virtual": "^3.13.22",
-    "@uiw/codemirror-theme-dracula": "^4.25.10",
-    "@uiw/react-codemirror": "^4.25.10",
+    "@uiw/codemirror-theme-dracula": "^4.25.11",
+    "@uiw/react-codemirror": "^4.25.11",
     "cmdk": "^1.1.1",
     "date-fns": "catalog:",
     "prettier": "^3.8.3",
