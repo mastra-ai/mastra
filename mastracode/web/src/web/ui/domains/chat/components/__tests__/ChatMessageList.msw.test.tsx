@@ -266,6 +266,11 @@ describe('ChatMessageList', () => {
           messages: [
             { id: 'status-1', role: 'assistant', content: [{ type: 'om_compaction' }] },
             { id: 'status-2', role: 'assistant', content: [{ type: 'om_summary', text: 'Memory updated' }] },
+            {
+              id: 'status-3',
+              role: 'assistant',
+              content: [{ type: 'om_compaction' }, { type: 'text', text: 'This is an ordinary agent response.' }],
+            },
           ],
         }),
       ),
@@ -277,6 +282,7 @@ describe('ChatMessageList', () => {
     // …the text-less one renders nothing instead of an empty bubble.
     const notices = document.querySelectorAll('.bg-notice-info\\/20');
     expect(notices).toHaveLength(1);
+    expect(screen.getByText('This is an ordinary agent response.').closest('.bg-notice-info\\/20')).toBeNull();
   });
 
   it('given the session fails to connect, then it shows the disconnected notice', async () => {

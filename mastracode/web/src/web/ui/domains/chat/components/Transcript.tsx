@@ -740,9 +740,9 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
   }
 
   const status = statusMetadata(entry);
-  // Some harness status parts (e.g. om_* markers) carry no text; skip them
-  // entirely instead of rendering an empty notice bubble.
-  if (status) return status.text.trim() ? <StatusMetadataCard status={status} /> : null;
+  // Some harness status parts (e.g. om_* markers) carry no text. Ignore the
+  // marker while preserving any ordinary assistant content in the message.
+  if (status?.text.trim()) return <StatusMetadataCard status={status} />;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
@@ -835,16 +835,17 @@ function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
   );
   if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
 
-  const text = 'text' in statusPart && typeof statusPart.text === 'string' ? statusPart.text : messageText(entry);
+  const text =
+    'text' in statusPart && typeof statusPart.text === 'string'
+      ? statusPart.text
+      : 'message' in statusPart && typeof statusPart.message === 'string'
+        ? statusPart.message
+        : '';
   return {
     id: `${entry.id}-${String(statusPart.type)}`,
     text,
     level: statusPart.type === 'harness-error' ? 'error' : 'info',
   };
-}
-
-function messageText(entry: MessageEntry): string {
-  return entry.message.content.parts.flatMap(part => (part.type === 'text' ? [part.text] : [])).join('');
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {
