@@ -227,7 +227,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const existing = await this.#getEntityByName(tx, input.name, scope);
-      if (existing) return (await this.#resolveTerminalEntity(tx, existing.id))!;
+      if (existing) {
+        const terminal = (await this.#resolveTerminalEntity(tx, existing.id))!;
+        if (!isKnowledgeScopeVisible(terminal.scope, scope)) {
+          throw new Error(`Merged knowledge entity is not visible from scope: ${input.name}`);
+        }
+        return terminal;
+      }
       const now = new Date();
       const entity: KnowledgeEntity = {
         id: input.id ?? crypto.randomUUID(),
@@ -351,6 +357,9 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       const target = await this.#resolveTerminalEntity(tx, input.targetId);
       if (!target) throw new KnowledgeNotFoundError('entity', input.targetId);
       if (target.id === source.id) throw new Error('Cannot create a knowledge merge cycle');
+      if (!isKnowledgeScopeVisible(target.scope, source.scope)) {
+        throw new Error('Cannot merge a knowledge entity into a target that is narrower than its source scope');
+      }
       const affected = await tx.execute({
         sql: `SELECT DISTINCT m.sourceType,m.sourceId,json(COALESCE(f.scope,r.scope)) AS scopeJson,CASE WHEN f.deletedAt IS NULL THEN 0 ELSE 1 END AS deleted FROM "${TABLE_KNOWLEDGE_MENTIONS}" m LEFT JOIN "${TABLE_KNOWLEDGE_FACTS}" f ON m.sourceType='fact' AND f.id=m.sourceId LEFT JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON m.sourceType='page' AND r.id=m.sourceId WHERE m.recordId=?`,
         args: [source.id],
@@ -829,7 +838,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async #resolveEntity(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeEntity | null> {
     for (let length = scope.length; length > 0; length--) {
       const entity = await this.#getEntityByName(executor, name, scope.slice(0, length));
-      if (entity) return this.#resolveTerminalEntity(executor, entity.id);
+      if (entity) {
+        const terminal = await this.#resolveTerminalEntity(executor, entity.id);
+        if (terminal && isKnowledgeScopeVisible(terminal.scope, scope)) return terminal;
+      }
     }
     return null;
   }

@@ -40,6 +40,14 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.factsTouching({ entityId: marco.id, scope: thread })).facts[0]?.id).toBe(fact.id);
     });
 
+    it('rejects merges whose target is narrower than the source alias', async () => {
+      const broad = await store.createEntity({ name: 'Broad alias', kind: 'person', scope: ['org:acme'] });
+      const narrow = await store.createEntity({ name: 'Narrow target', kind: 'person', scope: resource });
+      await expect(
+        store.mergeEntities({ sourceId: broad.id, targetId: narrow.id, sourceVersion: broad.version }),
+      ).rejects.toThrow('target that is narrower');
+    });
+
     it('repoints merge relationships and schedules old-scope semantic cleanup', async () => {
       const target = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
       const duplicate = await store.createEntity({ name: 'Jane Doe', kind: 'person', scope: resource });
