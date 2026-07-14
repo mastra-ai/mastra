@@ -54,6 +54,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 // import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
+import type { ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
@@ -172,18 +173,10 @@ export interface MastraCodeConfig {
   modes?: AgentControllerMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: AgentControllerSubagent[];
-  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
-    | Record<
-        string,
-        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
-      >
-    | ((ctx: {
-        requestContext: RequestContext;
-      }) => Record<
-        string,
-        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
-      >);
+    | Record<string, ToolLike>
+    | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike> | Promise<Record<string, ToolLike>>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
