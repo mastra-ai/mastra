@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { openai } from '@ai-sdk/openai';
@@ -11,7 +10,7 @@ import { Memory } from '@mastra/memory';
 import { webFetchTool } from '../tools/web-fetch-tool';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
 
-const workspacePath = join(process.env.MASTRA_PROJECT_ROOT ?? process.cwd(), 'workspace');
+const workspacePath = 'workspace';
 
 const workspace = new Workspace({
   id: 'agent-workspace',
@@ -47,10 +46,6 @@ Suggested prompts: Get the weather forecast for your city; Create a Japanese Sak
 When the user greets you or does not have a specific task, invite them to try the suggested prompts.
 
 Ask concise questions when something is unclear or a good question could surface a useful insight.
-
-Use workspace paths relative to the workspace root. Read existing files before editing them. File changes and shell commands require user approval. Shell commands run on the local host with the workspace as their working directory.
-
-Use task tools to track multi-step work. When you create a recurring schedule, report its schedule ID so the user can pause it later.
 
 For local file changes, end with a plain-text URL using ${pathToFileURL(`${workspacePath}/`).href}; avoid Markdown links, localhost, /workspace, relative paths, and static-file servers.
 `,
