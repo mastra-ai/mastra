@@ -2489,14 +2489,12 @@ export class DurableAgent<
   }
 
   /**
-   * Clear cached pubsub events for a run's topic.
-   * Only effective when pubsub supports clearTopic (e.g. CachingPubSub).
+   * Clear retained pubsub state for a run's topic (cached history and, for
+   * persistent transports, the underlying stream). Fire-and-forget: the
+   * `clearTopic` contract is best-effort and non-throwing.
    */
   #clearPubsubTopic(runId: string): void {
-    const pubsub = this.pubsub;
-    if ('clearTopic' in pubsub && typeof (pubsub as any).clearTopic === 'function') {
-      void (pubsub as any).clearTopic(AGENT_STREAM_TOPIC(runId));
-    }
+    void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));
   }
 
   /**

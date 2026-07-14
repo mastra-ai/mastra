@@ -459,8 +459,9 @@ describe('CachingPubSub', () => {
       expect(inner.clearTopic).toHaveBeenCalledWith('some-topic');
     });
 
-    it('does not throw when the inner transport has no clearTopic', async () => {
-      // EventEmitterPubSub has no clearTopic; the probe must skip it cleanly.
+    it('does not throw when the inner transport does not override clearTopic', async () => {
+      // EventEmitterPubSub retains nothing per topic and relies on the
+      // PubSub base class's no-op clearTopic; forwarding must resolve cleanly.
       await expect(cachingPubsub.clearTopic('no-inner-hook')).resolves.toBeUndefined();
     });
   });

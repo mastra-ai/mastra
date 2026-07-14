@@ -313,18 +313,12 @@ export class CachingPubSub extends PubSub {
    * Call this when a stream completes to free memory. The forward matters for
    * persistent inner transports (e.g. Redis Streams): without it, wrapping a
    * pubsub in `CachingPubSub` silently turns `clearTopic` into a cache-only
-   * no-op and the inner stream leaks forever. The hook is optional on the
-   * `PubSub` contract, so probe for it before calling.
+   * no-op and the inner stream leaks forever.
    */
-  async clearTopic(topic: string): Promise<void> {
+  override async clearTopic(topic: string): Promise<void> {
     const cacheKey = this.getCacheKey(topic);
     const counterKey = this.getCounterKey(topic);
-    const inner = this.inner as PubSub & { clearTopic?: (topic: string) => Promise<void> };
-    await Promise.all([
-      this.cache.delete(cacheKey),
-      this.cache.delete(counterKey),
-      typeof inner.clearTopic === 'function' ? inner.clearTopic(topic) : undefined,
-    ]);
+    await Promise.all([this.cache.delete(cacheKey), this.cache.delete(counterKey), this.inner.clearTopic(topic)]);
   }
 
   /**

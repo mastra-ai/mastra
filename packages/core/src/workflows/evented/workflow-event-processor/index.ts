@@ -107,10 +107,50 @@ export class WorkflowEventProcessor extends EventProcessor {
   // an entry mid-retry, but low enough to bound memory.
   private static readonly DELIVERY_ATTEMPTS_MAX_ENTRIES = 1024;
 
-  constructor({ mastra, stepExecutionStrategy }: { mastra: Mastra; stepExecutionStrategy?: StepExecutionStrategy }) {
+  // How long after a run reaches a terminal state before its
+  // `workflow.events.v2.<runId>` topic is cleared from the pubsub. The
+  // terminal `workflow-finish` watch event is published to that same topic,
+  // so deletion must lag long enough for attached watchers/streams to drain
+  // it. Mirrors DurableAgent's cleanupTimeoutMs default. 0 disables cleanup.
+  private readonly topicCleanupDelayMs: number;
+  private static readonly DEFAULT_TOPIC_CLEANUP_DELAY_MS = 30_000;
+
+  constructor({
+    mastra,
+    stepExecutionStrategy,
+    topicCleanupDelayMs,
+  }: {
+    mastra: Mastra;
+    stepExecutionStrategy?: StepExecutionStrategy;
+    topicCleanupDelayMs?: number;
+  }) {
     super({ mastra });
     this.stepExecutor = new StepExecutor({ mastra });
     this.stepExecutionStrategy = stepExecutionStrategy;
+    this.topicCleanupDelayMs = topicCleanupDelayMs ?? WorkflowEventProcessor.DEFAULT_TOPIC_CLEANUP_DELAY_MS;
+  }
+
+  /**
+   * Schedule deletion of a finished run's `workflow.events.v2.<runId>` topic.
+   *
+   * Per-run watch topics are written by every step of a run; on transports
+   * that retain messages (e.g. Redis Streams) they would otherwise live
+   * forever once the run ends. Deletion is delayed so subscribers still
+   * draining the terminal `workflow-finish` event aren't cut off, and
+   * fire-and-forget because topic cleanup must never affect run completion.
+   *
+   * Best-effort by design: if the process exits before the timer fires, the
+   * transport-level idle TTL (e.g. `streamIdleTtlMs`) is the backstop.
+   */
+  private scheduleRunTopicCleanup(runId: string): void {
+    if (this.topicCleanupDelayMs <= 0) return;
+    const timer = setTimeout(() => {
+      this.mastra.pubsub.clearTopic(`workflow.events.v2.${runId}`).catch(err => {
+        this.mastra.getLogger()?.warn('Failed to clear workflow events topic', { runId, error: err });
+      });
+    }, this.topicCleanupDelayMs);
+    // Don't let a pending cleanup timer keep a short-lived process alive.
+    timer.unref?.();
   }
 
   /**
@@ -535,6 +575,13 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
 
+    // A per-step run publishes `workflow.end` while merely paused — it will
+    // keep writing to its watch topic when the next step executes, so only
+    // truly terminal runs get their topic cleared.
+    if (!perStep) {
+      this.scheduleRunTopicCleanup(runId);
+    }
+
     // handle nested workflow
     if (parentWorkflow) {
       // get the step from the parent workflow and process it if it's a loop
@@ -720,6 +767,9 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
+
+    // 'failed' is terminal: the run stops writing to its watch topic.
+    this.scheduleRunTopicCleanup(runId);
 
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
