@@ -26,14 +26,13 @@ The agent asks for approval before it changes files or runs commands. When it cr
 
 - Node.js 22.13 or newer
 - An [OpenAI API key](https://platform.openai.com/api-keys)
-- pnpm 11 or newer
 
 ## Quickstart
 
 1. Create the project:
 
    ```bash
-   pnpm dlx create-mastra@latest --template agent-harness
+   npx create-mastra@latest --template agent-harness
    ```
 
 2. Copy `.env.example` to `.env` and set `OPENAI_API_KEY`.
@@ -41,8 +40,8 @@ The agent asks for approval before it changes files or runs commands. When it cr
 3. Install dependencies and start Mastra:
 
    ```bash
-   pnpm install
-   pnpm run dev
+   npm install
+   npm run dev
    ```
 
 4. Open [localhost:4111](http://localhost:4111), select **Agent**, and send a demo prompt.
