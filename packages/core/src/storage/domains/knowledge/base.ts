@@ -198,6 +198,30 @@ let lastUlidTime = -1;
 let lastUlidRandom = 0n;
 
 export function canonicalizeKnowledgeScope(scope: KnowledgeScope): KnowledgeScope {
+  const entriesByLevel = new Map<KnowledgeScopeLevel, string>();
+  for (const entry of scope) {
+    const separator = entry.indexOf(':');
+    const level = entry.slice(0, separator) as KnowledgeScopeLevel;
+    const id = entry.slice(separator + 1);
+    if (separator <= 0 || !id || SCOPE_ORDER[level] === undefined) {
+      throw new Error(`Invalid knowledge scope entry: ${entry}`);
+    }
+    const existing = entriesByLevel.get(level);
+    if (existing && existing !== entry) {
+      throw new Error(`Knowledge scope contains multiple ${level} entries`);
+    }
+    entriesByLevel.set(level, entry);
+  }
+  if (entriesByLevel.size === 0) {
+    throw new Error('Knowledge scope cannot be empty');
+  }
+  if (entriesByLevel.has('thread') && (!entriesByLevel.has('resource') || !entriesByLevel.has('org'))) {
+    throw new Error('Thread knowledge scope requires resource and org ancestors');
+  }
+  if (entriesByLevel.has('resource') && !entriesByLevel.has('org')) {
+    throw new Error('Resource knowledge scope requires an org ancestor');
+  }
+
   const unique = [...new Set(scope)];
   unique.sort((a, b) => {
     const aLevel = a.slice(0, a.indexOf(':')) as KnowledgeScopeLevel;

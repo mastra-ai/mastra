@@ -40,7 +40,44 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.factsTouching({ entityId: marco.id, scope: thread })).facts[0]?.id).toBe(fact.id);
     });
 
-    it('enforces CAS and scope ceilings atomically', async () => {
+    it('repoints merge relationships and schedules old-scope semantic cleanup', async () => {
+      const target = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
+      const duplicate = await store.createEntity({ name: 'Jane Doe', kind: 'person', scope: resource });
+      await store.createPage({ name: 'People', body: 'Contact [[Jane Doe]]', scope: resource });
+      const project = await store.createEntity({ name: 'Project', kind: 'task', scope: resource });
+      const fact = await store.appendFact({
+        parentEntityId: project.id,
+        text: 'Owned by [[Jane Doe]]',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+        maxScope: 'org',
+      });
+      const beforeMerge = (await store.listSemanticOutbox()).length;
+      await store.mergeEntities({ sourceId: duplicate.id, targetId: target.id, sourceVersion: duplicate.version });
+      expect((await store.listSemanticOutbox()).slice(beforeMerge).map(entry => entry.documentType)).toEqual(
+        expect.arrayContaining(['page', 'fact', 'entity']),
+      );
+
+      const beforeRescope = (await store.listSemanticOutbox()).length;
+      await store.rescopeFact({ id: fact.id, scope: ['org:acme'] });
+      expect((await store.listSemanticOutbox()).slice(beforeRescope)).toEqual([
+        expect.objectContaining({ operation: 'delete', scope: resource }),
+        expect.objectContaining({ operation: 'upsert', scope: ['org:acme'] }),
+      ]);
+    });
+
+    it('enforces record CAS and scope structure atomically', async () => {
+      await expect(store.createEntity({ name: 'Invalid', kind: 'task', scope: ['thread:t1'] })).rejects.toThrow(
+        'requires resource and org',
+      );
+      const page = await store.createPage({ name: 'Guide', body: 'one', scope: resource });
+      await store.updatePage({ id: page.id, version: page.version, body: 'two' });
+      await expect(store.updatePage({ id: page.id, version: page.version, body: 'stale' })).rejects.toThrow(
+        'version conflict',
+      );
+
       const entity = await store.createEntity({ name: 'Secret', kind: 'task', scope: resource });
       await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
       await expect(store.updateEntity({ id: entity.id, version: entity.version, kind: 'stale' })).rejects.toThrow(
