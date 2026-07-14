@@ -997,6 +997,89 @@ describe('AUTHORIZE_TOOL_PROVIDER_ROUTE (scope)', () => {
     expect(authorize).not.toHaveBeenCalled();
     expect(store.upsertConnection).not.toHaveBeenCalled();
   });
+
+  it("uses the provider's defaultScope when the request omits scope", async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'ca_new' });
+    const provider = makeProvider({ authorize, defaultScope: 'caller-supplied' });
+    const editor = makeEditor(provider);
+    const store = makeToolProviderConnectionsStore();
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'end_user_77');
+
+    await AUTHORIZE_TOOL_PROVIDER_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, store),
+      providerId: 'composio',
+      toolkit: 'gmail',
+      connectionId: '',
+      // no scope on the request — provider defaultScope drives it
+      requestContext,
+    } as any);
+
+    expect(authorize).toHaveBeenCalledWith({
+      toolkit: 'gmail',
+      connectionId: 'end_user_77',
+      toolName: undefined,
+      config: undefined,
+    });
+    expect(store.upsertConnection).toHaveBeenCalledWith({
+      authorId: 'end_user_77',
+      providerId: 'composio',
+      toolkit: 'gmail',
+      connectionId: 'ca_new',
+      label: null,
+      scope: 'caller-supplied',
+    });
+  });
+
+  it('request scope overrides the provider defaultScope', async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'ca_new' });
+    const provider = makeProvider({ authorize, defaultScope: 'caller-supplied' });
+    const editor = makeEditor(provider);
+    const store = makeToolProviderConnectionsStore();
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user_42');
+
+    await AUTHORIZE_TOOL_PROVIDER_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, store),
+      providerId: 'composio',
+      toolkit: 'gmail',
+      connectionId: '',
+      scope: 'shared',
+      requestContext,
+    } as any);
+
+    // The override must also select the shared bucket, not just persist the label:
+    // authorize gets the shared bucket as its connection context, and the stored
+    // row is owned by the shared author id.
+    expect(authorize).toHaveBeenCalledWith({
+      toolkit: 'gmail',
+      connectionId: 'shared',
+      toolName: undefined,
+      config: undefined,
+    });
+    expect(store.upsertConnection).toHaveBeenCalledWith(
+      expect.objectContaining({ authorId: 'shared', connectionId: 'ca_new', scope: 'shared' }),
+    );
+  });
+
+  it("defaults to 'per-author' when neither request scope nor defaultScope is set", async () => {
+    const authorize = vi.fn().mockResolvedValue({ url: 'https://oauth/redirect', authId: 'ca_new' });
+    const provider = makeProvider({ authorize });
+    const editor = makeEditor(provider);
+    const store = makeToolProviderConnectionsStore();
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user_42');
+
+    await AUTHORIZE_TOOL_PROVIDER_ROUTE.handler({
+      mastra: makeMastraWithStorage(editor, store),
+      providerId: 'composio',
+      toolkit: 'gmail',
+      connectionId: '',
+      requestContext,
+    } as any);
+
+    expect(store.upsertConnection).toHaveBeenCalledWith(expect.objectContaining({ scope: 'per-author' }));
+  });
 });
 
 describe('DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE (scope)', () => {

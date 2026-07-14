@@ -12,19 +12,19 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
   const completedSteps = steps.filter(step => step.status === 'success').length;
 
   return (
-    <div className="flex justify-center flex-col gap-4 content-center w-full">
-      <div className="grid grid-cols-[0_repeat(9,1fr)] w-full">
+    <div className="flex w-full flex-col content-center justify-center gap-4">
+      <div className="grid w-full grid-cols-[0_repeat(9,1fr)]">
         {steps.map((step: ProcessStep, idx: number) => {
           return (
             <div
               key={step.id}
-              className={cn('flex justify-end items-center relative h-[2rem]', transitions.colors, {
+              className={cn('relative flex h-8 items-center justify-end', transitions.colors, {
                 'bg-accent1Dark': step.status === 'success' && steps?.[idx - 1]?.status === 'success',
               })}
             >
               <div
                 className={cn(
-                  'w-[2rem] h-[2rem] rounded-full flex items-center justify-center self-center absolute right-0 translate-x-[50%] bg-surface3 z-10 text-neutral3 font-bold text-ui-sm',
+                  'absolute right-0 z-10 flex size-[2rem] translate-x-[50%] items-center justify-center self-center rounded-full bg-surface3 text-ui-sm font-bold text-neutral3',
                   transitions.all,
                   {
                     'border border-neutral2 border-dashed': step.status === 'pending',
@@ -40,7 +40,7 @@ export function ProcessStepProgressBar({ steps }: ProcessStepProgressBarProps) {
           );
         })}
       </div>
-      <div className={cn('text-xs text-neutral3 text-center', transitions.colors)}>
+      <div className={cn('text-center text-xs text-neutral3', transitions.colors)}>
         {completedSteps} of {totalSteps} steps completed
       </div>
     </div>

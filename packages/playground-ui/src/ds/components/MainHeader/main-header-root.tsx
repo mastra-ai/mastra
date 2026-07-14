@@ -24,7 +24,7 @@ export function MainHeaderRoot({
   return children ? (
     <header
       className={cn(
-        'grid grid-cols-[1fr_auto] gap-16 w-full ',
+        'grid w-full grid-cols-[1fr_auto] gap-16 ',
         {
           'mt-[6vh] mb-[4vh]': withMargins,
         },
@@ -34,11 +34,11 @@ export function MainHeaderRoot({
       {children}
     </header>
   ) : (
-    <header className={cn('grid gap-2 pt-8 pb-8 ', className)}>
+    <header className={cn('grid gap-2 py-8 ', className)}>
       <h1
         className={cn(
-          'text-neutral6 text-xl font-normal flex items-center gap-2',
-          '[&>svg]:w-6 [&>svg]:h-6 [&>svg]:text-neutral3',
+          'flex items-center gap-2 text-xl font-normal text-neutral6',
+          '[&>svg]:size-6 [&>svg]:text-neutral3',
           {
             'bg-surface4 w-60 max-w-[50%] rounded-md animate-pulse': titleIsLoading,
           },
@@ -54,7 +54,7 @@ export function MainHeaderRoot({
       </h1>
       {description && (
         <p
-          className={cn('text-neutral4 text-sm m-0', {
+          className={cn('m-0 text-sm text-neutral4', {
             'bg-surface4 w-[40rem] max-w-[80%] rounded-md animate-pulse': descriptionIsLoading,
           })}
         >
