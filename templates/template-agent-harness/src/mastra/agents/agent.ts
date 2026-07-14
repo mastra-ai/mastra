@@ -1,4 +1,4 @@
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { openai } from '@ai-sdk/openai';
@@ -11,15 +11,7 @@ import { Memory } from '@mastra/memory';
 import { webFetchTool } from '../tools/web-fetch-tool';
 import { startScheduleTool, stopScheduleTool } from '../tools/schedule-tools';
 
-function getProjectRoot() {
-  const cwd = process.cwd();
-  const runtimePaths = [`${sep}src${sep}mastra${sep}public`, `${sep}.mastra${sep}output`];
-  const runtimePath = runtimePaths.find(path => cwd.includes(path));
-
-  return runtimePath ? cwd.slice(0, cwd.indexOf(runtimePath)) : cwd;
-}
-
-const workspacePath = join(getProjectRoot(), 'workspace');
+const workspacePath = join(process.env.MASTRA_PROJECT_ROOT ?? process.cwd(), 'workspace');
 
 const workspace = new Workspace({
   id: 'agent-workspace',
