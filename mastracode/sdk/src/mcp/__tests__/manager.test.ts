@@ -1,3 +1,6 @@
+import { promises as fs } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { loadMcpConfig } from '../config.js';
@@ -949,6 +952,271 @@ describe('createMcpManager', () => {
       logs.push('injected');
 
       expect(manager.getServerLogs('fs')).not.toContain('injected');
+    });
+  });
+
+  describe('needs-auth status', () => {
+    it('surfaces needsAuth from the client auth state for OAuth-configured servers', async () => {
+      setupConfig({
+        mcpServers: {
+          api: {
+            url: 'https://api.example.com/mcp',
+            oauth: { redirectUrl: 'http://127.0.0.1:1458/oauth/callback' },
+          },
+        },
+      });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: {}, errors: { api: 'Unauthorized' } });
+        this.getServerAuthState = vi.fn().mockReturnValue('needs-auth');
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const statuses = manager.getServerStatuses();
+      expect(statuses[0]!.needsAuth).toBe(true);
+      expect(statuses[0]!.connected).toBe(false);
+    });
+
+    it('flags a bare url server whose connect error is a 401 as needing auth', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: {},
+          errors: { api: 'Streamable HTTP error: Error POSTing to endpoint (HTTP 401): invalid_token' },
+        });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(manager.getServerStatuses()[0]!.needsAuth).toBe(true);
+    });
+
+    it('does not flag non-auth connect failures', async () => {
+      setupConfig({
+        mcpServers: {
+          api: { url: 'https://api.example.com/mcp' },
+          fs: { command: 'npx' },
+        },
+      });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: {},
+          // The stdio error mentions 401 to prove the heuristic only applies to HTTP servers
+          errors: { api: 'fetch failed: ECONNREFUSED', fs: 'spawn npx ENOENT after HTTP 401 from registry' },
+        });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      for (const status of manager.getServerStatuses()) {
+        expect(status.needsAuth).toBeUndefined();
+      }
+    });
+  });
+
+  describe('authenticateServer', () => {
+    function setupAuthenticatingClient(overrides: Record<string, any> = {}) {
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { api: { fetch: {} } }, errors: {} });
+        this.authenticate = vi.fn().mockResolvedValue(undefined);
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+        Object.assign(this, overrides);
+      } as any);
+    }
+
+    it('returns error status for unknown server name', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      setupAuthenticatingClient();
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const result = await manager.authenticateServer('nonexistent');
+      expect(result.connected).toBe(false);
+      expect(result.error).toContain('not found in config');
+    });
+
+    it('returns error status for stdio servers', async () => {
+      setupConfig({ mcpServers: { fs: { command: 'npx' } } });
+      setupAuthenticatingClient();
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const result = await manager.authenticateServer('fs');
+      expect(result.connected).toBe(false);
+      expect(result.error).toContain('does not support OAuth');
+    });
+
+    it('provisions a zero-config OAuth provider for bare url entries and authenticates', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      setupAuthenticatingClient();
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      // Bare entries get no eager provider — provisioning happens on authenticate
+      expect(MockedMCPOAuthClientProvider).not.toHaveBeenCalled();
+
+      const result = await manager.authenticateServer('api');
+
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(1);
+      const options = MockedMCPOAuthClientProvider.mock.calls[0]![0]!;
+      expect(options.redirectUrl).toBe('http://127.0.0.1:1458/oauth/callback');
+      expect(options.clientMetadata.redirect_uris).toEqual(['http://127.0.0.1:1458/oauth/callback']);
+      expect(options.clientInformation).toBeUndefined();
+
+      // The provider is attached to the live server def so the client sees it
+      const serverDef = (MockedMCPClient.mock.calls[0]![0]! as any).servers['api'];
+      expect(serverDef.authProvider).toBeInstanceOf(mcpMocks.MCPOAuthClientProvider);
+
+      const mockInstance = MockedMCPClient.mock.instances[0] as any;
+      expect(mockInstance.authenticate).toHaveBeenCalledWith('api', undefined);
+      expect(result.connected).toBe(true);
+      expect(result.toolNames).toEqual(['api_fetch']);
+    });
+
+    it('keeps the configured provider for servers with an explicit oauth block', async () => {
+      setupConfig({
+        mcpServers: {
+          api: {
+            url: 'https://api.example.com/mcp',
+            oauth: { redirectUrl: 'http://localhost:3000/oauth/callback' },
+          },
+        },
+      });
+      setupAuthenticatingClient();
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(1);
+
+      await manager.authenticateServer('api');
+
+      // No second provider — the configured one wins
+      expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(1);
+      expect(MockedMCPOAuthClientProvider.mock.calls[0]![0]!.redirectUrl).toBe('http://localhost:3000/oauth/callback');
+    });
+
+    it('passes timeoutMs through to the client', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      setupAuthenticatingClient();
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      await manager.authenticateServer('api', { timeoutMs: 1000 });
+
+      const mockInstance = MockedMCPClient.mock.instances[0] as any;
+      expect(mockInstance.authenticate).toHaveBeenCalledWith('api', { timeoutMs: 1000 });
+    });
+
+    it('surfaces the authorization URL through onAuthorizationUrl', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      setupAuthenticatingClient({
+        authenticate: vi.fn().mockImplementation(async () => {
+          // Simulate the SDK delivering the authorization URL through the provider
+          const providerOptions = MockedMCPOAuthClientProvider.mock.calls[0]![0]!;
+          providerOptions.onRedirectToAuthorization(new URL('https://auth.example.com/authorize?state=abc'));
+        }),
+      });
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const seenUrls: string[] = [];
+      await manager.authenticateServer('api', { onAuthorizationUrl: url => seenUrls.push(url) });
+
+      expect(seenUrls).toEqual(['https://auth.example.com/authorize?state=abc']);
+    });
+
+    it('returns a needs-auth error status when authentication fails', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      setupAuthenticatingClient({
+        authenticate: vi.fn().mockRejectedValue(new Error('Timed out waiting for the OAuth callback')),
+        getServerAuthState: vi.fn().mockReturnValue('needs-auth'),
+      });
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      const result = await manager.authenticateServer('api');
+      expect(result.connected).toBe(false);
+      expect(result.error).toContain('Timed out');
+      expect(result.needsAuth).toBe(true);
+    });
+  });
+
+  describe('OAuth token storage fingerprint', () => {
+    it('is stable across zero-config provisioning and manager instantiations', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { api: { fetch: {} } }, errors: {} });
+        this.authenticate = vi.fn().mockResolvedValue(undefined);
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      await createMcpManager('/tmp/project-a').init();
+      const firstManager = createMcpManager('/tmp/project-a');
+      await firstManager.init();
+      await firstManager.authenticateServer('api');
+      const firstStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
+
+      vi.clearAllMocks();
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { api: { fetch: {} } }, errors: {} });
+        this.authenticate = vi.fn().mockResolvedValue(undefined);
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const secondManager = createMcpManager('/tmp/project-a');
+      await secondManager.init();
+      await secondManager.authenticateServer('api');
+      const secondStoragePath = MockedMCPOAuthClientProvider.mock.calls[0]?.[0]?.storage?.filePath;
+
+      expect(firstStoragePath).toEqual(expect.stringMatching(/mcp-oauth\/[a-f0-9]{16}\.json$/));
+      expect(secondStoragePath).toBe(firstStoragePath);
+    });
+
+    it('eagerly attaches a provider on init when a previous session persisted OAuth state', async () => {
+      const dataDir = await fs.mkdtemp(join(tmpdir(), 'mc-oauth-test-'));
+      process.env.MASTRA_APP_DATA_DIR = dataDir;
+      try {
+        setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+        MockedMCPClient.mockImplementation(function (this: any) {
+          this.listToolsetsWithErrors = vi.fn().mockResolvedValue({ toolsets: { api: { fetch: {} } }, errors: {} });
+          this.authenticate = vi.fn().mockResolvedValue(undefined);
+          this.disconnect = vi.fn().mockResolvedValue(undefined);
+        } as any);
+
+        // Session 1: no persisted state — provider only appears on authenticate
+        const firstManager = createMcpManager('/tmp/project-a');
+        await firstManager.init();
+        expect(MockedMCPOAuthClientProvider).not.toHaveBeenCalled();
+        await firstManager.authenticateServer('api');
+        const storagePath = MockedMCPOAuthClientProvider.mock.calls[0]![0]!.storage.filePath as string;
+
+        // Simulate the provider having persisted tokens to disk
+        await fs.mkdir(dirname(storagePath), { recursive: true });
+        await fs.writeFile(storagePath, JSON.stringify({ tokens: { access_token: 'stored' } }));
+
+        // Session 2: persisted state — provider attaches eagerly so tokens are used
+        MockedMCPOAuthClientProvider.mockClear();
+        const secondManager = createMcpManager('/tmp/project-a');
+        await secondManager.init();
+        expect(MockedMCPOAuthClientProvider).toHaveBeenCalledTimes(1);
+        expect(MockedMCPOAuthClientProvider.mock.calls[0]![0]!.storage.filePath).toBe(storagePath);
+      } finally {
+        delete process.env.MASTRA_APP_DATA_DIR;
+        await fs.rm(dataDir, { recursive: true, force: true });
+      }
     });
   });
 });
