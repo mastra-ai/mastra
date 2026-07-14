@@ -70,7 +70,7 @@ import {
 import type { GitIdentity, MaterializationSandbox, PrepareProgress, ProgressFn } from './sandbox';
 import { githubInstallations, githubProjects, githubProjectSandboxes, githubWorktrees } from './schema';
 import type { GithubProjectRow, GithubProjectSandboxRow } from './schema';
-import { subscribeToPullRequest } from './subscriptions';
+import { listPullRequestSubscriptionsForThread, subscribeToPullRequest } from './subscriptions';
 
 export interface MountGithubRoutesOptions {
   /**
@@ -239,6 +239,34 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   }
 
   routes.push(
+    registerApiRoute('/web/github/subscriptions', {
+      method: 'GET',
+      handler: async c => {
+        await ensureWebAuthUser(loose(c));
+        const tenant = webAuthTenant(loose(c));
+        if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
+
+        const resourceId = c.req.query('resourceId');
+        const threadId = c.req.query('threadId');
+        const sessionScope = c.req.query('scope');
+        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+
+        const subscriptions = await listPullRequestSubscriptionsForThread({
+          orgId: tenant.orgId,
+          resourceId,
+          threadId,
+          sessionScope,
+        });
+        return c.json({
+          subscriptions: subscriptions.map(subscription => ({
+            id: subscription.id,
+            repoFullName: subscription.repoFullName,
+            pullRequestNumber: subscription.pullRequestNumber,
+            url: `https://github.com/${subscription.repoFullName}/pull/${subscription.pullRequestNumber}`,
+          })),
+        });
+      },
+    }),
     registerApiRoute('/web/github/webhook', {
       method: 'POST',
       requiresAuth: false,

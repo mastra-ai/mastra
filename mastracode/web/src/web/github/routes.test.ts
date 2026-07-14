@@ -318,7 +318,10 @@ sandboxesRef = githubProjectSandboxes;
 subscriptionsRef = githubSignalSubscriptions;
 
 // ── Test harness ─────────────────────────────────────────────────────────
-function buildApp(user: { workosId: string; organizationId?: string } | null, controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller']) {
+function buildApp(
+  user: { workosId: string; organizationId?: string } | null,
+  controller?: NonNullable<Parameters<typeof buildGithubRoutes>[0]>['controller'],
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) {
@@ -432,7 +435,10 @@ describe('webhook route', () => {
   });
 
   it('dispatches a verified PR webhook through the configured controller', async () => {
-    const sendNotificationSignal = vi.fn(async () => ({ record: { id: 'notification-1' }, decision: { action: 'deliver' } }));
+    const sendNotificationSignal = vi.fn(async () => ({
+      record: { id: 'notification-1' },
+      decision: { action: 'deliver' },
+    }));
     const session = {
       thread: { getId: () => 'thread-1', switch: vi.fn() },
       sendNotificationSignal,
@@ -559,6 +565,36 @@ describe('status route', () => {
     expect(json.enabled).toBe(true);
     expect(json.connected).toBe(true);
     expect(json.installations[0].installationId).toBe(7);
+  });
+});
+
+describe('subscriptions route', () => {
+  it('returns pull request links for the exact scoped thread', async () => {
+    tables.subscriptions.push({
+      id: 'subscription-1',
+      orgId: 'org1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      sessionScope: '/tmp/worktree',
+      repoFullName: 'octo/hello',
+      pullRequestNumber: 42,
+    });
+
+    const res = await buildApp({ workosId: 'u1' }).request(
+      '/web/github/subscriptions?resourceId=resource-1&threadId=thread-1&scope=%2Ftmp%2Fworktree',
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({
+      subscriptions: [
+        {
+          id: 'subscription-1',
+          repoFullName: 'octo/hello',
+          pullRequestNumber: 42,
+          url: 'https://github.com/octo/hello/pull/42',
+        },
+      ],
+    });
   });
 });
 
