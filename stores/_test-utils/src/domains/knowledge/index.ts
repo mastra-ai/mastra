@@ -169,6 +169,21 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       await expect(store.rescopeFact({ id: fact.id, scope: ['org:acme'] })).rejects.toThrow('ceiling');
     });
 
+    it('serializes semantic work for successive versions of the same document', async () => {
+      const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
+      await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+
+      const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
+      expect(first).toHaveLength(1);
+      expect(first[0]?.documentId).toBe(`knowledge:entity:${entity.id}`);
+      expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
+
+      await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+      const second = await store.claimSemanticOutbox({ workerId: 'second', limit: 10 });
+      expect(second).toHaveLength(1);
+      expect(second[0]?.documentId).toBe(first[0]?.documentId);
+    });
+
     it('dangerously clears every knowledge table', async () => {
       const entity = await store.createEntity({ name: 'Temporary', kind: 'task', scope: resource });
       await store.appendFact({

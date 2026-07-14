@@ -547,6 +547,16 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       )
       .filter(entry => entry.availableAt <= now)
       .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
+      .filter(
+        entry =>
+          ![...this.#db.knowledgeSemanticOutbox.values()].some(
+            earlier =>
+              earlier.documentId === entry.documentId &&
+              earlier.status !== 'completed' &&
+              (earlier.createdAt < entry.createdAt ||
+                (earlier.createdAt.getTime() === entry.createdAt.getTime() && earlier.id < entry.id)),
+          ),
+      )
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100);
     for (const entry of claimed) {
