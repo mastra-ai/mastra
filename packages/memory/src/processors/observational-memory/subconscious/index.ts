@@ -1,5 +1,6 @@
 import { Extractor } from '../extractor';
 import { SubconsciousCaptureExtractor } from './capture';
+import { SubconsciousRemindExtractor } from './remind';
 import type {
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
@@ -109,6 +110,9 @@ export class Subconscious {
             activityRecentUpdates: this.resolved.activity === false ? undefined : this.resolved.activity.recentUpdates,
           }),
         );
+      } else if (name === 'remind') {
+        const resolved = this.resolved.observation.find(agent => agent.name === name);
+        if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved));
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
         const custom = entry as SubconsciousCustomObservationConfig;
         extractors.push(
@@ -163,6 +167,7 @@ export {
 } from './activity';
 export type { SubconsciousActivitySnapshot, SubconsciousActivityUpdate } from './activity';
 export { SubconsciousCaptureExtractor, subconsciousCaptureSchema } from './capture';
+export { SubconsciousRemindExtractor } from './remind';
 export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from './semantic-index';
 export type { KnowledgeSemanticIndexCoordinatorConfig } from './semantic-index';
 export type { CaptureExtractorOptions } from './capture';
