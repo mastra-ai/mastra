@@ -40,7 +40,7 @@ export class KnowledgeSemanticIndexCoordinator {
   readonly #embedderOptions?: MastraEmbeddingOptions;
   readonly #workerId: string;
   readonly #batchSize: number;
-  #draining?: Promise<number>;
+  readonly #draining = new Map<string, Promise<number>>();
 
   constructor(config: KnowledgeSemanticIndexCoordinatorConfig) {
     this.#knowledge = config.knowledge;
@@ -52,11 +52,14 @@ export class KnowledgeSemanticIndexCoordinator {
   }
 
   async drain(scope?: KnowledgeScope): Promise<number> {
-    if (this.#draining) return this.#draining;
-    this.#draining = this.#drain(scope).finally(() => {
-      this.#draining = undefined;
+    const key = scope?.join('\u001f') ?? '*';
+    const active = this.#draining.get(key);
+    if (active) return active;
+    const draining = this.#drain(scope).finally(() => {
+      this.#draining.delete(key);
     });
-    return this.#draining;
+    this.#draining.set(key, draining);
+    return draining;
   }
 
   async #drain(scope?: KnowledgeScope): Promise<number> {

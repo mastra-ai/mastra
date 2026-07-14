@@ -22,6 +22,23 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect(await store.getEntity(page.id)).toBeNull();
     });
 
+    it('applies fact visibility independently from parent entity identity scope', async () => {
+      const entity = await store.createEntity({ name: 'Resource entity', kind: 'task', scope: resource });
+      await store.appendFact({
+        parentEntityId: entity.id,
+        text: 'organization-visible fact',
+        scope: ['org:acme'],
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+
+      expect((await store.factsAbout({ entityId: entity.id, scope: ['org:acme'] })).facts).toHaveLength(1);
+      expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
+        expect.objectContaining({ type: 'fact', recordId: entity.id, scope: ['org:acme'] }),
+      ]);
+    });
+
     it('maintains mentions and soft deletes without losing them', async () => {
       const jane = await store.createEntity({ name: 'Jane', kind: 'person', scope: resource });
       const marco = await store.createEntity({ name: 'Marco', kind: 'person', scope: resource });
