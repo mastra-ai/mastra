@@ -1436,10 +1436,26 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // OpenAI reasoning models fail on the next turn with
             // "Item 'fc_...' of type 'function_call' was provided without
             // its required 'reasoning' item" (#19365).
+            //
+            // Mirror the regular Agent's buildResponseModelMetadata so the
+            // persisted assistant message carries the same content.metadata
+            // (modelId/provider): prefer the static model, fall back to the
+            // response-metadata chunk.
+            const responseModelId = currentModel.modelId ?? responseMetadata?.modelId;
+            const responseModelMetadata =
+              responseModelId || currentModel.provider
+                ? {
+                    metadata: {
+                      ...(responseModelId ? { modelId: responseModelId } : {}),
+                      ...(currentModel.provider ? { provider: currentModel.provider } : {}),
+                    },
+                  }
+                : undefined;
             const builtMessages = buildMessagesFromChunks({
               chunks: collectedChunks,
               messageId: currentMessageId,
               tools: currentTools,
+              responseModelMetadata,
             });
             if (builtMessages.length > 0) {
               for (const msg of builtMessages) {
