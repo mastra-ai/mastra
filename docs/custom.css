@@ -481,6 +481,15 @@
   display: block;
 }
 
+.theme-back-to-top-button {
+  display: none;
+}
+
+.doc-chat-fab {
+  background: var(--mastra-color-surface-elevation-sm) !important;
+  border: var(--ifm-button-border-width) solid var(--mastra-color-surface-hover) !important;
+}
+
 /* Themed aliases + plugin overrides for dark mode */
 [data-theme='dark'] {
   --mastra-color-surface-bg: var(--mastra-color-dark-surface-bg);
