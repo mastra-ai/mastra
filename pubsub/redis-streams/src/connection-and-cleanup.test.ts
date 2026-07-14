@@ -4,7 +4,7 @@ import type { Event, EventCallback } from '@mastra/core/events';
 import { createClient } from 'redis';
 import type { RedisClientType } from 'redis';
 import { afterEach, describe, expect, it } from 'vitest';
-import { REDIS_URL } from '../test-fixtures/harness';
+import { getFreePort, REDIS_URL } from '../test-fixtures/harness';
 import { RedisStreamsPubSub } from './index';
 
 function makeEvent(overrides: Partial<Omit<Event, 'id' | 'createdAt'>> = {}): Omit<Event, 'id' | 'createdAt'> {
@@ -171,17 +171,19 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
   });
 
   describe('streamIdleTtlMs', () => {
-    it('stamps a rolling TTL on the stream key when configured', async () => {
+    it('stamps a rolling TTL on the stream key when configured (atomically with the write)', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 60_000 });
       const topic = `ttl-${randomUUID()}`;
       await ps.publish(topic, makeEvent());
 
       const inspector = await createInspector();
-      // The PEXPIRE is fire-and-forget after the publish; poll briefly.
-      await expect
-        .poll(async () => await inspector.pTTL(`mastra:topic:${topic}`), { timeout: 3000 })
-        .toBeGreaterThan(0);
+      // No polling: XADD and PEXPIRE run in one MULTI, so the TTL must already
+      // be set the moment publish() resolves. A detached PEXPIRE could fail or
+      // be skipped (process exit) after the XADD — and on the topic's *last*
+      // write there is no next write to self-heal, leaving an immortal stream
+      // despite the TTL.
       const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+      expect(pttl).toBeGreaterThan(0);
       expect(pttl).toBeLessThanOrEqual(60_000);
     }, 15_000);
 
@@ -243,6 +245,62 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       // (otherwise it would linger forever).
       await ps.clearTopic(topic);
       await expect.poll(async () => await inspector.pTTL(streamKey), { timeout: 5000 }).toBeGreaterThan(0);
+    }, 15_000);
+
+    it('tolerates same-group subscribers racing to recreate a deleted stream (BUSYGROUP in MULTI)', async () => {
+      // Two subscribers in one consumer group: deleting the stream sends both
+      // read loops into NOGROUP recovery, so the loser's XGROUP CREATE hits
+      // BUSYGROUP — which, inside the recovery MULTI, surfaces as a
+      // MultiErrorReply whose message does NOT contain "BUSYGROUP" (it lives in
+      // err.replies). Recovery must treat that as success: no error logged, TTL
+      // still applied, delivery resumed.
+      const logged: string[] = [];
+      const logger = {
+        debug: (msg: unknown) => logged.push(String(msg)),
+        warn: (msg: unknown) => logged.push(String(msg)),
+      };
+      const ps1 = createPubSub({ streamIdleTtlMs: 60_000, logger });
+      const ps2 = createPubSub({ streamIdleTtlMs: 60_000, logger });
+      const topic = `busygroup-${randomUUID()}`;
+      const group = 'workers';
+      const received: number[] = [];
+      const cb: EventCallback = (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      };
+      await ps1.subscribe(topic, cb, { group });
+      await ps2.subscribe(topic, cb, { group });
+
+      await ps1.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toContain(1);
+
+      const inspector = await createInspector();
+      const streamKey = `mastra:topic:${topic}`;
+      await ps1.clearTopic(topic);
+
+      // Both loops recover; the recreated stream carries a TTL and delivery works.
+      await expect.poll(async () => await inspector.pTTL(streamKey), { timeout: 5000 }).toBeGreaterThan(0);
+      await ps1.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toContain(2);
+      expect(logged.filter(m => m.includes('re-create failed'))).toEqual([]);
+    }, 20_000);
+  });
+
+  describe('failure observability', () => {
+    it('logs clearTopic failures at warn level instead of swallowing them silently', async () => {
+      // Point at a port nobody listens on, with reconnection disabled so the
+      // lazy connect fails fast. clearTopic must still resolve (callers invoke
+      // it fire-and-forget) but the failure has to surface at warn — a failed
+      // delete means the memory leak clearTopic exists to prevent is recurring.
+      const port = await getFreePort();
+      const warns: string[] = [];
+      const ps = new RedisStreamsPubSub({
+        url: `redis://127.0.0.1:${port}`,
+        redisOptions: { socket: { reconnectStrategy: false } },
+        logger: { warn: (msg: unknown) => warns.push(String(msg)) },
+      });
+      await expect(ps.clearTopic('some-topic')).resolves.toBeUndefined();
+      expect(warns.some(m => m.includes('clearTopic failed'))).toBe(true);
     }, 15_000);
   });
 });
