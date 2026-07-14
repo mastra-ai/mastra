@@ -5,6 +5,7 @@ import type { Pool, PoolConnection, RowDataPacket } from 'mysql2/promise';
 import {
   formatTableName,
   prepareDeleteStatement,
+  prepareInsertOnlyStatement,
   prepareStatement,
   prepareUpdateStatement,
   prepareWhereClause,
@@ -363,14 +364,7 @@ export class StoreOperationsMySQL extends StoreOperations {
 
   async insertOnly({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
     try {
-      const statement = prepareStatement({ tableName, record, database: this.database });
-      const duplicateClause = ' ON DUPLICATE KEY UPDATE ';
-      const duplicateClauseIndex = statement.sql.indexOf(duplicateClause);
-      if (duplicateClauseIndex === -1) {
-        throw new Error(`Unexpected insert statement generated for table ${tableName}`);
-      }
-      statement.sql = statement.sql.slice(0, duplicateClauseIndex);
-      statement.args = statement.args.slice(0, Object.keys(record).length);
+      const statement = prepareInsertOnlyStatement({ tableName, record, database: this.database });
       await this.pool.execute(statement.sql, statement.args);
     } catch (error) {
       throw new MastraError(
