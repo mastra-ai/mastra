@@ -115,6 +115,22 @@ export class WorkflowEventProcessor extends EventProcessor {
   private readonly topicCleanupDelayMs: number;
   private static readonly DEFAULT_TOPIC_CLEANUP_DELAY_MS = 30_000;
 
+  // Pending per-run topic cleanup timers, so a run restarted in this process
+  // (timeTravel/restart reuse the runId) cancels its own pending deletion.
+  private readonly pendingTopicCleanups = new Map<string, ReturnType<typeof setTimeout>>();
+
+  // Statuses under which a run is still (or again) writing to its watch
+  // topic. If the run was restarted via timeTravel/restart after its terminal
+  // end, deletion must be skipped — the new execution reschedules cleanup
+  // when it reaches its own terminal state.
+  private static readonly ACTIVE_RUN_STATUSES: ReadonlySet<string> = new Set([
+    'running',
+    'pending',
+    'waiting',
+    'suspended',
+    'paused',
+  ]);
+
   constructor({
     mastra,
     stepExecutionStrategy,
@@ -141,16 +157,49 @@ export class WorkflowEventProcessor extends EventProcessor {
    *
    * Best-effort by design: if the process exits before the timer fires, the
    * transport-level idle TTL (e.g. `streamIdleTtlMs`) is the backstop.
+   *
+   * A finished run can be re-executed under the same runId (`timeTravel`,
+   * `restart`), so deletion is double-guarded: a restart processed by this
+   * process cancels the pending timer directly, and when the timer fires we
+   * re-check the run's persisted status — a restart may have been picked up
+   * by a different worker process — and skip deletion while the run is
+   * active again.
    */
-  private scheduleRunTopicCleanup(runId: string): void {
+  private scheduleRunTopicCleanup(workflowId: string, runId: string): void {
     if (this.topicCleanupDelayMs <= 0) return;
+    this.cancelRunTopicCleanup(runId);
     const timer = setTimeout(() => {
-      this.mastra.pubsub.clearTopic(`workflow.events.v2.${runId}`).catch(err => {
-        this.mastra.getLogger()?.warn('Failed to clear workflow events topic', { runId, error: err });
-      });
+      this.pendingTopicCleanups.delete(runId);
+      void this.clearRunTopicUnlessActive(workflowId, runId);
     }, this.topicCleanupDelayMs);
     // Don't let a pending cleanup timer keep a short-lived process alive.
     timer.unref?.();
+    this.pendingTopicCleanups.set(runId, timer);
+  }
+
+  private cancelRunTopicCleanup(runId: string): void {
+    const timer = this.pendingTopicCleanups.get(runId);
+    if (timer !== undefined) {
+      clearTimeout(timer);
+      this.pendingTopicCleanups.delete(runId);
+    }
+  }
+
+  private async clearRunTopicUnlessActive(workflowId: string, runId: string): Promise<void> {
+    try {
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      if (workflowsStore) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        const status = typeof snapshot === 'string' ? undefined : snapshot?.status;
+        // Run was restarted (possibly by another worker process) after the
+        // terminal end that scheduled this cleanup: it is writing to its
+        // topic again, and its own terminal end will reschedule deletion.
+        if (status && WorkflowEventProcessor.ACTIVE_RUN_STATUSES.has(status)) return;
+      }
+      await this.mastra.pubsub.clearTopic(`workflow.events.v2.${runId}`);
+    } catch (err) {
+      this.mastra.getLogger()?.warn('Failed to clear workflow events topic', { workflowId, runId, error: err });
+    }
   }
 
   /**
@@ -375,6 +424,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     const initialState = (arguments[0] as any).initialState ?? state ?? {};
     const resolvedFormat = format ?? this.runFormats.get(runId);
     this.runFormats.set(runId, resolvedFormat);
+    // The run is starting (or restarting via timeTravel/restart under the
+    // same runId): any topic cleanup pending from a previous terminal end
+    // must not fire while the run is writing to its topic again.
+    this.cancelRunTopicCleanup(runId);
     // Create abort controller for this workflow run
     this.getOrCreateAbortController(runId);
 
@@ -579,7 +632,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // keep writing to its watch topic when the next step executes, so only
     // truly terminal runs get their topic cleared.
     if (!perStep) {
-      this.scheduleRunTopicCleanup(runId);
+      this.scheduleRunTopicCleanup(_workflowId, runId);
     }
 
     // handle nested workflow
@@ -769,7 +822,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.cleanupRun(runId);
 
     // 'failed' is terminal: the run stops writing to its watch topic.
-    this.scheduleRunTopicCleanup(runId);
+    this.scheduleRunTopicCleanup(workflowId, runId);
 
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
 
