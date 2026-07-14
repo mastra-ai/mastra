@@ -34,18 +34,19 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
-  '@vitest/coverage-v8': 4.1.9
-  '@vitest/ui': 4.1.9
+  '@vitest/coverage-v8': 4.1.10
+  '@vitest/ui': 4.1.10
   date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
-  vitest: 4.1.9
+  vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.22.4
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
+  '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
