@@ -14,7 +14,7 @@ Keep the work focused on first-contact intake: classify the issue, explain the r
 Use only these auto-triage labels:
 
 - `auto-triaged` — add after a successful triage comment for every issue processed by this skill.
-- `status:needs-approval` — add only when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
+- `needs-approval` — add only when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
 
 Also remove `status: needs triage` after the triage comment is posted or updated, if that label is present.
 
@@ -89,13 +89,13 @@ Choose one primary type and one primary route. If multiple types apply, pick the
 
 | Type | Use when | Route | Approval label |
 | --- | --- | --- | --- |
-| `feature request` | The issue asks for new behavior, API, product direction, or policy change. | `Prepare approval` unless it is already clearly accepted policy. | Usually add `status:needs-approval`. |
+| `feature request` | The issue asks for new behavior, API, product direction, or policy change. | `Prepare approval` unless it is already clearly accepted policy. | Usually add `needs-approval`. |
 | `bug` | The issue reports broken or unexpected behavior. | `Investigate issue #<n>` when actionable; `Ask author for info` when repro/details are missing. | Usually no approval label. Add only if closing/rejecting is uncertain or product policy is involved. |
 | `docs` | The issue is about docs, examples, wording, missing explanation, or docs/product-positioning mismatch. | `Investigate issue #<n>` or docs fix when actionable; ask for specifics if unclear. | Add only for broad positioning/product decisions. |
 | `question/support` | The issue asks how something works or needs usage help. | Answer directly and route to close when confident; ask for info when not. | Usually no approval label. |
 | `duplicate` | A matching issue already exists. | `Close as duplicate`, linking the canonical issue. | No approval label unless the duplicate call is uncertain. |
 | `resolved` | A closing/fixing PR or released change appears to have resolved it. | `Close as resolved` or route to the fixing PR. | No approval label unless uncertain. |
-| `invalid` / `spam` / `out-of-scope` | The report is not actionable for this repo or is abusive/irrelevant. | `Close as <reason>` with brief neutral explanation. | Add `status:needs-approval` if the close/reject decision needs maintainer sign-off. |
+| `invalid` / `spam` / `out-of-scope` | The report is not actionable for this repo or is abusive/irrelevant. | `Close as <reason>` with brief neutral explanation. | Add `needs-approval` if the close/reject decision needs maintainer sign-off. |
 | `maintenance` / `other` | It does not fit the above categories. | Choose the closest actionable route and state uncertainty. | Add only if approval/prep is required. |
 
 When there is an explicit active PR that closes/fixes the issue, mention it in the comment and route toward that PR instead of starting issue investigation.
@@ -114,7 +114,7 @@ When there is an explicit active PR that closes/fixes the issue, mention it in t
 After the comment is posted or updated:
 
 1. Add `auto-triaged`.
-2. Add `status:needs-approval` only if the selected route needs maintainer approval/prep.
+2. Add `needs-approval` only if the selected route needs maintainer approval/prep.
 3. Remove `status: needs triage` if present.
 4. Stop.
 

@@ -142,7 +142,7 @@ function parseListPage(raw: string | undefined): number | null {
   return page >= 1 ? page : null;
 }
 
-const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'status:needs-approval']);
+const VALID_ISSUE_LABEL_FILTERS = new Set(['auto-triaged', 'needs-approval']);
 
 function parseIssueLabelFilter(raw: string | undefined): string | undefined | null {
   if (raw === undefined || raw === '') return undefined;

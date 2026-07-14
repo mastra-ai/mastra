@@ -78,7 +78,7 @@ const triageIssues: GithubIssue[] = [
   },
   {
     ...issues[1]!,
-    labels: ['auto-triaged', 'status:needs-approval'],
+    labels: ['auto-triaged', 'needs-approval'],
   },
 ];
 
@@ -588,7 +588,7 @@ describe('Factory Triage page', () => {
     expect(within(list).getByText('Fix flaky test')).toBeInTheDocument();
     expect(within(list).getByText('Improve docs')).toBeInTheDocument();
     expect(within(list).getAllByText('auto-triaged')).toHaveLength(2);
-    expect(within(list).getByText('status:needs-approval')).toBeInTheDocument();
+    expect(within(list).getByText('needs-approval')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Investigate issue #12' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Prepare approval #15' })).toBeInTheDocument();
   });
@@ -711,7 +711,7 @@ describe('Factory investigate flow', () => {
     expect(captured.messages).toHaveLength(1);
     expect(captured.messages[0]!.message).toContain('Prepare maintainer approval next steps');
     expect(captured.messages[0]!.message).toContain('https://github.com/mastra-ai/mastra/issues/15');
-    expect(captured.messages[0]!.message).toContain('status:needs-approval');
+    expect(captured.messages[0]!.message).toContain('needs-approval');
   });
 
   it('given a pull request, when Review is clicked, then a worktree, thread, and understand-pr prompt are created and the app navigates to the new thread', async () => {

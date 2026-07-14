@@ -963,11 +963,11 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'auto-triaged' });
   });
 
-  it('forwards the status needs-approval label filter', async () => {
+  it('forwards the needs-approval label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=status%3Aneeds-approval');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=needs-approval');
     expect(res.status).toBe(200);
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'status:needs-approval' });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'needs-approval' });
   });
 
   it('400s on an unsupported label filter', async () => {

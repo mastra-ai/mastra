@@ -218,7 +218,7 @@ function buildIssueTriagePrompt(input: GithubIssueTriageRunInput): string {
     'Issue triage output:',
     '- Post or update one GitHub issue comment with the triage result.',
     '- Apply the auto-triaged label after successful triage.',
-    '- Apply status:needs-approval only when the issue needs explicit human approval before investigation or implementation.',
+    '- Apply needs-approval only when the issue needs explicit human approval before investigation or implementation.',
     '',
     'Issue:',
     `- Repository: ${input.repository}`,
