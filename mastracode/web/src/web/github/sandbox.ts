@@ -434,11 +434,12 @@ export async function materializeRepo(
 
   const authUrl = tokenUrl(repo, token);
 
-  // The DB's `materializedAt` can drift from disk — a fresh per-user binding
-  // row over an already-populated workdir (local dev DB resets, repaired
-  // rows, earlier flows) would make `git clone` fail on the non-empty
-  // directory. Re-detect an existing checkout of this repo and pull instead.
-  const alreadyMaterialized = Boolean(sandboxRow.materializedAt) || (await hasExistingCheckout(sandbox, workdir, repo));
+  // The DB's `materializedAt` can drift from disk in either direction: a fresh
+  // row can point at an already-cloned checkout, and a restored/replaced VM can
+  // have no checkout even though the DB says it was materialized. Trust the
+  // sandbox filesystem as the source of truth and pull only when the expected
+  // repo checkout really exists.
+  const alreadyMaterialized = await hasExistingCheckout(sandbox, workdir, repo);
 
   try {
     if (!alreadyMaterialized) {

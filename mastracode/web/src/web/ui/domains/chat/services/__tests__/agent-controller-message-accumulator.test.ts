@@ -1,20 +1,19 @@
-import type { AgentControllerMessage } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 
 import { toMastraDBMessage } from '../agent-controller-message-accumulator';
 
 describe('agent controller message accumulator', () => {
   it('converts visible controller content into ordered Mastra message parts', () => {
-    const message: AgentControllerMessage = {
+    const message = {
       id: 'message-1',
       role: 'assistant',
       content: [
         { type: 'text', text: 'I will inspect the file.' },
         { type: 'thinking', thinking: 'Need to check the current implementation.' },
         { type: 'tool_call', id: 'tool-1', name: 'read_file', args: { path: 'src/index.ts' } },
-        { type: 'tool_result', id: 'tool-1', name: 'read_file', result: 'export const value = 1;' },
+        { type: 'tool_result', id: 'tool-1', name: 'read_file', result: 'export const value = 1;', isError: false },
       ],
-    };
+    } as const;
 
     const converted = toMastraDBMessage(message);
 
@@ -45,7 +44,7 @@ describe('agent controller message accumulator', () => {
   });
 
   it('converts image and file content into Mastra file parts', () => {
-    const message: AgentControllerMessage = {
+    const message = {
       id: 'message-2',
       role: 'user',
       content: [
@@ -53,7 +52,7 @@ describe('agent controller message accumulator', () => {
         { type: 'image', data: 'aW1hZ2UtYnl0ZXM=', mimeType: 'image/png' },
         { type: 'file', data: 'ZmlsZS1ieXRlcw==', mediaType: 'application/pdf', filename: 'doc.pdf' },
       ],
-    };
+    } as const;
 
     const converted = toMastraDBMessage(message);
 
@@ -65,15 +64,22 @@ describe('agent controller message accumulator', () => {
     expect(converted.content.metadata?.harnessContent).toBeUndefined();
   });
 
-  it('stores structured status content as harness metadata without duplicating notification text', () => {
-    const message: AgentControllerMessage = {
+  it('stores structured status content as harness metadata with readable fallback text', () => {
+    const message = {
       id: 'status-1',
       role: 'system',
       content: [
-        { type: 'notification_summary', message: 'Review pending notifications' },
-        { type: 'om_thread_title_updated', text: 'Refactor transcript renderer' },
+        {
+          type: 'notification_summary',
+          message: 'Review pending notifications',
+          pending: 1,
+          bySource: { github: 1 },
+          byPriority: { medium: 1 },
+          notificationIds: ['notification-1'],
+        },
+        { type: 'om_thread_title_updated', threadId: 'thread-1', newTitle: 'Refactor transcript renderer' },
       ],
-    };
+    } as const;
 
     const converted = toMastraDBMessage(message);
 

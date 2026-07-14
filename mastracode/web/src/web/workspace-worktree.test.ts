@@ -1,17 +1,10 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-
 // Capture the workdir the SandboxFilesystem is constructed with so we can assert
 // the workspace binds to the worktree path rather than the repo root.
 const sandboxFsCalls: Array<{ workdir: string }> = [];
-vi.mock('../sandbox-filesystem.js', () => ({
+vi.mock('./github/sandbox-filesystem.js', () => ({
   SandboxFilesystem: class {
     workdir: string;
     constructor(opts: { workdir: string }) {
@@ -21,7 +14,7 @@ vi.mock('../sandbox-filesystem.js', () => ({
   },
 }));
 
-vi.mock('../sandbox-reattach.js', () => ({
+vi.mock('./github/sandbox.js', () => ({
   reattachProjectSandbox: vi.fn(async () => ({
     executeCommand: vi.fn(),
     getInfo: vi.fn(),
@@ -51,10 +44,26 @@ afterEach(() => {
   vi.resetModules();
 });
 
-describe('getDynamicWorkspace sandbox worktree binding', () => {
+describe('getWebWorkspace', () => {
+  it('uses a minimal local filesystem workspace when GitHub metadata is absent', async () => {
+    const projectPath = '/tmp/mastracode-web-local-workspace';
+    const { LocalFilesystem } = await import('@mastra/core/workspace');
+    const { getWebWorkspace } = await import('./workspace.js');
+
+    const workspace = await getWebWorkspace({
+      requestContext: createSandboxRequestContext({ projectPath }) as any,
+    });
+
+    const filesystem = workspace.filesystem as InstanceType<typeof LocalFilesystem>;
+    expect(filesystem).toBeInstanceOf(LocalFilesystem);
+    expect(filesystem.basePath).toBe(projectPath);
+    expect(workspace.sandbox).toBeUndefined();
+    expect(sandboxFsCalls).toHaveLength(0);
+  });
+
   it('binds the workspace to the repo root when no worktree is active', async () => {
-    const { getDynamicWorkspace } = await import('../workspace.js');
-    const workspace = await getDynamicWorkspace({
+    const { getWebWorkspace } = await import('./workspace.js');
+    const workspace = await getWebWorkspace({
       requestContext: createSandboxRequestContext({ ...baseState }) as any,
     });
 
@@ -64,8 +73,8 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
   });
 
   it('binds the workspace to the worktree path when one is active', async () => {
-    const { getDynamicWorkspace } = await import('../workspace.js');
-    const workspace = await getDynamicWorkspace({
+    const { getWebWorkspace } = await import('./workspace.js');
+    const workspace = await getWebWorkspace({
       requestContext: createSandboxRequestContext({
         ...baseState,
         worktreePath: '/workspace/worktrees/feat-x',
@@ -79,14 +88,14 @@ describe('getDynamicWorkspace sandbox worktree binding', () => {
   });
 
   it('produces distinct reuse keys for different worktrees on the same sandbox', async () => {
-    const { getDynamicWorkspace } = await import('../workspace.js');
-    const a = await getDynamicWorkspace({
+    const { getWebWorkspace } = await import('./workspace.js');
+    const a = await getWebWorkspace({
       requestContext: createSandboxRequestContext({
         ...baseState,
         worktreePath: '/workspace/worktrees/feat-a',
       }) as any,
     });
-    const b = await getDynamicWorkspace({
+    const b = await getWebWorkspace({
       requestContext: createSandboxRequestContext({
         ...baseState,
         worktreePath: '/workspace/worktrees/feat-b',

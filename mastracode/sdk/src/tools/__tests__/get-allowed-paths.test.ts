@@ -7,8 +7,8 @@ const { buildSkillPathsMock } = vi.hoisted(() => ({
   ]),
 }));
 
-// Mock the workspace module to control buildSkillPaths
-vi.mock('../../agents/workspace.js', () => ({
+// Mock the skill path helper to control buildSkillPaths
+vi.mock('../skill-paths.js', () => ({
   buildSkillPaths: buildSkillPathsMock,
 }));
 

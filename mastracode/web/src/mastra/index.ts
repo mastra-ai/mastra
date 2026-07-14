@@ -39,6 +39,7 @@ import {
   parseCreatedPullRequest,
   subscribeCurrentSessionToPullRequest,
 } from '../web/github/session-subscriptions.js';
+import { getWebWorkspace } from '../web/workspace.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
   assembleWebApiRoutes,
@@ -124,6 +125,7 @@ const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undef
 const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
   disableGithubSignals: true,
+  workspace: getWebWorkspace,
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
     : {}),

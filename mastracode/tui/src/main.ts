@@ -17,6 +17,7 @@ import { detectTerminalTheme } from './tui/detect-theme.js';
 import { MastraTUI } from './tui/index.js';
 import { applyThemeMode, restoreTerminalForeground } from './tui/theme.js';
 import { getCurrentVersion } from './version.js';
+import { getTuiWorkspace } from './workspace.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -60,6 +61,7 @@ async function tuiMain(pipedInput?: string | null) {
 
   const initialState = resolveInitialStateFromEnv();
   const result = await createMastraCode({
+    workspace: getTuiWorkspace,
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),

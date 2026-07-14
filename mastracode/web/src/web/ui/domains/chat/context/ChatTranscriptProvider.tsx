@@ -51,7 +51,8 @@ function ChatTranscriptValueProvider({
   // Only the run flag is synced: a delayed reconnect refetch must not roll
   // back newer SSE-driven OM progress/usage (those hydrate via the fallbacks
   // in `effectiveTranscript` below until live events supply them).
-  const stateRunning = connection.state?.running;
+  const connectionState = connection.state as (typeof connection.state & { running?: boolean }) | undefined;
+  const stateRunning = connectionState?.running;
   const stateUpdatedAt = connection.stateUpdatedAt;
   useEffect(() => {
     if (typeof stateRunning !== 'boolean') return;

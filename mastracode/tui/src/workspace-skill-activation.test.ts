@@ -46,7 +46,7 @@ describe('mastracode workspace skill activation', () => {
       await fs.symlink(canonicalSkillDir, symlinkedSkillDir, 'dir');
 
       process.chdir(tempDir);
-      const { getDynamicWorkspace } = await import('../workspace.js');
+      const { getTuiWorkspace } = await import('./workspace.js');
 
       const requestContext = new RequestContext();
       const getState = () => ({
@@ -63,7 +63,7 @@ describe('mastracode workspace skill activation', () => {
         },
       });
 
-      const workspace = await getDynamicWorkspace({ requestContext });
+      const workspace = await getTuiWorkspace({ requestContext });
 
       const agent = new Agent({
         id: 'mc-symlink-skill-agent',

@@ -1,12 +1,12 @@
 import type {
   AgentControllerEvent,
   KnownAgentControllerEvent,
-  AgentControllerMessage,
-  AgentControllerMessageContent,
   AgentControllerTaskSnapshot,
   AgentControllerOMProgress,
+  AgentControllerMessage,
 } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
+import type { AgentControllerMessageContent } from '@mastra/core/agent-controller';
 
 import { toMastraDBMessage } from './agent-controller-message-accumulator';
 import { stripAnsi } from './ansi';

@@ -13,6 +13,7 @@ const createMastraCodeGatewayMock = vi.fn(() => mastraCodeGatewayMock);
 const mastraCodeCatalogProviderMock = vi.fn();
 const createMastraCodeModelCatalogProviderMock = vi.fn(() => mastraCodeCatalogProviderMock);
 const resolveModelMock = vi.fn();
+const createGoalJudgeToolsResolverMock = vi.fn(() => 'goal-tools-resolver');
 
 vi.mock('@mastra/core/llm', () => ({
   MastraModelGateway: class {},
@@ -61,7 +62,6 @@ const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
 const getStorageConfigMock = vi.fn(() => ({ type: 'memory' }));
 const getResourceIdOverrideMock = vi.fn(() => undefined);
-const getDynamicWorkspaceMock = vi.fn();
 let controllerStateMock: Record<string, unknown> = { cavemanObservations: false };
 
 function createMockSettings() {
@@ -219,9 +219,8 @@ vi.mock('../agents/tools.js', () => ({
   createToolHooks: vi.fn(),
 }));
 
-vi.mock('../agents/workspace.js', () => ({
-  getDynamicWorkspace: getDynamicWorkspaceMock,
-  getGoalJudgeTools: vi.fn(),
+vi.mock('../agents/goal-judge-tools.js', () => ({
+  createGoalJudgeToolsResolver: createGoalJudgeToolsResolverMock,
 }));
 
 vi.mock('../auth/storage.js', () => ({
@@ -331,6 +330,8 @@ describe('createMastraCode', () => {
     createMastraCodeModelCatalogProviderMock.mockClear();
     mastraCodeCatalogProviderMock.mockClear();
     resolveModelMock.mockClear();
+    createGoalJudgeToolsResolverMock.mockClear();
+    createGoalJudgeToolsResolverMock.mockReturnValue('goal-tools-resolver');
     mastraCodeGatewayMock.fetchProviders.mockClear();
     mastraCodeGatewayMock.buildUrl.mockClear();
     mastraCodeGatewayMock.getApiKey.mockClear();
@@ -356,7 +357,6 @@ describe('createMastraCode', () => {
     getStorageConfigMock.mockReturnValue({ type: 'memory' });
     getResourceIdOverrideMock.mockReset();
     getResourceIdOverrideMock.mockReturnValue(undefined);
-    getDynamicWorkspaceMock.mockReset();
     detectProjectMock.mockReset();
     detectProjectMock.mockReturnValue({
       mode: 'none',
@@ -476,7 +476,7 @@ describe('createMastraCode', () => {
     expect(hookManagerConstructorMock).toHaveBeenCalledWith(projectPath, 'session-init', '.acme-code', undefined);
   });
 
-  it('passes custom workspace config through to AgentController without using the default factory', async () => {
+  it('passes custom static workspace config through to AgentController', async () => {
     const customWorkspace = { id: 'custom-workspace' };
     const { createMastraCode } = await import('../index.js');
 
@@ -484,17 +484,44 @@ describe('createMastraCode', () => {
 
     const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
     expect(agentControllerConfig?.workspace).toBe(customWorkspace);
-    expect(getDynamicWorkspaceMock).not.toHaveBeenCalled();
+    expect(createGoalJudgeToolsResolverMock).toHaveBeenCalledWith(customWorkspace);
   });
 
-  it('uses a workspace factory when no custom workspace is configured', async () => {
+  it('passes custom dynamic workspace config through to AgentController', async () => {
+    const customWorkspaceFactory = vi.fn();
+    const { createMastraCode } = await import('../index.js');
+
+    await createMastraCode({ workspace: customWorkspaceFactory as any });
+
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
+    expect(agentControllerConfig?.workspace).toBe(customWorkspaceFactory);
+    expect(createGoalJudgeToolsResolverMock).toHaveBeenCalledWith(customWorkspaceFactory);
+  });
+
+  it('uses a minimal local filesystem workspace when no custom workspace is configured', async () => {
+    const projectPath = '/tmp/mastracode-sdk-default-workspace';
+    detectProjectMock.mockReturnValueOnce({
+      mode: 'none',
+      rootPath: projectPath,
+      resourceId: 'project-resource',
+      packageManager: 'pnpm',
+      hasGit: false,
+      contextFiles: [],
+    });
+    const { LocalFilesystem } = await import('@mastra/core/workspace');
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode();
 
-    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: unknown } | undefined;
-    expect(typeof agentControllerConfig?.workspace).toBe('function');
-    expect(agentControllerConfig?.workspace).not.toEqual({ id: 'custom-workspace' });
+    const agentControllerConfig = controllerConstructorMock.mock.calls[0]?.[0] as { workspace?: any } | undefined;
+    const workspace = agentControllerConfig?.workspace;
+    expect(typeof workspace).not.toBe('function');
+    expect(workspace?.filesystem).toBeInstanceOf(LocalFilesystem);
+    expect(workspace?.filesystem.basePath).toBe(projectPath);
+    expect(workspace?.sandbox).toBeUndefined();
+    expect(workspace?.skills).toBeUndefined();
+    expect(workspace?.lsp).toBeUndefined();
+    expect(createGoalJudgeToolsResolverMock).toHaveBeenCalledWith(workspace);
   });
 
   it('adds active plugin tool names to mode availableTools allowlists and seeds plugin instructions', async () => {

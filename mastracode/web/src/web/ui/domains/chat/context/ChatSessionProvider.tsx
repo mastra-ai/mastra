@@ -55,7 +55,13 @@ export function ChatSessionProvider({
       // worktree there is nothing to bind a session to.
       sessionEnabled: sessionEnabled && (!isGithubProject || Boolean(projectPath)),
       projectPath,
-      projectState: isGithubProject ? { githubProjectId: activeProject.githubProjectId } : undefined,
+      projectState: isGithubProject
+        ? {
+            githubProjectId: activeProject.githubProjectId,
+            sandboxId: activeProject.sandboxId,
+            sandboxWorkdir: activeProject.sandboxWorkdir,
+          }
+        : undefined,
       baseUrl,
       kind: isGithubProject ? 'factory' : 'user',
       threadBasePath: '/threads',

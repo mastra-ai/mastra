@@ -1,10 +1,17 @@
-import type { AgentControllerMessage, AgentControllerMessageContent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent';
+import type { AgentControllerMessageContent } from '@mastra/core/agent-controller';
+
+type ConvertibleAgentControllerMessage = {
+  id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: readonly unknown[];
+};
 
 const fallbackCreatedAtByMessageId = new Map<string, Date>();
 
-export function toMastraDBMessage(message: AgentControllerMessage): MastraDBMessage {
-  const harnessContent = message.content.filter(isHarnessMetadataContent);
+export function toMastraDBMessage(message: ConvertibleAgentControllerMessage): MastraDBMessage {
+  const content = message.content as AgentControllerMessageContent[];
+  const harnessContent = content.filter(isHarnessMetadataContent);
 
   return {
     id: message.id,
@@ -12,7 +19,7 @@ export function toMastraDBMessage(message: AgentControllerMessage): MastraDBMess
     createdAt: createdAtForMessage(message.id),
     content: {
       format: 2,
-      parts: toMastraMessageParts(message.content),
+      parts: toMastraMessageParts(content),
       ...(harnessContent.length > 0 ? { metadata: { harnessContent } } : {}),
     },
   };
@@ -118,11 +125,12 @@ function isHarnessMetadataContent(part: AgentControllerMessageContent): boolean 
 }
 
 function toStatusText(part: AgentControllerMessageContent): string | null {
-  if (part.type === 'om_thread_title_updated' && part.text) {
-    return `Thread title updated: ${part.text}`;
+  if (part.type === 'om_thread_title_updated') {
+    return `Thread title updated: ${part.newTitle}`;
   }
 
-  return part.text ?? null;
+  if ('message' in part && typeof part.message === 'string') return part.message;
+  return null;
 }
 
 function createdAtForMessage(messageId: string): Date {
