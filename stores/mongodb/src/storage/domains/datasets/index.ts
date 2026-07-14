@@ -840,7 +840,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           historyRows.map(row => this.transformItemRowFull(row)),
           randomUUID,
         );
-        const resolved = new Map<string, DatasetItem>(plan.existingCurrentItems);
+        const resolved = new Map<string, DatasetItem>(
+          [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+        );
 
         if (plan.inserts.length > 0) {
           const now = new Date();

@@ -1117,7 +1117,9 @@ export class DatasetsLibSQL extends DatasetsStorage {
             historyResult.rows.map(row => this.transformItemRowFull(row)),
             () => crypto.randomUUID(),
           );
-          const resolved = new Map<string, DatasetItem>([...plan.existingCurrentItems].map(([id, row]) => [id, row]));
+          const resolved = new Map<string, DatasetItem>(
+            [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+          );
           if (plan.inserts.length > 0) {
             const newVersion = Number(dataset.version) + 1;
             const now = new Date();

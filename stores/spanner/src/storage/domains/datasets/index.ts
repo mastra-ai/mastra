@@ -1145,7 +1145,9 @@ export class DatasetsSpanner extends DatasetsStorage {
               historyRows = (rows as Array<Record<string, any>>).map(rowToItemRow);
             }
             const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
-            const resolved = new Map<string, DatasetItem>(plan.existingCurrentItems);
+            const resolved = new Map<string, DatasetItem>(
+              [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+            );
             if (plan.inserts.length > 0) {
               const now = new Date();
               const {

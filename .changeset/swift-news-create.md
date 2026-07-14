@@ -1,5 +1,7 @@
 ---
 '@mastra/core': minor
+'@mastra/server': minor
+'@mastra/client-js': minor
 '@mastra/libsql': minor
 '@mastra/mongodb': minor
 '@mastra/mysql': minor

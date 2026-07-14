@@ -878,6 +878,10 @@ export function createDatasetsTests({
 
         expect(retry!.id).toBe(first!.id);
         expect(retry!.externalId).toBe('item-1');
+        expect(first).not.toHaveProperty('validTo');
+        expect(first).not.toHaveProperty('isDeleted');
+        expect(retry).not.toHaveProperty('validTo');
+        expect(retry).not.toHaveProperty('isDeleted');
         expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
       });
 

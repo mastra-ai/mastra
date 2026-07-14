@@ -219,6 +219,11 @@ export abstract class DatasetsStorage extends StorageDomain {
     return createDatasetItemBatchPlan(items, historyRows, createId);
   }
 
+  protected datasetItemFromRow(row: DatasetItemRow): DatasetItem {
+    const { validTo: _validTo, isDeleted: _isDeleted, ...item } = row;
+    return item;
+  }
+
   /** Subclasses implement batch insert with SCD-2 versioning */
   protected abstract _doBatchInsertItems(input: BatchInsertItemsInput): Promise<DatasetItem[]>;
 

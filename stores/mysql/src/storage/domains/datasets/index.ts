@@ -1178,9 +1178,12 @@ export class DatasetsMySQL extends DatasetsStorage {
       }
 
       const plan = this.planDatasetItemBatch(input.items, historyRows, randomUUID);
+      const existingItems = new Map<string, DatasetItem>(
+        [...plan.existingCurrentItems].map(([id, row]) => [id, this.datasetItemFromRow(row)]),
+      );
       if (plan.inserts.length === 0) {
         await connection.commit();
-        return plan.resolvedIds.map(id => plan.existingCurrentItems.get(id)!);
+        return plan.resolvedIds.map(id => existingItems.get(id)!);
       }
 
       const now = new Date();
@@ -1231,7 +1234,7 @@ export class DatasetsMySQL extends DatasetsStorage {
       );
       await connection.commit();
 
-      return plan.resolvedIds.map(id => inserted.get(id) ?? plan.existingCurrentItems.get(id)!);
+      return plan.resolvedIds.map(id => inserted.get(id) ?? existingItems.get(id)!);
     } catch (error) {
       await connection.rollback();
       if (error instanceof MastraError) throw error;
