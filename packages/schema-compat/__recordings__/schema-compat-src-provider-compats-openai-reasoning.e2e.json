@@ -5,11 +5,11 @@
     "testName": "OpenAI reasoning e2e test",
     "model": "o4-mini",
     "createdAt": "2026-03-24T13:48:10.128Z",
-    "updatedAt": "2026-03-27T00:46:00.926Z"
+    "updatedAt": "2026-07-14T12:33:12.245Z"
   },
   "recordings": [
     {
-      "hash": "fb48017f28d78358",
+      "hash": "3c6794d64981d104",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -269,6 +269,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -308,6 +341,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -317,43 +352,44 @@
             }
           }
         },
-        "timestamp": 1774572306937
+        "timestamp": 1784032322745
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e2a5ed84e2f867c-BRU",
+          "cf-ray": "a1b08c416e44698e-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 27 Mar 2026 00:45:21 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "13829",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Tue, 14 Jul 2026 12:32:31 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "28405",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "198781",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "365ms",
-          "x-request-id": "req_6efd5879903946479bc0886f509a8a38"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149998687",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_6be88963b7ce4610819a50bccfd41f09"
         },
         "body": {
-          "id": "resp_0722b0064ca8908d0069c5d31359748195b88bc1bd5a63f68f",
+          "id": "resp_0cafb36df488c37d006a562c433e2c81a38f63b226c708dd58",
           "object": "response",
-          "created_at": 1774572307,
+          "created_at": 1784032323,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774572321,
+          "completed_at": 1784032351,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -361,14 +397,17 @@
           "max_output_tokens": null,
           "max_tool_calls": null,
           "model": "o4-mini-2025-04-16",
+          "moderation": null,
           "output": [
             {
-              "id": "rs_0722b0064ca8908d0069c5d313cab88195901c4b8da6d3c7da",
+              "id": "rs_0cafb36df488c37d006a562c447e0481a38339bc670f77014a",
               "type": "reasoning",
+              "content": [],
+              "encrypted_content": "gAAAAABqVixfY7TDPNkxYwpTX21k3xUJdFLCJ_M4xEm5cCgepgKYTriZk7zuJZlgpHjNo0ZcUHon92oBjhHZWeQQFaOzpN-7J4OUqNqBrxfs6bZnDgAVRZq8pHKLoV0onU6i2K0-wWgV0e1DdLz4eLfb1u3q3t4In9xhmgurmWeLu5YoGIm0C5u1lBp3Fe98ztnRGitMPcOa82AlASJJjek2ZqVlSqAsKJyUS0R44ZaVatiArYQwtCYkoNzs7jx2_CStDzQkoEoIBeliqOh5hVtgN6Z4uurcad9ikeOCjW0P1RjDVxCgAoAVvFr-76xXTTOkxm-rAZOsIVpXTH_aDp18Jp7YuJTY6aqOwJkxxisG_tfYMbF2Imn0loDIxAjtEMlccC5E4xMfc-WKzODpX99fSnNippUp9oguQ3HY2v16uKbKZeWtI4kOqgeQRSu5RS0fpVlh9L-ejSYYj0nKh-OYXXZJ-4NN3lJCGN9PrAla_ghR2iIobAFwYDRUuNI118aI860YaaY1rpiJjFkMKDnXxMrpXmxApk2gmhGCno237lJWTqs8OKDpneiBLT8-wVHnZYUbefKRahZUT5TAbKh_Q2nubNvduTnp5cbCfjWCutw0cu89gJAWvUpOmAZskGABhTnhhRnkUwGgmQkySqunKYH1M5e5NlrYhHdCQw-gT6n1XwduI9cI_KpSW22vnLw2fc30qCfeUzO0Z1mDdqRBQi2aYdbhzjZbo43-hQO_UbgtvML2FNK2H5yqeZHt4tv88CgBaO22zPH7QMwOd4UkX8TLxtD29DQOFyCOqAaJ7IKnrQsBZy37Mjc50f2uEj8t49Rg9d0mDRGUdpoJjyJ6tAt_ZAv3m_XySv8he3Cvz0Ga3mE9uLwmA_wlPfUdgQMNKzf6vtSc-2NrmXzGJvcIXhvXzvTKewIfXx2CkNpBfRQe_cO6mwJguKa5ZcSuhpTuyPkHlEfDYfBGp7SOtI3nlGT_Xr4F8GNZgf-64fyZ0Wv4v4r6IBpjXqQMUqgB4DHJ8b7DXfn8_a7fzvreDk3DWBGiVDuBJCKZWcbNI4TEqV6O_ti2xI1YUqtQSRcHfpw2hmUehqng_Yjs11rkPhHEd1KIngXTn7JQVEuE1ZicSbxOO8nXmNFXnx_dXstObYZM_tMlD6yqXVLbQOs7I-lchaH0n6VYa59du3lbpbxi4hbQe7W7_Uldf3bGaanIpoMS26mfnaLR10WV6fBFjU885dFfPwxidQoUeOObsTU1X-JJD6DYF6fZt4LyjbSLp2PwGS3AUGBal-TWz-617rB-9yTNxxG-Jon8fkrvZhDOp6O4Gisfdh4sL4LznxF0YR2JwUQP_TMk3XygcADyvFd7A3knvIhaRnLoKK61dNs3jilgNSKAYO7FzUV-kxNn88jSmtTSIpF3HQJzuc1Qh1OFLPIqqDxEj0yhU2yPdg1jlIdxvp4ytLjHvk7CFbl0jWUhXNQx0XJ1lS0GaDjQ3bC6TbQC6p2kAVdRhePIB6My1xsg1mVQ-A96ESQpzlc1uTfXqg3TrT9q638yPZKvDGzWO4D4up5LUfFTTo25AZDtAGOUifNKsFdrJ35c976CEj_oMpPdOx0c2rohgdtGWw3NjTORDr-yzNAt8o9scDtZRYIL3WwYf6dO6A_J6w-T7206H5eHEt9eKqAUvS5NTZlraorOIl2R9OqF7RWJfEq3vcC7T2Ep4pyU3wCuKvKVN9abEoj1kR-opV0cghftFY-vgZ5CffB1lUS7Tqehq7YvMffaWFa1Dj0OhsZRcnFDSosYSye7ScPkeUST3A0lPtc1Awg8VNonnNbeHHoMJTDL9UXxGXcAAWj8-iHkXoKPAqv91f-rBk-obHyFYy5i0rlnoOpuXLoHXTzbPNqAP5TrvJ4IvPd9EFk7VCSmJcdK7_6Ykj04q_bGSEn6zgv0r4UT9Qn-orLQR0ueVTLFPR8besiD2yLFz-lfYWX-wbpb9B1j57X8eMPXalyLSeAJfogPn9Inl3JPoM5Cu5DvIGKdEjsPq-3y8OBWlfjUvpoZNEOnFXUCWoxj1mG_k9OfYEa5p_PFMLl6a7yKqHvhuIiRQdiRu7aQ3f9qdH_4762uo7JEpni5sJQcdMGtV0SLGYmQ8TTP5gvS0t88d_oveiGwym3odQFKMZ6AenbYR2pYZM6x8T_Glydc_Say740T4uU8YiA88lS8LGZU7g3v4QlpMt9FIXxjwGWHgI84P3F3tagfstpWyewqHmhURvWtO0gYuGpnZ9qtc5rK7kwdtX1bsZnmfEQDckQXA60_fY04tE3sr9KC8ZMriUQyD8ktRb3e3o27HvM8XY9W7GqC-lRBb1HcKaaH0e435qNR2SV9CumFXnAvmzf-c9JfeA5wXTPNaQ7bnr_KfakE5PLKY6m-7fmlTyhqCa5Zwc6yji1czjvsCBod48ZdtJuXvDeFgZKoVQkuue2pY2a2Gsj7528_wRoCuBbVVU1NzxJ-ew96s6zzdoq_Jpj65Ebcl9qh1XPhpSJWx7bwdEPrmUQEqP_wR5kQBEi4WO0kIiKyNXr8tl6T1DsjA1kDpcxRJTRepjOaA5ZKMxtgLO7Vj35vEFWD9foMj9y4sVRwvgzjKUZ1IBMxXyWzfz2Vn4hvyEIi2Sg0YUgSgAjjhYO45AalGrSfm_LAyAr_f7MONffqJHJHxPH3GIuIYf6Zhd1CRvdrwt0kOto_hwotqoukl1OhSDdV1DjCgBVUfUOvzn96xgwV3l9djAMMNmtibMRc8nOyf3xk48LtPgtmqCjUwDXqVM0QEHsR2MNMbYu9QInTAB5BlAPYW8UL4poYdKkZryHMsfYpuZK1NOM5NHsNp7VSuwbSPlB54Oq0ZS6DouFdYPsjg-P4HIZ3yRascJF2rILh3zmC0-MKbJ1-375M0tDoQ98_kUcfhN10zafce9eyAFd-elb6S5y6n-FDlRXzEN7Kq1rOlzOGAyySUfcPmlwpcIceNBUQ4_QUkr1z-uAv-he8TC2lAV-q95xxnKFbXlvVE1lepaLSv-6sjPai7aEBNkoRWYQiYffvc1jC0xh__v-iXzT_IuRWXm4Q819Q9so3uxEFEBYuQb3BWneo1N3ugMz5GBMnG5Eo-L8_y4uO4h5MDGYKwdlFfkyd9aGq7QNlqcnDWNnQniaUPL9FWC-_uyuSM9oT8yLiN8JWoivPBMrw6ibSWALb4EKlf1_C1GOU8sBQow76QFEjKZUgOocucV5EQM43pm6SWIGBM-LkmM5zL1YrR9U7wVi6yBorML6Vbv0yfisUfHSzebz8GHcr32eL9N2kUdb4HxRi6RabzsV23lI4nDJK3qsIXGN3cFoselVVLYkBGyWNs6qqkRQxt8hpq2t89iKs9QfcW62dKn7d-a77ZD4bS2OO_KRoiLWa224mHqeSTWvWuQW3AdW5zZJSuYvStqf4X3mUJNyK2g1Yi0tqRMzlfmsZVeWzNBy2z2yrLLxn_nQC5sWC4URhXAhE86vBii5i-OsDMlznecneggWSKtRvte4dBKmmwyxV1yTXfytbrR_TsSnY5czVZw5909S5WNMD8juzE_91otB9eYO-BM6nAi9TjlGW_na3SSXmfXHzBHv9ozfmiOJWjJRewPVjPCZZFdnpqf9r_1wASmeQL_GIj0cdA3aQOpvuGM4sWGeRr53BD8OaAm8pz8BVXrYVxPvomzRBDZ3O6g03le9KvKk4KqtOcITqAcFs9ky7Hyc2N1ANeRtk1VTUjcFCrOkmaPYyUjcYGbCbactsC4BNt3U9_I38GV9bH2p0swkBPTIh426g8wSWFGqBvI7Osz5gxLjVo-L9y4MgydQEIb6LWWmUk27Y0OfYAhK7P-jCObs5SuVTgRLtK5FyidBtYjebbCJFgIHUM9Oglp05GL-nIC5PgRrM_mHjlq04e6Dm7pWAa5q8ejI8etqi-qky82CRPB_hLgfn-5j6F3-DmMC3zh-mT3lJaDSJJ69ajZSo0VhvmHrrWdTJB8BxhzT58FLAW9QjYKeonx-Ek3TkVuU3imgZILePZVfAQ0vm1vcnZWQ_ZwOSENbu4KHAwA3Rg65ZI6PgFz4820AQ17t0mPg9X9MgrLPZqKJ0eLpk4JZRbHCb5bEQ3LHc0ijiDTWA82gCDULcofmbNlWfWJpgRuT1JithD2nqlg5so6t5JqUwWmqFiPWx5jjyaghS1Nq1MdqzQH4jq3GoYzxza58DpyO6li6l_QaACzcNgPxItIYDLqJrhi_q3oAcGL8gLiXaE3B4s6QAUbDjoRr81jsiTAwgtTGVyVbL4E2otixDINXEojrx8lSu8Y-fovy4ABJpTkOBcsgYIwWfIrH4Ji_hJE00WysyqeFDfYLhNWNZ4ZFypxchOYTUD5-DsO-a7BBeLsOlUXLdypKSeLLaeKczCAIICxOdXClC5BQHR5StwtQp5PMT_7AFhB6RpugPbKl0K3jm8FcR3m8owMb3QOdWlcZSHBNQTh9GRod8HLEg-zpZFlX-OZguT5tovxXLNaTMFhcTvb7aNkkMvD-Vd4mjnq_sXJa6mDD4yyINrNkTVyuU1Vz9wvDITrURHAiftPu4ijetiXBa2fZBkL5jdbbwXhI6E5gNbkhnXdvchXJS3NQJKXDVlQTKVOQDmIyW931_DbcH7gmnyFyx913APpLh4ChFETGg3SD1xRGTYiD_49IfxS5mo0wNtxjI4Scg2Ah2FfiXErRthg1qLSr4kW6yrc_Is5KALmSEjB2ngt29mGzde3-P7GXInjCTYQ5oPM6QCZErHb_clIgG-wPNpD2pxd7p9M7rMs8ljnoutjjn8i_oPeDHUbzFPfp3yQG_vSuho03T8AOUeRfbKrI6J29D1QtCxka5Izr5NkM7XcbKSwg5CNTXwtBCSHSxUfSxj9gshzACC1PqbfJOra2dS-4fqFvbqQAOrNHVqWDsof2sFED31wd5GgUzbTTDA43SSHiMqM6OD7eDxpb-y7pD4kUJJhQ2LiqmjxUmtDZJeSmtjUDDXATgtWS3TRIMmDLYdr-iLapJhvShaCofgv4dybtRxW8K65sn91pO-YFOSH4FW92J_7n5v0NXatxFIRuGzPEzxDk1mlb61qx6E-j_Zg6c_ZFJpS7lES0JrjqLPrIVtBJHn1HoZFXeCWLS08tTyowlJhwJMQa4FfKlc-VjKOcGJMN1kkt-5E00mqgdQyp6mg_CbJ8ohoG8XrUnWKv4k1onPxO6UbJftye-3FW-wPdSy5kp2jrVDp_8-YU5B6zJm0UHDtM1Bt0UDRMYuglXNFCfjr3lZlRdETP2g8KfJMWgpjYphp5Iqn-52B4-CbDgnj74BKrmrF1UBlbCYcT4967vQoiOJcSrRKbLy8syQ5ROeZkurnzgPLxR-N9F1TzE-hEQt_HLVD4TfvaYvDt8vT2s24iBkq6hPvVMIZm2P3PC3AsASzeZJGG6uOd-MlxgHuY0LwTd2VwVGsCIA9dyCEfa5wC6FUYnkTeOkXjif6pQ0fii9N8kHo4XapjqdEj6qn0nEYIDbs3d6YchSyVGLdgGaAmnd25uQ87ccGO0Jo6rYYk2gColaWtifhHXZURwPXPmV8PiyZPVPjUXvOjyovwAxBI4tm1XYXehcrPPrTeSJLVv46WSbyM628R67qgLXz2TO9fy7dg5mJq36tbJIJlfLsK1jcfVzcc-ah7UtufL-vXrT0dWZrBfcjxGqZ9nadOZGfmnQc_zWR1gx4XgoQOB-McVoyebZnqIUJ7qkeow5eACYqxIeMXoKjGZPWyL-u7iJ6bFVaEr7DtV0Bc_OauSt5ri0HxlzEJdUBgUzxD3E9GFxrzWyaebmPuF_5_ajd5EkfCfPJHM8e48EACu34EJI9Ts04n1nKnnmdHnXQUa4Gy1Ne6t5_JCxViUEe-XOWr5Jf7r1OJ7iy7AJ9jta_vEcxDnpZVwfL2FA_D_f3XnFjDQ3FH40j5qSY9a9MAcbNyhyxDI0wuJSb2oqBwZsla5K6Ecb46RuK7lDkVs55nL11OMgHqtcv-FvL3Foo4E6mGX6vcV7uCipIyHgwM6F9MLHci3G__zHUEEGEgDfPSmIi4MGO1Kj3HrxTyNQeTF4rgvJT7oU0jVDiajLv8NSSQQG6CMHdV9PLIY6cwGoE6o3JbVF5DeSNCsy9tPVMJHzevbQxEZ3GEw4OfAculcAhDFlF5zTGXVMHB2QkzJvUY8gKEUjyb3xhLrruEd-mxhC-q0ZnFAhPlZsgyhmYx_98VjRRSbR_aLiLNQ_H4zrxlrUMklhB83yXC5beCBFIid0TC1HOCbvomdcO-90Rn-LRixZlz0lR2_U7f8iy3NrC2dtRHpMAwLKgFz8J4kKASkg-JYFsyT3wKJL64iW9CwairR_abxh8nQJw-6uJ0y2ngkn0vP9rDoZPEWedGobwmBrPNX4ALvyC5lmz7GaTINkBbhN3bSHDRx2Sc5LAw0gcUsyljpwg_uyFusuHNn7g2Sd1B2LpWFGi92mt1wMVQWTHY-M59sQYy27Z744Xhc9pMSFOpGkbvJ53S5FFfkp756Ta7JozOnn1u6cmmsGcmuT-FBwv0CmQqzq6ofBZGdXqbEdOfYwOeHp60tKcucyWm4LR5qDOOHAYKhccxubVQP1776zHzEsBkoZnUDVXymvuXJCPGGln6e_Re35wb1mDI8yANBOXZGlBvVXGdsk3eX3xZWvneyKf6fg0e2t5XD4J6L7OXJX6bkadLZVy3uOSkClcLsfCI3QB63DFxkESaZeQxwg6g1ApxcK188ISVdJaeS3cnqEhHwVm7q2bIJwW_11pCcMHlriwh3VIlSQbfRt8k4PEfk7XY6MEjuClLWkQgVy1R5zL_7MtSo8kn9LKY2A5mEW_pqjDq3O7xNAPyLHj9IOAIQLYVu2JtU_CJaVnnE7pQs1tEGH8V806HLR9HJrPMTJ4NdVnq4ncN0J2fDi25vzDSLFhyMjl0XPbkjupE_2Zl-wF_HSQhbtN4nN_TfwGlq5xHqUs_HgN790Dh0EQ6xq0Tdx2oUasXOCn9N-0BI-vNcSyQJAy9qBra9y5J164G9xcC1iWs6qg_3hwFWBZS20PAYhSAayyRKLIMzHhu4wCmd-QRbAEZTGBzdYECDzIm7tUB6HVU7sUhdnCKYAXnlVQcILhM1C4_1zNPyAjpqC8eLIRi5VfSY5xUVz9Ij67vBywVC7lbWhE9BhGYIHLtLuR1bBlF_akXAwJD7090Ic5k1YWiVWmm-aEqkcXuyHVYHOErreztC24Yryi0B7h3ubTxAaPY6FTQG6hzp2GDgnixdrFDIfOkob3ktoMI6O3tLMkM985BE20RZjHPwohp0sF_0ariI7a0F1EtOFh-wlaSnTt-K3I24oBR2CvnHmYj_7vuzfqrCQgUzUbPLiBRggP1sVRXKs3EnQAJogNkhN83iBWZKVcmJcAKhqIk44vhspdHOOSGJtAdcda7_W0voI8uTnIBr8jxX6hpiOmBwQ80BFm78FNwX3jDJOeDyIoHtAMquVSkUB4fux8NBA0UDMjkTkRKKK9iT6StYYmGMafG3AHAJK50zDWrU9TIsOw8MyRQZVlC0k9RxJDz6bFGSG1auMqkQRqn_xykb8IuqXLG2_qTnNiGvcx32FyVhSxQZ8opugp84o7oRPQ8HMssVJG3jf5Ya-6iyZWUZHYX4sqtQ6mZUC1iOYQeCNWwjciIqaS4eAwWkV6QfoVwyZJNsZon23Z0qMRknUJtoObDz8wh1fLbyBGSx6JLtVbdpnWKE-HOhR5LQTSiVL9OK7bp-G24_U5OnA2N7r5XbFcrd4mXQ9H3OtzU8NC60Qnp-_0zjhUea47LE8cX5wfEOTAZD0C0GCG4FmXWCkoJVC-IZTBxT2YBARe6AKY6BXTrGo_RrKyvWWphQmAFLneO1DZc8fBNA8qtrooDjC_nUMAI_plt3kx5EA_4okpndz2vb8Db2ZWuakRLBSS0sr5iGYcOay1a3FWk2pl1ZU26J2QPFAbS4uAcO6U-XhcgeHsZAAYFRMbadYe2eTsjBX61c8PbSqgbh6Z8Dz8YfEjGlrWZoo8jeocUPSCQ0XaD4Xtti0XUx8vMCuXQEnzPBXZ-H-zRkkE5bYDjfsucOyMbMIiSdy40wyYqsxAyE0SkHz9RuMlNRRVFAwBPL2eEt0GVQ3OrTOb2fNqHEnlUPZ57s45Wl5sw2M_ndXa0Kx8F08QlZWHgvQDLj_7Z3TkQ0ZzN7AL_tnOVYMv3aN-EVVOuqjwHmJcBSLMQFDpVE6wJU6HpCizpVe2Ql5Dxa6oX-aJtZCoC1uAygOqQkb5au5343H85n8B8_JM8Qo8ASgM6iPkF3Q5jTwyoMxD_P-fecLb2xJC8nBvpHYw_NZt3Q09I7WOT7l5YXTGj3YcPFv20md2YJ57bDUgrL4fyN6u4HhgfNy3AUp3afMoc3OX64lLN3aJzBLvcfXFngrpP8nkaIexWEzbcWM8NcWsqc4w0h1Xs6pmfBpEj-4p0AWztp_46Wvryjj4QY0fu043L8Px8T9CE7pG-NN8JOcITNQe4og6nKaQNkICxj0adXKlzph07mmLsu1DNcSc9K2Ai5-uE5jj0GlNP7maawDoP34ph0F4L8zeJVFqSsd0TlzPqxH4jVpkcbhyp__XlsLauxXMW5mdpQ4XXfQWn6-_B8vhFidOm8ev5PTg-CsFfMTntyNzLPI3G9J9lxiHvsAqK0qDwrbcpkgWYaPieTq9Dpu6-mHu7Uf_31QC2pHOh6Gkq5c2q2VJAUAyYCHTXmHoBIvmHJ55yQU7VhjAsoorqymfXxRfXf2v8d4qTQZ4W0b0wqAH97hk4myFZuR1UJ1nXV_RJ1VW5GQrkxhcav6JE9gIbwxIXQSVjXbqgFUii8bzWOwvOHZBLV5ii9CiNLk5s-XI_6Frx0beVPKEWJVZ2kpN-lBLjV_JoJtmkXGvjW5PuPMBOXVVqGJcn-Rq2limQ5_godHgw4jyaVtgX1UD8VoOMh-igo9sEAV8xObYy-Wp_5d9v6Sy7AF74pj6DLtM0Ap_S3Yc6904pZdr1TwX9PFYmRfa5tQ7FIEjKWZsY0sL424QJek-J2bARuH6PmeSZi",
               "summary": []
             },
             {
-              "id": "msg_0722b0064ca8908d0069c5d31ef7b48195a80103a1bd6eee56",
+              "id": "msg_0cafb36df488c37d006a562c5a064081a3b90f425e793b2bec",
               "type": "message",
               "status": "completed",
               "content": [
@@ -376,7 +415,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"HelloMax\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-value\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"a\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2023-08-15T13:45:30Z\",\"dateAfter\":\"2024-06-01T10:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2026-03-27T00:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"sample\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"default\":\"\"}"
+                  "text": "{\"string\":\"Sample text\",\"stringMin\":\"Hello\",\"stringMax\":\"MaxLength\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckbq8y1400003n5ku8o6u3nup\",\"stringRegex\":\"test-value\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5.5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-06-25T12:00:00Z\",\"dateAfter\":\"2024-02-01T00:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2023-07-14T10:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{  \t}, \"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"unionString\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"record\":[{\"key\":\"key1\",\"value\":\"value1\"},{\"key\":\"key2\",\"value\":\"value2\"}],\"recordEnumKeys\":{\"A\":\"valueA\",\"B\":\"valueB\"},\"default\":\"\"}"
                 }
               ],
               "role": "assistant"
@@ -386,9 +425,11 @@
           "presence_penalty": 0,
           "previous_response_id": null,
           "prompt_cache_key": null,
-          "prompt_cache_retention": null,
+          "prompt_cache_retention": "in_memory",
           "reasoning": {
+            "context": "current_turn",
             "effort": "medium",
+            "mode": "standard",
             "summary": null
           },
           "safety_identifier": null,
@@ -637,6 +678,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -676,6 +750,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -687,18 +763,1641 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [],
           "top_logprobs": 0,
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1012,
+            "input_tokens": 1107,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 1923,
+            "output_tokens": 1986,
             "output_tokens_details": {
               "reasoning_tokens": 1600
+            },
+            "total_tokens": 3093
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "4374d2909bdadd8a",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "o4-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Call the manySchemasTool tool with valid sample data."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "manySchemasTool",
+              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "string": {
+                    "type": "string",
+                    "description": "Sample text"
+                  },
+                  "stringMin": {
+                    "type": "string",
+                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
+                  },
+                  "stringMax": {
+                    "type": "string",
+                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
+                  },
+                  "stringEmail": {
+                    "type": "string",
+                    "description": "a sample email address\nconstraints: a valid email"
+                  },
+                  "stringEmoji": {
+                    "type": "string",
+                    "description": "a valid sample emoji"
+                  },
+                  "stringUrl": {
+                    "type": "string",
+                    "description": "a valid sample url"
+                  },
+                  "stringUuid": {
+                    "type": "string",
+                    "description": "a valid sample uuid\nconstraints: a valid uuid"
+                  },
+                  "stringCuid": {
+                    "type": "string",
+                    "description": "a valid sample cuid"
+                  },
+                  "stringRegex": {
+                    "type": "string",
+                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
+                  },
+                  "number": {
+                    "type": "number",
+                    "description": "any valid sample number"
+                  },
+                  "numberGt": {
+                    "type": "number",
+                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
+                  },
+                  "numberLt": {
+                    "type": "number",
+                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
+                  },
+                  "numberGte": {
+                    "type": "number",
+                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
+                  },
+                  "numberLte": {
+                    "type": "number",
+                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
+                  },
+                  "numberMultipleOf": {
+                    "type": "number",
+                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
+                  },
+                  "numberInt": {
+                    "type": "integer",
+                    "description": "any valid sample number that is an integer"
+                  },
+                  "exampleArray": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid array of example strings"
+                  },
+                  "arrayMin": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
+                  },
+                  "arrayMax": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
+                  },
+                  "date": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateAfter": {
+                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateBefore": {
+                    "description": "a valid sample date before today\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "actualData": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": true
+                  },
+                  "object": {
+                    "type": "object",
+                    "properties": {
+                      "foo": {
+                        "type": "string"
+                      },
+                      "bar": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["foo", "bar"],
+                    "additionalProperties": false,
+                    "description": "any valid sample object with a string and a number"
+                  },
+                  "objectNested": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "constraints: minimum length 2"
+                          },
+                          "age": {
+                            "type": "number",
+                            "description": "constraints: greater than or equal to 18"
+                          }
+                        },
+                        "required": ["name", "age"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["user"],
+                    "additionalProperties": false,
+                    "description": "any valid sample data"
+                  },
+                  "objectPassthrough": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "objectLoose": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "optional": {
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nullable": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "leave this field empty (null value) as an example of a nullable field"
+                  },
+                  "enum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "nativeEnum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "unionPrimitives": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "sample text or number"
+                  },
+                  "unionObjects": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "inventoryItemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["amount", "inventoryItemName"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["type", "permissions"],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "description": "give an valid object"
+                  },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
+                  "default": {
+                    "default": "test",
+                    "description": "sample text that is the default value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "string",
+                  "stringMin",
+                  "stringMax",
+                  "stringEmail",
+                  "stringEmoji",
+                  "stringUrl",
+                  "stringUuid",
+                  "stringCuid",
+                  "stringRegex",
+                  "number",
+                  "numberGt",
+                  "numberLt",
+                  "numberGte",
+                  "numberLte",
+                  "numberMultipleOf",
+                  "numberInt",
+                  "exampleArray",
+                  "arrayMin",
+                  "arrayMax",
+                  "date",
+                  "dateAfter",
+                  "dateBefore",
+                  "actualData",
+                  "object",
+                  "objectNested",
+                  "objectPassthrough",
+                  "objectLoose",
+                  "nullable",
+                  "enum",
+                  "nativeEnum",
+                  "unionPrimitives",
+                  "unionObjects",
+                  "record",
+                  "recordEnumKeys",
+                  "default",
+                  "optional"
+                ],
+                "additionalProperties": false,
+                "x-optional": ["optional"]
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1784032351482
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a1b08cf4cd99698e-CDG",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Tue, 14 Jul 2026 12:32:47 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "15899",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149998910",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_da223bbe7c52493e8faabe92a1689170"
+        },
+        "body": {
+          "id": "resp_08c8622bd46b4b33006a562c5f91d8819dba8cfd4f015a97b9",
+          "object": "response",
+          "created_at": 1784032351,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1784032367,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "o4-mini-2025-04-16",
+          "moderation": null,
+          "output": [
+            {
+              "id": "rs_08c8622bd46b4b33006a562c602388819d802da52aed538d4e",
+              "type": "reasoning",
+              "content": [],
+              "encrypted_content": "gAAAAABqVixvQOtOooZDQzZo6zyjl1TvndRx7IX2_9HPu_AFWo6iBDVAqj2lm4Otgy3jt4SFYb1CvsJ4z5HAQiHdOhn-JmQP9qRzA76G8lOqtR_XtoqNqE2jKgzRlznGvppwTwHuHXlEw_UU4M5-3gqJTcTWpGddahCyGjo_XiRRGnkqGTAStlma9c0o8OskVcq8Tv8p4rMHIoRIoYN33yfrcuUvVicKkKfcHCVYcBPstyzxk2md_YlPZ-ov3c1GHIZ95ykfzoh5EiJbdTBtqDRNe5G0ZArF1nXlJI1Ian3Ev1me-bWGQqND9_YipMnZXmj7aJqd0JH2PmNTw3Kctj7f7Vj9eaoKz7V3TsRIAUVinQMl1CUuHXWi5GnuTz-gVsfM3wiOrbC5-Z4x4i9ezaPg2fc9O6aHuq48SW66mxW6cJITKyPX1krj0ErCsBmRowztTR9_EFB_IfKanmX7K89JnpN9T3fiSvjBL_nkb-XP7H-hWmR3DE6NkoY8o2Vs62pBLmYqCMH3emzFOwl5jR-QX1h_ZSQ4-9BFEShg5EzQAe57q783Rc7ffr1b46r6UFYIP3IgK0qYRDG4MugtVwuJmv-RujP97zlQ-bWWXOePBRe5hdKtKOxeaTdQEs3Jibb578QLCPPHJREt_8J9pszDbY5M6grhwT86NcHEAiZql8WtuAJXVKRgKMFIIkMn9FJ-hH-aueiXEoBND02TjMLg13VI8dXGRmVUfI4h7SL80DZOXO9S5JVbEDLe4zPTkcqJByYl20KWA9REBsiW4r_5J7lRSRP7Zi1X3oH2lfHM2MvZh0_usXrlkBlfIlPwIHowbyblygVfIAdU6QGzR0VuZEaCbfgAc4elnoTO9zs-CFHTAnZO8vIniIpOTE4o1uJicv33w7wY11WVZh-fOGUGOMFbcjF4DHsF0_-GvfSnuvN2E3ydjqrlpU4H2FMoogClaTIP1CeHhwRX0EU0Zv8IwPLo6nIqDyNE-3ivGtmZeIk1afW8R13z6ERMLOjKIo0iP3aIoCIm5YjYuy1DJcBP6Zik2XAyDfx4sqUd36zXWndNhoPi8bUNB_iTXzLuAp6UujiABxqXD6zJotMGgmZE7cwA5UeugZk92MH-MI8YfhU0r5XlDZYAIyzvlhi5r6HjarCuvCumKOfF2Wo-xwYClK52S7jYwKd5KHJ_hcKFW2Py5nhBz8aD2SYNfYhdwUEBR6DcU0cO1HrlsKTzkQMPNv71-Q41fKvguuFjQaSE_ymJkkn9ws_ogdsKU8PGbsUqlFobnzPDpyMRSUvhhKUKAkoOxlGqhZRL1cAyIQmqxKnAKiJwqxPQCSSsZ1hEMQx6FYyS6s4xDWbh6uLcPHy2CVww6HhbgpOY9715RoC3DIsoi3YxSZ50qZSnqbQLkbtAdHQNKiDIZ9-4A5SyFilK2JvkCvoiYqB9TGNeqd_HLC-uU8dcgN_R8hMfZZLouFgi6sHpM31ZiHZVSPKFSIvStzQPvdZemVqndNS-Ci_657II7TWbWKVj5cbvBFq08WXCFDJ4EcjzSA1BzUSXKfvibdOHhpGuABLtm8o_3qj9tZ9qgGDpxqA2eFtjGpd6FWh5YunHW7xVkDxUv2uw8QFsvKejdxYkshv5rcGhNDMiFZZKpe1_XovNHBaZO3SLKnGzW6-gFLMzcHyp__3SAXhmhJKcz28vj_JFtDoSJJZ7b2oOJRrtTLe0yGhXWuus1XoVRPQQfcgQydLvBpW2iTKL6UUDQlee-reJLmxtj3nKELYS5XFquVMCgbvFB1VMPqUYVPB02ydHVkm8wJ20ulVObluUtwYZqjOLGcwDW4RPU16-ahWKSs-URVLqmA3v-kbjjK_uRb6ms5wYzZklIund69iyrPtlCGybmXjlsrjXC4oI9cps-2L9-KYy7qKfm7fYJtyhsq62FDtRYH_gjrcmTguYK3oorb1dJBM7R1QIPTs-3d1UX_fNWYOy8mvOpfwT3pip_BJ8GAOr2LnYEPL22HqKAty8off6pFILzFBeh4CVr7Iu7MI-dR4xyZLEMoWSxBm6bJ2eU88ig4rJBuYfgJesNKoCMPymQP4HP4TtA0jo79v-Wr7K96q8VOeBhjMPv65hkLgruHUXbSmTGScJlkl5-WgyjuQCJdwyh3PL4oRKXq_3ErvEHAuGkIOWdq-d4jaunOvPgrAwF6nuUkLFBA5fb-cS07EE5xmH_NEzL6M-xnvozUSCk0ngtjeQRKs4KnLeMFm1EMl2k8N1No1GFF0nPpY3PekxGJEOGmEavNK_axA0N23RJYdhzHprjod3uZJPvLJJYko43GlDTzv5xyC4aXwyP8pX7RlfQKra_UF3rXgTkSsy3gMnO2BmbqI2YOffxrJpnELiA2Ivuz-FHtm1g1i1D0PL8XRSYp8ESeW0AzfhckjzWlM1O9evp2lQFdSz4imczB4BLYcmfyTh-vfdbzqSFQ0X3cPfCUIGhPJ9lhZH0mLAOTWnVl5S_SPGo-7Y8gWl5xDB78VaLL0nrEFpaTZOpX62UxsbCZKWnkjzsAIoKhevYDE7BSBPCvtsVj46eM5nS45QSL7ZoCqqlC8lzRwOTyVeIUuWECxZ931ybWvMR9L2DOekMO4XSTWN8oP9svajUw6UcggXS0lKCnM1AF49eLO18V2FKJ2hSA7slIv--YQ8WNQxauQHD71XufdJJkAw9EiObnRuWCW_nzI1hYEgR5YyaFijBV30q6XEPX7aBL1EvAkzSO8Uf-GA7nm_U1Rs9M9NCxMtTKHLXOfw8cwbBXwEoDKubUczUozKPQjoI1SR03n17YPVt6be8yiMwbiE3i9rk37SvfBMwiVSeCZj5YnMAo77BKHIB4NjwTt5kT2P0pbwe1diLGZL0zoeLMrNVSuLRuqj686lBorhzQT4PTBDO_x8ea-oyAr7h7oDFgYqf07stJlRtpKSC2IJqeSfykMx6TLlmjxkkFvhmGqLJuSBztkNxAZYaZKaokCWkd6uNEuW4AX_C_tQXg58wLmJE9Z9amy6ZFbQmuoDxcwCPJvdZxyalhO84hnoktaLTzWdDaZ3GakF4_pr1V14yLAYxOkt_-kooYVEBFUXGrA49BhLRfGF5uR68HFJS5U1tmOnZC9fDUU211m1FB5SISpMv0oEOqaKSDU4nzUzjm5EoXapYqsgWckKr6GvYE1NiZB29ssyWTW2NqO-1Vzpc6WZ3PJR3qWGji1A9CghvOjp5tWa8gcUlcHj7Xa4Ldbv3ZWuyQl2_VbLJsZL70-h0hZs5NrZLexIWnw6wEDJYuKVy2vz0LKopFxCAjv61Dl8kTJdrpG5GtOBkiag-oRYsaDCFDSZjnhDn7EgtTDzYIG5_nb09FVhn1sm_z7bYpy8NwRs8lG8C4Z_t5Ynr5X__habxQzcLyfsAdMO8hfHzxF1oK7KFTYXgtTmWM4FSw01Dx7ihSgFIx9ZROPxZqnvjjX2WlwIgMtr7rn6F4XsVZbocU7XDr7RPeK6C5oKUGqOere4GJR75fbaSOyJtQDhKaoEPUjwuR-sChb3XIlAljZDsAHt6rT8lJtShYaFkTCtCqKZcsi8nRlHJXS6mpa5EJEM8srbh7xPL7B9cVEQFCU2ZoTk-E7ix9MkGtvKCZ0QnQohG-Gy5FpgEVO39gANpiuQnQPIjRhs4LAjs0xq9MbB4VwNjPyJORkLDVWyLHgrMQ6N2Eiz3ceilQwltJ9-PQ5wjC_uAs2O9_5cYcYyGEXtet43QRJwCPj8epGhlIyBN56qMwVg-cBil0oJhzRIs1qfTlS7G_xhIyxM1hKkguN20kGj_ATiU7GlX2arrQkqjPco2DhNHvEBpJphq4NYpZsMZxx6CVqrP0Zff_PIJ2GNTz-5DLKW5sSGfQlFkH-wWz6hqqS9op1z_JwqX0MmU4o5Dk__snHUP6hCjJKO-oC4y2LvY8gVqlR8zVOQm6OOIOFbdoJw979miewcVAIbSVwhXP0AjVQfN33plp8m9hm352fJ3Oy0Qqb4lBLAUeweJcth1B_to-MbSvhUoSRREckAxb4XtFjZgs7ril_xgVgFMbEE46E1EKIgu9iFWh2Z7yp-JmakBzVA1PBgDa54qT_QjAKowr8czzjkIzkgYc1nA3_PfNDFSg8hNfox0Vo102L6545Fnb70FSj5Lr7DRNhOjbPQfxwCq0hTRUElWlojoIV1c_vuYBEUd2WM6IiTwdlZRAXr4VoyKGQ0ADTGeozP--hdA7XrObcFyFpJo_Mj8v1LQHvP4tp2z4QB8qL8vaFJ7flFNRVxZ5jAqmE5ZoaqWmDq3HsQqG68kq_CZ4s9ef5QJyIvCGDM3rkctry10fBLYgwS4mn0u9Ej4ymat_e8ghpbwEYrrC6ZROjd6iC1QFwMQBqZrz0gcmY71hqHJvqdpmon8Qsks9JvO4P6-gZLHQWVXhLijFnMQfhS4Q3kctPJGCWtfi3wmzFsm76iGBLTIXjf4JNdWyRLlz6gqqOjEweZgvHvWCAcW5ogy0tY9f0gSp24H7X4gjPZZvYR1LrsKC9QdRIJ2X5XBhFIa2Cl-m6rnFENb6rCijLtOkuvWjz_MgEU00nFpZMKQNRvaftT1osO5g6b8DJlzWdb18RfVq3e36lNRoXsfRrk032ml3SudTLfcRvoGKSHVi-zU70_UR-zEGAHoc1GpfpmTw24e3LttfeZiEAZPWgfnQrDwW_8-q2bM3BWJl4a6jS5PpZmYGH9yytJqClsXKC5-JoJ2g7SrAUIL6Txqj_Ihr7i1A7FpJmLeAiZTbWisuJLtbnfqI7c0A6s2qk329Ca3VH8Kk9gBEbObxF_t_leVuSkm0I_ItstU4IHhqiwzvid4fO0b4i63Ba2dn_LUW5DkZOyk-jHzziW3B0_U9__XWLjRC998KnLvI6BqIKvqcnVn8KtWQLjWNaxKR6AStJplo2ZD51WaelgM7rsurMi-Yl_bys3LM7EMa1ovt-x7eiTSChs_8MHB5Rlf0350KBYrFS5Sj3V-1AivvVlgWqc7NJHjS-SNs7Q1758Y3WFNN5sk3wgylUrVQNmn1RafT3wpUCG8rhCEkeFLwyMOTSyUfOlIb89fQa6dRtJFW0r_1UW5P7xbt4TnytzCrha5l-GeOQwT_T6jcIefVBMINPafFm0X6w_suCYz2r7wATFSCzv0nJS05lua4WHpzvbT6mIc3weJ80876bn3CFkTmrBSNuZsvu1uGcV3ddyOJh23Y_faBjLryKlhwTumzYQ2SmLnU8LrdWA51XlrDAp6nQXKzz58SSNpPRJEPNHxsTRW4dM6lAw-o6uvyMvuytVSpEqi19PFH3vJcVU4dKvTnuaQOWqnPjwOJfS_tjKj4ARAiqRF7kfqW2V036UF6Ris-bu5zHQg_f_CfYCxWqZ8cUi4Om0C2EXzApaceJo81sIoBroRyEvD8BmJVxI2yBJjVqabXCbBdjIoWXYTFBw9kU9zVdFZ4UZoRDsscq-NIbIbdIcAg7GHv84zaahdPkwaHfD_uqzhyrFOTz-Sqkzd7jdpibdmdMs237YKUG146DuSWzlaewR0itqJ0kOiaX2P9fWM5TBz6OaarGJdCM7BTrMbIBDMlpFb_Yo7eT86kvrXS99WPMUyxI-6pU2LS4LtZB4XrahKH5byjF8J_n8Q2kyjLQ72OJ3ROuw5jyQ6bw3HLrgjBtYiumOAQIy4vIzHvrjgtZYtEeOw5gLgl3DlTt9iHgEv7MrhUFi_NDZ6poYB19ke8bM1ahiko48VKk86tRKn_FMJGejHWebxuK831HsI3HZjZAkWCbuCzGwpgGEEaqHV492W7fBVauHmpPtRHB_TKAXZVT7r28hhv1pm4H9YCTjP1w3YYw0fUVq_3RBOZ9Tqyt9-_IzWoPAZ0J6JoJA2kqSY9WpdFS9N9yHWZhRIE7pchvmHAeIeLHWSwtckokTTqrWhIvX0xg44-zCcsww1Px1Md3C28yoAC__pYOXbr4X71rzayu9WxNnCD-tW7iyqg0IoEqvKfgNAUBLpC6YcsWxRdiz0X9oAVhQ5uzB0YLPoUxoZyntAKoJmN86l5Zg1z8zBSZ6fU77cnlq2qqZ_VnrA2vz9VNS9ZDwcZX8yr3VLP1nhfLN61XtopHOVCg2TML2mROM-w4ZeGvCEIuYs1OUZrKXjbfQukc4aq0y3vjfYovFvRwUGvR_HRaaa93Bi6N8x_P7NyMtutv4GHqdeTX9FHSNMnz4ol9GbHtfRMj15G6OHP31bPbgGg_0cmgUta0TaroAdgQLxfzauDCwtZle2CBp116MgPj45lTPn72zreVHKudBJGAYFobJdx4OWy53P2dQ9iMayps43BVlZ_1_wPSQooizavEtFv3r7xg2E-iKvzO-MEvA-2h2zhKwbhi7vmKE2XfjGhWVB0DLJEl94L0cdFATCnxNLyEBlUMceVbhl69SiEAfHDkXQp0pR-GOdVlJJahBON2-q-IlpBR3ZYpMOK47Ul4el0Flm_2HiXsp7aYwxmxM9WXPlZILGoG3qNXtzu_RliO2W_ziWq3vMMJVIa7gmVI-83R7I0PPao_Ahua0ezOpKs9BiwXdrw38qkyZUxPK-dkDtHEtPa8TV5RuWyHXpmCCBOAsqIGYwJZ1K0ityMKFrpjHgRGyfqccpN4Iol78yqqXI1eNgdECmLqLbtBTudneqenD9OOE9v9WjFWbzQrQwYA-tJAtD2RhsV07s89IsG4wyoshr6TxOH2KV5rLBv2AT2NGsdnQLhsbotNmF5eChoeDz0dy6IzJ8peLWdyd6XceN0tQQL3Zr7jxsf9MDnI9wW8WMJ_Ie2Lsmp2wtRY23OOBcWmb_UIZw9s1hde0HVtoqysbcfyEpIWTGSbi4qAKJNxp0xIBsBe_lHYlweglyxpWqVMEA0jQNJpRCMmtW94rFxWJ7lyvqNElIyV9_lNH8lzoVz_Q8sNiE7jyd6JxFu3icWV7d9wj9rSyVxBLgZi88PTsSly_RzLrewk1vyZw76iX1_EMbw7l7FIeQx6kYCco98k-se74PHPKEK23JknLAMj2OY0zQJSFejZGUQRHDJsoj-haflfH7xEp0vINDVyLkdBdjkZMezUVPTPoOqrQD5WbhXZbaHzGp1bOaIz2YPwh3iczP1j8jzxImxso9D9Q_SX0YnxTGzPQLGBV-WldTmJL3D8UBX8x3nNXlY-gpHhbEq3PelwfE-KY-GNvhv4sPomLPu7pb1fmbfGFuhKAfdaeELnDBxaqhfJI-eYC5vv9FfDw2QzyRdEjzFMcYpQDaetmnQzJCozhUDClZcTiRrWslkU0YvO9K9yRqkQdZ1dvBbsBRqXh_wKSn86K7frE0BFLPnqQF7qwlXweTLIsNh8olPTqrReTYhc6HPk0WqaZTVUtvIC2iTjNIGmHgkPWUkf9tPR4iB1n5Ptp1P81_neyp9zZ_t7wLmlJ1k6xLGBsVXnT8AgiqjqwB4tquHK1tqTUu8a-oSrf5nViFFjHGjNaOyQFLR-hLGzAcWXsdUsYC0MH7eglfyHtDrvQSp9ciNprfF1qqpxYYsH3jLfwTirHuAKWWKGfGe8Vgz4MNTxdhX62SLHoos_bqdK6SkBlYCrS8N3M9O5gQZUw_-wqQGDpYrdZ0lunFt-8VLQKYsdMlm_67sAleUxlm6LojWOoAEKOHYv3q6HafG0Qepv0qbk4w31PKKJ9wghntIZ7n43QIFodHNAcSmN2i47THA2umJh4cQ0n3lKnbezO7r86YO9NKq522_vIjHgaq0hACRl14x2qPJk_DGjIuKZWZr5ADbNIFAw4y18xUcfRyrPRsYGiKDp6M8pzE37mjKvhxkK0ro1NBcH7LNd4feG4KpnJUCjNUFF9RP9RYkUNWrqqDvcIu3l9IqtyBFHu7lLVgpuidIE-Wg==",
+              "summary": []
+            },
+            {
+              "id": "fc_08c8622bd46b4b33006a562c6b583c819d8fb3ea144b7ba8c0",
+              "type": "function_call",
+              "status": "completed",
+              "arguments": "{\"string\":\"sample\",\"stringMin\":\"hello\",\"stringMax\":\"short\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckb1v1h2000000z3d9r3wqk1g\",\"stringRegex\":\"test-match\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":10,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2025-01-01T00:00:00Z\",\"dateAfter\":\"2024-06-01T12:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2025-05-20T10:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"record\":[{\"key\":\"first\",\"value\":\"1\"},{\"key\":\"second\",\"value\":\"2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"beta\"},\"default\":\"test\"}",
+              "call_id": "call_kKfafyBwM6gUz6KzLyKc8ls5",
+              "name": "manySchemasTool"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "context": "current_turn",
+            "effort": "medium",
+            "mode": "standard",
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
+          "tools": [
+            {
+              "type": "function",
+              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+              "name": "manySchemasTool",
+              "output_schema": null,
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "string": {
+                    "type": "string",
+                    "description": "Sample text"
+                  },
+                  "stringMin": {
+                    "type": "string",
+                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
+                  },
+                  "stringMax": {
+                    "type": "string",
+                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
+                  },
+                  "stringEmail": {
+                    "type": "string",
+                    "description": "a sample email address\nconstraints: a valid email"
+                  },
+                  "stringEmoji": {
+                    "type": "string",
+                    "description": "a valid sample emoji"
+                  },
+                  "stringUrl": {
+                    "type": "string",
+                    "description": "a valid sample url"
+                  },
+                  "stringUuid": {
+                    "type": "string",
+                    "description": "a valid sample uuid\nconstraints: a valid uuid"
+                  },
+                  "stringCuid": {
+                    "type": "string",
+                    "description": "a valid sample cuid"
+                  },
+                  "stringRegex": {
+                    "type": "string",
+                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
+                  },
+                  "number": {
+                    "type": "number",
+                    "description": "any valid sample number"
+                  },
+                  "numberGt": {
+                    "type": "number",
+                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
+                  },
+                  "numberLt": {
+                    "type": "number",
+                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
+                  },
+                  "numberGte": {
+                    "type": "number",
+                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
+                  },
+                  "numberLte": {
+                    "type": "number",
+                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
+                  },
+                  "numberMultipleOf": {
+                    "type": "number",
+                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
+                  },
+                  "numberInt": {
+                    "type": "integer",
+                    "description": "any valid sample number that is an integer"
+                  },
+                  "exampleArray": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid array of example strings"
+                  },
+                  "arrayMin": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
+                  },
+                  "arrayMax": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
+                  },
+                  "date": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateAfter": {
+                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateBefore": {
+                    "description": "a valid sample date before today\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "actualData": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": true
+                  },
+                  "object": {
+                    "type": "object",
+                    "properties": {
+                      "foo": {
+                        "type": "string"
+                      },
+                      "bar": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["foo", "bar"],
+                    "additionalProperties": false,
+                    "description": "any valid sample object with a string and a number"
+                  },
+                  "objectNested": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "constraints: minimum length 2"
+                          },
+                          "age": {
+                            "type": "number",
+                            "description": "constraints: greater than or equal to 18"
+                          }
+                        },
+                        "required": ["name", "age"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["user"],
+                    "additionalProperties": false,
+                    "description": "any valid sample data"
+                  },
+                  "objectPassthrough": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "objectLoose": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "optional": {
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nullable": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "leave this field empty (null value) as an example of a nullable field"
+                  },
+                  "enum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "nativeEnum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "unionPrimitives": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "sample text or number"
+                  },
+                  "unionObjects": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "inventoryItemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["amount", "inventoryItemName"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["type", "permissions"],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "description": "give an valid object"
+                  },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
+                  "default": {
+                    "default": "test",
+                    "description": "sample text that is the default value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "string",
+                  "stringMin",
+                  "stringMax",
+                  "stringEmail",
+                  "stringEmoji",
+                  "stringUrl",
+                  "stringUuid",
+                  "stringCuid",
+                  "stringRegex",
+                  "number",
+                  "numberGt",
+                  "numberLt",
+                  "numberGte",
+                  "numberLte",
+                  "numberMultipleOf",
+                  "numberInt",
+                  "exampleArray",
+                  "arrayMin",
+                  "arrayMax",
+                  "date",
+                  "dateAfter",
+                  "dateBefore",
+                  "actualData",
+                  "object",
+                  "objectNested",
+                  "objectPassthrough",
+                  "objectLoose",
+                  "optional",
+                  "nullable",
+                  "enum",
+                  "nativeEnum",
+                  "unionPrimitives",
+                  "unionObjects",
+                  "record",
+                  "recordEnumKeys",
+                  "default"
+                ],
+                "additionalProperties": false,
+                "x-optional": ["optional"]
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 827,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 0
+            },
+            "output_tokens": 1732,
+            "output_tokens_details": {
+              "reasoning_tokens": 1344
+            },
+            "total_tokens": 2559
+          },
+          "user": null,
+          "metadata": {}
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "bd16b379bb3438d4",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "o4-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Call the manySchemasTool tool with valid sample data."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_08c8622bd46b4b33006a562c602388819d802da52aed538d4e"
+            },
+            {
+              "type": "item_reference",
+              "id": "fc_08c8622bd46b4b33006a562c6b583c819d8fb3ea144b7ba8c0"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_kKfafyBwM6gUz6KzLyKc8ls5",
+              "output": "{\"string\":\"sample\",\"stringMin\":\"hello\",\"stringMax\":\"short\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ckb1v1h2000000z3d9r3wqk1g\",\"stringRegex\":\"test-match\",\"number\":42.5,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":10,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"min\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2025-01-01T00:00:00Z\",\"dateAfter\":\"2024-06-01T12:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2025-05-20T10:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"record\":[{\"key\":\"first\",\"value\":\"1\"},{\"key\":\"second\",\"value\":\"2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"beta\"},\"default\":\"test\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "manySchemasTool",
+              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "string": {
+                    "type": "string",
+                    "description": "Sample text"
+                  },
+                  "stringMin": {
+                    "type": "string",
+                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
+                  },
+                  "stringMax": {
+                    "type": "string",
+                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
+                  },
+                  "stringEmail": {
+                    "type": "string",
+                    "description": "a sample email address\nconstraints: a valid email"
+                  },
+                  "stringEmoji": {
+                    "type": "string",
+                    "description": "a valid sample emoji"
+                  },
+                  "stringUrl": {
+                    "type": "string",
+                    "description": "a valid sample url"
+                  },
+                  "stringUuid": {
+                    "type": "string",
+                    "description": "a valid sample uuid\nconstraints: a valid uuid"
+                  },
+                  "stringCuid": {
+                    "type": "string",
+                    "description": "a valid sample cuid"
+                  },
+                  "stringRegex": {
+                    "type": "string",
+                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
+                  },
+                  "number": {
+                    "type": "number",
+                    "description": "any valid sample number"
+                  },
+                  "numberGt": {
+                    "type": "number",
+                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
+                  },
+                  "numberLt": {
+                    "type": "number",
+                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
+                  },
+                  "numberGte": {
+                    "type": "number",
+                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
+                  },
+                  "numberLte": {
+                    "type": "number",
+                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
+                  },
+                  "numberMultipleOf": {
+                    "type": "number",
+                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
+                  },
+                  "numberInt": {
+                    "type": "integer",
+                    "description": "any valid sample number that is an integer"
+                  },
+                  "exampleArray": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid array of example strings"
+                  },
+                  "arrayMin": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
+                  },
+                  "arrayMax": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
+                  },
+                  "date": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateAfter": {
+                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateBefore": {
+                    "description": "a valid sample date before today\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "actualData": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": true
+                  },
+                  "object": {
+                    "type": "object",
+                    "properties": {
+                      "foo": {
+                        "type": "string"
+                      },
+                      "bar": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["foo", "bar"],
+                    "additionalProperties": false,
+                    "description": "any valid sample object with a string and a number"
+                  },
+                  "objectNested": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "constraints: minimum length 2"
+                          },
+                          "age": {
+                            "type": "number",
+                            "description": "constraints: greater than or equal to 18"
+                          }
+                        },
+                        "required": ["name", "age"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["user"],
+                    "additionalProperties": false,
+                    "description": "any valid sample data"
+                  },
+                  "objectPassthrough": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "objectLoose": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "optional": {
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nullable": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "leave this field empty (null value) as an example of a nullable field"
+                  },
+                  "enum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "nativeEnum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "unionPrimitives": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "sample text or number"
+                  },
+                  "unionObjects": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "inventoryItemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["amount", "inventoryItemName"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["type", "permissions"],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "description": "give an valid object"
+                  },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
+                  "default": {
+                    "default": "test",
+                    "description": "sample text that is the default value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "string",
+                  "stringMin",
+                  "stringMax",
+                  "stringEmail",
+                  "stringEmoji",
+                  "stringUrl",
+                  "stringUuid",
+                  "stringCuid",
+                  "stringRegex",
+                  "number",
+                  "numberGt",
+                  "numberLt",
+                  "numberGte",
+                  "numberLte",
+                  "numberMultipleOf",
+                  "numberInt",
+                  "exampleArray",
+                  "arrayMin",
+                  "arrayMax",
+                  "date",
+                  "dateAfter",
+                  "dateBefore",
+                  "actualData",
+                  "object",
+                  "objectNested",
+                  "objectPassthrough",
+                  "objectLoose",
+                  "nullable",
+                  "enum",
+                  "nativeEnum",
+                  "unionPrimitives",
+                  "unionObjects",
+                  "record",
+                  "recordEnumKeys",
+                  "default",
+                  "optional"
+                ],
+                "additionalProperties": false,
+                "x-optional": ["optional"]
+              }
+            }
+          ],
+          "tool_choice": "auto"
+        },
+        "timestamp": 1784032367601
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a1b08d598bb1698e-CDG",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Tue, 14 Jul 2026 12:32:49 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "1410",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149996832",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_96c632a3d91646f58d94018f711b5688"
+        },
+        "body": {
+          "id": "resp_08c8622bd46b4b33006a562c6fb3e8819d8e79b3d83cd88003",
+          "object": "response",
+          "created_at": 1784032367,
+          "status": "completed",
+          "background": false,
+          "billing": {
+            "payer": "developer"
+          },
+          "completed_at": 1784032368,
+          "error": null,
+          "frequency_penalty": 0,
+          "incomplete_details": null,
+          "instructions": null,
+          "max_output_tokens": null,
+          "max_tool_calls": null,
+          "model": "o4-mini-2025-04-16",
+          "moderation": null,
+          "output": [
+            {
+              "id": "msg_08c8622bd46b4b33006a562c705f28819d8721df200b7f8877",
+              "type": "message",
+              "status": "completed",
+              "content": [
+                {
+                  "type": "output_text",
+                  "annotations": [],
+                  "logprobs": [],
+                  "text": "The `manySchemasTool` has been called with valid sample data. Let me know if you need any adjustments or explanations!"
+                }
+              ],
+              "role": "assistant"
+            }
+          ],
+          "parallel_tool_calls": true,
+          "presence_penalty": 0,
+          "previous_response_id": null,
+          "prompt_cache_key": null,
+          "prompt_cache_retention": "in_memory",
+          "reasoning": {
+            "context": "current_turn",
+            "effort": "medium",
+            "mode": "standard",
+            "summary": null
+          },
+          "safety_identifier": null,
+          "service_tier": "default",
+          "store": true,
+          "temperature": 1,
+          "text": {
+            "format": {
+              "type": "text"
+            },
+            "verbosity": "medium"
+          },
+          "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
+          "tools": [
+            {
+              "type": "function",
+              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
+              "name": "manySchemasTool",
+              "output_schema": null,
+              "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "type": "object",
+                "properties": {
+                  "string": {
+                    "type": "string",
+                    "description": "Sample text"
+                  },
+                  "stringMin": {
+                    "type": "string",
+                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
+                  },
+                  "stringMax": {
+                    "type": "string",
+                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
+                  },
+                  "stringEmail": {
+                    "type": "string",
+                    "description": "a sample email address\nconstraints: a valid email"
+                  },
+                  "stringEmoji": {
+                    "type": "string",
+                    "description": "a valid sample emoji"
+                  },
+                  "stringUrl": {
+                    "type": "string",
+                    "description": "a valid sample url"
+                  },
+                  "stringUuid": {
+                    "type": "string",
+                    "description": "a valid sample uuid\nconstraints: a valid uuid"
+                  },
+                  "stringCuid": {
+                    "type": "string",
+                    "description": "a valid sample cuid"
+                  },
+                  "stringRegex": {
+                    "type": "string",
+                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
+                  },
+                  "number": {
+                    "type": "number",
+                    "description": "any valid sample number"
+                  },
+                  "numberGt": {
+                    "type": "number",
+                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
+                  },
+                  "numberLt": {
+                    "type": "number",
+                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
+                  },
+                  "numberGte": {
+                    "type": "number",
+                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
+                  },
+                  "numberLte": {
+                    "type": "number",
+                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
+                  },
+                  "numberMultipleOf": {
+                    "type": "number",
+                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
+                  },
+                  "numberInt": {
+                    "type": "integer",
+                    "description": "any valid sample number that is an integer"
+                  },
+                  "exampleArray": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid array of example strings"
+                  },
+                  "arrayMin": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
+                  },
+                  "arrayMax": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    },
+                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
+                  },
+                  "date": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateAfter": {
+                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "dateBefore": {
+                    "description": "a valid sample date before today\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": false
+                  },
+                  "actualData": {
+                    "description": "a valid sample date\nconstraints: a valid date-time",
+                    "type": "string",
+                    "x-date": true
+                  },
+                  "object": {
+                    "type": "object",
+                    "properties": {
+                      "foo": {
+                        "type": "string"
+                      },
+                      "bar": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["foo", "bar"],
+                    "additionalProperties": false,
+                    "description": "any valid sample object with a string and a number"
+                  },
+                  "objectNested": {
+                    "type": "object",
+                    "properties": {
+                      "user": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "description": "constraints: minimum length 2"
+                          },
+                          "age": {
+                            "type": "number",
+                            "description": "constraints: greater than or equal to 18"
+                          }
+                        },
+                        "required": ["name", "age"],
+                        "additionalProperties": false
+                      }
+                    },
+                    "required": ["user"],
+                    "additionalProperties": false,
+                    "description": "any valid sample data"
+                  },
+                  "objectPassthrough": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "objectLoose": {
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": false,
+                    "description": "any sample object with example keys and data",
+                    "required": []
+                  },
+                  "optional": {
+                    "description": "leave this field empty (undefined value) as an example of an optional field",
+                    "anyOf": [
+                      {
+                        "description": "leave this field empty (undefined value) as an example of an optional field",
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "nullable": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "leave this field empty (null value) as an example of a nullable field"
+                  },
+                  "enum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "nativeEnum": {
+                    "type": "string",
+                    "enum": ["A", "B", "C"],
+                    "description": "The letter A, B, or C"
+                  },
+                  "unionPrimitives": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ],
+                    "description": "sample text or number"
+                  },
+                  "unionObjects": {
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "amount": {
+                            "type": "number"
+                          },
+                          "inventoryItemName": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["amount", "inventoryItemName"],
+                        "additionalProperties": false
+                      },
+                      {
+                        "type": "object",
+                        "properties": {
+                          "type": {
+                            "type": "string"
+                          },
+                          "permissions": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": ["type", "permissions"],
+                        "additionalProperties": false
+                      }
+                    ],
+                    "description": "give an valid object"
+                  },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
+                  "default": {
+                    "default": "test",
+                    "description": "sample text that is the default value",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "string",
+                  "stringMin",
+                  "stringMax",
+                  "stringEmail",
+                  "stringEmoji",
+                  "stringUrl",
+                  "stringUuid",
+                  "stringCuid",
+                  "stringRegex",
+                  "number",
+                  "numberGt",
+                  "numberLt",
+                  "numberGte",
+                  "numberLte",
+                  "numberMultipleOf",
+                  "numberInt",
+                  "exampleArray",
+                  "arrayMin",
+                  "arrayMax",
+                  "date",
+                  "dateAfter",
+                  "dateBefore",
+                  "actualData",
+                  "object",
+                  "objectNested",
+                  "objectPassthrough",
+                  "objectLoose",
+                  "optional",
+                  "nullable",
+                  "enum",
+                  "nativeEnum",
+                  "unionPrimitives",
+                  "unionObjects",
+                  "record",
+                  "recordEnumKeys",
+                  "default"
+                ],
+                "additionalProperties": false,
+                "x-optional": ["optional"]
+              },
+              "strict": true
+            }
+          ],
+          "top_logprobs": 0,
+          "top_p": 1,
+          "truncation": "disabled",
+          "usage": {
+            "input_tokens": 2906,
+            "input_tokens_details": {
+              "cache_write_tokens": 0,
+              "cached_tokens": 2432
+            },
+            "output_tokens": 29,
+            "output_tokens_details": {
+              "reasoning_tokens": 0
             },
             "total_tokens": 2935
           },
@@ -709,1419 +2408,7 @@
       }
     },
     {
-      "hash": "4da02db22db38f85",
-      "request": {
-        "url": "https://api.openai.com/v1/responses",
-        "method": "POST",
-        "body": {
-          "model": "o4-mini",
-          "input": [
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "Call the manySchemasTool tool with valid sample data."
-                }
-              ]
-            }
-          ],
-          "tools": [
-            {
-              "type": "function",
-              "name": "manySchemasTool",
-              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "string": {
-                    "type": "string",
-                    "description": "Sample text"
-                  },
-                  "stringMin": {
-                    "type": "string",
-                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
-                  },
-                  "stringMax": {
-                    "type": "string",
-                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
-                  },
-                  "stringEmail": {
-                    "type": "string",
-                    "description": "a sample email address\nconstraints: a valid email"
-                  },
-                  "stringEmoji": {
-                    "type": "string",
-                    "description": "a valid sample emoji"
-                  },
-                  "stringUrl": {
-                    "type": "string",
-                    "description": "a valid sample url"
-                  },
-                  "stringUuid": {
-                    "type": "string",
-                    "description": "a valid sample uuid\nconstraints: a valid uuid"
-                  },
-                  "stringCuid": {
-                    "type": "string",
-                    "description": "a valid sample cuid"
-                  },
-                  "stringRegex": {
-                    "type": "string",
-                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
-                  },
-                  "number": {
-                    "type": "number",
-                    "description": "any valid sample number"
-                  },
-                  "numberGt": {
-                    "type": "number",
-                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
-                  },
-                  "numberLt": {
-                    "type": "number",
-                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
-                  },
-                  "numberGte": {
-                    "type": "number",
-                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
-                  },
-                  "numberLte": {
-                    "type": "number",
-                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
-                  },
-                  "numberMultipleOf": {
-                    "type": "number",
-                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
-                  },
-                  "numberInt": {
-                    "type": "integer",
-                    "description": "any valid sample number that is an integer"
-                  },
-                  "exampleArray": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid array of example strings"
-                  },
-                  "arrayMin": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
-                  },
-                  "arrayMax": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
-                  },
-                  "date": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateAfter": {
-                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateBefore": {
-                    "description": "a valid sample date before today\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "actualData": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": true
-                  },
-                  "object": {
-                    "type": "object",
-                    "properties": {
-                      "foo": {
-                        "type": "string"
-                      },
-                      "bar": {
-                        "type": "number"
-                      }
-                    },
-                    "required": ["foo", "bar"],
-                    "additionalProperties": false,
-                    "description": "any valid sample object with a string and a number"
-                  },
-                  "objectNested": {
-                    "type": "object",
-                    "properties": {
-                      "user": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "description": "constraints: minimum length 2"
-                          },
-                          "age": {
-                            "type": "number",
-                            "description": "constraints: greater than or equal to 18"
-                          }
-                        },
-                        "required": ["name", "age"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["user"],
-                    "additionalProperties": false,
-                    "description": "any valid sample data"
-                  },
-                  "objectPassthrough": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "objectLoose": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "optional": {
-                    "description": "leave this field empty (undefined value) as an example of an optional field",
-                    "anyOf": [
-                      {
-                        "description": "leave this field empty (undefined value) as an example of an optional field",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
-                  },
-                  "enum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "nativeEnum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
-                  },
-                  "unionObjects": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "amount": {
-                            "type": "number"
-                          },
-                          "inventoryItemName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["amount", "inventoryItemName"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string"
-                          },
-                          "permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["type", "permissions"],
-                        "additionalProperties": false
-                      }
-                    ],
-                    "description": "give an valid object"
-                  },
-                  "default": {
-                    "default": "test",
-                    "description": "sample text that is the default value",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "string",
-                  "stringMin",
-                  "stringMax",
-                  "stringEmail",
-                  "stringEmoji",
-                  "stringUrl",
-                  "stringUuid",
-                  "stringCuid",
-                  "stringRegex",
-                  "number",
-                  "numberGt",
-                  "numberLt",
-                  "numberGte",
-                  "numberLte",
-                  "numberMultipleOf",
-                  "numberInt",
-                  "exampleArray",
-                  "arrayMin",
-                  "arrayMax",
-                  "date",
-                  "dateAfter",
-                  "dateBefore",
-                  "actualData",
-                  "object",
-                  "objectNested",
-                  "objectPassthrough",
-                  "objectLoose",
-                  "nullable",
-                  "enum",
-                  "nativeEnum",
-                  "unionPrimitives",
-                  "unionObjects",
-                  "default",
-                  "optional"
-                ],
-                "additionalProperties": false,
-                "x-optional": ["optional"]
-              }
-            }
-          ],
-          "tool_choice": "auto"
-        },
-        "timestamp": 1774572321280
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "alt-svc": "h3=\":443\"; ma=86400",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e2a5f301972867c-BRU",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Fri, 27 Mar 2026 00:45:33 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "12158",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
-          "openai-version": "2020-10-01",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "198962",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "311ms",
-          "x-request-id": "req_969c1098a41c40cc8233eb8addbef9f1"
-        },
-        "body": {
-          "id": "resp_0f87da5c10d5bb7e0069c5d3216d088193a10e1dabf9327560",
-          "object": "response",
-          "created_at": 1774572321,
-          "status": "completed",
-          "background": false,
-          "billing": {
-            "payer": "developer"
-          },
-          "completed_at": 1774572333,
-          "error": null,
-          "frequency_penalty": 0,
-          "incomplete_details": null,
-          "instructions": null,
-          "max_output_tokens": null,
-          "max_tool_calls": null,
-          "model": "o4-mini-2025-04-16",
-          "output": [
-            {
-              "id": "rs_0f87da5c10d5bb7e0069c5d321db1881938deb95f026c12f9b",
-              "type": "reasoning",
-              "summary": []
-            },
-            {
-              "id": "fc_0f87da5c10d5bb7e0069c5d32b15308193a5eccc06cec4cf99",
-              "type": "function_call",
-              "status": "completed",
-              "arguments": "{\"string\":\"hello world\",\"stringMin\":\"hello\",\"stringMax\":\"1234567890\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"single\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-03-01T12:00:00Z\",\"dateAfter\":\"2024-06-01T00:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2023-01-01T00:00:00Z\",\"object\":{\"foo\":\"hello\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union text\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"widget\"},\"default\":\"test\"}",
-              "call_id": "call_CsCWBK2msTzq4BuuigUeplEQ",
-              "name": "manySchemasTool"
-            }
-          ],
-          "parallel_tool_calls": true,
-          "presence_penalty": 0,
-          "previous_response_id": null,
-          "prompt_cache_key": null,
-          "prompt_cache_retention": null,
-          "reasoning": {
-            "effort": "medium",
-            "summary": null
-          },
-          "safety_identifier": null,
-          "service_tier": "default",
-          "store": true,
-          "temperature": 1,
-          "text": {
-            "format": {
-              "type": "text"
-            },
-            "verbosity": "medium"
-          },
-          "tool_choice": "auto",
-          "tools": [
-            {
-              "type": "function",
-              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
-              "name": "manySchemasTool",
-              "parameters": {
-                "type": "object",
-                "properties": {
-                  "string": {
-                    "type": "string",
-                    "description": "Sample text"
-                  },
-                  "stringMin": {
-                    "type": "string",
-                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
-                  },
-                  "stringMax": {
-                    "type": "string",
-                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
-                  },
-                  "stringEmail": {
-                    "type": "string",
-                    "description": "a sample email address\nconstraints: a valid email"
-                  },
-                  "stringEmoji": {
-                    "type": "string",
-                    "description": "a valid sample emoji"
-                  },
-                  "stringUrl": {
-                    "type": "string",
-                    "description": "a valid sample url"
-                  },
-                  "stringUuid": {
-                    "type": "string",
-                    "description": "a valid sample uuid\nconstraints: a valid uuid"
-                  },
-                  "stringCuid": {
-                    "type": "string",
-                    "description": "a valid sample cuid"
-                  },
-                  "stringRegex": {
-                    "type": "string",
-                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
-                  },
-                  "number": {
-                    "type": "number",
-                    "description": "any valid sample number"
-                  },
-                  "numberGt": {
-                    "type": "number",
-                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
-                  },
-                  "numberLt": {
-                    "type": "number",
-                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
-                  },
-                  "numberGte": {
-                    "type": "number",
-                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
-                  },
-                  "numberLte": {
-                    "type": "number",
-                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
-                  },
-                  "numberMultipleOf": {
-                    "type": "number",
-                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
-                  },
-                  "numberInt": {
-                    "type": "integer",
-                    "description": "any valid sample number that is an integer"
-                  },
-                  "exampleArray": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid array of example strings"
-                  },
-                  "arrayMin": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
-                  },
-                  "arrayMax": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
-                  },
-                  "date": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateAfter": {
-                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateBefore": {
-                    "description": "a valid sample date before today\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "actualData": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": true
-                  },
-                  "object": {
-                    "type": "object",
-                    "properties": {
-                      "foo": {
-                        "type": "string"
-                      },
-                      "bar": {
-                        "type": "number"
-                      }
-                    },
-                    "required": ["foo", "bar"],
-                    "additionalProperties": false,
-                    "description": "any valid sample object with a string and a number"
-                  },
-                  "objectNested": {
-                    "type": "object",
-                    "properties": {
-                      "user": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "description": "constraints: minimum length 2"
-                          },
-                          "age": {
-                            "type": "number",
-                            "description": "constraints: greater than or equal to 18"
-                          }
-                        },
-                        "required": ["name", "age"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["user"],
-                    "additionalProperties": false,
-                    "description": "any valid sample data"
-                  },
-                  "objectPassthrough": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "objectLoose": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "optional": {
-                    "description": "leave this field empty (undefined value) as an example of an optional field",
-                    "anyOf": [
-                      {
-                        "description": "leave this field empty (undefined value) as an example of an optional field",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
-                  },
-                  "enum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "nativeEnum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
-                  },
-                  "unionObjects": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "amount": {
-                            "type": "number"
-                          },
-                          "inventoryItemName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["amount", "inventoryItemName"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string"
-                          },
-                          "permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["type", "permissions"],
-                        "additionalProperties": false
-                      }
-                    ],
-                    "description": "give an valid object"
-                  },
-                  "default": {
-                    "default": "test",
-                    "description": "sample text that is the default value",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "string",
-                  "stringMin",
-                  "stringMax",
-                  "stringEmail",
-                  "stringEmoji",
-                  "stringUrl",
-                  "stringUuid",
-                  "stringCuid",
-                  "stringRegex",
-                  "number",
-                  "numberGt",
-                  "numberLt",
-                  "numberGte",
-                  "numberLte",
-                  "numberMultipleOf",
-                  "numberInt",
-                  "exampleArray",
-                  "arrayMin",
-                  "arrayMax",
-                  "date",
-                  "dateAfter",
-                  "dateBefore",
-                  "actualData",
-                  "object",
-                  "objectNested",
-                  "objectPassthrough",
-                  "objectLoose",
-                  "optional",
-                  "nullable",
-                  "enum",
-                  "nativeEnum",
-                  "unionPrimitives",
-                  "unionObjects",
-                  "default"
-                ],
-                "additionalProperties": false,
-                "x-optional": ["optional"]
-              },
-              "strict": true
-            }
-          ],
-          "top_logprobs": 0,
-          "top_p": 1,
-          "truncation": "disabled",
-          "usage": {
-            "input_tokens": 775,
-            "input_tokens_details": {
-              "cached_tokens": 0
-            },
-            "output_tokens": 1461,
-            "output_tokens_details": {
-              "reasoning_tokens": 1088
-            },
-            "total_tokens": 2236
-          },
-          "user": null,
-          "metadata": {}
-        },
-        "isStreaming": false
-      }
-    },
-    {
-      "hash": "6fc2f07b234719b5",
-      "request": {
-        "url": "https://api.openai.com/v1/responses",
-        "method": "POST",
-        "body": {
-          "model": "o4-mini",
-          "input": [
-            {
-              "role": "user",
-              "content": [
-                {
-                  "type": "input_text",
-                  "text": "Call the manySchemasTool tool with valid sample data."
-                }
-              ]
-            },
-            {
-              "type": "item_reference",
-              "id": "rs_0f87da5c10d5bb7e0069c5d321db1881938deb95f026c12f9b"
-            },
-            {
-              "type": "item_reference",
-              "id": "fc_0f87da5c10d5bb7e0069c5d32b15308193a5eccc06cec4cf99"
-            },
-            {
-              "type": "function_call_output",
-              "call_id": "call_CsCWBK2msTzq4BuuigUeplEQ",
-              "output": "{\"string\":\"hello world\",\"stringMin\":\"hello\",\"stringMax\":\"1234567890\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-sample\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"single\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-03-01T12:00:00Z\",\"dateAfter\":\"2024-06-01T00:00:00Z\",\"dateBefore\":\"2025-12-31T23:59:59Z\",\"actualData\":\"2023-01-01T00:00:00Z\",\"object\":{\"foo\":\"hello\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union text\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"widget\"},\"default\":\"test\"}"
-            }
-          ],
-          "tools": [
-            {
-              "type": "function",
-              "name": "manySchemasTool",
-              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
-              "parameters": {
-                "$schema": "http://json-schema.org/draft-07/schema#",
-                "type": "object",
-                "properties": {
-                  "string": {
-                    "type": "string",
-                    "description": "Sample text"
-                  },
-                  "stringMin": {
-                    "type": "string",
-                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
-                  },
-                  "stringMax": {
-                    "type": "string",
-                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
-                  },
-                  "stringEmail": {
-                    "type": "string",
-                    "description": "a sample email address\nconstraints: a valid email"
-                  },
-                  "stringEmoji": {
-                    "type": "string",
-                    "description": "a valid sample emoji"
-                  },
-                  "stringUrl": {
-                    "type": "string",
-                    "description": "a valid sample url"
-                  },
-                  "stringUuid": {
-                    "type": "string",
-                    "description": "a valid sample uuid\nconstraints: a valid uuid"
-                  },
-                  "stringCuid": {
-                    "type": "string",
-                    "description": "a valid sample cuid"
-                  },
-                  "stringRegex": {
-                    "type": "string",
-                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
-                  },
-                  "number": {
-                    "type": "number",
-                    "description": "any valid sample number"
-                  },
-                  "numberGt": {
-                    "type": "number",
-                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
-                  },
-                  "numberLt": {
-                    "type": "number",
-                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
-                  },
-                  "numberGte": {
-                    "type": "number",
-                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
-                  },
-                  "numberLte": {
-                    "type": "number",
-                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
-                  },
-                  "numberMultipleOf": {
-                    "type": "number",
-                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
-                  },
-                  "numberInt": {
-                    "type": "integer",
-                    "description": "any valid sample number that is an integer"
-                  },
-                  "exampleArray": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid array of example strings"
-                  },
-                  "arrayMin": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
-                  },
-                  "arrayMax": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
-                  },
-                  "date": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateAfter": {
-                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateBefore": {
-                    "description": "a valid sample date before today\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "actualData": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": true
-                  },
-                  "object": {
-                    "type": "object",
-                    "properties": {
-                      "foo": {
-                        "type": "string"
-                      },
-                      "bar": {
-                        "type": "number"
-                      }
-                    },
-                    "required": ["foo", "bar"],
-                    "additionalProperties": false,
-                    "description": "any valid sample object with a string and a number"
-                  },
-                  "objectNested": {
-                    "type": "object",
-                    "properties": {
-                      "user": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "description": "constraints: minimum length 2"
-                          },
-                          "age": {
-                            "type": "number",
-                            "description": "constraints: greater than or equal to 18"
-                          }
-                        },
-                        "required": ["name", "age"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["user"],
-                    "additionalProperties": false,
-                    "description": "any valid sample data"
-                  },
-                  "objectPassthrough": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "objectLoose": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "optional": {
-                    "description": "leave this field empty (undefined value) as an example of an optional field",
-                    "anyOf": [
-                      {
-                        "description": "leave this field empty (undefined value) as an example of an optional field",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
-                  },
-                  "enum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "nativeEnum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
-                  },
-                  "unionObjects": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "amount": {
-                            "type": "number"
-                          },
-                          "inventoryItemName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["amount", "inventoryItemName"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string"
-                          },
-                          "permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["type", "permissions"],
-                        "additionalProperties": false
-                      }
-                    ],
-                    "description": "give an valid object"
-                  },
-                  "default": {
-                    "default": "test",
-                    "description": "sample text that is the default value",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "string",
-                  "stringMin",
-                  "stringMax",
-                  "stringEmail",
-                  "stringEmoji",
-                  "stringUrl",
-                  "stringUuid",
-                  "stringCuid",
-                  "stringRegex",
-                  "number",
-                  "numberGt",
-                  "numberLt",
-                  "numberGte",
-                  "numberLte",
-                  "numberMultipleOf",
-                  "numberInt",
-                  "exampleArray",
-                  "arrayMin",
-                  "arrayMax",
-                  "date",
-                  "dateAfter",
-                  "dateBefore",
-                  "actualData",
-                  "object",
-                  "objectNested",
-                  "objectPassthrough",
-                  "objectLoose",
-                  "nullable",
-                  "enum",
-                  "nativeEnum",
-                  "unionPrimitives",
-                  "unionObjects",
-                  "default",
-                  "optional"
-                ],
-                "additionalProperties": false,
-                "x-optional": ["optional"]
-              }
-            }
-          ],
-          "tool_choice": "auto"
-        },
-        "timestamp": 1774572333601
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "alt-svc": "h3=\":443\"; ma=86400",
-          "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e2a5f7d1b37867c-BRU",
-          "connection": "keep-alive",
-          "content-type": "application/json",
-          "date": "Fri, 27 Mar 2026 00:45:34 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "1085",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
-          "openai-version": "2020-10-01",
-          "server": "cloudflare",
-          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
-          "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "197194",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "841ms",
-          "x-request-id": "req_a6b2b47d4078422eb46e41a7aeb8d00e"
-        },
-        "body": {
-          "id": "resp_0f87da5c10d5bb7e0069c5d32dbecc8193825bf409fd592c0d",
-          "object": "response",
-          "created_at": 1774572333,
-          "status": "completed",
-          "background": false,
-          "billing": {
-            "payer": "developer"
-          },
-          "completed_at": 1774572334,
-          "error": null,
-          "frequency_penalty": 0,
-          "incomplete_details": null,
-          "instructions": null,
-          "max_output_tokens": null,
-          "max_tool_calls": null,
-          "model": "o4-mini-2025-04-16",
-          "output": [
-            {
-              "id": "msg_0f87da5c10d5bb7e0069c5d32e3b5c819385b798b5bfe9da26",
-              "type": "message",
-              "status": "completed",
-              "content": [
-                {
-                  "type": "output_text",
-                  "annotations": [],
-                  "logprobs": [],
-                  "text": "The tool has been called with valid sample data. Let me know if you need anything else!"
-                }
-              ],
-              "role": "assistant"
-            }
-          ],
-          "parallel_tool_calls": true,
-          "presence_penalty": 0,
-          "previous_response_id": null,
-          "prompt_cache_key": null,
-          "prompt_cache_retention": null,
-          "reasoning": {
-            "effort": "medium",
-            "summary": null
-          },
-          "safety_identifier": null,
-          "service_tier": "default",
-          "store": true,
-          "temperature": 1,
-          "text": {
-            "format": {
-              "type": "text"
-            },
-            "verbosity": "medium"
-          },
-          "tool_choice": "auto",
-          "tools": [
-            {
-              "type": "function",
-              "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
-              "name": "manySchemasTool",
-              "parameters": {
-                "type": "object",
-                "properties": {
-                  "string": {
-                    "type": "string",
-                    "description": "Sample text"
-                  },
-                  "stringMin": {
-                    "type": "string",
-                    "description": "sample text with a minimum of 5 characters\nconstraints: minimum length 5"
-                  },
-                  "stringMax": {
-                    "type": "string",
-                    "description": "sample text with a maximum of 10 characters\nconstraints: maximum length 10"
-                  },
-                  "stringEmail": {
-                    "type": "string",
-                    "description": "a sample email address\nconstraints: a valid email"
-                  },
-                  "stringEmoji": {
-                    "type": "string",
-                    "description": "a valid sample emoji"
-                  },
-                  "stringUrl": {
-                    "type": "string",
-                    "description": "a valid sample url"
-                  },
-                  "stringUuid": {
-                    "type": "string",
-                    "description": "a valid sample uuid\nconstraints: a valid uuid"
-                  },
-                  "stringCuid": {
-                    "type": "string",
-                    "description": "a valid sample cuid"
-                  },
-                  "stringRegex": {
-                    "type": "string",
-                    "description": "a valid sample string that satisfies the regex\nconstraints: input must match this regex ^test-"
-                  },
-                  "number": {
-                    "type": "number",
-                    "description": "any valid sample number"
-                  },
-                  "numberGt": {
-                    "type": "number",
-                    "description": "any valid sample number greater than 3\nconstraints: greater than 3"
-                  },
-                  "numberLt": {
-                    "type": "number",
-                    "description": "any valid sample number less than 6\nconstraints: lower than 6"
-                  },
-                  "numberGte": {
-                    "type": "number",
-                    "description": "any valid sample number greater than or equal to 1\nconstraints: greater than or equal to 1"
-                  },
-                  "numberLte": {
-                    "type": "number",
-                    "description": "any valid sample number less than or equal to 1\nconstraints: lower than or equal to 1"
-                  },
-                  "numberMultipleOf": {
-                    "type": "number",
-                    "description": "any valid sample number that is a multiple of 2\nconstraints: multiple of 2"
-                  },
-                  "numberInt": {
-                    "type": "integer",
-                    "description": "any valid sample number that is an integer"
-                  },
-                  "exampleArray": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid array of example strings"
-                  },
-                  "arrayMin": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a minimum of 1 string\nconstraints: minimum length 1"
-                  },
-                  "arrayMax": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    },
-                    "description": "any valid sample array of strings with a maximum of 5 strings\nconstraints: maximum length 5"
-                  },
-                  "date": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateAfter": {
-                    "description": "a valid sample date after 2024-01-01\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "dateBefore": {
-                    "description": "a valid sample date before today\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": false
-                  },
-                  "actualData": {
-                    "description": "a valid sample date\nconstraints: a valid date-time",
-                    "type": "string",
-                    "x-date": true
-                  },
-                  "object": {
-                    "type": "object",
-                    "properties": {
-                      "foo": {
-                        "type": "string"
-                      },
-                      "bar": {
-                        "type": "number"
-                      }
-                    },
-                    "required": ["foo", "bar"],
-                    "additionalProperties": false,
-                    "description": "any valid sample object with a string and a number"
-                  },
-                  "objectNested": {
-                    "type": "object",
-                    "properties": {
-                      "user": {
-                        "type": "object",
-                        "properties": {
-                          "name": {
-                            "type": "string",
-                            "description": "constraints: minimum length 2"
-                          },
-                          "age": {
-                            "type": "number",
-                            "description": "constraints: greater than or equal to 18"
-                          }
-                        },
-                        "required": ["name", "age"],
-                        "additionalProperties": false
-                      }
-                    },
-                    "required": ["user"],
-                    "additionalProperties": false,
-                    "description": "any valid sample data"
-                  },
-                  "objectPassthrough": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "objectLoose": {
-                    "type": "object",
-                    "properties": {},
-                    "additionalProperties": false,
-                    "description": "any sample object with example keys and data",
-                    "required": []
-                  },
-                  "optional": {
-                    "description": "leave this field empty (undefined value) as an example of an optional field",
-                    "anyOf": [
-                      {
-                        "description": "leave this field empty (undefined value) as an example of an optional field",
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
-                  },
-                  "nullable": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ],
-                    "description": "leave this field empty (null value) as an example of a nullable field"
-                  },
-                  "enum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "nativeEnum": {
-                    "type": "string",
-                    "enum": ["A", "B", "C"],
-                    "description": "The letter A, B, or C"
-                  },
-                  "unionPrimitives": {
-                    "anyOf": [
-                      {
-                        "type": "string"
-                      },
-                      {
-                        "type": "number"
-                      }
-                    ],
-                    "description": "sample text or number"
-                  },
-                  "unionObjects": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "amount": {
-                            "type": "number"
-                          },
-                          "inventoryItemName": {
-                            "type": "string"
-                          }
-                        },
-                        "required": ["amount", "inventoryItemName"],
-                        "additionalProperties": false
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "type": {
-                            "type": "string"
-                          },
-                          "permissions": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
-                          }
-                        },
-                        "required": ["type", "permissions"],
-                        "additionalProperties": false
-                      }
-                    ],
-                    "description": "give an valid object"
-                  },
-                  "default": {
-                    "default": "test",
-                    "description": "sample text that is the default value",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "string",
-                  "stringMin",
-                  "stringMax",
-                  "stringEmail",
-                  "stringEmoji",
-                  "stringUrl",
-                  "stringUuid",
-                  "stringCuid",
-                  "stringRegex",
-                  "number",
-                  "numberGt",
-                  "numberLt",
-                  "numberGte",
-                  "numberLte",
-                  "numberMultipleOf",
-                  "numberInt",
-                  "exampleArray",
-                  "arrayMin",
-                  "arrayMax",
-                  "date",
-                  "dateAfter",
-                  "dateBefore",
-                  "actualData",
-                  "object",
-                  "objectNested",
-                  "objectPassthrough",
-                  "objectLoose",
-                  "optional",
-                  "nullable",
-                  "enum",
-                  "nativeEnum",
-                  "unionPrimitives",
-                  "unionObjects",
-                  "default"
-                ],
-                "additionalProperties": false,
-                "x-optional": ["optional"]
-              },
-              "strict": true
-            }
-          ],
-          "top_logprobs": 0,
-          "top_p": 1,
-          "truncation": "disabled",
-          "usage": {
-            "input_tokens": 2543,
-            "input_tokens_details": {
-              "cached_tokens": 2048
-            },
-            "output_tokens": 23,
-            "output_tokens_details": {
-              "reasoning_tokens": 0
-            },
-            "total_tokens": 2566
-          },
-          "user": null,
-          "metadata": {}
-        },
-        "isStreaming": false
-      }
-    },
-    {
-      "hash": "53bd3088716adf84",
+      "hash": "0481015ef86fc2d0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2381,6 +2668,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -2420,6 +2740,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -2430,43 +2752,44 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1774572334974
+        "timestamp": 1784032369183
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e2a5f85acdd867c-BRU",
+          "cf-ray": "a1b08d6368d9698e-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 27 Mar 2026 00:45:57 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "22109",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Tue, 14 Jul 2026 12:33:06 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "17524",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "198956",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "313ms",
-          "x-request-id": "req_e08c8431e3fa42e4a5ef7bbd38fb505f"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149998902",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "0s",
+          "x-request-id": "req_3ecd6d04b35845988b8155184a100e38"
         },
         "body": {
-          "id": "resp_0893c1d9ca18296e0069c5d32f225c81909c9702ae9fd28729",
+          "id": "resp_03143136d844ccf2006a562c716070819cba52692d570e902c",
           "object": "response",
-          "created_at": 1774572335,
+          "created_at": 1784032369,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774572357,
+          "completed_at": 1784032386,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2474,18 +2797,21 @@
           "max_output_tokens": null,
           "max_tool_calls": null,
           "model": "o4-mini-2025-04-16",
+          "moderation": null,
           "output": [
             {
-              "id": "rs_0893c1d9ca18296e0069c5d32f94688190aa24119383e5882a",
+              "id": "rs_03143136d844ccf2006a562c72c9e0819cb00ee971b2396d01",
               "type": "reasoning",
+              "content": [],
+              "encrypted_content": "gAAAAABqViyCfsSJTbzFEkcOAcFGG1bWBpdw0K9LTeLLhIzAD6nRYIXqmaXWDU8YIy9xzh7IS0DNHHHQLLBJF_SFPH7f31iRZWDi7gfnfhz4mu63yGjL1SbyDjwx7hvQabLiIgH6J9f3Q0kz8cgPHQx1RXGzN_iZYn5rRSltnzRAYrCR0ti865IK5vo9PX6twZYCG0ksE1cEIq3oQOhyr4fT5i8BvqL6Ej_4yEtlkgBWMRQ4J2xjAnNQVUIXRnGr9CdxAtMUNMlmj7xM-djz5BVK7GVDp0DhNlClyCfptOc6rMcctmop79bkheIm6MpgJlysGziWT6WLfDtC0d_SrWGVkki7nDvJsexO8Ks1LiTFpzfbyIGjEXDv4gv5Zk6Zp8X3cxf1NQulS2khUiu8xw-ZnOWKljIcK_C2jkQR9A12CueXoAdNxxmDR0R-vURjP7zMktIdO-J7fT4_MPMZM7OqgpZD2xIUEHJqpX1z_cPeyQ806c3p5Mgm7tecrN4ePdzNIrHUUawQG8kSc1yySwJs5LvKrkE6mrIBUvf3Yfte0mlyukBJyQBn0cbg7p7nHbfnXA0EQX57YeOqmgZNoCVgBvru_H9dA-Zy6oxVN4g_wDsspHLRZj3hKEU9MlTYLdPhZTaGicDRvOZiXwBhzFNJGQjv4zX415uEJOj_uSyBRUWHy7B8N3Gn2vLoZY9H-fGjh-ezlh95iIIGwz8_9swubTmurcA9xtcSflYKe383bgLyLLg_IMeLJFj0PMnePC8ty8-P1a3MZSbTVWWLgqkkftSGtefatmI7qamqq2LEpv5uOyA4nBNPr4ruEtfDmmuZnxwAgutJmzVeBc-oGkoKGBATO2h0osXdHslZkVzYfZBBzB3Ltu8Q0z2rWLnY5p2K8v03Iy1j5clpXWAljecRDaHTGJgbZgo_ofxnWlqGq-UEJcKZgY18LmeV2i35ZrbBOphUkq-m1eX74gpTzVr75jbeZ-DV8B9mUg3QtBy1HNORcgdlmoFdovbt-AdvBM23z276r5H10ZsZIy4Cj9g7wmeK1jM0UjvPXEVKjRAjSU76S3SiyHeZ_8lGoP2rkMbQTrXZQawGNnuR_XCVvVB3zdd4iTggkGGx4dVXAbty5AOfGquDbfdi5uChvzUZt95B_tqEKXqbmFf--3QDsyJov_1w43drqL1FLYGryqSsxOVwqUpMpNLQ1lp1qVUGJrN6yHt1yNZkYap9CKooABVYJy2vsSY6ckb_UVsYVYCpVOGe4RplXV5aeuSIr1R0wiFLKLDF10bDFh2CbyxhUGvOVCVNykEVsdW7FRnr1E_HfkCreq68gsMyanOnXbAURFXllptJxqpjYZu-wWOsgZ9tDE_ieEDj1jLx68vVJh0fJm-LvbNv0LSj2pxPVjdUPSsA3FG24MTgY5mr5AcU1EWdrr8wA-EhU4Mr0DJ4sWr2y6fwb5slOOXGHFehMs52xOFxDZNS2nE45yC_IhoQah2GTSbhEcSU6EewdJmkMacou5C7sv7Wd0rrjt711OEwoiyUhiQpBQsKzdO1Dk30SOuVQlAAJwzQkXkyH9D3dsmnkgTkbeAJ4gPXK0HGKXaGwMpnO82VOfr0pnA_6vDBVuTJ1GcazUTOIs3-hmJ4eIfk513I-7-omBXlnzQz0_1rFA2d6NzLp0x_VroGZUD_hL_LyEKHLqUKVADuYmCHZLEIZWtkr-PHgRcPUMA1-DzL1s-3Z1-GJmQ5rLew1AHkO_6XLXD7lqOnPDw-ChRv0jMnqoDd0GpN58WO3INmqBPavk7wqwge2BL3N-T0xQf7Lm1BIkTXqAa_6ncOyagJYliHXIlk_Qe6n_i8rV4dieL66eBOglEfjGBZc7LX9eZXPW1oNk2CH8fX1_iEf0wOI8BTUoGqBVSmjVHx1E-2FgtBgB3NBypX4ahBqHr_1Bi7HiPi1pV0ASXST5gAC2F77ejN9PHk0qJtYY8S8qjUmRCBJ0jZTiCGsT1TY2UAGGCwl4H7rzKSzdxLEGP-I25LskgoeeDStKCPKxum2oNkgNV6WC37zJGCp6DeIcDb8KPs_CAESZKTc0xephPCDSifBrrLkB4hbaauMkmu-0ul-xjj5RBLVbkmTRg8_A8dOXBayA279LkCgkpaUqCPvF97IsCtmk74WxWoYpXdCHw5AxCm67G13_G2vZ6lPWF8-_ncxG1yWC2kOZNSeIlfUweWRyp90F9WR7oz2dyeMSwUZN8JG5QcGH4Ge8HSDcbWyMoM-t4b8e1v3KPHguy9i73kXZlzm27dxNSsSjXwCyPH8rRvCewBRb217BWcTSoCphnLt22NYV6uzYuYkYi0Oeg2smTxd6lVMyjllP1i1hSJv547aRdz9ZQ6xOIcXV9t1a5nIlJPM5V41VbwdNm2P8DflB-NArzf12on6dUl0nK9n0UdmHvX2lZOEDk43oeU97KTm4WONCWgUCV-ylZTCwBLqPapHmRdA8sL8nPfQQVUnBROAP9CzdvBGgJ9XpA_Z89rsht9S9orgvkAKUMAN_xtvwN91VI5gOXKK9GbOaY9pX-nPkOUJYvofAYJAM3Kzw-M3p5YNDEQrjbtrD05WClZVLumIpGkRWOLdbYe_cJ4TVHak6AijwuawzYzhbYLSfoxPiYF2KiCiAzvGn9Jz_AOSc6t3jaCasQwZ5GgADTZiR0psZEYkgtV8BxIYOHS2nCyjRX3XXXnnN2iC1t4sTra5J--tZXa588htq43aS4gzEavwJvO6x2Sg-AVd-vAT_LnK-oQ-u-BAptK7g98kAtkqIihhuygBYBDBIhjY5xfNdLxPFdt_ZjqPebLz_i8ubGsaCwOj5TG5ixwk-i18KebELXS32RmAI9ePXNpbHiTAQFazcCoDInzglMFw5RhYufgw9YmcZUuDEenPguEwCXUr0HNwPVGpZWlLh2fxxZKCDzbk2iR5CT95ChiV1zGMz1RSPPTLXTTM3p8ORfX6wMS1hZ774bDtJ4OCK63O7hJCYPOxCMDUgvt8wk0aE3b_2dYwc013IBmlWdDkmsmeLB4xQrzSEfpDiQwl7q3EQSObESrbLy1LrBkjlfxiUiZeh71naaK37JmC0icWgejFtCHG1bFQuRWxQweUXxhSdw1ZEDSCBLsZUuIfzvR_AtNOl4AgjERNLjs3mlpWN2pYp7aeCT88k5_u002tmdC6qYWR5D8XT-YkB0WdOykRiXbdhar_t61jl7U9D-nmlr2yc6tys-1Ni2f_qEBuJ8LfJn-Ed-u24_ZCbgRvl6xzTx7AZvS8G4PSoTeB_YsLQXasX5jWvxd0GxZeNQ8iYmMPy_qZUTd8LyfyfUYPBrNNVVsbbfvR4XKAgSmaaJ1cotsEMb0McbYHd6CbI1yp-NKbfzNnrENtGiekh4yBMeeZ8_Y49WpugM1zujGAy4asSft61IDMPBhTCbEIl8JXyP4dRIsk7LdnVFNMGk7KKXQqCXIpflqygoO4uOXHhs4m4KKWPHevppRb7hjVWrQ8JyZKCM9pwpdyFjn7uUMKrkOLJ7Grd6KA3RwXjV3NTtMQX4MsfbqrmlW4DXSuD-zthdiKcMhxnsZ3NrgXpmURNjtBZDKONbD5Kzei4wYEdihWt2spR-h9_Vl9UVH2AKGQFR4gceTgFRNKuOn_MhL18juwMBJkuJu2FVIn62gsOjGSQkutxh_n_4T-0_iG8us1TDEFQijiEz5tkSeXdLyLzoAOe1K__w5PlvUuD-Xxl6Bx8BEtnoHgem5NA8A08YM4zDM6AiYhTyq1R1SCjv3oW7o8KdAHDmtCvo3OWgLF14Xz203DXQctWQ8U1XVuNhzcrDJ9QxjhbbhGVQI4OQXBfl4dbb1xp69OOQPW55PJdhy9OHAD5jZU_-RFPGiYsqPztLTmUVoOvYtF9Nz0eBDgTxAHCXvX5NMGgxCEHJ-XGbTRufZ0CUvX4OwKlme3RMcqXzLbtoObM4i1m8Iz_ZcYajHNsHt8DI_AqTIVB99qyLr5wPQhgCmgMbRUmjQ4BQEV7yEGN9MQMtkYq0WYtZ2s3ipb2suEV7chay2fazuZrlg1xBY2z7a6g1sH8MKcm6vXYyuVlK__rUasSp8kmfkHzEj4Yt-ODl2Wvu2uhZqs10ycjYpkdspK86yGpv0RVcPxWjQjG3SvyocyWGB4y5Db9NVFKneoYN9Z35CWWC1X5DH--3lo67_LuRFMK7RK-oCFZZVvngxKH9R-57CoL4B98r5Ou8z-9O6q6Z_gcqzjakHvOnPd-ZIOHvjs9DWbpgWzeFnhFi1Ks4brLDqsq-rAATtpL6XWx1XCRj_x9UXo2rN5fuCCQDa0wm6T4TgnIXPp1DNPO77kn2Nsag-B2GlQMopOECLNQxd-3Q1aQGeS0siVcoiiVNvIEXyfIFWQjIyICwIfqvGbrM9ZZUQYjrQIyVaU-FgnVCavGoT58JBjIjQzACEAhxfOJTlrs9fb3PMocjSKfXavb1Qbq9VvkFf6RMTgzw3FvEXEVgKfY9Zo0hQkHCAof8QPp_FlIlXFFsxYkWsvxa6N67KgY1Ay7ck_GyxYKNMch_4sQCDn1yVkbcMurgo3bK3OW4Z0voqfZew3dG5HbzGJrLZIlmbGOKhZGdA41u-rHDESKeor_XNMj1YEd7IxNWWakrfRnT65arN3Z_IUyqGo1ZhLDibdmV37zcWNqSX8CwaIhSOU2jNs5xyS6AM9-IipK-q1CIJ-SSyPwZTt6oiiuuVaQggxnCkPSJyEZf_2wlfgbjHTKaLrWzVp01S6i-NkTtfMb0Fff6kOSo3p64JF444Msh78tfKF8wQ4zGrSAP3eI5T3QZNW22qZRa-fTvhjnhzSaS7XvdBPH6EbR-o9eQPxcAja-epnXNrntMQHL2ZfaAGRhn2_COcaZvJx8NzFhdCM7UsAhXy9n-GzFriuiNke_qO0BpWkUxnk6uwbnv2ApLonx1J05osFuN-XYxFgGswAcChdJmQYWOMctajw_POlIbrU5z2zmNmWWuLOFlRM3gc5w5ocwRDtMgoMpz1E58A-b0lJxNE_5Um6i6cnY8Z3debComGbTAl4TRQjZoxWeKJ5s7dJNE6epup3eeTdgYT2lNvnDH5Sy0-jTtwrD3KKm9ieObbA_DqRwxpxwvZzzJT4MzPQUMOu9kSlr18gB-NXSHotHZuzp1_rZHJJa56kPupTGX6ujT-v640NfCUQfNJ9yNf-WqyXR4iSVm-8aJqFxMmIpgqCxkrts8mwead7kFlOtKjCOKhmWwTT5c3ShyAuTYtp9avlVdVttlHjhEkYorJX3xxueH1i_YhETfF4IdmkdZlMvbKvMOaQah7ndd1pNe9lssgIDgluEytEcF2vGfR7WC_Pu0XsengWwrOGfehbStZuJ8dYlVqvwHbemJcFxM4HfVXF1cM5_OOwIRJl2PpSvy4M91qZK3icB6SNAj0w41QDhUa9J4RbA_9O0CsL_3wBu_qSY4uMis_dg4cyU4Ut8QxF6kYTxr_wZcG9nAn_u_yZ1XUIOx2PMOK2zTWDcZ-KMjvmOyCXyXF7dsJWB9Wc9ROkFVHMxNrnTgogboOY4JjedCgz1kKj5jzTmCQKmFy9JaCE_0_CqbV58s9xxlNfc3W4IqR7FzafXLdZVmDLA7n0pAw4LdjsnkLnLd0jhDMV0dhoSwzNZtiDvUoZV4vyGhZqngBFSPW7Z-zo5w5MuavcVaA-zqUiNSgmohB265j6setlIt7O1ehtng3hSwwT6pqYLbBP1b4Lb_etdJfPvdyE_uvBGZWfswabFiwtpmoT5w2m-hktDTXV9VmH1Y16MinaUgQAOVh0j79l9BrSxQRj_neQVFtAqOwOFjDcdx9C3D0X4GgGeSywK_eomCyY5EUh9sTU6IAQ1B4stBfiGCBWb30Y7mTmQVVNEekDfa7c-KR3P8FNut7HkqMz339EY8yqBCnILIcmBK1wTAPo_K8ZpRNRRk68vn6EjxIksz_0tV0Vv9K9kVrdA6zz53FzMUbm6qKJC-4vEWEyIpbwuucb8DSXup6-_lyJcvwKFLoJVCF2TC1dqsrT52gAB2g7ux9V-jUn9TipK4t8eR4Hhtj4X09wXi2PF3-ki-I4C42pX_hFRxUlNnrg3b-MuwMQ_CNV5cg-DG46TeSFVjrsoShhLXLenJrc1aG0hhNgT41s6t-6m3SXguwofRJ9shHdjpHPhxGV0GkQjXuYe-23J8nShHmKjR3c3xPIZ_gELBebH19UTNBARAJxxH-yQMXr1InU182FZ14--cK5j9QFZzMdJJ6gPeet3OqFo87wvZMnrXTGTFpFI7W4dYYSBLJQZzQlD3mEPjO8WqgnhAiv5t5_mpLfQprHicWnqWMZTwdG2OkxXwPyz-KYtbIhzdReviWg9DYj1e7sSsSKm-ftH_aeLETnEUxQStGw_CddYcpkYAOqSSbTgRjhuZyEmAW5s6MKBuu5Vq_x9nhxKlP5ZU_4ZH__b3BkO3nroOX05mMeiH0SJilCHvdZXINdR8MEIqioB6H7CyaRxjjAtLSGxbPvfSUYj14KzQ2-vMZjsdrqhRzLYJw1Zc0SGdesyyhJDj0EnVoCRsEZQStekoTsUIPwhjRQz7IJU6D-aA_mKjJhIAS0XT8kcMBB5PicJZtMT6XpyfPBUKM0Or5T6kExChAyuBSsCP34lGdPoIhuvZvkoqkyFCZi3O-jmQVWI8-PJhMQsUhtWAg9VxDqs91XtewVBAUxeJKCQ0I6rHGJYgwBVR1Fr4CYLbOoEm49FGsSQaKQp-K_a9_2y537cNrPZfuXSVoGnLuXtDhN0542z59pO764EgmqCPVnqHurR5p_g4xDTKBGidca9SHj8q06XzEJOjx4EB4syi1J_cb0NUVCQK7IkeyIMUfIZ0Jm25kqnccDB-p-Nq8Y1sRywBKtWoBZVG2qwPWAXoHSoFYDHpFM-uB7QUyr6gCfAkXadvJO_F776e3VeJfmDOH7ZrpUYRCZHJUoqU3rB-v6ElmMDVw5BGAPMrFvZLcXi21k51m-G-FfzQGs3QBDNOi0MFTN2PohPLRnn-QbRPnki0b0OQhS717Q-ms18DjFqHkeW4_pbQRraVdCudYxHmbpk5Cw6XA2te_sqzg69ObK41FgxZZ47OwUok_1jPux6NhRDq2uu6rn5YWF-y0bmKjttpOk1rsfmtDGAcwSYByofe0rEhscXyClvcntiqJX1tcA2b4eWT6wzcCPA_cjip72Gv5z4U6Ec9psELD28Y3e9MKVRV-s36xOtdsn9Lrf9Efr6SBLGTjHKkKjibewCu4wSfdRkiurQoZTPxWiyKQEi6BMZ19iUVuj-e_3MA0IhpGH8mCYTPgG9E0xrsAdeDGOahNqV-b28yM4kgIF7zosCg7kVwGtDen5XYLAjZUEd9Kn8qONH45s6KIU3Jw9sf-TzyJzkThCbJHTnWzByzlp3X2YGFLRdErsOj9lKQXuS2htelcwVAICe2nnF0VxbEcmyofzQf-zQ9vv_IN0IUOvFJtw7-IFSXxcPMdMHv1yRNwzyaOF9c0m2TSdpdTdbNqJBIino5BS7deJQ47EYEgXM-HSeIqAb8jFT0Y3z9WLHverR5GgDpuqS47u6FUoTT__KRKIule_p9Z",
               "summary": []
             },
             {
-              "id": "fc_0893c1d9ca18296e0069c5d342f3548190b0d479bf8e24c29a",
+              "id": "fc_03143136d844ccf2006a562c7fc84c819cb191a427799cd35a",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2026-01-01T00:00:00Z\",\"dateAfter\":\"2025-06-15T12:00:00Z\",\"dateBefore\":\"2026-03-01T00:00:00Z\",\"actualData\":\"2026-02-14T15:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}",
-              "call_id": "call_7UiTdCAq8iLvue4mIZlbMld6",
+              "arguments": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ck68b5x4i000123l7v9h2z1ab\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-01-01T00:00:00Z\",\"dateAfter\":\"2024-05-01T12:00:00Z\",\"dateBefore\":\"2023-12-31T23:59:59Z\",\"actualData\":\"2026-07-14T12:34:56Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemA\"},\"record\":[{\"key\":\"first\",\"value\":\"1st\"},{\"key\":\"second\",\"value\":\"2nd\"}],\"recordEnumKeys\":{\"A\":\"ValueA\",\"B\":\"ValueB\"},\"default\":\"test\"}",
+              "call_id": "call_UT0didgecCpV8Gir2jg5S0nj",
               "name": "manySchemasTool"
             }
           ],
@@ -2493,9 +2819,11 @@
           "presence_penalty": 0,
           "previous_response_id": null,
           "prompt_cache_key": null,
-          "prompt_cache_retention": null,
+          "prompt_cache_retention": "in_memory",
           "reasoning": {
+            "context": "current_turn",
             "effort": "medium",
+            "mode": "standard",
             "summary": null
           },
           "safety_identifier": null,
@@ -2509,12 +2837,32 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [
             {
               "type": "function",
               "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
               "name": "manySchemasTool",
+              "output_schema": null,
               "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
                 "properties": {
                   "string": {
@@ -2751,6 +3099,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -2791,6 +3172,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default"
                 ],
                 "additionalProperties": false,
@@ -2803,15 +3186,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 781,
+            "input_tokens": 833,
             "input_tokens_details": {
+              "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 3014,
+            "output_tokens": 1712,
             "output_tokens_details": {
-              "reasoning_tokens": 2688
+              "reasoning_tokens": 1344
             },
-            "total_tokens": 3795
+            "total_tokens": 2545
           },
           "user": null,
           "metadata": {}
@@ -2820,7 +3204,7 @@
       }
     },
     {
-      "hash": "d7b828c720da1b87",
+      "hash": "70282b1ae8d8187b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2838,16 +3222,16 @@
             },
             {
               "type": "item_reference",
-              "id": "rs_0893c1d9ca18296e0069c5d32f94688190aa24119383e5882a"
+              "id": "rs_03143136d844ccf2006a562c72c9e0819cb00ee971b2396d01"
             },
             {
               "type": "item_reference",
-              "id": "fc_0893c1d9ca18296e0069c5d342f3548190b0d479bf8e24c29a"
+              "id": "fc_03143136d844ccf2006a562c7fc84c819cb191a427799cd35a"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_7UiTdCAq8iLvue4mIZlbMld6",
-              "output": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2026-01-01T00:00:00.000Z\",\"dateAfter\":\"2025-06-15T12:00:00.000Z\",\"dateBefore\":\"2026-03-01T00:00:00.000Z\",\"actualData\":\"2026-02-14T15:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+              "call_id": "call_UT0didgecCpV8Gir2jg5S0nj",
+              "output": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"ck68b5x4i000123l7v9h2z1ab\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":10,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2025-01-01T00:00:00.000Z\",\"dateAfter\":\"2024-05-01T12:00:00.000Z\",\"dateBefore\":\"2023-12-31T23:59:59.000Z\",\"actualData\":\"2026-07-14T12:34:56.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Alice\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":100,\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemA\"},\"record\":{\"first\":\"1st\",\"second\":\"2nd\"},\"recordEnumKeys\":{\"A\":\"ValueA\",\"B\":\"ValueB\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -3093,6 +3477,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -3132,6 +3549,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default",
                   "optional"
                 ],
@@ -3142,43 +3561,44 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1774572357246
+        "timestamp": 1784032386957
       },
       "response": {
         "status": 200,
         "statusText": "OK",
         "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "9e2a6010de88867c-BRU",
+          "cf-ray": "a1b08dd28c14698e-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Fri, 27 Mar 2026 00:46:00 GMT",
-          "openai-organization": "personal-zxkt1f",
-          "openai-processing-ms": "3523",
-          "openai-project": "proj_UQ5rzUDfvZzGqHpSXl27HCzr",
+          "date": "Tue, 14 Jul 2026 12:33:12 GMT",
+          "openai-organization": "mastra-qb2kpb",
+          "openai-processing-ms": "5038",
+          "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
           "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
           "x-content-type-options": "nosniff",
-          "x-ratelimit-limit-requests": "500",
-          "x-ratelimit-limit-tokens": "200000",
-          "x-ratelimit-remaining-requests": "499",
-          "x-ratelimit-remaining-tokens": "195337",
-          "x-ratelimit-reset-requests": "120ms",
-          "x-ratelimit-reset-tokens": "1.398s",
-          "x-request-id": "req_a353d0e0b29c4970af6c1a4c65539fd0"
+          "x-ratelimit-limit-requests": "30000",
+          "x-ratelimit-limit-tokens": "150000000",
+          "x-ratelimit-remaining-requests": "29999",
+          "x-ratelimit-remaining-tokens": "149996847",
+          "x-ratelimit-reset-requests": "2ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_833d4506df1e47e7884ca4b9ef71f9cf"
         },
         "body": {
-          "id": "resp_0893c1d9ca18296e0069c5d3455f448190b70925ad2f45bf9f",
+          "id": "resp_03143136d844ccf2006a562c831760819c82a6441f2b016c4a",
           "object": "response",
-          "created_at": 1774572357,
+          "created_at": 1784032387,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1774572360,
+          "completed_at": 1784032391,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3186,9 +3606,10 @@
           "max_output_tokens": null,
           "max_tool_calls": null,
           "model": "o4-mini-2025-04-16",
+          "moderation": null,
           "output": [
             {
-              "id": "msg_0893c1d9ca18296e0069c5d345e28c8190a333d32f2226631b",
+              "id": "msg_03143136d844ccf2006a562c84791c819cb66be67faa773cd4",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3196,7 +3617,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortTxt\",\"stringEmail\":\"user@example.com\",\"stringEmoji\":\"😀\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjld2cjxh0000qzrmn831i7rn\",\"stringRegex\":\"test-value\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2026-01-01T00:00:00.000Z\",\"dateAfter\":\"2025-06-15T12:00:00.000Z\",\"dateBefore\":\"2026-03-01T00:00:00.000Z\",\"actualData\":\"2026-02-14T15:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":30}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"C\",\"unionPrimitives\":\"union\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"Widget\"},\"default\":\"test\"}"
+                  "text": "Here is the validated output from the manySchemasTool:\n\n{\n  \"string\": \"Hello, world!\",\n  \"stringMin\": \"Hello\",\n  \"stringMax\": \"ShortTxt\",\n  \"stringEmail\": \"user@example.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"stringCuid\": \"ck68b5x4i000123l7v9h2z1ab\",\n  \"stringRegex\": \"test-value\",\n  \"number\": 42,\n  \"numberGt\": 4,\n  \"numberLt\": 5,\n  \"numberGte\": 1,\n  \"numberLte\": 1,\n  \"numberMultipleOf\": 10,\n  \"numberInt\": 7,\n  \"exampleArray\": [\"one\", \"two\", \"three\"],\n  \"arrayMin\": [\"item\"],\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"date\": \"2025-01-01T00:00:00.000Z\",\n  \"dateAfter\": \"2024-05-01T12:00:00.000Z\",\n  \"dateBefore\": \"2023-12-31T23:59:59.000Z\",\n  \"actualData\": \"2026-07-14T12:34:56.000Z\",\n  \"object\": { \"foo\": \"bar\", \"bar\": 123 },\n  \"objectNested\": { \"user\": { \"name\": \"Alice\", \"age\": 30 } },\n  \"objectPassthrough\": {},\n  \"objectLoose\": {},\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"C\",\n  \"unionPrimitives\": 100,\n  \"unionObjects\": { \"amount\": 5, \"inventoryItemName\": \"ItemA\" },\n  \"record\": { \"first\": \"1st\", \"second\": \"2nd\" },\n  \"recordEnumKeys\": { \"A\": \"ValueA\", \"B\": \"ValueB\" },\n  \"default\": \"test\"\n}"
                 }
               ],
               "role": "assistant"
@@ -3206,9 +3627,11 @@
           "presence_penalty": 0,
           "previous_response_id": null,
           "prompt_cache_key": null,
-          "prompt_cache_retention": null,
+          "prompt_cache_retention": "in_memory",
           "reasoning": {
+            "context": "current_turn",
             "effort": "medium",
+            "mode": "standard",
             "summary": null
           },
           "safety_identifier": null,
@@ -3222,12 +3645,32 @@
             "verbosity": "medium"
           },
           "tool_choice": "auto",
+          "tool_usage": {
+            "image_gen": {
+              "input_tokens": 0,
+              "input_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "output_tokens": 0,
+              "output_tokens_details": {
+                "image_tokens": 0,
+                "text_tokens": 0
+              },
+              "total_tokens": 0
+            },
+            "web_search": {
+              "num_requests": 0
+            }
+          },
           "tools": [
             {
               "type": "function",
               "description": "A test tool. Call this tool with valid data matching the schema. If the schema is optional or nullable, please mark it as null.",
               "name": "manySchemasTool",
+              "output_schema": null,
               "parameters": {
+                "$schema": "http://json-schema.org/draft-07/schema#",
                 "type": "object",
                 "properties": {
                   "string": {
@@ -3464,6 +3907,39 @@
                     ],
                     "description": "give an valid object"
                   },
+                  "record": {
+                    "type": "array",
+                    "x-record": true,
+                    "description": "a map of two sample string keys to sample string values",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "key": {
+                          "type": "string"
+                        },
+                        "value": {
+                          "type": "string"
+                        }
+                      },
+                      "required": ["key", "value"],
+                      "additionalProperties": false
+                    }
+                  },
+                  "recordEnumKeys": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["A", "B"],
+                    "description": "a map with exactly the keys A and B mapped to sample strings",
+                    "properties": {
+                      "A": {
+                        "type": "string"
+                      },
+                      "B": {
+                        "type": "string"
+                      }
+                    },
+                    "x-record-object": true
+                  },
                   "default": {
                     "default": "test",
                     "description": "sample text that is the default value",
@@ -3504,6 +3980,8 @@
                   "nativeEnum",
                   "unionPrimitives",
                   "unionObjects",
+                  "record",
+                  "recordEnumKeys",
                   "default"
                 ],
                 "additionalProperties": false,
@@ -3516,15 +3994,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 4111,
+            "input_tokens": 2888,
             "input_tokens_details": {
-              "cached_tokens": 0
+              "cache_write_tokens": 0,
+              "cached_tokens": 2304
             },
-            "output_tokens": 307,
+            "output_tokens": 468,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 4418
+            "total_tokens": 3356
           },
           "user": null,
           "metadata": {}
