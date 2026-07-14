@@ -234,6 +234,9 @@ function ensureAdditionalPropertiesFalse(schema: JSONSchema7): JSONSchema7 {
 
   if (result.type === 'object' || result.properties) {
     result.additionalProperties = false;
+    // z.record(...) emits `propertyNames`, which OpenAI strict mode rejects
+    // (only properties/required/additionalProperties are permitted on an object).
+    delete result.propertyNames;
   }
 
   if (result.properties) {

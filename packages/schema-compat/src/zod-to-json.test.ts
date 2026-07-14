@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { zodToJsonSchema, ensureAllPropertiesRequired } from './zod-to-json';
+import { zodToJsonSchema, ensureAllPropertiesRequired, prepareJsonSchemaForOpenAIStrictMode } from './zod-to-json';
 
 /**
  * Shared test suite for zodToJsonSchema that runs with both Zod v3 and v4.
@@ -735,5 +735,69 @@ describe('ensureAllPropertiesRequired', () => {
 
       expect(additionalData.type).toBe('string');
     });
+  });
+});
+
+// =============================================================================
+// prepareJsonSchemaForOpenAIStrictMode — unit tests
+// =============================================================================
+
+describe('prepareJsonSchemaForOpenAIStrictMode', () => {
+  it('strips propertyNames from object schemas (raw JSON Schema)', () => {
+    // Strict mode only permits properties/required/additionalProperties on
+    // objects; `propertyNames` (emitted by z.record in zod v4) makes the
+    // whole request fail with an "Invalid schema" error.
+    const schema = {
+      type: 'object' as const,
+      properties: {
+        metadata: {
+          type: 'object' as const,
+          propertyNames: { type: 'string' as const },
+          additionalProperties: { type: 'string' as const },
+        },
+      },
+      required: ['metadata'],
+    };
+
+    const prepared = prepareJsonSchemaForOpenAIStrictMode(schema);
+
+    expect(JSON.stringify(prepared)).not.toContain('"propertyNames"');
+    expect((prepared.properties as any).metadata.additionalProperties).toBe(false);
+  });
+
+  it('strips propertyNames emitted by z.record', () => {
+    const schema = zodToJsonSchema(
+      z.object({
+        metadata: createRecord(z.string()),
+      }),
+    );
+
+    const prepared = prepareJsonSchemaForOpenAIStrictMode(schema);
+
+    expect(JSON.stringify(prepared)).not.toContain('"propertyNames"');
+  });
+
+  it('strips propertyNames on nested and anyOf schemas', () => {
+    const schema = {
+      type: 'object' as const,
+      properties: {
+        nested: {
+          type: 'object' as const,
+          properties: {
+            inner: {
+              type: 'object' as const,
+              propertyNames: { type: 'string' as const },
+            },
+          },
+        },
+        union: {
+          anyOf: [{ type: 'object' as const, propertyNames: { type: 'string' as const } }, { type: 'null' as const }],
+        },
+      },
+    };
+
+    const prepared = prepareJsonSchemaForOpenAIStrictMode(schema);
+
+    expect(JSON.stringify(prepared)).not.toContain('"propertyNames"');
   });
 });
