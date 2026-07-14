@@ -48,7 +48,7 @@ export function createAgentControllerClient({
 
   const client = new MastraClient({ baseUrl, credentials: 'include' });
   const controller = client.getAgentController(agentControllerId);
-  const session = controller.session(resourceId, normalizedScope);
+  const session = controller.session(resourceId);
   const entry = { client, controller, session };
   clientCache.set(key, entry);
   return entry;
