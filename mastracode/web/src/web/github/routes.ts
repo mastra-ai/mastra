@@ -90,6 +90,22 @@ function isValidRepoFullName(value: unknown): value is string {
   return typeof value === 'string' && value.length <= 256 && /^[\w.-]+\/[\w.-]+$/.test(value);
 }
 
+function isCanonicalGithubIssueUrl(value: string, repoFullName: string, issueNumber: number): boolean {
+  try {
+    const url = new URL(value);
+    const [owner, repo] = repoFullName.split('/');
+    return (
+      url.protocol === 'https:' &&
+      url.hostname === 'github.com' &&
+      url.pathname === `/${owner}/${repo}/issues/${issueNumber}` &&
+      url.search === '' &&
+      url.hash === ''
+    );
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Validate a git branch/ref name against a strict whitelist. The value is later
  * interpolated into a shell `git clone --branch` command, so it must never
@@ -617,7 +633,12 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         if (typeof body.title !== 'string' || body.title.trim().length === 0 || body.title.length > 5000) {
           return c.json({ error: 'invalid_title' }, 400);
         }
-        if (typeof body.url !== 'string' || body.url.trim().length === 0 || body.url.length > 2048) {
+        if (
+          typeof body.url !== 'string' ||
+          body.url.trim().length === 0 ||
+          body.url.length > 2048 ||
+          !isCanonicalGithubIssueUrl(body.url, project.repoFullName, issueNumber)
+        ) {
           return c.json({ error: 'invalid_url' }, 400);
         }
 
