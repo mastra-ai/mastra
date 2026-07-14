@@ -1,0 +1,11 @@
+packages:
+  - '.'
+minimumReleaseAgeExclude:
+  - mastra
+  - "@mastra/*"
+allowBuilds:
+  esbuild: true
+  sharp: true
+onlyBuiltDependencies:
+  - esbuild
+  - sharp
