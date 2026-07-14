@@ -10,6 +10,7 @@ import { composeStepInput } from '../../../../loop/shared/compose-step-input';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
+import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { Mastra } from '../../../../mastra';
 import type {
   SpanType,
@@ -858,7 +859,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // so reasoning/text/tool parts are reconstructed in stream order,
             // including empty reasoning spans that carry providerMetadata
             // (e.g. OpenAI itemId) required by subsequent turns (#19365).
-            const collectedChunks: Array<{ type: string; payload: unknown; metadata?: Record<string, unknown> }> = [];
+            const collectedChunks: CollectedChunk[] = [];
 
             // 10. Execute LLM call (or replay cached response)
             let modelResult: ReturnType<typeof execute>;
