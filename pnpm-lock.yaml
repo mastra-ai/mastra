@@ -1760,6 +1760,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.14
         version: 1.19.14(hono@4.12.30)
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../../../packages/_vendored/ai_v5
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../../client-sdks/client-js
