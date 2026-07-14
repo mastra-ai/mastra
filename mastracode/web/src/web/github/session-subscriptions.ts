@@ -106,7 +106,8 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
   return {
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',
-      description: 'Subscribe this thread to GitHub pull request activity. Accepts a PR number or canonical URL for the active project.',
+      description:
+        'Subscribe this thread to GitHub pull request activity. Use this for existing PRs; successful gh pr create commands subscribe automatically. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool');
@@ -115,7 +116,8 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
     }),
     github_unsubscribe_pr: createTool({
       id: 'github_unsubscribe_pr',
-      description: 'Unsubscribe this thread from GitHub pull request activity. Accepts a PR number or canonical URL for the active project.',
+      description:
+        'Unsubscribe this thread from GitHub pull request activity. Closed and merged PR subscriptions retire automatically. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await unsubscribeCurrentSessionFromPullRequest(requestContext, pullRequest);

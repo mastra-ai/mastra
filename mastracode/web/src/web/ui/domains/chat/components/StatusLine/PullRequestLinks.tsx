@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { CircleDot, CircleX, GitMerge } from 'lucide-react';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 
 import { useChatSessionContext } from '../../context/useChatSessionContext';
@@ -34,7 +34,8 @@ function statusColor(status: PullRequestSubscription['status']): string {
 export function PullRequestLinks() {
   const { threadId } = useParams<{ threadId: string }>();
   const { baseUrl, resourceId, projectPath, projectState } = useChatSessionContext();
-  const { transcript } = useChatTranscript();
+  const { transcript, busy } = useChatTranscript();
+  const wasBusy = useRef(busy);
   const notificationIds = transcript.entries
     .flatMap(entry => {
       if (entry.kind === 'notification') return [entry.notificationId];
@@ -67,6 +68,11 @@ export function PullRequestLinks() {
   useEffect(() => {
     if (notificationIds) void query.refetch();
   }, [notificationIds, query.refetch]);
+
+  useEffect(() => {
+    if (wasBusy.current && !busy) void query.refetch();
+    wasBusy.current = busy;
+  }, [busy, query.refetch]);
 
   if (!query.data?.subscriptions.length) return null;
 

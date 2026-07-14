@@ -232,6 +232,35 @@ describe('StatusLine', () => {
       expect(link).toHaveAttribute('href', 'https://github.com/octo/hello/pull/42');
     });
 
+    it('refreshes subscribed pull requests when an agent run completes', async () => {
+      seedProject('github');
+      useAgentControllerHandlers([{ type: 'agent_start' }], [{ type: 'agent_end' }]);
+      let requests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {
+          requests += 1;
+          return HttpResponse.json({
+            subscriptions:
+              requests > 1
+                ? [
+                    {
+                      id: 'subscription-1',
+                      repoFullName: 'octo/hello',
+                      pullRequestNumber: 42,
+                      status: 'open',
+                      url: 'https://github.com/octo/hello/pull/42',
+                    },
+                  ]
+                : [],
+          });
+        }),
+      );
+      renderStatusLine();
+
+      await waitFor(() => expect(requests).toBeGreaterThan(1));
+      expect(await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' })).toBeInTheDocument();
+    });
+
     it('refreshes the pull request status when a notification arrives', async () => {
       seedProject('github');
       useAgentControllerHandlers([], [
