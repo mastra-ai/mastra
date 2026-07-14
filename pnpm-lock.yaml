@@ -4786,6 +4786,9 @@ importers:
       '@hono/node-server':
         specifier: ^1.19.11
         version: 1.19.14(hono@4.12.30)
+      '@internal/ai-sdk-v5':
+        specifier: workspace:*
+        version: link:../_vendored/ai_v5
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
@@ -4819,9 +4822,6 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
-      ai:
-        specifier: ^5.0.210
-        version: 5.0.210(zod@4.4.3)
       eslint:
         specifier: ^10.4.1
         version: 10.6.0(jiti@2.7.0)
