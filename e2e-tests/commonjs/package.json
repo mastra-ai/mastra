@@ -7,10 +7,10 @@
     "get-port": "^7.2.0",
     "tinyglobby": "^0.2.17",
     "npm-cli-login": "^1.0.0",
-    "rollup": "^4.61.1",
+    "rollup": "^4.62.2",
     "verdaccio": "^6.7.4",
     "verdaccio-auth-memory": "^10.3.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.10"
   },
   "scripts": {
     "test": "vitest run"
