@@ -3117,8 +3117,9 @@ export class Agent<
     this.#mastra = mastra;
 
     // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish. Release
-    // its global scorer hook synchronously so it can't outlive the instance.
+    // the background — we don't await to keep this hot path sync-ish.
+    // (`__unregisterHooks` is a no-op for ephemeral instances, which never
+    // register the scorer hook — see `__ephemeral` in the Mastra config.)
     if (this.#ephemeralMastra) {
       this.#ephemeralMastra.__unregisterHooks();
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
@@ -6481,6 +6482,10 @@ export class Agent<
       logger: false,
       storage: new InMemoryStore(),
       pubsub: new EventEmitterPubSub(),
+      // Skip module-level scorer-hook registration: the hook can never resolve
+      // a scorer on this registry-less instance, and it would pin the whole
+      // ephemeral graph against GC for the process lifetime (#19404).
+      __ephemeral: true,
     });
     await ephemeral.startWorkers();
     this.#ephemeralMastra = ephemeral;

@@ -136,6 +136,16 @@ export interface GoogleListenOptionsV2 {
 
 export type GoogleListenOptions = GoogleListenOptionsV1 | GoogleListenOptionsV2;
 
+type ISynthesizeSpeechRequest = TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest;
+
+export interface GoogleSpeakOptions {
+  speaker?: string;
+  languageCode?: string;
+  input?: ISynthesizeSpeechRequest['input'];
+  voice?: ISynthesizeSpeechRequest['voice'];
+  audioConfig?: ISynthesizeSpeechRequest['audioConfig'];
+}
+
 const DEFAULT_VOICE = 'en-US-Casual-K';
 
 /**
@@ -304,29 +314,43 @@ export class GoogleVoice extends MastraVoice {
   }
 
   /**
-   * Converts text to speech
+   * Converts text to speech.
+   *
+   * When `input` is a string or stream, builds a text-only request (existing behaviour).
+   * Pass `options.input` to send richer proto fields (ssml, markup, prompt,
+   * customPronunciations, multiSpeakerMarkup) and `options.voice` for fields
+   * like modelName or multiSpeakerVoiceConfig.
+   *
    * @param {string | NodeJS.ReadableStream} input - Text or stream to convert to speech
-   * @param {Object} [options] - Speech synthesis options
-   * @param {string} [options.speaker] - Voice ID to use
-   * @param {string} [options.languageCode] - Language code for the voice
-   * @param {TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest['audioConfig']} [options.audioConfig] - Audio configuration options
-   * @returns {Promise<NodeJS.ReadableStream>} Stream of synthesized audio. Default encoding is LINEAR16.
+   * @param {GoogleSpeakOptions} [options] - Speech synthesis options
+   * @returns {Promise<NodeJS.ReadableStream>} Stream of synthesised audio. Default encoding is LINEAR16.
    */
-  async speak(
-    input: string | NodeJS.ReadableStream,
-    options?: {
-      speaker?: string;
-      languageCode?: string;
-      audioConfig?: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest['audioConfig'];
-    },
-  ): Promise<NodeJS.ReadableStream> {
-    const text = typeof input === 'string' ? input : await this.streamToString(input);
+  async speak(input: string | NodeJS.ReadableStream, options?: GoogleSpeakOptions): Promise<NodeJS.ReadableStream> {
+    const defaultVoiceName = options?.speaker || this.speaker;
+    const defaultLanguageCode = options?.languageCode || defaultVoiceName?.split('-').slice(0, 2).join('-') || 'en-US';
 
-    const request: TextToSpeechTypes.cloud.texttospeech.v1.ISynthesizeSpeechRequest = {
-      input: { text },
+    const requestInput: ISynthesizeSpeechRequest['input'] = options?.input
+      ? { ...options.input }
+      : { text: typeof input === 'string' ? input : await this.streamToString(input) };
+
+    // When the caller provides a rich input object but no explicit text field,
+    // populate it from the positional `input` argument for convenience.
+    if (
+      options?.input &&
+      !options.input.text &&
+      !options.input.ssml &&
+      !options.input.markup &&
+      !options.input.multiSpeakerMarkup
+    ) {
+      requestInput!.text = typeof input === 'string' ? input : await this.streamToString(input);
+    }
+
+    const request: ISynthesizeSpeechRequest = {
+      input: requestInput,
       voice: {
-        name: options?.speaker || this.speaker,
-        languageCode: options?.languageCode || options?.speaker?.split('-').slice(0, 2).join('-') || 'en-US',
+        name: defaultVoiceName,
+        languageCode: defaultLanguageCode,
+        ...options?.voice,
       },
       audioConfig: options?.audioConfig || { audioEncoding: 'LINEAR16' },
     };
