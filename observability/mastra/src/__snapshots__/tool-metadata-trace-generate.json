@@ -33,9 +33,7 @@
         },
         "input": "Use metadata tool to process some data",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 generate response",
           "files": []
         }
       },
@@ -97,9 +95,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 generate response",
               "warnings": []
             }
           },
@@ -288,6 +284,7 @@
                     "attributes": {
                       "toolDescription": "A tool that adds custom metadata",
                       "toolType": "tool",
+                      "toolCallId": "call-metadata-1",
                       "success": true
                     },
                     "metadata": {
@@ -365,9 +362,7 @@
                   }
                 ],
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 generate response",
                   "toolCalls": []
                 }
               },
@@ -411,9 +406,7 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 generate response",
                       "toolCalls": []
                     }
                   },
@@ -439,9 +432,7 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          }
+                          "text": "Mock V2 generate response"
                         }
                       }
                     }

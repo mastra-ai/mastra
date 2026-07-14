@@ -36,9 +36,7 @@
         },
         "input": "Calculate 5 + 3",
         "output": {
-          "text": {
-            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-          },
+          "text": "Mock V2 stream response",
           "files": []
         }
       },
@@ -102,9 +100,7 @@
               "files": [],
               "reasoning": [],
               "sources": [],
-              "text": {
-                "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-              },
+              "text": "Mock V2 stream response",
               "warnings": []
             }
           },
@@ -305,6 +301,7 @@
                     "attributes": {
                       "toolDescription": "Performs calculations",
                       "toolType": "tool",
+                      "toolCallId": "call-calc-1",
                       "success": true
                     },
                     "metadata": {
@@ -383,9 +380,7 @@
                   }
                 ],
                 "output": {
-                  "text": {
-                    "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                  },
+                  "text": "Mock V2 stream response",
                   "toolCalls": []
                 }
               },
@@ -430,9 +425,7 @@
                       "environment": "test"
                     },
                     "output": {
-                      "text": {
-                        "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                      },
+                      "text": "Mock V2 stream response",
                       "toolCalls": []
                     }
                   },
@@ -460,9 +453,7 @@
                           "environment": "test"
                         },
                         "output": {
-                          "text": {
-                            "__or__": ["Mock V2 generate response", "Mock V2 stream response"]
-                          }
+                          "text": "Mock V2 stream response"
                         }
                       }
                     }
