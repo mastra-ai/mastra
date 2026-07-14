@@ -43,20 +43,45 @@ describe('withEphemeralMemory', () => {
     expect(seenInside?.thread?.id).toBe('fixed-uuid');
   });
 
-  it('restores the caller MastraMemory + reserved keys after fn resolves', async () => {
+  it('stamps the reserved thread/resource keys with the ephemeral ids inside fn', async () => {
     const rc = new RequestContext();
     rc.set('MastraMemory', { thread: { id: 'parent-thread' }, resourceId: 'parent-resource' });
     rc.set(MASTRA_THREAD_ID_KEY, 'parent-thread');
     rc.set(MASTRA_RESOURCE_ID_KEY, 'parent-resource');
 
-    await withEphemeralMemory(rc, async () => {
-      expect(rc.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
-      expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBe('parent-resource');
-    });
+    await withEphemeralMemory(
+      rc,
+      async () => {
+        // MASTRA_THREAD_ID_KEY must equal the ephemeral thread id so inner
+        // agent invocations resolve to it (resolveThreadIdFromArgs reads this
+        // key, not MastraMemory). Downstream storage writes rely on message
+        // rows having this threadId stamped.
+        expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('ephemeral-uuid');
+        expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBe('parent-resource');
+        expect((rc.get('MastraMemory') as any)?.thread?.id).toBe('ephemeral-uuid');
+      },
+      { threadId: 'ephemeral-uuid' },
+    );
 
     expect((rc.get('MastraMemory') as any)?.thread?.id).toBe('parent-thread');
     expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('parent-thread');
     expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBe('parent-resource');
+  });
+
+  it('deletes reserved thread/resource keys on restore when the caller never set them', async () => {
+    const rc = new RequestContext();
+    // No MastraMemory, no reserved keys.
+    await withEphemeralMemory(
+      rc,
+      async () => {
+        expect(rc.get(MASTRA_THREAD_ID_KEY)).toBe('ephemeral-uuid');
+      },
+      { threadId: 'ephemeral-uuid' },
+    );
+
+    expect(rc.get('MastraMemory')).toBeUndefined();
+    expect(rc.get(MASTRA_THREAD_ID_KEY)).toBeUndefined();
+    expect(rc.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
   });
 
   it('restores the caller memory scope even when fn throws', async () => {

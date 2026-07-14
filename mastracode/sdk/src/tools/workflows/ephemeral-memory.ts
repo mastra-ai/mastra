@@ -8,10 +8,14 @@
  *     (observational-memory, task-state, working-memory-state).
  *
  * `withEphemeralMemory` swaps a fresh MastraMemory (new random threadId,
- * inherited resourceId) onto the caller's requestContext for the duration of
- * `fn`, then restores the original memory scope in `finally` — mirroring the
- * sub-agent-as-tool save/restore pattern in
- * packages/core/src/agent/agent.ts:4470–5209.
+ * inherited resourceId) onto the caller's requestContext AND stamps the
+ * reserved MASTRA_THREAD_ID_KEY / MASTRA_RESOURCE_ID_KEY context values to the
+ * same ephemeral ids for the duration of `fn`, then restores everything in
+ * `finally`. Isolation is achieved by writing the ephemeral ids into the
+ * context, not by scrubbing them — inner agent invocations (e.g. workflow
+ * agent steps) resolve their thread/resource via those reserved keys, so
+ * leaving them unset causes downstream storage saves to throw
+ * "Thread ID is required".
  *
  * Callers can override the ephemeral thread id (e.g. for tests) via
  * `options.threadId`.
@@ -37,18 +41,22 @@ export async function withEphemeralMemory<T>(
   const savedThreadIdKey = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
   const savedResourceIdKey = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
 
+  const ephemeralThreadId = options.threadId ?? randomUUID();
   const parentResourceId = savedMastraMemory?.resourceId ?? savedResourceIdKey ?? '';
+
   requestContext.set('MastraMemory', {
-    thread: { id: options.threadId ?? randomUUID() },
+    thread: { id: ephemeralThreadId },
     resourceId: parentResourceId,
     memoryConfig: undefined,
   });
-  // Reserved thread/resource-key context values take precedence over the
-  // MastraMemory payload — scrub MASTRA_THREAD_ID_KEY so the fresh thread
-  // above is honored. Leave MASTRA_RESOURCE_ID_KEY as-is so thread-scoped
-  // processors that require a resource still resolve one.
-  if (savedThreadIdKey !== undefined) {
-    requestContext.delete(MASTRA_THREAD_ID_KEY);
+  // Stamp the reserved thread/resource-key context values with the same
+  // ephemeral ids. Inner agent invocations (workflow agent steps, sub-agent
+  // tool calls) read these keys to resolve their runtime thread; leaving
+  // MASTRA_THREAD_ID_KEY unset causes prepare-memory-step to build a
+  // MessageList without a threadId, which storage rejects downstream.
+  requestContext.set(MASTRA_THREAD_ID_KEY, ephemeralThreadId);
+  if (parentResourceId) {
+    requestContext.set(MASTRA_RESOURCE_ID_KEY, parentResourceId);
   }
 
   try {
@@ -61,9 +69,14 @@ export async function withEphemeralMemory<T>(
     }
     if (savedThreadIdKey !== undefined) {
       requestContext.set(MASTRA_THREAD_ID_KEY, savedThreadIdKey);
+    } else {
+      requestContext.delete(MASTRA_THREAD_ID_KEY);
     }
     if (savedResourceIdKey !== undefined) {
       requestContext.set(MASTRA_RESOURCE_ID_KEY, savedResourceIdKey);
+    } else if (parentResourceId) {
+      // We wrote a resource-id key that wasn't there before — clean it up.
+      requestContext.delete(MASTRA_RESOURCE_ID_KEY);
     }
   }
 }

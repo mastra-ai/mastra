@@ -89,10 +89,11 @@ Read the tool's actual \`outputSchema\` first. If it's a primitive (\`z.string()
 A mapping step's \`mapConfig\` is a **JSON-encoded string** of an object (yes, encoded — \`mapConfig\` is a string, not an object). Each top-level key becomes a field of the mapping's output. Each value is one of these source forms:
 
 - \`{ "template": "<text with \${placeholders}>" }\` — interpolates a string. Placeholders can read from these namespaces:
-  - \`\${inputData.<field>}\` — a field of the WORKFLOW's input object (NOT the previous step's output — that's the #1 mistake).
+  - \`\${inputData.<field>}\` — a field of the CURRENT step's live input, which equals the PREVIOUS step's output. For step 1 only, this happens to equal the workflow input (because step 1's input IS the workflow input). From step 2 onward, \`inputData\` is the previous step's output — if you want the workflow's original input past step 1, use \`\${initData.<field>}\` instead.
+  - \`\${initData.<field>}\` — a field of the WORKFLOW's original input, available from ANY step. Use this whenever a mid-workflow step needs an argument from the top-level workflow input (e.g. a step-3 mapping referencing \`\${initData.path}\`).
   - \`\${stepResults.<stepId>.<field>}\` — a field of an earlier step's output when the output is an object. Dotted paths drill into nested fields.
   - \`\${stepResults.<stepId>}\` — the whole step result, ONLY when the step's \`outputSchema\` is a primitive (\`z.string()\` / \`z.number()\` / \`z.boolean()\`). If the result is an object or array the template will throw at runtime — pluck a field instead.
-  - \`\${initData.<field>}\`, \`\${state.<field>}\`, \`\${requestContext.<field>}\` — advanced, rarely needed.
+  - \`\${state.<field>}\`, \`\${requestContext.<field>}\` — advanced, rarely needed.
   Templates render primitives (string/number/boolean). They treat \`null\`/\`undefined\` as \`""\`. They THROW if asked to render an object or array — pluck the field first.
 - \`{ "value": <constant> }\` — embed a literal JSON value.
 - \`{ "step": "<stepId>", "path": "<field.path>" }\` — pluck a single field from a prior step's output. Dotted paths drill into nested objects.
@@ -225,12 +226,12 @@ Every build runs through these five steps in order:
 
 - ❌ \`\${stepResults.fetch-weather}\` when \`fetch-weather\` returns an object → ✅ \`\${stepResults.fetch-weather.temperature}\` (specific field). The bare form is only valid when the step's \`outputSchema\` is a primitive.
 - ❌ Inventing field names like \`.summary\` or \`.headline\` when they aren't in the previous step's \`outputSchema\`. If it's not in the schema you got from discovery, it doesn't exist.
-- ❌ Using \`inputData.foo\` when you mean the previous step's output. \`inputData\` is the WORKFLOW's input, only. For the previous step, use \`stepResults.<previous-step-id>.<field>\`.
+- ❌ Using \`\${inputData.<workflowInputField>}\` in a mapping AFTER step 1 — \`inputData\` past step 1 is the previous step's OUTPUT, not the workflow input. To reach the workflow's original input, use \`\${initData.<field>}\`. (For the specific previous step by name, use \`\${stepResults.<previous-step-id>.<field>}\`.)
 - ❌ Putting an object or array into a \`template\`. Templates render primitives only. Pluck the field first.
 - ❌ Skipping a mapping when shapes don't line up. Two consecutive steps whose output/input shapes don't match WILL fail.
 - ❌ Feeding a tool that returns a string DIRECTLY into an agent step. Agent input is strictly \`{ prompt: string }\` — the engine does NOT wrap or coerce. Insert a mapping producing \`{ prompt: "<template referencing the tool output>" }\`.
 - ❌ Feeding a \`foreach\` over an \`agent\` inner step from an upstream that emits \`Array<string>\` or \`Array<{someObject}>\`. The inner agent step still requires \`{ prompt: string }\` per iteration — and \`mapping\` CANNOT sit inside a \`foreach\`. Fix: change the upstream so it emits \`Array<{ prompt: string }>\` directly via its \`outputSchema\` (an agent with structured output can do this trivially by prompting "emit an array of \`{ prompt }\` objects, one per file"), OR make the foreach's inner a \`tool\` whose \`inputSchema\` matches what your array elements already look like.
-- ❌ Adding a no-op mapping that just renames \`inputData\` keys. The workflow accepts the input object directly into step 1.
+- ❌ Adding a no-op step-1 mapping that just renames \`inputData\` keys. Step 1 receives the workflow input object directly. (Past step 1, if you need workflow input again, use \`\${initData.…}\` — not a rename mapping.)
 - ❌ \`mapConfig\` as an object (\`"mapConfig": { ... }\`). It MUST be a JSON-encoded string (\`"mapConfig": "{...}"\`).
 
 # Worked example: list files → review each
@@ -332,6 +333,24 @@ Walk the shapes:
 
 **The general pattern for fanning out to an agent from an unstructured upstream:** tool-string → mapping-to-prompt → agent-with-array-of-prompt-objects → foreach-over-agent. If the foreach's inner is a \`tool\` instead of an agent, the bridge agent should emit \`Array<{...that tool's inputSchema}>\` instead of \`Array<{ prompt }>\`.
 
+# Worked example: reusing the workflow's original input past step 1
+
+If the workflow input is \`{ path: string }\` and step 3 needs that same \`path\` again, you CANNOT use \`\${inputData.path}\` — at step 3, \`inputData\` is step 2's output. Use \`\${initData.path}\`:
+
+\`\`\`json
+[
+  { "type": "tool", "id": "list", "toolId": "mastra_workspace_list_files" },
+  { "type": "agent", "id": "pick-first", "agentId": "code-agent" },
+  {
+    "type": "mapping",
+    "id": "final-prompt",
+    "mapConfig": "{\\"prompt\\":{\\"template\\":\\"Root path was \${initData.path}. First candidate: \${stepResults.pick-first.text}\\"}}"
+  }
+]
+\`\`\`
+
+Rule of thumb: for the workflow's original input, \`initData\` is always safe. \`inputData\` is only equal to the workflow input at step 1.
+
 # Summary rules
 
 - Discover FIRST. Don't guess shapes.
@@ -340,7 +359,7 @@ Walk the shapes:
 - Agent steps take \`{ prompt: string }\` as input and return \`{ text }\` by default. Set \`outputSchema\` when a downstream step needs a machine-readable shape — especially when the next step is a \`foreach\` (the inner-step's per-iteration input shape must match every element of the array).
 - Never emit \`conditional\` or \`loop\` — they don't round-trip in v1. (Note: the in-process TypeScript builder can accept \`.dowhile(agent, ...)\` / \`.dountil(tool, ...)\`, but that's for programmatically constructed workflows only; \`save-workflow\` cannot persist a loop today.)
 - Templates render primitives only. Use \`\${stepResults.<id>.<field>}\` for object outputs; use \`\${stepResults.<id>}\` only when the step's \`outputSchema\` is a primitive.
-- \`inputData\` = workflow input. \`stepResults.<id>\` = a specific prior step.
+- \`\${inputData.<field>}\` = current step's live input (== previous step's output; only equals workflow input at step 1). \`\${initData.<field>}\` = workflow's original input, from any step. \`\${stepResults.<id>[.<field>]}\` = a specific prior step's output.
 - Mappings reshape between steps when shapes don't line up.
 - \`mapConfig\` is a JSON-encoded string.
 - Call \`save-workflow\` once. Use a kebab-case \`id\`. Return a one-paragraph summary at the end so the parent agent can relay it to the user.
