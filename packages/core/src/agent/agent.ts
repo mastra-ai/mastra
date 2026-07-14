@@ -6335,7 +6335,7 @@ export class Agent<
     return toolCalls;
   }
 
-  #validateSuspendedToolCallTarget({
+  async #validateSuspendedToolCallTarget({
     snapshot,
     toolCallId,
     runId,
@@ -6348,7 +6348,24 @@ export class Agent<
   }) {
     if (toolCallId === undefined) return;
 
-    const isSuspended = this.#getSuspendedToolCalls(snapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+    const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
+      this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+
+    let isSuspended = isTargetSuspended(snapshot);
+    if (!isSuspended) {
+      // A resume stream can expose the next suspension just before its snapshot is
+      // persisted. Briefly poll after authorization so an immediate response to
+      // that newly surfaced tool call is not rejected based on the prior snapshot.
+      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
+      const deadline = Date.now() + 2000;
+      while (!isSuspended && workflowsStore && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
+        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+      }
+    }
+
     if (!isSuspended) {
       throw new MastraError({
         id: 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED',
@@ -8273,7 +8290,7 @@ export class Agent<
       snapshotMemoryInfo,
       actor,
     });
-    this.#validateSuspendedToolCallTarget({
+    await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: streamOptions?.toolCallId,
       runId,
@@ -8433,7 +8450,7 @@ export class Agent<
       snapshotMemoryInfo: this.#getSnapshotMemoryInfo(existingSnapshot),
       actor,
     });
-    this.#validateSuspendedToolCallTarget({
+    await this.#validateSuspendedToolCallTarget({
       snapshot: existingSnapshot,
       toolCallId: options?.toolCallId,
       runId,
