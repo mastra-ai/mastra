@@ -73,13 +73,13 @@ describe('Subconscious LibSQL integration', () => {
           type: 'text' as const,
           text: JSON.stringify({
             capture: {
-              entities:
+              nodes:
                 doGenerate.mock.calls.length === 1
                   ? [
                       {
                         name: 'Project Atlas',
                         kind: 'project',
-                        facts: [
+                        items: [
                           { text: '[[Maya Chen]] owns [[Project Atlas]].' },
                           { text: 'The staging region is cobalt.' },
                         ],
@@ -88,7 +88,7 @@ describe('Subconscious LibSQL integration', () => {
                         name: 'Alpha Secret',
                         kind: 'note',
                         scope: 'thread',
-                        facts: [{ text: 'Only the alpha thread may see this.', scope: 'thread' }],
+                        items: [{ text: 'Only the alpha thread may see this.', scope: 'thread' }],
                       },
                     ]
                   : [],
@@ -106,7 +106,7 @@ describe('Subconscious LibSQL integration', () => {
         observationalMemory: {
           enabled: true,
           model,
-          subconscious: new Subconscious({ observation: ['capture'], reflection: [] }),
+          experimental_subconscious: new Subconscious({ observation: ['capture'], reflection: [] }),
           observation: { messageTokens: 1, bufferTokens: false, previousObserverTokens: 1_000 },
         },
       },
@@ -135,9 +135,9 @@ describe('Subconscious LibSQL integration', () => {
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
-    const atlas = await knowledge.resolveEntity({ name: 'Project Atlas', scope });
+    const atlas = await knowledge.resolveNode({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
-    expect((await knowledge.factsAbout({ entityId: atlas!.id, scope })).facts).toHaveLength(2);
+    expect((await knowledge.itemsAbout({ nodeId: atlas!.id, scope })).items).toHaveLength(2);
 
     const betaThreadId = randomUUID();
     await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
@@ -176,6 +176,33 @@ describe('Subconscious LibSQL integration', () => {
     expect(await knowledge.listSemanticOutbox({ status: 'pending', scope })).toEqual([]);
     const indexName = (await vector.listIndexes()).find(name => name.startsWith('knowledge_documents_dimension'))!;
     const matches = await vector.query({ indexName, queryVector: [0.1, 0.2, 0.3, 0.4], topK: 20 });
-    expect(matches.map(match => match.id)).toContain(`knowledge:entity:${atlas!.id}`);
+    expect(matches.map(match => match.id)).toContain(`knowledge:node:${atlas!.id}`);
+
+    const alphaSecret = await knowledge.resolveNode({ name: 'Alpha Secret', scope });
+    await knowledge.appendItem({
+      parentNodeId: alphaSecret!.id,
+      text: 'The shared cobalt checklist is ready.',
+      scope: scope.slice(0, 2),
+      sourceThreadId: threadId,
+      resolutionScope: scope,
+      defaultScope: scope,
+    });
+
+    const tools = memory.listTools();
+    const toolContext = { agent: { threadId: betaThreadId, resourceId }, requestContext } as any;
+    const search = await tools.knowledge_search!.execute?.({ query: 'cobalt staging' }, toolContext);
+    expect(search).toMatchObject({
+      results: expect.arrayContaining([expect.objectContaining({ name: 'Project Atlas' })]),
+    });
+    expect((search as any).results.map((item: any) => item.name)).not.toContain('Alpha Secret');
+    expect((search as any).results).toEqual(
+      expect.arrayContaining([expect.objectContaining({ type: 'item', name: '(private node)' })]),
+    );
+    const read = await tools.knowledge_read!.execute?.({ name: 'Project Atlas' }, toolContext);
+    expect(read).toMatchObject({ found: true, node: { name: 'Project Atlas' } });
+    const hidden = await tools.knowledge_read!.execute?.({ name: 'Alpha Secret' }, toolContext);
+    expect(hidden).toEqual({ found: false });
+    const browse = await tools.knowledge_browse!.execute?.({}, toolContext);
+    expect((browse as any).records.map((record: any) => record.name)).not.toContain('Alpha Secret');
   });
 });

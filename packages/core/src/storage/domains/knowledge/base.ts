@@ -131,7 +131,63 @@ export interface ListKnowledgeNodesInput {
   namePrefix?: string;
   kind?: string;
   hasContent?: boolean;
+  cursor?: string;
   limit?: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface KnowledgeNodeCursor {
+  updatedAt: Date;
+  name: string;
+  id: string;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function createKnowledgeNodeCursor(
+  node: Pick<KnowledgeNode, 'updatedAt' | 'name' | 'id'>,
+  filters: { namePrefix?: string; kind?: string; hasContent?: boolean } = {},
+): string {
+  return encodeURIComponent(
+    JSON.stringify({
+      version: 1,
+      type: 'node',
+      updatedAt: node.updatedAt.toISOString(),
+      name: node.name,
+      id: node.id,
+      namePrefix: filters.namePrefix?.toLocaleLowerCase() ?? null,
+      kind: filters.kind ?? null,
+      hasContent: filters.hasContent ?? null,
+    }),
+  );
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export function parseKnowledgeNodeCursor(
+  cursor: string,
+  filters: { namePrefix?: string; kind?: string; hasContent?: boolean },
+): KnowledgeNodeCursor {
+  let value: unknown;
+  try {
+    value = JSON.parse(decodeURIComponent(cursor));
+  } catch {
+    throw new Error('Invalid knowledge node cursor.');
+  }
+  if (!value || typeof value !== 'object') throw new Error('Invalid knowledge node cursor.');
+  const parsed = value as Record<string, unknown>;
+  const updatedAt = typeof parsed.updatedAt === 'string' ? new Date(parsed.updatedAt) : new Date(Number.NaN);
+  if (
+    parsed.version !== 1 ||
+    parsed.type !== 'node' ||
+    typeof parsed.name !== 'string' ||
+    typeof parsed.id !== 'string' ||
+    Number.isNaN(updatedAt.getTime()) ||
+    parsed.namePrefix !== (filters.namePrefix?.toLocaleLowerCase() ?? null) ||
+    parsed.kind !== (filters.kind ?? null) ||
+    parsed.hasContent !== (filters.hasContent ?? null)
+  ) {
+    throw new Error('Knowledge node cursor does not match the active browse filters.');
+  }
+  return { updatedAt, name: parsed.name, id: parsed.id };
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
