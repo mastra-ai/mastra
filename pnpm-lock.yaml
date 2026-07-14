@@ -317,8 +317,8 @@ importers:
   agent-sdks/claude:
     devDependencies:
       '@anthropic-ai/claude-agent-sdk':
-        specifier: ^0.3.168
-        version: 0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)
+        specifier: ^0.3.207
+        version: 0.3.207(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../packages/_config
@@ -8956,7 +8956,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.5.0
-        version: 1.6.0(@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.224(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
+        version: 1.6.0(@anthropic-ai/claude-agent-sdk@0.3.207(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.224(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9680,52 +9680,52 @@ packages:
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.169':
-    resolution: {integrity: sha512-5PJU3wqfvJUrgUF3H7iroxAGDyliKmq5q8kK+glERf8YZgmPeDMvQL4mGSB0Vf9RgBWS01dCen93TIsN0O8NPQ==}
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.207':
+    resolution: {integrity: sha512-08xSo1FDx8h0aLhL5tvcRxa2SMmcUV3aDWeZiEJVTclyiDAs61BgTjAxCg+SZcu1CndjJO8cfO0yM5dhamxz3g==}
     cpu: [arm64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.169':
-    resolution: {integrity: sha512-1Hzt0QYG7N/ExfPbN/C92YRc3BoDnyQMJpuWLVyI/r0NmKV/se/cZbIygbvQXs2ywoXOB/EyNj/hkVHaC1G22g==}
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.207':
+    resolution: {integrity: sha512-1o7K4EYqyCixZ/oeOZSh7AzSy6TM86xoOuf4VuORjPSS31hBnoqY0NGZd27+2VDs9LGtsdksmsTqcNGx9xd1hA==}
     cpu: [x64]
     os: [darwin]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.169':
-    resolution: {integrity: sha512-xkmyNdU6f7HXXzgR6IZym7x41bjL3rjGrXf5PAmx9PjdThy476+TrpO1evKUza1zlVmUj4tj/jYKQsV4ER7QFw==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.207':
+    resolution: {integrity: sha512-oPj+g2DslhH4Y9nCTs7al4t9wZv78FZwLFQwOCg99BXuz1o0ZOpKmxyvR7J9eBR+GPszeMMS8gYplQTiZC9o2w==}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.169':
-    resolution: {integrity: sha512-J0tyM4t5qxc2/xilsfHqcJv+fyEDhX66Nv+CMXq4mRbquZmMHhbZbh8ryb+BnKYXUeqKX3uoU/J+7K6/fjcY4g==}
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.207':
+    resolution: {integrity: sha512-X4uezYOifDiNTTmmugfRCdg3nNamrr1LFRY9hg30vWYTShL+bbN+nfC3KaFfSYCl4GTtsEEUbYdOTC2F3bBpcA==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.169':
-    resolution: {integrity: sha512-Me8VW91pCKgkct/y1isjKNVt+ZPMPhHk3C7O078UO1bakHD6kuPiMtugcCsg4jmmmuuywXQIQUESRbcf0GluUg==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.207':
+    resolution: {integrity: sha512-uRv+D5oG/7EYr41FAJ9IPo2pZYBe2ZMaA6nSHCeizsgPxCSMtl5bNppmU21+jZJvo4hivObEgkGFERAhdGqygg==}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.169':
-    resolution: {integrity: sha512-ktEPBwzXZagt0cntfRLlvNL0sAplt2HOCbR5iBvq2IV5dLvbEOiBjZQArIcSAN7CTQUFqkZs9HzQMdKe5QPwuQ==}
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.207':
+    resolution: {integrity: sha512-Kg6BPH8Ee0ny/oEUWJmvT1jCRBne4jVpRSOMsJcYp1Fav1rMEgpU219oJJs+LWwx4ifuuLtNWedqJNnVw7mnKg==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.169':
-    resolution: {integrity: sha512-HL9ecP82A/H8aC896Q7ETyl+nLFkMzBHfO0yvK7Lhxbi98CEpqXn3BADTAc5pEgzkO+r18+CDmZdgjTFMvGoTw==}
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.207':
+    resolution: {integrity: sha512-9fWpUzfkXlPAg2tf8JpQe7w9avFaomAUbfAwyAmykQgSIf66LwaJjvI5hNqhNqczRKyfsXPn3ei2S5HKlmFP+Q==}
     cpu: [arm64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.169':
-    resolution: {integrity: sha512-34pBbiKe7FNsY8LHuuTmKujmYko/cBOrKJpk9H+MOot+dSfB/FmIHq9USL17otNal5Droq9lqpezAWPBPv3lAQ==}
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.207':
+    resolution: {integrity: sha512-YPjVT0q6aXEM2MgN4CI6/9fqiTXwETji+4NoPOzCYuqAkhXZqp30Jsk7/NHqYGNNSfURKrsuAoliKB0rsbpbjg==}
     cpu: [x64]
     os: [win32]
 
-  '@anthropic-ai/claude-agent-sdk@0.3.169':
-    resolution: {integrity: sha512-pzsd0BBnlfHwAUfKouSNwDLcCxGDq+lbPZTsIdiNSLw+AQw7mjxPxqnFwd4YH7qw+E3XhlotuihCm01XzcybPQ==}
+  '@anthropic-ai/claude-agent-sdk@0.3.207':
+    resolution: {integrity: sha512-y0PkQRmQBi96MHiN5Xzfq+GaddxCZCqI/cXEQBLYBLXGa4i1nDSlulQqkMBj2RorrrSGQJ6Wdw+uhu6OfHNPzA==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       '@anthropic-ai/sdk': '>=0.93.0'
@@ -30356,44 +30356,44 @@ snapshots:
 
   '@alloc/quick-lru@5.2.0': {}
 
-  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-linux-x64@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.169':
+  '@anthropic-ai/claude-agent-sdk-win32-x64@0.3.207':
     optional: true
 
-  '@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)':
+  '@anthropic-ai/claude-agent-sdk@0.3.207(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)':
     dependencies:
       '@anthropic-ai/sdk': 0.39.0(encoding@0.1.13)
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       zod: 4.4.3
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.169
-      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.169
+      '@anthropic-ai/claude-agent-sdk-darwin-arm64': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-darwin-x64': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-linux-arm64': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-linux-arm64-musl': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-linux-x64': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-linux-x64-musl': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-win32-arm64': 0.3.207
+      '@anthropic-ai/claude-agent-sdk-win32-x64': 0.3.207
 
   '@anthropic-ai/sdk@0.39.0(encoding@0.1.13)':
     dependencies:
@@ -45367,11 +45367,11 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.6.0(@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.224(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
+  files-sdk@1.6.0(@anthropic-ai/claude-agent-sdk@0.3.207(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.224(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
     dependencies:
       commander: 14.0.3
     optionalDependencies:
-      '@anthropic-ai/claude-agent-sdk': 0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)
+      '@anthropic-ai/claude-agent-sdk': 0.3.207(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3)
       '@aws-sdk/client-s3': 3.1059.0
       '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1059.0)
       '@azure/core-auth': 1.10.1
