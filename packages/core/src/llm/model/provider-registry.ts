@@ -440,6 +440,7 @@ export function getRegisteredProviders(): string[] {
 interface ProviderCapabilityFile {
   attachment?: string[];
   temperature?: string[];
+  structuredOutput?: string[];
 }
 
 type CapabilityDimension = keyof ProviderCapabilityFile;
@@ -447,6 +448,15 @@ type CapabilityDimension = keyof ProviderCapabilityFile;
 const providerCapCaches: Record<CapabilityDimension, Map<string, string[] | null>> = {
   attachment: new Map(),
   temperature: new Map(),
+  structuredOutput: new Map(),
+};
+
+const capabilityOverrides: Partial<Record<CapabilityDimension, Record<string, boolean>>> = {
+  // DeepSeek's native endpoint rejects response_format for this routed model even
+  // though models.dev currently reports structured_output support.
+  structuredOutput: {
+    'deepseek/deepseek-v4-pro': false,
+  },
 };
 
 function isDirectory(dir: string): boolean {
@@ -538,6 +548,9 @@ function getProviderCapabilitySupport(
 }
 
 function modelSupportsCapability(modelRouterId: string, dimension: CapabilityDimension): boolean | undefined {
+  const override = capabilityOverrides[dimension]?.[modelRouterId];
+  if (override !== undefined) return override;
+
   const { provider, modelId } = parseModelString(modelRouterId);
   if (!provider) return undefined;
 
@@ -588,6 +601,15 @@ export function modelSupportsAttachments(modelRouterId: string): boolean | undef
  */
 export function modelSupportsTemperature(modelRouterId: string): boolean | undefined {
   return modelSupportsCapability(modelRouterId, 'temperature');
+}
+
+/**
+ * Check whether a model supports native structured output.
+ * Returns `true` if the model is listed, `false` if the provider is known but
+ * the model isn't listed, or `undefined` when no data exists for the provider.
+ */
+export function modelSupportsStructuredOutput(modelRouterId: string): boolean | undefined {
+  return modelSupportsCapability(modelRouterId, 'structuredOutput');
 }
 
 /**
@@ -700,8 +722,14 @@ export class GatewayRegistry {
       const gateways = [...defaultGateways, ...this.customGateways];
 
       // Fetch provider data
-      const { providers, models, attachmentCapabilities, temperatureCapabilities, failedGateways } =
-        await fetchProvidersFromGateways(gateways);
+      const {
+        providers,
+        models,
+        attachmentCapabilities,
+        temperatureCapabilities,
+        structuredOutputCapabilities,
+        failedGateways,
+      } = await fetchProvidersFromGateways(gateways);
 
       // If any gateway failed, skip writing to prevent partial results from
       // overwriting the complete bundled registry. The existing static registry
@@ -725,6 +753,7 @@ export class GatewayRegistry {
           models,
           attachmentCapabilities,
           temperatureCapabilities,
+          structuredOutputCapabilities,
         );
         // console.debug(`[GatewayRegistry] ✅ Updated global cache at ${CACHE_DIR()}`);
       } catch (error) {
@@ -742,6 +771,7 @@ export class GatewayRegistry {
         models,
         attachmentCapabilities,
         temperatureCapabilities,
+        structuredOutputCapabilities,
       );
       // console.debug(`[GatewayRegistry] ✅ Updated registry files in dist/`);
 

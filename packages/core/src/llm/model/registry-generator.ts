@@ -9,6 +9,7 @@ import type {
   AttachmentCapabilities,
   MastraModelGatewayInterface,
   ProviderConfig,
+  StructuredOutputCapabilities,
   TemperatureCapabilities,
 } from './gateways/base.js';
 import { getGatewayId, shouldEnableGateway } from './gateways/index.js';
@@ -19,6 +20,10 @@ interface GatewayWithAttachmentCapabilities {
 
 interface GatewayWithTemperatureCapabilities {
   getTemperatureCapabilities(): TemperatureCapabilities;
+}
+
+interface GatewayWithStructuredOutputCapabilities {
+  getStructuredOutputCapabilities(): StructuredOutputCapabilities;
 }
 
 function hasAttachmentCapabilities(
@@ -36,6 +41,15 @@ function hasTemperatureCapabilities(
   return (
     'getTemperatureCapabilities' in gateway &&
     typeof (gateway as { getTemperatureCapabilities?: unknown }).getTemperatureCapabilities === 'function'
+  );
+}
+
+function hasStructuredOutputCapabilities(
+  gateway: MastraModelGatewayInterface,
+): gateway is MastraModelGatewayInterface & GatewayWithStructuredOutputCapabilities {
+  return (
+    'getStructuredOutputCapabilities' in gateway &&
+    typeof (gateway as { getStructuredOutputCapabilities?: unknown }).getStructuredOutputCapabilities === 'function'
   );
 }
 
@@ -90,6 +104,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
   models: Record<string, string[]>;
   attachmentCapabilities: AttachmentCapabilities;
   temperatureCapabilities: TemperatureCapabilities;
+  structuredOutputCapabilities: StructuredOutputCapabilities;
   failedGateways: string[];
 }> {
   const enabledGateways: MastraModelGatewayInterface[] = [];
@@ -104,6 +119,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
   const allModels: Record<string, string[]> = {};
   const allAttachmentCapabilities: AttachmentCapabilities = {};
   const allTemperatureCapabilities: TemperatureCapabilities = {};
+  const allStructuredOutputCapabilities: StructuredOutputCapabilities = {};
   const failedGateways: string[] = [];
 
   const maxRetries = 3;
@@ -137,6 +153,9 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
     const gatewayTemperatureCaps = hasTemperatureCapabilities(gateway)
       ? gateway.getTemperatureCapabilities()
       : undefined;
+    const gatewayStructuredOutputCaps = hasStructuredOutputCapabilities(gateway)
+      ? gateway.getStructuredOutputCapabilities()
+      : undefined;
 
     for (const [providerId, config] of Object.entries(providers)) {
       // For true gateways, use gateway id as prefix (e.g., "netlify/anthropic")
@@ -159,6 +178,9 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
       if (gatewayTemperatureCaps?.[providerId]) {
         allTemperatureCapabilities[typeProviderId] = gatewayTemperatureCaps[providerId];
       }
+      if (gatewayStructuredOutputCaps?.[providerId]) {
+        allStructuredOutputCapabilities[typeProviderId] = gatewayStructuredOutputCaps[providerId];
+      }
     }
   }
 
@@ -167,6 +189,7 @@ export async function fetchProvidersFromGateways(gateways: MastraModelGatewayInt
     models: allModels,
     attachmentCapabilities: allAttachmentCapabilities,
     temperatureCapabilities: allTemperatureCapabilities,
+    structuredOutputCapabilities: allStructuredOutputCapabilities,
     failedGateways,
   };
 }
@@ -259,6 +282,7 @@ export async function writeRegistryFiles(
   models: Record<string, string[]>,
   attachmentCapabilities?: AttachmentCapabilities,
   temperatureCapabilities?: TemperatureCapabilities,
+  structuredOutputCapabilities?: StructuredOutputCapabilities,
 ): Promise<void> {
   // 0. Ensure directories exist
   const jsonDir = path.dirname(jsonPath);
@@ -282,7 +306,8 @@ export async function writeRegistryFiles(
   // 3. Write per-provider capability files into a capabilities/ directory
   const hasCapabilities =
     (attachmentCapabilities && Object.keys(attachmentCapabilities).length > 0) ||
-    (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0);
+    (temperatureCapabilities && Object.keys(temperatureCapabilities).length > 0) ||
+    (structuredOutputCapabilities && Object.keys(structuredOutputCapabilities).length > 0);
   if (hasCapabilities) {
     const capDir = path.join(jsonDir, 'capabilities');
     await fs.mkdir(capDir, { recursive: true });
@@ -303,12 +328,16 @@ export async function writeRegistryFiles(
     const allProviderIds = new Set([
       ...(attachmentCapabilities ? Object.keys(attachmentCapabilities) : []),
       ...(temperatureCapabilities ? Object.keys(temperatureCapabilities) : []),
+      ...(structuredOutputCapabilities ? Object.keys(structuredOutputCapabilities) : []),
     ]);
 
     for (const provider of allProviderIds) {
       const capData: Record<string, string[]> = {};
       if (attachmentCapabilities?.[provider]) capData.attachment = attachmentCapabilities[provider];
       if (temperatureCapabilities?.[provider]) capData.temperature = temperatureCapabilities[provider];
+      if (structuredOutputCapabilities?.[provider]) {
+        capData.structuredOutput = structuredOutputCapabilities[provider];
+      }
 
       const providerFile = path.join(capDir, `${provider}.json`);
       await atomicWriteFile(providerFile, JSON.stringify(capData, null, 2), 'utf-8');
