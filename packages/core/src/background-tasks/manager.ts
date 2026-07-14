@@ -29,6 +29,10 @@ export class BackgroundTaskManager {
 
   #mastra?: Mastra;
 
+  // Single-flight guard for #ensureWorkersStarted — concurrent first
+  // dispatches share one in-flight startWorkers() run.
+  #workersStartPromise?: Promise<void>;
+
   // Per-task contexts — keyed by task ID, holds closures from the caller's stream.
   /** @internal — read by the workflow-engine step bodies in workflow.ts */
   taskContexts: Map<string, TaskContext> = new Map();
@@ -742,11 +746,19 @@ export class BackgroundTaskManager {
    * startWorkers() is idempotent — safe if already started. Safe to call from
    * within #doInit() (stale-task recovery): no worker start path awaits the
    * manager's own initPromise when sharing Mastra's manager.
+   *
+   * Single-flight: concurrent first dispatches (e.g. two simultaneous requests
+   * on a cold Express app) share one in-flight startWorkers() run instead of
+   * each starting workers — mirrors Mastra's #schedulingWorkersStartPromise
+   * pattern. Cleared on settle so a failed start is retried by the next
+   * dispatch; a successful one flips __workersStarted, short-circuiting here.
    */
   async #ensureWorkersStarted(): Promise<void> {
-    if (this.#mastra && !this.#mastra.__workersStarted) {
-      await this.#mastra.startWorkers();
-    }
+    if (!this.#mastra || this.#mastra.__workersStarted) return;
+    this.#workersStartPromise ??= this.#mastra.startWorkers().finally(() => {
+      this.#workersStartPromise = undefined;
+    });
+    await this.#workersStartPromise;
   }
 
   private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {

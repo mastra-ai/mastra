@@ -1,5 +1,5 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createBackgroundTask } from '../../background-tasks';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage';
@@ -180,6 +180,7 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
       runId: 'r1',
       retryCount: 0,
       maxRetries: 0,
+      timeoutMs: 30_000,
       createdAt: new Date(),
     });
 
@@ -202,5 +203,42 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
     }
 
     expect(status).toBe('completed');
+  }, 15000);
+
+  it('starts workers only once for concurrent first dispatches', async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true },
+    });
+
+    const manager = mastra.backgroundTaskManager!;
+    const startSpy = vi.spyOn(mastra, 'startWorkers');
+
+    // Two producers dispatch at the same time on a cold instance (e.g. two
+    // simultaneous requests hitting an Express app). The single-flight guard
+    // must funnel both through one startWorkers() run.
+    const makeTask = (n: number) =>
+      createBackgroundTask(manager, {
+        toolName: `my-tool-${n}`,
+        toolCallId: `call-${n}`,
+        args: {},
+        agentId: 'a1',
+        runId: `r${n}`,
+        context: { executor: { execute: async () => ({ data: `hello-${n}` }) } },
+      });
+    await Promise.all([makeTask(1).dispatch(), makeTask(2).dispatch()]);
+
+    expect(startSpy).toHaveBeenCalledTimes(1);
+
+    let statuses: string[] = [];
+    for (let i = 0; i < 50; i++) {
+      const { tasks } = await manager.listTasks({});
+      statuses = tasks.map(t => t.status);
+      if (statuses.length === 2 && statuses.every(s => s === 'completed' || s === 'failed')) break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    expect(statuses).toEqual(['completed', 'completed']);
   }, 15000);
 });
