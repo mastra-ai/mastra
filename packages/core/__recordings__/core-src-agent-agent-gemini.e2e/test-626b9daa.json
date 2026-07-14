@@ -37,9 +37,7 @@
                   "name": "weatherTool",
                   "description": "Gets the current weather for a location",
                   "parameters": {
-                    "required": [
-                      "location"
-                    ],
+                    "required": ["location"],
                     "type": "object",
                     "properties": {
                       "location": {
@@ -213,9 +211,7 @@
                   "name": "weatherTool",
                   "description": "Gets the current weather for a location",
                   "parameters": {
-                    "required": [
-                      "location"
-                    ],
+                    "required": ["location"],
                     "type": "object",
                     "properties": {
                       "location": {

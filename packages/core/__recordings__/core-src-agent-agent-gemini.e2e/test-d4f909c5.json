@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -200,16 +190,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"response):** \\\"This is a system message.\\\" (Meaning: \\\"I got a dot, what do you actually want?\\\")\\n    *   **You (now):** *Tell me what you need!*\\n\\n**Please go ahead and provide your\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 338,\"totalTokenCount\": 1329,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" actual prompt, question, or the task you want me to help you with.** I'm ready when you are!\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 42,\"candidatesTokenCount\": 362,\"totalTokenCount\": 1353,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 42}],\"thoughtsTokenCount\": 949,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"325WaoHwLp7mnsEPvZqY0As\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          130,
-          240,
-          344,
-          105,
-          225,
-          286,
-          50
-        ],
+        "chunkTimings": [0, 130, 240, 344, 105, 225, 286, 50],
         "isStreaming": true
       }
     },
@@ -222,10 +203,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -282,10 +260,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\\"isComplete\\\": true, \\\"completionReason\\\": \\\"The helperAgent has provided a comprehensive explanation regarding the 'This is a system message' response, clarifying its meaning and suggesting\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1122,\"candidatesTokenCount\": 35,\"totalTokenCount\": 1615,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1122}],\"thoughtsTokenCount\": 458,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6G5WapKBCbGqnsEP6OqnwAo\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" the next steps. This directly addresses the user's original task.\\\", \\\"finalResult\\\": \\\"\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 1122,\"candidatesTokenCount\": 54,\"totalTokenCount\": 1634,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 1122}],\"thoughtsTokenCount\": 458,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"6G5WapKBCbGqnsEP6OqnwAo\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          0
-        ],
+        "chunkTimings": [0, 0],
         "isStreaming": true
       }
     }

@@ -398,6 +398,7 @@ export class AgentController<TState = {}> {
     }
 
     const creation = this.#createSessionForResource(effectiveOwnerId, effectiveSessionId, effectiveResourceId, tags, {
+      scope,
       workspace,
       browser,
       requestContext,
@@ -422,6 +423,7 @@ export class AgentController<TState = {}> {
     effectiveResourceId: string,
     tags?: Record<string, string>,
     overrides?: {
+      scope?: string;
       workspace?: Workspace;
       browser?: MastraBrowser;
       requestContext?: RequestContext;
@@ -455,6 +457,7 @@ export class AgentController<TState = {}> {
       },
       threadId: null,
       resourceId: effectiveResourceId,
+      scope: overrides?.scope,
       session: {
         id,
         ownerId,
@@ -2155,6 +2158,7 @@ export class AgentController<TState = {}> {
       updateState: updater => session.state.update(updater),
       threadId: session.thread.getId(),
       resourceId: session.identity.getResourceId(),
+      scope: this.#sessionScopes.get(session),
       session: {
         id: session.identity.getId(),
         ownerId: session.identity.getOwnerId(),

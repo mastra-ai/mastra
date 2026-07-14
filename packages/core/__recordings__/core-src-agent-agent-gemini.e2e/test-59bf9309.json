@@ -74,9 +74,7 @@
                   "name": "testTool",
                   "description": "A test tool",
                   "parameters": {
-                    "required": [
-                      "query"
-                    ],
+                    "required": ["query"],
                     "type": "object",
                     "properties": {
                       "query": {

@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -181,13 +171,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" are fundamental to modern AI development.\\n*   **Applications:** AI is transforming industries such as healthcare (diagnosis, drug discovery), finance (fraud detection, algorithmic trading), manufacturing (automation, quality control), transportation (autonomous vehicles), and entertainment (content\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 17,\"candidatesTokenCount\": 179,\"totalTokenCount\": 379,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 17}],\"thoughtsTokenCount\": 183,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"mm5WarjINJjnnsEPi7bRmQ0\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" recommendation, creative tools).\\n*   **Challenges & Ethics:** Significant considerations include data privacy, algorithmic bias, job displacement, ethical decision-making in autonomous systems, and ensuring responsible development and deployment of AI technologies.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 17,\"candidatesTokenCount\": 223,\"totalTokenCount\": 423,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 17}],\"thoughtsTokenCount\": 183,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"mm5WarjINJjnnsEPi7bRmQ0\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          155,
-          940,
-          32,
-          29
-        ],
+        "chunkTimings": [0, 155, 940, 32, 29],
         "isStreaming": true
       }
     },
@@ -200,10 +184,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -263,13 +244,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"), Natural Language Processing (NLP), computer vision, and robotics. AI's applications are diverse, transforming sectors such as healthcare (diagnosis, drug discovery), finance (fraud detection), manufacturing (automation), transportation (autonomous vehicles), and entertainment (\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 975,\"candidatesTokenCount\": 175,\"totalTokenCount\": 1229,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 975}],\"thoughtsTokenCount\": 79,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"nm5WarvkNvfPnsEP8f-54Qw\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"content recommendation). However, its development also presents significant challenges and ethical considerations, including data privacy, algorithmic bias, potential job displacement, and the need for responsible deployment and ethical decision-making in autonomous systems.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 975,\"candidatesTokenCount\": 217,\"totalTokenCount\": 1271,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 975}],\"thoughtsTokenCount\": 79,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"nm5WarvkNvfPnsEP8f-54Qw\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          137,
-          232,
-          174,
-          184
-        ],
+        "chunkTimings": [0, 137, 232, 174, 184],
         "isStreaming": true
       }
     },
@@ -282,10 +257,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "summary",
-                "confidence"
-              ],
+              "required": ["summary", "confidence"],
               "type": "object",
               "properties": {
                 "summary": {
@@ -342,14 +314,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"), transportation (autonomous vehicles), and entertainment (content recommendation, creative tools). *   **Challenges & Ethics:** Significant considerations include data privacy, algorithmic bias, job displacement, ethical decision-making in autonomous systems, and ensuring responsible development and deployment\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 698,\"candidatesTokenCount\": 217,\"totalTokenCount\": 1482,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 698}],\"thoughtsTokenCount\": 567,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"oW5WaqGtD_rl7M8P4rDe6Qs\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" of AI technologies.\\\",\\\"confidence\\\":0.95}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 698,\"candidatesTokenCount\": 229,\"totalTokenCount\": 1494,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 698}],\"thoughtsTokenCount\": 567,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"oW5WaqGtD_rl7M8P4rDe6Qs\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          133,
-          187,
-          185,
-          187,
-          58
-        ],
+        "chunkTimings": [0, 133, 187, 185, 187, 58],
         "isStreaming": true
       }
     }

@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -170,10 +160,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -231,11 +218,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" step (a 'none none' decision) indicated that the explanation has been provided and no further tools or agents are needed to complete the task.\\\", \\\"finalResult\\\": \\\"The system has completed the task of explaining the result. It has provided\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 833,\"candidatesTokenCount\": 61,\"totalTokenCount\": 2459,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 833}],\"thoughtsTokenCount\": 1565,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"zW5WauHzD8uK7M8P-r-EwQg\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" a clear and concise explanation, stating that the previous output was simple and directly interpretable, and no further steps are required.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 833,\"candidatesTokenCount\": 87,\"totalTokenCount\": 2485,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 833}],\"thoughtsTokenCount\": 1565,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"zW5WauHzD8uK7M8P-r-EwQg\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          41,
-          164
-        ],
+        "chunkTimings": [0, 41, 164],
         "isStreaming": true
       }
     }

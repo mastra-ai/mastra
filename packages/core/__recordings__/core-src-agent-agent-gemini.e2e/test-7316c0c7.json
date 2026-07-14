@@ -15,12 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -30,12 +25,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -170,10 +160,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"Yes, I can help you! Please tell me more about the task you need assistance with\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 17,\"candidatesTokenCount\": 18,\"totalTokenCount\": 433,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 17}],\"thoughtsTokenCount\": 398,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"p25WatmpBfqK7M8PqOH6oAw\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \". I'll do my best to assist you.\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 17,\"candidatesTokenCount\": 29,\"totalTokenCount\": 444,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 17}],\"thoughtsTokenCount\": 398,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"p25WatmpBfqK7M8PqOH6oAw\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          0
-        ],
+        "chunkTimings": [0, 0],
         "isStreaming": true
       }
     },
@@ -186,10 +173,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -247,11 +231,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"\\\": \\\"The helperAgent has indicated it can assist but requires more information to proceed with the task. It has not provided a final solution or completed a specific action.\\\", \\\"finalResult\\\": \\\"The helperAgent is ready to help but needs more details about\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 774,\"candidatesTokenCount\": 59,\"totalTokenCount\": 975,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 774}],\"thoughtsTokenCount\": 142,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"qW5Wav-JMP2nkdUPzuSc8Ag\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" your request. Please provide additional information so it can assist you further.\\\"}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 774,\"candidatesTokenCount\": 74,\"totalTokenCount\": 990,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 774}],\"thoughtsTokenCount\": 142,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"qW5Wav-JMP2nkdUPzuSc8Ag\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          101,
-          521
-        ],
+        "chunkTimings": [0, 101, 521],
         "isStreaming": true
       }
     },
@@ -264,12 +244,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "primitiveId",
-                "primitiveType",
-                "prompt",
-                "selectionReason"
-              ],
+              "required": ["primitiveId", "primitiveType", "prompt", "selectionReason"],
               "type": "object",
               "properties": {
                 "primitiveId": {
@@ -279,12 +254,7 @@
                 "primitiveType": {
                   "description": "The type of the primitive to be called",
                   "type": "string",
-                  "enum": [
-                    "agent",
-                    "workflow",
-                    "none",
-                    "tool"
-                  ]
+                  "enum": ["agent", "workflow", "none", "tool"]
                 },
                 "prompt": {
                   "description": "The json string or text value to be sent to the primitive",
@@ -436,11 +406,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \", I understand. To prompt `helperAgent` to explicitly ask the user for details about their task, I would have `helperAgent` say:\\n\\n\\\"Could you please tell me more about what you need assistance with today? What task\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 65,\"candidatesTokenCount\": 49,\"totalTokenCount\": 230,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 65}],\"thoughtsTokenCount\": 116,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"rm5WauL5DYLkkdUPuq2W2Qw\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" can I help you with?\\\"\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 65,\"candidatesTokenCount\": 55,\"totalTokenCount\": 236,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 65}],\"thoughtsTokenCount\": 116,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"rm5WauL5DYLkkdUPuq2W2Qw\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          106,
-          35
-        ],
+        "chunkTimings": [0, 106, 35],
         "isStreaming": true
       }
     },
@@ -453,10 +419,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "isComplete",
-                "completionReason"
-              ],
+              "required": ["isComplete", "completionReason"],
               "type": "object",
               "properties": {
                 "isComplete": {
@@ -513,10 +476,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \"{\\n  \\\"isComplete\\\": true,\\n  \\\"completionReason\\\": \\\"The helperAgent has successfully provided a suitable prompt for asking the user for task details, which fulfills the implicit goal of the original task. No further primitives are\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 809,\"candidatesTokenCount\": 47,\"totalTokenCount\": 1309,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 809}],\"thoughtsTokenCount\": 453,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"r25WatmUGuPj7M8P6s2-qQg\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" required.\\\",\\n  \\\"finalResult\\\": \\\"\\\"\\n}\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 809,\"candidatesTokenCount\": 58,\"totalTokenCount\": 1320,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 809}],\"thoughtsTokenCount\": 453,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"r25WatmUGuPj7M8P6s2-qQg\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          0
-        ],
+        "chunkTimings": [0, 0],
         "isStreaming": true
       }
     }

@@ -15,9 +15,7 @@
           "generationConfig": {
             "responseMimeType": "application/json",
             "responseSchema": {
-              "required": [
-                "summary"
-              ],
+              "required": ["summary"],
               "type": "object",
               "properties": {
                 "summary": {

@@ -37,15 +37,11 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": [
-                      "inputData"
-                    ],
+                    "required": ["inputData"],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": [
-                          "name"
-                        ],
+                        "required": ["name"],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -111,10 +107,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"functionCall\": {\"name\": \"workflow-findUserWorkflow\",\"args\": {\"inputData\": {\"name\": \"Dero Israel\"}}},\"thoughtSignature\": \"CiQBEU0yD5LzavEMSu1g7dNjyIve3zRLnaZvuOOFDIpIuUIQ9/EKXwERTTIP5H76DXzFeDVTJtbFCEBEOA13acOV8mi20uMSiBtIbFOQ7KKIAlsPYw8HdDjI+aTh01+p44SIpzB5NAkOg2rUXTnLYrKy2KPZ35oO4J4ecsn8PmBA3IFI5CzsCoICARFNMg/XkmnbTitrHARiqZIthGCO0i93jmVrYTk17l4a3aPQzJ5GpZVaXPlMHGD1ONq0i3VMErSvRkyK9EInIQUnjhkW74xQ+l5CAt1FfpX/+HOjSSm8rHylDudlH0gqZt32SfmuRa4VCjHRuSKN3DXkQYXO1aKnAaNkc1JJ7Lp9WL8QRqU+WGFyEJKPP/B1LSRf3S5lLj+pdvXTLLk7kEiyh9pbhhUoRAbe6hhdl9OYtwHSdOCYXpQn4RyiGEQSzz7L+dnt6APNYGkPPV7tjwaUEIxo9yCrrYQshiVO13tNC3QXVYSaG7UWTsVIMaH7giPxgVwjtgxv4J+Yjlr6llCfCoQBARFNMg/Ar8d9r9B8N/2IlGtEgtpr6CuZ3efzSm4jQxikXrC9NexeahrrDKnj4BZEcXIw6szRBIjI",
           "IK6pGJc7uPFs940RNpCRIekInmMbDtjbnWK8cCqtVy2/Vv/p7sypHAu71Y96fLxX0wgl7Ar9RY5ZbbUhgz5OetXHwDcr+leukza5\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 186,\"candidatesTokenCount\": 24,\"totalTokenCount\": 303,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 186}],\"thoughtsTokenCount\": 93,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"-W5WaqGeK960nsEPisXP-As\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          0
-        ],
+        "chunkTimings": [0, 0],
         "isStreaming": true
       }
     },
@@ -157,15 +150,11 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": [
-                      "inputData"
-                    ],
+                    "required": ["inputData"],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": [
-                          "name"
-                        ],
+                        "required": ["name"],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -232,11 +221,7 @@
           "fCtABARFNMg/MROQZNywxAAe2aoRjycak02r6COOx0DRC08yT7QopzmAlTouH4MhJYbKVgjtuenlMspnPoEM4BPA+s9QORz95mKw83t9+IsEuyv4UoFPPovZAjIdmBhahDOIl/D+nHNqUB7c3MEnBrZcAO3nk326SUBJBn2z6Tm8DbRSKAfHSG2Z6+ENXbc1dGhgYCdjIDoKAgdObiX85vfL3n30VRiUpZg40Z0ReoMeE3FwPK/AziF1bxKLAKurtqgVp/ELEAGbLGkH6TQE34VUvmQrIAQERTTIPVKtUyM7dW88WNdZ03ccMDkBCNW6B7Hec5sOJTfJrNJm3QM/dT+OHP+CXvK075GTxUTxFZy9XbAaa6k9Y10rVPCWdiNz6HRqq+pfm5wygnOlycnjmEvxVXy3kM0jR1Qzwh5TISh7WThwyLa4Skl8skWYUcrjtOMkuunvbAeL3U1nTikEFM/EQsQeZ8FOjjuX9TTR8x9zWVzqBJ1ejdKxFi+1Vj6vTiIxM1B0+WQxymCrsL1N3OtWORwVyiTRvoR3JmU5ECtABARFNMg9aokTehxiLvnIpeI7AvrAfRVro0+INr0wC1CoLkIQIRX94OUWvv7OpaOICom9SxYFbt93WPWuiyJ2rQN+hPuvNNqo/WUvvyMc2ZURJnk3iXjcQ+60Cm76pHSLkcKmGl7R2RrOYRC3bFlrVBBirZQxHXtVsDPACLlPg51kVnlO66rT4PyDnHbB9x33FC/VWXu/KLJLR3+2FBoFyGFN1wgk1ZqAilOj4qu2ifU79p9lxxKqP9gpP8JTuakua7mzfScOCuKGShW1bNSvrkArYAQERTTIPKBmSnDzyKoPuozRWhyIpD1OZeGFUS2yhs/o7mtHe6b5xq9qqBBMERB01IqBU53MlZwv8/jA3S9eMNWSVhtEbqoWzDvIMhXdZB7i7sl93cDNWArznQuOo5acHPGhbZBBWzEu0ygG2c8FWuw+u1QcRTls2P0RFlbPs+ufdsCPhTJGOkWcEN0StwAUs6OeaGOkPq9XlVMWEtLgyXNohTPliOBKJjrY79MsZbHwyZCInmOebzWcyntOqMRb0XN1vjGF0XANkvAp45UNtYX4l0vS9AIoczQqRAQERTTIPbKeOadx/C5AroJpR4L9FNs0MtRSbJrbAfCsQb7YcLmjgR+ptm",
           "gmtDAUScg3me/FEp4uGPA4B/iwmKXQMcr//AWUCbbQyKUm9YQfeZhQ5JBvY8y6Ehi8rr79S4oJc44T8kwTVtlPVB50sAgFj3GInOUL+KMF4GuygptNtiVJiewb5LrtdQsNNYPDz+IcKogEBEU0yDx04ycdz8iukkCALdWDWaUNZz/va+dY4BS3Hm8eDThGGDjzkczVWYUU8UOx9wphDHdxLxOwxSUb66U40e+4iHO2+n9TB/tsg4BV7i0QciAUp/ev6DmqrLac8wTEY8ZbNIdr6Mrvn+6SLWduqBFAFDx6haKz6InZQFBng9IEFpPw8pGwXIcZaCU3c++5r7dqQ8WtPKVn8SjUO0r8Gbe0KlgEBEU0yD8k5nQxXFjo3aCns8OimNjcd53mxdgJ/Q+nITI7F4OZ+6y23wPy1vlCEYu0xMqOIRATNnSd8t9a0KYnqBQM+BHHd2Cb3S40begc6dxC/kNbHvLtIP7N+2MQq6OPe7gVhog50zg/LXXGaPH3qVGcCpClstDiQ2T/nX8uAHtTTUoRJOBOrRNKuHqjSCUCAuXDMdcYKNAERTTIPuNYmLrAMxjuxvcpVA9SXO107oxnS101CasigJuHLL+efEJolF0aBZ1/u3e4AQDcKIgERTTIPoAY/oemuMQLRRBBMrEvFu7Phq2YQiyL6AiuyO0w=\"}],\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0,\"finishMessage\": \"Model generated function call(s).\"}],\"usageMetadata\": {\"promptTokenCount\": 578,\"candidatesTokenCount\": 78,\"totalTokenCount\": 1130,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 578}],\"thoughtsTokenCount\": 474,\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"-m5WapOYOs6L7M8P_v6k-Aw\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          1,
-          0,
-          0
-        ],
+        "chunkTimings": [1, 0, 0],
         "isStreaming": true
       }
     },
@@ -322,15 +307,11 @@
                   "name": "workflow-findUserWorkflow",
                   "description": "This is a tool that returns name and age",
                   "parameters": {
-                    "required": [
-                      "inputData"
-                    ],
+                    "required": ["inputData"],
                     "type": "object",
                     "properties": {
                       "inputData": {
-                        "required": [
-                          "name"
-                        ],
+                        "required": ["name"],
                         "type": "object",
                         "properties": {
                           "name": {
@@ -397,11 +378,7 @@
           "data: {\"candidates\": [{\"content\": {\"parts\": [{\"text\": \" Dero Israel is 25 years old. Their email is test@test.com.\"}],\"role\": \"model\"},\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 840,\"candidatesTokenCount\": 21,\"totalTokenCount\": 861,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 840}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"_m5WaobYAqvnnsEPmsK6iQ4\"}\r\n\r\n",
           "data: {\"candidates\": [{\"content\": {\"role\": \"model\"},\"finishReason\": \"STOP\",\"index\": 0}],\"usageMetadata\": {\"promptTokenCount\": 840,\"candidatesTokenCount\": 21,\"totalTokenCount\": 861,\"promptTokensDetails\": [{\"modality\": \"TEXT\",\"tokenCount\": 840}],\"serviceTier\": \"standard\"},\"modelVersion\": \"gemini-2.5-flash\",\"responseId\": \"_m5WaobYAqvnnsEPmsK6iQ4\"}\r\n\r\n"
         ],
-        "chunkTimings": [
-          0,
-          0,
-          0
-        ],
+        "chunkTimings": [0, 0, 0],
         "isStreaming": true
       }
     }
