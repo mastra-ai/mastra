@@ -109,6 +109,28 @@ describe('dispatchGithubWebhook', () => {
     expect(listSubscriptions).not.toHaveBeenCalled();
   });
 
+  it('fails closed when the collaborator permission check times out', async () => {
+    vi.useFakeTimers();
+    try {
+      getRepositoryCollaboratorPermission.mockImplementation(() => new Promise(() => undefined));
+      const listSubscriptions = vi.fn(async () => [subscription('a', '/worktrees/a')]);
+      const result = dispatchGithubWebhook(
+        parsed('issue_comment', 'created', {
+          issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+          pull_request: undefined,
+        }),
+        { controller: {} as never, listSubscriptions },
+      );
+
+      await vi.advanceTimersByTimeAsync(5_000);
+
+      await expect(result).resolves.toEqual({ delivered: 0, failed: 0, ignored: true });
+      expect(listSubscriptions).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('allows only explicitly authorized bot senders for author-gated activity', async () => {
     const listSubscriptions = vi.fn(async () => []);
     const unauthorized = parsed('pull_request_review_comment', 'created', {

@@ -351,6 +351,7 @@ async function resolveSubscriptionSession(
 
 const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
 const AUTHORIZED_PERMISSIONS = new Set(['admin', 'maintain', 'write']);
+const PERMISSION_CHECK_TIMEOUT_MS = 5_000;
 const AUTHOR_GATED_KINDS = new Set([
   'issue-comment-created',
   'review-comment-created',
@@ -369,12 +370,20 @@ async function isAuthorizedGithubSender(notification: GithubWebhookNotification)
   if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
     return AUTHORIZED_BOTS.has(normalizedSender);
   }
-  const permission = await getRepositoryCollaboratorPermission(
-    notification.metadata.installationId,
-    repository,
-    sender,
-  );
-  return permission !== undefined && AUTHORIZED_PERMISSIONS.has(permission);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const permission = await Promise.race([
+      getRepositoryCollaboratorPermission(notification.metadata.installationId, repository, sender),
+      new Promise<undefined>(resolve => {
+        timeout = setTimeout(() => resolve(undefined), PERMISSION_CHECK_TIMEOUT_MS);
+      }),
+    ]);
+    return permission !== undefined && AUTHORIZED_PERMISSIONS.has(permission);
+  } catch {
+    return false;
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
 }
 
 export async function dispatchGithubWebhook(

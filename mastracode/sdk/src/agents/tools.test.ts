@@ -139,10 +139,14 @@ describe('createToolHooks', () => {
     expect(observer).toHaveBeenCalledWith(expect.objectContaining({ error }));
   });
 
-  it('supports an observer without a hook manager and isolates observer failures', async () => {
-    const observer = vi.fn(async () => {
+  it.each([
+    vi.fn(() => {
       throw new Error('observer failed');
-    });
+    }),
+    vi.fn(async () => {
+      throw new Error('observer failed');
+    }),
+  ])('supports an observer without a hook manager and isolates observer failures', async observer => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const hooks = createToolHooks(undefined, observer)!;
 

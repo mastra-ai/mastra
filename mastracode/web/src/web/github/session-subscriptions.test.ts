@@ -88,6 +88,11 @@ describe('parseCreatedPullRequest', () => {
     { toolName: 'other', input: { command: 'gh pr create' }, output: 'https://github.com/o/r/pull/1' },
     { toolName: 'execute_command', input: { command: 'echo "gh pr create"' }, output: 'https://github.com/o/r/pull/1' },
     { toolName: 'execute_command', input: { command: 'create-pr' }, output: 'https://github.com/o/r/pull/1' },
+    {
+      toolName: 'execute_command',
+      input: { command: "cat <<'EOF'\ngh pr create\nEOF" },
+      output: 'https://github.com/o/r/pull/1',
+    },
     { toolName: 'execute_command', input: { command: 'gh pr create' }, output: 'no url', error: new Error('failed') },
     {
       toolName: 'execute_command',

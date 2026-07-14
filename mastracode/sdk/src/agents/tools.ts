@@ -90,9 +90,11 @@ export function createToolHooks(hookManager?: HookManager, postToolObserver?: Po
           )
           .catch(() => undefined);
       }
-      await Promise.resolve(postToolObserver?.(context)).catch(error => {
-        console.warn(`[MastraCode] Post-tool observer failed for ${toolName}.`, error);
-      });
+      await Promise.resolve()
+        .then(() => postToolObserver?.(context))
+        .catch(error => {
+          console.warn(`[MastraCode] Post-tool observer failed for ${toolName}.`, error);
+        });
     },
   };
 }
