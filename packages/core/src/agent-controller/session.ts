@@ -3091,7 +3091,17 @@ export class Session<TState = unknown> {
       } catch (error) {
         throw error;
       }
-      void result.accepted.catch(() => {});
+      // Idle signals can wake a new run whose output is not attached to the session. Process it here so
+      // late chunks, including goal evaluations emitted after `finish`, still reach session listeners.
+      void result.accepted
+        .then(accepted => {
+          if (accepted.action === 'wake') {
+            void this.runEngine.processStream(accepted.output, requestContextInput).catch(error => {
+              this.emit({ type: 'error', error: error instanceof Error ? error : new Error(String(error)) });
+            });
+          }
+        })
+        .catch(() => {});
       return { accepted: true as const, runId: undefined };
     });
 

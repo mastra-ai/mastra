@@ -134,9 +134,15 @@ export class SessionRunEngine {
       if (chunk.type === 'abort') {
         aborted = true;
       }
+      if (chunk.type === 'finish') {
+        // A goal chunk may follow the model's finish chunk. Finalize the current
+        // message, but keep consuming the stream so late lifecycle chunks reach
+        // session listeners.
+        result ??= this.finishStreamState(state);
+        continue;
+      }
       if (
         result ||
-        chunk.type === 'finish' ||
         chunk.type === 'error' ||
         chunk.type === 'abort' ||
         chunk.type === 'tool-call-suspended' ||
