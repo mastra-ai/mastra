@@ -26,5 +26,21 @@
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2"
+  ],
+  "structuredOutput": [
+    "MiniMaxAI/MiniMax-M2.7",
+    "MiniMaxAI/MiniMax-M3",
+    "Qwen/Qwen2.5-7B-Instruct-Turbo",
+    "Qwen/Qwen3.5-9B",
+    "deepseek-ai/DeepSeek-V4-Pro",
+    "google/gemma-3n-E4B-it",
+    "google/gemma-4-31B-it",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "nvidia/nemotron-3-ultra-550b-a55b",
+    "openai/gpt-oss-20b",
+    "zai-org/GLM-5",
+    "zai-org/GLM-5.1",
+    "zai-org/GLM-5.2"
   ]
 }

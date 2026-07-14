@@ -136,5 +136,17 @@
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2"
+  ],
+  "structuredOutput": [
+    "gemini-3.1-flash-lite-preview",
+    "gemini-3.1-pro-preview",
+    "gpt-5-codex",
+    "gpt-5.1-codex",
+    "gpt-5.1-codex-max",
+    "gpt-5.2-codex",
+    "gpt-5.3-codex",
+    "gpt-5.3-codex-xhigh",
+    "gpt-5.4",
+    "kimi-k2.5"
   ]
 }
