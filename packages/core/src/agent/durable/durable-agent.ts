@@ -1016,6 +1016,17 @@ export class DurableAgent<
       );
     }
 
+    // Enforce agent-level FGA (agents:execute) before durable execution. The
+    // base Agent enforces this in its stream()/generate(); durable execution
+    // runs a workflow instead and would otherwise skip the gate. This also
+    // covers evented subclasses, which inherit stream()/generate().
+    await this.requireAgentExecutionFGA({
+      requestContext: options?.requestContext,
+      memory: options?.memory,
+      runId: options?.runId,
+      actor: options?.actor,
+    });
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
@@ -1207,6 +1218,11 @@ export class DurableAgent<
       );
     }
 
+    // agents:execute FGA is enforced when the run is started (stream()/generate()).
+    // resume() continues that already-authorized run and has no fresh request
+    // context to authenticate a principal, so it does not re-check here.
+    // Resume-time re-authorization would require threading a requestContext
+    // through resume() and is tracked as a follow-up.
     let entry = this.#runRegistry.get(runId);
     if (!entry) {
       // A persisted durable run can outlive this process (or the registry TTL).
@@ -1965,6 +1981,15 @@ export class DurableAgent<
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
+    // Enforce agent-level FGA (agents:execute) before durable execution — see
+    // stream() above. Durable/evented generate would otherwise skip the gate.
+    await this.requireAgentExecutionFGA({
+      requestContext: options?.requestContext,
+      memory: options?.memory,
+      runId: options?.runId,
+      actor: options?.actor,
+    });
+
     // 1. Prepare for durable execution (non-durable phase)
     const preparation = await prepareForDurableExecution<TOutput>({
       agent: this.#wrappedAgent as Agent<string, any, TOutput>,
