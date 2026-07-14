@@ -323,18 +323,6 @@ detects the stopped VM and re-provisions automatically.
 Without a sandbox provider, users can still connect GitHub and pick repos, but opening a repo
 project shows a clear "sandbox not configured" error.
 
-GitHub project sessions provide `github_subscribe_pr` and `github_unsubscribe_pr` tools. Each tool
-accepts a pull request number or a canonical pull request URL for the active project. A session also
-subscribes automatically after it successfully opens a pull request with a direct `gh pr create`
-command. Subscriptions persist in the application Postgres database and route signed GitHub App
-webhook activity to the exact subscribed thread. Notification priority controls whether activity is
-delivered immediately, batched, persisted, or summarized.
-
-Configure the GitHub App webhook URL as `https://your-host/web/github/webhook`, set
-`GITHUB_APP_WEBHOOK_SECRET` to the same secret configured in GitHub, and subscribe the App to pull
-request, pull request review, pull request review comment, and issue comment events. Issue comments
-are delivered only when they belong to a pull request.
-
 ### Storage
 
 All agent state (threads, messages, memory, observational memory, recall vectors) persists in the

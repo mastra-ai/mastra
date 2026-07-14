@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubSignalSubscriptionRow } from './schema';
+
+const getRepositoryCollaboratorPermission = vi.hoisted(() =>
+  vi.fn<() => Promise<'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none' | undefined>>(async () => 'write'),
+);
+vi.mock('./client', () => ({ getRepositoryCollaboratorPermission }));
 import { classifyGithubWebhook, dispatchGithubWebhook, type ParsedGithubWebhook } from './webhook';
 
 function parsed(event: string, action: string, extra: Record<string, unknown> = {}): ParsedGithubWebhook {
@@ -39,13 +44,23 @@ function subscription(id: string, scope: string, threadId = `thread-${id}`): Git
   };
 }
 
+beforeEach(() => {
+  getRepositoryCollaboratorPermission.mockReset();
+  getRepositoryCollaboratorPermission.mockResolvedValue('write');
+});
+
 describe('classifyGithubWebhook', () => {
   it.each([
     ['pull_request_review', 'submitted', { review: { state: 'approved' } }, 'urgent'],
     ['pull_request_review', 'submitted', { review: { state: 'changes_requested' } }, 'urgent'],
     ['pull_request', 'closed', { pull_request: { number: 34, merged: true } }, 'urgent'],
     ['pull_request', 'closed', { pull_request: { number: 34, merged: false } }, 'urgent'],
-    ['issue_comment', 'created', { issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } }, pull_request: undefined }, 'high'],
+    [
+      'issue_comment',
+      'created',
+      { issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } }, pull_request: undefined },
+      'high',
+    ],
     ['pull_request_review_comment', 'created', {}, 'high'],
     ['pull_request_review', 'submitted', { review: { state: 'commented' } }, 'high'],
     ['pull_request', 'reopened', {}, 'high'],
@@ -69,32 +84,78 @@ describe('classifyGithubWebhook', () => {
   it('acknowledges unknown actions and ordinary issue comments without classifying them', () => {
     expect(classifyGithubWebhook(parsed('pull_request', 'opened'))).toBeUndefined();
     expect(
-      classifyGithubWebhook(
-        parsed('issue_comment', 'created', { issue: { number: 34 }, pull_request: undefined }),
-      ),
+      classifyGithubWebhook(parsed('issue_comment', 'created', { issue: { number: 34 }, pull_request: undefined })),
     ).toBeUndefined();
   });
 });
 
 describe('dispatchGithubWebhook', () => {
+  it('ignores author-gated activity from senders without write access', async () => {
+    getRepositoryCollaboratorPermission.mockResolvedValue('read');
+    const listSubscriptions = vi.fn(async () => [subscription('a', '/worktrees/a')]);
+    const result = await dispatchGithubWebhook(
+      parsed('issue_comment', 'created', {
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        pull_request: undefined,
+      }),
+      {
+        controller: {} as never,
+        listSubscriptions,
+      },
+    );
+
+    expect(result).toEqual({ delivered: 0, failed: 0, ignored: true });
+    expect(getRepositoryCollaboratorPermission).toHaveBeenCalledWith(7, 'octo/hello', 'ada');
+    expect(listSubscriptions).not.toHaveBeenCalled();
+  });
+
+  it('allows only explicitly authorized bot senders for author-gated activity', async () => {
+    const listSubscriptions = vi.fn(async () => []);
+    const unauthorized = parsed('pull_request_review_comment', 'created', {
+      sender: { login: 'random-bot[bot]', type: 'Bot' },
+    });
+    const authorized = parsed('pull_request_review_comment', 'created', {
+      sender: { login: 'coderabbitai[bot]', type: 'Bot' },
+    });
+
+    await expect(dispatchGithubWebhook(unauthorized, { controller: {} as never, listSubscriptions })).resolves.toEqual({
+      delivered: 0,
+      failed: 0,
+      ignored: true,
+    });
+    await expect(dispatchGithubWebhook(authorized, { controller: {} as never, listSubscriptions })).resolves.toEqual({
+      delivered: 0,
+      failed: 0,
+      ignored: false,
+    });
+    expect(listSubscriptions).toHaveBeenCalledTimes(1);
+    expect(getRepositoryCollaboratorPermission).not.toHaveBeenCalled();
+  });
+
   it('delivers with per-target dedupe, exact scope/thread resume, and no delivery overrides', async () => {
     const sendA = vi.fn(async () => ({ record: { id: 'n-a' }, decision: { action: 'deliver' } }));
     const sendB = vi.fn(async () => ({ record: { id: 'n-b' }, decision: { action: 'deliver' } }));
     const switchB = vi.fn(async () => undefined);
     const liveA = { thread: { getId: () => 'thread-a', switch: vi.fn() }, sendNotificationSignal: sendA };
     const resumedB = { thread: { getId: () => 'thread-b', switch: switchB }, sendNotificationSignal: sendB };
-    const getSessionByResource = vi.fn(async (_resourceId: string, scope?: string) => (scope === '/worktrees/a' ? liveA : undefined));
+    const getSessionByResource = vi.fn(async (_resourceId: string, scope?: string) =>
+      scope === '/worktrees/a' ? liveA : undefined,
+    );
     const createSession = vi.fn(async () => resumedB);
     const rows = [subscription('a', '/worktrees/a'), subscription('b', '/worktrees/b')];
 
-    const result = await dispatchGithubWebhook(parsed('issue_comment', 'created', {
-      issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
-      comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
-      pull_request: undefined,
-    }), {
-      controller: { getSessionByResource, createSession } as never,
-      listSubscriptions: async () => rows,
-    });
+    const result = await dispatchGithubWebhook(
+      parsed('issue_comment', 'created', {
+        issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+        comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
+        pull_request: undefined,
+      }),
+      {
+        controller: { getSessionByResource, createSession } as never,
+        listSubscriptions: async () => rows,
+        isAuthorizedSender: async () => true,
+      },
+    );
 
     expect(result).toEqual({ delivered: 2, failed: 0, ignored: false });
     expect(getSessionByResource).toHaveBeenCalledWith('resource-1', '/worktrees/a');
@@ -138,9 +199,7 @@ describe('dispatchGithubWebhook', () => {
 
   it('includes retained subscriptions and reopens them after accepted reopen delivery', async () => {
     const send = vi.fn(async () => ({ record: { id: 'n-1' }, decision: { action: 'deliver' } }));
-    const listSubscriptions = vi.fn(async () => [
-      { ...subscription('a', '/worktrees/a'), status: 'closed' as const },
-    ]);
+    const listSubscriptions = vi.fn(async () => [{ ...subscription('a', '/worktrees/a'), status: 'closed' as const }]);
     const updateStatus = vi.fn(async () => {});
 
     await dispatchGithubWebhook(parsed('pull_request', 'reopened'), {
@@ -155,10 +214,9 @@ describe('dispatchGithubWebhook', () => {
       retireSubscription: updateStatus,
     });
 
-    expect(listSubscriptions).toHaveBeenCalledWith(
-      expect.objectContaining({ pullRequestNumber: 34 }),
-      { includeTerminal: true },
-    );
+    expect(listSubscriptions).toHaveBeenCalledWith(expect.objectContaining({ pullRequestNumber: 34 }), {
+      includeTerminal: true,
+    });
     expect(updateStatus).toHaveBeenCalledWith('a', 'open');
   });
 

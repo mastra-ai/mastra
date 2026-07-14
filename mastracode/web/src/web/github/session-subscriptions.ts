@@ -56,7 +56,8 @@ async function verifyPullRequest(target: SessionTarget, pullRequest: number) {
   if (!owner || !repo) throw new Error('GitHub project repository is invalid.');
   const octokit = getInstallationOctokit(target.project.installationId);
   const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest });
-  if (data.base.repo.id !== target.project.repoId) throw new Error('Pull request repository does not match the active project.');
+  if (data.base.repo.id !== target.project.repoId)
+    throw new Error('Pull request repository does not match the active project.');
 }
 
 async function subscriptionInput(target: SessionTarget, pullRequestNumber: number) {
@@ -107,7 +108,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
     github_subscribe_pr: createTool({
       id: 'github_subscribe_pr',
       description:
-        'Subscribe this thread to GitHub pull request activity. Use this for existing PRs; successful gh pr create commands subscribe automatically. Accepts a PR number or canonical URL for the active project.',
+        'Subscribe this thread to GitHub pull request activity. You usually do not need this tool: successful gh pr create commands subscribe automatically. Use it for an existing PR or to recover when automatic subscription did not occur. Closed or merged PRs are unsubscribed automatically. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await subscribeCurrentSessionToPullRequest(requestContext, pullRequest, 'explicit-tool');
@@ -117,7 +118,7 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
     github_unsubscribe_pr: createTool({
       id: 'github_unsubscribe_pr',
       description:
-        'Unsubscribe this thread from GitHub pull request activity. Closed and merged PR subscriptions retire automatically. Accepts a PR number or canonical URL for the active project.',
+        'Manually unsubscribe this thread from GitHub pull request activity. You usually do not need this tool because closed or merged PRs are unsubscribed automatically. Use it to stop notifications before then. Accepts a PR number or canonical URL for the active project.',
       inputSchema: pullRequestInputSchema,
       execute: async ({ pullRequest }) => {
         const number = await unsubscribeCurrentSessionFromPullRequest(requestContext, pullRequest);
@@ -127,7 +128,12 @@ export function createGithubSubscriptionTools(requestContext: RequestContext) {
   };
 }
 
-export function parseCreatedPullRequest(context: { toolName: string; input: unknown; output?: unknown; error?: unknown }) {
+export function parseCreatedPullRequest(context: {
+  toolName: string;
+  input: unknown;
+  output?: unknown;
+  error?: unknown;
+}) {
   if (context.toolName !== 'execute_command' || context.error) return undefined;
   const command = (context.input as { command?: unknown } | undefined)?.command;
   if (typeof command !== 'string' || !/(?:^|\n|;|&&|\|\|)\s*gh\s+pr\s+create(?:\s|$)/.test(command)) {

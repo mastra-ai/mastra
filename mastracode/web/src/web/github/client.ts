@@ -202,6 +202,26 @@ export async function listInstallationRepos(installationId: number): Promise<Rep
  * accessible to the installation (so a client can't create a project for an
  * arbitrary repo under an installation id it merely owns).
  */
+export type GithubRepositoryPermission = 'admin' | 'maintain' | 'write' | 'triage' | 'read' | 'none';
+
+export async function getRepositoryCollaboratorPermission(
+  installationId: number,
+  repoFullName: string,
+  username: string,
+): Promise<GithubRepositoryPermission | undefined> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return undefined;
+  try {
+    const { data } = await getInstallationOctokit(installationId).repos.getCollaboratorPermissionLevel({
+      ...parts,
+      username,
+    });
+    return data.permission as GithubRepositoryPermission;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
   const slash = repoFullName.indexOf('/');
   if (slash <= 0) return null;

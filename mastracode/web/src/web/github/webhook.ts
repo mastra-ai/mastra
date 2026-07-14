@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
+import { getRepositoryCollaboratorPermission } from './client';
 import type { GithubSignalSubscriptionRow } from './schema';
 import {
   listPullRequestSubscriptionsForWebhook,
@@ -51,6 +52,7 @@ export interface GithubWebhookMetadata {
   issueNumber?: number;
   pullRequestNumber?: number;
   sender?: string;
+  senderType?: string;
   installationId?: number;
 }
 
@@ -82,6 +84,7 @@ export interface GithubWebhookDispatchDependencies {
     options?: { includeTerminal?: boolean },
   ) => Promise<GithubSignalSubscriptionRow[]>;
   retireSubscription?: (id: string, status: 'open' | 'closed' | 'merged') => Promise<void>;
+  isAuthorizedSender?: (notification: GithubWebhookNotification) => Promise<boolean>;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
 }
 
@@ -200,6 +203,7 @@ export function normalizeGithubWebhookMetadata(parsed: ParsedGithubWebhook): Git
       getNumber(pullRequest?.number) ??
       (event === 'issue_comment' && issuePullRequest ? getNumber(issue?.number) : undefined),
     sender: getString(sender?.login),
+    senderType: getString(sender?.type),
     installationId: getNumber(installation?.id),
   };
 }
@@ -345,12 +349,44 @@ async function resolveSubscriptionSession(
   return session;
 }
 
+const AUTHORIZED_BOTS = new Set(['coderabbitai[bot]', 'devin-ai-integration[bot]']);
+const AUTHORIZED_PERMISSIONS = new Set(['admin', 'maintain', 'write']);
+const AUTHOR_GATED_KINDS = new Set([
+  'issue-comment-created',
+  'review-comment-created',
+  'review-submitted',
+  'review-approved',
+  'review-changes-requested',
+  'review-dismissed',
+]);
+
+async function isAuthorizedGithubSender(notification: GithubWebhookNotification): Promise<boolean> {
+  if (!AUTHOR_GATED_KINDS.has(notification.kind)) return true;
+  const sender = notification.metadata.sender;
+  const repository = notification.metadata.repository;
+  if (!sender || !repository) return false;
+  const normalizedSender = sender.toLowerCase();
+  if (notification.metadata.senderType?.toLowerCase() === 'bot' || normalizedSender.endsWith('[bot]')) {
+    return AUTHORIZED_BOTS.has(normalizedSender);
+  }
+  const permission = await getRepositoryCollaboratorPermission(
+    notification.metadata.installationId,
+    repository,
+    sender,
+  );
+  return permission !== undefined && AUTHORIZED_PERMISSIONS.has(permission);
+}
+
 export async function dispatchGithubWebhook(
   parsed: ParsedGithubWebhook,
   dependencies: GithubWebhookDispatchDependencies,
 ): Promise<{ delivered: number; failed: number; ignored: boolean }> {
   const notification = classifyGithubWebhook(parsed);
   if (!notification) return { delivered: 0, failed: 0, ignored: true };
+  const isAuthorizedSender = dependencies.isAuthorizedSender ?? isAuthorizedGithubSender;
+  if (!(await isAuthorizedSender(notification))) {
+    return { delivered: 0, failed: 0, ignored: true };
+  }
 
   const target = {
     installationId: notification.metadata.installationId,
