@@ -535,6 +535,32 @@ export const resumeStreamBodySchema = agentExecutionBodySchema.omit({ messages: 
 });
 
 // ============================================================================
+// Recover Schema
+// ============================================================================
+
+/**
+ * Body schema for recovering an orphaned RUNNING durable-agent run.
+ * Thread and resource are read from the persisted snapshot, so we only accept
+ * the runId plus request-context / version overrides needed for auth and
+ * routing.
+ */
+export const recoverBodySchema = z.object({
+  runId: z.string(),
+  requestContext: z.record(z.string(), z.any()).optional(),
+  versions: z
+    .object({
+      agents: z
+        .record(
+          z.string(),
+          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+        )
+        .optional(),
+      defaultStatus: z.enum(['draft', 'published']).optional(),
+    })
+    .optional(),
+});
+
+// ============================================================================
 // Model Management Schemas
 // ============================================================================
 

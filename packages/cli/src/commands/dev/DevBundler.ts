@@ -1,14 +1,35 @@
 import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
-import { createWatcher, getWatcherInputOptions } from '@mastra/deployer/build';
+import {
+  createWatcher,
+  discoverFsAgents,
+  getWatcherInputOptions,
+  prepareFsAgentsEntry,
+  writeFsAgentsEntry,
+} from '@mastra/deployer/build';
+import type { DiscoveredFsAgent, PrepareFsAgentsEntryResult } from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
 import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
+
+interface FsRoutingWatchOptions {
+  mastraDir: string;
+  userEntryFile: string | undefined;
+  outputDirectory: string;
+  preparedEntry: PrepareFsAgentsEntryResult;
+}
+
+function collectInstructionPaths(agents: DiscoveredFsAgent[]): string[] {
+  return agents.flatMap(agent => [
+    ...(agent.instructionsPath ? [agent.instructionsPath] : []),
+    ...collectInstructionPaths(agent.subagents),
+  ]);
+}
 
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
@@ -59,6 +80,7 @@ export class DevBundler extends Bundler {
     entryFile: string,
     outputDirectory: string,
     toolsPaths: (string | string[])[],
+    fsRoutingWatchOptions?: FsRoutingWatchOptions,
   ): ReturnType<typeof createWatcher> {
     const __filename = fileURLToPath(import.meta.url);
     const __dirname = dirname(__filename);
@@ -89,6 +111,8 @@ export class DevBundler extends Bundler {
 
     await this.writePackageJson(outputDir, new Map(), {});
 
+    let lastFsAgentsModuleSource = fsRoutingWatchOptions?.preparedEntry.moduleSource;
+
     const watcher = await createWatcher(
       {
         ...inputOptions,
@@ -110,7 +134,30 @@ export class DevBundler extends Bundler {
             name: 'env-watcher',
             buildStart() {
               for (const envFile of envFiles) {
-                this.addWatchFile(envFile);
+                this.addWatchFile(resolve(envFile));
+              }
+            },
+          },
+          {
+            name: 'fs-routing-watcher',
+            async buildStart() {
+              if (!fsRoutingWatchOptions?.preparedEntry.moduleSource) {
+                return;
+              }
+
+              const agents = await discoverFsAgents(fsRoutingWatchOptions.mastraDir);
+              for (const instructionsPath of collectInstructionPaths(agents)) {
+                this.addWatchFile(resolve(instructionsPath));
+              }
+
+              const nextEntry = await prepareFsAgentsEntry(
+                fsRoutingWatchOptions.mastraDir,
+                fsRoutingWatchOptions.userEntryFile,
+                fsRoutingWatchOptions.outputDirectory,
+              );
+              if (nextEntry.moduleSource !== lastFsAgentsModuleSource) {
+                await writeFsAgentsEntry(nextEntry);
+                lastFsAgentsModuleSource = nextEntry.moduleSource;
               }
             },
           },

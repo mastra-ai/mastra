@@ -7,6 +7,7 @@
     "moduleResolution": "bundler",
     "allowJs": true,
     "strict": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "skipLibCheck": true,
     "esModuleInterop": true,

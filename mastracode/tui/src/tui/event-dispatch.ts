@@ -1,0 +1,492 @@
+/**
+ * Event dispatcher: maps AgentControllerEvent types to extracted handler functions.
+ */
+import { getCurrentGitBranchAsync } from '@mastra/code-sdk/utils/project';
+import type { AgentControllerEvent, AgentControllerThread } from '@mastra/core/agent-controller';
+import type { TaskItemSnapshot } from '@mastra/core/signals';
+import type { AskUserSelectionMode } from '@mastra/core/tools';
+
+import {
+  handleAgentStart,
+  handleAgentEnd,
+  handleAgentAborted,
+  handleAgentError,
+  handleGoalEvaluation,
+  handleMessageStart,
+  handleMessageUpdate,
+  handleMessageEnd,
+  handleOMObservationStart,
+  handleOMObservationEnd,
+  handleOMReflectionStart,
+  handleOMReflectionEnd,
+  handleOMFailed,
+  handleOMBufferingStart,
+  handleOMBufferingEnd,
+  handleOMBufferingFailed,
+  handleOMActivation,
+  handleOMThreadTitleUpdated,
+  handleAskQuestion,
+  handleSandboxAccessRequest,
+  handlePlanApproval,
+  handleSubagentStart,
+  handleSubagentToolStart,
+  handleSubagentToolEnd,
+  handleSubagentEnd,
+  handleToolApprovalRequired,
+  handleToolStart,
+  handleToolUpdate,
+  handleShellOutput,
+  handleToolInputStart,
+  handleToolInputDelta,
+  handleToolInputEnd,
+  handleToolEnd,
+  clearPendingShellOutputs,
+  clearToolInputParsers,
+} from './handlers/index.js';
+import type { EventHandlerContext } from './handlers/types.js';
+import { flushRender } from './render-scheduler.js';
+import type { TUIState } from './state.js';
+import { getGithubPrSubscriptionsFromMetadata } from './state.js';
+
+/**
+ * Dispatch a AgentControllerEvent to the appropriate handler.
+ */
+function trackInteractivePrompt(
+  ectx: EventHandlerContext,
+  promptType: string,
+  properties?: Record<string, unknown>,
+): void {
+  ectx.analytics?.trackInteractivePrompt(promptType, properties);
+}
+
+export async function dispatchEvent(
+  event: AgentControllerEvent,
+  ectx: EventHandlerContext,
+  state: TUIState,
+): Promise<void> {
+  switch (event.type) {
+    case 'agent_start':
+      clearToolInputParsers();
+      clearPendingShellOutputs();
+      // Reset tokens/sec at the start of a new turn (not at the end) so the
+      // last turn's reading stays visible while idle — short single-step turns
+      // would otherwise zero it before it could be read.
+      state.tokensPerSec = 0;
+      state.decodeStartedAt = 0;
+      state.agentRunStartedAt = Date.now();
+      state.agentRunLastStreamPartAt = state.agentRunStartedAt;
+      state.lastAgentRunDurationMs = undefined;
+      state.lastAgentRunEndedAt = undefined;
+      state.lastAgentRunEndReason = undefined;
+      ectx.updateStatusLine();
+      handleAgentStart(ectx);
+      break;
+
+    case 'agent_end':
+      // Keep tokensPerSec as the last turn's reading; only clear the in-flight
+      // decode window so a stale start can't bleed into the next turn.
+      if (state.agentRunStartedAt !== undefined) {
+        const now = Date.now();
+        state.lastAgentRunDurationMs = Math.max(0, now - state.agentRunStartedAt);
+        state.lastAgentRunEndedAt = now;
+        state.lastAgentRunEndReason = event.reason === 'aborted' || event.reason === 'error' ? event.reason : 'done';
+        state.agentRunStartedAt = undefined;
+        state.agentRunLastStreamPartAt = undefined;
+      }
+      state.decodeStartedAt = 0;
+      ectx.updateStatusLine();
+      if (event.reason === 'aborted') {
+        clearPendingShellOutputs();
+        handleAgentAborted(ectx);
+      } else if (event.reason === 'error') {
+        clearPendingShellOutputs();
+        handleAgentError(ectx);
+      } else {
+        handleAgentEnd(ectx);
+      }
+      break;
+
+    case 'message_start':
+      handleMessageStart(ectx, event.message);
+      break;
+
+    case 'message_update': {
+      // Only open the decode window when an assistant message carries actual
+      // streamed text — tool-result-only updates (e.g. plan approval resume) and
+      // user/system message updates must not count toward tokens/sec.
+      const hasAssistantText =
+        event.message.role === 'assistant' &&
+        event.message.content.some(part => part.type === 'text' && 'text' in part && part.text.trim().length > 0);
+      if (hasAssistantText) {
+        state.agentRunLastStreamPartAt = Date.now();
+        if (state.decodeStartedAt === 0) {
+          state.decodeStartedAt = state.agentRunLastStreamPartAt;
+        }
+      }
+      ectx.updateStatusLine();
+      handleMessageUpdate(ectx, event.message);
+      break;
+    }
+
+    case 'message_end':
+      handleMessageEnd(ectx, event.message);
+      break;
+
+    case 'tool_start':
+      state.agentRunLastStreamPartAt = Date.now();
+      handleToolStart(ectx, event.toolCallId, event.toolName, event.args);
+      break;
+
+    case 'tool_approval_required':
+      trackInteractivePrompt(ectx, 'tool_approval_required', {
+        toolName: event.toolName,
+        threadId: state.session.thread.getId(),
+        resourceId: state.session.identity.getResourceId(),
+      });
+      handleToolApprovalRequired(ectx, event.toolCallId, event.toolName, event.args);
+      break;
+
+    case 'tool_update':
+      state.agentRunLastStreamPartAt = Date.now();
+      handleToolUpdate(ectx, event.toolCallId, event.partialResult);
+      break;
+
+    case 'shell_output':
+      state.agentRunLastStreamPartAt = Date.now();
+      handleShellOutput(ectx, event.toolCallId, event.output, event.stream);
+      break;
+
+    case 'tool_input_start':
+      if (event.toolName === 'ask_user' || event.toolName === 'request_access' || event.toolName === 'submit_plan') {
+        trackInteractivePrompt(ectx, event.toolName, {
+          toolName: event.toolName,
+          threadId: state.session.thread.getId(),
+          resourceId: state.session.identity.getResourceId(),
+        });
+      }
+      handleToolInputStart(ectx, event.toolCallId, event.toolName);
+      break;
+
+    case 'tool_input_delta':
+      handleToolInputDelta(ectx, event.toolCallId, event.argsTextDelta);
+      break;
+
+    case 'tool_input_end':
+      handleToolInputEnd(ectx, event.toolCallId);
+      break;
+
+    case 'tool_end':
+      state.agentRunLastStreamPartAt = Date.now();
+      handleToolEnd(ectx, event.toolCallId, event.result, event.isError);
+      break;
+
+    case 'info':
+      ectx.showInfo(event.message);
+      break;
+
+    case 'error':
+      ectx.showFormattedError(event);
+      break;
+
+    case 'mode_changed':
+      await ectx.refreshModelAuthStatus();
+      break;
+
+    case 'model_changed':
+      await ectx.refreshModelAuthStatus();
+      break;
+
+    case 'thread_changed': {
+      ectx.showInfo(`Switched to thread: ${event.threadId}`);
+      // Clear per-thread ephemeral state first so renderExistingMessages
+      // and other downstream observers see clean state.
+      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks([]);
+        flushRender(state);
+      }
+      state.taskToolInsertIndex = -1;
+      await ectx.renderExistingMessages();
+      await state.controller.loadOMProgress(state.session);
+      // Refresh git branch async so TUI status line reflects the current branch
+      getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
+        if (freshBranch) {
+          state.projectInfo.gitBranch = freshBranch;
+          ectx.updateStatusLine();
+        }
+      });
+      // Update current thread title for status line display
+      const threads = await state.session.thread.list();
+      const currentThread = threads.find((t: AgentControllerThread) => t.id === event.threadId);
+      if (currentThread) {
+        state.currentThreadTitle = currentThread.title;
+        const metadata = currentThread.metadata as Record<string, unknown> | undefined;
+        state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
+        state.githubPrPollingActive = false;
+        state.githubPrGradientAnimator?.stop();
+        // Load the objective from the durable ThreadState slot, falling back to
+        // the legacy thread-metadata goal for pre-migration threads.
+        await state.goalManager.loadFromThread(state);
+        if (!state.goalManager.getGoal()) {
+          state.goalManager.loadFromThreadMetadata(metadata);
+        }
+      }
+      break;
+    }
+
+    case 'thread_created': {
+      ectx.showInfo(`Created thread: ${event.thread.id}`);
+      // Update current thread title for status line display
+      state.currentThreadTitle = event.thread.title;
+      state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(
+        event.thread.metadata as Record<string, unknown> | undefined,
+      );
+      state.githubPrPollingActive = false;
+      state.githubPrGradientAnimator?.stop();
+      // If /goal started without an existing thread, save that pending goal to the
+      // newly-created thread. Otherwise load the thread's own goal metadata so goals
+      // do not bleed into unrelated new threads.
+      const shouldPersistPendingGoal = state.goalManager?.consumePersistOnNextThreadCreate() ?? false;
+      if (shouldPersistPendingGoal) {
+        state.goalManager?.saveToThread(state).catch(() => {});
+      } else {
+        state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
+      }
+      // Sync inherited resource-level settings
+      const tState = state.session.state.get() as any;
+      if (typeof tState?.escapeAsCancel === 'boolean') {
+        state.editor.escapeEnabled = tState.escapeAsCancel;
+      }
+      // Clear per-thread ephemeral state so new threads start clean.
+      await state.session.state.set({ tasks: [], activePlan: null, sandboxAllowedPaths: [] });
+      state.previousPlanSnapshot = undefined;
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks([]);
+      }
+      state.taskToolInsertIndex = -1;
+      break;
+    }
+
+    case 'usage_update': {
+      // Token accumulation handled by AgentController display state.
+      // usage_update fires at step-finish and carries the completion (and any
+      // reasoning) tokens generated during this step. Measure tokens/sec over the
+      // decode window only — from this step's first content delta
+      // (state.decodeStartedAt) to now — which excludes TTFT and inter-step
+      // tool/scheduling time. Smooth with an exponential moving average (α=0.3).
+      const now = Date.now();
+      const stepTokens = (event.usage.completionTokens ?? 0) + (event.usage.reasoningTokens ?? 0);
+      if (state.decodeStartedAt > 0 && stepTokens > 0) {
+        const decodeSec = (now - state.decodeStartedAt) / 1000;
+        if (decodeSec > 0) {
+          const instantaneous = stepTokens / decodeSec;
+          const alpha = 0.3;
+          const ema = state.tokensPerSec > 0 ? alpha * instantaneous + (1 - alpha) * state.tokensPerSec : instantaneous;
+          state.tokensPerSec = Math.round(ema);
+        }
+      }
+      // Re-arm: the next step's decode window opens on its first content delta.
+      state.decodeStartedAt = 0;
+      ectx.updateStatusLine();
+      state.ui.requestRender();
+      break;
+    }
+
+    // Observational Memory events
+    case 'om_status':
+      // All state updates handled by AgentController applyDisplayStateUpdate
+      break;
+
+    case 'om_observation_start':
+      handleOMObservationStart(ectx, event.cycleId, event.tokensToObserve);
+      break;
+
+    case 'om_observation_end':
+      handleOMObservationEnd(
+        ectx,
+        event.cycleId,
+        event.durationMs,
+        event.tokensObserved,
+        event.observationTokens,
+        event.observations,
+        event.currentTask,
+        event.suggestedResponse,
+      );
+      break;
+
+    case 'om_observation_failed':
+      handleOMFailed(ectx, event.cycleId, event.error, 'observation');
+      break;
+
+    case 'om_reflection_start':
+      handleOMReflectionStart(ectx, event.cycleId, event.tokensToReflect);
+      break;
+
+    case 'om_reflection_end':
+      handleOMReflectionEnd(ectx, event.cycleId, event.durationMs, event.compressedTokens, event.observations);
+      break;
+
+    case 'om_reflection_failed':
+      handleOMFailed(ectx, event.cycleId, event.error, 'reflection');
+      break;
+
+    case 'om_buffering_start':
+      handleOMBufferingStart(ectx, event.operationType, event.tokensToBuffer);
+      break;
+
+    case 'om_buffering_end':
+      handleOMBufferingEnd(ectx, event.operationType, event.tokensBuffered, event.bufferedTokens, event.observations);
+      break;
+
+    case 'om_buffering_failed':
+      handleOMBufferingFailed(ectx, event.operationType, event.error);
+      break;
+
+    case 'om_activation': {
+      const activationEvent = event as Extract<AgentControllerEvent, { type: 'om_activation' }> & {
+        triggeredBy?: 'threshold' | 'ttl' | 'provider_change';
+        lastActivityAt?: number;
+        ttlExpiredMs?: number;
+        activateAfterIdle?: number;
+        previousModel?: string;
+        currentModel?: string;
+      };
+      handleOMActivation(
+        ectx,
+        activationEvent.operationType,
+        activationEvent.tokensActivated,
+        activationEvent.observationTokens,
+        activationEvent.triggeredBy,
+        activationEvent.activateAfterIdle,
+        activationEvent.ttlExpiredMs,
+        activationEvent.previousModel,
+        activationEvent.currentModel,
+      );
+      break;
+    }
+
+    case 'om_thread_title_updated':
+      state.currentThreadTitle = event.newTitle;
+      handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
+      ectx.updateStatusLine();
+      break;
+
+    case 'follow_up_queued': {
+      ectx.updateStatusLine();
+      break;
+    }
+
+    case 'workspace_ready':
+      // Workspace initialized successfully - silent unless verbose
+      break;
+
+    case 'workspace_error':
+      ectx.showError(`Workspace: ${event.error.message}`);
+      break;
+
+    case 'workspace_status_changed':
+      if (event.status === 'error' && event.error) {
+        ectx.showError(`Workspace: ${event.error.message}`);
+      }
+      break;
+
+    // Subagent / Task delegation events
+    case 'subagent_start':
+      handleSubagentStart(ectx, event.toolCallId, event.agentType, event.task, event.modelId, event.forked);
+      break;
+
+    case 'subagent_tool_start':
+      handleSubagentToolStart(ectx, event.toolCallId, event.subToolName, event.subToolArgs);
+      break;
+
+    case 'subagent_tool_end':
+      handleSubagentToolEnd(ectx, event.toolCallId, event.subToolName, event.subToolResult, event.isError);
+      break;
+
+    case 'subagent_text_delta':
+      // Text deltas are streamed but we don't render them incrementally
+      // (the final result is shown via tool_end for the parent tool call)
+      break;
+
+    case 'subagent_end':
+      handleSubagentEnd(ectx, event.toolCallId, event.isError, event.durationMs, event.result);
+      break;
+
+    case 'task_updated': {
+      const tasks = event.tasks as TaskItemSnapshot[];
+      if (state.taskProgress) {
+        state.taskProgress.updateTasks(tasks ?? []);
+
+        // Defensive cleanup for older or non-streaming task_write components.
+        // Current task tools update the pinned component directly through task_updated.
+        let insertIndex = -1;
+        for (let i = state.allToolComponents.length - 1; i >= 0; i--) {
+          const comp = state.allToolComponents[i];
+          if ((comp as any).toolName === 'task_write') {
+            insertIndex = state.chatContainer.children.indexOf(comp as any);
+            state.chatContainer.removeChild(comp as any);
+            state.allToolComponents.splice(i, 1);
+            break;
+          }
+        }
+        // Fall back to the position recorded during streaming (when no inline component was created)
+        if (insertIndex === -1 && state.taskToolInsertIndex >= 0) {
+          insertIndex = state.taskToolInsertIndex;
+          state.taskToolInsertIndex = -1;
+        }
+
+        const previousTasks = state.session.displayState.get().previousTasks;
+        if (tasks?.length > 0 && tasks.every(task => task.status === 'completed')) {
+          ectx.renderCompletedTasksInline(tasks, insertIndex);
+        } else if (previousTasks.length > 0 && (!tasks || tasks.length === 0)) {
+          ectx.renderClearedTasksInline(previousTasks, insertIndex);
+        } else if (tasks?.length > 0) {
+          ectx.renderTaskDeltaInline(previousTasks, tasks, insertIndex);
+        }
+
+        state.ui.requestRender();
+      }
+      break;
+    }
+
+    case 'goal_evaluation': {
+      handleGoalEvaluation(ectx, event.payload);
+      break;
+    }
+
+    case 'tool_suspended': {
+      // Interactive built-in tools pause via the native tool-suspension primitive.
+      // Route the suspension to the matching prompt UI using the suspend payload;
+      // the UI resumes the tool by calling controller.session.respondToToolSuspension({ toolCallId }).
+      const payload = (event.suspendPayload ?? {}) as Record<string, unknown>;
+      if (event.toolName === 'request_access' || payload.kind === 'sandbox_access_request') {
+        await handleSandboxAccessRequest(
+          ectx,
+          event.toolCallId,
+          String(payload.path ?? ''),
+          String(payload.reason ?? ''),
+        );
+      } else if (event.toolName === 'ask_user') {
+        await handleAskQuestion(
+          ectx,
+          event.toolCallId,
+          String(payload.question ?? ''),
+          payload.options as Array<{ label: string; description?: string }> | undefined,
+          payload.selectionMode as AskUserSelectionMode | undefined,
+        );
+      } else if (event.toolName === 'submit_plan') {
+        await handlePlanApproval(ectx, event.toolCallId, String(payload.path ?? ''));
+      }
+      break;
+    }
+
+    case 'display_state_changed':
+      // The AgentController emits this after every event with the updated display state.
+      // Use it as the single trigger for status-line re-renders since all the
+      // fields it reads (isRunning, omProgress, buffering flags) are now
+      // maintained by the AgentController.
+      ectx.updateStatusLine();
+      break;
+  }
+}

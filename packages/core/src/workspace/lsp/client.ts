@@ -193,6 +193,16 @@ export class LSPClient {
 
     const reader = new StreamMessageReader(this.handle.reader);
     const writer = new StreamMessageWriter(this.handle.writer);
+    // vscode-jsonrpc's Connection.sendRequest re-throws stream write errors inside
+    // an `async` promise executor. That throw rejects the executor's own implicit
+    // promise (which nothing awaits) instead of the request promise, so when the
+    // server process dies mid-write (e.g. EPIPE), it surfaces as an unhandled
+    // rejection and crashes the host process. Swallow write rejections here: the
+    // error still reaches the connection's error handler via the writer's
+    // handleError, and every request we send is wrapped in a timeout, so callers
+    // get a clean timeout error instead of a fatal crash.
+    const originalWrite = writer.write.bind(writer);
+    writer.write = (msg: unknown) => originalWrite(msg).catch(() => {});
     this.connection = createMessageConnection(reader, writer);
 
     // Silently ignore stream destroyed errors during shutdown

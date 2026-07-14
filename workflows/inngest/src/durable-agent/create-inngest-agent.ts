@@ -45,11 +45,7 @@ import {
   runResumeDurableStreamUntilIdle,
   globalRunRegistry,
 } from '@mastra/core/agent/durable';
-import type {
-  AgentFinishEventData,
-  AgentStepFinishEventData,
-  AgentSuspendedEventData,
-} from '@mastra/core/agent/durable';
+import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import { InMemoryServerCache } from '@mastra/core/cache';
 import type { MastraServerCache } from '@mastra/core/cache';
@@ -57,7 +53,7 @@ import { CachingPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import type { MastraModelOutput, ChunkType, FullOutput } from '@mastra/core/stream';
+import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import type { Workflow } from '@mastra/core/workflows';
 import type { Inngest } from 'inngest';
 
@@ -206,9 +202,9 @@ export interface InngestAgentStreamOptions<OUTPUT = undefined> {
   /** Callback when step finishes */
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
   /** Callback when execution finishes */
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
   /** Callback on error */
-  onError?: (error: Error) => void | Promise<void>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   /** Callback when workflow suspends */
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal or `result.abort()` */
@@ -267,8 +263,8 @@ export interface InngestAgentResumeOptions<OUTPUT = undefined> {
   resourceId?: string;
   onChunk?: (chunk: ChunkType<OUTPUT>) => void | Promise<void>;
   onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-  onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-  onError?: (error: Error) => void | Promise<void>;
+  onFinish?: MastraOnFinishCallback<OUTPUT>;
+  onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
   onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
   /** Callback when execution is aborted via abortSignal or `result.abort()` */
   onAbort?: AgentExecutionOptions<OUTPUT>['onAbort'];
@@ -363,8 +359,8 @@ export interface InngestAgent<TOutput = undefined> {
       offset?: number;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData) => void | Promise<void>;
-      onFinish?: (result: AgentFinishEventData) => void | Promise<void>;
-      onError?: (error: Error) => void | Promise<void>;
+      onFinish?: MastraOnFinishCallback<TOutput>;
+      onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
   ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
@@ -600,7 +596,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: {},
+        requestContext: workflowInput.requestContextEntries ?? {},
         tracingOptions,
       },
     });
@@ -785,9 +781,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeGlobalRegistry();
           }
         },
-        onError: async error => {
+        onError: async errorArg => {
           try {
-            await streamOptions?.onError?.(error);
+            await streamOptions?.onError?.(errorArg);
           } finally {
             finalizeGlobalRegistry();
           }
@@ -905,7 +901,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         existingEntry = {
           // Minimal placeholder fields. The durable LLM step recreates tools
           // and model from the workflow input; this slot exists primarily to
-          // carry the abort controller across the resumed segment.
+          // carry the abort controller across the resumed segment. The
+          // explicit flag tells resolveRuntimeDependencies to rebuild runtime
+          // state from the Mastra instance instead of trusting this entry.
+          isPlaceholder: true,
           tools: {},
           model: undefined as any,
         };
@@ -948,9 +947,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeResumeRegistry();
           }
         },
-        onError: async error => {
+        onError: async errorArg => {
           try {
-            await resumeOptions?.onError?.(error);
+            await resumeOptions?.onError?.(errorArg);
           } finally {
             finalizeResumeRegistry();
           }
@@ -990,7 +989,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
               initialState: snapshot?.value ?? {},
               runId,
               resourceId: resumeOptions?.resourceId,
-              requestContext: {},
+              requestContext: snapshot?.requestContext ?? {},
               stepResults: snapshot?.context,
               resume: {
                 steps,

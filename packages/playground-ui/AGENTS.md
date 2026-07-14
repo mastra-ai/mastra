@@ -28,3 +28,4 @@ applicable.
 
 This package needs both component validation and realistic UI validation.
 Preserve design-system consistency and existing component APIs where possible.
+Do not add new `asChild` usage; prefer Base UI's native `render` prop for stronger type safety.

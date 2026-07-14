@@ -16,6 +16,11 @@
   ],
   "redirects": [
     {
+      "source": "/docs/agents/channels",
+      "destination": "/docs/capabilities/channels/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/observability/tracing/exporters/cloud",
       "destination": "/docs/observability/integrations/exporters/mastra-platform",
       "permanent": true
@@ -101,6 +106,46 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/adding-voice",
+      "destination": "/docs/voice/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/durable-agents",
+      "destination": "/docs/long-running-agents/durable-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/goals",
+      "destination": "/docs/long-running-agents/goals",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats",
+      "destination": "/docs/long-running-agents/schedules",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signal-providers",
+      "destination": "/docs/long-running-agents/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signals",
+      "destination": "/docs/long-running-agents/signals",
+      "permanent": true
+    },
+    {
       "source": "/examples/memory/working-memory-schema",
       "destination": "https://github.com/mastra-ai/mastra/tree/main/examples/memory-with-schema",
       "permanent": true
@@ -122,7 +167,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit",
-      "destination": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
       "permanent": true
     },
     {
@@ -337,7 +382,7 @@
     },
     {
       "source": "/docs/server-db/storage",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -522,7 +567,7 @@
     },
     {
       "source": "/docs/memory/storage/overview",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -547,7 +592,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources",
-      "destination": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
       "permanent": true
     },
     {
@@ -812,7 +857,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming",
-      "destination": "/docs/agents/background-tasks",
+      "destination": "/docs/long-running-agents/background-tasks",
       "permanent": true
     },
     {
@@ -853,6 +898,126 @@
     {
       "source": "/reference/harness/session",
       "destination": "/reference/agent-controller/session",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/contributing-templates",
+      "destination": "https://mastra.ai/templates",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/discord",
+      "destination": "https://discord.gg/BTYqqHKUrf",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing",
+      "destination": "/docs/license",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel",
+      "destination": "/reference/workspace/vercel-serverless",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-microvm-sandbox",
+      "destination": "/reference/workspace/vercel-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit",
+      "destination": "/guides/build-your-ui/copilotkit/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools/overview",
+      "destination": "/docs/agents/using-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/model-providers",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure",
+      "destination": "/reference/project-structure",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage",
+      "destination": "/docs/storage/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents",
+      "destination": "/docs/getting-started/file-based-agents",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/input-processors",
+      "destination": "/docs/agents/processors",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-usage",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/ai-sdk",
+      "destination": "/models",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-with-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-agents-and-tools",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/steps",
+      "destination": "/reference/workflows/step",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/agents",
+      "destination": "/docs/workflows/agents-and-tools",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/flow-control",
+      "destination": "/docs/workflows/control-flow",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/running-evals",
+      "destination": "/docs/evals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/creating-custom-scorers",
+      "destination": "/docs/evals/custom-scorers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/channels/llms.txt",
+      "destination": "/docs/capabilities/channels/overview/llms.txt",
       "permanent": true
     },
     {
@@ -921,6 +1086,46 @@
       "permanent": true
     },
     {
+      "source": "/docs/agents/adding-voice/llms.txt",
+      "destination": "/docs/voice/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/background-tasks/llms.txt",
+      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/durable-agents/llms.txt",
+      "destination": "/docs/long-running-agents/durable-agents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/goals/llms.txt",
+      "destination": "/docs/long-running-agents/goals/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/heartbeats/llms.txt",
+      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/long-running-agents/heartbeats/llms.txt",
+      "destination": "/docs/long-running-agents/schedules/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signal-providers/llms.txt",
+      "destination": "/docs/long-running-agents/signal-providers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/signals/llms.txt",
+      "destination": "/docs/long-running-agents/signals/llms.txt",
+      "permanent": true
+    },
+    {
       "source": "/docs/frameworks/agentic-uis/ai-sdk/llms.txt",
       "destination": "/guides/build-your-ui/ai-sdk-ui/llms.txt",
       "permanent": true
@@ -932,7 +1137,7 @@
     },
     {
       "source": "/docs/frameworks/agentic-uis/copilotkit/llms.txt",
-      "destination": "/guides/build-your-ui/copilotkit/llms.txt",
+      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1022,7 +1227,7 @@
     },
     {
       "source": "/docs/server-db/storage/llms.txt",
-      "destination": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1167,7 +1372,7 @@
     },
     {
       "source": "/docs/memory/storage/overview/llms.txt",
-      "destination": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1192,7 +1397,7 @@
     },
     {
       "source": "/docs/memory/threads-and-resources/llms.txt",
-      "destination": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
       "permanent": true
     },
     {
@@ -1397,7 +1602,7 @@
     },
     {
       "source": "/docs/streaming/background-task-streaming/llms.txt",
-      "destination": "/docs/agents/background-tasks/llms.txt",
+      "destination": "/docs/long-running-agents/background-tasks/llms.txt",
       "permanent": true
     },
     {
@@ -1438,6 +1643,111 @@
     {
       "source": "/reference/harness/session/llms.txt",
       "destination": "/reference/agent-controller/session/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/community/licensing/llms.txt",
+      "destination": "/docs/license/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel/llms.txt",
+      "destination": "/reference/workspace/vercel-serverless/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/workspace/vercel-microvm-sandbox/llms.txt",
+      "destination": "/reference/workspace/vercel-sandbox/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/guides/build-your-ui/copilotkit/llms.txt",
+      "destination": "/guides/build-your-ui/copilotkit/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/tools/overview/llms.txt",
+      "destination": "/docs/agents/using-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/model-providers/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/project-structure/llms.txt",
+      "destination": "/reference/project-structure/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/memory/storage/llms.txt",
+      "destination": "/docs/storage/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/file-based-agents/llms.txt",
+      "destination": "/docs/getting-started/file-based-agents/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/input-processors/llms.txt",
+      "destination": "/docs/agents/processors/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-providers/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/agents/model-usage/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/frameworks/ai-sdk/llms.txt",
+      "destination": "/models/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-with-agents-and-tools/llms.txt",
+      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/using-agents-and-tools/llms.txt",
+      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/steps/llms.txt",
+      "destination": "/reference/workflows/step/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/agents/llms.txt",
+      "destination": "/docs/workflows/agents-and-tools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/flow-control/llms.txt",
+      "destination": "/docs/workflows/control-flow/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/evals/running-evals/llms.txt",
+      "destination": "/docs/evals/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/custom-scorers/llms.txt",
+      "destination": "/docs/evals/custom-scorers/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/scorers/creating-custom-scorers/llms.txt",
+      "destination": "/docs/evals/custom-scorers/llms.txt",
       "permanent": true
     }
   ]

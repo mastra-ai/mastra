@@ -6,7 +6,6 @@ import type {
   EntityLearningTopicsResponse,
   EntityLearningTopicResponse,
   EntityLearningTopicExamplesResponse,
-  EntityLearningPointsResponse,
   EntityLearningOutliersResponse,
 } from './entity-learning-types';
 
@@ -27,13 +26,6 @@ export type EntityLearningTopicExamplesParams = {
   limit?: number;
 };
 
-export type EntityLearningPointsParams = {
-  signalName: string;
-  runId: string;
-  includeOutliers?: boolean;
-  limit?: number;
-};
-
 export type EntityLearningOutlierExamplesParams = {
   signalName: string;
   runId: string;
@@ -42,7 +34,12 @@ export type EntityLearningOutlierExamplesParams = {
 
 export type EntityLearningService = ReturnType<typeof createEntityLearningService>;
 
-const trimTrailingSlash = (value: string) => value.replace(/\/+$/, '');
+// Index scan instead of regex to avoid backtracking (CodeQL js/polynomial-redos)
+const trimTrailingSlash = (value: string) => {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
+};
 
 /**
  * Network layer for the platform Agent Learning API served by the
@@ -121,17 +118,6 @@ export function createEntityLearningService(config: EntityLearningServiceConfig)
         buildUrl(`/entities/${encode(entityId)}/topics/${encode(topicId)}/examples`, {
           signalName: params.signalName,
           runId: params.runId,
-          limit: params.limit,
-        }),
-      );
-    },
-
-    getEntityPoints(entityId: string, params: EntityLearningPointsParams) {
-      return getJson<EntityLearningPointsResponse>(
-        buildUrl(`/entities/${encode(entityId)}/points`, {
-          signalName: params.signalName,
-          runId: params.runId,
-          includeOutliers: params.includeOutliers,
           limit: params.limit,
         }),
       );

@@ -216,6 +216,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     totalTokens: undefined,
   };
   #tripwire: StepTripwireData | undefined = undefined;
+  #wasSuspended = false;
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
   #transportClosed = false;
 
@@ -467,6 +468,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             case 'tool-call-suspended':
             case 'tool-call-approval':
               self.#status = 'suspended';
+              self.#wasSuspended = true;
               self.#delayedPromises.suspendPayload.resolve(chunk.payload);
               self.#delayedPromises.resumeSchema.resolve(chunk.payload.resumeSchema);
               if (!self.#finishCallbackSent) {
@@ -682,7 +684,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 toolCalls: self.#bufferedByStep.toolCalls,
                 toolResults: self.#bufferedByStep.toolResults,
 
-                content: messageList.get.response.aiV5.modelContent(-1),
+                // Durable agents attach pre-computed step content on the
+                // step-finish chunk because the stream adapter's messageList
+                // may be a stale reference (each workflow step deserializes
+                // a fresh instance).  Fall back to the live messageList for
+                // non-durable agents.
+                content: (chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
@@ -951,14 +958,24 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
                   // Cast needed because chunk.payload.response is typed with default OUTPUT=undefined
                   (chunk.payload as { response?: LLMStepResult<OUTPUT>['response'] }).response = response;
-                } else if (!self.#options.isLLMExecutionStep) {
-                  // No processor runner, not in LLM execution step - resolve with buffered text
+                } else if (!self.#options.isLLMExecutionStep || self.#options.resolveFinalPromises) {
+                  // No processor runner, not in LLM execution step - resolve ordinary
+                  // tool-driven multi-step runs with the last step's text so narration before
+                  // tool calls is excluded. Suspended/resumed tool approval flows keep the
+                  // aggregate stream text because pre-approval text is part of the resumed run.
+                  // Durable agents set resolveFinalPromises to force resolution even when
+                  // isLLMExecutionStep is true (single MastraModelOutput for the entire run).
+                  const lastStep = self.#bufferedSteps[self.#bufferedSteps.length - 1];
+                  const hasToolStep = self.#bufferedSteps.some(
+                    step => step.toolCalls.length > 0 || step.toolResults.length > 0,
+                  );
                   this.resolvePromises({
-                    text: self.#bufferedText.join(''),
+                    text: hasToolStep && !self.#wasSuspended && lastStep ? lastStep.text : self.#bufferedText.join(''),
                     finishReason: self.#finishReason,
                   });
                 }
-                // If isLLMExecutionStep is true, don't resolve text here - let the outer MastraModelOutput handle it
+                // If isLLMExecutionStep is true (without resolveFinalPromises), don't resolve
+                // text here - let the outer MastraModelOutput handle it
               } catch (error) {
                 if (error instanceof TripWire) {
                   self.#tripwire = {
@@ -1810,6 +1827,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       request: this.#request,
       usageCount: this.#usageCount,
       tripwire: this.#tripwire,
+      wasSuspended: this.#wasSuspended,
       messageList: this.messageList.serialize(),
     };
   }
@@ -1834,6 +1852,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#request = state.request;
     this.#usageCount = state.usageCount;
     this.#tripwire = state.tripwire;
+    this.#wasSuspended = state.wasSuspended ?? state.status === 'suspended';
     this.messageList = this.messageList.deserialize(state.messageList);
   }
 }

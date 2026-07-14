@@ -96,6 +96,7 @@ describe('Temporal prebuild integration', () => {
       const { createWorkflow, createStep } = init({
         client: undefined,
         taskQueue: 'mastra',
+        startToCloseTimeout: '5 minutes',
       });
 
       const step1 = createStep({
@@ -167,6 +168,7 @@ describe('Temporal prebuild integration', () => {
     expect(workflowSource).toContain('.then("step4")');
     expect(workflowSource).not.toContain('export const mastra');
     expect(workflowSource).not.toContain('createStep({');
+    expect(workflowSource).toContain("startToCloseTimeout: '5 minutes'");
 
     expect(activitiesSource).toContain('function createStep(args)');
     expect(activitiesSource).toContain('const step1 = createStep({');
@@ -229,7 +231,7 @@ describe('Temporal prebuild integration', () => {
         step4: { result: 'test-step1-inner-step2|test-step1-inner-step3|final' },
       },
     });
-    expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '1 minute' });
+    expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '5 minutes' });
     expect(executeChild).toHaveBeenCalledWith('innerWorkflow', { args: [{ inputData: { value: 'test-step1' } }] });
     expect(sleep).toHaveBeenCalledWith(1000);
   });

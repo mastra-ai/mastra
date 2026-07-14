@@ -165,7 +165,11 @@ describe('extractV6NativeApproval', () => {
 
     const result = extractV6NativeApproval(messages as any);
 
-    expect(result).toEqual({ resumeData: { approved: true }, runId: 'run-123' });
+    expect(result).toEqual({
+      resumeData: { approved: true },
+      runId: 'run-123',
+      toolCallId: 'tooluse_abc123',
+    });
   });
 
   it('includes reason when the user denied with a reason', () => {
@@ -188,7 +192,11 @@ describe('extractV6NativeApproval', () => {
 
     const result = extractV6NativeApproval(messages as any);
 
-    expect(result).toEqual({ resumeData: { approved: false, reason: 'Not safe' }, runId: 'run-456' });
+    expect(result).toEqual({
+      resumeData: { approved: false, reason: 'Not safe' },
+      runId: 'run-456',
+      toolCallId: 'tooluse_xyz',
+    });
   });
 
   it('omits reason when not provided', () => {
@@ -395,7 +403,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     expect(mockAgent.resumeStream).toHaveBeenCalledTimes(1);
     expect(mockAgent.resumeStream).toHaveBeenCalledWith(
       { approved: true },
-      expect.objectContaining({ runId: 'run-123' }),
+      expect.objectContaining({ runId: 'run-123', toolCallId: 'tooluse_abc123' }),
     );
     expect(mockAgent.stream).not.toHaveBeenCalled();
   });

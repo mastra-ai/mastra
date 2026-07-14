@@ -23,7 +23,9 @@ import type {
 // `MastraMessagePart` (from @mastra/core) is V4-shaped:
 //   - text/reasoning parts have no `state`, `textId`, `reasoningId`, or `redacted`
 //   - the V4 reasoning part requires a `details` array we do not synthesize
-//   - the V4 file part is `{ mimeType, data }`; we emit V5-shaped `{ mediaType, url }`
+//   - file parts use the canonical DB shape `{ mimeType, data }` so MessageList /
+//     `toAISdkMessages` adapters can read them (V5-shaped `{ mediaType, url }`
+//     only survives conversion on the way *out* to AI SDK UI parts)
 //   - V4 source parts wrap a `LanguageModelV1Source` object; we emit V5-shaped
 //     flat `source-url` / `source-document` parts
 //
@@ -42,6 +44,15 @@ type StreamChunk = {
 
 const cloneMetadata = (metadata: MastraDBMessageMetadata | undefined): MastraDBMessageMetadata =>
   metadata ? { ...metadata } : {};
+
+const uint8ArrayToBase64 = (bytes: Uint8Array): string => {
+  const chunkSize = 0x8000;
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+};
 
 const withParts = (message: MastraDBMessage, parts: MastraMessagePart[]): MastraDBMessage => ({
   ...message,
@@ -344,31 +355,39 @@ const signalContentsToUserMessages = (contents: unknown, metadata: MastraDBMessa
       return [
         {
           type: 'file',
-          mediaType:
+          mimeType:
             typeof typedPart.mediaType === 'string'
               ? typedPart.mediaType
               : typeof typedPart.mimeType === 'string'
                 ? typedPart.mimeType
                 : 'image/*',
-          url: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
-        } as unknown as MastraMessagePart,
+          data: typeof image === 'string' ? image : image instanceof URL ? image.toString() : '',
+        },
       ];
     }
 
     if (typedPart.type === 'file') {
       const data = typedPart.data;
+      const dataValue =
+        typeof data === 'string'
+          ? data
+          : data instanceof URL
+            ? data.toString()
+            : typeof typedPart.url === 'string'
+              ? typedPart.url
+              : '';
       return [
         {
           type: 'file',
-          mediaType:
+          mimeType:
             typeof typedPart.mediaType === 'string'
               ? typedPart.mediaType
               : typeof typedPart.mimeType === 'string'
                 ? typedPart.mimeType
                 : 'application/octet-stream',
-          url: typeof data === 'string' ? data : data instanceof URL ? data.toString() : '',
+          data: dataValue,
           ...(typeof typedPart.filename === 'string' ? { filename: typedPart.filename } : {}),
-        } as unknown as MastraMessagePart,
+        },
       ];
     }
 
@@ -1259,20 +1278,20 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
 
       const parts = [...lastMessage.content.parts];
 
-      let url: string;
+      let data: string;
       if (typeof chunk.payload.data === 'string') {
-        url = chunk.payload.base64
+        data = chunk.payload.base64
           ? `data:${chunk.payload.mimeType};base64,${chunk.payload.data}`
           : `data:${chunk.payload.mimeType},${encodeURIComponent(chunk.payload.data)}`;
       } else {
-        const base64 = btoa(String.fromCharCode(...chunk.payload.data));
-        url = `data:${chunk.payload.mimeType};base64,${base64}`;
+        const base64 = uint8ArrayToBase64(chunk.payload.data);
+        data = `data:${chunk.payload.mimeType};base64,${base64}`;
       }
 
       parts.push({
         type: 'file',
-        mediaType: chunk.payload.mimeType,
-        url,
+        mimeType: chunk.payload.mimeType,
+        data,
         providerMetadata: chunk.payload.providerMetadata,
       } as unknown as MastraMessagePart);
 
