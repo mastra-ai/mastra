@@ -4,6 +4,8 @@ import { isSingleStepEntry } from '../../utils';
 import { EventedWorkflow } from '../workflow';
 import type { ParentWorkflow } from '.';
 
+export { getInnerStepId, materializeInnerStep } from '../../inner-step';
+
 /**
  * Type guard to check if a step is actually a Workflow.
  * A step is a Workflow if it's an EventedWorkflow instance or has component === 'WORKFLOW'.
@@ -57,7 +59,7 @@ export function getNestedWorkflow(
     parentStep = parentStep.steps[executionPath[1]!];
   }
 
-  if (parentStep?.type === 'step' || parentStep?.type === 'loop') {
+  if (parentStep?.type === 'step') {
     // Validate that the inner step is actually a Workflow before returning
     if (isWorkflowStep(parentStep.step)) {
       return parentStep.step;
@@ -66,12 +68,14 @@ export function getNestedWorkflow(
     return null;
   }
 
-  // Handle foreach - validate that the inner step is actually a Workflow
-  if (parentStep?.type === 'foreach') {
-    if (isWorkflowStep(parentStep.step)) {
-      return parentStep.step;
+  // Handle loop / foreach - validate that the inner step is actually a Workflow.
+  // The inner step is now a SingleStepEntry; only the `type: 'step'` variant
+  // can wrap a live Workflow. Declarative agent/tool/mapping entries never
+  // nest a workflow.
+  if (parentStep?.type === 'loop' || parentStep?.type === 'foreach') {
+    if (parentStep.step.type === 'step' && isWorkflowStep(parentStep.step.step)) {
+      return parentStep.step.step;
     }
-    // Not a workflow - this is a regular step in a foreach, return null
     return null;
   }
 
@@ -86,7 +90,13 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
     parentStep = parentStep.steps[executionPath[1]!];
     idx++;
   } else if (parentStep?.type === 'foreach') {
-    return parentStep.step;
+    // Foreach inner step is a SingleStepEntry; expose a lightweight handle so
+    // callers that only need the id (or `.step` for the classic `type: 'step'`
+    // case) keep working without a `mastra` handle in scope.
+    if (parentStep.step.type === 'step') {
+      return parentStep.step.step;
+    }
+    return { id: parentStep.step.id } as Step<string, any, any, any, any, any>;
   }
 
   if (!(parentStep && (isSingleStepEntry(parentStep) || parentStep.type === 'loop'))) {
@@ -97,8 +107,15 @@ export function getStep(workflow: Workflow, executionPath: number[]): Step<strin
     return getStep(parentStep, executionPath.slice(idx + 1));
   }
 
-  if (parentStep.type === 'step' || parentStep.type === 'loop') {
+  if (parentStep.type === 'step') {
     return parentStep.step;
+  }
+
+  if (parentStep.type === 'loop') {
+    if (parentStep.step.type === 'step') {
+      return parentStep.step.step;
+    }
+    return { id: parentStep.step.id } as Step<string, any, any, any, any, any>;
   }
 
   // Declarative agent / tool / mapping entries are not nested workflows; expose a

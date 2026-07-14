@@ -187,15 +187,18 @@ describe('getStep', () => {
   });
 
   it('should return step property for loop type', () => {
-    // Arrange: Create workflow with loop step
+    // Arrange: Create workflow with loop step. `loop.step` is a SingleStepEntry —
+    // the classic `{ type: 'step', step: <live Step> }` variant is what `getStep`
+    // unwraps to the underlying Step for this legacy contract.
+    const innerStep = {
+      id: 'loopStep',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      execute: async () => ({}),
+    };
     const loopStep = {
       type: 'loop' as const,
-      step: {
-        id: 'loopStep',
-        inputSchema: z.object({}),
-        outputSchema: z.object({}),
-        execute: async () => ({}),
-      },
+      step: { type: 'step' as const, step: innerStep },
     };
 
     const workflow = new EventedWorkflow({
@@ -208,8 +211,8 @@ describe('getStep', () => {
     // Act: Call getStep with path to loop step
     const result = getStep(workflow as any, [0]);
 
-    // Assert: Verify returned step matches loop step
-    expect(result).toBe(loopStep.step);
+    // Assert: Verify returned step matches inner live Step
+    expect(result).toBe(innerStep);
   });
 
   it('should correctly resolve step from EventedWorkflow nested in parallel step', () => {

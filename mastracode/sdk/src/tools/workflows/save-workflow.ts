@@ -16,17 +16,37 @@ interface AddStoredWorkflowable {
   }) => Promise<void>;
 }
 
+// Optional step-level knobs that round-trip on both agent and tool entries.
+// Keep this shape JSON-safe — no closures, no live handles.
+const stepOptions = z
+  .object({
+    retries: z.number().int().nonnegative().optional().describe('Retry count on failure. Static number only.'),
+    metadata: z.record(z.string(), z.any()).optional().describe('Arbitrary JSON-safe metadata attached to the step.'),
+  })
+  .optional()
+  .describe(
+    'JSON-safe subset of step options that round-trips through storage. `onFinish` callbacks and function-valued scorers are NOT supported.',
+  );
+
 // Single-step-like entries — the shapes that can appear at the top level AND
 // nested inside `parallel.steps` / `foreach.step`.
 const agentEntry = z.object({
   type: z.literal('agent'),
   id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
   agentId: z.string().describe('Id of an agent registered on this Mastra instance (see list-available-agents).'),
+  outputSchema: z
+    .any()
+    .optional()
+    .describe(
+      "OPTIONAL JSON Schema (Draft 2020-12) describing the structured output the agent must produce for this step. When set, the agent runs with structured output and the step's output IS that shape (not `{ text: string }`). Use this when a downstream step needs a machine-readable field — for example, an agent that reads a directory listing and emits `{ files: string[] }`, which a subsequent `foreach` iterates over.",
+    ),
+  options: stepOptions,
 });
 const toolEntry = z.object({
   type: z.literal('tool'),
   id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
   toolId: z.string().describe('Id of a tool registered on this Mastra instance (see list-available-tools).'),
+  options: stepOptions,
 });
 const mappingEntry = z.object({
   type: z.literal('mapping'),
@@ -38,6 +58,12 @@ const mappingEntry = z.object({
     ),
 });
 const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry]);
+
+// Foreach inner step — same discriminated shape as agent/tool at the top level.
+// `mapping` is deliberately excluded: a mapping's output is always an object
+// keyed by mapConfig fields, so iterating it per-element is meaningless and the
+// rehydrator rejects it.
+const foreachInnerStep = z.discriminatedUnion('type', [agentEntry, toolEntry]);
 
 // Full top-level entry union — includes container step types (parallel, foreach,
 // sleep, sleepUntil) in addition to the single-step-like entries above.
@@ -55,7 +81,9 @@ const graphEntry = z.discriminatedUnion('type', [
   }),
   z.object({
     type: z.literal('foreach'),
-    step: singleStepEntry.describe("The inner step, run once per element of the previous step's array output."),
+    step: foreachInnerStep.describe(
+      "The inner step, run once per element of the previous step's array output. MUST be `agent` or `tool` — mapping steps cannot be foreach inner steps because their output shape isn't per-element executable. Give this inner step its own unique `id` distinct from surrounding steps.",
+    ),
     opts: z
       .object({ concurrency: z.number().int().positive() })
       .optional()

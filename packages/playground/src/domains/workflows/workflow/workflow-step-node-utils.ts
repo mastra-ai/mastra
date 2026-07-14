@@ -84,13 +84,16 @@ export const resolveWorkflowGraphStep = (flow: SerializedStepFlowEntry): Resolve
         id: flow.id,
         flow,
       };
-    case 'foreach':
+    case 'foreach': {
+      const inner = flow.step;
+      const innerStep = inner.type === 'step' ? inner.step : ({ id: inner.id } as never);
       return {
         kind: 'foreach-step',
-        id: flow.step.id,
-        step: flow.step,
+        id: innerStep.id,
+        step: innerStep,
         flow,
       };
+    }
     case 'parallel':
       return {
         kind: 'parallel-step',

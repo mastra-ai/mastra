@@ -46,6 +46,7 @@ import type {
   TimeTravelExecutionParams,
   WorkflowRunStatus,
 } from './types';
+import { getSingleStepEntryId } from './utils';
 // Imported so the per-type execute methods (executeAgent/executeTool/executeMapping)
 // can build a runnable step from a declarative entry. This creates a
 // workflow<->default module cycle, but these are only invoked at execution time
@@ -1081,9 +1082,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         {} as Record<string, any>,
       );
     } else if (step.type === 'loop') {
-      return stepResults[step.step.id]?.output;
+      return stepResults[getSingleStepEntryId(step.step)]?.output;
     } else if (step.type === 'foreach') {
-      return stepResults[step.step.id]?.output;
+      return stepResults[getSingleStepEntryId(step.step)]?.output;
     }
   }
 

@@ -8,13 +8,36 @@
  * invariant. If a future engine change tightens what toStorableGraph accepts,
  * or a rehydrate case regresses, this test fails.
  */
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../../agent';
 import { Mastra } from '../../mastra';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { rehydrateWorkflow, toStorableGraph } from '../load-from-storage';
 import type { SerializedStepFlowEntry } from '../types';
+
+function fixedResponseAgent(id: string, response: string) {
+  return new Agent({
+    id,
+    name: id,
+    instructions: 'stub',
+    model: new MockLanguageModelV2({
+      doStream: async () => ({
+        rawCall: { rawPrompt: null, rawSettings: {} },
+        warnings: [],
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          { type: 'text-start', id: 't' },
+          { type: 'text-delta', id: 't', delta: response },
+          { type: 'text-end', id: 't' },
+          { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+        ]),
+      }),
+    }),
+  });
+}
 
 const echoTool = createTool({
   id: 'echo-tool',
@@ -45,7 +68,7 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
       },
       {
         type: 'foreach',
-        step: { id: 'echo-tool', description: 'Echoes a string' } as any,
+        step: { type: 'tool', id: 'echo-tool', toolId: 'echo-tool' },
         opts: { concurrency: 3 },
       },
       { type: 'sleep', id: 'wait-a-bit', duration: 1234 },
@@ -88,7 +111,7 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
 
     expect(foreach).toMatchObject({
       type: 'foreach',
-      step: { id: 'echo-tool' },
+      step: { type: 'tool', toolId: 'echo-tool' },
       opts: { concurrency: 3 },
     });
 
@@ -146,5 +169,139 @@ describe('rehydrate static subset — parallel / foreach / sleep / sleepUntil', 
         mastra,
       ),
     ).rejects.toThrow(/predicate DSL/);
+  });
+
+  it('preserves a foreach step id that differs from the underlying tool id', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'echo-tool': echoTool } as any,
+      storage: new InMemoryStore({ id: 'rehydrate-foreach-mismatched-tool-id' }),
+    });
+
+    const storedGraph: SerializedStepFlowEntry[] = [
+      {
+        type: 'foreach',
+        step: {
+          type: 'tool',
+          id: 'summarize-file',
+          toolId: 'echo-tool',
+          options: { retries: 2, metadata: { tag: 'per-file' } },
+        },
+        opts: { concurrency: 4 },
+      },
+    ];
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'foreach-mismatched-tool-wf',
+        inputSchema: { type: 'array', items: { type: 'object' } },
+        outputSchema: { type: 'array', items: { type: 'object' } },
+        graph: JSON.parse(JSON.stringify(storedGraph)),
+      },
+      mastra,
+    );
+
+    // Live entry preserves the stored step id, distinct from the tool id.
+    const [foreachEntry] = workflow.stepGraph as Array<any>;
+    expect(foreachEntry.type).toBe('foreach');
+    expect(foreachEntry.step.id).toBe('summarize-file');
+
+    // Re-serializing preserves the mismatched id + toolId + options.
+    const [reserialized] = toStorableGraph(workflow.stepGraph) as any[];
+    expect(reserialized).toMatchObject({
+      type: 'foreach',
+      opts: { concurrency: 4 },
+      step: {
+        type: 'tool',
+        id: 'summarize-file',
+        toolId: 'echo-tool',
+        options: { retries: 2, metadata: { tag: 'per-file' } },
+      },
+    });
+  });
+
+  it('round-trips a foreach step whose body is an agent with a structured outputSchema', async () => {
+    const agent = fixedResponseAgent('summarizer-agent', '{"summary":"ok"}');
+    const mastra = new Mastra({
+      logger: false,
+      agents: { 'summarizer-agent': agent } as any,
+      storage: new InMemoryStore({ id: 'rehydrate-foreach-agent' }),
+    });
+
+    const storedGraph: SerializedStepFlowEntry[] = [
+      {
+        type: 'foreach',
+        step: {
+          type: 'agent',
+          id: 'summarize-each',
+          agentId: 'summarizer-agent',
+          outputSchema: {
+            type: 'object',
+            properties: { summary: { type: 'string' } },
+            required: ['summary'],
+          },
+          options: { retries: 1 },
+        },
+        opts: { concurrency: 2 },
+      },
+    ];
+
+    const { workflow } = await rehydrateWorkflow(
+      {
+        id: 'foreach-agent-wf',
+        inputSchema: { type: 'array', items: { type: 'object' } },
+        outputSchema: { type: 'array', items: { type: 'object' } },
+        graph: JSON.parse(JSON.stringify(storedGraph)),
+      },
+      mastra,
+    );
+
+    const [foreachEntry] = workflow.stepGraph as Array<any>;
+    expect(foreachEntry.type).toBe('foreach');
+    expect(foreachEntry.step.id).toBe('summarize-each');
+
+    // Re-serialize: outputSchema + agentId + options survive the round-trip.
+    const [reserialized] = toStorableGraph(workflow.stepGraph) as any[];
+    expect(reserialized).toMatchObject({
+      type: 'foreach',
+      opts: { concurrency: 2 },
+      step: {
+        type: 'agent',
+        id: 'summarize-each',
+        agentId: 'summarizer-agent',
+        outputSchema: {
+          type: 'object',
+          properties: { summary: { type: 'string' } },
+          required: ['summary'],
+        },
+        options: { retries: 1 },
+      },
+    });
+  });
+
+  it('rejects a foreach whose inner step is a mapping (mappings project, they do not execute)', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      tools: { 'echo-tool': echoTool } as any,
+      storage: new InMemoryStore({ id: 'rehydrate-foreach-mapping' }),
+    });
+
+    await expect(
+      rehydrateWorkflow(
+        {
+          id: 'foreach-mapping-wf',
+          inputSchema: { type: 'array' },
+          outputSchema: { type: 'array' },
+          graph: [
+            {
+              type: 'foreach',
+              step: { type: 'mapping', id: 'map-1', mapConfig: '{}' },
+              opts: { concurrency: 1 },
+            } as any,
+          ],
+        },
+        mastra,
+      ),
+    ).rejects.toThrow(/mapping/i);
   });
 });

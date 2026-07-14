@@ -17,6 +17,7 @@ import type {
   WorkflowRunState,
 } from '../../../workflows/types';
 import type { Workflow } from '../../../workflows/workflow';
+import { getInnerStepId, materializeInnerStep } from '../../inner-step';
 import {
   createRestartExecutionParams,
   createTimeTravelExecutionParams,
@@ -1230,6 +1231,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     const streamFormat = this.runFormats.get(runId);
     const currentState = resolveCurrentState({ stepResults, state });
     const stepGraph: StepFlowEntry[] = workflow.stepGraph;
+    // For 'step' entries step.step is already a live Step. For 'loop' / 'foreach'
+    // (widened to SingleStepEntry) materialize the inner step so the rest of this
+    // method can keep treating step.step as a live Step at runtime.
+    const innerStep: Step = step.type === 'step' ? step.step : materializeInnerStep(step.step, this.mastra as any);
 
     if (!isExecutableStep(step)) {
       return this.errorWorkflow(
@@ -1254,16 +1259,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    activeStepsPath[step.step.id] = executionPath;
+    activeStepsPath[innerStep.id] = executionPath;
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
 
     // Run nested workflow - check for both EventedWorkflow and regular Workflow
-    if (step.step instanceof EventedWorkflow || step.step.component === 'WORKFLOW') {
-      const nestedWorkflow = step.step as Workflow;
+    if (innerStep instanceof EventedWorkflow || innerStep.component === 'WORKFLOW') {
+      const nestedWorkflow = innerStep as Workflow;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
-      if (resumeSteps?.length === 1 && resumeSteps[0] === step.step.id) {
-        const stepData = stepResults[step.step.id];
+      if (resumeSteps?.length === 1 && resumeSteps[0] === innerStep.id) {
+        const stepData = stepResults[innerStep.id];
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
           return this.errorWorkflow(
@@ -1289,7 +1294,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
 
         const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: step.step.id,
+          workflowName: innerStep.id,
           runId: nestedRunId,
         });
 
@@ -1311,7 +1316,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             },
             new MastraError({
               id: 'MASTRA_WORKFLOW',
-              text: `No suspended step found in nested workflow: ${step.step.id}`,
+              text: `No suspended step found in nested workflow: ${innerStep.id}`,
               domain: ErrorDomain.MASTRA_WORKFLOW,
               category: ErrorCategory.SYSTEM,
             }),
@@ -1332,9 +1337,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow.resume',
           runId,
           data: {
-            workflowId: step.step.id,
+            workflowId: innerStep.id,
             parentWorkflow: {
-              stepId: step.step.id,
+              stepId: innerStep.id,
               workflowId,
               runId,
               stepGraph,
@@ -1360,8 +1365,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else if (resumeSteps?.length > 1 && resumeSteps[0] === step.step.id) {
-        const stepData = stepResults[step.step.id];
+      } else if (resumeSteps?.length > 1 && resumeSteps[0] === innerStep.id) {
+        const stepData = stepResults[innerStep.id];
         const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
           return this.errorWorkflow(
@@ -1387,7 +1392,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
 
         const snapshot = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: step.step.id,
+          workflowName: innerStep.id,
           runId: nestedRunId,
         });
 
@@ -1404,9 +1409,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow.resume',
           runId,
           data: {
-            workflowId: step.step.id,
+            workflowId: innerStep.id,
             parentWorkflow: {
-              stepId: step.step.id,
+              stepId: innerStep.id,
               workflowId,
               runId,
               stepGraph,
@@ -1432,11 +1437,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === step.step.id) {
-        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
+      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === innerStep.id) {
+        const nestedRunId = stepResults[innerStep.id]?.metadata?.nestedRunId ?? randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
-            workflowName: step.step.id,
+            workflowName: innerStep.id,
             runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
@@ -1444,7 +1449,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           steps: timeTravel.steps.slice(1),
           inputData: timeTravel.inputData,
           resumeData: timeTravel.resumeData,
-          context: (timeTravel.nestedStepResults?.[step.step.id] ?? {}) as any,
+          context: (timeTravel.nestedStepResults?.[innerStep.id] ?? {}) as any,
           nestedStepsContext: (timeTravel.nestedStepResults ?? {}) as any,
           snapshot,
           graph: nestedWorkflow.buildExecutionGraph(),
@@ -1458,9 +1463,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow.start',
           runId,
           data: {
-            workflowId: step.step.id,
+            workflowId: innerStep.id,
             parentWorkflow: {
-              stepId: step.step.id,
+              stepId: innerStep.id,
               workflowId,
               runId,
               stepGraph,
@@ -1486,11 +1491,11 @@ export class WorkflowEventProcessor extends EventProcessor {
             outputOptions,
           },
         });
-      } else if (restart && !!restart.activeStepsPath?.[step.step.id]) {
-        const nestedRunId = stepResults[step.step.id]?.metadata?.nestedRunId ?? randomUUID();
+      } else if (restart && !!restart.activeStepsPath?.[innerStep.id]) {
+        const nestedRunId = stepResults[innerStep.id]?.metadata?.nestedRunId ?? randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
-            workflowName: step.step.id,
+            workflowName: innerStep.id,
             runId: nestedRunId,
           })) ?? ({ context: {} } as WorkflowRunState);
 
@@ -1503,9 +1508,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow.start',
           runId,
           data: {
-            workflowId: step.step.id,
+            workflowId: innerStep.id,
             parentWorkflow: {
-              stepId: step.step.id,
+              stepId: innerStep.id,
               workflowId,
               runId,
               stepGraph,
@@ -1571,9 +1576,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           type: 'workflow.start',
           runId,
           data: {
-            workflowId: step.step.id,
+            workflowId: innerStep.id,
             parentWorkflow: {
-              stepId: step.step.id,
+              stepId: innerStep.id,
               workflowId,
               stepGraph,
               runId,
@@ -1610,7 +1615,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         data: {
           type: 'workflow-step-start',
           payload: {
-            id: step.step.id,
+            id: innerStep.id,
             startedAt: Date.now(),
             payload: prevResult.status === 'success' ? prevResult.output : undefined,
             status: 'running',
@@ -1633,8 +1638,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
     const { resumeData: timeTravelResumeData, validationError: timeTravelResumeValidationError } =
       await validateStepResumeData({
-        resumeData: timeTravel?.stepResults[step.step.id]?.status === 'suspended' ? timeTravel?.resumeData : undefined,
-        step: step.step,
+        resumeData: timeTravel?.stepResults[innerStep.id]?.status === 'suspended' ? timeTravel?.resumeData : undefined,
+        step: innerStep,
       });
 
     let resumeDataToUse;
@@ -1642,10 +1647,10 @@ export class WorkflowEventProcessor extends EventProcessor {
       resumeDataToUse = timeTravelResumeData;
     } else if (timeTravelResumeData && timeTravelResumeValidationError) {
       this.mastra.getLogger()?.warn('Time travel resume data validation failed', {
-        stepId: step.step.id,
+        stepId: innerStep.id,
         error: timeTravelResumeValidationError.message,
       });
-    } else if (resumeSteps?.length > 0 && resumeSteps?.[0] === step.step.id) {
+    } else if (resumeSteps?.length > 0 && resumeSteps?.[0] === innerStep.id) {
       resumeDataToUse = resumeData;
     }
 
@@ -1658,7 +1663,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       stepResult = await this.stepExecutionStrategy.executeStep({
         workflowId,
         runId,
-        stepId: step.step.id,
+        stepId: innerStep.id,
         executionPath,
         stepResults,
         state: currentState,
@@ -1675,7 +1680,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     } else {
       stepResult = await this.stepExecutor.execute({
         workflowId,
-        step: step.step,
+        step: innerStep,
         runId,
         stepResults,
         state: currentState,
@@ -1713,7 +1718,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           timeTravel,
           stepResults: {
             ...stepResults,
-            [step.step.id]: stepResult,
+            [innerStep.id]: stepResult,
             __state: updatedState,
           },
           prevResult: { ...stepResult, status: 'canceled' }, //set the status to canceled to indicate the workflow was canceled
@@ -1741,7 +1746,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         resumeSteps,
         stepResults: {
           ...stepResults,
-          [step.step.id]: stepResult,
+          [innerStep.id]: stepResult,
         },
         prevResult: stepResult,
         activeStepsPath,
@@ -1754,7 +1759,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     if (stepResult.status === 'failed') {
-      const retries = step.step.retries ?? workflow.retryConfig.attempts ?? 0;
+      const retries = innerStep.retries ?? workflow.retryConfig.attempts ?? 0;
       if (retryCount >= retries) {
         await this.mastra.pubsub.publish('workflows', {
           type: 'workflow.step.end',
@@ -1817,7 +1822,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           restart,
           stepResults: {
             ...stepResults,
-            [step.step.id]: stepResult,
+            [innerStep.id]: stepResult,
             __state: updatedState,
           },
           prevResult: stepResult,
@@ -1873,7 +1878,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           restart,
           stepResults: {
             ...stepResults,
-            [step.step.id]: stepResult,
+            [innerStep.id]: stepResult,
             __state: updatedState,
           },
           prevResult: stepResult,
@@ -2134,7 +2139,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       const currentIdx = executionPath[1];
-      const existingStepResult = snapshot?.context?.[step.step.id] as any;
+      const existingStepResult = snapshot?.context?.[getInnerStepId(step.step)] as any;
       const currentResult = existingStepResult?.output;
       // Preserve the original payload (the input array) from the existing step result
       const originalPayload = existingStepResult?.payload;
@@ -2156,7 +2161,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           await workflowsStore?.updateWorkflowResults({
             workflowName: workflow.id,
             runId,
-            stepId: step.step.id,
+            stepId: getInnerStepId(step.step),
             result: bailedResult as any,
             requestContext,
           });
@@ -2169,7 +2174,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             runId,
             executionPath: [executionPath[0]!],
             resumeSteps,
-            stepResults: { ...stepResults, [step.step.id]: bailedResult },
+            stepResults: { ...stepResults, [getInnerStepId(step.step)]: bailedResult },
             prevResult: bailedResult,
             activeStepsPath,
             requestContext,
@@ -2210,7 +2215,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       const newStepResults = await workflowsStore?.updateWorkflowResults({
         workflowName: workflow.id,
         runId,
-        stepId: step.step.id,
+        stepId: getInnerStepId(step.step),
         result: newResult,
         requestContext,
       });
@@ -2238,14 +2243,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // discarding everything but the foreach step's result.
       const mergedForeachStepResults =
         !newStepResults || Object.keys(newStepResults).length === 0
-          ? { ...(stepResults ?? {}), [step.step.id]: newResult }
+          ? { ...(stepResults ?? {}), [getInnerStepId(step.step)]: newResult }
           : newStepResults;
       stepResults = { ...mergedForeachStepResults, __state: currentState };
 
       // For foreach iterations, check if all iterations are complete before emitting events
       // This prevents emitting workflow.suspend when only some concurrent iterations have finished
       if (currentIdx !== undefined) {
-        const foreachResult = stepResults[step.step.id] as any;
+        const foreachResult = stepResults[getInnerStepId(step.step)] as any;
         const iterationResults = foreachResult?.output ?? [];
         const targetLen = foreachResult?.payload?.length ?? 0;
 
@@ -2274,7 +2279,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           data: {
             type: 'workflow-step-progress',
             payload: {
-              id: step.step.id,
+              id: getInnerStepId(step.step),
               completedCount,
               totalCount: targetLen,
               currentIndex: currentIdx,
@@ -2328,7 +2333,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           const collectedResumeLabels: Record<string, { stepId: string; foreachIndex?: number }> = {};
           // suspendedPaths maps stepId -> executionPath, using the step ID (not stepId[index])
           const suspendedPaths: Record<string, number[]> = {
-            [step.step.id]: [executionPath[0]!],
+            [getInnerStepId(step.step)]: [executionPath[0]!],
           };
 
           let firstSuspendedIterationPayload: Record<string, unknown> | undefined;
@@ -2370,7 +2375,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           await workflowsStore?.updateWorkflowResults({
             workflowName: workflow.id,
             runId,
-            stepId: step.step.id,
+            stepId: getInnerStepId(step.step),
             result: foreachSuspendResult as any,
             requestContext,
           });
@@ -2418,7 +2423,7 @@ export class WorkflowEventProcessor extends EventProcessor {
               executionPath: [executionPath[0]!],
               resumeSteps,
               parentWorkflow,
-              stepResults: { ...stepResults, [step.step.id]: foreachSuspendResult },
+              stepResults: { ...stepResults, [getInnerStepId(step.step)]: foreachSuspendResult },
               prevResult: foreachSuspendResult,
               activeStepsPath,
               requestContext,
@@ -2718,7 +2723,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     } else if (step?.type === 'foreach') {
       // Get the original array from the foreach step's stored payload
-      const foreachStepResult = stepResults[step.step.id] as any;
+      const foreachStepResult = stepResults[getInnerStepId(step.step)] as any;
       const originalArray = foreachStepResult?.payload;
       await this.mastra.pubsub.publish('workflows', {
         type: 'workflow.step.run',

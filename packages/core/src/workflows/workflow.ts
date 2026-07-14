@@ -44,7 +44,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
-import { toStandardSchema } from '../schema';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
@@ -118,6 +118,40 @@ export type AgentStepOptions<TOUTPUT> = Omit<
   | 'scorers'
 >;
 
+/**
+ * Extract the JSON-safe subset of an agent-step options bag for the in-process
+ * `serializedStepFlow` (which feeds `WorkflowInfo.stepGraph` for dashboards
+ * and client-side rendering). Kept intentionally best-effort: this path is
+ * write-only and can't throw — the strict throwing round-trip serialization
+ * lives in `toStorableGraph` / `serializeSingleEntry`.
+ */
+function serializeAgentStepFields(options: any): {
+  outputSchema?: Record<string, any>;
+  options?: { retries?: number; metadata?: StepMetadata };
+} {
+  const out: { outputSchema?: Record<string, any>; options?: { retries?: number; metadata?: StepMetadata } } = {};
+  const raw = options?.structuredOutput?.schema;
+  if (raw !== undefined && raw !== null) {
+    try {
+      out.outputSchema = standardSchemaToJSONSchema(toStandardSchema(raw)) as Record<string, any>;
+    } catch {
+      // best-effort; toStorableGraph will surface the real error at persist time
+    }
+  }
+  const opts: { retries?: number; metadata?: StepMetadata } = {};
+  if (typeof options?.retries === 'number') opts.retries = options.retries;
+  if (options?.metadata && typeof options.metadata === 'object') opts.metadata = options.metadata;
+  if (Object.keys(opts).length > 0) out.options = opts;
+  return out;
+}
+
+function serializeToolStepFields(options: any): { options?: { retries?: number; metadata?: StepMetadata } } {
+  const opts: { retries?: number; metadata?: StepMetadata } = {};
+  if (typeof options?.retries === 'number') opts.retries = options.retries;
+  if (options?.metadata && typeof options.metadata === 'object') opts.metadata = options.metadata;
+  return Object.keys(opts).length > 0 ? { options: opts } : {};
+}
+
 export function mapVariable<TStep extends Step<string, any, any, any, any, any>>({
   step,
   path,
@@ -183,8 +217,18 @@ function areProcessorMessageArraysEqual(before: unknown[] | undefined, after: un
 
 function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): SerializedStepFlowEntry | undefined {
   for (const entry of graph) {
-    if ('step' in entry && entry.step?.id === stepId) return entry;
-    if ('id' in entry && entry.id === stepId) return entry;
+    if (entry.type === 'loop') {
+      const inner = entry.step as SerializedSingleStepEntry | SerializedStep<any>;
+      const innerId = 'type' in inner ? (inner.type === 'step' ? inner.step.id : (inner as any).id) : (inner as any).id;
+      if (innerId === stepId) return entry;
+    }
+    if (entry.type === 'foreach') {
+      const inner = entry.step;
+      const innerId = inner.type === 'step' ? inner.step.id : inner.id;
+      if (innerId === stepId) return entry;
+    }
+    if (entry.type === 'step' && (entry as any).step?.id === stepId) return entry;
+    if ('id' in entry && (entry as any).id === stepId) return entry;
     if ((entry.type === 'conditional' || entry.type === 'parallel') && 'steps' in entry) {
       const found = findStepInGraph(entry.steps as SerializedStepFlowEntry[], stepId);
       if (found) return found;
@@ -929,10 +973,22 @@ function toSingleStepEntry(step: any): SingleStepEntry {
 /** JSON-safe mirror of {@link toSingleStepEntry}. */
 function toSerializedSingleStepEntry(step: any): SerializedSingleStepEntry {
   if (step?.component === 'AGENT' && step.__agentRef) {
-    return { type: 'agent', id: step.id, agentId: step.__agentRef.id, description: step.description };
+    return {
+      type: 'agent',
+      id: step.id,
+      agentId: step.__agentRef.id,
+      description: step.description,
+      ...serializeAgentStepFields(step.__agentOptions),
+    };
   }
   if (step?.component === 'TOOL' && step.__toolRef) {
-    return { type: 'tool', id: step.id, toolId: step.__toolRef.id, description: step.description };
+    return {
+      type: 'tool',
+      id: step.id,
+      toolId: step.__toolRef.id,
+      description: step.description,
+      ...serializeToolStepFields(step.__toolOptions),
+    };
   }
   return {
     type: 'step',
@@ -2072,6 +2128,7 @@ export class Workflow<
       id,
       agentId,
       description: isId ? undefined : agentOrId.getDescription?.(),
+      ...serializeAgentStepFields(options),
     });
     this.steps[id] = isId
       ? ({ id, component: 'AGENT' } as any)
@@ -2124,6 +2181,7 @@ export class Workflow<
       id,
       toolId,
       description: isId ? undefined : toolOrId.description,
+      ...serializeToolStepFields(options),
     });
     this.steps[id] = isId
       ? ({ id, component: 'TOOL' } as any)
@@ -2485,7 +2543,7 @@ export class Workflow<
   ) {
     this.stepFlow.push({
       type: 'loop',
-      step: step as any,
+      step: toSingleStepEntry(step),
       condition,
       loopType: 'dowhile',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -2533,7 +2591,7 @@ export class Workflow<
   ) {
     this.stepFlow.push({
       type: 'loop',
-      step: step as any,
+      step: toSingleStepEntry(step),
       condition,
       loopType: 'dountil',
       serializedCondition: { id: `${step.id}-condition`, fn: condition.toString() },
@@ -2590,18 +2648,14 @@ export class Workflow<
       concurrency: number;
     },
   ) {
-    const actualStep = step as Step<any, any, any, any, any, any>;
-    this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
+    this.stepFlow.push({
+      type: 'foreach',
+      step: toSingleStepEntry(step as any),
+      opts: opts ?? { concurrency: 1 },
+    });
     this.serializedStepFlow.push({
       type: 'foreach',
-      step: {
-        id: (step as SerializedStep).id,
-        description: (step as SerializedStep).description,
-        metadata: (step as SerializedStep).metadata,
-        component: (step as SerializedStep).component,
-        serializedStepFlow: (step as SerializedStep).serializedStepFlow,
-        canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
-      },
+      step: toSerializedSingleStepEntry(step as any),
       opts: opts ?? { concurrency: 1 },
     });
     this.steps[(step as any).id] = step as any;

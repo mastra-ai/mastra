@@ -20,9 +20,17 @@
  */
 import { z } from 'zod';
 import type { Mastra } from '../mastra';
+import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import { createWorkflow } from './create';
-import type { SerializedSingleStepEntry, SerializedStepFlowEntry, SingleStepEntry, StepFlowEntry } from './types';
-import { createStep, mapVariable } from './workflow';
+import type {
+  SerializedSingleStepEntry,
+  SerializedStepFlowEntry,
+  SerializedStepOptions,
+  SingleStepEntry,
+  StepFlowEntry,
+} from './types';
+import { getSingleStepEntryId } from './utils';
+import { createStep, createStepFromAgent, createStepFromTool, mapVariable } from './workflow';
 
 // ============================================================================
 // JSON shape persisted to WorkflowDefinitionsStorage
@@ -79,15 +87,22 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
     case 'parallel':
       return { type: 'parallel', steps: entry.steps.map(s => serializeSingleEntry(s)) };
     case 'foreach':
+      if (entry.step.type === 'mapping') {
+        throw new Error(
+          `Foreach step cannot iterate a mapping: mappings project data, they don't execute per item. Use an agent, tool, or plain step as the foreach body.`,
+        );
+      }
       return {
         type: 'foreach',
-        step: stepDescriptor(entry.step),
+        step: serializeSingleEntry(entry.step),
         opts: { concurrency: entry.opts.concurrency },
       };
     case 'conditional':
       throw new Error(`Conditional steps cannot be stored: requires the Phase-2 predicate DSL.`);
     case 'loop':
-      throw new Error(`Loop step "${entry.step.id}" cannot be stored: requires the Phase-2 predicate DSL.`);
+      throw new Error(
+        `Loop step "${getSingleStepEntryId(entry.step)}" cannot be stored: requires the Phase-2 predicate DSL.`,
+      );
     default: {
       const _exhaustive: never = entry;
       throw new Error(`Unknown step entry type: ${JSON.stringify(_exhaustive)}`);
@@ -97,10 +112,26 @@ function serializeEntry(entry: StepFlowEntry): SerializedStepFlowEntry {
 
 function serializeSingleEntry(entry: SingleStepEntry): SerializedSingleStepEntry {
   if (entry.type === 'agent') {
-    return { type: 'agent', id: entry.id, agentId: entry.agentId, description: entry.agent?.description };
+    const options = pickSerializableStepOptions(entry.options, entry.id, 'agent');
+    const outputSchema = extractStructuredOutputJsonSchema(entry.options, entry.id);
+    return {
+      type: 'agent',
+      id: entry.id,
+      agentId: entry.agentId,
+      description: entry.agent?.description,
+      ...(outputSchema ? { outputSchema } : {}),
+      ...(options ? { options } : {}),
+    };
   }
   if (entry.type === 'tool') {
-    return { type: 'tool', id: entry.id, toolId: entry.toolId, description: entry.tool?.description };
+    const options = pickSerializableStepOptions(entry.options, entry.id, 'tool');
+    return {
+      type: 'tool',
+      id: entry.id,
+      toolId: entry.toolId,
+      description: entry.tool?.description,
+      ...(options ? { options } : {}),
+    };
   }
   if (entry.type === 'mapping') {
     if (typeof entry.mapConfig === 'function') {
@@ -146,6 +177,71 @@ function stepDescriptor(step: any) {
     component: step.component,
     canSuspend: Boolean(step.suspendSchema || step.resumeSchema),
   };
+}
+
+/**
+ * Pull the JSON-safe fields (`retries`, `metadata`) out of the options bag
+ * carried on a live agent/tool `SingleStepEntry`. Closure-valued fields must
+ * hard-crash here rather than silently vanish through storage.
+ */
+function pickSerializableStepOptions(
+  options: any,
+  entryId: string,
+  kind: 'agent' | 'tool',
+): SerializedStepOptions | undefined {
+  if (!options || typeof options !== 'object') return undefined;
+
+  // Closure-valued options don't round-trip. Fail loudly at serialize time so
+  // the workflow author immediately learns their step won't persist rather
+  // than discovering it in production when the callback silently no-ops.
+  const forbidden: Array<{ key: string; hint: string }> = [
+    { key: 'onFinish', hint: 'callback closure' },
+    { key: 'onChunk', hint: 'callback closure' },
+    { key: 'onError', hint: 'callback closure' },
+    { key: 'onStepFinish', hint: 'callback closure' },
+    { key: 'onAbort', hint: 'callback closure' },
+    { key: 'toolChoice', hint: 'may be a function' },
+  ];
+  for (const { key, hint } of forbidden) {
+    if (typeof options[key] === 'function') {
+      throw new Error(
+        `${kind === 'agent' ? 'Agent' : 'Tool'} step "${entryId}" cannot be stored: option "${key}" is a ${hint} that does not round-trip. Remove it or move that logic outside the persisted workflow.`,
+      );
+    }
+  }
+  if (typeof options.scorers === 'function') {
+    throw new Error(
+      `${kind === 'agent' ? 'Agent' : 'Tool'} step "${entryId}" cannot be stored: "scorers" is a function; only the static array form round-trips.`,
+    );
+  }
+
+  const out: SerializedStepOptions = {};
+  if (typeof options.retries === 'number') out.retries = options.retries;
+  if (options.metadata && typeof options.metadata === 'object') {
+    out.metadata = options.metadata as Record<string, any>;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * If the agent-step options carry `structuredOutput.schema`, that schema IS
+ * the step's output shape (see `createStepFromAgent`). Emit it as JSON Schema
+ * so rehydration can wire the same structured output back in.
+ */
+function extractStructuredOutputJsonSchema(options: any, entryId: string): Record<string, any> | undefined {
+  const raw = options?.structuredOutput?.schema;
+  if (raw === undefined || raw === null) return undefined;
+  try {
+    // `.agent()`'s typed overload requires a StandardSchemaWithJSON, but the
+    // any-form accepts a raw Zod schema. Normalize either shape here so the
+    // storage form is consistent.
+    const standard = toStandardSchema(raw);
+    return standardSchemaToJSONSchema(standard) as Record<string, any>;
+  } catch (e) {
+    throw new Error(
+      `Agent step "${entryId}" cannot be stored: structuredOutput.schema is not convertible to JSON Schema (${(e as Error).message}).`,
+    );
+  }
 }
 
 // ============================================================================
@@ -195,11 +291,11 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
   switch (entry.type) {
     case 'agent':
       assertAgentExists(mastra, entry.agentId);
-      wf.agent(entry.agentId, { id: entry.id });
+      wf.agent(entry.agentId, rebuildAgentOptions(entry), { id: entry.id });
       return;
     case 'tool':
       assertToolExists(mastra, entry.toolId);
-      wf.tool(entry.toolId, { id: entry.id });
+      wf.tool(entry.toolId, rebuildToolOptions(entry), { id: entry.id });
       return;
     case 'mapping': {
       const cfg = parseMapConfig(entry.mapConfig, entry.id);
@@ -222,9 +318,12 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
     case 'parallel':
       wf.parallel(entry.steps.map(s => resolveSingle(s, mastra)));
       return;
-    case 'foreach':
-      wf.foreach(resolveStepDescriptor(entry.step, mastra), { concurrency: entry.opts.concurrency });
+    case 'foreach': {
+      const inner = resolveForeachInner(entry.step, mastra);
+      const opts = entry.opts?.concurrency !== undefined ? { concurrency: entry.opts.concurrency } : undefined;
+      wf.foreach(inner, opts);
       return;
+    }
     case 'step':
       wf.then(resolveStepDescriptor(entry.step, mastra));
       return;
@@ -238,26 +337,83 @@ function applyGraphEntry(wf: any, entry: SerializedStepFlowEntry, mastra: Mastra
   }
 }
 
+/**
+ * Reconstruct the options bag `.agent()` accepts from a serialized entry.
+ * Restores `structuredOutput.schema` from `outputSchema` (JSON Schema → Zod)
+ * and merges in `retries` / `metadata`. Returns `undefined` when nothing to
+ * restore so `.agent(agentId)` stays a clean call.
+ */
+function rebuildAgentOptions(entry: {
+  outputSchema?: Record<string, any>;
+  options?: SerializedStepOptions;
+}): Record<string, any> | undefined {
+  const opts: Record<string, any> = {};
+  if (entry.outputSchema) {
+    opts.structuredOutput = { schema: jsonSchemaToZod(entry.outputSchema) };
+  }
+  if (entry.options?.retries !== undefined) opts.retries = entry.options.retries;
+  if (entry.options?.metadata !== undefined) opts.metadata = entry.options.metadata;
+  return Object.keys(opts).length > 0 ? opts : undefined;
+}
+
+function rebuildToolOptions(entry: { options?: SerializedStepOptions }): Record<string, any> | undefined {
+  const opts: Record<string, any> = {};
+  if (entry.options?.retries !== undefined) opts.retries = entry.options.retries;
+  if (entry.options?.metadata !== undefined) opts.metadata = entry.options.metadata;
+  return Object.keys(opts).length > 0 ? opts : undefined;
+}
+
 function resolveSingle(entry: SerializedSingleStepEntry, mastra: Mastra): any {
   switch (entry.type) {
     case 'agent': {
       assertAgentExists(mastra, entry.agentId);
-      // Wrap in createStep so `.parallel()` sees the __agentRef discriminator
-      // and re-emits a `type: 'agent'` entry when re-serialized. A raw agent
-      // instance falls through to the generic `type: 'step'` branch and the
-      // round-trip loses the declarative shape.
+      // Wrap in createStep so `.parallel()` / `.foreach()` sees the __agentRef
+      // discriminator and re-emits a `type: 'agent'` entry when re-serialized.
+      // A raw agent instance falls through to the generic `type: 'step'` branch
+      // and the round-trip loses the declarative shape.
       return createStep(mastra.getAgentById(entry.agentId));
     }
     case 'tool': {
       assertToolExists(mastra, entry.toolId);
-      // Same reason as above — the tool must be wrapped so `.parallel()` can
-      // recognize the __toolRef discriminator.
+      // Same reason as above — the tool must be wrapped so `.parallel()` /
+      // `.foreach()` can recognize the __toolRef discriminator.
       return createStep(mastra.getTool(entry.toolId) as any);
     }
     case 'step':
       return resolveStepDescriptor(entry.step, mastra);
     case 'mapping':
-      throw new Error(`mapping entries cannot appear inside .parallel(); they must be top-level.`);
+      throw new Error(`mapping entries cannot appear inside .parallel() or .foreach(); they must be top-level.`);
+  }
+}
+
+/**
+ * Build a runnable `Step` for a `.foreach()` inner from its serialized entry.
+ * Preserves the stored `id` (which may differ from the underlying agent/tool id)
+ * and restores `structuredOutput` / `retries` / `metadata` on the step so
+ * per-iteration execution honors them.
+ */
+function resolveForeachInner(entry: SerializedSingleStepEntry, mastra: Mastra): any {
+  switch (entry.type) {
+    case 'agent': {
+      assertAgentExists(mastra, entry.agentId);
+      const agent = mastra.getAgentById(entry.agentId);
+      const options = rebuildAgentOptions(entry);
+      const base = createStepFromAgent(agent as any, options as any);
+      return { ...base, id: entry.id, __agentOptions: options };
+    }
+    case 'tool': {
+      assertToolExists(mastra, entry.toolId);
+      const tool = mastra.getTool(entry.toolId);
+      const options = rebuildToolOptions(entry);
+      const base = createStepFromTool(tool as any, options as any);
+      return { ...base, id: entry.id, __toolOptions: options };
+    }
+    case 'step':
+      return resolveStepDescriptor(entry.step, mastra);
+    case 'mapping':
+      throw new Error(
+        `Foreach step cannot iterate a mapping: mappings project data, they don't execute per item. Use an agent, tool, or plain step as the foreach body.`,
+      );
   }
 }
 

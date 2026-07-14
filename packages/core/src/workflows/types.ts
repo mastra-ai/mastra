@@ -565,15 +565,21 @@ export type StepFlowEntry<TEngineType = DefaultEngineType> =
       serializedConditions: { id: string; fn: string }[];
     }
   | {
+      // `loop` is not yet round-trippable end-to-end: the condition is still a
+      // closure (see the "Phase-2 predicate DSL" throw in `toStorableGraph`), so
+      // the storage side of this variant does not exist yet. The *live* step
+      // shape is aligned with `parallel` / `foreach` up front so the builder can
+      // accept an Agent / Tool directly today and the phase-2 unblock is
+      // purely about the condition, not restructuring the inner step.
       type: 'loop';
-      step: Step;
+      step: SingleStepEntry<TEngineType>;
       condition: LoopConditionFunction<any, any, any, any, any, TEngineType>;
       serializedCondition: { id: string; fn: string };
       loopType: 'dowhile' | 'dountil';
     }
   | {
       type: 'foreach';
-      step: Step;
+      step: SingleStepEntry<TEngineType>;
       opts: {
         concurrency: number;
       };
@@ -593,10 +599,42 @@ export type SerializedStep<TEngineType = DefaultEngineType> = Pick<
  * JSON-safe mirror of {@link SingleStepEntry}: declarative variants carry
  * ids/strings only (no closures or live references).
  */
+/**
+ * JSON-safe subset of {@link AgentStepOptions} / tool step options carried on
+ * a serialized declarative entry. Closure-valued fields (`onFinish`, function
+ * `scorers`) don't round-trip and are rejected at `toStorableGraph` time.
+ */
+export type SerializedStepOptions = {
+  retries?: number;
+  metadata?: StepMetadata;
+};
+
 export type SerializedSingleStepEntry =
   | { type: 'step'; step: SerializedStep }
-  | { type: 'agent'; id: string; agentId: string; description?: string }
-  | { type: 'tool'; id: string; toolId: string; description?: string }
+  | {
+      type: 'agent';
+      id: string;
+      agentId: string;
+      description?: string;
+      /**
+       * The step's output shape. When `.agent()` is called with
+       * `structuredOutput.schema`, that schema becomes the step output; this
+       * field captures it as JSON Schema so rehydration can reconstruct the
+       * same `structuredOutput` wiring. Absent means the step produces the
+       * default `{ text: string }`.
+       */
+      outputSchema?: Record<string, any>;
+      options?: SerializedStepOptions;
+    }
+  | {
+      type: 'tool';
+      id: string;
+      toolId: string;
+      description?: string;
+      // No outputSchema: a tool's output shape lives on the tool itself and is
+      // looked up from the live Mastra instance at rehydration time.
+      options?: SerializedStepOptions;
+    }
   | { type: 'mapping'; id: string; mapConfig: string };
 
 export type SerializedStepFlowEntry =
@@ -630,7 +668,7 @@ export type SerializedStepFlowEntry =
     }
   | {
       type: 'foreach';
-      step: SerializedStep;
+      step: SerializedSingleStepEntry;
       opts: {
         concurrency: number;
       };

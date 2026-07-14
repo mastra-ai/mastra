@@ -282,7 +282,7 @@ export const getStepIds = (entry: StepFlowEntry): string[] => {
     return [getSingleStepEntryId(entry)];
   }
   if (entry.type === 'foreach' || entry.type === 'loop') {
-    return [entry.step.id];
+    return [getSingleStepEntryId(entry.step)];
   }
   if (entry.type === 'parallel' || entry.type === 'conditional') {
     return entry.steps.map(s => getSingleStepEntryId(s));
@@ -479,7 +479,7 @@ export const createRestartExecutionParams = ({
     };
   } else if (firstEntry.type === 'foreach' || firstEntry.type === 'loop') {
     nestedWorkflowActiveStepsPath = {
-      [firstEntry.step.id]: [0],
+      [getSingleStepEntryId(firstEntry.step)]: [0],
     };
   } else if (firstEntry.type === 'sleep' || firstEntry.type === 'sleepUntil') {
     nestedWorkflowActiveStepsPath = {
