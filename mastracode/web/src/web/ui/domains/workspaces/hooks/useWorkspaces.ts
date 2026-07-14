@@ -6,8 +6,8 @@ import { useToast } from '../../../ui/toast';
 import { createWorktree, deleteWorktree } from '../services/github';
 import type { Project, Worktree } from '../services/projects';
 import {
+  factoryWorktrees,
   loadProjects,
-  projectWorktrees,
   removeWorktree,
   selectedWorktree,
   selectWorktree,
@@ -39,7 +39,10 @@ function latestProject(project: Project): Project {
 
 export function deriveProjectPath(project: Project | null | undefined): string {
   if (!project) return '';
-  if (project.source === 'github') return selectedWorktree(project)?.worktreePath ?? project.sandboxWorkdir ?? '';
+  // The repo-root checkout is not a chat target: everything runs in a
+  // worktree branched from HEAD, so a GitHub project without a selected
+  // workspace has no project path (and no enabled chat session).
+  if (project.source === 'github') return selectedWorktree(project)?.worktreePath ?? '';
   return project.path ?? '';
 }
 
@@ -59,7 +62,9 @@ function invalidateWorkspaceQueries(
 function workspacesData(project: Project): WorkspacesData {
   const current = latestProject(project);
   return {
-    worktrees: projectWorktrees(current),
+    // Factory workspaces only: user-session worktrees are listed by the
+    // User Sessions section, and the repo root is not a workspace at all.
+    worktrees: factoryWorktrees(current),
     selected: selectedWorktree(current),
   };
 }
@@ -116,8 +121,9 @@ export function useCreateWorkspaceMutation(project: Project | null | undefined, 
 /**
  * Delete a worktree: removes the sandbox checkout + branch server-side, deletes
  * every thread that ran inside it, drops it from the stored project, and — when
- * the deleted worktree was selected — falls back to the repo-root selection
- * (the UI re-derives the scope and addresses that worktree's own session).
+ * the deleted worktree was selected — falls back to the first remaining factory
+ * workspace (the UI re-derives the scope and addresses that worktree's own
+ * session), or to no selection when none remain.
  * Destructive; callers confirm with the user first.
  */
 export function useDeleteWorkspaceMutation(

@@ -4,6 +4,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   ADD_ITEM_ROUTE,
+  BATCH_INSERT_ITEMS_ROUTE,
   DELETE_DATASET_ROUTE,
   GET_DATASET_ROUTE,
   GET_ITEM_ROUTE,
@@ -295,6 +296,110 @@ describe('Datasets Handlers', () => {
       const details = await survivor.getDetails();
       expect(details.id).toBe(created.id);
       expect(details.projectId).toBe('proj_1');
+    });
+  });
+
+  describe('item identity', () => {
+    it('forwards externalId through single and batch insertion', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Identity DS' });
+
+      const added = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        externalId: 'single-item',
+        input: { q: 'single' },
+      } as any);
+      const batch = await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ externalId: 'batch-item', input: { q: 'batch' } }],
+      } as any);
+
+      expect(added.externalId).toBe('single-item');
+      expect(batch.items[0]?.externalId).toBe('batch-item');
+    });
+
+    it('maps incompatible externalId reuse to HTTP 409', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Conflict DS' });
+      await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        externalId: 'item-1',
+        input: { q: 'first' },
+      } as any);
+
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        externalId: 'item-1',
+        input: { q: 'different' },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(409);
+      expect((error as HTTPException).cause).toMatchObject({
+        conflicts: [expect.objectContaining({ externalId: 'item-1', reason: 'payload_mismatch' })],
+      });
+    });
+
+    it('maps an empty externalId to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Invalid Identity DS' });
+      const error = await ADD_ITEM_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        externalId: '',
+        input: { q: 'invalid' },
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
+    });
+
+    it('maps incompatible externalId reuse in a batch to HTTP 409', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Batch Conflict DS' });
+      await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ externalId: 'item-1', input: { q: 'first' } }],
+      } as any);
+
+      const error = await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ externalId: 'item-1', input: { q: 'different' } }],
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(409);
+      expect((error as HTTPException).cause).toMatchObject({
+        conflicts: [expect.objectContaining({ externalId: 'item-1', reason: 'payload_mismatch' })],
+      });
+    });
+
+    it('maps an empty externalId in a batch to HTTP 400', async () => {
+      const dataset = await mastra.datasets.create({ name: 'Batch Invalid Identity DS' });
+      const error = await BATCH_INSERT_ITEMS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        items: [{ externalId: '', input: { q: 'invalid' } }],
+      } as any).then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+      expect(error).toBeInstanceOf(HTTPException);
+      expect((error as HTTPException).status).toBe(400);
+      expect((error as HTTPException).cause).toEqual({ field: 'externalId' });
     });
   });
 

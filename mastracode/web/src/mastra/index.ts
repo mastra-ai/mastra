@@ -41,6 +41,9 @@ import {
   resolveIntakeReady,
   resolveLinearReady,
 } from '../web/web-surface.js';
+import type { WebApiRoutesDeps } from '../web/web-surface.js';
+
+type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
 
 const CONTROLLER_ID = 'code';
 
@@ -121,7 +124,7 @@ const prepared = await prepareAgentControllerMount({
   // project belongs to an org with an active Linear connection.
   ...(linearReady ? { extraTools: buildLinearAgentTools } : {}),
   ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
-  buildApiRoutes: ({ controller, authStorage }) => [
+  buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
     // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.

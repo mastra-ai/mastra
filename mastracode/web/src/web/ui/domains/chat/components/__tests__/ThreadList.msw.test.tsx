@@ -224,14 +224,16 @@ describe('ThreadList', () => {
     expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
   });
 
-  it('given a main-branch workspace is active on a GitHub project, then the full thread controls render', async () => {
+  it('given a GitHub project, then the list is read-only even when the repo-root path was persisted as selected', async () => {
+    // Legacy projects could persist the repo root as the selected worktree;
+    // it is no longer a workspace, so GitHub lists never expose thread controls.
     seedProject({ ...worktreeProject, selectedWorktreePath: '/sandbox/mastra' });
     useAgentControllerHandlers([threadOne]);
     renderThreadList();
 
     expect(await screen.findByText('First thread')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New thread' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Thread actions' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New thread' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Thread actions' })).not.toBeInTheDocument();
   });
 
   it('when a thread is clicked, then the app navigates to its page and the sidebar closes', async () => {
