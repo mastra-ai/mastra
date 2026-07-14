@@ -62,6 +62,15 @@ function stagesAfterMove(stages: string[], from: string | null, to: string): str
   return [...rest, to];
 }
 
+/**
+ * Custom prompts keep the same base context as the default run (what the
+ * issue/PR is and how to pick it up) — the typed text guides the run instead
+ * of directing an explicit skill.
+ */
+function guidedPrompt(base: string, instructions: string): string {
+  return `${base}\n\nGuidance for this run: ${instructions}`;
+}
+
 // ── Candidates (live issues/PRs with no board record yet) ───────────────────
 
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
@@ -90,6 +99,7 @@ interface BoardCandidate {
 
 function issueCandidate(issue: GithubIssue): BoardCandidate {
   const ref = `GitHub issue #${issue.number}: "${issue.title}" (${issue.url})`;
+  const base = `Investigate ${ref}.`;
   return {
     sourceKey: `github-issue:${issue.number}`,
     source: 'github-issue',
@@ -105,7 +115,7 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
     branch: `factory/issue-${issue.number}`,
     threadTitle: `Issue #${issue.number}: ${issue.title}`,
     defaultPrompt: `Use the understand-issue skill to investigate ${ref}.`,
-    customPrompt: instructions => `Regarding ${ref}. ${instructions}`,
+    customPrompt: instructions => guidedPrompt(base, instructions),
     metadata: { number: issue.number, author: issue.author },
   };
 }
@@ -113,6 +123,7 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
 function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
   const ref = `GitHub pull request #${pr.number}: "${pr.title}" (${pr.url})`;
   const checkout = `The PR head branch is ${pr.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${pr.number}\`).`;
+  const base = `Review ${ref}. ${checkout}`;
   return {
     sourceKey: `github-pr:${pr.number}`,
     source: 'github-pr',
@@ -128,7 +139,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
     branch: `factory/pr-${pr.number}`,
     threadTitle: `PR #${pr.number}: ${pr.title}`,
     defaultPrompt: `Use the understand-pr skill to review ${ref}. ${checkout}`,
-    customPrompt: instructions => `Regarding ${ref}. ${checkout} ${instructions}`,
+    customPrompt: instructions => guidedPrompt(base, instructions),
     metadata: { number: pr.number, author: pr.author, headBranch: pr.headBranch, baseBranch: pr.baseBranch },
   };
 }
@@ -136,6 +147,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
 function linearCandidate(issue: LinearIssue): BoardCandidate {
   const ref = `Linear issue ${issue.identifier}: "${issue.title}" (${issue.url})`;
   const fetchHint = `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
+  const base = `Investigate ${ref}. ${fetchHint}`;
   return {
     sourceKey: `linear:${issue.identifier}`,
     source: 'linear-issue',
@@ -151,8 +163,7 @@ function linearCandidate(issue: LinearIssue): BoardCandidate {
     branch: `factory/linear-${issue.identifier.toLowerCase()}`,
     threadTitle: `${issue.identifier}: ${issue.title}`,
     defaultPrompt: `Use the understand-issue skill to investigate ${ref}. ${fetchHint}`,
-    customPrompt: instructions =>
-      `Regarding ${ref} — fetch its full details with the linear_get_issue tool. ${instructions}`,
+    customPrompt: instructions => guidedPrompt(base, instructions),
     metadata: { identifier: issue.identifier, state: issue.state, assignee: issue.assignee },
   };
 }

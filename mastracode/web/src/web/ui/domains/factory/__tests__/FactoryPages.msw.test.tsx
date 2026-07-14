@@ -783,7 +783,7 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).toContain('linear_get_issue');
   });
 
-  it('given an issue candidate, when a custom prompt is submitted from the action menu, then the run starts with the typed prompt', async () => {
+  it('given an issue candidate, when a custom prompt is submitted, then the run keeps the issue context and adds the typed guidance', async () => {
     useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/board');
@@ -802,7 +802,10 @@ describe('Factory Board — investigate flow', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.messages).toHaveLength(1);
-    expect(captured.messages[0]!.message).toContain('Write a failing test first');
+    // The base issue context survives; the typed text guides the run instead
+    // of the explicit skill directive.
+    expect(captured.messages[0]!.message).toContain('Investigate GitHub issue #12: "Fix flaky test"');
+    expect(captured.messages[0]!.message).toContain('Guidance for this run: Write a failing test first');
     expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
   });
 
