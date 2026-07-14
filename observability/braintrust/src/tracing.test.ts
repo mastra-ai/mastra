@@ -992,6 +992,112 @@ describe('BraintrustExporter', () => {
     );
   });
 
+  it('should reconstruct LLM output with MCP tool results for Thread view', async () => {
+    const traceId = 'mcp-step-output-reconstruction-trace';
+
+    const llmSpan = createMockSpan({
+      id: 'mcp-model-gen-span',
+      traceId,
+      name: 'gpt-4-call',
+      type: SpanType.MODEL_GENERATION,
+      isRoot: true,
+      input: [{ role: 'user', content: 'List the files in /tmp' }],
+      output: {
+        text: 'There are 2 files.',
+      },
+      attributes: { model: 'gpt-4', provider: 'openai' },
+    });
+
+    const modelStep0Span = createMockSpan({
+      id: 'mcp-model-step-0-span',
+      traceId,
+      name: 'Model Step 0',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      output: {
+        text: '',
+        toolCalls: [{ toolCallId: 'mcp-tc-1', toolName: 'list_files', args: { path: '/tmp' } }],
+      },
+      attributes: { stepIndex: 0 },
+    });
+    modelStep0Span.parentSpanId = llmSpan.id;
+
+    const mcpToolCallSpan = createMockSpan({
+      id: 'mcp-tool-call-span',
+      traceId,
+      name: "mcp_tool: 'list_files' on 'filesystem-server'",
+      type: SpanType.MCP_TOOL_CALL,
+      isRoot: false,
+      entityName: 'list_files',
+      input: { path: '/tmp' },
+      output: {
+        files: ['a.txt', 'b.txt'],
+      },
+      attributes: { mcpServer: 'filesystem-server', toolCallId: 'mcp-tc-1', success: true },
+    });
+    mcpToolCallSpan.parentSpanId = modelStep0Span.id;
+
+    const modelStep1Span = createMockSpan({
+      id: 'mcp-model-step-1-span',
+      traceId,
+      name: 'Model Step 1',
+      type: SpanType.MODEL_STEP,
+      isRoot: false,
+      input: {},
+      output: {
+        text: 'There are 2 files.',
+        toolCalls: [],
+      },
+      attributes: { stepIndex: 1 },
+    });
+    modelStep1Span.parentSpanId = llmSpan.id;
+
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: llmSpan });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: modelStep0Span });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: mcpToolCallSpan });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...mcpToolCallSpan, endTime: new Date() },
+    });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStep0Span, endTime: new Date() },
+    });
+    await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: modelStep1Span });
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...modelStep1Span, endTime: new Date() },
+    });
+
+    mockSpan.log.mockClear();
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_ENDED,
+      exportedSpan: { ...llmSpan, endTime: new Date() },
+    });
+
+    expect(mockSpan.log).toHaveBeenCalledWith(
+      expect.objectContaining({
+        output: [
+          {
+            role: 'assistant',
+            content: '',
+            tool_calls: [
+              {
+                id: 'mcp-tc-1',
+                type: 'function',
+                function: { name: 'list_files', arguments: '{"path":"/tmp"}' },
+              },
+            ],
+          },
+          { role: 'tool', content: '{"files":["a.txt","b.txt"]}', tool_call_id: 'mcp-tc-1' },
+          { role: 'assistant', content: 'There are 2 files.' },
+        ],
+      }),
+    );
+  });
+
   describe('AI SDK v5 Message Conversion', () => {
     it('should convert AI SDK v5 user messages to OpenAI format', async () => {
       const llmSpan = createMockSpan({

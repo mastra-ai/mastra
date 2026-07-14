@@ -297,10 +297,12 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Handle thread data accumulation for MODEL_STEP and TOOL_CALL spans
+    // Handle thread data accumulation for MODEL_STEP and tool spans.
+    // PROVIDER_TOOL_CALL is excluded: those spans parent under AGENT_RUN, so
+    // findModelGenerationAncestor never finds a MODEL_GENERATION to merge into.
     if (span.type === SpanType.MODEL_STEP) {
       this.accumulateModelStepData(span, traceData);
-    } else if (span.type === SpanType.TOOL_CALL) {
+    } else if (span.type === SpanType.TOOL_CALL || span.type === SpanType.MCP_TOOL_CALL) {
       this.accumulateToolCallResult(span, traceData);
     }
 
@@ -384,8 +386,8 @@ export class BraintrustExporter extends TrackingExporter<
   }
 
   /**
-   * Store TOOL_CALL result in parent MODEL_GENERATION's pendingToolResults.
-   * Called when a TOOL_CALL span ends.
+   * Store a tool result (TOOL_CALL or MCP_TOOL_CALL) in parent MODEL_GENERATION's pendingToolResults.
+   * Called when the tool span ends.
    * Results are merged into threadData when MODEL_GENERATION ends.
    */
   private accumulateToolCallResult(span: AnyExportedSpan, traceData: BraintrustTraceData): void {
