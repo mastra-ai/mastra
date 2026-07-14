@@ -83,6 +83,7 @@ import { resolveAgentSkills, mergeWorkspaceSkills } from '../skills/agent-skills
 import type { AgentSkillsInput, SkillInput } from '../skills/types';
 import { InMemoryStore } from '../storage';
 import type { GoalObjectiveRecord } from '../storage/domains/thread-state/base';
+import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { ChunkFrom } from '../stream';
 import type { MastraAgentNetworkStream } from '../stream';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
@@ -6310,12 +6311,8 @@ export class Agent<
 
   #getSuspendedToolCalls(existingSnapshot: WorkflowRunState | null | undefined): AgentRunToolCall[] {
     const toolCalls: AgentRunToolCall[] = [];
-    for (const key in existingSnapshot?.context) {
-      const step = existingSnapshot?.context[key];
-      if (step?.status !== 'suspended') continue;
-      const payload = step.suspendPayload;
-      if (!payload) continue;
 
+    const collectFromPayload = (payload: Record<string, any>, stepKey: string) => {
       if (payload.requireToolApproval) {
         toolCalls.push({
           toolCallId: payload.requireToolApproval.toolCallId,
@@ -6325,12 +6322,97 @@ export class Agent<
         });
       } else if (payload.toolCallSuspended || payload.toolName || payload.toolCallId) {
         toolCalls.push({
-          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, key),
+          toolCallId: payload.toolCallId ?? this.#findResumeLabelForStep(existingSnapshot, stepKey),
           toolName: payload.toolName,
           requiresApproval: false,
           suspendPayload: payload.toolCallSuspended,
         });
       }
+    };
+
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step?.status !== 'suspended') continue;
+      const payload = step.suspendPayload;
+      if (!payload) continue;
+
+      // A foreach step (e.g. parallel tool calls in the agentic loop) can park several
+      // iterations at once, but its step-level suspendPayload only carries the first
+      // suspended iteration. The full set lives in `__workflow_meta.foreachOutput`,
+      // where each suspended entry keeps its own per-iteration payload — surface every
+      // one of them so all pending tool calls are discoverable and resumable.
+      const suspendedIterations = this.#getSuspendedForeachIterations(payload);
+      if (suspendedIterations.length > 0) {
+        for (const iteration of suspendedIterations) {
+          collectFromPayload(iteration.suspendPayload, key);
+        }
+      } else {
+        collectFromPayload(payload, key);
+      }
+    }
+
+    return toolCalls;
+  }
+
+  #getSuspendedForeachIterations(
+    payload: Record<string, any>,
+  ): { status: 'suspended'; suspendPayload: Record<string, any> }[] {
+    const foreachOutput = payload.__workflow_meta?.foreachOutput;
+    if (!Array.isArray(foreachOutput)) return [];
+    return foreachOutput.filter(
+      (entry: any): entry is { status: 'suspended'; suspendPayload: Record<string, any> } =>
+        entry?.status === 'suspended' && !!entry.suspendPayload,
+    );
+  }
+
+  /**
+   * Like `#getSuspendedToolCalls`, but follows nested-workflow suspensions into their own
+   * persisted snapshots. The agentic loop nests execution (`agentic-loop` →
+   * `executionWorkflow` → foreach over `toolCallStep`), and only the nested run's snapshot
+   * carries the per-iteration `foreachOutput` with EVERY parked tool call — the payload
+   * that bubbles up to the parent only carries the first one. Nested snapshots are stored
+   * under the parent step's id as the workflow name.
+   */
+  async #getSuspendedToolCallsDeep(
+    existingSnapshot: WorkflowRunState | null | undefined,
+    workflowsStore: WorkflowsStorage | undefined,
+    depth = 0,
+  ): Promise<AgentRunToolCall[]> {
+    if (!workflowsStore || depth >= 5) {
+      return this.#getSuspendedToolCalls(existingSnapshot);
+    }
+
+    const toolCalls: AgentRunToolCall[] = [];
+    for (const key in existingSnapshot?.context) {
+      const step = existingSnapshot?.context[key];
+      if (step?.status !== 'suspended') continue;
+      const payload = step.suspendPayload;
+      if (!payload) continue;
+
+      const nestedRunId = payload.__workflow_meta?.runId;
+      if (nestedRunId && this.#getSuspendedForeachIterations(payload).length === 0) {
+        let nestedSnapshot: WorkflowRunState | null = null;
+        try {
+          nestedSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: key, runId: nestedRunId });
+        } catch {
+          // Fall through to the shallow payload below.
+        }
+        if (nestedSnapshot) {
+          const nestedToolCalls = await this.#getSuspendedToolCallsDeep(nestedSnapshot, workflowsStore, depth + 1);
+          if (nestedToolCalls.length > 0) {
+            toolCalls.push(...nestedToolCalls);
+            continue;
+          }
+        }
+      }
+
+      // Reuse the shallow logic for this single step by scoping it to a one-step snapshot.
+      toolCalls.push(
+        ...this.#getSuspendedToolCalls({
+          ...existingSnapshot,
+          context: { [key]: step },
+        } as WorkflowRunState),
+      );
     }
 
     return toolCalls;
@@ -6349,21 +6431,24 @@ export class Agent<
   }) {
     if (toolCallId === undefined) return;
 
-    const isTargetSuspended = (currentSnapshot: WorkflowRunState) =>
-      this.#getSuspendedToolCalls(currentSnapshot).some(toolCall => toolCall.toolCallId === toolCallId);
+    const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
+    const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
 
-    let isSuspended = isTargetSuspended(snapshot);
+    const isTargetSuspended = async (currentSnapshot: WorkflowRunState) =>
+      (await this.#getSuspendedToolCallsDeep(currentSnapshot, workflowsStore)).some(
+        toolCall => toolCall.toolCallId === toolCallId,
+      );
+
+    let isSuspended = await isTargetSuspended(snapshot);
     if (!isSuspended) {
       // A resume stream can expose the next suspension just before its snapshot is
       // persisted. Briefly poll after authorization so an immediate response to
       // that newly surfaced tool call is not rejected based on the prior snapshot.
-      const effectiveMastra = this.#mastra ?? (await this.#getOrCreateEphemeralMastra());
-      const workflowsStore = await effectiveMastra?.getStorage()?.getStore('workflows');
       const deadline = Date.now() + 2000;
       while (!isSuspended && workflowsStore && Date.now() < deadline) {
         await new Promise(resolve => setTimeout(resolve, 25));
         const latestSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId });
-        isSuspended = latestSnapshot ? isTargetSuspended(latestSnapshot) : false;
+        isSuspended = latestSnapshot ? await isTargetSuspended(latestSnapshot) : false;
       }
     }
 
@@ -7578,7 +7663,7 @@ export class Agent<
         threadId: runThreadId,
         resourceId: runResourceId,
         suspendedAt: run.updatedAt,
-        toolCalls: this.#getSuspendedToolCalls(snapshot),
+        toolCalls: await this.#getSuspendedToolCallsDeep(snapshot, workflowsStore),
       });
     }
 
