@@ -1,116 +1,121 @@
 ---
 name: triage-issue
-description: Classify and route a GitHub issue, post/update an issue triage comment, and manage auto-triage lifecycle labels
+description: First-contact triage for a GitHub issue
 ---
 
 # Triage Issue
 
-Classify one open GitHub issue, post/update an issue triage comment, and manage the issue's auto-triage lifecycle labels.
+Use this skill for first-contact intake on one GitHub issue. Gather enough context to classify the issue, choose the next route, post or update one concise issue comment, apply the minimal triage labels, and stop.
 
-Use this skill when `gh-triage` delegates an issue, when a GitHub `issues.opened` webhook starts automatic classification, or when a maintainer manually classifies an untriaged issue from Intake.
+Keep the work focused on first-contact intake: classify the issue, explain the route, update the issue, and stop. If the issue needs technical investigation after triage, route it to `Investigate issue #<number>` so a follow-on `understand-issue` run can do that work.
 
-This skill is **comment-and-label only**. It classifies and routes issues by posting/updating one GitHub issue comment and applying labels. It must not create branches, worktrees, PRs, commits, local files, or Maintainer's Triage Notes.
+## Label policy
 
-## Label Policy
+Use only these auto-triage labels:
 
-The exact label names for this lifecycle are:
+- `auto-triaged` — add after a successful triage comment for every issue processed by this skill.
+- `status:needs-approval` — add only when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject.
 
-- `auto-triaged` — issue was processed by automatic/manual auto-triage classification.
-- `triage:needs-approval` — classification found a path that needs maintainer approval/prep before action.
+Also remove `status: needs triage` after the triage comment is posted or updated, if that label is present.
 
-Rules:
+Apply only the labels listed above.
 
-- Add `auto-triaged` to every auto-processed issue before or alongside the triage output.
-- Add routing labels that help the Triage page choose the next action. Use `triage:needs-approval` when the next action requires maintainer approval.
-- When adding `triage:needs-approval`, do not also add redundant lifecycle labels unless they are explicitly useful for the issue state.
-- Do not remove lifecycle labels unless the user explicitly asks.
-- After successfully posting/updating the triage output, remove `status: needs triage` if present.
+## Output contract
 
-## Rules
+Triage ends with one GitHub-visible issue comment. Update an existing auto-triage comment when possible instead of adding duplicates.
 
-- Require one issue number or issue URL. Missing input: ask and stop; in headless mode, fail clearly.
-- Triage creates no local files.
-- Triage must always end with one GitHub-visible output: an issue comment. Do not create or update a Maintainer's Triage Note for issue triage.
-- Stop on non-open issues unless the user explicitly asks for a note.
-- Stop if the author is a core contributor (`authorAssociation` is `OWNER`, `MEMBER`, or `COLLABORATOR`) unless the user explicitly asks for triage.
-- Do not create branches, worktrees, PRs, commits, local files, or Factory runs.
-- Do not modify code, assignees, milestones, branches, issue state, or unrelated labels.
-- Do not invent evidence. Say what was not checked.
-- In `--headless`, classify, post the selected triage output, apply labels, and exit.
-
-## Issue Comment
-
-Use one GitHub issue comment for issue triage. Update the same auto-triage comment across lifecycle runs when possible. Do not use the PR Maintainer's Triage Note format for issues.
+Use this shape:
 
 ```markdown
 Thanks for opening this.
 
-**Triage:** <bug|feature request|docs|question/support|maintenance|duplicate|invalid|spam|other> — <one-sentence summary>
-**Route:** <Review PR #n|Investigate issue #n|Ask author for info|Close as duplicate/invalid/spam|Approve CI checks before Review|Select fixing PR|Other>
+**Triage:** <bug|feature request|docs|question/support|maintenance|duplicate|resolved|invalid|spam|out-of-scope|other> — <one-sentence classification>
+**Route:** <Investigate issue #n|Prepare approval|Ask author for info|Close as duplicate/resolved/invalid/spam/out-of-scope|Answer provided / close|Other>
 **Severity:** <🔴 critical|🟠 high|🟡 medium|🟢 low> — <short reason>
+**Confidence:** <high|medium|low> — <short reason>
 **Next step:** <concise maintainer-facing next action>
 
-<Concise maintainer-facing response: what was found, what is needed, why this route was chosen, or why this is not actionable.>
+<Short explanation with the concrete evidence used, what was not checked if relevant, and why this route was chosen.>
 
-<If asking for info, list exactly what is needed. If duplicate, link the duplicate/closed issue or PR. If candidate PRs exist, link them. If spam/invalid, keep it brief and neutral.>
+<If asking for info, list the exact missing details. If duplicate/resolved, link the issue or PR. If answering a question, give the answer briefly and say it can be closed if no follow-up is needed.>
 ```
 
-Severity: critical = security/data loss/outage/core path broken; high = serious regression/workflow blocked; medium = real limited issue or docs/behavior confusion; low = minor/support/duplicate/invalid/spam/unclear.
+Severity guide:
 
-Post/update an issue comment only after explicit approval in interactive mode. In `--headless` triage, choose the required output from the classification case and post it without asking.
+- 🔴 critical — security issue, data loss, outage, or core path unusable.
+- 🟠 high — serious regression or common workflow blocked.
+- 🟡 medium — actionable bug/docs gap/behavior confusion with limited scope.
+- 🟢 low — minor issue, support question, duplicate, invalid, spam, or unclear report.
 
 ## Workflow
 
 ### 1. Resolve input
 
-- Parse the issue number or URL.
-- Fetch enough issue context to classify and write the output:
+- Require one issue number or issue URL.
+- Parse the issue number and repository.
+- If the input cannot be resolved, state what is missing and stop.
+
+### 2. Gather context
+
+Gather enough context to classify well. Keep this fast and bounded; do not perform deep code investigation.
+
+Fetch issue details, labels, comments, author context, and state:
 
 ```bash
 gh issue view "$ISSUE" --comments --json number,title,state,author,authorAssociation,assignees,labels,createdAt,updatedAt,body,comments,url
 ```
 
-- Find PRs that explicitly close/fix the issue.
-- Treat mention-only/cross-referenced PRs as context unless they clearly close/fix.
-- Check recent git history for the relevant area to inform next steps, severity, and likely reviewers. Default to 90 days; widen only if the area is quiet or recurrence/regression context is still unclear. Keep this high-level; do not inspect implementation deeply during Triage. Do not set confidence during Triage.
+Then check:
+
+- **Issue state:** if the issue is not open, stop unless the user explicitly asked for a note.
+- **Current labels:** preserve useful existing type/severity labels in your reasoning, but do not over-label.
+- **Author context:** lightly note whether the author appears to be a maintainer/core contributor or external reporter. Do not skip contributor-authored issues by default; still classify them.
+- **Existing discussion:** read comments for clarifications, maintainer hints, repro details, workarounds, and prior decisions.
+- **Closing/fixing PRs:** find PRs that explicitly close or fix this issue. Treat mention-only PRs as context unless they clearly resolve the issue.
+- **Duplicates/related issues:** search for obvious duplicates or closely related open/closed issues using title keywords, error messages, package names, and affected feature names.
+- **Likely area:** if obvious from the issue, optionally check recent history for that area to improve routing/severity. Keep this shallow; do not trace implementation.
+
+Useful commands:
 
 ```bash
 ISSUE_NODE_ID=$(gh issue view "$ISSUE" --json id -q .id)
 gh api graphql -f query='query($id:ID!){ node(id:$id){ ... on Issue { closedByPullRequestsReferences(first:20){ nodes{ number title state url isDraft } } } } }' -f id="$ISSUE_NODE_ID"
-gh api "repos/$OWNER/$REPO/issues/$ISSUE/timeline" --paginate --jq '.[] | select(.event=="cross-referenced") | {source:.source.issue | {number,title,state,pull_request,url}}'
+gh issue list --search "<keywords>" --state all --json number,title,state,labels,url --limit 20
 ```
 
-### 2. Classify and route
+### 3. Classify and route
 
-Choose one case. Triage must finish with exactly one primary output route.
+Choose one primary type and one primary route. If multiple types apply, pick the route that best determines what a maintainer should do next.
 
-#### Case A: Irrelevant, duplicate, resolved, unclear, suspicious, or non-actionable
+| Type | Use when | Route | Approval label |
+| --- | --- | --- | --- |
+| `feature request` | The issue asks for new behavior, API, product direction, or policy change. | `Prepare approval` unless it is already clearly accepted policy. | Usually add `status:needs-approval`. |
+| `bug` | The issue reports broken or unexpected behavior. | `Investigate issue #<n>` when actionable; `Ask author for info` when repro/details are missing. | Usually no approval label. Add only if closing/rejecting is uncertain or product policy is involved. |
+| `docs` | The issue is about docs, examples, wording, missing explanation, or docs/product-positioning mismatch. | `Investigate issue #<n>` or docs fix when actionable; ask for specifics if unclear. | Add only for broad positioning/product decisions. |
+| `question/support` | The issue asks how something works or needs usage help. | Answer directly and route to close when confident; ask for info when not. | Usually no approval label. |
+| `duplicate` | A matching issue already exists. | `Close as duplicate`, linking the canonical issue. | No approval label unless the duplicate call is uncertain. |
+| `resolved` | A closing/fixing PR or released change appears to have resolved it. | `Close as resolved` or route to the fixing PR. | No approval label unless uncertain. |
+| `invalid` / `spam` / `out-of-scope` | The report is not actionable for this repo or is abusive/irrelevant. | `Close as <reason>` with brief neutral explanation. | Add `status:needs-approval` if the close/reject decision needs maintainer sign-off. |
+| `maintenance` / `other` | It does not fit the above categories. | Choose the closest actionable route and state uncertainty. | Add only if approval/prep is required. |
 
-Use when no Review should start yet: spam, unrelated, invalid, unsupported, out of scope, unclear/missing details, duplicate, already resolved, or suspicious/security-risky attached code.
+When there is an explicit active PR that closes/fixes the issue, mention it in the comment and route toward that PR instead of starting issue investigation.
 
-Next Step: `Close as <reason>`, `Ask author for info`, `Escalate suspicious security risk`, `Approve CI checks before Review`, or `Wait for author/checks`.
+### 4. Draft/post the comment
 
-Output: issue comment only. Explain why Review is not starting, cite duplicates/resolution when present, ask for exact missing details, or briefly state why normal Review cannot proceed.
+- Make the comment useful to both maintainers and the reporter.
+- Cite concrete evidence: issue text, comments, labels, duplicates, linked PRs, or recent related reports.
+- Be explicit about anything important you did not check.
+- If asking for information, ask for exact missing details: repro steps, expected behavior, actual behavior, version, environment, logs, screenshots, minimal reproduction, or affected package.
+- Avoid sounding robotic. Keep it concise, neutral, and specific.
+- Do not promise a fix, assign ownership, close the issue, or imply a maintainer has approved the route unless that is already evident.
 
-#### Case C/D: One or more candidate PRs
+### 5. Apply labels and stop
 
-Use when one or more active PRs clearly close/fix the issue.
+After the comment is posted or updated:
 
-Next Step: `Review PR #<n>`, `Select one fixing PR for Review`, or `Approve CI checks before Review`.
+1. Add `auto-triaged`.
+2. Add `status:needs-approval` only if the selected route needs maintainer approval/prep.
+3. Remove `status: needs triage` if present.
+4. Stop.
 
-Output: issue comment only. Include candidate PRs, linked issue state, CI approval recommendation when relevant, and why the PR route was chosen. If CI workflows have not been approved, do not list failing checks; recommend approving CI before Review.
-
-#### Case E: Issue investigation
-
-Use for an open issue with no active PR that clearly closes/fixes it, and enough information for investigation.
-
-Next Step: `Investigate issue #<n>`.
-
-Output: issue comment only. Include likely area, known evidence, missing-but-nonblocking context, and why issue investigation comes before PR Review.
-
-### 3. Post/update output and labels
-
-- Case A: post/update the issue comment, add `auto-triaged`, add any useful routing labels, remove `status: needs triage` if present, and stop.
-- Cases C-E: post/update the issue comment, add `auto-triaged`, add any useful routing labels, remove `status: needs triage` if present, and stop unless the user explicitly asks to continue.
-- If posting automatically, replace lettered options with a short summary of what was posted and the next step, then stop.
-- If interactive approval is needed before posting, add `triage:needs-approval` and stop with concise lettered options.
+If the next route is investigation, approval prep, docs work, or a linked fixing PR, name that route in the comment and stop after the issue update.

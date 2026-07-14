@@ -12,7 +12,7 @@ import { useStartFactoryRun } from './hooks/useStartFactoryRun';
 import type { GithubIssue } from './services/factory';
 
 const AUTO_TRIAGED_LABEL = 'auto-triaged';
-const NEEDS_APPROVAL_LABEL = 'triage:needs-approval';
+const NEEDS_APPROVAL_LABEL = 'status:needs-approval';
 
 /** Factory › Triage: GitHub issues currently labeled auto-triaged. */
 export function TriagePage() {

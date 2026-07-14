@@ -963,16 +963,16 @@ describe('issues route', () => {
     expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'auto-triaged' });
   });
 
-  it('forwards the triage needs-approval label filter', async () => {
+  it('forwards the status needs-approval label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=triage%3Aneeds-approval');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=status%3Aneeds-approval');
     expect(res.status).toBe(200);
-    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'triage:needs-approval' });
+    expect(listRepoOpenIssues).toHaveBeenCalledWith(7, 'octo/hello', 1, { label: 'status:needs-approval' });
   });
 
   it('400s on an unsupported label filter', async () => {
     seedMaterializedProject();
-    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=needs-approval');
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/issues?label=status%3Ablocked');
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: 'invalid_label' });
     expect(listRepoOpenIssues).not.toHaveBeenCalled();
