@@ -329,8 +329,10 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
     // Tool identification
     attributes[ATTR_GEN_AI_TOOL_NAME] = span.entityName ?? span.entityId;
 
-    //TODO:
-    // attributes['gen_ai.tool.call.id'] = call_mszuSIzqtI65i1wAUOE8w5H4
+    const toolCallId = (span.attributes as { toolCallId?: string })?.toolCallId ?? span.metadata?.toolCallId;
+    if (toolCallId) {
+      attributes['gen_ai.tool.call.id'] = toolCallId;
+    }
 
     // MCP-specific attributes
     if (span.type === SpanType.MCP_TOOL_CALL) {

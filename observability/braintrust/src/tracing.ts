@@ -394,9 +394,8 @@ export class BraintrustExporter extends TrackingExporter<
       return;
     }
 
-    // Extract tool call ID from TOOL_CALL span input
-    const input = span.input as { toolCallId?: string } | undefined;
-    const toolCallId = input?.toolCallId;
+    const attrs = span.attributes as { toolCallId?: string } | undefined;
+    const toolCallId = attrs?.toolCallId ?? span.metadata?.toolCallId;
     if (!toolCallId) {
       return;
     }

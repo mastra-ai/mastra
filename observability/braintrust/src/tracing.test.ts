@@ -867,20 +867,15 @@ describe('BraintrustExporter', () => {
     const toolCallSpan = createMockSpan({
       id: 'tool-call-span',
       traceId,
-      name: 'calculator',
+      name: "tool: 'calculator'",
       type: SpanType.TOOL_CALL,
       isRoot: false,
-      // Input contains the tool call details (including toolCallId for matching)
-      input: {
-        toolCallId: 'tc-1',
-        toolName: 'calculator',
-        args: { a: 2, b: 2 },
-      },
-      // Output contains the tool result
+      entityName: 'calculator',
+      input: { a: 2, b: 2 },
       output: {
         result: 4,
       },
-      attributes: { toolId: 'calculator', success: true },
+      attributes: { toolCallId: 'tc-1', success: true },
     });
     toolCallSpan.parentSpanId = modelStep0Span.id;
 

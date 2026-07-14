@@ -753,10 +753,12 @@ export class CoreToolBuilder extends MastraBase {
               mcpServer: mcpMeta.serverName,
               serverVersion: mcpMeta.serverVersion,
               toolDescription: options.description,
+              toolCallId: execOptions?.toolCallId,
             }
           : {
               toolDescription: options.description,
               toolType: logType || 'tool',
+              toolCallId: execOptions?.toolCallId,
             },
         tracingPolicy: options.tracingPolicy,
         tracingContext: tracingContext,
