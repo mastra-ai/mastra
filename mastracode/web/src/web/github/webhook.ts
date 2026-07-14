@@ -55,8 +55,9 @@ export interface GithubWebhookDispatchDependencies {
   controller: MountedMastraCode['controller'];
   listSubscriptions?: (
     target: GithubWebhookPullRequestTarget,
+    options?: { includeTerminal?: boolean },
   ) => Promise<GithubSignalSubscriptionRow[]>;
-  retireSubscription?: (id: string) => Promise<void>;
+  retireSubscription?: (id: string, status: 'open' | 'closed' | 'merged') => Promise<void>;
   onTargetError?: (subscription: GithubSignalSubscriptionRow, error: unknown) => void;
 }
 
@@ -273,7 +274,7 @@ export async function dispatchGithubWebhook(
   };
   const listSubscriptions = dependencies.listSubscriptions ?? listPullRequestSubscriptionsForWebhook;
   const retireSubscription = dependencies.retireSubscription ?? retirePullRequestSubscription;
-  const subscriptions = await listSubscriptions(target);
+  const subscriptions = await listSubscriptions(target, { includeTerminal: notification.action === 'reopened' });
   let delivered = 0;
   let failed = 0;
 
@@ -293,12 +294,17 @@ export async function dispatchGithubWebhook(
           event: notification.metadata.event,
           action: notification.action,
           repository: notification.metadata.repository,
+          issueNumber: notification.metadata.issueNumber,
           pullRequestNumber: notification.metadata.pullRequestNumber,
           deliveryId: parsed.deliveryId,
         },
       });
       await Promise.all([result.persisted, result.accepted].filter(Boolean));
-      if (notification.terminal) await retireSubscription(subscription.id);
+      if (notification.terminal) {
+        await retireSubscription(subscription.id, notification.kind === 'pull-request-merged' ? 'merged' : 'closed');
+      } else if (notification.action === 'reopened') {
+        await retireSubscription(subscription.id, 'open');
+      }
       delivered += 1;
     } catch (error) {
       failed += 1;

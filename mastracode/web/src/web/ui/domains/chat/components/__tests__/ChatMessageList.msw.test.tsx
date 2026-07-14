@@ -158,15 +158,24 @@ describe('ChatMessageList', () => {
               notificationId: 'notification-1',
               message: 'octo/repo#42 received a new comment',
               source: 'github',
-              kind: 'pull-request-comment',
+              kind: 'pull-request-opened',
               priority: 'high',
+              metadata: { action: 'opened', repository: 'octo/repo', pullRequestNumber: 42 },
             },
             {
               type: 'notification',
               notificationId: 'notification-2',
-              message: 'octo/repo#42 received a review',
+              message: 'octo/repo#42 was merged',
               source: 'github',
-              kind: 'pull-request-review',
+              kind: 'pull-request-merged',
+              priority: 'urgent',
+            },
+            {
+              type: 'notification',
+              notificationId: 'notification-3',
+              message: 'octo/repo#43 was closed',
+              source: 'github',
+              kind: 'pull-request-closed',
               priority: 'urgent',
             },
           ],
@@ -177,11 +186,23 @@ describe('ChatMessageList', () => {
 
     await waitFor(() => expect(screen.getByText('octo/repo#42 received a new comment')).toBeInTheDocument());
     expect(screen.getAllByText('octo/repo#42 received a new comment')).toHaveLength(1);
-    expect(screen.getAllByText('octo/repo#42 received a review')).toHaveLength(1);
+    expect(screen.getAllByText('octo/repo#42 was merged')).toHaveLength(1);
+    expect(screen.getAllByText('octo/repo#43 was closed')).toHaveLength(1);
     expect(screen.getByText('I will inspect the updated pull request.')).toBeInTheDocument();
-    expect(screen.getAllByText('github')).toHaveLength(2);
+    expect(screen.getAllByText('github')).toHaveLength(3);
     expect(screen.getByText('high')).toBeInTheDocument();
-    expect(screen.getByText('urgent')).toBeInTheDocument();
+    expect(screen.getAllByText('urgent')).toHaveLength(2);
+    const targetLink = screen.getByRole('link', { name: /Open notification target/ });
+    expect(targetLink).toHaveAttribute('href', 'https://github.com/octo/repo/pull/42');
+    expect(targetLink.querySelector('[data-notification-state="open"]')).toBeInTheDocument();
+    expect(screen.getByText('octo/repo#42 was merged').closest('[data-notification-state]')).toHaveAttribute(
+      'data-notification-state',
+      'merged',
+    );
+    expect(screen.getByText('octo/repo#43 was closed').closest('[data-notification-state]')).toHaveAttribute(
+      'data-notification-state',
+      'closed',
+    );
   });
 
   it('given an assistant response after a notification summary, then it does not render the response as a notice', async () => {

@@ -146,6 +146,7 @@ export const githubSignalSubscriptions = pgTable(
     threadId: text('thread_id').notNull(),
     sessionScope: text('session_scope').notNull().default(''),
     source: text('source', { enum: ['auto-gh-pr-create', 'factory-pr-create', 'explicit-tool'] }).notNull(),
+    status: text('status', { enum: ['open', 'closed', 'merged'] }).notNull().default('open'),
     subscribedByUserId: text('subscribed_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -269,10 +270,13 @@ CREATE TABLE IF NOT EXISTS github_signal_subscriptions (
   thread_id text NOT NULL,
   session_scope text NOT NULL DEFAULT '',
   source text NOT NULL,
+  status text NOT NULL DEFAULT 'open',
   subscribed_by_user_id text,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+
+ALTER TABLE github_signal_subscriptions ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'open';
 
 CREATE UNIQUE INDEX IF NOT EXISTS github_signal_subscriptions_target_pr_unique
   ON github_signal_subscriptions (

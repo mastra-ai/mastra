@@ -461,6 +461,7 @@ describe('webhook route', () => {
       threadId: 'thread-1',
       sessionScope: '/worktrees/a',
       source: 'explicit-tool',
+      status: 'open',
     });
 
     const res = await buildApp(null, controller).request(
@@ -578,6 +579,7 @@ describe('subscriptions route', () => {
       sessionScope: '/tmp/worktree',
       repoFullName: 'octo/hello',
       pullRequestNumber: 42,
+      status: 'open',
     });
 
     const res = await buildApp({ workosId: 'u1' }).request(
@@ -591,6 +593,7 @@ describe('subscriptions route', () => {
           id: 'subscription-1',
           repoFullName: 'octo/hello',
           pullRequestNumber: 42,
+          status: 'open',
           url: 'https://github.com/octo/hello/pull/42',
         },
       ],

@@ -35,6 +35,7 @@ const columnToProperty: Record<string, string> = {
   resource_id: 'resourceId',
   thread_id: 'threadId',
   session_scope: 'sessionScope',
+  status: 'status',
 };
 
 function matches(row: Row, condition: Condition): boolean {
@@ -74,6 +75,7 @@ function createFakeDb() {
               createdAt: new Date('2026-07-13T00:00:00Z'),
               updatedAt: new Date('2026-07-13T00:00:00Z'),
               subscribedByUserId: null,
+              status: 'open',
               ...values,
             };
             rowsFor(table).push(row);
@@ -89,6 +91,15 @@ function createFakeDb() {
           if (matches(rows[index]!, condition)) rows.splice(index, 1);
         }
       },
+    }),
+    update: (table: unknown) => ({
+      set: (values: Row) => ({
+        where: async (condition: Condition) => {
+          for (const row of rowsFor(table)) {
+            if (matches(row, condition)) Object.assign(row, values);
+          }
+        },
+      }),
     }),
   } as unknown as AppDb;
 
@@ -151,6 +162,18 @@ describe('GitHub signal subscription store', () => {
     expect(fake.subscriptions).toHaveLength(1);
   });
 
+  it('reactivates a retained terminal subscription when subscribing again', async () => {
+    const { retirePullRequestSubscription, subscribeToPullRequest } = await import('./subscriptions');
+    const first = await subscribeToPullRequest(baseInput, fake.db);
+    await retirePullRequestSubscription(first.id, 'closed', fake.db);
+
+    const reactivated = await subscribeToPullRequest(baseInput, fake.db);
+
+    expect(reactivated.id).toBe(first.id);
+    expect(reactivated.status).toBe('open');
+    expect(fake.subscriptions[0]?.status).toBe('open');
+  });
+
   it('unsubscribes idempotently', async () => {
     const { subscribeToPullRequest, unsubscribeFromPullRequest } = await import('./subscriptions');
     await subscribeToPullRequest(baseInput, fake.db);
@@ -208,12 +231,27 @@ describe('GitHub signal subscription store', () => {
         repoId: baseInput.repoId,
         pullRequestNumber: baseInput.pullRequestNumber,
       },
+      {},
       fake.db,
     );
     expect(matches.map(row => row.id)).toEqual([first.id, second.id]);
 
-    await retirePullRequestSubscription(first.id, fake.db);
-    expect(fake.subscriptions.map(row => row.id)).toEqual([second.id]);
+    await retirePullRequestSubscription(first.id, 'merged', fake.db);
+    expect(fake.subscriptions).toHaveLength(2);
+    expect(fake.subscriptions.find(row => row.id === first.id)?.status).toBe('merged');
+    expect(
+      (
+        await listPullRequestSubscriptionsForWebhook(
+          {
+            installationId: baseInput.installationId,
+            repoId: baseInput.repoId,
+            pullRequestNumber: baseInput.pullRequestNumber,
+          },
+          {},
+          fake.db,
+        )
+      ).map(row => row.id),
+    ).toEqual([second.id]);
   });
 
   it('retires all subscriptions for one pull request', async () => {

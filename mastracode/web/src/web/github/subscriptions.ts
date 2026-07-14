@@ -113,6 +113,14 @@ export async function subscribeToPullRequest(
 
   const [existing] = await db.select().from(githubSignalSubscriptions).where(targetConditions(input));
   if (!existing) throw new Error('GitHub signal subscription conflict could not be resolved.');
+  if (existing.status !== 'open') {
+    const updatedAt = new Date();
+    await db
+      .update(githubSignalSubscriptions)
+      .set({ status: 'open', updatedAt })
+      .where(eq(githubSignalSubscriptions.id, existing.id));
+    return { ...existing, status: 'open', updatedAt };
+  }
   return existing;
 }
 
@@ -160,22 +168,29 @@ export async function listPullRequestSubscriptions(
 
 export async function listPullRequestSubscriptionsForWebhook(
   input: GithubWebhookPullRequestTarget,
+  options: { includeTerminal?: boolean } = {},
   db: AppDb = getAppDb(),
 ): Promise<GithubSignalSubscriptionRow[]> {
+  const target = and(
+    eq(githubSignalSubscriptions.installationId, input.installationId),
+    eq(githubSignalSubscriptions.repoId, input.repoId),
+    eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
+  );
   return db
     .select()
     .from(githubSignalSubscriptions)
-    .where(
-      and(
-        eq(githubSignalSubscriptions.installationId, input.installationId),
-        eq(githubSignalSubscriptions.repoId, input.repoId),
-        eq(githubSignalSubscriptions.pullRequestNumber, input.pullRequestNumber),
-      ),
-    );
+    .where(options.includeTerminal ? target : and(target, eq(githubSignalSubscriptions.status, 'open')));
 }
 
-export async function retirePullRequestSubscription(id: string, db: AppDb = getAppDb()): Promise<void> {
-  await db.delete(githubSignalSubscriptions).where(eq(githubSignalSubscriptions.id, id));
+export async function retirePullRequestSubscription(
+  id: string,
+  status: 'open' | 'closed' | 'merged',
+  db: AppDb = getAppDb(),
+): Promise<void> {
+  await db
+    .update(githubSignalSubscriptions)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(githubSignalSubscriptions.id, id));
 }
 
 export async function retirePullRequestSubscriptions(

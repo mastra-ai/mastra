@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { GitPullRequest } from 'lucide-react';
+import { CircleDot, CircleX, GitMerge } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useChatSessionContext } from '../../context/useChatSessionContext';
@@ -8,11 +8,24 @@ interface PullRequestSubscription {
   id: string;
   repoFullName: string;
   pullRequestNumber: number;
+  status: 'open' | 'closed' | 'merged';
   url: string;
 }
 
 interface PullRequestSubscriptionsResponse {
   subscriptions: PullRequestSubscription[];
+}
+
+function PullRequestIcon({ status }: { status: PullRequestSubscription['status'] }) {
+  if (status === 'merged') return <GitMerge size={13} aria-hidden />;
+  if (status === 'closed') return <CircleX size={13} aria-hidden />;
+  return <CircleDot size={13} aria-hidden />;
+}
+
+function statusColor(status: PullRequestSubscription['status']): string {
+  if (status === 'merged') return 'text-accent3 hover:text-accent3';
+  if (status === 'closed') return 'text-error hover:text-error';
+  return 'text-accent1 hover:text-accent1';
 }
 
 /** Pull requests subscribed to the active GitHub-backed thread. */
@@ -44,10 +57,10 @@ export function PullRequestLinks() {
           href={subscription.url}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1 text-icon3 hover:text-icon5"
-          aria-label={`Open ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
+          className={`inline-flex items-center gap-1 ${statusColor(subscription.status)}`}
+          aria-label={`Open ${subscription.status} ${subscription.repoFullName} pull request ${subscription.pullRequestNumber}`}
         >
-          <GitPullRequest size={13} /> PR #{subscription.pullRequestNumber}
+          <PullRequestIcon status={subscription.status} /> PR #{subscription.pullRequestNumber}
         </a>
       ))}
     </div>

@@ -9,7 +9,21 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { MessageFactory } from '@mastra/react';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react';
-import { Bell, ChevronDown, Eye, Globe, ListChecks, Pencil, Search, Terminal, Wrench } from 'lucide-react';
+import {
+  Bell,
+  ChevronDown,
+  CircleDot,
+  CircleX,
+  ExternalLink,
+  Eye,
+  GitMerge,
+  Globe,
+  ListChecks,
+  Pencil,
+  Search,
+  Terminal,
+  Wrench,
+} from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 
@@ -526,11 +540,40 @@ function SubagentCard({ entry }: { entry: SubagentEntry }) {
 // Notification cards
 // ---------------------------------------------------------------------------
 
+function notificationUrl(entry: NotificationEntry): string | undefined {
+  const repository = entry.metadata?.repository;
+  if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
+  const pullRequestNumber = entry.metadata?.pullRequestNumber;
+  if (typeof pullRequestNumber === 'number') return `https://github.com/${repository}/pull/${pullRequestNumber}`;
+  const issueNumber = entry.metadata?.issueNumber;
+  if (typeof issueNumber === 'number') return `https://github.com/${repository}/issues/${issueNumber}`;
+  return undefined;
+}
+
+function notificationPresentation(entry: NotificationEntry) {
+  const action = entry.metadata?.action;
+  if (entry.notifKind === 'pull-request-merged') {
+    return { state: 'merged', icon: <GitMerge size={13} />, className: 'border-accent3/30 text-accent3' };
+  }
+  if (entry.notifKind === 'pull-request-closed') {
+    return { state: 'closed', icon: <CircleX size={13} />, className: 'border-error/30 text-error' };
+  }
+  if (action === 'opened' || action === 'reopened') {
+    return { state: 'open', icon: <CircleDot size={13} />, className: 'border-accent1/30 text-accent1' };
+  }
+  return { state: 'notification', icon: <Bell size={13} />, className: 'border-border1 text-icon3' };
+}
+
 function NotificationCard({ entry }: { entry: NotificationEntry }) {
-  return (
-    <div className="rounded-lg border border-accent3/30 bg-surface2 px-3 py-2 shadow-sm">
+  const url = notificationUrl(entry);
+  const presentation = notificationPresentation(entry);
+  const content = (
+    <div
+      data-notification-state={presentation.state}
+      className={`rounded-lg border bg-surface2 px-3 py-2 shadow-sm ${presentation.className}`}
+    >
       <div className="flex items-center gap-2">
-        <Bell size={13} />
+        {presentation.icon}
         <Txt variant="ui-sm" font="mono">
           {entry.source ?? 'notification'}
         </Txt>
@@ -539,11 +582,19 @@ function NotificationCard({ entry }: { entry: NotificationEntry }) {
             {entry.priority}
           </Badge>
         )}
+        {url && <ExternalLink size={12} className="ml-auto" aria-hidden />}
       </div>
       <Txt variant="ui-sm" className="py-1">
         {entry.message}
       </Txt>
     </div>
+  );
+
+  if (!url) return content;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" aria-label={`Open notification target: ${entry.message}`}>
+      {content}
+    </a>
   );
 }
 
@@ -782,6 +833,7 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
         source: 'source' in part && typeof part.source === 'string' ? part.source : undefined,
         notifKind: 'kind' in part && typeof part.kind === 'string' ? part.kind : undefined,
         priority: 'priority' in part && typeof part.priority === 'string' ? part.priority : undefined,
+        metadata: 'metadata' in part && isRecord(part.metadata) ? part.metadata : undefined,
       });
       continue;
     }
@@ -805,6 +857,10 @@ function notificationMetadata(entry: MessageEntry): Array<NotificationEntry | No
     });
   }
   return notifications;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function isNumberRecord(value: unknown): value is Record<string, number> {

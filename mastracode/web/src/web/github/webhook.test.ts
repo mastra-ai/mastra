@@ -32,6 +32,7 @@ function subscription(id: string, scope: string, threadId = `thread-${id}`): Git
     threadId,
     sessionScope: scope,
     source: 'explicit-tool',
+    status: 'open',
     subscribedByUserId: 'user-1',
     createdAt: new Date('2026-07-13T00:00:00Z'),
     updatedAt: new Date('2026-07-13T00:00:00Z'),
@@ -131,6 +132,32 @@ describe('dispatchGithubWebhook', () => {
     expect(send).toHaveBeenCalledOnce();
   });
 
+  it('includes retained subscriptions and reopens them after accepted reopen delivery', async () => {
+    const send = vi.fn(async () => ({ record: { id: 'n-1' }, decision: { action: 'deliver' } }));
+    const listSubscriptions = vi.fn(async () => [
+      { ...subscription('a', '/worktrees/a'), status: 'closed' as const },
+    ]);
+    const updateStatus = vi.fn(async () => {});
+
+    await dispatchGithubWebhook(parsed('pull_request', 'reopened'), {
+      controller: {
+        getSessionByResource: async () => ({
+          thread: { getId: () => 'thread-a', switch: vi.fn() },
+          sendNotificationSignal: send,
+        }),
+        createSession: vi.fn(),
+      } as never,
+      listSubscriptions,
+      retireSubscription: updateStatus,
+    });
+
+    expect(listSubscriptions).toHaveBeenCalledWith(
+      expect.objectContaining({ pullRequestNumber: 34 }),
+      { includeTerminal: true },
+    );
+    expect(updateStatus).toHaveBeenCalledWith('a', 'open');
+  });
+
   it('isolates failed targets and retires only successful terminal deliveries after acceptance', async () => {
     const order: string[] = [];
     const success = {
@@ -169,7 +196,7 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 1, failed: 1, ignored: false });
     expect(retire).toHaveBeenCalledOnce();
-    expect(retire).toHaveBeenCalledWith('a');
+    expect(retire).toHaveBeenCalledWith('a', 'merged');
     expect(order.at(-1)).toBe('retired:a');
     expect(onTargetError).toHaveBeenCalledWith(expect.objectContaining({ id: 'b' }), expect.any(Error));
   });

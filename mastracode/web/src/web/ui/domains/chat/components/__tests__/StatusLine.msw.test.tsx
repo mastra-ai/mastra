@@ -218,6 +218,7 @@ describe('StatusLine', () => {
                 id: 'subscription-1',
                 repoFullName: 'octo/hello',
                 pullRequestNumber: 42,
+                status: 'open',
                 url: 'https://github.com/octo/hello/pull/42',
               },
             ],
@@ -226,7 +227,7 @@ describe('StatusLine', () => {
       );
       renderStatusLine();
 
-      const link = await screen.findByRole('link', { name: 'Open octo/hello pull request 42' });
+      const link = await screen.findByRole('link', { name: 'Open open octo/hello pull request 42' });
       expect(link).toHaveTextContent('PR #42');
       expect(link).toHaveAttribute('href', 'https://github.com/octo/hello/pull/42');
     });

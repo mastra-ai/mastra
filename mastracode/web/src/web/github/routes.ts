@@ -262,6 +262,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
             id: subscription.id,
             repoFullName: subscription.repoFullName,
             pullRequestNumber: subscription.pullRequestNumber,
+            status: subscription.status,
             url: `https://github.com/${subscription.repoFullName}/pull/${subscription.pullRequestNumber}`,
           })),
         });
