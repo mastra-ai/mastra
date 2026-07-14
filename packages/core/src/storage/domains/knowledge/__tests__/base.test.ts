@@ -226,6 +226,12 @@ describe('InMemoryKnowledgeStorage', () => {
         ?.id,
     ).toBe(first.id);
 
+    const sourcePage = await store.listFactsBySource({ sourceThreadId: 't1', scope: thread, limit: 1 });
+    expect(sourcePage).toMatchObject({ facts: [{ id: first.id }], nextCursor: first.id });
+    expect(
+      (await store.listFactsBySource({ sourceThreadId: 't1', scope: thread, after: sourcePage.nextCursor })).facts,
+    ).toEqual([expect.objectContaining({ id: second.id })]);
+
     const claimed = await store.claimSemanticOutbox({ workerId: 'one', limit: 1, now: new Date('2026-07-01') });
     expect(claimed).toHaveLength(0);
     const pending = await store.listSemanticOutbox({ status: 'pending' });

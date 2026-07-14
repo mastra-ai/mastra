@@ -29,6 +29,7 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeFactsBySourceInput,
   ListKnowledgeFactsInput,
   ListKnowledgeFactsOutput,
   ListKnowledgeRecordsInput,
@@ -417,6 +418,25 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       ),
       { ...input, scope: queryScope },
     );
+  }
+
+  async listFactsBySource(input: ListKnowledgeFactsBySourceInput): Promise<ListKnowledgeFactsOutput> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    const limit = input.limit ?? 100;
+    const facts = [...this.#db.knowledgeFacts.values()]
+      .filter(
+        fact =>
+          fact.sourceThreadId === input.sourceThreadId &&
+          isKnowledgeScopeVisible(fact.scope, scope) &&
+          (input.includeDeleted || !fact.deletedAt) &&
+          (!input.after || fact.id > input.after),
+      )
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, limit + 1);
+    return {
+      facts: facts.slice(0, limit).map(cloneFact),
+      nextCursor: facts.length > limit ? facts[limit - 1]?.id : undefined,
+    };
   }
 
   async removeFact({ id, deletedBy }: { id: string; deletedBy: string }): Promise<KnowledgeFact> {
