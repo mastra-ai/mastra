@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { playDoneChime } from '../services/doneChime';
+import { playDoneSound } from '../../settings/services/doneSound';
 
 /**
  * Tracks which workspaces finished an agent run the user hasn't looked at yet.
  *
  * When a workspace's running flag flips true → false its blinking activity
- * dot should turn solid (and a chime plays) until the user opens that
- * workspace again. Attention also clears on its own when a new run starts in
+ * dot should turn solid (and the configured completion sound plays) until
+ * the user opens that workspace again. Attention also clears on its own when a new run starts in
  * the workspace, so a solid dot never coexists with a blinking one.
  */
 export function useWorkspaceAttention(runningByPath: Record<string, boolean>): {
@@ -34,7 +34,7 @@ export function useWorkspaceAttention(runningByPath: Record<string, boolean>): {
       const unchanged = next.size === current.size && [...next].every(path => current.has(path));
       return unchanged ? current : next;
     });
-    if (finished.length > 0) playDoneChime();
+    if (finished.length > 0) playDoneSound();
   }, [runningByPath]);
 
   const clearAttention = useCallback((path: string) => {

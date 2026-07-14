@@ -20,13 +20,16 @@ import { ToastProvider } from '../../../../ui';
 import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
 import { ActiveProjectProvider } from '../../context/ActiveProjectProvider';
 import type { Project } from '../../services/projects';
-import { playDoneChime } from '../../services/doneChime';
+import { playDoneSound } from '../../../settings/services/doneSound';
 import { loadProjects, saveProjects } from '../../services/projects';
 import { WorkspacesSection } from '../WorkspacesSection';
 
-// The chime synthesizes audio via AudioContext, which jsdom doesn't provide;
-// mock it so specs can assert the notification fired.
-vi.mock('../../services/doneChime', () => ({ playDoneChime: vi.fn() }));
+// The completion sound synthesizes audio via AudioContext, which jsdom
+// doesn't provide; mock playback so specs can assert the notification fired.
+vi.mock('../../../settings/services/doneSound', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../../settings/services/doneSound')>()),
+  playDoneSound: vi.fn(),
+}));
 
 const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
@@ -211,7 +214,7 @@ describe('WorkspacesSection', () => {
   it('given a run that finishes, then the dot turns solid and chimes, and opening the workspace dismisses it', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
-    vi.mocked(playDoneChime).mockClear();
+    vi.mocked(playDoneSound).mockClear();
     let featState: 'active' | 'idle' = 'active';
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
@@ -238,7 +241,7 @@ describe('WorkspacesSection', () => {
     const doneDot = await screen.findByRole('status', { name: 'Agent finished in feat-ui' });
     expect(doneDot).not.toHaveClass('animate-pulse');
     expect(screen.queryByRole('status', { name: 'Agent working in feat-ui' })).not.toBeInTheDocument();
-    expect(playDoneChime).toHaveBeenCalledTimes(1);
+    expect(playDoneSound).toHaveBeenCalledTimes(1);
 
     // Opening the workspace marks it seen and clears the indicator.
     await userEvent.click(screen.getByRole('button', { name: /feat-ui/ }));
@@ -252,7 +255,7 @@ describe('WorkspacesSection', () => {
   it('given workspaces that are idle from the start, then no done indicator or chime fires', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
-    vi.mocked(playDoneChime).mockClear();
+    vi.mocked(playDoneSound).mockClear();
     server.use(
       http.get(`${API}/sessions/:resourceId/threads`, () =>
         HttpResponse.json({
@@ -272,7 +275,7 @@ describe('WorkspacesSection', () => {
     await screen.findByRole('button', { name: 'feat-ui' });
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(screen.queryByRole('status', { name: 'Agent finished in feat-ui' })).not.toBeInTheDocument();
-    expect(playDoneChime).not.toHaveBeenCalled();
+    expect(playDoneSound).not.toHaveBeenCalled();
   });
 
   it('selects a workspace row and rebinds the session to its worktree path', async () => {
