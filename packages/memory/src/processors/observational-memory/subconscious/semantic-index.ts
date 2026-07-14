@@ -4,6 +4,7 @@ import type {
   KnowledgeSemanticOutboxEntry,
   KnowledgeStorage,
 } from '@mastra/core/storage';
+import { canonicalizeKnowledgeScope, isKnowledgeScopeVisible } from '@mastra/core/storage';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '@mastra/core/vector';
 
 const DEFAULT_BATCH_SIZE = 50;
@@ -60,6 +61,52 @@ export class KnowledgeSemanticIndexCoordinator {
     });
     this.#draining.set(key, draining);
     return draining;
+  }
+
+  async search(query: string, scope: KnowledgeScope, limit = 10) {
+    await this.drain(scope);
+    const result = await this.#embedder.doEmbed({
+      values: [query],
+      ...(this.#embedderOptions ?? {}),
+    } as never);
+    const embedding = result.embeddings[0];
+    if (!embedding?.length) throw new Error('Embedder returned no vector for knowledge search query.');
+
+    const indexName = this.#indexName(embedding.length);
+    if (!(await this.#knowledgeIndexes()).includes(indexName)) {
+      throw new StaleKnowledgeSemanticIndexError(
+        `Knowledge semantic index ${indexName} is unavailable. Capture or index knowledge before searching.`,
+      );
+    }
+
+    const visibleScopeKeys = scope.map((_, index) => scope.slice(0, index + 1).join('\u001f'));
+    const batches = await Promise.all(
+      visibleScopeKeys.map(scopeKey =>
+        this.#vector.query({
+          indexName,
+          queryVector: embedding,
+          topK: limit,
+          filter: { scope_key: scopeKey },
+        }),
+      ),
+    );
+    const deduped = new Map<string, (typeof batches)[number][number]>();
+    for (const candidate of batches.flat()) {
+      const candidateScope = candidate.metadata?.scope;
+      if (!Array.isArray(candidateScope)) continue;
+      let visible = false;
+      try {
+        visible = isKnowledgeScopeVisible(canonicalizeKnowledgeScope(candidateScope.map(String)), scope);
+      } catch {
+        continue;
+      }
+      if (!visible) continue;
+      const existing = deduped.get(candidate.id);
+      if (!existing || candidate.score > existing.score) deduped.set(candidate.id, candidate);
+    }
+    return [...deduped.values()]
+      .sort((left, right) => right.score - left.score || left.id.localeCompare(right.id))
+      .slice(0, limit);
   }
 
   async #drain(scope?: KnowledgeScope): Promise<number> {
@@ -169,13 +216,11 @@ export class KnowledgeSemanticIndexCoordinator {
       includeDeleted: true,
     });
     if (!fact || fact.deletedAt) return null;
-    const entity = await this.#knowledge.getEntity(fact.parentEntityId);
-    if (!entity) return null;
     return {
-      text: `${entity.name}\n${fact.text}`,
-      name: entity.name,
+      text: fact.text,
+      name: '(fact)',
       scope: fact.scope,
-      recordId: entity.id,
+      recordId: fact.id,
       type: 'fact',
     };
   }

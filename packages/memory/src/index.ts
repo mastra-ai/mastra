@@ -51,6 +51,7 @@ import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
+import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -2473,6 +2474,9 @@ Notes:
         retrievalScope,
         searchEnabled: this.hasRetrievalSearch(omConfig.retrieval),
       });
+    }
+    if (omConfig?.subconscious instanceof Subconscious && omConfig.subconscious.resolved.tools) {
+      Object.assign(tools, createKnowledgeTools(this));
     }
 
     return tools;

@@ -16,6 +16,7 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  parseKnowledgeRecordCursor,
   parseKnowledgeWikilinks,
   TABLE_KNOWLEDGE_ACTIVITY,
   TABLE_KNOWLEDGE_CURSORS,
@@ -291,9 +292,19 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       clauses.push('kind = ?');
       args.push(input.kind);
     }
+    if (input.cursor) {
+      const cursor = parseKnowledgeRecordCursor(input.cursor, {
+        type: 'entity',
+        namePrefix: input.namePrefix,
+        kind: input.kind,
+      });
+      const updatedAt = cursor.updatedAt.toISOString();
+      clauses.push('(updatedAt < ? OR (updatedAt = ? AND (name > ? OR (name = ? AND id > ?))))');
+      args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
+    }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC LIMIT ?`,
+      sql: `SELECT *, json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC, name ASC, id ASC LIMIT ?`,
       args,
     });
     return result.rows.map(parseEntity);
@@ -474,9 +485,15 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       clauses.push('canonicalName LIKE ?');
       args.push(`${canonicalName(input.namePrefix)}%`);
     }
+    if (input.cursor) {
+      const cursor = parseKnowledgeRecordCursor(input.cursor, { type: 'page', namePrefix: input.namePrefix });
+      const updatedAt = cursor.updatedAt.toISOString();
+      clauses.push('(updatedAt < ? OR (updatedAt = ? AND (name > ? OR (name = ? AND id > ?))))');
+      args.push(updatedAt, updatedAt, cursor.name, cursor.name, cursor.id);
+    }
     args.push(input.limit ?? 100);
     const result = await this.#client.execute({
-      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC,name ASC LIMIT ?`,
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE ${clauses.join(' AND ')} ORDER BY updatedAt DESC,name ASC,id ASC LIMIT ?`,
       args,
     });
     return result.rows.map(parsePage);
@@ -660,18 +677,21 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     }));
     if (results.length < (input.limit ?? 20)) {
       const facts = await this.#client.execute({
-        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name FROM "${TABLE_KNOWLEDGE_FACTS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentEntityId AND r.type='entity' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
+        sql: `SELECT f.*,json(f.scope) AS scopeJson,r.name,json(r.scope) AS parentScopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" f JOIN "${TABLE_KNOWLEDGE_RECORDS}" r ON r.id=f.parentEntityId AND r.type='entity' AND r.mergedInto IS NULL WHERE f.deletedAt IS NULL AND ${visibleSql.replaceAll('scopeKey', 'f.scopeKey')} AND lower(f.text) LIKE ? ORDER BY f.id DESC LIMIT ?`,
         args: [key, key, query, (input.limit ?? 20) - results.length],
       });
       results.push(
-        ...facts.rows.map(row => ({
-          type: 'fact' as const,
-          id: String(row.id),
-          recordId: String(row.parentEntityId),
-          name: String(row.name),
-          text: String(row.text),
-          scope: parseJson<KnowledgeScope>(row.scopeJson),
-        })),
+        ...facts.rows.map(row => {
+          const parentVisible = isKnowledgeScopeVisible(parseJson<KnowledgeScope>(row.parentScopeJson), scope);
+          return {
+            type: 'fact' as const,
+            id: String(row.id),
+            recordId: parentVisible ? String(row.parentEntityId) : String(row.id),
+            name: parentVisible ? String(row.name) : '(private entity)',
+            text: String(row.text),
+            scope: parseJson<KnowledgeScope>(row.scopeJson),
+          };
+        }),
       );
     }
     return results;

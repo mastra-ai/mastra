@@ -1,4 +1,5 @@
 import type { KnowledgeStorage } from '@mastra/core/storage';
+import { createKnowledgeRecordCursor } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 const resource = ['org:acme', 'resource:mastra'];
@@ -35,8 +36,36 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
 
       expect((await store.factsAbout({ entityId: entity.id, scope: ['org:acme'] })).facts).toHaveLength(1);
       expect(await store.search({ query: 'organization-visible', scope: ['org:acme'] })).toEqual([
-        expect.objectContaining({ type: 'fact', recordId: entity.id, scope: ['org:acme'] }),
+        expect.objectContaining({ type: 'fact', name: '(private entity)', scope: ['org:acme'] }),
       ]);
+    });
+
+    it('paginates entities and pages with opaque record cursors', async () => {
+      await store.createEntity({ name: 'Atlas', kind: 'project', scope: resource });
+      await store.createEntity({ name: 'Beacon', kind: 'project', scope: resource });
+      await store.createPage({ name: 'Atlas page', body: 'A', scope: resource });
+      await store.createPage({ name: 'Beacon page', body: 'B', scope: resource });
+
+      const entityPage = await store.listEntities({ scope: thread, limit: 1 });
+      const nextEntityPage = await store.listEntities({
+        scope: thread,
+        cursor: createKnowledgeRecordCursor(entityPage[0]!),
+        limit: 1,
+      });
+      expect(nextEntityPage).toHaveLength(1);
+      expect(nextEntityPage[0]!.id).not.toBe(entityPage[0]!.id);
+      await expect(
+        store.listEntities({ scope: thread, namePrefix: 'A', cursor: createKnowledgeRecordCursor(entityPage[0]!) }),
+      ).rejects.toThrow(/active browse filters/);
+
+      const pagePage = await store.listPages({ scope: thread, limit: 1 });
+      const nextPagePage = await store.listPages({
+        scope: thread,
+        cursor: createKnowledgeRecordCursor(pagePage[0]!),
+        limit: 1,
+      });
+      expect(nextPagePage).toHaveLength(1);
+      expect(nextPagePage[0]!.id).not.toBe(pagePage[0]!.id);
     });
 
     it('maintains mentions and soft deletes without losing them', async () => {

@@ -10,6 +10,7 @@ import {
   KnowledgeConflictError,
   KnowledgeNotFoundError,
   KnowledgeStorage,
+  parseKnowledgeRecordCursor,
   parseKnowledgeWikilinks,
 } from './base';
 import type {
@@ -143,14 +144,29 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listEntities(input: ListKnowledgeRecordsInput): Promise<KnowledgeEntity[]> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
-    return [...this.#db.knowledgeEntities.values()]
+    const records = [...this.#db.knowledgeEntities.values()]
       .filter(entity => !entity.mergedInto)
       .filter(entity => isKnowledgeScopeVisible(entity.scope, queryScope))
       .filter(
         entity => !input.namePrefix || entity.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
       .filter(entity => !input.kind || entity.kind === input.kind)
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.name.localeCompare(b.name))
+      .sort(
+        (a, b) =>
+          b.updatedAt.getTime() - a.updatedAt.getTime() ||
+          (a.name === b.name ? (a.id < b.id ? -1 : 1) : a.name < b.name ? -1 : 1),
+      );
+    const cursor = input.cursor
+      ? parseKnowledgeRecordCursor(input.cursor, { type: 'entity', namePrefix: input.namePrefix, kind: input.kind })
+      : undefined;
+    return records
+      .filter(
+        record =>
+          !cursor ||
+          record.updatedAt < cursor.updatedAt ||
+          (record.updatedAt.getTime() === cursor.updatedAt.getTime() &&
+            (record.name > cursor.name || (record.name === cursor.name && record.id > cursor.id))),
+      )
       .slice(0, input.limit ?? 100)
       .map(cloneEntity);
   }
@@ -285,12 +301,27 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
 
   async listPages(input: Omit<ListKnowledgeRecordsInput, 'kind'>): Promise<KnowledgePage[]> {
     const queryScope = canonicalizeKnowledgeScope(input.scope);
-    return [...this.#db.knowledgePages.values()]
+    const records = [...this.#db.knowledgePages.values()]
       .filter(page => isKnowledgeScopeVisible(page.scope, queryScope))
       .filter(
         page => !input.namePrefix || page.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || a.name.localeCompare(b.name))
+      .sort(
+        (a, b) =>
+          b.updatedAt.getTime() - a.updatedAt.getTime() ||
+          (a.name === b.name ? (a.id < b.id ? -1 : 1) : a.name < b.name ? -1 : 1),
+      );
+    const cursor = input.cursor
+      ? parseKnowledgeRecordCursor(input.cursor, { type: 'page', namePrefix: input.namePrefix })
+      : undefined;
+    return records
+      .filter(
+        record =>
+          !cursor ||
+          record.updatedAt < cursor.updatedAt ||
+          (record.updatedAt.getTime() === cursor.updatedAt.getTime() &&
+            (record.name > cursor.name || (record.name === cursor.name && record.id > cursor.id))),
+      )
       .slice(0, input.limit ?? 100)
       .map(clonePage);
   }
@@ -472,11 +503,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       ) {
         const entity = this.#db.knowledgeEntities.get(fact.parentEntityId);
         if (entity && !entity.mergedInto) {
+          const parentVisible = isKnowledgeScopeVisible(entity.scope, queryScope);
           results.push({
             type: 'fact',
             id: fact.id,
-            recordId: entity.id,
-            name: entity.name,
+            recordId: parentVisible ? entity.id : fact.id,
+            name: parentVisible ? entity.name : '(private entity)',
             text: fact.text,
             scope: fact.scope,
           });
