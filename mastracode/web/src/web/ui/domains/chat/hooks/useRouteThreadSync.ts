@@ -12,7 +12,7 @@ import { useSwitchAgentControllerThreadMutation } from './useAgentControllerThre
 import { useAgentControllerThreads } from './useAgentControllerThreads';
 
 export function useRouteThreadSync() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl, threadBasePath } = useChatSessionContext();
   const { status, state } = useChatConnection();
   const { transcript, reset, syncState, pushNotice } = useChatTranscript();
   const threadsQuery = useAgentControllerThreads({
@@ -66,7 +66,7 @@ export function useRouteThreadSync() {
           : Promise.resolve();
         void warm.finally(() => {
           if (!isLatestRequest()) return;
-          void navigate(`/threads/${latest.id}`, { replace: true });
+          void navigate(`${threadBasePath}/${latest.id}`, { replace: true });
         });
         return;
       }
