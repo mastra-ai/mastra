@@ -29,7 +29,11 @@ export function useAgentControllerSessionInit({
   });
 
   return useQuery({
-    queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init', projectState],
+    queryKey: [
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      'init',
+      projectState,
+    ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({ tags: projectPath ? { projectPath } : undefined });

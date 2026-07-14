@@ -146,7 +146,9 @@ export const githubSignalSubscriptions = pgTable(
     threadId: text('thread_id').notNull(),
     sessionScope: text('session_scope').notNull().default(''),
     source: text('source', { enum: ['auto-gh-pr-create', 'factory-pr-create', 'explicit-tool'] }).notNull(),
-    status: text('status', { enum: ['open', 'closed', 'merged'] }).notNull().default('open'),
+    status: text('status', { enum: ['open', 'closed', 'merged'] })
+      .notNull()
+      .default('open'),
     subscribedByUserId: text('subscribed_by_user_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -40,6 +40,8 @@ function seedProject(source: 'local' | 'github' = 'local') {
           sandboxWorkdir: '/tmp/mastracode-test',
           resourceId: RESOURCE_ID,
           gitBranch: 'main',
+          worktrees: [{ branch: 'feature', worktreePath: '/tmp/mastracode-test-worktree', baseBranch: 'main' }],
+          selectedWorktreePath: '/tmp/mastracode-test-worktree',
           createdAt: 1,
         }
       : {
@@ -211,7 +213,7 @@ describe('StatusLine', () => {
           const url = new URL(request.url);
           expect(url.searchParams.get('resourceId')).toBe(RESOURCE_ID);
           expect(url.searchParams.get('threadId')).toBe(THREAD_ID);
-          expect(url.searchParams.get('scope')).toBe('/tmp/mastracode-test');
+          expect(url.searchParams.get('scope')).toBe('/tmp/mastracode-test-worktree');
           return HttpResponse.json({
             subscriptions: [
               {
@@ -263,25 +265,28 @@ describe('StatusLine', () => {
 
     it('refreshes the pull request status when a notification arrives', async () => {
       seedProject('github');
-      useAgentControllerHandlers([], [
-        {
-          type: 'message_update',
-          message: {
-            id: 'notification-message',
-            role: 'assistant',
-            content: [
-              {
-                type: 'notification',
-                notificationId: 'notification-merged',
-                message: 'octo/hello#42 was merged',
-                source: 'github',
-                kind: 'pull-request-merged',
-                priority: 'urgent',
-              },
-            ],
+      useAgentControllerHandlers(
+        [],
+        [
+          {
+            type: 'message_update',
+            message: {
+              id: 'notification-message',
+              role: 'assistant',
+              content: [
+                {
+                  type: 'notification',
+                  notificationId: 'notification-merged',
+                  message: 'octo/hello#42 was merged',
+                  source: 'github',
+                  kind: 'pull-request-merged',
+                  priority: 'urgent',
+                },
+              ],
+            },
           },
-        },
-      ]);
+        ],
+      );
       let requests = 0;
       server.use(
         http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => {

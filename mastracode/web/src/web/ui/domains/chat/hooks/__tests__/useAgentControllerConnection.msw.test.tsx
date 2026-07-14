@@ -96,10 +96,12 @@ describe('useAgentControllerConnection', () => {
           settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
         }),
       ),
-      http.get(`${sessionUrl}/stream`, () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+      http.get(
+        `${sessionUrl}/stream`,
+        () =>
+          new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
+            headers: { 'content-type': 'text/event-stream' },
+          }),
       ),
     );
 

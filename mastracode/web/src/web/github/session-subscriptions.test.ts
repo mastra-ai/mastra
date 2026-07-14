@@ -60,7 +60,10 @@ beforeEach(() => {
 
 describe('parseCreatedPullRequest', () => {
   it.each([
-    { command: 'gh pr create --draft --title "Fix"', output: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' } },
+    {
+      command: 'gh pr create --draft --title "Fix"',
+      output: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' },
+    },
     {
       command:
         'gh pr create --head factory/issue-6 --base main --draft --title "Fix" --body-file /tmp/pr-body.md\nstatus=$?\nrm /tmp/pr-body.md\nexit $status',
@@ -68,7 +71,7 @@ describe('parseCreatedPullRequest', () => {
     },
     {
       command:
-        'gh pr close 122 && cat <<\'EOF\' > /tmp/pr-body.md\nFixes the issue.\nEOF\ngh pr create --draft --body-file /tmp/pr-body.md',
+        "gh pr close 122 && cat <<'EOF' > /tmp/pr-body.md\nFixes the issue.\nEOF\ngh pr create --draft --body-file /tmp/pr-body.md",
       output: { result: 'Closed pull request #122\nhttps://github.com/mastra-ai/mastra/pull/123\n' },
     },
   ])('extracts one canonical PR URL from successful execute_command output', ({ command, output }) => {
@@ -125,7 +128,11 @@ describe('GitHub subscription entry points', () => {
 
   it('rejects a canonical URL for another repository before subscription', async () => {
     await expect(
-      subscribeCurrentSessionToPullRequest(authenticatedRequestContext(), 'https://github.com/other/repo/pull/123', 'explicit-tool'),
+      subscribeCurrentSessionToPullRequest(
+        authenticatedRequestContext(),
+        'https://github.com/other/repo/pull/123',
+        'explicit-tool',
+      ),
     ).rejects.toThrow('Pull request must belong to mastra-ai/mastra.');
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
