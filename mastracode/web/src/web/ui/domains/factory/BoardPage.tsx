@@ -29,7 +29,8 @@ import type { WorkItem, WorkItemSource } from './services/workItems';
 const BOARD_STAGES = [
   { id: 'intake', label: 'Intake' },
   { id: 'triage', label: 'Triage' },
-  { id: 'execute', label: 'In progress' },
+  { id: 'planning', label: 'Planning' },
+  { id: 'execute', label: 'Building' },
   { id: 'review', label: 'Review' },
   { id: 'done', label: 'Done' },
 ] as const;
@@ -64,7 +65,7 @@ function stagesAfterMove(stages: string[], from: string | null, to: string): str
 }
 
 /** Pre-work stages a card exits when a run starts on it. */
-const PRE_RUN_STAGES: string[] = ['intake', 'triage'];
+const PRE_RUN_STAGES: string[] = ['intake', 'triage', 'planning'];
 
 function stagesAfterRunStart(stages: string[], to: string): string[] {
   return stagesAfterMove(
