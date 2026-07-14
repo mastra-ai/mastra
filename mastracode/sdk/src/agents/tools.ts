@@ -81,12 +81,13 @@ export function createToolHooks(hookManager?: HookManager, postToolObserver?: Po
     afterToolCall: async context => {
       const { toolName, input, output, error } = context;
       if (hookManager) {
+        const failed = error !== undefined;
         await hookManager
           .runPostToolUse(
             toolName,
             input,
-            error ? { error: error instanceof Error ? error.message : String(error) } : output,
-            Boolean(error),
+            failed ? { error: error instanceof Error ? error.message : String(error) } : output,
+            failed,
           )
           .catch(() => undefined);
       }

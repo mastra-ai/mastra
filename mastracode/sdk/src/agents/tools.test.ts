@@ -139,6 +139,18 @@ describe('createToolHooks', () => {
     expect(observer).toHaveBeenCalledWith(expect.objectContaining({ error }));
   });
 
+  it.each([0, false, ''])('treats a falsey error value (%j) as a failed tool call', async error => {
+    const hookManager = {
+      runPreToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
+      runPostToolUse: vi.fn(async () => ({ allowed: true, results: [], warnings: [] })),
+    };
+    const hooks = createToolHooks(hookManager as any)!;
+
+    await hooks.afterToolCall?.({ toolName: 'custom_tool', input: {}, context: {}, output: 'success', error } as any);
+
+    expect(hookManager.runPostToolUse).toHaveBeenCalledWith('custom_tool', {}, { error: String(error) }, true);
+  });
+
   it.each([
     vi.fn(() => {
       throw new Error('observer failed');
