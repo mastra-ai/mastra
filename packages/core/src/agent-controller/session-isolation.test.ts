@@ -318,9 +318,89 @@ describe('AgentController session registry', () => {
     await controller.init();
 
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
-    controller.setResourceId(a, { resourceId: 'user-a-renamed' });
+    await controller.setResourceId(a, { resourceId: 'user-a-renamed' });
 
     expect(await controller.getSessionByResource('user-a-renamed')).toBe(a);
     expect(await controller.getSessionByResource('user-a')).toBeUndefined();
+  });
+
+  it('creates independent sessions for the same resourceId under different scopes', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const a = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+      tags: { projectPath: '/worktrees/a' },
+    });
+    const b = await controller.createSession({
+      id: 'user-a::wt-b',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/b',
+      tags: { projectPath: '/worktrees/b' },
+    });
+
+    expect(b).not.toBe(a);
+    // Each scoped session has its own thread binding and mode/model state.
+    expect(a.thread.getId()).not.toBe(b.thread.getId());
+    await a.mode.switch({ modeId: 'plan' });
+    expect(a.mode.get()).toBe('plan');
+    expect(b.mode.get()).toBe('build');
+  });
+
+  it('returns the same session for the same resourceId and scope (get-or-create)', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const first = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+    });
+    const second = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+    });
+
+    expect(second).toBe(first);
+  });
+
+  it('resolves scoped sessions independently via getSessionByResource', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const unscoped = await controller.createSession({ id: 'user-a', ownerId: 'test-owner', resourceId: 'user-a' });
+    const scoped = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+    });
+
+    expect(await controller.getSessionByResource('user-a')).toBe(unscoped);
+    expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBe(scoped);
+    expect(await controller.getSessionByResource('user-a', '/worktrees/other')).toBeUndefined();
+  });
+
+  it('keeps the scope when a scoped session is re-keyed to a new resourceId', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const a = await controller.createSession({
+      id: 'user-a::wt-a',
+      ownerId: 'test-owner',
+      resourceId: 'user-a',
+      scope: '/worktrees/a',
+    });
+    await controller.setResourceId(a, { resourceId: 'user-a-renamed' });
+
+    expect(await controller.getSessionByResource('user-a-renamed', '/worktrees/a')).toBe(a);
+    expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBeUndefined();
   });
 });

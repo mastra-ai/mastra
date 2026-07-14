@@ -1,3 +1,4 @@
+import { createHmac } from 'node:crypto';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as AuthModule from '../auth';
@@ -144,6 +145,8 @@ const ensureWorktree = vi.fn(async (_sb: any, _workdir: string, opts: { branch: 
   branch: opts.branch,
   baseBranch: opts.baseBranch,
 }));
+const removeWorktree = vi.fn(async (_sb: any, _workdir: string, _opts: { branch: string; worktreePath: string }) => {});
+const runWorktreeSetup = vi.fn(async (_sb: any, _worktreePath: string, _command: string) => {});
 const commitAll = vi.fn(async () => ({ committed: true }));
 const pushBranch = vi.fn(async () => {});
 const createPullRequest = vi.fn(async () => ({ url: 'https://github.com/octo/hello/pull/1' }));
@@ -171,6 +174,8 @@ vi.mock('./sandbox', () => {
     materializeRepo: (...args: any[]) => materializeRepo(...(args as [])),
     reattachProjectSandbox: (id: string) => reattachProjectSandbox(id),
     ensureWorktree: (sb: any, workdir: string, opts: any) => ensureWorktree(sb, workdir, opts),
+    removeWorktree: (sb: any, workdir: string, opts: any) => removeWorktree(sb, workdir, opts),
+    runWorktreeSetup: (sb: any, worktreePath: string, command: string) => runWorktreeSetup(sb, worktreePath, command),
     commitAll: (...args: any[]) => commitAll(...(args as [])),
     pushBranch: (...args: any[]) => pushBranch(...(args as [])),
     createPullRequest: (...args: any[]) => createPullRequest(...(args as [])),
@@ -186,6 +191,7 @@ let featureEnabled = true;
 vi.mock('./config', () => ({
   isGithubFeatureEnabled: () => featureEnabled,
   getGithubFeatureDiagnostics: () => ({}),
+  getGithubWebhookSecret: () => process.env.GITHUB_APP_WEBHOOK_SECRET || undefined,
   signState: (orgId: string, userId: string) => `state.${orgId}.${userId}`,
   verifyState: (state: string | undefined) => {
     if (!state?.startsWith('state.')) return null;
@@ -222,6 +228,9 @@ vi.mock('../auth', async () => {
 
 import { mountApiRoutes } from '../test-utils';
 import { buildGithubRoutes } from './routes';
+// The mocked class from the `./sandbox` factory above — routes match on
+// `instanceof WorktreeError`, so failure specs must throw this exact class.
+import { WorktreeError as MockedWorktreeError } from './sandbox';
 
 // ── Fake table helpers ──────────────────────────────────────────────────
 function tableKind(table: any): keyof Tables {
@@ -328,12 +337,15 @@ beforeEach(() => {
   featureEnabled = true;
   sandboxEnabled = true;
   cookieUser = null;
+  process.env.GITHUB_APP_WEBHOOK_SECRET = 'test-webhook-secret';
   // No Postgres in these unit tests: keep the project lock purely in-process.
   process.env.MASTRACODE_DISTRIBUTED_LOCK = '0';
   ensureProjectSandbox.mockClear();
   materializeRepo.mockClear();
   reattachProjectSandbox.mockClear();
   ensureWorktree.mockClear();
+  removeWorktree.mockClear();
+  runWorktreeSetup.mockClear();
   commitAll.mockClear();
   pushBranch.mockClear();
   createPullRequest.mockClear();
@@ -342,8 +354,137 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  delete process.env.GITHUB_APP_WEBHOOK_SECRET;
   delete process.env.MASTRACODE_DISTRIBUTED_LOCK;
   vi.clearAllMocks();
+});
+
+function signedGithubWebhookRequest(event: string, payload: Record<string, unknown>, init?: RequestInit): Request {
+  const body = JSON.stringify(payload);
+  const secret = process.env.GITHUB_APP_WEBHOOK_SECRET ?? '';
+  const signature = `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`;
+  const headers = new Headers({
+    'content-type': 'application/json',
+    'x-github-event': event,
+    'x-github-delivery': 'delivery-1',
+    'x-hub-signature-256': signature,
+  });
+  new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
+  return new Request('http://localhost/web/github/webhook', { ...init, method: 'POST', headers, body });
+}
+
+describe('webhook route', () => {
+  it('accepts a valid signed issues event and logs normalized metadata', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(
+      signedGithubWebhookRequest('issues', {
+        action: 'opened',
+        repository: { full_name: 'octo/hello' },
+        issue: { number: 12 },
+        sender: { login: 'ada' },
+        installation: { id: 99 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logSpy).toHaveBeenCalledWith('[GitHub Webhook]', {
+      event: 'issues',
+      action: 'opened',
+      deliveryId: 'delivery-1',
+      repository: 'octo/hello',
+      issueNumber: 12,
+      pullRequestNumber: undefined,
+      sender: 'ada',
+      installationId: 99,
+    });
+  });
+
+  it('accepts a valid signed PR review comment event and logs normalized PR metadata', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(
+      signedGithubWebhookRequest('pull_request_review_comment', {
+        action: 'created',
+        repository: { full_name: 'octo/hello' },
+        pull_request: { number: 34 },
+        sender: { login: 'grace' },
+        installation: { id: 99 },
+      }),
+    );
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(logSpy).toHaveBeenCalledWith('[GitHub Webhook]', {
+      event: 'pull_request_review_comment',
+      action: 'created',
+      deliveryId: 'delivery-1',
+      repository: 'octo/hello',
+      issueNumber: undefined,
+      pullRequestNumber: 34,
+      sender: 'grace',
+      installationId: 99,
+    });
+  });
+
+  it('rejects invalid signatures without logging', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const req = signedGithubWebhookRequest(
+      'issues',
+      { action: 'opened' },
+      {
+        headers: { 'x-hub-signature-256': 'sha256=0000000000000000000000000000000000000000000000000000000000000000' },
+      },
+    );
+
+    const res = await buildApp(null).request(req);
+
+    expect(res.status).toBe(401);
+    expect(await res.json()).toMatchObject({ error: 'unauthorized' });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['x-github-event', 400, { error: 'bad_request', message: 'Missing x-github-event header' }],
+    ['x-github-delivery', 400, { error: 'bad_request', message: 'Missing x-github-delivery header' }],
+    ['x-hub-signature-256', 401, { error: 'unauthorized', message: 'Missing x-hub-signature-256 header' }],
+  ] as const)('rejects missing %s header', async (missingHeader, expectedStatus, expectedBody) => {
+    const req = signedGithubWebhookRequest('issues', { action: 'opened' });
+    req.headers.delete(missingHeader);
+
+    const res = await buildApp(null).request(req);
+
+    expect(res.status).toBe(expectedStatus);
+    expect(await res.json()).toEqual(expectedBody);
+  });
+
+  it('rejects malformed JSON after signature verification', async () => {
+    const body = '{';
+    const signature = `sha256=${createHmac('sha256', process.env.GITHUB_APP_WEBHOOK_SECRET ?? '')
+      .update(body)
+      .digest('hex')}`;
+    const res = await buildApp(null).request('/web/github/webhook', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'x-github-event': 'issues',
+        'x-github-delivery': 'delivery-1',
+        'x-hub-signature-256': signature,
+      },
+      body,
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: 'bad_request', message: 'Malformed JSON payload' });
+  });
+
+  it('accepts and ignores a valid unsupported event', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const res = await buildApp(null).request(signedGithubWebhookRequest('installation', { action: 'created' }));
+
+    expect(res.status).toBe(202);
+    expect(await res.json()).toEqual({ ok: true, ignored: true });
+    expect(logSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe('status route', () => {
@@ -717,7 +858,7 @@ describe('ensure (materialize)', () => {
 });
 
 // ── Phase 4: worktree / commit / push / pr git routes ─────────────────────
-function seedMaterializedProject(opts: { orgId?: string; userId?: string } = {}) {
+function seedMaterializedProject(opts: { orgId?: string; userId?: string; setupCommand?: string | null } = {}) {
   const orgId = opts.orgId ?? 'org1';
   const userId = opts.userId ?? 'u1';
   tables.projects.push({
@@ -729,6 +870,7 @@ function seedMaterializedProject(opts: { orgId?: string; userId?: string } = {})
     repoId: 99,
     defaultBranch: 'main',
     sandboxWorkdir: '/workspace/hello',
+    setupCommand: opts.setupCommand ?? null,
   });
   tables.sandboxes.push({
     id: 'sbrow-1',
@@ -850,6 +992,82 @@ describe('prs route', () => {
   });
 });
 
+describe('project settings routes', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await buildApp(null).request('/web/github/projects/p1/settings');
+    expect(res.status).toBe(401);
+  });
+
+  it('404s for a project owned by another org', async () => {
+    seedMaterializedProject({ orgId: 'other-org' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns the stored setup command', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
+    const res = await buildApp({ workosId: 'u1' }).request('/web/github/projects/p1/settings');
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+  });
+
+  it('persists a trimmed setup command', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+      setupCommand: '  pnpm i && pnpm build  ',
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ setupCommand: 'pnpm i && pnpm build' });
+    expect(tables.projects[0].setupCommand).toBe('pnpm i && pnpm build');
+  });
+
+  it('clears the setup command with an empty string or null', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i' });
+    const app = buildApp({ workosId: 'u1' });
+    const res = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: '   ' });
+    expect(await res.json()).toEqual({ setupCommand: null });
+    expect(tables.projects[0].setupCommand).toBeNull();
+
+    tables.projects[0].setupCommand = 'pnpm i';
+    const res2 = await postJson(app, '/web/github/projects/p1/settings', { setupCommand: null });
+    expect(await res2.json()).toEqual({ setupCommand: null });
+    expect(tables.projects[0].setupCommand).toBeNull();
+  });
+
+  it('400s on a non-string setup command', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+      setupCommand: 42,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on an oversized setup command', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/settings', {
+      setupCommand: 'x'.repeat(2001),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('400s on a setup command containing control characters', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    const res = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: 'pnpm i \x1b[31m&& rm -rf /',
+    });
+    expect(res.status).toBe(400);
+    expect(tables.projects[0].setupCommand).toBeNull();
+
+    // Newlines and tabs are legitimate in multi-line setup scripts.
+    const res2 = await postJson(app, '/web/github/projects/p1/settings', {
+      setupCommand: 'pnpm i\npnpm build\t--force',
+    });
+    expect(res2.status).toBe(200);
+  });
+});
+
 describe('worktree route', () => {
   it('401s without an authenticated user', async () => {
     seedMaterializedProject();
@@ -896,6 +1114,14 @@ describe('worktree route', () => {
     expect(json.resourceId).toBe('p1');
     expect(reattachProjectSandbox).toHaveBeenCalledWith('sb-1');
     expect(ensureWorktree).toHaveBeenCalledOnce();
+    // A freshly minted install token + repo name are passed through so the
+    // worktree forks from the latest fetched origin/<base>, not local state.
+    expect(ensureWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      branch: 'feat/x',
+      baseBranch: 'main',
+      token: 'install-token',
+      repoFullName: 'octo/hello',
+    });
     expect(tables.worktrees).toHaveLength(1);
     expect(tables.worktrees[0]).toMatchObject({ githubProjectId: 'p1', branch: 'feat/x', userId: 'u1' });
   });
@@ -905,6 +1131,146 @@ describe('worktree route', () => {
     const app = buildApp({ workosId: 'u1' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
     await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    expect(tables.worktrees).toHaveLength(1);
+  });
+
+  it('runs the configured setup command in the fresh worktree', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i && pnpm build' });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(200);
+    expect(runWorktreeSetup).toHaveBeenCalledOnce();
+    expect(runWorktreeSetup).toHaveBeenCalledWith(
+      expect.anything(),
+      '/workspace/hello/../worktrees/feat/x',
+      'pnpm i && pnpm build',
+    );
+  });
+
+  it('skips the setup command when no command is configured', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(200);
+    expect(runWorktreeSetup).not.toHaveBeenCalled();
+  });
+
+  it('skips the setup command when reusing an existing worktree', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i' });
+    ensureWorktree.mockResolvedValueOnce({
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+      branch: 'feat/x',
+      baseBranch: 'main',
+      reused: true,
+    } as any);
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(200);
+    expect(runWorktreeSetup).not.toHaveBeenCalled();
+  });
+
+  it('surfaces a setup failure and does not persist the worktree row', async () => {
+    seedMaterializedProject({ setupCommand: 'pnpm i' });
+    runWorktreeSetup.mockRejectedValueOnce(new MockedWorktreeError('Setup command failed (exit 1)', 'setup-failed'));
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(502);
+    expect(await res.json()).toMatchObject({ error: 'setup-failed' });
+    expect(tables.worktrees).toHaveLength(0);
+  });
+});
+
+describe('worktree delete route', () => {
+  it('401s without an authenticated user', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp(null), '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBe(401);
+  });
+
+  it('400s on an invalid branch name', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'bad branch!',
+    });
+    expect(res.status).toBe(400);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('404s for a worktree that was never created', async () => {
+    seedMaterializedProject();
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'feat/unknown',
+    });
+    expect(res.status).toBe(404);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it("404s for another user's worktree", async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    const res = await postJson(buildApp({ workosId: 'u2' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'feat/x',
+    });
+    expect(res.status).toBe(404);
+    expect(removeWorktree).not.toHaveBeenCalled();
+    expect(tables.worktrees).toHaveLength(1);
+  });
+
+  it('400s when the worktree row points at the repo root checkout', async () => {
+    seedMaterializedProject();
+    tables.worktrees.push({
+      id: 'wt-root',
+      orgId: 'org1',
+      userId: 'u1',
+      githubProjectId: 'p1',
+      branch: 'main',
+      baseBranch: 'main',
+      worktreePath: '/workspace/hello',
+    });
+    const res = await postJson(buildApp({ workosId: 'u1' }), '/web/github/projects/p1/worktree/delete', {
+      branch: 'main',
+    });
+    expect(res.status).toBe(400);
+    expect(removeWorktree).not.toHaveBeenCalled();
+  });
+
+  it('removes the checkout, deletes the row, and returns the path', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    expect(tables.worktrees).toHaveLength(1);
+
+    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBe(200);
+    const json = await res.json();
+    expect(json).toMatchObject({
+      removed: true,
+      branch: 'feat/x',
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(removeWorktree).toHaveBeenCalledOnce();
+    expect(removeWorktree).toHaveBeenCalledWith(expect.anything(), '/workspace/hello', {
+      branch: 'feat/x',
+      worktreePath: '/workspace/hello/../worktrees/feat/x',
+    });
+    expect(tables.worktrees).toHaveLength(0);
+  });
+
+  it('keeps the row when the sandbox removal fails', async () => {
+    seedMaterializedProject();
+    const app = buildApp({ workosId: 'u1' });
+    await postJson(app, '/web/github/projects/p1/worktree', { branch: 'feat/x' });
+    removeWorktree.mockRejectedValueOnce(
+      Object.assign(new Error('git worktree remove failed'), { name: 'WorktreeError', code: 'worktree-failed' }),
+    );
+
+    const res = await postJson(app, '/web/github/projects/p1/worktree/delete', { branch: 'feat/x' });
+    expect(res.status).toBeGreaterThanOrEqual(400);
     expect(tables.worktrees).toHaveLength(1);
   });
 });

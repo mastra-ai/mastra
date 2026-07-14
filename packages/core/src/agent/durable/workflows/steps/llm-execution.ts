@@ -26,7 +26,7 @@ import { execute } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput } from '../../../../stream/base/output';
 import type { TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
-import { inferProviderExecuted } from '../../../../tools/provider-tool-utils';
+import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
 import type { CoreTool } from '../../../../tools/types';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
 import { createStep } from '../../../../workflows/workflow';
@@ -165,7 +165,21 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         logger,
       });
 
-      const { messageList, tools, model: resolvedModel, modelList: resolvedModelList } = resolved;
+      const {
+        messageList,
+        tools,
+        model: resolvedModel,
+        modelList: resolvedModelList,
+        // Processors rebuilt from the agent when the per-process registry was
+        // empty (cross-process worker). resolveRuntimeDependencies also writes
+        // these back into globalRunRegistry, so `registryEntry?.inputProcessors`
+        // below is populated too — these are the direct fallback if the entry is
+        // evicted (TTL) or absent, restoring the SkillsProcessor /
+        // WorkspaceInstructionsProcessor in the cross-process system prompt.
+        inputProcessors: resolvedInputProcessors,
+        llmRequestInputProcessors: resolvedLlmRequestInputProcessors,
+        outputProcessors: resolvedOutputProcessors,
+      } = resolved;
 
       // 1b. Check for abort signal before doing any work. If the signal is
       // already aborted (e.g. pre-aborted before the loop starts), return a
@@ -335,7 +349,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             const registryEntry = globalRunRegistry.get(runId);
             const executionAbortSignal = registryEntry?.abortSignal ?? abortSignal;
-            const baseInputProcessors = registryEntry?.inputProcessors ?? [];
+            const baseInputProcessors = registryEntry?.inputProcessors ?? resolvedInputProcessors ?? [];
+            // Output processors likewise fall back to the rebuilt list when the
+            // per-process registry is empty (cross-process worker).
+            const effectiveOutputProcessors = registryEntry?.outputProcessors ?? resolvedOutputProcessors ?? [];
             const stepInputProcessors = registryEntry?.prepareStep
               ? [...baseInputProcessors, new PrepareStepProcessor({ prepareStep: registryEntry.prepareStep })]
               : baseInputProcessors;
@@ -349,7 +366,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : undefined;
               const runner = new ProcessorRunner({
                 inputProcessors: stepInputProcessors,
-                outputProcessors: registryEntry?.outputProcessors ?? [],
+                outputProcessors: effectiveOutputProcessors,
                 errorProcessors: registryEntry?.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
@@ -520,7 +537,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // `ProcessorRunner.runProcessLLMRequest`. Fall back to
             // `inputProcessors` for backward compatibility.
             let cachedResponse: CachedLLMStepResponse | undefined;
-            const allInputProcessors = registryEntry?.llmRequestInputProcessors ?? registryEntry?.inputProcessors ?? [];
+            const allInputProcessors =
+              registryEntry?.llmRequestInputProcessors ??
+              registryEntry?.inputProcessors ??
+              resolvedLlmRequestInputProcessors ??
+              resolvedInputProcessors ??
+              [];
             // Create a single ProcessorRunner shared between processLLMRequest
             // and processLLMResponse so processor state (e.g. cache keys stashed
             // in the request hook) is available in the response hook.
@@ -625,11 +647,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // (which may carry only a toolCallId, no toolName) can still find the
             // tool resolved during the preceding `tool-call-input-streaming-start`.
             const resolvedToolByCallId = new Map<string, CoreTool>();
+            const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
 
             const resolveToolDef = (toolName: string): CoreTool | undefined => {
               const directTool = (currentTools as unknown as Record<string, CoreTool> | undefined)?.[toolName];
               if (directTool) return directTool;
-              return registryEntry?.tools?.[toolName];
+              const registryTool = registryEntry?.tools?.[toolName];
+              if (registryTool) return registryTool;
+              // Resolve provider tools by model-facing name (e.g. 'web_search' → provider tool with id 'anthropic.web_search').
+              // Check both currentTools and registryEntry.tools to match the durable tool-call step's resolution.
+              const providerTool = findProviderToolByName(currentTools as any, toolName) as CoreTool | undefined;
+              if (providerTool) return providerTool;
+              return findProviderToolByName(registryEntry?.tools as any, toolName) as CoreTool | undefined;
             };
 
             const endClientToolObservabilitySpan = (toolCallId: string, args?: unknown): void => {
@@ -723,6 +752,81 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               }
 
               return { toolDef };
+            };
+
+            const injectProviderToolObservability = ({
+              toolCallId,
+              toolName,
+              args,
+              providerExecuted,
+            }: {
+              toolCallId: string;
+              toolName: string;
+              args?: unknown;
+              providerExecuted?: boolean;
+            }) => {
+              if (!tracingContext?.currentSpan) return;
+
+              const toolDef = resolveToolDef(toolName);
+              const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
+              if (!inferredProviderExecuted) return;
+              const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+              if (existingEntry) {
+                if (args !== undefined && existingEntry.span.input === undefined) {
+                  (existingEntry.span as any).update?.({ input: args });
+                }
+                return;
+              }
+
+              try {
+                const parentSpan =
+                  tracingContext.currentSpan.type === ('agent_run' as string)
+                    ? tracingContext.currentSpan
+                    : ((tracingContext.currentSpan as any).findParent?.('agent_run') ?? tracingContext.currentSpan);
+
+                const span = (parentSpan as any).createChildSpan?.({
+                  type: 'provider_tool_call',
+                  name: `provider_tool: '${toolName}'`,
+                  entityType: EntityType.TOOL,
+                  entityId: toolName,
+                  entityName: toolName,
+                  attributes: {
+                    toolType: 'provider-tool',
+                    toolDescription: (toolDef as { description?: string } | undefined)?.description,
+                    toolCallId,
+                  },
+                  metadata: { toolCallId },
+                  ...(args !== undefined ? { input: args } : {}),
+                });
+
+                if (span) {
+                  providerToolSpansByToolCallId.set(toolCallId, { span: span as AnySpan, ended: false });
+                }
+              } catch (err) {
+                logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
+                  error: err instanceof Error ? err.message : String(err),
+                  toolName,
+                });
+              }
+            };
+
+            const cleanupToolObservabilitySpans = () => {
+              for (const [toolCallId, entry] of clientToolObservabilityByToolCallId.entries()) {
+                if (!entry.ended) {
+                  const parsedArgs = parseClientToolArgsFromDeltas(toolCallId);
+                  entry.span.end(parsedArgs !== undefined ? { metadata: { args: parsedArgs } } : undefined);
+                  entry.ended = true;
+                }
+              }
+              clientToolArgsTextByToolCallId.clear();
+
+              for (const [, entry] of providerToolSpansByToolCallId.entries()) {
+                if (!entry.ended) {
+                  entry.span.end();
+                  entry.ended = true;
+                }
+              }
+              providerToolSpansByToolCallId.clear();
             };
 
             // 8. Start MODEL_STEP span at the beginning of LLM execution
@@ -928,6 +1032,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (toolInputStartToolDef) {
                     resolvedToolByCallId.set(rawChunk.payload.toolCallId, toolInputStartToolDef);
                   }
+                  injectProviderToolObservability({
+                    toolCallId: rawChunk.payload.toolCallId,
+                    toolName: rawChunk.payload.toolName,
+                    providerExecuted: rawChunk.payload.providerExecuted,
+                  });
                 } else if (rawChunk.type === 'tool-call-delta') {
                   const toolCallId = rawChunk.payload.toolCallId;
                   if (toolCallId && rawChunk.payload.argsTextDelta) {
@@ -947,6 +1056,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     args: rawChunk.payload.args,
                     providerExecuted: rawChunk.payload.providerExecuted,
                     payload: (clientChunk as any).payload as Record<string, unknown> & { observability?: unknown },
+                  });
+                  injectProviderToolObservability({
+                    toolCallId: rawChunk.payload.toolCallId,
+                    toolName: rawChunk.payload.toolName,
+                    args: rawChunk.payload.args,
+                    providerExecuted: rawChunk.payload.providerExecuted,
                   });
                 }
 
@@ -1044,6 +1159,59 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     break;
                   }
 
+                  case 'tool-result': {
+                    const payload = rawChunk.payload as any;
+                    // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
+                    const providerEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
+                    if (providerEntry && !providerEntry.ended) {
+                      providerEntry.span.end({
+                        output: payload.result,
+                        attributes: { success: !payload.isError },
+                      });
+                      providerEntry.ended = true;
+                    } else if (!providerEntry && tracingContext?.currentSpan) {
+                      // Deferred result: no span was opened in this step invocation.
+                      // Only create a synthetic span if this is actually a provider-executed tool.
+                      const resultToolDef2 = resolveToolDef(payload.toolName);
+                      const isProviderExec = inferProviderExecuted(payload.providerExecuted, resultToolDef2);
+                      if (!isProviderExec) break;
+
+                      let spanInput = payload.args;
+                      if (spanInput === undefined) {
+                        // Fallback: find args from the tool-call already stored in messageList
+                        const allMessages = messageList.get.all.db();
+                        for (const msg of allMessages) {
+                          if (!msg.content?.parts) continue;
+                          for (const part of msg.content.parts) {
+                            if (
+                              part.type === 'tool-invocation' &&
+                              part.toolInvocation?.toolCallId === payload.toolCallId
+                            ) {
+                              spanInput = part.toolInvocation.args;
+                              break;
+                            }
+                          }
+                          if (spanInput !== undefined) break;
+                        }
+                      }
+                      injectProviderToolObservability({
+                        toolCallId: payload.toolCallId,
+                        toolName: payload.toolName,
+                        args: spanInput,
+                        providerExecuted: true,
+                      });
+                      const deferredEntry = providerToolSpansByToolCallId.get(payload.toolCallId);
+                      if (deferredEntry && !deferredEntry.ended) {
+                        deferredEntry.span.end({
+                          output: payload.result,
+                          attributes: { success: !payload.isError },
+                        });
+                        deferredEntry.ended = true;
+                      }
+                    }
+                    break;
+                  }
+
                   case 'step-finish': {
                     const payload = rawChunk.payload as any;
                     // The terminal chunk (rewritten from 'finish' above) carries finishReason
@@ -1074,7 +1242,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   }
                 }
               }
+              // Clean up any unclosed observability spans after successful stream completion
+              cleanupToolObservabilitySpans();
             } catch (error) {
+              cleanupToolObservabilitySpans();
               logger?.error?.('Error processing LLM stream', { error, runId });
 
               const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1301,10 +1472,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 13.5. Run processOutputStep for output processors (runs AFTER LLM response, BEFORE tool execution)
             // Mirrors the regular agent's llm-execution-step.ts processOutputStep call
-            if (registryEntry?.outputProcessors && registryEntry.outputProcessors.length > 0) {
+            if (effectiveOutputProcessors.length > 0) {
               const outputStepRunner = new ProcessorRunner({
                 inputProcessors: [],
-                outputProcessors: registryEntry.outputProcessors,
+                outputProcessors: effectiveOutputProcessors,
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
                 processorStates: registryEntry?.processorStates,
@@ -1336,6 +1507,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   text: textDeltas.join(''),
                   usage,
                   requestContext,
+                  tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: outputStepWriter,
                 });
               } catch (error) {

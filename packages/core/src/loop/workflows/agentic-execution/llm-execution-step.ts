@@ -150,6 +150,8 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   mastra?: Mastra;
   /** Active tracing context. Parent of any CLIENT_TOOL_CALL spans we create. */
   tracingContext?: TracingContext;
+  /** Closure-scoped map for PROVIDER_TOOL_CALL spans that may persist across iterations. */
+  providerToolSpansByToolCallId?: Map<string, { span: AnySpan; ended: boolean }>;
 };
 
 type ToolResolvers = {
@@ -436,6 +438,7 @@ async function processOutputStream<OUTPUT = undefined>({
   toolPayloadTransform,
   mastra,
   tracingContext,
+  providerToolSpansByToolCallId,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
   const collectedChunks: CollectedChunk[] = [];
@@ -551,6 +554,70 @@ async function processOutputStream<OUTPUT = undefined>({
     return { toolDef, inferredProviderExecuted };
   };
 
+  const injectProviderToolObservability = ({
+    toolCallId,
+    toolName,
+    args,
+    providerExecuted,
+  }: {
+    toolCallId: string;
+    toolName: string;
+    args?: unknown;
+    providerExecuted?: boolean;
+  }) => {
+    if (!providerToolSpansByToolCallId || !tracingContext?.currentSpan) {
+      return;
+    }
+
+    const toolDef = resolveDirectOrProviderTool(toolName);
+    const inferredProviderExecuted = inferProviderExecuted(providerExecuted, toolDef);
+
+    if (!inferredProviderExecuted) {
+      return;
+    }
+
+    const existingEntry = providerToolSpansByToolCallId.get(toolCallId);
+    if (existingEntry) {
+      // If args are now available and the span was created without them (e.g. from
+      // tool-call-input-streaming-start), update the span input.
+      if (args !== undefined && existingEntry.span.input === undefined) {
+        existingEntry.span.update({ input: args });
+      }
+      return;
+    }
+
+    try {
+      const parentSpan =
+        tracingContext.currentSpan.type === SpanType.AGENT_RUN
+          ? tracingContext.currentSpan
+          : (tracingContext.currentSpan.findParent(SpanType.AGENT_RUN) ?? tracingContext.currentSpan);
+
+      const span = parentSpan.createChildSpan({
+        type: SpanType.PROVIDER_TOOL_CALL,
+        name: `provider_tool: '${toolName}'`,
+        entityType: EntityType.TOOL,
+        entityId: toolName,
+        entityName: toolName,
+        attributes: {
+          toolType: 'provider-tool',
+          toolDescription: (toolDef as { description?: string } | undefined)?.description,
+          toolCallId,
+        },
+        metadata: { toolCallId },
+        ...(args !== undefined ? { input: args } : {}),
+      });
+
+      if (span) {
+        providerToolSpansByToolCallId.set(toolCallId, { span, ended: false });
+      }
+    } catch (err) {
+      logger?.warn?.('[ProviderToolObservability] failed to create PROVIDER_TOOL_CALL span', {
+        error: err instanceof Error ? err.message : String(err),
+        toolName,
+      });
+    }
+  };
+
   for await (let chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -591,6 +658,11 @@ async function processOutputStream<OUTPUT = undefined>({
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
       }));
+      injectProviderToolObservability({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        providerExecuted: chunk.payload.providerExecuted,
+      });
     } else if (chunk.type === 'tool-call-delta') {
       const toolCallId = chunk.payload.toolCallId;
       if (toolCallId && chunk.payload.argsTextDelta) {
@@ -610,6 +682,12 @@ async function processOutputStream<OUTPUT = undefined>({
         args: chunk.payload.args,
         providerExecuted: chunk.payload.providerExecuted,
         payload: chunk.payload as unknown as Record<string, unknown> & { observability?: unknown },
+      });
+      injectProviderToolObservability({
+        toolCallId: chunk.payload.toolCallId,
+        toolName: chunk.payload.toolName,
+        args: chunk.payload.args,
+        providerExecuted: chunk.payload.providerExecuted,
       });
     }
 
@@ -734,6 +812,17 @@ async function processOutputStream<OUTPUT = undefined>({
             providerMetadata: withToolPayloadTransformProviderMetadata(chunk.payload.providerMetadata, chunk.metadata),
             providerExecuted: inferProviderExecuted(chunk.payload.providerExecuted, resultToolDef),
           });
+        }
+        // Close PROVIDER_TOOL_CALL span if one was opened for this tool call
+        if (providerToolSpansByToolCallId) {
+          const providerEntry = providerToolSpansByToolCallId.get(chunk.payload.toolCallId);
+          if (providerEntry && !providerEntry.ended) {
+            providerEntry.span.end({
+              output: chunk.payload.result,
+              attributes: { success: !chunk.payload.isError },
+            });
+            providerEntry.ended = true;
+          }
         }
         safeEnqueue(controller, chunk);
         break;
@@ -870,6 +959,19 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
+  const providerToolSpansByToolCallId = new Map<string, { span: AnySpan; ended: boolean }>();
+
+  const cleanupProviderToolSpans = (terminal: boolean) => {
+    for (const [toolCallId, entry] of providerToolSpansByToolCallId.entries()) {
+      if (entry.ended) {
+        providerToolSpansByToolCallId.delete(toolCallId);
+      } else if (terminal) {
+        entry.span.end();
+        entry.ended = true;
+        providerToolSpansByToolCallId.delete(toolCallId);
+      }
+    }
+  };
 
   return createStep({
     id: 'llm-execution' as const,
@@ -1431,6 +1533,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               toolPayloadTransform: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
               mastra,
               tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
+              providerToolSpansByToolCallId,
             });
 
             // Build messages from the full chunk sequence and add to messageList.
@@ -1507,6 +1610,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               }
             }
           } catch (error) {
+            // Force-close any server tool spans opened during the failed stream
+            // before abort/error/fallback handling can return or throw.
+            cleanupProviderToolSpans(true);
+
             const provider = model?.provider;
             const modelIdStr = model?.modelId;
 
@@ -1637,6 +1744,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
           // so this handles the case where processOutputStream completed normally via `break`.
           if (options?.abortSignal?.aborted) {
+            cleanupProviderToolSpans(true);
             await options?.onAbort?.({
               steps: inputData?.output?.steps ?? [],
             });
@@ -1759,6 +1867,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
 
       // If processAPIError signaled retry, return early with retry metadata
       if (apiErrorRetryResult?.retry) {
+        cleanupProviderToolSpans(true);
         const currentProcessorRetryCount = inputData.processorRetryCount || 0;
         const steps = inputData.output?.steps || [];
         const nextProcessorRetryCount = currentProcessorRetryCount + 1;
@@ -2020,6 +2129,11 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'content-filter';
       const shouldContinue =
         shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+
+      // Clean up server tool spans: remove ended entries, force-close unclosed on terminal exit.
+      // On retry (shouldRetry), unclosed spans from the rejected attempt must also be closed —
+      // the LLM will produce a fresh response with new tool calls.
+      cleanupProviderToolSpans(!shouldContinue || shouldRetry);
 
       // Reset retry count after a successful non-retry step; only consecutive retries carry forward.
       const nextProcessorRetryCount = shouldRetry ? currentProcessorRetryCount + 1 : 0;

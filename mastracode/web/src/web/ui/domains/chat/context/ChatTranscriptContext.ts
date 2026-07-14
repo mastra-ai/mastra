@@ -1,13 +1,13 @@
 import { createContext } from 'react';
 
 import type { SessionStateSnapshot } from '../hooks/useAgentControllerTranscript';
-import type { TranscriptState } from '../services/transcript';
+import type { OutgoingFile, TranscriptState } from '../services/transcript';
 
 export interface ChatTranscriptApi {
   transcript: TranscriptState;
   busy: boolean;
   showWorkingIndicator: boolean;
-  localUser: (text: string, steer?: boolean) => void;
+  localUser: (text: string, steer?: boolean, files?: OutgoingFile[]) => void;
   syncState: (state: SessionStateSnapshot) => void;
   reset: (threadId?: string, state?: SessionStateSnapshot) => void;
   resolvePrompt: (id: string) => void;

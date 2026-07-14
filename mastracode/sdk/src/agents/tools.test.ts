@@ -24,7 +24,7 @@ function createRequestContext(state: Record<string, unknown>, modeId: string = '
 }
 
 describe('createDynamicTools', () => {
-  it('merges extra tools into the exposed tool map', () => {
+  it('merges extra tools into the exposed tool map', async () => {
     const customTool = {
       description: 'custom',
       async execute() {
@@ -36,7 +36,7 @@ describe('createDynamicTools', () => {
       custom_tool: customTool,
     });
 
-    const allowedTools = getDynamicTools({
+    const allowedTools = await getDynamicTools({
       requestContext: createRequestContext({
         projectPath: process.cwd(),
       }),

@@ -1,5 +1,27 @@
 # @mastra/editor
 
+## 0.13.7-alpha.4
+
+### Patch Changes
+
+- Fixed multi-tenant tool connections for Composio-backed agents. ([#19144](https://github.com/mastra-ai/mastra/pull/19144))
+
+  **Multi-tenant credential auto-resolve**
+
+  Agents that use a `caller-supplied` connection scope now let Composio pick the connected account within each tenant's user bucket, instead of pinning one shared account for every caller. This removes the need to track per-tenant account IDs yourself when building multi-tenant SaaS on top of the Agent Builder.
+
+  **Fixed account authorization**
+
+  Connecting a new account now uses Composio's supported managed-OAuth link flow, replacing a deprecated endpoint that stopped working for managed OAuth. Connections that collect custom fields (such as a Confluence subdomain) continue to work unchanged.
+
+  **Config-level connection scope**
+
+  `ComposioToolProvider` now forwards `defaultScope` to the provider, so you can set a provider's connection scope once at construction (for example `defaultScope: 'caller-supplied'`) instead of relying on per-request scope. Every connection authorized against the provider is then bucketed accordingly.
+
+- Updated dependencies [[`fb8aea3`](https://github.com/mastra-ai/mastra/commit/fb8aea384291e77311be3a64ee1717320d5c3c73), [`4ce0163`](https://github.com/mastra-ai/mastra/commit/4ce0163dc86e675a86809685c8ce6c49f1aeb87e)]:
+  - @mastra/core@1.51.0-alpha.5
+  - @mastra/mcp@1.14.0-alpha.0
+
 ## 0.13.7-alpha.3
 
 ### Patch Changes

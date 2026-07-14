@@ -4,6 +4,7 @@ export type {
   EnvironmentVariablesEditorAddButtonProps,
   EnvironmentVariablesEditorDuplicateKeysErrorProps,
   EnvironmentVariablesEditorMessagesProps,
+  EnvironmentVariablesEditorPasteHintProps,
   EnvironmentVariablesEditorReadOnlyEmptyProps,
   EnvironmentVariablesEditorReadOnlyHeaderProps,
   EnvironmentVariablesEditorProps,

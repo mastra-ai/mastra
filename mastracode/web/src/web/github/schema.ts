@@ -66,6 +66,12 @@ export const githubProjects = pgTable(
     sandboxProvider: text('sandbox_provider').notNull().default('railway'),
     /** Path inside the sandbox the repo is cloned into. */
     sandboxWorkdir: text('sandbox_workdir').notNull(),
+    /**
+     * Optional shell command (e.g. `pnpm i && pnpm build`) run inside every
+     * freshly created worktree before any agent execution starts. Null when the
+     * project has no setup step.
+     */
+    setupCommand: text('setup_command'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   table => [uniqueIndex('github_projects_org_repo_unique').on(table.orgId, table.repoId)],
@@ -173,6 +179,7 @@ CREATE TABLE IF NOT EXISTS github_projects (
 );
 
 ALTER TABLE github_projects ADD COLUMN IF NOT EXISTS org_id text;
+ALTER TABLE github_projects ADD COLUMN IF NOT EXISTS setup_command text;
 
 CREATE UNIQUE INDEX IF NOT EXISTS github_projects_org_repo_unique
   ON github_projects (org_id, repo_id);

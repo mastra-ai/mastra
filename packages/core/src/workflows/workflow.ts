@@ -95,6 +95,7 @@ import type {
   OutputWriter,
   StepMetadata,
   WorkflowRunStartOptions,
+  ForeachOptions,
 } from './types';
 import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
 
@@ -2239,11 +2240,10 @@ export class Workflow<
           unknown extends TStepRC ? unknown : TRequestContext
         >
       : 'Previous step must return an array type',
-    opts?: {
-      concurrency: number;
-    },
+    opts?: ForeachOptions,
   ) {
     const actualStep = step as Step<any, any, any, any, any, any>;
+    const concurrency = opts?.concurrency ?? 1;
     this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
     this.serializedStepFlow.push({
       type: 'foreach',
@@ -2255,7 +2255,7 @@ export class Workflow<
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
       },
-      opts: opts ?? { concurrency: 1 },
+      opts: typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency },
     });
     this.steps[(step as any).id] = step as any;
     return this as unknown as Workflow<

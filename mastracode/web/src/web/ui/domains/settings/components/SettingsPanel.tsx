@@ -15,7 +15,9 @@ import { useAgentControllerSettings } from '../../chat/hooks/useAgentControllerS
 import { useSetAgentControllerStateMutation } from '../../chat/hooks/useAgentControllerStateMutations';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { CustomProvidersSection } from './CustomProvidersSection';
+import { IntakeSection } from './IntakeSection';
 import { ModelPacksSection } from './ModelPacksSection';
+import { ProjectSetupSection } from './ProjectSetupSection';
 import { OMSection } from './OMSection';
 import { ProvidersSection } from './ProvidersSection';
 import { BehaviorTab, GeneralTab, ModelTab } from './SettingsPanel.parts';
@@ -46,11 +48,17 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 export function SettingsPanel({ onClose }: SettingsPanelProps) {
   const [tab, setTab] = useState<Tab>('general');
   const { theme, setTheme } = useTheme();
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { activeModelId, setModel } = useChatModels();
   const { permissions, pendingPermissionCategory, setPermissionForCategory } = useChatPermissions();
   const { toast } = useToast();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const modelsQuery = useAgentControllerModels(hookArgs);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const setStateMutation = useSetAgentControllerStateMutation(hookArgs);
@@ -85,6 +93,8 @@ export function SettingsPanel({ onClose }: SettingsPanelProps) {
           <div className="flex-1 min-h-0 overflow-y-auto px-5 pb-5">
             <TabContent value="general">
               <GeneralTab theme={theme} onThemeChange={setTheme} />
+              <ProjectSetupSection />
+              <IntakeSection />
             </TabContent>
             <TabContent value="model">
               <ModelTab

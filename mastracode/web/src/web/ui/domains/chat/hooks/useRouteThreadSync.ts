@@ -34,6 +34,7 @@ export function useRouteThreadSync() {
   const { session } = createAgentControllerClient({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    scope: projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });

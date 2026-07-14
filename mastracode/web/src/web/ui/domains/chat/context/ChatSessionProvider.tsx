@@ -30,10 +30,11 @@ export function ChatSessionProvider({ children, threadId }: { children: ReactNod
 }
 
 function ChatSessionBoundary({ children, threadId }: { children: ReactNode; threadId?: string }) {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     threadId,
     baseUrl,
     enabled: sessionEnabled && Boolean(threadId),

@@ -432,7 +432,9 @@ serverEnvCommand
 
 serverEnvCommand
   .command('pull [file]')
-  .description('Pull environment variables into a local .env file (default: .env)')
+  .description(
+    'Pull project-level environment variables into a local .env file (default: .env) — use `mastra env vars pull` to include environment-scoped vars',
+  )
   .option('-c, --config <file>', 'Project config file path (default: .mastra-project.json)')
   .option('--project <id>', 'Project ID or slug (overrides linked project when MASTRA_PROJECT_ID is unset)')
   .action(wrapAction(envPullAction));

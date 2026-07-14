@@ -54,6 +54,7 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 // import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
+import type { ToolLike } from './agents/tools.js';
 
 import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
@@ -66,7 +67,7 @@ import type { ProviderAccess } from './onboarding/packs.js';
 import { getAvailableModePacks, getAvailableOmPacks } from './onboarding/packs.js';
 import {
   loadSettings,
-  MEMORY_GATEWAY_PROVIDER,
+  MASTRA_GATEWAY_PROVIDER,
   OBSERVABILITY_AUTH_PREFIX,
   resolveModelDefaults,
   resolveOmRoleModel,
@@ -172,18 +173,10 @@ export interface MastraCodeConfig {
   modes?: AgentControllerMode[];
   /** Override or extend subagent definitions. Default: explore/plan/execute */
   subagents?: AgentControllerSubagent[];
-  /** Extra tools merged into the dynamic tool set. Can be a static record or a function that receives requestContext. */
+  /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
-    | Record<
-        string,
-        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
-      >
-    | ((ctx: {
-        requestContext: RequestContext;
-      }) => Record<
-        string,
-        { execute?: (input: unknown, context?: unknown) => Promise<unknown> | unknown; [key: string]: unknown }
-      >);
+    | Record<string, ToolLike>
+    | ((ctx: { requestContext: RequestContext }) => Record<string, ToolLike> | Promise<Record<string, ToolLike>>);
   /** Tools removed from the dynamic tool set before exposure to the model */
   disabledTools?: string[];
   /** Custom storage config instead of auto-detected default */
@@ -292,7 +285,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Auth storage (shared with Claude Max / OpenAI providers and AgentController)
   const authStorage = createAuthStorage();
   const globalSettings = loadSettings(config?.settingsPath);
-  const storedGatewayKey = authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER);
+  const storedGatewayKey = authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER);
   const storedGatewayUrl = globalSettings.memoryGateway?.baseUrl;
 
   if (storedGatewayKey) {
@@ -312,12 +305,12 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       const envVars = cfg?.apiKeyEnvVar;
       providerEnvVars[provider] = Array.isArray(envVars) ? envVars[0] : envVars;
     }
-    providerEnvVars[MEMORY_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
+    providerEnvVars[MASTRA_GATEWAY_PROVIDER] ??= 'MASTRA_GATEWAY_API_KEY';
     authStorage.loadStoredApiKeysIntoEnv(providerEnvVars);
   } catch {
     // Registry unavailable — load well-known provider keys so non-gateway flows still work
     authStorage.loadStoredApiKeysIntoEnv({
-      [MEMORY_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
+      [MASTRA_GATEWAY_PROVIDER]: 'MASTRA_GATEWAY_API_KEY',
       anthropic: 'ANTHROPIC_API_KEY',
       openai: 'OPENAI_API_KEY',
       google: 'GOOGLE_GENERATIVE_AI_API_KEY',
