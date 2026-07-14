@@ -52,7 +52,7 @@ export function useWorkspaceActivity({
     refetchInterval: WORKSPACE_ACTIVITY_POLL_MS,
     retry: false,
   });
-  const threads = query.data ?? [];
+  const threads = (query.data ?? []) as Array<{ tags?: Record<string, string | undefined>; state?: string }>;
   return Object.fromEntries(
     worktreePaths.map(path => [path, threads.some(thread => isActiveWorkspaceThread(thread, path))]),
   );

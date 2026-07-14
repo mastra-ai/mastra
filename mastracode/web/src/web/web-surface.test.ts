@@ -2,7 +2,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The state-secret guard must run before any DB work; stub the side-effectful
 // imports so `resolveLinearReady` can be exercised without a real database.
-vi.mock('./sandbox-reattach-registration', () => ({ registerSandboxReattach: () => {} }));
 vi.mock('./linear/db', () => ({ ensureLinearDbReady: vi.fn().mockResolvedValue(undefined) }));
 
 import { buildIssueTriagePrompt, resolveLinearReady } from './web-surface';

@@ -31,6 +31,7 @@ import type { ApiRoute } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import { InMemoryHarness, MastraCompositeStore } from '@mastra/core/storage';
 import { DEFAULT_GOAL_JUDGE_PROMPT } from '@mastra/core/tools';
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace';
 import { DuckDBStore } from '@mastra/duckdb';
 
 import { GithubSignals } from '@mastra/github-signals';
@@ -42,6 +43,7 @@ import {
   SensitiveDataFilter,
 } from '@mastra/observability';
 
+import { createGoalJudgeToolsResolver } from './agents/goal-judge-tools.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory } from './agents/memory.js';
 import { createMastraCodeGateway, getDynamicModel, getGoalJudgeModel, resolveModel } from './agents/model.js';
@@ -53,10 +55,10 @@ import { getStaticallyLoadedInstructionPaths } from './agents/prompts/agent-inst
 // import { exploreSubagent } from './agents/subagents/explore.js';
 // import { planSubagent } from './agents/subagents/plan.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
+import { MASTRACODE_WORKSPACE_TOOLS } from './agents/tool-availability.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { ToolLike } from './agents/tools.js';
 
-import { getDynamicWorkspace, getGoalJudgeTools } from './agents/workspace.js';
 import { AuthStorage } from './auth/storage.js';
 import { DEFAULT_CONFIG_DIR, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -191,7 +193,10 @@ export interface MastraCodeConfig {
   idGenerator?: AgentControllerConfig<MastraCodeState>['idGenerator'];
   /** Override interval handlers. Default: gateway-sync */
   intervalHandlers?: IntervalHandler[];
-  /** Override the workspace. Default: local filesystem + local sandbox based on detected project */
+  /**
+   * Override the workspace. Default: minimal local filesystem workspace rooted at the detected project.
+   * Surfaces that need command execution, LSP, skills, or remote sandboxes should inject their own workspace.
+   */
   workspace?: AgentControllerConfig<MastraCodeState>['workspace'];
   /** Override the config directory name. Default: '.mastracode'. Replaces '.mastracode' in all project-level and global config paths (MCP, hooks, commands, database, skills, agent instructions). */
   configDir?: string;
@@ -253,6 +258,18 @@ function resolveCloudObservabilityConfig(
     accessToken: process.env.MASTRA_CLOUD_ACCESS_TOKEN,
     projectId: process.env.MASTRA_PROJECT_ID,
   };
+}
+
+const SDK_WORKSPACE_ID_PREFIX = 'mastra-code-workspace';
+
+function createDefaultFilesystemWorkspace(projectPath: string): Workspace<LocalFilesystem> {
+  const resolvedProjectPath = path.resolve(projectPath);
+  return new Workspace({
+    id: `${SDK_WORKSPACE_ID_PREFIX}-${resolvedProjectPath}`,
+    name: 'Mastra Code Filesystem Workspace',
+    filesystem: new LocalFilesystem({ basePath: resolvedProjectPath }),
+    tools: MASTRACODE_WORKSPACE_TOOLS,
+  });
 }
 
 /**
@@ -477,6 +494,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
 
   const memory = config?.memory === false ? undefined : (config?.memory ?? getDynamicMemory(storage, vectorStore));
+  const workspace = config?.workspace ?? createDefaultFilesystemWorkspace(project.rootPath);
 
   // MCP
   const mcpManager = config?.disableMcp ? undefined : createMcpManager(project.rootPath, configDir, config?.mcpServers);
@@ -603,7 +621,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // find_files, file_stat, lsp_inspect) rather than grading prose alone —
       // restoring the original MastraCode judge's verification ability. Resolved
       // per-request from the active workspace (mirrors `judge`).
-      tools: getGoalJudgeTools,
+      tools: createGoalJudgeToolsResolver(workspace),
     },
     inputProcessors: [
       new PlanRejectionAbortProcessor(),
@@ -795,7 +813,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     agent: codeAgent,
     subagents: config?.subagents ?? [],
     gateways: [amazonBedrockGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace(args)),
+    workspace,
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,

@@ -80,10 +80,10 @@ export const requestSandboxAccessTool = createTool({
       if (approved) {
         // Persist to controller state first (and await it) so the value is
         // committed before the next tool call re-derives the workspace's
-        // allowed paths from state. The workspace factory rebuilds the
-        // filesystem allowlist from `sandboxAllowedPaths` on every call
-        // (getDynamicWorkspace), so an unawaited setState would let that
-        // rebuild clobber the in-turn widen below before the grant lands.
+        // allowed paths from state. Surface workspace factories rebuild the
+        // filesystem allowlist from `sandboxAllowedPaths` on every call, so an
+        // unawaited setState would let that rebuild clobber the in-turn widen
+        // below before the grant lands.
         const controllerState = agentControllerCtx?.getState();
         const currentAllowed = (controllerState?.sandboxAllowedPaths as string[] | undefined) ?? [];
         const nextAllowed = currentAllowed.includes(absolutePath) ? currentAllowed : [...currentAllowed, absolutePath];

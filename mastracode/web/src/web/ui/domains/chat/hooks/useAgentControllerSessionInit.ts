@@ -1,12 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
 
 import { queryKeys } from '../../../../../shared/api/keys';
+import type { ChatSessionGithubState } from '../context/ChatSessionContext';
 import { createAgentControllerClient, requireAgentControllerSession } from '../services/agentControllerClient';
 
 interface UseAgentControllerSessionInitArgs {
   agentControllerId: string;
   resourceId: string;
   projectPath?: string;
+  github?: ChatSessionGithubState;
   baseUrl?: string;
   enabled?: boolean;
 }
@@ -15,6 +17,7 @@ export function useAgentControllerSessionInit({
   agentControllerId,
   resourceId,
   projectPath,
+  github,
   baseUrl = '',
   enabled = true,
 }: UseAgentControllerSessionInitArgs) {
@@ -27,13 +30,25 @@ export function useAgentControllerSessionInit({
   });
 
   return useQuery({
-    queryKey: [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'],
+    queryKey: [
+      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      github?.githubProjectId ?? null,
+      github?.sandboxId ?? null,
+      github?.sandboxWorkdir ?? null,
+      'init',
+    ],
     queryFn: async () => {
       const activeSession = requireAgentControllerSession(session);
       const created = await activeSession.create({ tags: projectPath ? { projectPath } : undefined });
-      if (projectPath) {
+      const state = {
+        ...(projectPath ? { projectPath } : {}),
+        ...(github?.githubProjectId ? { githubProjectId: github.githubProjectId } : {}),
+        ...(github?.sandboxId ? { sandboxId: github.sandboxId } : {}),
+        ...(github?.sandboxWorkdir ? { sandboxWorkdir: github.sandboxWorkdir } : {}),
+      };
+      if (Object.keys(state).length > 0) {
         try {
-          await activeSession.setState({ projectPath });
+          await activeSession.setState(state);
         } catch {
           // Continue connecting; session.state() remains the source of truth.
         }

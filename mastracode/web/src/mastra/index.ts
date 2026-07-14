@@ -33,6 +33,7 @@ import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
 import { handleServerError } from '../web/server-error.js';
+import { getWebWorkspace } from '../web/workspace.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
   assembleWebApiRoutes,
@@ -117,6 +118,7 @@ const authProvider = webAuthEnabled ? createWebAuthProvider(redirectUri) : undef
 // (local libSQL file).
 const prepared = await prepareAgentControllerMount({
   controllerId: CONTROLLER_ID,
+  workspace: getWebWorkspace,
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
     : {}),

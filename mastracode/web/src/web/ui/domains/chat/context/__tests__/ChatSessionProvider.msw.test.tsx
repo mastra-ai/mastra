@@ -66,6 +66,19 @@ const nextProject: Project = {
   createdAt: 2,
 };
 
+const githubProject: Project = {
+  id: 'project-github',
+  name: 'GitHub Repo',
+  source: 'github',
+  githubProjectId: 'gh-proj-1',
+  sandboxId: 'railway-sandbox-1',
+  sandboxWorkdir: '/workspace/repo',
+  selectedWorktreePath: '/workspace/repo',
+  worktrees: [{ branch: 'main', baseBranch: 'main', worktreePath: '/workspace/repo' }],
+  resourceId: RESOURCE_ID,
+  createdAt: 3,
+};
+
 function seedProject(projects: Project[] = [project], activeProject: Project = project) {
   localStorage.setItem('mastracode-projects', JSON.stringify(projects));
   localStorage.setItem('mastracode-active-project', activeProject.id);
@@ -732,6 +745,18 @@ describe('ChatSessionProvider', () => {
 
     await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
     expect(requests).toContain('setState:{"state":{"projectPath":"/tmp/mastracode-test"}}');
+  });
+
+  it('given a GitHub project, when the session connects, then it binds sandbox workspace metadata', async () => {
+    const requests: string[] = [];
+    seedProject([githubProject], githubProject);
+    useAgentControllerHandlers([], requests);
+    renderProbe();
+
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('ready'));
+    expect(requests).toContain(
+      'setState:{"state":{"projectPath":"/workspace/repo","githubProjectId":"gh-proj-1","sandboxId":"railway-sandbox-1","sandboxWorkdir":"/workspace/repo"}}',
+    );
   });
 
   it('given a different project is selected, then the new session is bound to the new workspace path', async () => {

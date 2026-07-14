@@ -31,11 +31,6 @@ import { buildIntakeRoutes } from './intake/routes.js';
 import { getLinearFeatureDiagnostics, isLinearFeatureEnabled } from './linear/config.js';
 import { ensureLinearDbReady } from './linear/db.js';
 import { buildLinearRoutes } from './linear/routes.js';
-import { registerSandboxReattach } from './sandbox-reattach-registration.js';
-
-// Wire the core workspace seam to this package's sandbox provisioning as soon
-// as the web surface is loaded, so sandbox-backed workspaces can reattach.
-registerSandboxReattach();
 
 export interface WebApiRoutesDeps {
   controller: AgentController<MastraCodeState>;

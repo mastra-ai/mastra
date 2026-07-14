@@ -1,17 +1,10 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-vi.mock('../../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-
 // Capture the workdir each SandboxFilesystem is constructed with so we can
 // assert the workspace binds to the active worktree across re-opens.
 const sandboxFsCalls: Array<{ workdir: string }> = [];
-vi.mock('../sandbox-filesystem.js', () => ({
+vi.mock('./github/sandbox-filesystem.js', () => ({
   SandboxFilesystem: class {
     workdir: string;
     constructor(opts: { workdir: string }) {
@@ -22,7 +15,7 @@ vi.mock('../sandbox-filesystem.js', () => ({
 }));
 
 const reattachCalls: string[] = [];
-vi.mock('../sandbox-reattach.js', () => ({
+vi.mock('./github/sandbox.js', () => ({
   reattachProjectSandbox: vi.fn(async (sandboxId: string) => {
     reattachCalls.push(sandboxId);
     return { executeCommand: vi.fn(), getInfo: vi.fn() };
@@ -41,7 +34,7 @@ function createSandboxRequestContext(state: Record<string, unknown>) {
 }
 
 /**
- * Minimal Mastra registry stand-in. `getDynamicWorkspace` reuses a workspace
+ * Minimal Mastra registry stand-in. `getWebWorkspace` reuses a workspace
  * only when `mastra.getWorkspaceById(id)` returns one, so the test mirrors the
  * real open/reopen lifecycle by registering each freshly-built workspace and
  * serving it back on the next resolve with the same reuse key.
@@ -70,13 +63,13 @@ afterEach(() => {
 
 describe('S5 — worktree reattach round-trip through the workspace seam', () => {
   it('binds, reuses on reopen, and rebuilds across a different worktree', async () => {
-    const { getDynamicWorkspace } = await import('../workspace.js');
+    const { getWebWorkspace } = await import('./workspace.js');
     const reg = createWorkspaceRegistry();
 
     // Resolve helper that mimics how the server registers a newly-built
     // workspace before the next request can reuse it.
     const resolve = async (state: Record<string, unknown>) => {
-      const ws = await getDynamicWorkspace({
+      const ws = await getWebWorkspace({
         requestContext: createSandboxRequestContext(state) as any,
         mastra: reg as any,
       });
@@ -123,10 +116,10 @@ describe('S5 — worktree reattach round-trip through the workspace seam', () =>
   });
 
   it('reuses a worktree workspace independently from the base-checkout workspace', async () => {
-    const { getDynamicWorkspace } = await import('../workspace.js');
+    const { getWebWorkspace } = await import('./workspace.js');
     const reg = createWorkspaceRegistry();
     const resolve = async (state: Record<string, unknown>) => {
-      const ws = await getDynamicWorkspace({
+      const ws = await getWebWorkspace({
         requestContext: createSandboxRequestContext(state) as any,
         mastra: reg as any,
       });

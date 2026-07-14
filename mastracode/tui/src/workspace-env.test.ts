@@ -6,10 +6,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: () => ({}),
-}));
-vi.mock('../../onboarding/settings.js', () => ({
+vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
   loadSettings: () => ({}),
 }));
 
@@ -55,8 +52,8 @@ describe('mastracode workspace sandbox environment', () => {
 
     try {
       process.env.MASTRACODE_TEST_ENV = 'works';
-      const { getDynamicWorkspace } = await import('../workspace.js');
-      const workspace = await getDynamicWorkspace({ requestContext: createRequestContext(tempDir) as any });
+      const { getTuiWorkspace } = await import('./workspace.js');
+      const workspace = await getTuiWorkspace({ requestContext: createRequestContext(tempDir) as any });
 
       const result = await workspace.sandbox!.executeCommand!('node -e "console.log(process.env.MASTRACODE_TEST_ENV)"');
 
@@ -71,8 +68,8 @@ describe('mastracode workspace sandbox environment', () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastracode-workspace-hooks-'));
 
     try {
-      const { getDynamicWorkspace } = await import('../workspace.js');
-      const { createToolHooks } = await import('../tools.js');
+      const { getTuiWorkspace } = await import('./workspace.js');
+      const { createToolHooks } = await import('@mastra/code-sdk/agents/tools');
       const requestContext = createRequestContext(tempDir) as any;
       const hookManager = {
         runPreToolUse: vi.fn(async () => ({ allowed: true })),
@@ -80,7 +77,7 @@ describe('mastracode workspace sandbox environment', () => {
       };
       let callCount = 0;
       await fs.writeFile(path.join(tempDir, 'hooked.txt'), 'original');
-      const workspace = await getDynamicWorkspace({ requestContext });
+      const workspace = await getTuiWorkspace({ requestContext });
       const agent = new Agent({
         id: 'mc-workspace-hook-agent',
         name: 'MC Workspace Hook Agent',
