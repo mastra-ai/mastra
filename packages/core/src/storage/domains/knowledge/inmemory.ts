@@ -133,9 +133,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async listEntities(input: ListKnowledgeRecordsInput): Promise<KnowledgeEntity[]> {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
     return [...this.#db.knowledgeEntities.values()]
       .filter(entity => !entity.mergedInto)
-      .filter(entity => isKnowledgeScopeVisible(entity.scope, input.scope))
+      .filter(entity => isKnowledgeScopeVisible(entity.scope, queryScope))
       .filter(
         entity => !input.namePrefix || entity.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
@@ -173,6 +174,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     }
     this.#db.knowledgeEntities.set(input.id, updated);
     this.#recordActivity('entity-updated', 'entity', input.id, scope);
+    const scopeChanged = knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope);
+    if (scopeChanged) {
+      this.#enqueue('entity', input.id, 'delete', createKnowledgeUlid(), existing.scope);
+      for (const fact of this.#db.knowledgeFacts.values()) {
+        if (fact.parentEntityId !== input.id) continue;
+        this.#enqueue('fact', fact.id, 'delete', createKnowledgeUlid(), fact.scope);
+        if (!fact.deletedAt) this.#enqueue('fact', fact.id, 'upsert', createKnowledgeUlid(), fact.scope);
+      }
+    }
     this.#enqueue('entity', input.id, 'upsert', updated.version, scope);
     return cloneEntity(updated);
   }
@@ -262,8 +272,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async listPages(input: Omit<ListKnowledgeRecordsInput, 'kind'>): Promise<KnowledgePage[]> {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
     return [...this.#db.knowledgePages.values()]
-      .filter(page => isKnowledgeScopeVisible(page.scope, input.scope))
+      .filter(page => isKnowledgeScopeVisible(page.scope, queryScope))
       .filter(
         page => !input.namePrefix || page.name.toLocaleLowerCase().startsWith(input.namePrefix.toLocaleLowerCase()),
       )
@@ -299,6 +310,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       await this.#replaceMentions('page', input.id, updated.body, input.resolutionScope ?? scope, scope);
     }
     this.#recordActivity('page-updated', 'page', input.id, scope);
+    if (knowledgeScopeKey(existing.scope) !== knowledgeScopeKey(scope)) {
+      this.#enqueue('page', input.id, 'delete', createKnowledgeUlid(), existing.scope);
+    }
     this.#enqueue('page', input.id, 'upsert', updated.version, scope);
     return clonePage(updated);
   }
@@ -340,23 +354,25 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async factsAbout(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, input.scope)) return { facts: [] };
+    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { facts: [] };
     return this.#paginateFacts(
       [...this.#db.knowledgeFacts.values()].filter(fact => fact.parentEntityId === terminal.id),
-      input,
+      { ...input, scope: queryScope },
     );
   }
 
   async factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
     const terminal = this.#resolveTerminalEntity(input.entityId);
-    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, input.scope)) return { facts: [] };
+    if (!terminal || !isKnowledgeScopeVisible(terminal.scope, queryScope)) return { facts: [] };
     return this.#paginateFacts(
       [...this.#db.knowledgeFacts.values()].filter(
         fact =>
           fact.parentEntityId === terminal.id || this.#db.knowledgeMentions.get(`fact:${fact.id}`)?.has(terminal.id),
       ),
-      input,
+      { ...input, scope: queryScope },
     );
   }
 
@@ -408,10 +424,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   }
 
   async search(input: SearchKnowledgeInput): Promise<SearchKnowledgeResult[]> {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
     const query = input.query.trim().toLocaleLowerCase();
     if (!query) return [];
     const results: SearchKnowledgeResult[] = [];
-    for (const entity of await this.listEntities({ scope: input.scope, limit: Number.MAX_SAFE_INTEGER })) {
+    for (const entity of await this.listEntities({ scope: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
       if (entity.name.toLocaleLowerCase().includes(query) || entity.kind.toLocaleLowerCase().includes(query)) {
         results.push({
           type: 'entity',
@@ -423,7 +440,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         });
       }
     }
-    for (const page of await this.listPages({ scope: input.scope, limit: Number.MAX_SAFE_INTEGER })) {
+    for (const page of await this.listPages({ scope: queryScope, limit: Number.MAX_SAFE_INTEGER })) {
       if (page.name.toLocaleLowerCase().includes(query) || page.body.toLocaleLowerCase().includes(query)) {
         results.push({
           type: 'page',
@@ -438,11 +455,11 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     for (const fact of this.#db.knowledgeFacts.values()) {
       if (
         !fact.deletedAt &&
-        isKnowledgeScopeVisible(fact.scope, input.scope) &&
+        isKnowledgeScopeVisible(fact.scope, queryScope) &&
         fact.text.toLocaleLowerCase().includes(query)
       ) {
         const entity = this.#db.knowledgeEntities.get(fact.parentEntityId);
-        if (entity && !entity.mergedInto && isKnowledgeScopeVisible(entity.scope, input.scope)) {
+        if (entity && !entity.mergedInto && isKnowledgeScopeVisible(entity.scope, queryScope)) {
           results.push({
             type: 'fact',
             id: fact.id,
@@ -481,8 +498,9 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     after?: string;
     limit?: number;
   }): Promise<KnowledgeActivityEvent[]> {
+    const queryScope = canonicalizeKnowledgeScope(input.scope);
     return this.#db.knowledgeActivity
-      .filter(event => isKnowledgeScopeVisible(event.scope, input.scope))
+      .filter(event => isKnowledgeScopeVisible(event.scope, queryScope))
       .filter(event => !input.after || event.id > input.after)
       .sort((a, b) => b.id.localeCompare(a.id))
       .slice(0, input.limit ?? 100)
@@ -496,9 +514,10 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       limit?: number;
     } = {},
   ): Promise<KnowledgeSemanticOutboxEntry[]> {
+    const queryScope = input.scope ? canonicalizeKnowledgeScope(input.scope) : undefined;
     return [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(entry => !input.status || entry.status === input.status)
-      .filter(entry => !input.scope || isKnowledgeScopeVisible(entry.scope, input.scope))
+      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100)
       .map(entry => ({ ...entry, scope: [...entry.scope] }));
@@ -507,6 +526,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
   async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput): Promise<KnowledgeSemanticOutboxEntry[]> {
     const now = input.now ?? new Date();
     const timeout = input.claimTimeoutMs ?? 60_000;
+    const queryScope = input.scope ? canonicalizeKnowledgeScope(input.scope) : undefined;
     const claimed = [...this.#db.knowledgeSemanticOutbox.values()]
       .filter(
         entry =>
@@ -514,7 +534,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
           (entry.status === 'processing' && entry.claimedAt && now.getTime() - entry.claimedAt.getTime() >= timeout),
       )
       .filter(entry => entry.availableAt <= now)
-      .filter(entry => !input.scope || isKnowledgeScopeVisible(entry.scope, input.scope))
+      .filter(entry => !queryScope || isKnowledgeScopeVisible(entry.scope, queryScope))
       .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id))
       .slice(0, input.limit ?? 100);
     for (const entry of claimed) {

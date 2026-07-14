@@ -68,10 +68,53 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       ]);
     });
 
+    it('deletes stale semantic scopes when records move', async () => {
+      const entity = await store.createEntity({ name: 'Movable', kind: 'task', scope: resource });
+      const fact = await store.appendFact({
+        parentEntityId: entity.id,
+        text: 'dependent fact',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      const page = await store.createPage({ name: 'Movable page', body: 'body', scope: resource });
+      const before = (await store.listSemanticOutbox()).length;
+
+      await store.updateEntity({ id: entity.id, version: entity.version, scope: ['org:acme'] });
+      await store.updatePage({ id: page.id, version: page.version, scope: ['org:acme'] });
+
+      const entries = (await store.listSemanticOutbox()).slice(before);
+      expect(entries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            documentId: `knowledge:entity:${entity.id}`,
+            operation: 'delete',
+            scope: resource,
+          }),
+          expect.objectContaining({
+            documentId: `knowledge:entity:${entity.id}`,
+            operation: 'upsert',
+            scope: ['org:acme'],
+          }),
+          expect.objectContaining({ documentId: `knowledge:fact:${fact.id}`, operation: 'delete' }),
+          expect.objectContaining({ documentId: `knowledge:fact:${fact.id}`, operation: 'upsert' }),
+          expect.objectContaining({ documentId: `knowledge:page:${page.id}`, operation: 'delete', scope: resource }),
+          expect.objectContaining({
+            documentId: `knowledge:page:${page.id}`,
+            operation: 'upsert',
+            scope: ['org:acme'],
+          }),
+        ]),
+      );
+    });
+
     it('enforces record CAS and scope structure atomically', async () => {
       await expect(store.createEntity({ name: 'Invalid', kind: 'task', scope: ['thread:t1'] })).rejects.toThrow(
         'requires resource and org',
       );
+      await expect(store.listEntities({ scope: ['thread:t1'] })).rejects.toThrow('requires resource and org');
+      await expect(store.search({ query: 'anything', scope: ['resource:mastra'] })).rejects.toThrow('requires an org');
       const page = await store.createPage({ name: 'Guide', body: 'one', scope: resource });
       await store.updatePage({ id: page.id, version: page.version, body: 'two' });
       await expect(store.updatePage({ id: page.id, version: page.version, body: 'stale' })).rejects.toThrow(
