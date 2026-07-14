@@ -81,7 +81,9 @@ const listRepoOpenIssues = vi.fn(
     nextPage: null as number | null,
   }),
 );
-const addIssueLabels = vi.fn(async (_installationId: number, _repoFullName: string, _issueNumber: number, _labels: string[]) => {});
+const addIssueLabels = vi.fn(
+  async (_installationId: number, _repoFullName: string, _issueNumber: number, _labels: string[]) => {},
+);
 const listRepoOpenPullRequests = vi.fn(async (_installationId: number, _repoFullName: string, _page: number) => ({
   pullRequests: [
     {
@@ -323,7 +325,9 @@ sandboxesRef = githubProjectSandboxes;
 // ── Test harness ─────────────────────────────────────────────────────────
 function buildApp(
   user: { workosId: string; organizationId?: string } | null,
-  options: { runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }> } = {},
+  options: {
+    runIssueTriage?: (input: any) => Promise<{ threadId?: string; projectPath?: string; branch?: string }>;
+  } = {},
 ) {
   const app = new Hono();
   app.use('*', async (c, next) => {

@@ -245,10 +245,13 @@ function useBoardHandlers(options: BoardHandlerOptions = {}): BoardState {
         nextPage: null,
       });
     }),
-    http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`, async ({ request, params }) => {
-      state.triageRequests.push({ number: Number(params.number), body: await request.json() });
-      return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
-    }),
+    http.post(
+      `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
+      async ({ request, params }) => {
+        state.triageRequests.push({ number: Number(params.number), body: await request.json() });
+        return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/prs`, () =>
       HttpResponse.json({ pullRequests: options.pullRequests ?? [], nextPage: null }),
     ),
@@ -424,7 +427,9 @@ describe('Factory Board — Intake candidates', () => {
       'href',
       'https://github.com/mastra-ai/mastra/issues/12',
     );
-    expect(within(within(intake).getByRole('article', { name: 'Fix flaky test' })).queryByText('bug')).not.toBeInTheDocument();
+    expect(
+      within(within(intake).getByRole('article', { name: 'Fix flaky test' })).queryByText('bug'),
+    ).not.toBeInTheDocument();
     // Open PRs are review work: they land in the Review column, not Intake.
     const review = column('review');
     expect(await within(review).findByText('Add factory pages')).toBeInTheDocument();
@@ -439,11 +444,14 @@ describe('Factory Board — Intake candidates', () => {
       resolveTriage = resolve;
     });
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`, async ({ request, params }) => {
-        state.triageRequests.push({ number: Number(params.number), body: await request.json() });
-        await triageStarted;
-        return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
-      }),
+      http.post(
+        `${TEST_BASE_URL}/web/github/projects/${GITHUB_PROJECT_ID}/issues/:number/triage`,
+        async ({ request, params }) => {
+          state.triageRequests.push({ number: Number(params.number), body: await request.json() });
+          await triageStarted;
+          return HttpResponse.json({ ok: true, threadId: 'thread-triage' }, { status: 202 });
+        },
+      ),
     );
     const { router } = renderAt('/factory/board');
 
@@ -470,8 +478,12 @@ describe('Factory Board — Intake candidates', () => {
     resolveTriage();
     await waitFor(() => expect(router.state.location.pathname).toBe('/factory/board'));
     await waitFor(() => {
-      expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(unfilteredRequestsBeforeResolve);
-      expect(state.issueRequests.filter(label => label === 'auto-triaged').length).toBeGreaterThan(autoTriagedRequestsBeforeResolve);
+      expect(state.issueRequests.filter(label => label === null).length).toBeGreaterThan(
+        unfilteredRequestsBeforeResolve,
+      );
+      expect(state.issueRequests.filter(label => label === 'auto-triaged').length).toBeGreaterThan(
+        autoTriagedRequestsBeforeResolve,
+      );
     });
   });
 
@@ -489,7 +501,9 @@ describe('Factory Board — Intake candidates', () => {
   });
 
   it('given an auto-triaged issue needing approval, when the Board renders, then it appears in Triage with Prepare approval and no label chips', async () => {
-    const state = useBoardHandlers({ triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged', 'needs-approval'] }] });
+    const state = useBoardHandlers({
+      triageIssues: [{ ...issues[0]!, labels: ['bug', 'auto-triaged', 'needs-approval'] }],
+    });
     renderAt('/factory/board');
 
     await waitFor(() => expect(state.issueRequests).toContain('auto-triaged'));
@@ -702,7 +716,9 @@ describe('Factory Board — persisted cards', () => {
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
     expect(captured.worktree).toMatchObject({ branch: 'factory/issue-21' });
-    expect(captured.messages[0]!.message).toContain('Prepare approval for GitHub issue #21 (https://github.com/mastra-ai/mastra/issues/21)');
+    expect(captured.messages[0]!.message).toContain(
+      'Prepare approval for GitHub issue #21 (https://github.com/mastra-ai/mastra/issues/21)',
+    );
     expect(captured.messages[0]!.message).not.toContain('Add OAuth support');
     expect(state.patches).toMatchObject([
       {
@@ -996,7 +1012,9 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.worktree).toMatchObject({ branch: 'factory/pr-34' });
     expect(captured.threadTitles).toEqual(['PR #34: Add factory pages']);
     expect(captured.messages[0]!.message).toContain('understand-pr skill');
-    expect(captured.messages[0]!.message).toContain('GitHub pull request #34 (https://github.com/mastra-ai/mastra/pull/34)');
+    expect(captured.messages[0]!.message).toContain(
+      'GitHub pull request #34 (https://github.com/mastra-ai/mastra/pull/34)',
+    );
     expect(captured.messages[0]!.message).toContain('gh pr checkout 34');
     expect(captured.messages[0]!.message).not.toContain('Add factory pages');
     expect(captured.messages[0]!.message).not.toContain('feat/factory-pages');
@@ -1052,7 +1070,9 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages).toHaveLength(1);
     // The base issue context survives; the typed text guides the run instead
     // of the explicit skill directive.
-    expect(captured.messages[0]!.message).toContain('Investigate GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)');
+    expect(captured.messages[0]!.message).toContain(
+      'Investigate GitHub issue #12 (https://github.com/mastra-ai/mastra/issues/12)',
+    );
     expect(captured.messages[0]!.message).toContain('Guidance for this run: Write a failing test first');
     expect(captured.messages[0]!.message).not.toContain('Fix flaky test');
     expect(captured.messages[0]!.message).not.toContain('understand-issue skill');

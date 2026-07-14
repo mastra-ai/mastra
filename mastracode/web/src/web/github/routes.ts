@@ -252,7 +252,10 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           .select()
           .from(githubProjects)
           .where(
-            and(eq(githubProjects.installationId, input.installationId), eq(githubProjects.repoFullName, input.repository)),
+            and(
+              eq(githubProjects.installationId, input.installationId),
+              eq(githubProjects.repoFullName, input.repository),
+            ),
           );
         if (!project) throw new Error(`GitHub project not found for ${input.repository}`);
         const projectPath = input.projectPath ?? computeWorktreePath(project.sandboxWorkdir, branch);
@@ -634,7 +637,12 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           branch,
         });
         return c.json(
-          { ok: true, threadId: result.threadId, projectPath: result.projectPath ?? projectPath, branch: result.branch ?? branch },
+          {
+            ok: true,
+            threadId: result.threadId,
+            projectPath: result.projectPath ?? projectPath,
+            branch: result.branch ?? branch,
+          },
           202,
         );
       },

@@ -53,5 +53,7 @@ export function useWorkspaceActivity({
     retry: false,
   });
   const threads = query.data ?? [];
-  return Object.fromEntries(worktreePaths.map(path => [path, threads.some(thread => isActiveWorkspaceThread(thread, path))]));
+  return Object.fromEntries(
+    worktreePaths.map(path => [path, threads.some(thread => isActiveWorkspaceThread(thread, path))]),
+  );
 }

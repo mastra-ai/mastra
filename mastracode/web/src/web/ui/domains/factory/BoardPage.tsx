@@ -12,7 +12,11 @@ import { SkeletonRows } from '../../ui';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
-import { useProjectIssuesQuery, useProjectPullRequestsQuery, useStartIssueTriageMutation } from './hooks/useFactoryData';
+import {
+  useProjectIssuesQuery,
+  useProjectPullRequestsQuery,
+  useStartIssueTriageMutation,
+} from './hooks/useFactoryData';
 import { useIntakeConfigQuery } from './hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearData';
 import { useStartFactoryRun } from './hooks/useStartFactoryRun';
@@ -45,7 +49,9 @@ function hasLabel(labels: readonly string[], label: string): boolean {
 }
 
 function metadataLabels(metadata: Record<string, unknown>): string[] {
-  return Array.isArray(metadata.labels) ? metadata.labels.filter((label): label is string => typeof label === 'string') : [];
+  return Array.isArray(metadata.labels)
+    ? metadata.labels.filter((label): label is string => typeof label === 'string')
+    : [];
 }
 
 function issueTriageThreadTags(issueNumber: number): Record<string, string> {
@@ -471,7 +477,10 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                 <CandidateCard
                   key={candidate.sourceKey}
                   candidate={candidate}
-                  starting={(start.isPending && start.variables?.branch === candidate.branch) || (triage.isPending && triage.variables?.number === candidate.issue?.number)}
+                  starting={
+                    (start.isPending && start.variables?.branch === candidate.branch) ||
+                    (triage.isPending && triage.variables?.number === candidate.issue?.number)
+                  }
                   disabled={!runEnabled || start.isPending || triage.isPending}
                   onRun={prompt =>
                     start.mutate({
