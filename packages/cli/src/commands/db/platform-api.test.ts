@@ -99,6 +99,31 @@ describe('attachDatabase', () => {
       'TURSO_DATABASE_URL is already set on this project',
     );
   });
+
+  it('surfaces field-level validation errors on 400 (e.g. bad --region)', async () => {
+    mockPlatformFetch.mockResolvedValue(
+      jsonResponse(400, {
+        detail: 'The request body contains invalid fields',
+        errors: [{ field: 'regionId', message: 'Invalid option: expected one of "ams"|"arn"|"fra"' }],
+      }),
+    );
+
+    const { attachDatabase } = await import('./platform-api.js');
+    await expect(
+      attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db', regionId: 'eu' }),
+    ).rejects.toThrow(
+      'The request body contains invalid fields: regionId — Invalid option: expected one of "ams"|"arn"|"fra"',
+    );
+  });
+
+  it('leaves plain-detail 400s unchanged', async () => {
+    mockPlatformFetch.mockResolvedValue(jsonResponse(400, { detail: 'Provider is unavailable' }));
+
+    const { attachDatabase } = await import('./platform-api.js');
+    await expect(attachDatabase('tok', 'org-1', 'proj-1', { kind: 'turso', name: 'db' })).rejects.toThrow(
+      /^Provider is unavailable$/,
+    );
+  });
 });
 
 describe('detachDatabase', () => {
