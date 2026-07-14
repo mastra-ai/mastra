@@ -321,32 +321,34 @@ export function getAttributes(span: AnyExportedSpan): Attributes {
 
   // Add tool-specific attributes using OTEL conventions
   if (
-    (span.type === SpanType.TOOL_CALL ||
-      span.type === SpanType.MCP_TOOL_CALL ||
-      span.type === SpanType.PROVIDER_TOOL_CALL) &&
-    span.attributes
+    span.type === SpanType.TOOL_CALL ||
+    span.type === SpanType.MCP_TOOL_CALL ||
+    span.type === SpanType.PROVIDER_TOOL_CALL
   ) {
-    // Tool identification
+    // Tool identification (entityName/entityId are always set by producers)
     attributes[ATTR_GEN_AI_TOOL_NAME] = span.entityName ?? span.entityId;
 
-    const toolCallId = (span.attributes as { toolCallId?: string })?.toolCallId ?? span.metadata?.toolCallId;
+    const toolCallId =
+      (span.attributes as { toolCallId?: string } | undefined)?.toolCallId ?? span.metadata?.toolCallId;
     if (toolCallId) {
       attributes['gen_ai.tool.call.id'] = toolCallId;
     }
 
-    // MCP-specific attributes
-    if (span.type === SpanType.MCP_TOOL_CALL) {
-      const mcpAttrs = span.attributes as MCPToolCallAttributes;
-      if (mcpAttrs.mcpServer) {
-        attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
-      }
-    } else {
-      const toolAttrs = span.attributes as ToolCallAttributes;
-      if (toolAttrs.toolDescription) {
-        attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
-      }
-      if (toolAttrs.toolType) {
-        attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+    // Attribute-dependent fields (description, type, MCP server)
+    if (span.attributes) {
+      if (span.type === SpanType.MCP_TOOL_CALL) {
+        const mcpAttrs = span.attributes as MCPToolCallAttributes;
+        if (mcpAttrs.mcpServer) {
+          attributes[ATTR_SERVER_ADDRESS] = mcpAttrs.mcpServer;
+        }
+      } else {
+        const toolAttrs = span.attributes as ToolCallAttributes;
+        if (toolAttrs.toolDescription) {
+          attributes[ATTR_GEN_AI_TOOL_DESCRIPTION] = toolAttrs.toolDescription;
+        }
+        if (toolAttrs.toolType) {
+          attributes['gen_ai.tool.type'] = toolAttrs.toolType;
+        }
       }
     }
   }
