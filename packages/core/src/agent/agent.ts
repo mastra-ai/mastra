@@ -3084,26 +3084,6 @@ export class Agent<
   }
 
   /**
-   * Release resources held by this Agent.  Tears down any ephemeral Mastra
-   * (scorer hook + workers) created for standalone usage.
-   *
-   * Call this when a standalone Agent (one that was never registered on a
-   * Mastra instance via `{ agents }`) will no longer be used.  Without this,
-   * the module-level scorer-hook emitter retains a reference to the ephemeral
-   * Mastra, preventing garbage collection (#19404).
-   *
-   * After calling `dispose()`, the Agent can still accept new `stream()` /
-   * `generate()` calls — a fresh ephemeral Mastra will be created on demand.
-   */
-  dispose(): void {
-    if (this.#ephemeralMastra) {
-      this.#ephemeralMastra.__unregisterHooks();
-      void this.#ephemeralMastra.stopWorkers().catch(() => {});
-      this.#ephemeralMastra = undefined;
-    }
-  }
-
-  /**
    * Registers the Mastra instance with the agent.
    * @internal
    */
@@ -3111,8 +3091,9 @@ export class Agent<
     this.#mastra = mastra;
 
     // Tear down any ephemeral Mastra: we now have a real one. Workers stop in
-    // the background — we don't await to keep this hot path sync-ish. Release
-    // its global scorer hook synchronously so it can't outlive the instance.
+    // the background — we don't await to keep this hot path sync-ish.
+    // (`__unregisterHooks` is a no-op for ephemeral instances, which never
+    // register the scorer hook — see `__ephemeral` in the Mastra config.)
     if (this.#ephemeralMastra) {
       this.#ephemeralMastra.__unregisterHooks();
       void this.#ephemeralMastra.stopWorkers().catch(() => {});
@@ -6474,6 +6455,10 @@ export class Agent<
       logger: false,
       storage: new InMemoryStore(),
       pubsub: new EventEmitterPubSub(),
+      // Skip module-level scorer-hook registration: the hook can never resolve
+      // a scorer on this registry-less instance, and it would pin the whole
+      // ephemeral graph against GC for the process lifetime (#19404).
+      __ephemeral: true,
     });
     await ephemeral.startWorkers();
     this.#ephemeralMastra = ephemeral;
@@ -6885,17 +6870,6 @@ export class Agent<
             error: err instanceof Error ? err.message : String(err),
           });
         }
-      }
-
-      // Standalone-agent hook cleanup (#19404): when the Agent has no real Mastra
-      // attached, the ephemeral Mastra's scorer hook stays registered on the
-      // module-level mitt emitter indefinitely, preventing GC.  Unregister it
-      // here so each standalone call is self-contained.  The next call to
-      // #getOrCreateEphemeralMastra() will lazily rebuild it.
-      if (!this.#mastra && this.#ephemeralMastra) {
-        this.#ephemeralMastra.__unregisterHooks();
-        void this.#ephemeralMastra.stopWorkers().catch(() => {});
-        this.#ephemeralMastra = undefined;
       }
     }
   }
