@@ -97,7 +97,9 @@ function remapFilePartsToV4(options: LanguageModelV4CallOptions): LanguageModelV
     return { ...message, content };
   });
 
-  return promptModified ? { ...options, prompt } : options;
+  // The map only replaces file parts with file parts, but TS widens the
+  // mapped message union across roles, so restore the prompt type.
+  return promptModified ? { ...options, prompt: prompt as typeof options.prompt } : options;
 }
 
 function remapCallOptionsToV4(options: LanguageModelV4CallOptions): LanguageModelV4CallOptions {
