@@ -1,5 +1,31 @@
 # @internal/playground
 
+## 1.19.0-alpha.13
+
+### Patch Changes
+
+- Updated dependencies [[`aa38805`](https://github.com/mastra-ai/mastra/commit/aa38805b878b827403be785eb90688d7172f5a40), [`2d22570`](https://github.com/mastra-ai/mastra/commit/2d22570c7dfdd02123d0ecc529efb05ccba2d9fc), [`4378341`](https://github.com/mastra-ai/mastra/commit/43783412df5ea3dd35f5b1f6e4851e79c346fc89)]:
+  - @mastra/core@1.51.0-alpha.12
+  - @mastra/client-js@1.32.0-alpha.12
+  - @mastra/react@1.2.5-alpha.12
+  - @mastra/playground-ui@41.0.0-alpha.12
+
+## 1.19.0-alpha.12
+
+### Minor Changes
+
+- Added compact, auto-growing text areas for string fields in Studio schema forms. ([#19417](https://github.com/mastra-ai/mastra/pull/19417))
+
+### Patch Changes
+
+- Fixed trace detail pages so long timelines and span details scroll independently within the viewport. ([#19419](https://github.com/mastra-ai/mastra/pull/19419))
+
+- Updated dependencies [[`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`7bf8550`](https://github.com/mastra-ai/mastra/commit/7bf8550aec81984fe16e1a77825ecf0318e27ec1), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59), [`899997e`](https://github.com/mastra-ai/mastra/commit/899997e52c6a1f05089f3e7ead3ebd64b6036eea)]:
+  - @mastra/core@1.51.0-alpha.11
+  - @mastra/react@1.2.5-alpha.11
+  - @mastra/playground-ui@41.0.0-alpha.11
+  - @mastra/client-js@1.32.0-alpha.11
+
 ## 1.19.0-alpha.11
 
 ### Patch Changes

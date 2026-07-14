@@ -29,6 +29,7 @@
 
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { RedisStreamsPubSub } from '@mastra/redis-streams';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
 import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
 import { handleServerError } from '../web/server-error.js';
@@ -40,6 +41,9 @@ import {
   resolveIntakeReady,
   resolveLinearReady,
 } from '../web/web-surface.js';
+import type { WebApiRoutesDeps } from '../web/web-surface.js';
+
+type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
 
 const CONTROLLER_ID = 'code';
 
@@ -73,6 +77,26 @@ const intakeReady = await resolveIntakeReady(githubReady || linearReady);
 // Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
 const factoryReady = await resolveFactoryReady(githubReady);
 
+// Distributed pub/sub: when `REDIS_URL` is set, events (streams, workflows,
+// signals) ride Redis Streams so multiple web server processes can share one
+// event bus. RedisStreamsPubSub also implements LeaseProvider, so passing
+// `crossProcessPubSub` lets the controller drop its file-based thread locks in
+// favor of pubsub-coordinated leases. Without `REDIS_URL` (bare local dev) the
+// in-process default applies.
+const redisUrl = process.env.REDIS_URL;
+const pubsub = redisUrl ? new RedisStreamsPubSub({ url: redisUrl }) : undefined;
+if (redisUrl) {
+  // Redact credentials before logging (REDIS_URL may embed a password).
+  let redisTarget = 'redis';
+  try {
+    const parsed = new URL(redisUrl);
+    redisTarget = `${parsed.protocol}//${parsed.host}`;
+  } catch {
+    // Unparseable URL — RedisStreamsPubSub will surface the real error; keep the log generic.
+  }
+  console.log(`[PubSub] REDIS_URL set — event bus on Redis Streams (${redisTarget}), cross-process leases enabled.`);
+}
+
 const webAuthEnabled = isWebAuthEnabled();
 
 const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
@@ -99,7 +123,8 @@ const prepared = await prepareAgentControllerMount({
   // Linear tools are resolved per session: exposed only when the session's
   // project belongs to an org with an active Linear connection.
   ...(linearReady ? { extraTools: buildLinearAgentTools } : {}),
-  buildApiRoutes: ({ controller, authStorage }) => [
+  ...(pubsub ? { pubsub, crossProcessPubSub: true } : {}),
+  buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
     // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.

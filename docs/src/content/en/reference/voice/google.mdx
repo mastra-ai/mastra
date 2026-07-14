@@ -17,12 +17,25 @@ import { GoogleVoice } from '@mastra/voice-google'
 // Initialize with default configuration (uses GOOGLE_API_KEY environment variable)
 const voice = new GoogleVoice()
 
-// Text-to-Speech
+// Text-to-Speech (plain text)
 const audioStream = await voice.speak('Hello, world!', {
   languageCode: 'en-US',
   audioConfig: {
     audioEncoding: 'LINEAR16',
   },
+})
+
+// Text-to-Speech with SSML
+const ssmlStream = await voice.speak('ignored', {
+  input: {
+    ssml: '<speak>Take <say-as interpret-as="unit">5 mg</say-as> daily.</speak>',
+  },
+})
+
+// Text-to-Speech with Gemini-TTS model
+const geminiStream = await voice.speak('Hello from Gemini TTS!', {
+  voice: { name: 'Kore', modelName: 'gemini-2.5-flash-preview-tts' },
+  input: { prompt: 'Warm, calm tone.' },
 })
 
 // Speech-to-Text
@@ -162,25 +175,39 @@ Converts text to speech using Google Cloud Text-to-Speech service.
     isOptional: true,
     properties: [
       {
-        type: 'object',
+        type: 'GoogleSpeakOptions',
         parameters: [
           {
             name: 'speaker',
             type: 'string',
-            description: 'Voice ID to use for this request',
+            description: 'Voice ID to use for this request.',
             isOptional: true,
           },
           {
             name: 'languageCode',
             type: 'string',
             description:
-              "Language code for the voice (e.g., 'en-US'). Defaults to the language code from the speaker ID or 'en-US'",
+              "Language code for the voice (e.g., 'en-US'). Defaults to the language code derived from the speaker ID, or 'en-US'.",
+            isOptional: true,
+          },
+          {
+            name: 'input',
+            type: "ISynthesizeSpeechRequest['input']",
+            description:
+              'Rich input object passed through to the Google Cloud TTS API. Supports `ssml`, `markup`, `prompt` (Gemini-TTS style steering), `customPronunciations`, and `multiSpeakerMarkup`. When provided without `text`, `ssml`, `markup`, or `multiSpeakerMarkup`, the positional `input` argument is used as the `text` field automatically.',
+            isOptional: true,
+          },
+          {
+            name: 'voice',
+            type: "ISynthesizeSpeechRequest['voice']",
+            description:
+              "Voice configuration merged on top of defaults (`name` and `languageCode`). Supports `modelName` (e.g., `'gemini-2.5-flash-preview-tts'`) and `multiSpeakerVoiceConfig`.",
             isOptional: true,
           },
           {
             name: 'audioConfig',
             type: "ISynthesizeSpeechRequest['audioConfig']",
-            description: 'Audio configuration options from Google Cloud Text-to-Speech API',
+            description: 'Audio configuration options from Google Cloud Text-to-Speech API.',
             isOptional: true,
             defaultValue: "{ audioEncoding: 'LINEAR16' }",
           },
