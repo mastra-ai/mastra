@@ -75,7 +75,7 @@ These four types are top-level entries in \`graph\`. They can NOT nest inside ea
 
 The parallel step's output is \`{ "summarise": { "text": "..." }, "count-lines": <its outputSchema> }\`. Downstream steps that need one branch's result pluck it via \`stepResults.<parallelId>.<childId>.<field>\` in a mapping.
 
-**\`foreach\` — run the same step over every item in an array.** Emit:
+**\`foreach\` — run the same step over every item in an array.** THIS IS THE ONLY WAY to run a step per-item. If the user says "for each", "for every", "on each", "one per", "iterate over", "run X on all the Ys", "map over" — the answer is \`foreach\`. Do not try to fake it with an agent that "loops internally"; do not try to unroll the array into N sibling steps. Emit:
 
 \`\`\`json
 {
@@ -85,7 +85,13 @@ The parallel step's output is \`{ "summarise": { "text": "..." }, "count-lines":
 }
 \`\`\`
 
-The step BEFORE a \`foreach\` must produce an array. If the source of the array is a specific field of a prior step (\`{ files: [...] }\`), insert a \`mapping\` immediately before the \`foreach\` that projects the array into the top-level (its \`mapConfig\` output shape should be an array — do this by using a single-key mapping and letting the surrounding \`foreach\` iterate that key, OR by ensuring an upstream tool naturally returns an array).
+The rules:
+- The step IMMEDIATELY BEFORE a \`foreach\` MUST produce an ARRAY as its top-level output. Not an object with an array field — the array itself. Foreach iterates \`previous.output\`, not \`previous.output.<somekey>\`.
+- Because a \`mapping\` step always outputs an OBJECT (its top-level keys are \`mapConfig\`'s keys), a mapping CANNOT be the step before a \`foreach\` — a mapping's output is never a raw array. So: put the \`foreach\` directly after a step (tool or agent) whose output shape IS the array. If no such upstream is available, don't emit \`foreach\` — either ask for a tool that returns the array, or fall back to one \`code-agent\` step whose prompt iterates internally.
+- The inner \`step\` is a SINGLE step-like entry: \`{ "type": "agent", ... }\` or \`{ "type": "tool", ... }\`. No nested \`foreach\` / \`parallel\` / \`mapping\`.
+- The inner step receives ONE ELEMENT of the array at a time as its input. If the element is a string and the inner step is an agent, the agent gets that string coerced to the user message. If the element is an object, the agent gets the JSON of that object.
+- Output is an array of the inner step's outputs, order-preserved. Agent inner steps ⇒ \`{ text: string }[]\`. Tool inner steps ⇒ \`toolOutputSchema[]\`.
+- \`opts.concurrency\` (optional, default 1) controls how many elements run at once.
 
 **\`sleep\` — wait a fixed number of milliseconds.** Static only; a function form exists in code but does NOT round-trip.
 
@@ -157,6 +163,29 @@ Discovery returns (excerpts):
 - (If a "security-expert" agent isn't registered) agent steps reference \`code-agent\`, outputShape \`{ text: string }\`. Use that instead.
 
 If discovery shows the workspace tools return raw strings (not objects), templates can interpolate the string directly. If discovery shows a richer object shape, pluck specific fields via \`stepResults.<id>.<field>\`. **Always read the schema first; the worked-example shapes above are illustrative — confirm against your discovery result.**
+
+# Worked example: foreach — run an agent on each item of a list
+
+User says: "for every open GitHub issue in the repo, have code-agent write a one-line triage note. id: triage-issues."
+
+Discovery must surface an upstream that returns an ARRAY as its top-level output. If \`github_list_open_issues\`'s \`outputSchema\` is \`{ title: string, body: string }[]\` (a raw array), the graph is trivial:
+
+\`\`\`json
+[
+  { "type": "tool", "id": "list-issues", "toolId": "github_list_open_issues" },
+  {
+    "type": "foreach",
+    "step": { "type": "agent", "id": "triage-one", "agentId": "code-agent" },
+    "opts": { "concurrency": 3 }
+  }
+]
+\`\`\`
+
+Each iteration: \`triage-one\` receives one \`{ title, body }\` object (JSON-stringified as the agent's user message) and returns \`{ text }\`. The foreach's output is \`{ text }[]\`, one per issue, in list order. That becomes the workflow's final output (\`outputSchema\` should therefore be \`{ type: "array", items: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } }\`).
+
+If instead discovery shows \`github_list_open_issues\` returns \`{ issues: [...] }\` (array nested inside an object), \`foreach\` CANNOT iterate — because a mapping cannot un-wrap the array into a top-level array output (mappings always produce objects keyed by \`mapConfig\`). In that case, you have two honest choices: (a) tell the user you need a tool variant whose output IS the array and stop; (b) skip \`foreach\` and use one \`code-agent\` step with a prompt that walks the array itself — it will handle iteration inside its own reasoning, at the cost of a single LLM call instead of N parallel ones.
+
+Never emit a graph that pretends \`foreach\` will unwrap an object. It won't.
 
 # Summary rules
 

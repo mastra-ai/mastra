@@ -16,29 +16,78 @@ interface AddStoredWorkflowable {
   }) => Promise<void>;
 }
 
+// Single-step-like entries — the shapes that can appear at the top level AND
+// nested inside `parallel.steps` / `foreach.step`.
+const agentEntry = z.object({
+  type: z.literal('agent'),
+  id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
+  agentId: z.string().describe('Id of an agent registered on this Mastra instance (see list-available-agents).'),
+});
+const toolEntry = z.object({
+  type: z.literal('tool'),
+  id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
+  toolId: z.string().describe('Id of a tool registered on this Mastra instance (see list-available-tools).'),
+});
+const mappingEntry = z.object({
+  type: z.literal('mapping'),
+  id: z.string().describe('Step id — kebab-case, unique within the workflow.'),
+  mapConfig: z
+    .string()
+    .describe(
+      'A JSON-ENCODED STRING (not an object) of an object whose top-level keys become the mapping output fields. Each value is one of: { "template": "<text with ${placeholders}>" }, { "value": <constant> }, { "step": "<stepId>", "path": "<field.path>" }, { "initData": "<workflowId>", "path": "<field.path>" }, { "requestContextPath": "<field.path>" }.',
+    ),
+});
+const singleStepEntry = z.discriminatedUnion('type', [agentEntry, toolEntry, mappingEntry]);
+
+// Full top-level entry union — includes container step types (parallel, foreach,
+// sleep, sleepUntil) in addition to the single-step-like entries above.
+const graphEntry = z.discriminatedUnion('type', [
+  agentEntry,
+  toolEntry,
+  mappingEntry,
+  z.object({
+    type: z.literal('parallel'),
+    steps: z
+      .array(singleStepEntry)
+      .describe(
+        'Children run in parallel on the same input. Each child MUST be agent/tool/mapping — no nested containers.',
+      ),
+  }),
+  z.object({
+    type: z.literal('foreach'),
+    step: singleStepEntry.describe("The inner step, run once per element of the previous step's array output."),
+    opts: z
+      .object({ concurrency: z.number().int().positive() })
+      .optional()
+      .describe('Optional concurrency control; defaults to 1 (sequential).'),
+  }),
+  z.object({
+    type: z.literal('sleep'),
+    id: z.string(),
+    duration: z.number().describe('Milliseconds to wait. Static number only — function form does not round-trip.'),
+  }),
+  z.object({
+    type: z.literal('sleepUntil'),
+    id: z.string(),
+    date: z
+      .string()
+      .describe('ISO 8601 wall-clock date to wait until. Static string only — function form does not round-trip.'),
+  }),
+]);
+
 export const saveWorkflowTool = createTool({
   id: 'save-workflow',
   description:
-    'Persist a static workflow definition and live-register it on the running Mastra instance. After this returns, the workflow is immediately runnable. Use this once you have the full definition; do not call it incrementally.',
+    'Persist a static workflow definition and live-register it on the running Mastra instance. Supports all seven step types the engine can rehydrate: agent, tool, mapping, parallel, foreach, sleep, sleepUntil. Conditional and loop entries are the only step types NOT supported (their predicates cannot round-trip in v1). After this returns, the workflow is immediately runnable. Call it exactly once with the complete definition; there is no incremental save API.',
   inputSchema: z.object({
     id: z.string().describe('Workflow id — kebab-case, descriptive.'),
     description: z.string().optional(),
     inputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow input.'),
     outputSchema: z.any().describe('JSON Schema (Draft 2020-12) for the workflow output.'),
     graph: z
-      .array(z.any())
+      .array(graphEntry)
       .describe(
-        [
-          'The static workflow graph as SerializedStepFlowEntry[]. Each top-level entry is one of:',
-          '  - { type: "agent", id, agentId }',
-          '  - { type: "tool", id, toolId }',
-          '  - { type: "mapping", id, mapConfig: <JSON-string of object with template/value/step/initData/requestContextPath sources> }',
-          '  - { type: "parallel", steps: SingleStepEntry[] } — children must be agent/tool/mapping (no nested containers)',
-          '  - { type: "foreach", step: { type: "agent"|"tool"|"mapping", ... }, opts: { concurrency: number } } — previous step MUST output an array',
-          '  - { type: "sleep", id, duration: number } — milliseconds; static number only',
-          '  - { type: "sleepUntil", id, date: string | Date } — ISO date; static value only',
-          'Do NOT emit conditional or loop entries; their predicates cannot be rehydrated in v1.',
-        ].join('\n'),
+        'The workflow as an ordered array of step entries. Every one of the seven step types is a first-class option here; the discriminated-union schema lists them explicitly.',
       ),
   }),
   outputSchema: z.object({
