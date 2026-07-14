@@ -995,6 +995,24 @@ describe('createMcpManager', () => {
       expect(manager.getServerStatuses()[0]!.needsAuth).toBe(true);
     });
 
+    it('flags a bare url server whose connect error carries only the bearer error code', async () => {
+      setupConfig({ mcpServers: { api: { url: 'https://api.example.com/mcp' } } });
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: {},
+          // The SDK flattens 401 bodies without the status code — only the
+          // RFC 6750 bearer error code survives in the message
+          errors: { api: 'Streamable HTTP error: Error POSTing to endpoint: {"error":"invalid_token"}' },
+        });
+        this.disconnect = vi.fn().mockResolvedValue(undefined);
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(manager.getServerStatuses()[0]!.needsAuth).toBe(true);
+    });
+
     it('does not flag non-auth connect failures', async () => {
       setupConfig({
         mcpServers: {

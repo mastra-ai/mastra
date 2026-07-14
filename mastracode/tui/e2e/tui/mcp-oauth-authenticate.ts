@@ -1,0 +1,112 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { z } from 'zod/v3';
+import { createGlobalPatchScope } from './global-patches.js';
+import { startMcpOAuthFixtureServer } from './mcp-oauth-fixture.js';
+import type { McE2eInProcessApp, McE2eScenario, McE2eTerminal } from './types.js';
+
+function extractAuthorizationUrl(terminal: McE2eTerminal): string {
+  const view = terminal.serialize().view;
+  const match = view.match(/http:\/\/127\.0\.0\.1:\d+\/authorize\?\S+/);
+  if (!match) {
+    throw new Error(`authorization URL not found on screen:\n${view}`);
+  }
+  return match[0];
+}
+
+export const mcpOauthAuthenticateScenario = {
+  name: 'mcp-oauth-authenticate',
+  description:
+    'Authenticates a bare-url OAuth-protected HTTP MCP server from the /mcp selector, with the harness acting as the browser.',
+  testName: 'authenticates an OAuth MCP server from the interactive selector overlay',
+  projectFixture: 'long-branch',
+  prepare({ projectDir }) {
+    mkdirSync(join(projectDir, '.mastracode'), { recursive: true });
+  },
+  async inProcessApp({ projectDir, startMastraCodeApp }): Promise<McE2eInProcessApp> {
+    const patches = createGlobalPatchScope();
+    // Never spawn a real browser from the e2e run — the harness fetches the URL.
+    patches.setEnv('MASTRA_MCP_OAUTH_NO_BROWSER', '1');
+    const fixtureServer = await startMcpOAuthFixtureServer({
+      name: 'mc-e2e-oauth-mcp',
+      registerTools: server => {
+        server.tool(
+          'oauth_probe',
+          'Return the deterministic MCP OAuth e2e probe payload.',
+          { label: z.string().default('oauth') },
+          input => ({
+            content: [{ type: 'text', text: `MC_MCP_OAUTH_TOOL:${String(input.label)}:ok` }],
+          }),
+        );
+      },
+    });
+
+    writeFileSync(
+      join(projectDir, '.mastracode', 'mcp.json'),
+      JSON.stringify({ mcpServers: { oauth_server: { url: fixtureServer.url } } }, null, 2),
+    );
+
+    try {
+      const app = await startMastraCodeApp({
+        config: {
+          disableHooks: true,
+          disableMcp: false,
+          unixSocketPubSub: false,
+        },
+      });
+
+      return {
+        stop: async () => {
+          try {
+            await patches.stopApp(app.stop);
+          } finally {
+            await fixtureServer.close();
+          }
+        },
+      };
+    } catch (error) {
+      await fixtureServer.close();
+      patches.restore();
+      throw error;
+    }
+  },
+  async run({ terminal, runtime }) {
+    runtime.startLiveOutput(terminal);
+
+    // Wide terminal so the authorization URL renders unwrapped on one line.
+    terminal.resize(400, 50);
+
+    await runtime.waitForScreenText(/MCP: Failed to connect to "oauth_server"/i, terminal, 15_000);
+
+    terminal.submit('/mcp');
+    await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 8_000);
+
+    // Open the sub-menu; Authenticate is the first action.
+    terminal.write('\r');
+    await runtime.waitForScreenText(/Authenticate/i, terminal, 8_000);
+    terminal.write('\r');
+
+    // Close the overlay so the printed authorization URL is visible on screen.
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
+    await runtime.waitForScreenText(/MCP: To authenticate "oauth_server", open:/i, terminal, 15_000);
+
+    // Act as the browser: follow the authorize redirect back to the loopback
+    // callback server started by the client's OAuth flow.
+    const authorizationUrl = extractAuthorizationUrl(terminal);
+    const callbackResponse = await fetch(authorizationUrl, { redirect: 'follow' });
+    if (!callbackResponse.ok) {
+      throw new Error(`OAuth callback failed: HTTP ${callbackResponse.status}`);
+    }
+
+    await runtime.waitForScreenText(/MCP: Authenticated "oauth_server" — 1 tool\(s\)/i, terminal, 15_000);
+
+    terminal.submit('/mcp');
+    await runtime.waitForScreenText(/oauth_server \[http\] connected.*1 tools/i, terminal, 8_000);
+    runtime.printScreen('mcp selector after oauth authenticate', terminal);
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
+    terminal.keyCtrlC();
+  },
+} satisfies McE2eScenario;
