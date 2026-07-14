@@ -11,16 +11,25 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { MemoryRouter, useLocation } from 'react-router';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/web-ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../../e2e/web-ui/render';
+import { queryKeys } from '../../../../../../shared/api/keys';
 import { ToastProvider } from '../../../../ui';
 import { ChatSessionProvider } from '../../../chat/context/ChatSessionProvider';
 import { ActiveProjectProvider } from '../../context/ActiveProjectProvider';
 import type { Project } from '../../services/projects';
+import { playDoneSound } from '../../../settings/services/doneSound';
 import { loadProjects, saveProjects } from '../../services/projects';
 import { WorkspacesSection } from '../WorkspacesSection';
+
+// The completion sound synthesizes audio via AudioContext, which jsdom
+// doesn't provide; mock playback so specs can assert the notification fired.
+vi.mock('../../../settings/services/doneSound', async importOriginal => ({
+  ...(await importOriginal<typeof import('../../../settings/services/doneSound')>()),
+  playDoneSound: vi.fn(),
+}));
 
 const ORIGIN = TEST_BASE_URL;
 const GITHUB_PROJECT_ID = 'github-project-1';
@@ -89,6 +98,12 @@ function useAgentControllerHandlers(): { stateUpdates: Array<Record<string, unkn
     }),
     http.get(`${API}/sessions/:resourceId/permissions`, () => HttpResponse.json({ categories: {}, tools: {} })),
     http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
+    // Entering an empty worktree creates a thread; handle it here so tests
+    // that don't care about the create flow still settle deterministically
+    // (tests that count creates register their own handler on top).
+    http.post(`${API}/sessions/:resourceId/threads`, () =>
+      HttpResponse.json({ id: 'thread-generic', title: 'New thread', resourceId: 'resource-gh' }),
+    ),
     http.get(`${API}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${API}/sessions/:resourceId/stream`, () => sse()),
   );
@@ -148,6 +163,18 @@ describe('WorkspacesSection', () => {
     expect(inactiveRow.parentElement?.parentElement).not.toContainElement(nested);
   });
 
+  it('given a feature worktree is active, then children nest under its row', async () => {
+    seedActiveProject({ ...githubProject, selectedWorktreePath: '/sandbox/mastra-worktrees/feat-ui' });
+    useAgentControllerHandlers();
+
+    renderSection(<div data-testid="nested-threads">Threads</div>);
+
+    const activeRow = await screen.findByRole('button', { name: 'feat-ui' });
+    expect(activeRow).toHaveAttribute('aria-current', 'true');
+    const nested = screen.getByTestId('nested-threads');
+    expect(activeRow.parentElement?.parentElement).toContainElement(nested);
+  });
+
   it('does not render for local projects', async () => {
     seedActiveProject(localProject);
     useAgentControllerHandlers();
@@ -155,6 +182,100 @@ describe('WorkspacesSection', () => {
     renderSection();
 
     await waitFor(() => expect(screen.queryByText('Workspaces')).not.toBeInTheDocument());
+  });
+
+  it('shows an activity indicator on workspaces with an active thread', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    // One thread listing covers every worktree: each thread carries its
+    // worktree's projectPath tag and a server-annotated run state.
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            { id: 'thread-main', title: 'Main work', tags: { projectPath: '/sandbox/mastra' }, state: 'idle' },
+            {
+              id: 'thread-feat',
+              title: 'Feature work',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+              state: 'active',
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderSection();
+
+    expect(await screen.findByRole('status', { name: 'Agent working in feat-ui' })).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Agent working in main' })).not.toBeInTheDocument();
+  });
+
+  it('given a run that finishes, then the dot turns solid and chimes, and opening the workspace dismisses it', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    vi.mocked(playDoneSound).mockClear();
+    let featState: 'active' | 'idle' = 'active';
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            {
+              id: 'thread-feat',
+              title: 'Feature work',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+              state: featState,
+            },
+          ],
+        }),
+      ),
+    );
+    const { client } = renderSection();
+
+    expect(await screen.findByRole('status', { name: 'Agent working in feat-ui' })).toBeInTheDocument();
+
+    // The run finishes; the next activity poll reports the thread idle.
+    featState = 'idle';
+    await client.invalidateQueries({ queryKey: queryKeys.agentControllerActivity('code', 'resource-gh') });
+
+    const doneDot = await screen.findByRole('status', { name: 'Agent finished in feat-ui' });
+    expect(doneDot).not.toHaveClass('animate-pulse');
+    expect(screen.queryByRole('status', { name: 'Agent working in feat-ui' })).not.toBeInTheDocument();
+    expect(playDoneSound).toHaveBeenCalledTimes(1);
+
+    // Opening the workspace marks it seen and clears the indicator.
+    await userEvent.click(screen.getByRole('button', { name: /feat-ui/ }));
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Agent finished in feat-ui' })).not.toBeInTheDocument(),
+    );
+    // Let the open-thread flow settle so its requests can't leak into later tests.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-feat'));
+  });
+
+  it('given workspaces that are idle from the start, then no done indicator or chime fires', async () => {
+    seedActiveProject(githubProject);
+    useAgentControllerHandlers();
+    vi.mocked(playDoneSound).mockClear();
+    server.use(
+      http.get(`${API}/sessions/:resourceId/threads`, () =>
+        HttpResponse.json({
+          threads: [
+            {
+              id: 'thread-feat',
+              title: 'Feature work',
+              tags: { projectPath: '/sandbox/mastra-worktrees/feat-ui' },
+              state: 'idle',
+            },
+          ],
+        }),
+      ),
+    );
+    const { client } = renderSection();
+
+    await screen.findByRole('button', { name: 'feat-ui' });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(screen.queryByRole('status', { name: 'Agent finished in feat-ui' })).not.toBeInTheDocument();
+    expect(playDoneSound).not.toHaveBeenCalled();
   });
 
   it('selects a workspace row and rebinds the session to its worktree path', async () => {
@@ -168,6 +289,8 @@ describe('WorkspacesSection', () => {
       expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-ui' } }),
     );
     await waitFor(() => expect(loadProjects()[0]?.selectedWorktreePath).toBe('/sandbox/mastra-worktrees/feat-ui'));
+    // Let the open-thread flow settle so its requests can't leak into later tests.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
 
   it('opens the most recent thread of the new worktree when switching workspaces', async () => {
@@ -230,14 +353,14 @@ describe('WorkspacesSection', () => {
   it('stays on non-thread routes when switching workspaces', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
-    renderSection(undefined, '/factory/intake');
+    renderSection(undefined, '/factory/board');
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'feat-ui' })).toHaveAttribute('aria-current', 'true'),
     );
-    expect(screen.getByTestId('location')).toHaveTextContent('/factory/intake');
+    expect(screen.getByTestId('location')).toHaveTextContent('/factory/board');
   });
 
   it('creates a new workspace and selects it', async () => {
@@ -268,6 +391,8 @@ describe('WorkspacesSection', () => {
     await waitFor(() =>
       expect(stateUpdates).toContainEqual({ state: { projectPath: '/sandbox/mastra-worktrees/feat-new' } }),
     );
+    // Let the open-thread flow settle so its requests can't leak into later tests.
+    await waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent('/threads/thread-generic'));
   });
 
   it('shows an error and keeps the current selection when create fails', async () => {

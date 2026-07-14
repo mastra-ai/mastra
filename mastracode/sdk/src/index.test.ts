@@ -135,7 +135,7 @@ vi.mock('./onboarding/settings.js', () => ({
     },
     observability: { resources: {}, localTracing: false },
   })),
-  MEMORY_GATEWAY_PROVIDER: 'mastra',
+  MASTRA_GATEWAY_PROVIDER: 'mastra',
   resolveModelDefaults: vi.fn(() => ({ build: '', plan: '', fast: '' })),
   resolveOmModel: vi.fn(() => ''),
   resolveOmRoleModel: vi.fn(() => ''),

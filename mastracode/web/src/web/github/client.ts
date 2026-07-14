@@ -251,6 +251,29 @@ export interface IssuePage {
   nextPage: number | null;
 }
 
+export interface ListRepoOpenIssuesOptions {
+  label?: string;
+}
+
+export async function addIssueLabels(
+  installationId: number,
+  repoFullName: string,
+  issueNumber: number,
+  labels: string[],
+): Promise<void> {
+  const parts = splitRepoFullName(repoFullName);
+  if (!parts) return;
+  const uniqueLabels = [...new Set(labels.map(label => label.trim()).filter(Boolean))];
+  if (uniqueLabels.length === 0) return;
+  const octokit = getInstallationOctokit(installationId);
+  await octokit.issues.addLabels({
+    owner: parts.owner,
+    repo: parts.repo,
+    issue_number: issueNumber,
+    labels: uniqueLabels,
+  });
+}
+
 /**
  * List one page of a repo's open issues through an installation token. The
  * issues API also returns pull requests, so those are filtered out (the filter
@@ -261,6 +284,7 @@ export async function listRepoOpenIssues(
   installationId: number,
   repoFullName: string,
   page: number,
+  options: ListRepoOpenIssuesOptions = {},
 ): Promise<IssuePage> {
   const parts = splitRepoFullName(repoFullName);
   if (!parts) return { issues: [], nextPage: null };
@@ -269,6 +293,7 @@ export async function listRepoOpenIssues(
     owner: parts.owner,
     repo: parts.repo,
     state: 'open',
+    labels: options.label,
     per_page: LIST_PAGE_SIZE,
     page,
   });

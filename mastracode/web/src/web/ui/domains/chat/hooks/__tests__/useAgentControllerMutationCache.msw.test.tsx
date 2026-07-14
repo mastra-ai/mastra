@@ -48,7 +48,7 @@ describe('agent-controller mutation hooks cache behavior', () => {
     await waitFor(() => expect(result.current.settingsQuery.data?.notifications).toBe('off'));
 
     await act(async () => {
-      await result.current.sendMessage.mutateAsync('hello');
+      await result.current.sendMessage.mutateAsync({ text: 'hello' });
     });
     await waitForMutationsIdle(client);
 
@@ -127,7 +127,9 @@ describe('agent-controller mutation hooks cache behavior', () => {
     );
 
     const { result, client } = renderHookWithProviders(() => {
-      const settingsQuery = useAgentControllerSettings(hookArgs);
+      // Settings are session-scoped, so the query must carry the same projectPath
+      // scope as the mutation for invalidation to reach it.
+      const settingsQuery = useAgentControllerSettings({ ...hookArgs, projectPath: '/sandbox/mastra' });
       const threadsQuery = useAgentControllerThreads({ ...hookArgs, projectPath: '/sandbox/mastra' });
       const createThread = useCreateAgentControllerThreadMutation({ ...hookArgs, projectPath: '/sandbox/mastra' });
       return { settingsQuery, threadsQuery, createThread };

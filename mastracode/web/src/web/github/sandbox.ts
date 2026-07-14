@@ -719,7 +719,7 @@ export async function commitAll(
 export class WorktreeError extends Error {
   constructor(
     message: string,
-    readonly code: 'invalid-branch' | 'worktree-failed',
+    readonly code: 'invalid-branch' | 'worktree-failed' | 'setup-failed',
   ) {
     super(message);
     this.name = 'WorktreeError';
@@ -837,6 +837,38 @@ export async function ensureWorktree(
   }
 
   return { worktreePath, branch, baseBranch, reused: false };
+}
+
+/**
+ * Run the project's setup command (e.g. `pnpm i && pnpm build`) inside a
+ * freshly created worktree. Called before the worktree is handed to any agent
+ * run so the checkout is ready to build/test. A non-zero exit is a hard error —
+ * starting agent work in a half-set-up tree is worse than failing the request.
+ *
+ * Security model: the command is intentionally arbitrary shell — that is the
+ * feature (install deps, build, seed fixtures). It is only configurable by
+ * authenticated org members (the settings route is gated by
+ * `resolveOrgTenant` + org-scoped project lookup, with length and
+ * control-character validation), and it executes exclusively inside the
+ * project's isolated sandbox — the same environment where org members already
+ * run arbitrary shell via the agent's command tool. It never runs on the web
+ * server host, so it grants no privilege beyond what sandbox access already
+ * provides.
+ *
+ * @param sandbox       live sandbox containing the worktree
+ * @param worktreePath  the server-computed worktree path the command runs in
+ * @param command       the org-configured setup shell command
+ */
+export async function runWorktreeSetup(
+  sandbox: MaterializationSandbox,
+  worktreePath: string,
+  command: string,
+): Promise<void> {
+  const result = await sh(sandbox, `cd ${shellQuote(worktreePath)} && { ${command}\n}`);
+  if (result.exitCode !== 0) {
+    const detail = (result.stderr.trim() || result.stdout.trim()).slice(-2000);
+    throw new WorktreeError(`Setup command failed (exit ${result.exitCode}): ${detail}`, 'setup-failed');
+  }
 }
 
 /**

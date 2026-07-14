@@ -2,11 +2,13 @@ import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMPro
 import { useReducer, useRef } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
-import type { TranscriptState, UsageSnapshot } from '../services/transcript';
+import type { OutgoingFile, TranscriptState, UsageSnapshot } from '../services/transcript';
 
 export interface SessionStateSnapshot {
   omProgress?: AgentControllerOMProgress;
   tokenUsage?: UsageSnapshot;
+  /** Whether the agent is mid-run per the server snapshot (initial hydration). */
+  running?: boolean;
 }
 
 export function useAgentControllerTranscript({
@@ -24,6 +26,7 @@ export function useAgentControllerTranscript({
       threadId: initialThreadId,
       omProgress: initialState?.omProgress,
       usage: initialState?.tokenUsage,
+      running: initialState?.running,
     }),
   );
   const transcriptRef = useRef<TranscriptState>(transcript);
@@ -35,6 +38,7 @@ export function useAgentControllerTranscript({
       threadId,
       omProgress: state?.omProgress,
       usage: state?.tokenUsage,
+      running: state?.running,
     });
   };
 
@@ -43,6 +47,7 @@ export function useAgentControllerTranscript({
       type: 'syncState',
       omProgress: state.omProgress,
       usage: state.tokenUsage,
+      running: state.running,
     });
   };
 
@@ -50,8 +55,8 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'event', event });
   };
 
-  const localUser = (text: string, steer?: boolean) => {
-    dispatch({ type: 'localUser', text, steer });
+  const localUser = (text: string, steer?: boolean, files?: OutgoingFile[]) => {
+    dispatch({ type: 'localUser', text, steer, files });
   };
 
   const resolvePrompt = (id: string) => {

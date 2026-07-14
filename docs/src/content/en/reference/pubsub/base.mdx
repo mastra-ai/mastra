@@ -106,6 +106,16 @@ Waits for any in-flight deliveries to settle. Call this before shutdown to avoid
 await pubsub.flush()
 ```
 
+#### `clearTopic(topic)`
+
+Deletes all retained state for a topic — cached history, persistent stream entries, and consumer groups — once no more events will be published to it. Mastra's run lifecycles (durable agents and the evented workflow engine) call this automatically when a run reaches a terminal state, so per-run topics don't accumulate on transports that retain messages.
+
+The default implementation is a no-op: transports that retain nothing per topic (such as `EventEmitterPubSub`) have nothing to clear. Backends that persist messages, like [`RedisStreamsPubSub`](/reference/pubsub/redis-streams), override it. The contract is best-effort — implementations log failures rather than throwing, because callers invoke it fire-and-forget at cleanup boundaries.
+
+```typescript
+await pubsub.clearTopic('workflow.events.v2.run-123')
+```
+
 ### Replay methods
 
 These methods support resuming a stream after a disconnect. The default implementations fall back to a regular `subscribe`, so backends without history support behave as live-only. [`CachingPubSub`](/reference/pubsub/caching-pubsub) overrides them to replay cached events.

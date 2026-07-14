@@ -18,7 +18,7 @@ import type {
 } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import { AuthStorage } from '../auth/storage.js';
-import { getCustomProviderId, loadSettings, MEMORY_GATEWAY_PROVIDER } from '../onboarding/settings.js';
+import { getCustomProviderId, loadSettings, MASTRA_GATEWAY_PROVIDER } from '../onboarding/settings.js';
 import {
   buildAnthropicOAuthFetch,
   claudeCodeMiddleware,
@@ -153,8 +153,8 @@ function getProviderAuthKey(providerId: string): string | undefined {
   return authStorage.getStoredApiKey(authProviderId)?.trim() || undefined;
 }
 
-export function resolveAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: string): GatewayAuthResult | undefined {
-  return MastraCodeGateway.resolveProviderAuth(request, memoryGatewayApiKey);
+export function resolveAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
+  return MastraCodeGateway.resolveProviderAuth(request, mastraGatewayApiKey);
 }
 
 function getGatewayProviderKey(gatewayId: string, providerId: string): string {
@@ -265,8 +265,13 @@ export class MastraCodeGateway extends MastraModelGateway {
     this.#settingsPath = settingsPath;
   }
 
+  static getMastraGatewayApiKey(): string | undefined {
+    return authStorage.getStoredApiKey(MASTRA_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+  }
+
+  /** @deprecated Renamed to {@link MastraCodeGateway.getMastraGatewayApiKey}. */
   static getMemoryGatewayApiKey(): string | undefined {
-    return authStorage.getStoredApiKey(MEMORY_GATEWAY_PROVIDER) ?? process.env['MASTRA_GATEWAY_API_KEY'];
+    return MastraCodeGateway.getMastraGatewayApiKey();
   }
 
   /**
@@ -293,9 +298,9 @@ export class MastraCodeGateway extends MastraModelGateway {
     );
   }
 
-  static resolveProviderAuth(request: GatewayAuthRequest, memoryGatewayApiKey?: string): GatewayAuthResult | undefined {
-    if (request.gatewayId === 'mastra' && memoryGatewayApiKey) {
-      return { apiKey: memoryGatewayApiKey, source: 'gateway' };
+  static resolveProviderAuth(request: GatewayAuthRequest, mastraGatewayApiKey?: string): GatewayAuthResult | undefined {
+    if (request.gatewayId === 'mastra' && mastraGatewayApiKey) {
+      return { apiKey: mastraGatewayApiKey, source: 'gateway' };
     }
 
     const storedCred = authStorage.get(getAuthProviderId(request.providerId));

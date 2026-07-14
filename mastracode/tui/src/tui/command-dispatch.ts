@@ -38,7 +38,7 @@ import {
   handleBrowserCommand,
   handleThemeCommand,
   handleUpdateCommand,
-  handleMemoryGatewayCommand,
+  handleMastraGatewayCommand,
   handleApiKeysCommand,
   handlePluginsCommand,
   handleFeedbackCommand,
@@ -58,7 +58,16 @@ import {
 } from './goal-input-lock.js';
 import type { TUIState } from './state.js';
 
-const TRACKED_COMMANDS = new Set(['login', 'models', 'mode', 'memory-gateway', 'custom-providers', 'threads', 'new']);
+const TRACKED_COMMANDS = new Set([
+  'login',
+  'models',
+  'mode',
+  'gateway',
+  'memory-gateway',
+  'custom-providers',
+  'threads',
+  'new',
+]);
 
 /**
  * Dispatch a slash command input to the appropriate handler.
@@ -244,8 +253,9 @@ export async function dispatchSlashCommand(
     case 'update':
       await handleUpdateCommand(ctx);
       return true;
+    case 'gateway':
     case 'memory-gateway':
-      await handleMemoryGatewayCommand(ctx);
+      await handleMastraGatewayCommand(ctx);
       return true;
     case 'api-keys':
       await handleApiKeysCommand(buildCtx());

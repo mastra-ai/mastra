@@ -588,6 +588,23 @@ export interface Config<
    * @default { durableAgents: 'off' }
    */
   recovery?: MastraRecoveryConfig;
+
+  /**
+   * Marks this instance as an internally-owned ephemeral Mastra — e.g. the
+   * fallback instance a standalone `Agent` lazily creates so its
+   * prepare-stream workflow has a pubsub-equipped Mastra to run on.
+   *
+   * Ephemeral instances skip module-level scorer-hook registration: they have
+   * no agent/scorer/editor registries for the hook to resolve against, so the
+   * hook could never persist a score — but the module-level emitter would
+   * retain the instance (and everything it references) for the lifetime of
+   * the process, leaking one Mastra graph per discarded standalone Agent
+   * (#19404).
+   *
+   * @internal Not part of the public API — do not set this on application
+   * Mastra instances; it silently disables scorer persistence.
+   */
+  __ephemeral?: boolean;
 }
 
 /**
@@ -1640,11 +1657,16 @@ export class Mastra<
     }
 
     // `registerHook` adds to a module-level emitter that never drops handlers on
-    // its own. Keep the reference so short-lived internal/ephemeral Mastras can
-    // release it on teardown (see `__unregisterHooks`); otherwise their handler
-    // fires on every scorer run for the lifetime of the process.
-    this.#onScorerHook = createOnScorerHook(this);
-    registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+    // its own. Keep the reference so short-lived internal Mastras can release it
+    // on teardown (see `__unregisterHooks`); otherwise their handler fires on
+    // every scorer run for the lifetime of the process. Ephemeral instances
+    // (standalone-Agent fallbacks) skip registration entirely: their hook can
+    // never resolve a scorer, and the emitter would pin the instance against GC
+    // for the process lifetime (#19404).
+    if (!config?.__ephemeral) {
+      this.#onScorerHook = createOnScorerHook(this);
+      registerHook(AvailableHooks.ON_SCORER_RUN, this.#onScorerHook);
+    }
 
     /*
       Initialize observability with Mastra context (after storage configured)
