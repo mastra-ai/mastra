@@ -35,6 +35,9 @@ importers:
       '@mastra/react':
         specifier: link:../../client-sdks/react
         version: link:../../client-sdks/react
+      '@mastra/redis-streams':
+        specifier: link:../../pubsub/redis-streams
+        version: link:../../pubsub/redis-streams
       '@octokit/auth-app':
         specifier: ^8.0.0
         version: 8.2.0

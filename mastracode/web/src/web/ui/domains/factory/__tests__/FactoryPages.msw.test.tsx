@@ -577,7 +577,7 @@ describe('Factory Board — Intake candidates', () => {
     renderAt('/factory/board');
 
     const intake = await screen.findByTestId('board-column-intake');
-    // Issue #15 is still a candidate; issue #12 lives on only as a card in In progress.
+    // Issue #15 is still a candidate; issue #12 lives on as a card in Building.
     expect(await within(intake).findByText('Improve docs')).toBeInTheDocument();
     expect(within(intake).queryByText('Fix flaky test')).not.toBeInTheDocument();
     expect(within(column('triage')).queryByText('Fix flaky test')).not.toBeInTheDocument();
@@ -607,7 +607,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(reviewCard).getByText('Parallel effort')).toBeInTheDocument();
     // Each card chips the item's other stage.
     expect(within(executeCard).getByText('Review')).toBeInTheDocument();
-    expect(within(reviewCard).getByText('In progress')).toBeInTheDocument();
+    expect(within(reviewCard).getByText('Building')).toBeInTheDocument();
   });
 
   it('given a work item with sessions, when the Board renders, then the card links to each role thread', async () => {
@@ -654,7 +654,7 @@ describe('Factory Board — persisted cards', () => {
     expect(within(column('intake')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to In progress', async () => {
+  it('given a card in Triage, when Investigate is chosen, then triage exits and the card moves to Building', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
@@ -713,6 +713,54 @@ describe('Factory Board — persisted cards', () => {
     ]);
   });
 
+  it('given a card in Triage, when Move to Planning is chosen from the menu, then the card lands in the Planning swimlane', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['triage'],
+        }),
+      ],
+    });
+    renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-triage');
+    await userEvent.click(within(column('triage')).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Move to Planning' }));
+
+    await waitFor(() => expect(state.patches).toEqual([{ id: 'wi-1', stages: ['planning'] }]));
+    expect(within(column('planning')).getByText('Fix flaky test')).toBeInTheDocument();
+    expect(within(column('triage')).queryByTestId('work-item-card')).not.toBeInTheDocument();
+  });
+
+  it('given a card in Planning, when Investigate is chosen, then planning exits and the card moves to Building', async () => {
+    const state = useBoardHandlers({
+      workItems: [
+        makeWorkItem({
+          id: 'wi-1',
+          title: 'Fix flaky test',
+          source: 'github-issue',
+          sourceKey: 'github-issue:12',
+          stages: ['planning'],
+          metadata: { number: 12 },
+        }),
+      ],
+    });
+    const captured = useFactoryRunHandlers('factory-issue-12');
+    const { router } = renderAt('/factory/board');
+
+    await screen.findByTestId('board-column-planning');
+    await userEvent.click(within(column('planning')).getByRole('button', { name: 'Actions for Fix flaky test' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Investigate' }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/threads/thread-factory'));
+    expect(captured.worktree).toMatchObject({ branch: 'factory/issue-12' });
+    expect(state.patches).toMatchObject([{ id: 'wi-1', stages: ['execute'] }]);
+  });
+
   it('given a card in Intake, when Mark done is chosen from the menu, then the stages PATCH to done and the card moves', async () => {
     const state = useBoardHandlers({
       workItems: [
@@ -767,7 +815,7 @@ describe('Factory Board — persisted cards', () => {
 });
 
 describe('Factory Board — drag and drop', () => {
-  it('given a persisted card in Intake, when dragged to In progress, then the stages PATCH and the card moves optimistically', async () => {
+  it('given a persisted card in Intake, when dragged to Building, then the stages PATCH and the card moves optimistically', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({ id: 'wi-1', title: 'Fix flaky test', source: 'github-issue', sourceKey: 'github-issue:12' }),
@@ -805,7 +853,7 @@ describe('Factory Board — drag and drop', () => {
     expect(within(column('execute')).queryByTestId('work-item-card')).not.toBeInTheDocument();
   });
 
-  it('given an unmaterialized candidate, when dragged to In progress, then a work item is filed with that stage and no run starts', async () => {
+  it('given an unmaterialized candidate, when dragged to Building, then a work item is filed with that stage and no run starts', async () => {
     const state = useBoardHandlers({ issues });
     renderAt('/factory/board');
 
@@ -874,7 +922,7 @@ function useFactoryRunHandlers(branchDir: string): CapturedRun {
 }
 
 describe('Factory Board — investigate flow', () => {
-  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into In progress, and the app navigates to the thread', async () => {
+  it('given an issue candidate, when Investigate is clicked, then a worktree, thread, and prompt are created, a work item materializes into Building, and the app navigates to the thread', async () => {
     const state = useBoardHandlers({ issues });
     const captured = useFactoryRunHandlers('factory-issue-12');
     const { router } = renderAt('/factory/board');
@@ -1010,7 +1058,7 @@ describe('Factory Board — investigate flow', () => {
     expect(captured.messages[0]!.message).not.toContain('understand-issue skill');
   });
 
-  it('given a persisted issue card without a work session, when Investigate is chosen, then the run starts and the card PATCHes into In progress with the session ref', async () => {
+  it('given a persisted issue card without a work session, when Investigate is chosen, then the run starts and the card PATCHes into Building with the session ref', async () => {
     const state = useBoardHandlers({
       workItems: [
         makeWorkItem({
