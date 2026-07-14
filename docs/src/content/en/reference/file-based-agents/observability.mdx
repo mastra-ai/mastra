@@ -1,0 +1,38 @@
+---
+title: "Observability | File-based Agents"
+description: Configure observability by file convention with observability.ts.
+packages:
+  - "@mastra/core"
+  - "@mastra/observability"
+---
+
+# Observability
+
+Mastra configures [observability](/docs/observability/overview) from an `observability.ts` file directly under `src/mastra/`. The file default-exports an `Observability` instance that sets up tracing, logging, metrics, and feedback for the project.
+
+Use this page for the file-based convention. For the signal model, exporters, storage, and multi-config setup, see [Observability overview](/docs/observability/overview) and [Observability configuration](/docs/observability/config).
+
+## Quickstart
+
+Create `src/mastra/observability.ts` and default-export an `Observability` instance:
+
+```typescript title="src/mastra/observability.ts"
+import { MastraStorageExporter, Observability } from '@mastra/observability'
+
+export default new Observability({
+  configs: {
+    default: {
+      serviceName: 'mastra',
+      exporters: [new MastraStorageExporter()],
+    },
+  },
+})
+```
+
+## Observability and storage
+
+`observability.ts` configures which signals are collected and where they're exported. [`storage.ts`](/reference/file-based-agents/storage) configures the project store that can persist observability records. For storage support by signal, see [Observability storage](/docs/observability/storage).
+
+## Precedence with code
+
+Code-registered observability wins over `observability.ts`. Use `observability.ts` when one project-wide configuration is enough; use code registration when setup depends on runtime wiring in `src/mastra/index.ts`.

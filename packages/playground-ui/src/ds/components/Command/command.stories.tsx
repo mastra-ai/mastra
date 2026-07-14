@@ -45,7 +45,7 @@ const InlineResult = ({
       {icon}
     </span>
     <span className="flex min-w-0 flex-col gap-0.5">
-      <span className="truncate text-ui-sm font-medium leading-ui-sm text-neutral6">{title}</span>
+      <span className="truncate text-ui-sm leading-ui-sm font-medium text-neutral6">{title}</span>
       <span className="truncate text-ui-xs leading-ui-xs text-neutral3">{subtitle}</span>
     </span>
   </CommandItem>
@@ -53,7 +53,7 @@ const InlineResult = ({
 
 export const Default: Story = {
   render: () => (
-    <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+    <Command className="w-100 rounded-lg border border-border1 shadow-elevated">
       <CommandInput placeholder="Type a command or search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -96,7 +96,7 @@ export const Default: Story = {
 
 export const InlineVercelStyle: Story = {
   render: () => (
-    <div className="w-[24rem] overflow-hidden rounded-xl border border-border1 bg-surface2 shadow-dialog">
+    <div className="w-sm overflow-hidden rounded-xl border border-border1 bg-surface2 shadow-dialog">
       <Command className="rounded-none bg-surface2">
         <CommandInput
           placeholder="Find..."
@@ -177,9 +177,9 @@ export const WithDialog: Story = {
 
     return (
       <>
-        <p className="text-sm text-neutral3 mb-4">
+        <p className="mb-4 text-sm text-neutral3">
           Press{' '}
-          <kbd className="pointer-events-none inline-flex h-5 select-none items-center gap-1 rounded border border-border1 bg-surface4 px-1.5 font-mono text-[10px] font-medium text-neutral5">
+          <kbd className="pointer-events-none inline-flex h-5 items-center gap-1 rounded border border-border1 bg-surface4 px-1.5 font-mono text-[10px] font-medium text-neutral5 select-none">
             <span className="text-xs">⌘</span>K
           </kbd>{' '}
           or click the button below
@@ -230,7 +230,7 @@ export const WithDialog: Story = {
 
 export const Empty: Story = {
   render: () => (
-    <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+    <Command className="w-100 rounded-lg border border-border1 shadow-elevated">
       <CommandInput placeholder="Search..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -241,7 +241,7 @@ export const Empty: Story = {
 
 export const WithShortcuts: Story = {
   render: () => (
-    <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+    <Command className="w-100 rounded-lg border border-border1 shadow-elevated">
       <CommandInput placeholder="Type a command..." />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
@@ -300,7 +300,7 @@ export const SearchOnly: Story = {
     const filteredItems = items.filter(item => item.toLowerCase().includes(search.toLowerCase()));
 
     return (
-      <Command className="rounded-lg border border-border1 shadow-elevated w-[400px]">
+      <Command className="w-100 rounded-lg border border-border1 shadow-elevated">
         <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>

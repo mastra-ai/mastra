@@ -12,6 +12,10 @@ Mastra's logging system captures function execution, input data, and output resp
 
 When deploying to the Mastra platform, logs are shown in the dashboard. In self-hosted or custom environments, logs can be directed to files or external services depending on the configured transports.
 
+<Inject>
+  **For AI agents:** Run `npx mastra api log list '{"level":"error","page":0,"perPage":50}'` to inspect recent error logs directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with observability logging configured; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api log list --schema` before constructing different filters. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
+</Inject>
+
 ## Configuring logs with `PinoLogger`
 
 When [initializing a new Mastra project](/guides/getting-started/quickstart) using the CLI, `PinoLogger` is included by default.
@@ -28,11 +32,7 @@ export const mastra = new Mastra({
 })
 ```
 
-:::info
-
 Visit [PinoLogger](/reference/logging/pino-logger) for all available configuration options.
-
-:::
 
 ## Logging to observability storage
 

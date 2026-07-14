@@ -20,6 +20,10 @@ const IGNORED_ERROR_PATTERNS = [
   /service-worker/i,
   /ResizeObserver loop/i,
   /Content Security Policy/i,
+  // Storage Access API calls can be denied in CI without breaking docs pages.
+  /requestStorageAccess: Permission denied\./i,
+  // Browser feature probes can be blocked by Permissions Policy in CI.
+  /Permissions policy violation: compute-pressure is not allowed in this document\./i,
   // Browser's generic "Failed to load resource" message (no URL context) —
   // third-party scripts (Vercel analytics, HubSpot, etc.) fail locally.
   // Real broken resources are caught by network-level checks in smoke tests.

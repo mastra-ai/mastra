@@ -3,7 +3,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
-const tabListVariants = cva('flex items-center relative text-ui-lg', {
+const tabListVariants = cva('relative flex items-center text-ui-lg', {
   variants: {
     variant: {
       line: 'w-max min-w-full border-b border-border1',
@@ -61,7 +61,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
           <BaseTabs.Indicator
             className={cn(
               'absolute bottom-0 left-0 bg-[var(--tab-indicator-color,var(--neutral3))]',
-              'w-[var(--active-tab-width)] h-0.5',
+              'h-0.5 w-[var(--active-tab-width)]',
               'transition-all duration-200 ease-in-out',
             )}
             style={{ transform: 'translateX(var(--active-tab-left))' }}
@@ -71,7 +71,7 @@ export const TabList = ({ children, className, variant, sticky, style }: TabList
           <BaseTabs.Indicator
             className={cn(
               'absolute top-1/2 left-0 z-0 rounded-full bg-[var(--tab-indicator-color,var(--surface4))]',
-              'w-[var(--active-tab-width)] h-[calc(100%-0.5rem)]',
+              'h-[calc(100%-0.5rem)] w-[var(--active-tab-width)]',
               'transition-all duration-200 ease-in-out',
             )}
             style={{ transform: 'translateY(-50%) translateX(var(--active-tab-left))' }}

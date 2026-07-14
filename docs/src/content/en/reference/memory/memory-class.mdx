@@ -74,7 +74,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             name: 'lastMessages',
             type: 'number | false',
             description:
-              'Number of most recent messages to include in context. Set to `false` to disable loading conversation history into context. Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To prevent saving new messages, use the `readOnly` option instead.',
+              'Number of most recent messages to include in context. Set to `false` to disable the message history feature entirely (messages are not loaded into context or saved). Use `Number.MAX_SAFE_INTEGER` to retrieve all messages with no limit. To load messages without saving new ones, use the `readOnly` option.',
             isOptional: true,
             defaultValue: '10',
           },

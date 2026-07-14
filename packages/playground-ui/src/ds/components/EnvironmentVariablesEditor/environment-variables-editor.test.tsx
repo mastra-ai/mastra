@@ -110,6 +110,29 @@ function CompoundTestEditor({
   );
 }
 
+function HidePasteHintEditor() {
+  const editor = useEnvironmentVariablesEditor({ initialRows: [{ key: 'PUBLIC_URL', value: 'https://example.com' }] });
+
+  return <EnvironmentVariablesEditor editor={editor} hidePasteHint />;
+}
+
+function ReadOnlyRootEditor() {
+  const editor = useEnvironmentVariablesEditor({ initialRows: [{ key: 'PUBLIC_URL', value: 'https://example.com' }] });
+
+  return <EnvironmentVariablesEditor editor={editor} readOnly />;
+}
+
+function CustomPasteHintEditor() {
+  const editor = useEnvironmentVariablesEditor({ initialRows: [{ key: '', value: '' }] });
+
+  return (
+    <EnvironmentVariablesEditor.Root editor={editor} hidePasteHint>
+      <EnvironmentVariablesEditor.Rows />
+      <EnvironmentVariablesEditor.PasteHint>Paste your whole .env here</EnvironmentVariablesEditor.PasteHint>
+    </EnvironmentVariablesEditor.Root>
+  );
+}
+
 describe('EnvironmentVariablesEditor', () => {
   it('masks values by default and reveals only the selected row', () => {
     render(
@@ -232,6 +255,29 @@ describe('EnvironmentVariablesEditor', () => {
     expect(onSave).toHaveBeenCalledWith({
       API_KEY: 'secret',
     });
+  });
+
+  it('renders a paste hint by default and lets it be hidden', () => {
+    const { rerender } = render(<TestEditor />);
+
+    expect(screen.getByText('Tip: paste a .env file into any field to import it')).toBeDefined();
+
+    rerender(<HidePasteHintEditor />);
+
+    expect(screen.queryByText('Tip: paste a .env file into any field to import it')).toBeNull();
+  });
+
+  it('omits the paste hint in read-only mode', () => {
+    render(<ReadOnlyRootEditor />);
+
+    expect(screen.queryByText('Tip: paste a .env file into any field to import it')).toBeNull();
+  });
+
+  it('supports a custom paste hint via the composable part', () => {
+    render(<CustomPasteHintEditor />);
+
+    expect(screen.queryByText('Tip: paste a .env file into any field to import it')).toBeNull();
+    expect(screen.getByText('Paste your whole .env here')).toBeDefined();
   });
 
   it('uploads through a custom positioned upload button', async () => {

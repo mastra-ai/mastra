@@ -44,7 +44,7 @@ export const weatherAgent = new Agent({
 })
 ```
 
-On the frontend, register a renderer for the tool by name with `useRenderTool`. It is render-only (it does not execute the tool); the `render` function receives the tool call's `status` and, once the agent returns, its `result`:
+On the frontend, register a renderer for the tool by name with `useRenderTool`. It's render-only (it doesn't execute the tool); the `render` function receives the tool call's `status` and, once the agent returns, its `result`:
 
 ```tsx title="app/page.tsx"
 import { z } from 'zod'
@@ -159,7 +159,7 @@ The catalog defines the primitives (their schemas) and the renderers (how each p
 
 At the far end of the spectrum, the agent owns the entire surface: the UI is invented elsewhere and sandboxed in your app. CopilotKit supports this through **MCP Apps**, where an MCP server ships UI that renders inside your application. This tier trades determinism for novelty and is the most experimental point on the spectrum.
 
-The path of least resistance keeps the frontend untouched: your existing `<CopilotKit>` provider is enough. On the backend, point `registerCopilotKit()` at one or more MCP servers with the `mcpApps` option (it is forwarded to the CopilotKit runtime):
+The path of least resistance keeps the frontend untouched: your existing `<CopilotKit>` provider is enough. On the backend, point `registerCopilotKit()` at one or more MCP servers with the `mcpApps` option (it's forwarded to the CopilotKit runtime):
 
 ```typescript title="src/mastra/index.ts"
 registerCopilotKit({

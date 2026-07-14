@@ -31,7 +31,7 @@ export function TimelineNameCol({
     <div
       data-span-id={span.id}
       aria-label={`View details for span ${span.name}`}
-      className={cn('rounded-md flex opacity-80 min-h-8 items-center rounded-l-lg', {
+      className={cn('flex min-h-8 items-center rounded-md rounded-l-lg opacity-80', {
         'opacity-30 [&:hover]:opacity-60': isFaded,
         'bg-surface4': selectedSpanId === span.id,
       })}
@@ -42,17 +42,17 @@ export function TimelineNameCol({
       <button
         onClick={() => onSpanClick?.(span.id)}
         className={cn(
-          'text-ui-smd flex items-center text-left gap-1.5 text-neutral6 w-full min-w-0 rounded-md h-full px-2 py-1 transition-colors',
-          '[&>svg]:transition-all [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:w-[1em] [&>svg]:h-[1em] [&>svg]:ml-auto',
+          'flex size-full min-w-0 items-center gap-1.5 rounded-md px-2 py-1 text-left text-ui-smd text-neutral6 transition-colors',
+          '[&>svg]:ml-auto [&>svg]:size-[1em] [&>svg]:shrink-0 [&>svg]:opacity-0 [&>svg]:transition-all',
           'hover:bg-surface4 [&:hover>svg]:opacity-60',
-          'focus:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-accent1',
+          'focus:outline-none focus-visible:ring-1 focus-visible:ring-accent1 focus-visible:ring-inset',
         )}
       >
         {spanUI?.color && (
           <span
             aria-hidden
             title={spanUI.label}
-            className="inline-block w-2 h-2 shrink-0 rounded-full"
+            className="inline-block size-2 shrink-0 rounded-full"
             style={{ backgroundColor: spanUI.color }}
           />
         )}

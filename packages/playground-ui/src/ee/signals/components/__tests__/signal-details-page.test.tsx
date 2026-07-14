@@ -98,21 +98,6 @@ function useLiveDataHandlers() {
 }
 
 beforeAll(() => {
-  // jsdom does not implement matchMedia; CollapsiblePanel reads it to detect the
-  // reduced-motion preference. Provide a minimal stub so the real first-party
-  // layout components render without a third-party DOM API gap.
-  window.matchMedia ??= (query: string) =>
-    ({
-      matches: false,
-      media: query,
-      onchange: null,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-      addListener: () => {},
-      removeListener: () => {},
-      dispatchEvent: () => false,
-    }) as unknown as MediaQueryList;
-
   server.listen({ onUnhandledRequest: 'error' });
 });
 

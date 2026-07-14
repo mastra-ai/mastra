@@ -51,7 +51,7 @@ export const DateTimePicker: React.FC<DateTimePickerProps> = ({
         )}
       </PopoverTrigger>
       <PopoverContent
-        className="backdrop-blur-4xl w-auto p-0! bg-surface4 max-w-[16.5rem]"
+        className="backdrop-blur-4xl max-w-66 w-auto bg-surface4 p-0!"
         align="start"
         data-testid="datepicker-calendar"
       >
@@ -214,8 +214,8 @@ export const DateTimePickerContent = ({
       {localErrorMsg && (
         <div
           className={cn(
-            'text-ui-md m-4 mb-0 text-neutral3',
-            '[&>svg]:w-[1.1em] [&>svg]:h-[1.1em] [&>svg]:mt-0.5 [&>svg]:text-red-500 [&>svg]:float-left [&>svg]:mr-2',
+            'm-4 mb-0 text-ui-md text-neutral3',
+            '[&>svg]:float-left [&>svg]:mt-0.5 [&>svg]:mr-2 [&>svg]:size-[1.1em] [&>svg]:text-red-500',
           )}
         >
           <CircleAlertIcon /> {localErrorMsg}
@@ -237,7 +237,7 @@ export const DateTimePickerContent = ({
         defaultValue={value ? formatDate(new Date(value), 'hh:mm a') : defaultTimeStrValue}
       />
 
-      <div className="grid grid-cols-[1fr_2fr] gap-2 m-4 mt-0">
+      <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">
         {newValueDefined && (
           <Button tabIndex={0} size="md" onClick={handleClear} type="button">
             Clear
@@ -269,7 +269,7 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
   ({ value, placeholder, className, ...props }, ref) => {
     return (
       <Button ref={ref} className={cn('justify-start', className)} {...props}>
-        <CalendarIcon className="h-4 w-4" />
+        <CalendarIcon className="size-4" />
         {value ? (
           <span className="text-white">{format(value, 'PP p')}</span>
         ) : (

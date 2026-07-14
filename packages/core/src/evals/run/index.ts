@@ -82,7 +82,23 @@ type RunEvalsResult = {
   thresholdResults?: Array<{ id: string; passed: boolean; averageScore: number; threshold: ThresholdConfig }>;
 };
 
-// Agent with scorers array
+// Agent with gates (scorers optional) — gate-only runs are allowed
+export function runEvals<TAgent extends Agent>(config: {
+  data: RunEvalsDataItem<TAgent>[];
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates: MastraScorer<any, any, any, any>[];
+  scorers?: ScorerEntry[];
+  target: TAgent;
+  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
+  onItemComplete?: (params: {
+    item: RunEvalsDataItem<TAgent>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
+    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
+  }) => void | Promise<void>;
+  concurrency?: number;
+}): Promise<RunEvalsResult>;
+
+// Agent with scorers array (gates optional)
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
   scorers: ScorerEntry[];
@@ -149,7 +165,7 @@ export function runEvals<TAgent extends Agent>(config: {
 
 export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
-  scorers: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
   target: Agent | Workflow;
   gates?: MastraScorer<any, any, any, any>[];
   targetOptions?:
@@ -162,12 +178,12 @@ export async function runEvals(config: {
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult> {
-  const { data, scorers, gates, target, targetOptions, onItemComplete, concurrency = 1 } = config;
+  const { data, scorers = [], gates, target, targetOptions, onItemComplete, concurrency = 1 } = config;
 
   // Normalize ScorerEntry[] into bare scorers + threshold metadata
   const { bareScorers, thresholdMap } = normalizeScorerEntries(scorers);
 
-  validateEvalsInputs(data, bareScorers, target);
+  validateEvalsInputs(data, bareScorers, target, gates);
 
   let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
@@ -399,7 +415,9 @@ function validateEvalsInputs(
   data: RunEvalsDataItem<any>[],
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
   target: Agent | Workflow,
+  gates?: MastraScorer<any, any, any, any>[],
 ): void {
+  const hasGates = !!gates && gates.length > 0;
   if (data.length === 0) {
     throw new MastraError({
       domain: 'SCORER',
@@ -423,12 +441,14 @@ function validateEvalsInputs(
 
   // Validate scorers
   if (Array.isArray(scorers)) {
-    if (scorers.length === 0) {
+    // Gate-only runs are valid: a non-empty gates array satisfies the
+    // "at least one scorer" requirement even when scorers is empty.
+    if (scorers.length === 0 && !hasGates) {
       throw new MastraError({
         domain: 'SCORER',
         id: 'NO_SCORERS_PROVIDED',
         category: 'USER',
-        text: 'At least one scorer must be provided',
+        text: 'At least one scorer or gate must be provided',
       });
     }
   } else if (isWorkflow(target) && isWorkflowScorerConfig(scorers)) {

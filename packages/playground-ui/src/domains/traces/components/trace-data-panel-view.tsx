@@ -220,7 +220,7 @@ export function TraceDataPanelView({
             {!isOnTracePage && rootSpan && <TraceKeysAndValues rootSpan={rootSpan} className="mb-6" />}
 
             {!isOnTracePage && (onEvaluateTrace || onSaveAsDatasetItem || onAddTraceMocksToItem) && (
-              <div className="mb-6 flex flex-wrap justify-between items-center gap-4">
+              <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
                 {onEvaluateTrace && (
                   <Button size="sm" onClick={onEvaluateTrace}>
                     <Icon>

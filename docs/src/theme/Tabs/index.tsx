@@ -5,19 +5,21 @@
  * causes content churn that search engines penalize. Since our tabs use static
  * default values (npm2yarn with groupId sync), the workaround is unnecessary.
  */
-import React, { cloneElement, type ReactElement, type ReactNode } from 'react'
+import React, { type ReactNode } from 'react'
 import clsx from 'clsx'
 import { ThemeClassNames } from '@docusaurus/theme-common'
 import {
   useScrollPositionBlocker,
   useTabs,
+  useTabsContextValue,
   sanitizeTabsChildren,
-  type TabItemProps,
+  TabsProvider,
 } from '@docusaurus/theme-common/internal'
 import type { Props } from '@theme/Tabs'
 import styles from './styles.module.css'
 
-function TabList({ className, block, selectedValue, selectValue, tabValues }: Props & ReturnType<typeof useTabs>) {
+function TabList({ className }: Props) {
+  const { selectedValue, selectValue, tabValues, block } = useTabs()
   const tabRefs: (HTMLLIElement | null)[] = []
   const { blockElementScrollPositionUntilNextRender } = useScrollPositionBlocker()
 
@@ -94,31 +96,11 @@ function TabList({ className, block, selectedValue, selectValue, tabValues }: Pr
   )
 }
 
-function TabContent({ lazy, children, selectedValue }: Props & ReturnType<typeof useTabs>) {
-  const childTabs = (Array.isArray(children) ? children : [children]).filter(Boolean) as ReactElement<TabItemProps>[]
-  if (lazy) {
-    const selectedTabItem = childTabs.find(tabItem => tabItem.props.value === selectedValue)
-    if (!selectedTabItem) {
-      return null
-    }
-    return cloneElement(selectedTabItem, {
-      className: clsx('margin-top--md', selectedTabItem.props.className),
-    })
-  }
-  return (
-    <div className="margin-top--md">
-      {childTabs.map((tabItem, i) =>
-        cloneElement(tabItem, {
-          key: i,
-          hidden: tabItem.props.value !== selectedValue,
-        }),
-      )}
-    </div>
-  )
+function TabContent({ children }: Props) {
+  return <div className="margin-top--md">{children}</div>
 }
 
-function TabsComponent(props: Props): ReactNode {
-  const tabs = useTabs(props)
+function TabsContainer({ className, children }: Props) {
   return (
     <div
       className={clsx(
@@ -129,12 +111,17 @@ function TabsComponent(props: Props): ReactNode {
         styles.tabList,
       )}
     >
-      <TabList {...tabs} {...props} />
-      <TabContent {...tabs} {...props} />
+      <TabList className={className} />
+      <TabContent>{children}</TabContent>
     </div>
   )
 }
 
 export default function Tabs(props: Props): ReactNode {
-  return <TabsComponent {...props}>{sanitizeTabsChildren(props.children)}</TabsComponent>
+  const value = useTabsContextValue(props)
+  return (
+    <TabsProvider value={value}>
+      <TabsContainer className={props.className}>{sanitizeTabsChildren(props.children)}</TabsContainer>
+    </TabsProvider>
+  )
 }
