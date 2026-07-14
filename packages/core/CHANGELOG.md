@@ -1,5 +1,16 @@
 # @mastra/core
 
+## 1.51.0-alpha.10
+
+### Patch Changes
+
+- **Fixed** — `CachingPubSub.clearTopic` now forwards to the wrapped transport. Because the durable-agent runtime wraps every pubsub in `CachingPubSub`, clearing a topic previously dropped only the in-memory cache and never told a persistent backend (e.g. Redis Streams) to delete its stream — so finished runs' streams leaked. It now also calls `clearTopic` on the inner transport when the inner implements it. ([#19138](https://github.com/mastra-ai/mastra/pull/19138))
+
+- Fixed file attachments carrying AI SDK v5 metadata failing to persist and keep their media type. File parts using the v5 shape are now read wherever stored messages are converted, so they save correctly and retain their content type instead of erroring out. Also fixed distinct file attachments being wrongly deduplicated when they carried this metadata. ([#19021](https://github.com/mastra-ai/mastra/pull/19021))
+
+- Updated dependencies [[`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2)]:
+  - @mastra/schema-compat@1.3.4-alpha.2
+
 ## 1.51.0-alpha.9
 
 ### Patch Changes
