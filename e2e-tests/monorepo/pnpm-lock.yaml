@@ -9,14 +9,14 @@ importers:
   .:
     dependencies:
       form-data:
-        specifier: ^2.5.5
+        specifier: ^2.5.6
         version: 2.5.6
     devDependencies:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
       get-port:
-        specifier: ^7.1.0
+        specifier: ^7.2.0
         version: 7.2.0
       npm-cli-login:
         specifier: ^1.0.0
@@ -25,13 +25,13 @@ importers:
         specifier: ^4.61.1
         version: 4.62.2
       tinyglobby:
-        specifier: ^0.2.16
+        specifier: ^0.2.17
         version: 0.2.17
       verdaccio:
-        specifier: ^6.2.5
+        specifier: ^6.7.4
         version: 6.7.4(typanion@3.14.0)
       verdaccio-auth-memory:
-        specifier: ^10.3.1
+        specifier: ^10.3.3
         version: 10.3.3
       vitest:
         specifier: ^4.1.8
