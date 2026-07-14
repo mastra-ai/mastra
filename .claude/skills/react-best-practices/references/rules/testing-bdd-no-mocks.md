@@ -52,9 +52,7 @@ it('shows the editor for permitted users', () => {
 // __tests__/fixtures/capabilities.ts — typed from @mastra/client-js, no `as any`
 import type { GetCapabilitiesResponse } from '@mastra/client-js';
 
-export const canEditAgents: GetCapabilitiesResponse = {
-  /* … real-shaped capability payload granting agent edit … */
-};
+export const canEditAgents: GetCapabilitiesResponse = {/* … real-shaped capability payload granting agent edit … */};
 
 // agent-edit.msw.test.tsx
 describe('AgentEditPage', () => {

@@ -58,8 +58,7 @@ describeForAllEngines('AIMock loop scenario: tool execution errors', engine => {
     // to the original tool call id.
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { tool_call_id?: string; content?: unknown }
-      | undefined;
+      { tool_call_id?: string; content?: unknown } | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_flaky');
     // The tool result content references the failure (not a success payload).
     expect(JSON.stringify(toolMessage?.content)).toMatch(/error|fail|boom/i);
@@ -97,8 +96,7 @@ describeForAllEngines('AIMock loop scenario: tool execution errors', engine => {
 
     const turn2Messages = requests[1]?.body?.messages ?? [];
     const toolMessage = turn2Messages.find(message => (message as { role?: string }).role === 'tool') as
-      | { tool_call_id?: string; content?: unknown }
-      | undefined;
+      { tool_call_id?: string; content?: unknown } | undefined;
     expect(toolMessage?.tool_call_id).toBe('call_ghost');
 
     const text = await output.text;
