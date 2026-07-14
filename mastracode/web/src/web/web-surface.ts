@@ -19,6 +19,8 @@ import {
   hasExplicitStateSecret,
   isGithubFeatureEnabled,
 } from './github/config.js';
+import { ensureFactoryDbReady } from './factory/db.js';
+import { buildFactoryRoutes } from './factory/routes.js';
 import { ensureAppDbReady } from './github/db.js';
 import { buildGithubRoutes } from './github/routes.js';
 import { ensureIntakeDbReady } from './intake/db.js';
@@ -54,6 +56,30 @@ export interface WebApiRoutesDeps {
    * time via {@link resolveIntakeReady} so this stays synchronous.
    */
   intakeReady: boolean;
+  /**
+   * Whether the Factory work-item (kanban board) routes should be included.
+   * Resolved ahead of time via {@link resolveFactoryReady} so this stays
+   * synchronous.
+   */
+  factoryReady: boolean;
+}
+
+/**
+ * Resolve whether the Factory work-item routes are ready to serve. The board
+ * hangs off GitHub projects, so it requires the GitHub feature; the table
+ * lives in the same app DB. Fails soft like {@link resolveGithubReady}.
+ */
+export async function resolveFactoryReady(githubReady: boolean): Promise<boolean> {
+  if (!githubReady) return false;
+  try {
+    await ensureFactoryDbReady();
+    return true;
+  } catch (err) {
+    process.stderr.write(
+      `MastraCode Web: factory work-item routes disabled (app DB unreachable — ${err instanceof Error ? err.message : String(err)})\n`,
+    );
+    return false;
+  }
 }
 
 /**
@@ -200,5 +226,6 @@ export function assembleWebApiRoutes(deps: WebApiRoutesDeps): ApiRoute[] {
     ...(deps.githubReady ? buildGithubRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.linearReady ? buildLinearRoutes({ baseUrl: deps.publicOrigin }) : []),
     ...(deps.intakeReady ? buildIntakeRoutes() : []),
+    ...(deps.factoryReady ? buildFactoryRoutes() : []),
   ];
 }
