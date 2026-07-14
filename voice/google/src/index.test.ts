@@ -145,6 +145,136 @@ describe('GoogleVoice Unit Tests', () => {
     });
   });
 
+  describe('speak', () => {
+    it('should build a text-only request by default', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hello');
+      expect(mockSynthesize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: { text: 'Hello' },
+          voice: expect.objectContaining({ name: 'en-US-Casual-K', languageCode: 'en-US' }),
+          audioConfig: { audioEncoding: 'LINEAR16' },
+        }),
+      );
+    });
+
+    it('should pass SSML via options.input', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const ssml = '<speak>Hello <break time="200ms"/> world</speak>';
+      await voice.speak('ignored', { input: { ssml } });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.ssml).toBe(ssml);
+      expect(call.input.text).toBeUndefined();
+    });
+
+    it('should populate text from positional input when options.input has no text/ssml/markup', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hello world', {
+        input: { customPronunciations: { pronunciations: [] } },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.text).toBe('Hello world');
+      expect(call.input.customPronunciations).toEqual({ pronunciations: [] });
+    });
+
+    it('should merge caller voice fields on top of defaults', async () => {
+      const voice = new GoogleVoice({ speaker: 'en-US-Studio-O' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+      expect(call.voice.name).toBe('en-US-Studio-O');
+      expect(call.voice.languageCode).toBe('en-US');
+    });
+
+    it('should derive languageCode from non-en-US default speaker', async () => {
+      const voice = new GoogleVoice({ speaker: 'cmn-CN-Standard-A' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.name).toBe('cmn-CN-Standard-A');
+      expect(call.voice.languageCode).toBe('cmn-CN');
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+    });
+
+    it('should allow caller voice fields to override defaults', async () => {
+      const voice = new GoogleVoice({ speaker: 'en-US-Studio-O' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { name: 'custom-voice', languageCode: 'fr-FR' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.name).toBe('custom-voice');
+      expect(call.voice.languageCode).toBe('fr-FR');
+    });
+
+    it('should pass custom audioConfig', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', { audioConfig: { audioEncoding: 'MP3' } });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.audioConfig).toEqual({ audioEncoding: 'MP3' });
+    });
+
+    it('should not inject text when input uses multiSpeakerMarkup', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const multiSpeakerMarkup = { turns: [{ speaker: 'R', text: 'Hi' }] };
+      await voice.speak('ignored', { input: { multiSpeakerMarkup } });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.multiSpeakerMarkup).toEqual(multiSpeakerMarkup);
+      expect(call.input.text).toBeUndefined();
+    });
+
+    it('should not mutate caller input object', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const callerInput = { customPronunciations: { pronunciations: [] } };
+      await voice.speak('Hi', { input: callerInput });
+      expect(callerInput).toEqual({ customPronunciations: { pronunciations: [] } });
+    });
+
+    it('should handle stream input with rich options', async () => {
+      const voice = new GoogleVoice();
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      const textStream = Readable.from(['Hello', ' stream']);
+      await voice.speak(textStream, {
+        input: { customPronunciations: { pronunciations: [] } },
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.input.text).toBe('Hello stream');
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+    });
+  });
+
   describe('listen v1 (default)', () => {
     it('should call v1 recognize by default', async () => {
       const voice = new GoogleVoice();
