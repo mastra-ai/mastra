@@ -648,6 +648,29 @@ describe('BraintrustExporter', () => {
       expect(call.event.input[0].tool_calls[0].id).toBe('srvtoolu_123');
       expect(call.event.output.tool_call_id).toBe('srvtoolu_123');
     });
+
+    it('uses metadata.toolCallId when attributes.toolCallId is absent', async () => {
+      const toolSpan = createMockSpan({
+        id: 'sdk-tool-span',
+        name: "tool: 'search'",
+        type: SpanType.TOOL_CALL,
+        isRoot: true,
+        entityName: 'search',
+        input: { query: 'test' },
+        output: { results: [] },
+        attributes: { toolType: 'tool' },
+        metadata: { toolCallId: 'call_from_metadata' },
+      });
+
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_STARTED,
+        exportedSpan: toolSpan,
+      });
+
+      const call = mockLogger.startSpan.mock.calls.at(-1)![0];
+      expect(call.event.input[0].tool_calls[0].id).toBe('call_from_metadata');
+      expect(call.event.output.tool_call_id).toBe('call_from_metadata');
+    });
   });
 
   describe('LLM Generation Attributes', () => {
