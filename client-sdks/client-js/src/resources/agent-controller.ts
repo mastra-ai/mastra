@@ -22,7 +22,7 @@ export interface AgentControllerInfo {
 }
 
 export interface AgentControllerMessageContent {
-  type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | string;
+  type: 'text' | 'thinking' | 'tool_call' | 'tool_result' | 'image' | 'file' | string;
   /** Correlates a `tool_call` part with its `tool_result` part. */
   id?: string;
   text?: string;
@@ -31,6 +31,14 @@ export interface AgentControllerMessageContent {
   args?: unknown;
   result?: unknown;
   isError?: boolean;
+  /** Base64 payload for `image` and `file` parts. */
+  data?: string;
+  /** MIME type for `image` parts. */
+  mimeType?: string;
+  /** MIME type for `file` parts. */
+  mediaType?: string;
+  /** Optional filename for `file` parts. */
+  filename?: string;
 }
 
 export interface AgentControllerMessage {
@@ -425,9 +433,19 @@ export class AgentControllerSession extends BaseResource {
     };
   }
 
-  /** Send a user message. The reply streams over `subscribe()`. */
-  async sendMessage(message: string): Promise<void> {
-    await this.request(this.url(`${this.base()}/messages`), { method: 'POST', body: { message } });
+  /**
+   * Send a user message. The reply streams over `subscribe()`.
+   * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
+   * `sendMessage({ content: 'What is in this image?', files })`.
+   */
+  async sendMessage(
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
+  ): Promise<void> {
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
+    await this.request(this.url(`${this.base()}/messages`), {
+      method: 'POST',
+      body: { message: content, ...(files?.length ? { files } : {}) },
+    });
   }
 
   /** Abort the in-flight run for this session. */
