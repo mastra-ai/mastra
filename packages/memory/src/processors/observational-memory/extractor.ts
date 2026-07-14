@@ -22,6 +22,7 @@ export interface ExtractorOnExtractedContext<T = unknown> extends ExtractorRunti
   previous?: T;
   current: T;
   sendSignal?: ProcessorContext['sendSignal'];
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
 }
 
 type MaybePromise<T> = T | Promise<T>;

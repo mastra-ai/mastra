@@ -12,6 +12,7 @@ export interface SubconsciousCaptureOutput {
   nodes: Array<{
     name: string;
     kind: string;
+    scope?: KnowledgeScopeLevel;
     items: Array<{
       text: string;
       scope?: KnowledgeScopeLevel;
