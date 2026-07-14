@@ -508,7 +508,12 @@ export class BraintrustExporter extends TrackingExporter<
 
   private getToolCallId(span: AnyExportedSpan): string {
     const attrs = span.attributes as { toolCallId?: string } | undefined;
-    return attrs?.toolCallId ?? span.metadata?.toolCallId ?? span.id;
+    return (
+      attrs?.toolCallId ??
+      span.metadata?.toolCallId ??
+      (span.input as { toolCallId?: string } | undefined)?.toolCallId ??
+      span.id
+    );
   }
 
   private toToolCallInput(span: AnyExportedSpan): OpenAIMessage[] {
