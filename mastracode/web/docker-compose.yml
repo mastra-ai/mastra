@@ -1,12 +1,16 @@
-# Local-dev Postgres for the MastraCode Web GitHub App feature.
+# Local-dev backing services for MastraCode Web.
 #
-# This is the separate "application database" referenced by APP_DATABASE_URL
+# app-db is the separate "application database" referenced by APP_DATABASE_URL
 # (distinct from Mastra's own storage). The web server runs the GitHub schema
 # migrations automatically on boot when the feature is enabled.
+#
+# redis backs RedisStreamsPubSub (@mastra/redis-streams) for distributed event
+# delivery across web server processes.
 #
 # Usage:
 #   docker compose up -d
 #   export APP_DATABASE_URL=postgres://user:pass@localhost:54329/mastracode_web
+#   export REDIS_URL=redis://localhost:63799
 #
 # The default credentials below match the APP_DATABASE_URL example in
 # src/web/.env.example.
@@ -29,6 +33,19 @@ services:
       - mastracode-web-pgdata:/var/lib/postgresql
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-user} -d ${POSTGRES_DB:-mastracode_web}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    # Backs RedisStreamsPubSub — pub/sub state lives in Redis Streams, so no
+    # persistence volume is needed for local dev.
+    image: redis:8-alpine
+    container_name: mastracode-web-redis
+    ports:
+      - '63799:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 5s
       retries: 5
