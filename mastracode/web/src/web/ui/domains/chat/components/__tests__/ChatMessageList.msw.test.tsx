@@ -5,7 +5,11 @@
  * notice, empty-thread state, transcript entries, and the working indicator.
  * Driven end-to-end: real fetch/SSE transport, MSW at the network boundary.
  */
-import type { AgentControllerEvent, AgentControllerSessionState } from '@mastra/client-js';
+import type {
+  AgentControllerEvent,
+  AgentControllerMessageContent,
+  AgentControllerSessionState,
+} from '@mastra/client-js';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -178,6 +182,38 @@ describe('ChatMessageList', () => {
     expect(screen.getAllByText('github')).toHaveLength(2);
     expect(screen.getByText('high')).toBeInTheDocument();
     expect(screen.getByText('urgent')).toBeInTheDocument();
+  });
+
+  it('given an assistant response after a notification summary, then it does not render the response as a notice', async () => {
+    seedProject();
+    const summary: AgentControllerMessageContent = {
+      type: 'notification_summary',
+      message: 'github: 1',
+      pending: 1,
+      bySource: { github: 1 },
+      byPriority: { high: 1 },
+      notificationIds: ['notification-1'],
+    };
+    useAgentControllerHandlers([
+      {
+        type: 'message_update',
+        message: { id: 'assistant-1', role: 'assistant', content: [summary] },
+      },
+      {
+        type: 'message_update',
+        message: {
+          id: 'assistant-1',
+          role: 'assistant',
+          content: [summary, { type: 'text', text: 'The pull request is ready for review.' }],
+        },
+      },
+    ]);
+    renderMessageList();
+
+    await waitFor(() => expect(screen.getByText('The pull request is ready for review.')).toBeInTheDocument());
+    expect(screen.getByText('Notification summary')).toBeInTheDocument();
+    expect(screen.getByText('github: 1')).toBeInTheDocument();
+    expect(screen.getByText('The pull request is ready for review.').closest('.bg-notice-info\\/20')).toBeNull();
   });
 
   it('given a persisted notification signal, then it remains visible after transcript hydration', async () => {
