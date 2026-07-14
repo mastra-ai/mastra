@@ -1,5 +1,15 @@
 # @mastra/react
 
+## 1.2.5-alpha.11
+
+### Patch Changes
+
+- Fixed attachment rendering crash in `useChat` when `enableThreadSignals` is enabled. File attachments now display correctly during live streaming without requiring a page refresh. ([#19362](https://github.com/mastra-ai/mastra/pull/19362))
+
+- Updated dependencies [[`45a8e65`](https://github.com/mastra-ai/mastra/commit/45a8e65e1556d1362cb3f25187023c36de26661d), [`c8ed116`](https://github.com/mastra-ai/mastra/commit/c8ed11699f62bcac70102ab4ec84d80d20541da6), [`33f2b88`](https://github.com/mastra-ai/mastra/commit/33f2b88842c09a567f906fac4cb61cd5277ced59)]:
+  - @mastra/core@1.51.0-alpha.11
+  - @mastra/client-js@1.32.0-alpha.11
+
 ## 1.2.5-alpha.10
 
 ### Patch Changes

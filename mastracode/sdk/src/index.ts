@@ -1055,6 +1055,12 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    // Mirror the controller's internal-Mastra construction (which passes
+    // `config.pubsub` through): the server-owned Mastra must run its event
+    // bus on the same transport so streams/workflows/signals stay
+    // cross-process when a distributed PubSub (e.g. Redis Streams) is
+    // configured.
+    ...(base.signalsPubSub ? { pubsub: base.signalsPubSub } : {}),
     ...(Object.keys(serverConfig).length ? { server: serverConfig } : {}),
   };
 

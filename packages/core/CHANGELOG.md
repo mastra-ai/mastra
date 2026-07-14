@@ -1,5 +1,35 @@
 # @mastra/core
 
+## 1.51.0-alpha.11
+
+### Minor Changes
+
+- Workflow run event topics are now cleaned up automatically. The evented workflow engine deletes each run's `workflow.events.v2.<runId>` pub/sub topic shortly after the run reaches a terminal state (success, failure, or cancellation), so persistent transports like Redis Streams no longer accumulate streams from finished workflow runs (#19123). ([#19418](https://github.com/mastra-ai/mastra/pull/19418))
+
+  `clearTopic` is now part of the `PubSub` base class with a default no-op implementation. Custom transports that retain messages per topic should override it to delete that state:
+
+  ```typescript
+  import { PubSub } from '@mastra/core/events';
+
+  class CustomPubSub extends PubSub {
+    async clearTopic(topic: string): Promise<void> {
+      // delete retained state for the topic
+    }
+  }
+  ```
+
+  Callers no longer need to probe for the method before calling it — `CachingPubSub` and the durable-agent runtime now forward `clearTopic` unconditionally.
+
+### Patch Changes
+
+- Fixed `DurableAgent` losing reasoning items on turns that include tool calls, which caused OpenAI reasoning models like `gpt-5-mini` to fail on the next turn. Reasoning is now preserved and replayed correctly on subsequent turns. ([#19408](https://github.com/mastra-ai/mastra/pull/19408))
+
+  Fixes #19365.
+
+- Fixed a memory leak where every discarded standalone agent (an `Agent` used directly without being registered on a `Mastra` instance) stayed reachable for the lifetime of the process. The internal Mastra instance created for standalone execution no longer registers a module-level scorer hook it can never use, so standalone agents are garbage-collected once discarded. Applications that create one agent per request no longer see linear heap growth. ([#19413](https://github.com/mastra-ai/mastra/pull/19413))
+
+  Fixes [#19404](https://github.com/mastra-ai/mastra/issues/19404).
+
 ## 1.51.0-alpha.10
 
 ### Patch Changes
