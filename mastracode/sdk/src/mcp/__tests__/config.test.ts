@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { classifyServerEntry, expandEnvVars, loadMcpConfig, validateConfig } from '../config.js';
+import { DEFAULT_OAUTH_REDIRECT_URL, classifyServerEntry, expandEnvVars, loadMcpConfig, validateConfig } from '../config.js';
 
 describe('classifyServerEntry', () => {
   it('classifies stdio entry', () => {
@@ -186,6 +186,38 @@ describe('validateConfig', () => {
         clientSecret: 'client-secret',
       },
     });
+  });
+
+  it('applies the default loopback redirect URL when oauth.redirectUrl is omitted', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: {},
+        },
+      },
+    });
+
+    expect(result.skippedServers).toBeUndefined();
+    expect((result.mcpServers!['remote'] as { oauth?: { redirectUrl: string } }).oauth?.redirectUrl).toBe(
+      DEFAULT_OAUTH_REDIRECT_URL,
+    );
+  });
+
+  it('rejects a non-string oauth.redirectUrl', () => {
+    const result = validateConfig({
+      mcpServers: {
+        remote: {
+          url: 'https://mcp.example.com/mcp',
+          oauth: { redirectUrl: 42 },
+        },
+      },
+    });
+
+    expect(result.mcpServers).toBeUndefined();
+    expect(result.skippedServers).toEqual([
+      { name: 'remote', reason: 'Invalid OAuth config: "redirectUrl" must be a string' },
+    ]);
   });
 
   it('accepts loopback IPv6 HTTP OAuth redirect URLs', () => {

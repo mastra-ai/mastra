@@ -9,8 +9,21 @@ import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp';
 import type { MastraMCPServerDefinition, OAuthClientInformation, OAuthStorage } from '@mastra/mcp';
 import { DEFAULT_CONFIG_DIR } from '../constants.js';
 import { getAppDataDir } from '../utils/project.js';
-import { loadMcpConfig, getProjectMcpPath, getGlobalMcpPath, getClaudeSettingsPath } from './config.js';
-import type { McpConfig, McpHttpServerConfig, McpServerConfig, McpServerStatus, McpSkippedServer } from './types.js';
+import {
+  DEFAULT_OAUTH_REDIRECT_URL,
+  loadMcpConfig,
+  getProjectMcpPath,
+  getGlobalMcpPath,
+  getClaudeSettingsPath,
+} from './config.js';
+import type {
+  McpConfig,
+  McpHttpOAuthConfig,
+  McpHttpServerConfig,
+  McpServerConfig,
+  McpServerStatus,
+  McpSkippedServer,
+} from './types.js';
 
 const MASTRACODE_MCP_TIMEOUT_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -32,6 +45,16 @@ export interface McpManager {
   reload(): Promise<void>;
   /** Reconnect a single server by name. Returns updated status. */
   reconnectServer(name: string): Promise<McpServerStatus>;
+  /**
+   * Run the OAuth authorization-code flow for an HTTP server, then reconnect it.
+   * Servers without an `oauth` config are provisioned with a zero-config default
+   * (dynamic client registration). The authorization URL is surfaced through
+   * `onAuthorizationUrl` for the caller to open in a browser.
+   */
+  authenticateServer(
+    name: string,
+    options?: { onAuthorizationUrl?: (url: string) => void; timeoutMs?: number },
+  ): Promise<McpServerStatus>;
   /** Disconnect from all MCP servers and clean up. */
   disconnect(): Promise<void>;
   /** Get all tools from connected MCP servers (namespaced as serverName_toolName). */
@@ -93,12 +116,20 @@ class FileOAuthStorage implements OAuthStorage {
   }
 }
 
+/**
+ * Zero-config OAuth defaults for servers with a bare `url` entry. Dynamic
+ * client registration provisions the client, so no `clientId` is needed.
+ */
+const DEFAULT_OAUTH_CONFIG: McpHttpOAuthConfig = { redirectUrl: DEFAULT_OAUTH_REDIRECT_URL };
+
 function getOAuthStoragePath(projectDir: string, name: string, cfg: McpHttpServerConfig): string {
+  // The fingerprint always uses the resolved redirect URL so a bare `url`
+  // entry keeps the same token file before and after zero-config provisioning.
   const key = JSON.stringify({
     projectDir,
     name,
     url: cfg.url,
-    redirectUrl: cfg.oauth?.redirectUrl,
+    redirectUrl: cfg.oauth?.redirectUrl ?? DEFAULT_OAUTH_REDIRECT_URL,
     clientId: cfg.oauth?.clientId,
     scopes: cfg.oauth?.scopes ?? [],
   });
@@ -131,10 +162,14 @@ export function createMcpManager(
 
   let config = applyExtraServers(loadMcpConfig(projectDir, configDirName));
   let client: MCPClient | null = null;
+  let serverDefs: Record<string, MastraMCPServerDefinition> = {};
   let tools: Record<string, any> = {};
   let serverStatuses = new Map<string, McpServerStatus>();
   let stderrLogs = new Map<string, string[]>();
   let initialized = false;
+
+  /** Per-server handlers that receive the OAuth authorization URL during authenticateServer(). */
+  const authUrlHandlers = new Map<string, (url: string) => void>();
 
   const MAX_STDERR_LINES = 200;
 
@@ -174,24 +209,32 @@ export function createMcpManager(
   }
 
   function createOAuthProvider(name: string, cfg: McpHttpServerConfig) {
-    if (!cfg.oauth) return undefined;
+    // Bare `url` entries get no eager provider — auth is provisioned lazily
+    // when the user authenticates — unless a previous session already stored
+    // OAuth state for this server, in which case the provider is needed to
+    // attach the persisted tokens on connect.
+    const oauth = cfg.oauth ?? (existsSync(getOAuthStoragePath(projectDir, name, cfg)) ? DEFAULT_OAUTH_CONFIG : undefined);
+    if (!oauth) return undefined;
 
     return new MCPOAuthClientProvider({
-      redirectUrl: cfg.oauth.redirectUrl,
+      redirectUrl: oauth.redirectUrl,
       clientMetadata: {
-        redirect_uris: [cfg.oauth.redirectUrl],
-        client_name: cfg.oauth.clientName ?? `Mastra Code MCP ${name}`,
+        redirect_uris: [oauth.redirectUrl],
+        client_name: oauth.clientName ?? `Mastra Code MCP ${name}`,
         grant_types: ['authorization_code', 'refresh_token'],
         response_types: ['code'],
-        ...(cfg.oauth.scopes?.length ? { scope: cfg.oauth.scopes.join(' ') } : {}),
+        ...(oauth.scopes?.length ? { scope: oauth.scopes.join(' ') } : {}),
       },
-      clientInformation: cfg.oauth.clientId
+      clientInformation: oauth.clientId
         ? ({
-            client_id: cfg.oauth.clientId,
-            ...(cfg.oauth.clientSecret ? { client_secret: cfg.oauth.clientSecret } : {}),
+            client_id: oauth.clientId,
+            ...(oauth.clientSecret ? { client_secret: oauth.clientSecret } : {}),
           } satisfies OAuthClientInformation)
         : undefined,
       storage: new FileOAuthStorage(getOAuthStoragePath(projectDir, name, cfg)),
+      onRedirectToAuthorization: url => {
+        authUrlHandlers.get(name)?.(url.toString());
+      },
     });
   }
 
@@ -231,9 +274,10 @@ export function createMcpManager(
       });
     }
 
+    serverDefs = buildServerDefs(servers);
     client = new MCPClient({
       id: 'mastra-code-mcp',
-      servers: buildServerDefs(servers),
+      servers: serverDefs,
       timeout: MASTRACODE_MCP_TIMEOUT_MS,
     });
 
@@ -264,13 +308,15 @@ export function createMcpManager(
           });
         } else {
           // Server failed — use the real error from listToolsetsWithErrors()
+          const error = errors[name] ?? 'Failed to connect';
           serverStatuses.set(name, {
             name,
             connected: false,
             toolCount: 0,
             toolNames: [],
             transport: getTransport(servers[name]!),
-            error: errors[name] ?? 'Failed to connect',
+            error,
+            ...(serverNeedsAuth(name, servers[name]!, error) ? { needsAuth: true } : {}),
           });
         }
       }
@@ -290,8 +336,118 @@ export function createMcpManager(
           toolNames: [],
           transport: getTransport(servers[name]!),
           error: errMsg,
+          ...(serverNeedsAuth(name, servers[name]!, errMsg) ? { needsAuth: true } : {}),
         });
       }
+    }
+  }
+
+  /**
+   * Whether a failed HTTP server is blocked on OAuth authorization.
+   *
+   * Provider-backed servers report the exact state tracked by `@mastra/mcp`.
+   * Bare `url` entries carry no provider until the user authenticates, so a
+   * 401 in the connect error is the signal that the server wants OAuth.
+   */
+  function serverNeedsAuth(name: string, cfg: McpServerConfig, error?: string): boolean {
+    if (getTransport(cfg) !== 'http') return false;
+    if (client?.getServerAuthState?.(name) === 'needs-auth') return true;
+    if (serverDefs[name]?.authProvider) return false;
+    return error !== undefined && /\b401\b|unauthorized/i.test(error);
+  }
+
+  /**
+   * Runs a single-server connect action (reconnect or authenticate), then
+   * refreshes that server's tools and status from the client.
+   */
+  async function connectSingleServer(
+    name: string,
+    cfg: McpServerConfig,
+    connect: () => Promise<unknown>,
+  ): Promise<McpServerStatus> {
+    const transport = getTransport(cfg);
+
+    // Remove old tools for this server
+    const prefix = `${name}_`;
+    for (const key of Object.keys(tools)) {
+      if (key.startsWith(prefix)) {
+        delete tools[key];
+      }
+    }
+
+    // Clear old logs and mark as connecting
+    stderrLogs.delete(name);
+    serverStatuses.set(name, {
+      name,
+      connected: false,
+      connecting: true,
+      toolCount: 0,
+      toolNames: [],
+      transport,
+    });
+
+    try {
+      await connect();
+
+      // Recapture stderr for the reconnected server
+      captureStderr(name);
+
+      // Fetch updated toolsets to get this server's tools
+      const { toolsets, errors } = await client!.listToolsetsWithErrors();
+      const serverTools = toolsets[name];
+      const serverError = errors[name];
+
+      if (serverError) {
+        const status: McpServerStatus = {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport,
+          error: serverError,
+          ...(serverNeedsAuth(name, cfg, serverError) ? { needsAuth: true } : {}),
+        };
+        serverStatuses.set(name, status);
+        return status;
+      } else if (serverTools && Object.keys(serverTools).length > 0) {
+        const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
+        for (const [toolName, toolConfig] of Object.entries(serverTools)) {
+          tools[`${name}_${toolName}`] = toolConfig;
+        }
+        const status: McpServerStatus = {
+          name,
+          connected: true,
+          toolCount: toolNames.length,
+          toolNames,
+          transport,
+        };
+        serverStatuses.set(name, status);
+        return status;
+      } else {
+        const status: McpServerStatus = {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport,
+          error: 'Failed to connect',
+        };
+        serverStatuses.set(name, status);
+        return status;
+      }
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+      const status: McpServerStatus = {
+        name,
+        connected: false,
+        toolCount: 0,
+        toolNames: [],
+        transport,
+        error: errMsg,
+        ...(serverNeedsAuth(name, cfg, errMsg) ? { needsAuth: true } : {}),
+      };
+      serverStatuses.set(name, status);
+      return status;
     }
   }
 
@@ -361,88 +517,62 @@ export function createMcpManager(
         };
       }
 
-      const transport = getTransport(cfg);
+      // Use MCPClient's per-server reconnect
+      return connectSingleServer(name, cfg, () => client!.reconnectServer(name));
+    },
 
-      // Remove old tools for this server
-      const prefix = `${name}_`;
-      for (const key of Object.keys(tools)) {
-        if (key.startsWith(prefix)) {
-          delete tools[key];
-        }
-      }
-
-      // Clear old logs and mark as connecting
-      stderrLogs.delete(name);
-      serverStatuses.set(name, {
-        name,
-        connected: false,
-        connecting: true,
-        toolCount: 0,
-        toolNames: [],
-        transport,
-      });
-
-      try {
-        // Use MCPClient's per-server reconnect
-        await client.reconnectServer(name);
-
-        // Recapture stderr for the reconnected server
-        captureStderr(name);
-
-        // Fetch updated toolsets to get this server's tools
-        const { toolsets, errors } = await client.listToolsetsWithErrors();
-        const serverTools = toolsets[name];
-        const serverError = errors[name];
-
-        if (serverError) {
-          const status: McpServerStatus = {
-            name,
-            connected: false,
-            toolCount: 0,
-            toolNames: [],
-            transport,
-            error: serverError,
-          };
-          serverStatuses.set(name, status);
-          return status;
-        } else if (serverTools && Object.keys(serverTools).length > 0) {
-          const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
-          for (const [toolName, toolConfig] of Object.entries(serverTools)) {
-            tools[`${name}_${toolName}`] = toolConfig;
-          }
-          const status: McpServerStatus = {
-            name,
-            connected: true,
-            toolCount: toolNames.length,
-            toolNames,
-            transport,
-          };
-          serverStatuses.set(name, status);
-          return status;
-        } else {
-          const status: McpServerStatus = {
-            name,
-            connected: false,
-            toolCount: 0,
-            toolNames: [],
-            transport,
-            error: 'Failed to connect',
-          };
-          serverStatuses.set(name, status);
-          return status;
-        }
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        const status: McpServerStatus = {
+    async authenticateServer(name: string, options?: { onAuthorizationUrl?: (url: string) => void; timeoutMs?: number }): Promise<McpServerStatus> {
+      const cfg = config.mcpServers?.[name];
+      if (!cfg) {
+        return {
           name,
           connected: false,
           toolCount: 0,
           toolNames: [],
-          transport,
-          error: errMsg,
+          transport: 'stdio',
+          error: `Server "${name}" not found in config`,
         };
-        serverStatuses.set(name, status);
-        return status;
+      }
+
+      if (!client) {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: getTransport(cfg),
+          error: 'MCP client not initialized',
+        };
+      }
+
+      if (getTransport(cfg) !== 'http') {
+        return {
+          name,
+          connected: false,
+          toolCount: 0,
+          toolNames: [],
+          transport: 'stdio',
+          error: `Server "${name}" uses stdio transport, which does not support OAuth`,
+        };
+      }
+
+      // Zero-config provisioning: a bare `url` entry gets a provider with the
+      // default redirect URL the first time the user authenticates. Dynamic
+      // client registration takes care of the client credentials.
+      const def = serverDefs[name];
+      if (def?.url && !def.authProvider) {
+        def.authProvider = createOAuthProvider(name, { ...(cfg as McpHttpServerConfig), oauth: DEFAULT_OAUTH_CONFIG });
+      }
+
+      if (options?.onAuthorizationUrl) {
+        authUrlHandlers.set(name, options.onAuthorizationUrl);
+      }
+      try {
+        return await connectSingleServer(name, cfg, () =>
+          client!.authenticate(name, options?.timeoutMs === undefined ? undefined : { timeoutMs: options.timeoutMs }),
+        );
+      } finally {
+        authUrlHandlers.delete(name);
       }
     },
 
