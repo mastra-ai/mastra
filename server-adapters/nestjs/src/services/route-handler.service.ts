@@ -216,7 +216,9 @@ export class RouteHandlerService {
       ...this.omitReservedKeys(validatedPathParams),
       ...this.omitReservedKeys(validatedQueryParams),
       ...this.omitReservedKeys(body),
-      bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
+      ...('requestContext' in body
+        ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
+        : {}),
       ...context,
     };
 

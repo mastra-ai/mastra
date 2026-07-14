@@ -457,7 +457,9 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       ...params.urlParams,
       ...params.queryParams,
       ...body,
-      bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
+      ...('requestContext' in body
+        ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
+        : {}),
       requestContext: ctx.state.requestContext,
       mastra: this.mastra,
       tools: ctx.state.tools,

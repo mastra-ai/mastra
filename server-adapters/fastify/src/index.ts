@@ -634,7 +634,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         ...params.urlParams,
         ...params.queryParams,
         ...body,
-        bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
+        ...('requestContext' in body
+          ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
+          : {}),
         requestContext: request.requestContext,
         mastra: this.mastra,
         registeredTools: request.registeredTools,

@@ -544,7 +544,9 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           ...params.urlParams,
           ...params.queryParams,
           ...body,
-          bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
+          ...('requestContext' in body
+            ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
+            : {}),
           requestContext: res.locals.requestContext,
           mastra: this.mastra,
           registeredTools: res.locals.registeredTools,

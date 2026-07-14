@@ -523,7 +523,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           ...params.urlParams,
           ...params.queryParams,
           ...body,
-          bodyRequestContext: 'requestContext' in body ? body.requestContext : undefined,
+          ...('requestContext' in body
+            ? { bodyRequestContext: body.requestContext as Record<string, unknown> | undefined }
+            : {}),
           requestContext: c.get('requestContext'),
           mastra: this.mastra,
           registeredTools: c.get('registeredTools'),
