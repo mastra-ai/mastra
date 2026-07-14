@@ -459,9 +459,31 @@ describe('CachingPubSub', () => {
       expect(inner.clearTopic).toHaveBeenCalledWith('some-topic');
     });
 
-    it('does not throw when the inner transport has no clearTopic', async () => {
-      // EventEmitterPubSub has no clearTopic; the probe must skip it cleanly.
+    it('does not throw when the inner transport does not override clearTopic', async () => {
+      // EventEmitterPubSub retains nothing per topic and relies on the
+      // PubSub base class's no-op clearTopic; forwarding must resolve cleanly.
       await expect(cachingPubsub.clearTopic('no-inner-hook')).resolves.toBeUndefined();
+    });
+
+    it('does not reject when the cache or inner transport fails', async () => {
+      // The base-class contract says clearTopic is best-effort and
+      // non-throwing: callers (DurableAgent, WorkflowEventProcessor) invoke
+      // it fire-and-forget, so a rejection here would surface as an
+      // unhandledRejection. Failures must be logged, not thrown.
+      class FailingInner extends PubSub {
+        override clearTopic = vi.fn(async (_topic: string) => {
+          throw new Error('inner delete failed');
+        });
+        async publish(): Promise<void> {}
+        async subscribe(): Promise<void> {}
+        async unsubscribe(): Promise<void> {}
+        async flush(): Promise<void> {}
+      }
+      const logger = { error: vi.fn() };
+      const wrapped = new CachingPubSub(new FailingInner(), cache, { logger: logger as any });
+
+      await expect(wrapped.clearTopic('failing-topic')).resolves.toBeUndefined();
+      expect(logger.error).toHaveBeenCalledWith(expect.stringContaining('failing-topic'), expect.any(Error));
     });
   });
 
