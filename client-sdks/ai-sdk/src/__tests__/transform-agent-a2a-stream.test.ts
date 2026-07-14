@@ -94,6 +94,26 @@ describe('transformAgent A2A sub-agent streams', () => {
     });
   });
 
+  it('handles tool-call and object chunks without a start chunk (resumed streams)', () => {
+    // Resumed Agent streams also skip the `start` chunk (core's
+    // loop/workflows/stream.ts only emits it when there is no resumeContext).
+    const bufferedSteps = new Map<string, any>();
+    const runId = 'resumed-run';
+
+    const toolCall = transformAgent(
+      makePayload('tool-call', runId, { toolCallId: 'call-1', toolName: 'weather', args: { city: 'Paris' } }),
+      bufferedSteps,
+    );
+    expect(toolCall?.data.toolCalls).toEqual([{ toolCallId: 'call-1', toolName: 'weather', args: { city: 'Paris' } }]);
+
+    const objectChunk = transformAgent(
+      { type: 'object', runId: 'resumed-run-object', object: { answer: 42 } } as any,
+      bufferedSteps,
+    );
+    expect(objectChunk?.data.object).toEqual({ answer: 42 });
+    expect(objectChunk?.data.toolCalls).toEqual([]);
+  });
+
   it('still prefers the regular Agent finish payload shape', () => {
     const bufferedSteps = new Map<string, any>();
     const runId = 'agent-run';

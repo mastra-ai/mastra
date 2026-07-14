@@ -677,8 +677,10 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
     }
     case 'finish': {
       // Not all sub-agent streams emit a `start` chunk before their first
-      // content chunk (e.g. A2AAgent remote streams), so the run state may
-      // not exist yet.
+      // content chunk, so the run state may not exist yet. A2AAgent remote
+      // streams never emit one (see A2AAgentFullStreamChunkBase in
+      // @mastra/core), and resumed Agent streams skip it (`if (!resumeContext)`
+      // in core's loop/workflows/stream.ts).
       const finishRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       // Regular Agent streams emit `{ stepResult, output }`; A2AAgent remote
       // streams emit a flat `{ finishReason, usage }` payload.
@@ -740,17 +742,16 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
       hasChanged = true;
       break;
     }
-    case 'tool-call':
+    case 'tool-call': {
+      const toolCallRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
-        pendingToolCalls: removePendingToolCall(
-          bufferedSteps.get(payload.runId)!.pendingToolCalls,
-          payload.payload.toolCallId,
-        ),
-        toolCalls: [...bufferedSteps.get(payload.runId)!.toolCalls, payload.payload],
+        ...toolCallRun,
+        pendingToolCalls: removePendingToolCall(toolCallRun.pendingToolCalls, payload.payload.toolCallId),
+        toolCalls: [...toolCallRun.toolCalls, payload.payload],
       });
       hasChanged = true;
       break;
+    }
     case 'tool-result': {
       const toolResultRun = ensureAgentRunState(bufferedSteps, payload.runId!);
       bufferedSteps.set(payload.runId!, {
@@ -763,14 +764,14 @@ export function transformAgent<OUTPUT>(payload: ChunkType<OUTPUT>, bufferedSteps
     }
     case 'object-result':
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
+        ...ensureAgentRunState(bufferedSteps, payload.runId!),
         object: payload.object,
       });
       hasChanged = true;
       break;
     case 'object':
       bufferedSteps.set(payload.runId!, {
-        ...bufferedSteps.get(payload.runId!),
+        ...ensureAgentRunState(bufferedSteps, payload.runId!),
         object: payload.object,
       });
       hasChanged = true;
