@@ -46,6 +46,7 @@ interface MastraLike {
         }>;
       }
     | undefined;
+  removeWorkflow?: (keyOrId: string) => boolean;
 }
 
 interface WorkflowDefinitionsStore {
@@ -76,6 +77,13 @@ export async function getWorkflow(mastra: Mastra, id: string): Promise<StoredWor
 export async function deleteWorkflow(mastra: Mastra, id: string): Promise<{ ok: true; id: string }> {
   const store = await workflowDefinitionsStore(mastra);
   await store.delete(id);
+  // Also unregister the live in-process Workflow instance so a subsequent
+  // save-workflow with the same id re-registers cleanly instead of getting
+  // no-op'd by addWorkflow's first-write-wins guard.
+  const removeWorkflow = (mastra as unknown as MastraLike).removeWorkflow;
+  if (typeof removeWorkflow === 'function') {
+    removeWorkflow.call(mastra, id);
+  }
   return { ok: true, id };
 }
 

@@ -4279,6 +4279,48 @@ export class Mastra<
   }
 
   /**
+   * Removes a workflow from the Mastra instance by its key or ID.
+   * Used when stored workflows are updated/deleted so subsequent saves can
+   * re-register the same id cleanly.
+   *
+   * Note: this only clears the live in-process registration. In-flight runs
+   * are unaffected (they capture stepFlow at start time). Static workflow
+   * scorers stay registered (matching removeAgent/removeTool behavior).
+   *
+   * @param keyOrId - The workflow key or ID to remove
+   * @returns true if a workflow was removed, false if no workflow was found
+   *
+   * @example
+   * ```typescript
+   * // Remove by key
+   * mastra.removeWorkflow('myWorkflow');
+   *
+   * // Remove by ID
+   * mastra.removeWorkflow('workflow-123');
+   * ```
+   */
+  public removeWorkflow(keyOrId: string): boolean {
+    const workflows = this.#workflows as Record<string, AnyWorkflow>;
+
+    // Try direct key lookup first
+    if (workflows[keyOrId]) {
+      delete workflows[keyOrId];
+      this.#hiddenWorkflowKeys.delete(keyOrId);
+      return true;
+    }
+
+    // Try finding by workflow.id
+    const key = Object.keys(workflows).find(k => workflows[k]?.id === keyOrId);
+    if (key) {
+      delete workflows[key];
+      this.#hiddenWorkflowKeys.delete(key);
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Adds a new workflow to the Mastra instance.
    *
    * This method allows dynamic registration of workflows after the Mastra instance
@@ -4374,6 +4416,10 @@ export class Mastra<
    */
   public async addStoredWorkflow(def: StoredWorkflowGraph): Promise<void> {
     const { workflow } = await rehydrateWorkflow(def, this);
+    // Stored workflows are the source of truth for this id — replace any
+    // existing live registration so re-saves surface immediately instead of
+    // being silently no-op'd by addWorkflow's first-write-wins guard.
+    this.removeWorkflow(def.id);
     this.addWorkflow(workflow as AnyWorkflow, def.id);
 
     const store = await this.#storage?.getStore('workflowDefinitions');
