@@ -882,6 +882,11 @@ export function createDatasetsTests({
         expect(first).not.toHaveProperty('isDeleted');
         expect(retry).not.toHaveProperty('validTo');
         expect(retry).not.toHaveProperty('isDeleted');
+
+        const history = await datasetsStorage.getItemHistory(first!.id);
+        expect(history).toHaveLength(1);
+        expect(history[0]!.validTo).toBeNull();
+        expect(history[0]!.isDeleted).toBe(false);
         expect((await datasetsStorage.getDatasetById({ id: ds.id }))!.version).toBe(1);
       });
 
