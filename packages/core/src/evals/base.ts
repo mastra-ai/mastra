@@ -5,6 +5,7 @@ import type { MastraDBMessage, MastraMessagePart, MastraToolInvocationPart } fro
 import type { AgentMemoryOption, ToolsInput } from '../agent/types';
 import { tryStreamWithJsonFallback } from '../agent/utils';
 import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '../error';
+import { modelSupportsStructuredOutput } from '../llm/model/provider-registry';
 import { resolveModelConfig } from '../llm/model/resolve-model';
 import type { MastraModelConfig } from '../llm/model/shared.types';
 import { noopLogger } from '../logger';
@@ -73,10 +74,13 @@ type ScorerTypeShortcuts = {
  * grading text alone. Tools run in the judge agent's own tool-call loop and the
  * judge still returns the step's structured output at the end.
  */
+function selectJsonPromptInjection(capability: boolean | undefined): 'inline' | undefined {
+  return capability === true ? undefined : 'inline';
+}
+
 export interface ScorerJudgeConfig {
   model: MastraModelConfig;
   instructions: string;
-  jsonPromptInjection?: boolean;
   /** Optional tools the judge agent may call while evaluating (e.g. readonly verification tools). */
   tools?: ToolsInput;
   /** Optional memory instance for the internal judge agent. */
@@ -908,7 +912,6 @@ class MastraScorer<
     const prompt = await originalStep.createPrompt(context);
     const modelConfig = originalStep.judge?.model ?? this.config.judge?.model;
     const instructions = originalStep.judge?.instructions ?? this.config.judge?.instructions;
-    const jsonPromptInjection = originalStep.judge?.jsonPromptInjection ?? this.config.judge?.jsonPromptInjection;
     // Step-level tools override scorer-level tools. When present, the judge agent
     // can call them (in its own tool-call loop) before producing the step output.
     const tools = originalStep.judge?.tools ?? this.config.judge?.tools;
@@ -953,6 +956,7 @@ class MastraScorer<
       this.#mastra,
     );
     const judgeModel = resolvedModel.modelId;
+    const jsonPromptInjection = selectJsonPromptInjection(modelSupportsStructuredOutput(judgeModel));
 
     const judge = new Agent({
       id: 'judge',

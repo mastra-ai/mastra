@@ -140,10 +140,15 @@ export function createDurableGoalStep() {
       };
 
       const registryEntry = globalRunRegistry.get(state.runId);
-      const goal = registryEntry?.goal;
+      // This is shared agent configuration (judge, scorer, tools, defaults), not per-goal state.
+      // The objective and its progress are isolated by thread and loaded from storage below.
+      let goalConfig = registryEntry?.goal;
+      if (!goalConfig && initData.agentId) {
+        goalConfig = (mastra as any)?.getAgent?.(initData.agentId)?.__getGoalConfig?.();
+      }
 
-      // No goal configured → nothing to do.
-      if (!goal) return state;
+      // No goal mode configured → nothing to do.
+      if (!goalConfig) return state;
 
       // Same gating as isTaskComplete: skip background results, mid-tool-loop
       // continuations, and working-memory-only iterations.
@@ -179,10 +184,10 @@ export function createDurableGoalStep() {
       }
 
       const effective = resolveEffectiveGoalSettings(record, {
-        judgeModelId: typeof goal.judge === 'string' ? goal.judge : undefined,
-        maxRuns: goal.maxRuns,
-        prompt: goal.prompt,
-        maxSteps: goal.maxSteps,
+        judgeModelId: typeof goalConfig.judge === 'string' ? goalConfig.judge : undefined,
+        maxRuns: goalConfig.maxRuns,
+        prompt: goalConfig.prompt,
+        maxSteps: goalConfig.maxSteps,
       });
 
       // Defensive budget guard.
@@ -221,9 +226,10 @@ export function createDurableGoalStep() {
         return nextState;
       }
 
-      // Determine the judge model config. A non-string agent `goal.judge` (a
+      // Determine the judge model config. A non-string agent `goalConfig.judge` (a
       // resolved model or a model-resolver function) takes precedence.
-      const nonStringAgentJudge = goal.judge && typeof goal.judge !== 'string' ? goal.judge : undefined;
+      const nonStringAgentJudge =
+        goalConfig.judge && typeof goalConfig.judge !== 'string' ? goalConfig.judge : undefined;
 
       let judgeModelConfig: unknown = nonStringAgentJudge ?? effective.judgeModelId;
       if (typeof judgeModelConfig === 'function') {
@@ -268,37 +274,43 @@ export function createDurableGoalStep() {
         const observeJudgeStream = (stream: { fullStream?: AsyncIterable<ChunkType> }) => {
           if (!stream.fullStream) return;
           void (async () => {
-            let streamedText = '';
-            let lastReason = '';
-            for await (const chunk of stream.fullStream!) {
-              if (chunk.type === 'text-delta') {
-                streamedText += (chunk as any).payload?.text ?? '';
-                const reason = extractPartialReasonFromStructuredText(streamedText);
-                if (reason && reason !== lastReason) {
-                  lastReason = reason;
-                  emitJudgeActivity({ type: 'reason', message: reason });
+            try {
+              let streamedText = '';
+              let lastReason = '';
+              for await (const chunk of stream.fullStream!) {
+                if (chunk.type === 'text-delta') {
+                  streamedText += (chunk as any).payload?.text ?? '';
+                  const reason = extractPartialReasonFromStructuredText(streamedText);
+                  if (reason && reason !== lastReason) {
+                    lastReason = reason;
+                    emitJudgeActivity({ type: 'reason', message: reason });
+                  }
+                } else if (chunk.type === 'tool-call') {
+                  emitJudgeActivity(
+                    {
+                      type: 'tool-call',
+                      name: (chunk as any).payload?.toolName,
+                      message: (chunk as any).payload?.toolName,
+                    },
+                    (chunk as any).payload?.args,
+                  );
                 }
-              } else if (chunk.type === 'tool-call') {
-                emitJudgeActivity(
-                  {
-                    type: 'tool-call',
-                    name: (chunk as any).payload?.toolName,
-                    message: (chunk as any).payload?.toolName,
-                  },
-                  (chunk as any).payload?.args,
-                );
               }
+            } catch {
+              // The scorer owns structured-output fallback and error reporting.
+              // Judge activity streaming is best-effort UI feedback and must not
+              // turn a recoverable scorer stream failure into an unhandled rejection.
             }
           })();
         };
 
         // Resolve the scorer.
         let scorer: MastraScorer<any, any, any, any> | undefined;
-        if (goal.scorer) {
+        if (goalConfig.scorer) {
           scorer =
-            typeof goal.scorer === 'string'
-              ? (mastra?.getScorer?.(goal.scorer as any) as MastraScorer<any, any, any, any> | undefined)
-              : goal.scorer;
+            typeof goalConfig.scorer === 'string'
+              ? (mastra?.getScorer?.(goalConfig.scorer as any) as MastraScorer<any, any, any, any> | undefined)
+              : goalConfig.scorer;
         }
         if (!scorer) {
           const judgeModel = (
@@ -308,9 +320,11 @@ export function createDurableGoalStep() {
           ) as MastraLanguageModel;
 
           const goalTools: ToolsInput | undefined =
-            typeof goal.tools === 'function'
-              ? ((await (goal.tools as (args: any) => unknown)({ requestContext, mastra })) as ToolsInput | undefined)
-              : goal.tools;
+            typeof goalConfig.tools === 'function'
+              ? ((await (goalConfig.tools as (args: any) => unknown)({ requestContext, mastra })) as
+                  | ToolsInput
+                  | undefined)
+              : goalConfig.tools;
 
           scorer = createGoalScorer({
             mastra,
