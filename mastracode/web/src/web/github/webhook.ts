@@ -156,6 +156,16 @@ function notificationSummary(metadata: GithubWebhookMetadata, label: string): st
   return `${actor}${label} on ${metadata.repository}#${metadata.pullRequestNumber}`;
 }
 
+function notificationTargetUrl(event: string, payload: Record<string, unknown>): string | undefined {
+  if (event === 'issue_comment' || event === 'pull_request_review_comment') {
+    return getString(getObject(payload.comment)?.html_url);
+  }
+  if (event === 'pull_request_review') {
+    return getString(getObject(payload.review)?.html_url);
+  }
+  return getString(getObject(payload.pull_request)?.html_url);
+}
+
 export function classifyGithubWebhook(parsed: ParsedGithubWebhook): GithubWebhookNotification | undefined {
   const metadata = normalizeGithubWebhookMetadata(parsed);
   const { event, payload } = parsed;
@@ -296,6 +306,7 @@ export async function dispatchGithubWebhook(
           repository: notification.metadata.repository,
           issueNumber: notification.metadata.issueNumber,
           pullRequestNumber: notification.metadata.pullRequestNumber,
+          targetUrl: notificationTargetUrl(parsed.event, parsed.payload),
           deliveryId: parsed.deliveryId,
         },
       });

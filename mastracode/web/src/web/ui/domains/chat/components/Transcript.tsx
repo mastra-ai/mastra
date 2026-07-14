@@ -541,6 +541,9 @@ function SubagentCard({ entry }: { entry: SubagentEntry }) {
 // ---------------------------------------------------------------------------
 
 function notificationUrl(entry: NotificationEntry): string | undefined {
+  const targetUrl = entry.metadata?.targetUrl;
+  if (typeof targetUrl === 'string' && /^https:\/\/github\.com\//.test(targetUrl)) return targetUrl;
+
   const repository = entry.metadata?.repository;
   if (typeof repository !== 'string' || !/^[^/]+\/[^/]+$/.test(repository)) return undefined;
   const pullRequestNumber = entry.metadata?.pullRequestNumber;
@@ -561,7 +564,7 @@ function notificationPresentation(entry: NotificationEntry) {
   if (action === 'opened' || action === 'reopened') {
     return { state: 'open', icon: <CircleDot size={13} />, className: 'border-accent1/30 text-accent1' };
   }
-  return { state: 'notification', icon: <Bell size={13} />, className: 'border-border1 text-icon3' };
+  return { state: 'notification', icon: <Bell size={13} />, className: 'border-accent3/30 text-icon3' };
 }
 
 function NotificationCard({ entry }: { entry: NotificationEntry }) {

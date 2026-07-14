@@ -158,9 +158,14 @@ describe('ChatMessageList', () => {
               notificationId: 'notification-1',
               message: 'octo/repo#42 received a new comment',
               source: 'github',
-              kind: 'pull-request-opened',
+              kind: 'issue-comment-created',
               priority: 'high',
-              metadata: { action: 'opened', repository: 'octo/repo', pullRequestNumber: 42 },
+              metadata: {
+                action: 'created',
+                repository: 'octo/repo',
+                pullRequestNumber: 42,
+                targetUrl: 'https://github.com/octo/repo/pull/42#issuecomment-123',
+              },
             },
             {
               type: 'notification',
@@ -193,8 +198,8 @@ describe('ChatMessageList', () => {
     expect(screen.queryByText('high')).not.toBeInTheDocument();
     expect(screen.queryByText('urgent')).not.toBeInTheDocument();
     const targetLink = screen.getByRole('link', { name: /Open notification target/ });
-    expect(targetLink).toHaveAttribute('href', 'https://github.com/octo/repo/pull/42');
-    expect(targetLink.querySelector('[data-notification-state="open"]')).toBeInTheDocument();
+    expect(targetLink).toHaveAttribute('href', 'https://github.com/octo/repo/pull/42#issuecomment-123');
+    expect(targetLink.querySelector('[data-notification-state="notification"]')).toBeInTheDocument();
     expect(screen.getByText('octo/repo#42 was merged').closest('[data-notification-state]')).toHaveAttribute(
       'data-notification-state',
       'merged',

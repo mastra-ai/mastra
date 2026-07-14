@@ -89,6 +89,7 @@ describe('dispatchGithubWebhook', () => {
 
     const result = await dispatchGithubWebhook(parsed('issue_comment', 'created', {
       issue: { number: 34, pull_request: { url: 'https://api.github.test/pr/34' } },
+      comment: { html_url: 'https://github.com/octo/hello/pull/34#issuecomment-123' },
       pull_request: undefined,
     }), {
       controller: { getSessionByResource, createSession } as never,
@@ -110,6 +111,9 @@ describe('dispatchGithubWebhook', () => {
         priority: 'high',
         dedupeKey: 'delivery-1:session-a:thread-a',
         coalesceKey: 'github:99:pull-request:34',
+        metadata: expect.objectContaining({
+          targetUrl: 'https://github.com/octo/hello/pull/34#issuecomment-123',
+        }),
       }),
     );
     expect(sendA.mock.calls[0]).toHaveLength(1);
