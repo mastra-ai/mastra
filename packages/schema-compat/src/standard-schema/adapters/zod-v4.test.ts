@@ -345,5 +345,22 @@ describe('zod-v4 standard-schema adapter', () => {
 
       expect(() => standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' })).not.toThrow();
     });
+
+    it('patches the buggy zod <= 4.3.6 record def shape (value stored in keyType)', () => {
+      // On zod < 4.4.0, single-arg z.record(valueSchema) stores the value schema
+      // in def.keyType and leaves def.valueType undefined. The workspace zod has
+      // the upstream fix, so recreate the buggy def shape directly to keep this
+      // regression testable regardless of the installed zod version.
+      const schema = z.object({ flags: z.record(z.string(), z.boolean()) });
+      const def = (schema.shape.flags as any)._zod.def;
+      def.keyType = def.valueType;
+      def.valueType = undefined;
+
+      const standardSchema = toStandardSchema(schema);
+      const result = standardSchema['~standard'].jsonSchema.input({ target: 'draft-07' }) as Record<string, any>;
+
+      expect(result.properties.flags.type).toBe('object');
+      expect(result.properties.flags.additionalProperties).toEqual({ type: 'boolean' });
+    });
   });
 });
