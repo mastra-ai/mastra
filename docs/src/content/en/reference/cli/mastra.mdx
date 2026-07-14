@@ -358,7 +358,7 @@ Manages databases attached to a project on Mastra platform. Databases are provis
 
 A database is either **environment-scoped** (its env vars only go to one environment) or **shared** (project-scoped: its env vars go to all environments). Pass the environment argument to work with environment-scoped databases; omit it for shared databases.
 
-Creating and detaching databases requires the `admin` role in the organization.
+Creating and deleting databases requires the `admin` role in the organization.
 
 ### `mastra env db list`
 
@@ -422,12 +422,12 @@ Print secret connection values instead of masking them.
 
 Emit machine-readable JSON. Secret values are masked unless `--show-secrets` is passed.
 
-### `mastra env db detach`
+### `mastra env db delete`
 
-Detaches a database from the project. The CLI prompts for confirmation unless `--yes` is passed. After detaching, deploys no longer receive the database's env vars.
+Permanently deletes a database with the provider, including all of its data. This cannot be undone. The CLI prompts for confirmation unless `--yes` is passed. After deletion, deploys no longer receive the database's env vars.
 
 ```bash
-mastra env db detach <database>
+mastra env db delete <database>
 ```
 
 #### `-y, --yes`

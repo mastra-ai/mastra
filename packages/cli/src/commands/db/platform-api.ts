@@ -116,14 +116,14 @@ export async function fetchDatabase(
   return data.database;
 }
 
-export async function detachDatabase(token: string, orgId: string, projectId: string, dbId: string): Promise<void> {
+export async function deleteDatabase(token: string, orgId: string, projectId: string, dbId: string): Promise<void> {
   const resp = await platformFetch(`${getApiUrl()}/v1/server/projects/${projectId}/databases/${dbId}`, {
     method: 'DELETE',
     headers: authHeaders(token, orgId),
   });
 
   if (!resp.ok) {
-    await handleFailure(resp, 'Failed to detach database');
+    await handleFailure(resp, 'Failed to delete database');
   }
 }
 

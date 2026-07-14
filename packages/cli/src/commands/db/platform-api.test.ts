@@ -126,12 +126,12 @@ describe('attachDatabase', () => {
   });
 });
 
-describe('detachDatabase', () => {
+describe('deleteDatabase', () => {
   it('resolves on 204', async () => {
     mockPlatformFetch.mockResolvedValue({ ok: true, status: 204 } as unknown as Response);
 
-    const { detachDatabase } = await import('./platform-api.js');
-    await expect(detachDatabase('tok', 'org-1', 'proj-1', 'db-1')).resolves.toBeUndefined();
+    const { deleteDatabase } = await import('./platform-api.js');
+    await expect(deleteDatabase('tok', 'org-1', 'proj-1', 'db-1')).resolves.toBeUndefined();
 
     const [url, init] = mockPlatformFetch.mock.calls[0]!;
     expect(url).toBe('http://localhost:9999/v1/server/projects/proj-1/databases/db-1');
@@ -141,8 +141,8 @@ describe('detachDatabase', () => {
   it('throws a clear admin-role message on 403', async () => {
     mockPlatformFetch.mockResolvedValue(jsonResponse(403, { detail: 'Forbidden' }));
 
-    const { detachDatabase } = await import('./platform-api.js');
-    await expect(detachDatabase('tok', 'org-1', 'proj-1', 'db-1')).rejects.toThrow(
+    const { deleteDatabase } = await import('./platform-api.js');
+    await expect(deleteDatabase('tok', 'org-1', 'proj-1', 'db-1')).rejects.toThrow(
       'You need the admin role in this organization to manage databases.',
     );
   });
