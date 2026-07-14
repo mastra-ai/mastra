@@ -90,7 +90,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     const key = recordKey(input.name, scope);
     const existingId = this.#db.knowledgeEntityKeys.get(key);
-    if (existingId) return cloneEntity(this.#db.knowledgeEntities.get(existingId)!);
+    if (existingId) return cloneEntity(this.#resolveTerminalEntity(existingId)!);
 
     const now = new Date();
     const entity: KnowledgeEntity = {
@@ -127,7 +127,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
     const canonical = canonicalizeKnowledgeScope(scope);
     for (let length = canonical.length; length > 0; length--) {
       const entity = await this.getEntityByName({ name, scope: canonical.slice(0, length) });
-      if (entity && !entity.mergedInto) return entity;
+      if (entity) return cloneEntity(this.#resolveTerminalEntity(entity.id)!);
     }
     return null;
   }

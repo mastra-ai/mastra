@@ -227,7 +227,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     const scope = canonicalizeKnowledgeScope(input.scope);
     return this.#transaction(async tx => {
       const existing = await this.#getEntityByName(tx, input.name, scope);
-      if (existing) return existing;
+      if (existing) return (await this.#resolveTerminalEntity(tx, existing.id))!;
       const now = new Date();
       const entity: KnowledgeEntity = {
         id: input.id ?? crypto.randomUUID(),
@@ -829,7 +829,7 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   async #resolveEntity(executor: Executor, name: string, scope: KnowledgeScope): Promise<KnowledgeEntity | null> {
     for (let length = scope.length; length > 0; length--) {
       const entity = await this.#getEntityByName(executor, name, scope.slice(0, length));
-      if (entity && !entity.mergedInto) return entity;
+      if (entity) return this.#resolveTerminalEntity(executor, entity.id);
     }
     return null;
   }

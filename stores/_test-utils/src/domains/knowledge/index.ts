@@ -59,6 +59,18 @@ export function createKnowledgeStorageTests(createStore: () => Promise<Knowledge
       expect((await store.listSemanticOutbox()).slice(beforeMerge).map(entry => entry.documentType)).toEqual(
         expect.arrayContaining(['page', 'fact', 'entity']),
       );
+      const postMergeFact = await store.appendFact({
+        parentEntityId: project.id,
+        text: 'Still references [[Jane Doe]]',
+        scope: resource,
+        sourceThreadId: 't1',
+        resolutionScope: thread,
+        defaultScope: resource,
+      });
+      expect((await store.factsTouching({ entityId: target.id, scope: thread })).facts.map(item => item.id)).toContain(
+        postMergeFact.id,
+      );
+      expect((await store.createEntity({ name: 'Jane Doe', kind: 'person', scope: resource })).id).toBe(target.id);
 
       const beforeRescope = (await store.listSemanticOutbox()).length;
       await store.rescopeFact({ id: fact.id, scope: ['org:acme'] });
