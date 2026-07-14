@@ -30,6 +30,7 @@ export interface BundlerOptions {
   enableEsmShim: boolean;
   externals: boolean | string[];
   dynamicPackages?: string[];
+  transpilePackages?: string[];
 }
 
 /**

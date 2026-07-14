@@ -319,6 +319,7 @@ export abstract class Bundler extends MastraBundler {
       externals: bundlerOptions.externals ?? [],
       enableEsmShim,
       dynamicPackages: bundlerOptions.dynamicPackages,
+      transpilePackages: bundlerOptions.transpilePackages,
     };
 
     let analyzedBundleInfo;

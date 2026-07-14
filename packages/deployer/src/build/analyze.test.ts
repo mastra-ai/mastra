@@ -269,6 +269,55 @@ describe('external dependency versions', () => {
   }, 15000);
 });
 
+describe('transpilePackages threading (issue #19380)', () => {
+  it('accepts transpilePackages in bundlerOptions without dropping it', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-transpile-packages-'));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const entryFile = join(appDir, 'index.ts');
+    const outputDir = join(appDir, '.mastra', '.build');
+
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'test-workspace', version: '1.0.0' }));
+    await writeFile(join(appDir, 'package.json'), JSON.stringify({ name: 'app', version: '1.0.0', type: 'module' }));
+    await writeFile(entryFile, `export const value = 1;`);
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      // Before the fix, `transpilePackages` was outside the `Pick<BundlerOptions, ...>`
+      // accepted by analyzeBundle's type, and internalBundlerOptions
+      // (packages/deployer/src/bundler/index.ts) never read it off the user's
+      // config at all -- so it was silently dropped before ever reaching
+      // bundleExternals. This call should type-check and succeed without
+      // throwing, and is a regression guard against that field being dropped
+      // again in the future.
+      const result = await analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: appDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: {
+            externals: [],
+            enableSourcemap: false,
+            transpilePackages: ['some-ts-shipping-package'],
+          },
+        },
+        noopLogger,
+      );
+
+      expect(result).toBeDefined();
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 15000);
+});
+
 describe('protocol imports', () => {
   it('should exclude protocol imports from externalDependencies', async () => {
     await mkdir(tempRoot, { recursive: true });

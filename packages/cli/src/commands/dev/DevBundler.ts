@@ -102,6 +102,13 @@ export class DevBundler extends Bundler {
       },
       {
         sourcemap: sourcemapEnabled,
+        bundlerOptions: {
+          enableSourcemap: sourcemapEnabled,
+          enableEsmShim: true,
+          externals: bundlerOptions?.externals ?? true,
+          dynamicPackages: bundlerOptions?.dynamicPackages,
+          transpilePackages: bundlerOptions?.transpilePackages,
+        },
         analysisEntries: [entryFile, devServerAnalysisEntry],
       },
     );

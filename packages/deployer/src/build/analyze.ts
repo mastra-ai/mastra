@@ -386,7 +386,7 @@ export async function analyzeBundle(
     projectRoot: string;
     platform: BundlerPlatform;
     isDev?: boolean;
-    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages'> | null;
+    bundlerOptions?: Pick<BundlerOptions, 'externals' | 'enableSourcemap' | 'dynamicPackages' | 'transpilePackages'> | null;
   },
   logger: IMastraLogger,
 ) {
