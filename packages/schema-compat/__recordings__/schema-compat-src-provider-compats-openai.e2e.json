@@ -5,7 +5,7 @@
     "testName": "OpenAI e2e test",
     "model": "gpt-4.1",
     "createdAt": "2026-03-24T13:36:54.661Z",
-    "updatedAt": "2026-07-14T12:31:50.993Z"
+    "updatedAt": "2026-07-14T13:13:45.767Z"
   },
   "recordings": [
     {
@@ -352,7 +352,7 @@
             }
           }
         },
-        "timestamp": 1784032279621
+        "timestamp": 1784034805625
       },
       "response": {
         "status": 200,
@@ -361,12 +361,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b08b33db48697d-CDG",
+          "cf-ray": "a1b0c8df9d27b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 12:31:28 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:30 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "7279",
+          "openai-processing-ms": "4293",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -375,21 +375,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999680",
+          "x-ratelimit-remaining-tokens": "29999690",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_13c3e6f426a7449fbeca3d9c02e70d23"
+          "x-request-id": "req_07bcac09193c4743889af248ef16e990"
         },
         "body": {
-          "id": "resp_0aae596fb7e01685006a562c18bf0881928d826f2988ca989e",
+          "id": "resp_069cca348db47084006a5635f5d28081928f3b0429c21aa20f",
           "object": "response",
-          "created_at": 1784032280,
+          "created_at": 1784034805,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784032287,
+          "completed_at": 1784034809,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -400,7 +400,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0aae596fb7e01685006a562c19bc548192ae7d59dcca3adb72",
+              "id": "msg_069cca348db47084006a5635f625fc8192a1bece6ba24178d9",
               "type": "message",
               "status": "completed",
               "content": [
@@ -408,7 +408,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "{\"string\":\"sample text\",\"stringMin\":\"hello\",\"stringMax\":\"shorttext\",\"stringEmail\":\"example@test.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"550e8400-e29b-41d4-a716-446655440000\",\"stringCuid\":\"cll8bq0sl0000h8l3bqkwxyzx\",\"stringRegex\":\"test-case\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"one\",\"two\",\"three\"],\"arrayMin\":[\"item\"],\"arrayMax\":[\"a\",\"b\",\"c\",\"d\",\"e\"],\"date\":\"2022-08-15T10:00:00Z\",\"dateAfter\":\"2024-03-01T12:00:00Z\",\"dateBefore\":\"2024-06-01T00:00:00Z\",\"actualData\":\"2024-06-10T15:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":20}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"union sample\",\"unionObjects\":{\"amount\":9,\"inventoryItemName\":\"itemA\"},\"record\":[{\"key\":\"firstKey\",\"value\":\"firstValue\"},{\"key\":\"secondKey\",\"value\":\"secondValue\"}],\"recordEnumKeys\":{\"A\":\"apple\",\"B\":\"banana\"},\"default\":\"\"}"
+                  "text": "{\"string\":\"sample text\",\"stringMin\":\"hello\",\"stringMax\":\"shorttext\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjnz7qug50000q4rmniodw5k9\",\"stringRegex\":\"test-string\",\"number\":42,\"numberGt\":4,\"numberLt\":5,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":6,\"numberInt\":10,\"exampleArray\":[\"one\",\"two\"],\"arrayMin\":[\"sample\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2023-12-15T10:00:00Z\",\"dateAfter\":\"2024-02-01T12:00:00Z\",\"dateBefore\":\"2024-05-01T08:00:00Z\",\"actualData\":\"2024-06-01T16:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":7},\"objectNested\":{\"user\":{\"name\":\"John\",\"age\":28}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"example\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"record\":[{\"key\":\"first\",\"value\":\"value1\"},{\"key\":\"second\",\"value\":\"value2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"\"}"
                 }
               ],
               "role": "assistant"
@@ -783,11 +783,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 339,
+            "output_tokens": 329,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1436
+            "total_tokens": 1426
           },
           "user": null,
           "metadata": {}
@@ -1140,7 +1140,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784032288052
+        "timestamp": 1784034810251
       },
       "response": {
         "status": 200,
@@ -1149,12 +1149,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b08b685fd2697d-CDG",
+          "cf-ray": "a1b0c8fc3a30b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 12:31:31 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:34 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "3561",
+          "openai-processing-ms": "4196",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1163,21 +1163,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999869",
+          "x-ratelimit-remaining-tokens": "29999876",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_6a91b80f33ff46b7a599e2c6ba62c3e6"
+          "x-request-id": "req_e573a12bd1ba445fa16b25b9bedbb51d"
         },
         "body": {
-          "id": "resp_0a912d79b4ac00c9006a562c2027f08191ac72dc09088a54e6",
+          "id": "resp_078c1ef01d7f239c006a5635fa59b081a0bc0b1f8091b2df41",
           "object": "response",
-          "created_at": 1784032288,
+          "created_at": 1784034810,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784032291,
+          "completed_at": 1784034814,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1188,11 +1188,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_0a912d79b4ac00c9006a562c20db1c8191b045e9e38af0ee0b",
+              "id": "fc_078c1ef01d7f239c006a5635fb00cc81a09863b4dccd3d8474",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"test@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixlphn3l0000q9uwhgoboy4i\",\"stringRegex\":\"test-abc123\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"sample1\",\"sample2\"],\"arrayMin\":[\"atleastone\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"date\":\"2024-06-11T12:00:00Z\",\"dateAfter\":\"2024-06-02T09:00:00Z\",\"dateBefore\":\"2024-06-01T10:00:00Z\",\"actualData\":\"2024-06-10T15:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"text\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemA\"},\"record\":[{\"key\":\"first\",\"value\":\"value1\"},{\"key\":\"second\",\"value\":\"value2\"}],\"recordEnumKeys\":{\"A\":\"Alpha\",\"B\":\"Beta\"},\"default\":\"test\"}",
-              "call_id": "call_wbHeRpKH5bsyxrOX3fTAxDDc",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"More than five\",\"stringMax\":\"Short\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl2cyk0000y3rmniodnnqr5\",\"stringRegex\":\"test-value\",\"number\":10,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"foo\",\"bar\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"one\",\"two\"],\"date\":\"2024-05-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2023-12-01T08:00:00Z\",\"actualData\":\"2024-04-12T10:30:00Z\",\"object\":{\"foo\":\"baz\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Ed\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":7,\"inventoryItemName\":\"apple\"},\"record\":[{\"key\":\"k1\",\"value\":\"val1\"},{\"key\":\"k2\",\"value\":\"val2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"test\"}",
+              "call_id": "call_DYnUwbDZUD5azWTB8gPSq51L",
               "name": "manySchemasTool"
             }
           ],
@@ -1571,11 +1571,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 348,
+            "output_tokens": 341,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1161
+            "total_tokens": 1154
           },
           "user": null,
           "metadata": {}
@@ -1584,7 +1584,7 @@
       }
     },
     {
-      "hash": "2463e6bdbfa53d80",
+      "hash": "f752a7d6303b8f5c",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1601,13 +1601,15 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_0a912d79b4ac00c9006a562c20db1c8191b045e9e38af0ee0b"
+              "type": "function_call",
+              "call_id": "call_DYnUwbDZUD5azWTB8gPSq51L",
+              "name": "manySchemasTool",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"More than five\",\"stringMax\":\"Short\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl2cyk0000y3rmniodnnqr5\",\"stringRegex\":\"test-value\",\"number\":10,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"foo\",\"bar\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"one\",\"two\"],\"date\":\"2024-05-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2023-12-01T08:00:00Z\",\"actualData\":\"2024-04-12T10:30:00Z\",\"object\":{\"foo\":\"baz\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Ed\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":7,\"inventoryItemName\":\"apple\"},\"record\":[{\"key\":\"k1\",\"value\":\"val1\"},{\"key\":\"k2\",\"value\":\"val2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"test\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_wbHeRpKH5bsyxrOX3fTAxDDc",
-              "output": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"test@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixlphn3l0000q9uwhgoboy4i\",\"stringRegex\":\"test-abc123\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"sample1\",\"sample2\"],\"arrayMin\":[\"atleastone\"],\"arrayMax\":[\"one\",\"two\",\"three\"],\"date\":\"2024-06-11T12:00:00Z\",\"dateAfter\":\"2024-06-02T09:00:00Z\",\"dateBefore\":\"2024-06-01T10:00:00Z\",\"actualData\":\"2024-06-10T15:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"text\",\"unionObjects\":{\"amount\":5,\"inventoryItemName\":\"ItemA\"},\"record\":[{\"key\":\"first\",\"value\":\"value1\"},{\"key\":\"second\",\"value\":\"value2\"}],\"recordEnumKeys\":{\"A\":\"Alpha\",\"B\":\"Beta\"},\"default\":\"test\"}"
+              "call_id": "call_DYnUwbDZUD5azWTB8gPSq51L",
+              "output": "{\"string\":\"Sample text\",\"stringMin\":\"More than five\",\"stringMax\":\"Short\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cixl2cyk0000y3rmniodnnqr5\",\"stringRegex\":\"test-value\",\"number\":10,\"numberGt\":4,\"numberLt\":2,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":42,\"exampleArray\":[\"foo\",\"bar\"],\"arrayMin\":[\"item1\"],\"arrayMax\":[\"one\",\"two\"],\"date\":\"2024-05-01T12:00:00Z\",\"dateAfter\":\"2024-06-10T00:00:00Z\",\"dateBefore\":\"2023-12-01T08:00:00Z\",\"actualData\":\"2024-04-12T10:30:00Z\",\"object\":{\"foo\":\"baz\",\"bar\":12},\"objectNested\":{\"user\":{\"name\":\"Ed\",\"age\":22}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":7,\"inventoryItemName\":\"apple\"},\"record\":[{\"key\":\"k1\",\"value\":\"val1\"},{\"key\":\"k2\",\"value\":\"val2\"}],\"recordEnumKeys\":{\"A\":\"alpha\",\"B\":\"bravo\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -1937,7 +1939,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784032291849
+        "timestamp": 1784034814590
       },
       "response": {
         "status": 200,
@@ -1946,12 +1948,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b08b801b00697d-CDG",
+          "cf-ray": "a1b0c9175e92b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 12:31:36 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:38 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "4136",
+          "openai-processing-ms": "3625",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -1960,21 +1962,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999764",
+          "x-ratelimit-remaining-tokens": "29999769",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_c4792ec33ca343ba85e20869b8c3eeb6"
+          "x-request-id": "req_53cc7b0f6e7443ef9c31dfdc69ae44b6"
         },
         "body": {
-          "id": "resp_0a912d79b4ac00c9006a562c23f398819184595d1646636f33",
+          "id": "resp_05b87674c6e3cd4a006a5635feb2c881a0bd8a1598d7b31455",
           "object": "response",
-          "created_at": 1784032292,
+          "created_at": 1784034814,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784032295,
+          "completed_at": 1784034818,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -1985,7 +1987,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_0a912d79b4ac00c9006a562c2472fc8191a513854441d60a15",
+              "id": "msg_05b87674c6e3cd4a006a5635ff3af481a0aca4196855c6511c",
               "type": "message",
               "status": "completed",
               "content": [
@@ -1993,7 +1995,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "I have called the manySchemasTool with valid sample data for all fields. Here’s a summary of the types of data provided:\n\n- string: Sample text\n- stringMin: Hello!\n- stringMax: ShortText\n- stringEmail: test@example.com\n- stringEmoji: 😊\n- stringUrl: https://example.com\n- stringUuid: 123e4567-e89b-12d3-a456-426614174000\n- stringCuid: cixlphn3l0000q9uwhgoboy4i\n- stringRegex: test-abc123\n- number: 42\n- numberGt: 5\n- numberLt: 3\n- numberGte: 1\n- numberLte: 1\n- numberMultipleOf: 4\n- numberInt: 7\n- exampleArray: [\"sample1\", \"sample2\"]\n- arrayMin: [\"atleastone\"]\n- arrayMax: [\"one\", \"two\", \"three\"]\n- date: 2024-06-11T12:00:00Z\n- dateAfter: 2024-06-02T09:00:00Z\n- dateBefore: 2024-06-01T10:00:00Z\n- actualData: 2024-06-10T15:30:00Z\n- object: { foo: \"bar\", bar: 12 }\n- objectNested: { user: { name: \"Al\", age: 22 } }\n- objectPassthrough: {}\n- objectLoose: {}\n- optional: null \n- nullable: null\n- enum: A\n- nativeEnum: B\n- unionPrimitives: text\n- unionObjects: { amount: 5, inventoryItemName: \"ItemA\" }\n- record: [ { key: \"first\", value: \"value1\" }, { key: \"second\", value: \"value2\" } ]\n- recordEnumKeys: { A: \"Alpha\", B: \"Beta\" }\n- default: test\n\nLet me know if you want to see this data in a specific format or need to test anything else!"
+                  "text": "The manySchemasTool tool was successfully called with valid sample data for all its fields. Here’s a summary of the input provided:\n\n- string: \"Sample text\"\n- stringMin: \"More than five\"\n- stringMax: \"Short\"\n- stringEmail: \"example@email.com\"\n- stringEmoji: \"😊\"\n- stringUrl: \"https://example.com\"\n- stringUuid: \"123e4567-e89b-12d3-a456-426614174000\"\n- stringCuid: \"cixl2cyk0000y3rmniodnnqr5\"\n- stringRegex: \"test-value\"\n- number: 10\n- numberGt: 4\n- numberLt: 2\n- numberGte: 1\n- numberLte: 1\n- numberMultipleOf: 4\n- numberInt: 42\n- exampleArray: [\"foo\", \"bar\"]\n- arrayMin: [\"item1\"]\n- arrayMax: [\"one\", \"two\"]\n- date: \"2024-05-01T12:00:00Z\"\n- dateAfter: \"2024-06-10T00:00:00Z\"\n- dateBefore: \"2023-12-01T08:00:00Z\"\n- actualData: \"2024-04-12T10:30:00Z\"\n- object: { foo: \"baz\", bar: 12 }\n- objectNested: { user: { name: \"Ed\", age: 22 } }\n- objectPassthrough: {}\n- objectLoose: {}\n- optional: null\n- nullable: null\n- enum: \"B\"\n- nativeEnum: \"A\"\n- unionPrimitives: \"hello\"\n- unionObjects: { amount: 7, inventoryItemName: \"apple\" }\n- record: [{ key: \"k1\", value: \"val1\" }, { key: \"k2\", value: \"val2\" }]\n- recordEnumKeys: { A: \"alpha\", B: \"bravo\" }\n- default: \"test\"\n\nIf you need the output or results interpreted, let me know!"
                 }
               ],
               "role": "assistant"
@@ -2369,16 +2371,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1507,
+            "input_tokens": 1490,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 453,
+            "output_tokens": 448,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1960
+            "total_tokens": 1938
           },
           "user": null,
           "metadata": {}
@@ -2731,7 +2733,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784032296229
+        "timestamp": 1784034818348
       },
       "response": {
         "status": 200,
@@ -2740,12 +2742,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b08b9b7fe0697d-CDG",
+          "cf-ray": "a1b0c92ecd59b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 12:31:46 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:42 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "9804",
+          "openai-processing-ms": "3742",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -2754,21 +2756,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999871",
+          "x-ratelimit-remaining-tokens": "29999874",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_d22b7d2613504ec0b91db985b6649c2e"
+          "x-request-id": "req_9f2252fc33b24ec2968bbba92f629379"
         },
         "body": {
-          "id": "resp_078b5e066fd85a4c006a562c2859c481a2ac263de6fafddf3c",
+          "id": "resp_06ccec08104a9b67006a56360272fc81a0af9dfa4eba694095",
           "object": "response",
-          "created_at": 1784032296,
+          "created_at": 1784034818,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784032305,
+          "completed_at": 1784034821,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -2779,11 +2781,11 @@
           "moderation": null,
           "output": [
             {
-              "id": "fc_078b5e066fd85a4c006a562c292f6081a2811279391d255184",
+              "id": "fc_06ccec08104a9b67006a563603207881a080fba5dd1f5f07be",
               "type": "function_call",
               "status": "completed",
-              "arguments": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortWord\",\"stringEmail\":\"sample@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cklv5u9le00012v6wxdlhd8g0\",\"stringRegex\":\"test-hello\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\",\"cherry\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2024-05-01T12:30:00Z\",\"dateAfter\":\"2024-06-15T10:00:00Z\",\"dateBefore\":\"2023-12-31T09:00:00Z\",\"actualData\":\"2024-04-20T15:00:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Jo\",\"age\":23}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"record\":[{\"key\":\"first\",\"value\":\"one\"},{\"key\":\"second\",\"value\":\"two\"}],\"recordEnumKeys\":{\"A\":\"Alpha\",\"B\":\"Beta\"},\"default\":\"test\"}",
-              "call_id": "call_Ta29fQDnYGc7TdyBnyzMHzMN",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjo8e8abb0000q9r6svi0qz4z\",\"stringRegex\":\"test-1234\",\"number\":42,\"numberGt\":10,\"numberLt\":3,\"numberGte\":5,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2024-06-20T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2024-06-01T00:00:00Z\",\"actualData\":\"2024-06-02T14:30:00Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"optional\":null,\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"Text value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Book\"},\"record\":[{\"key\":\"name\",\"value\":\"John\"},{\"key\":\"city\",\"value\":\"London\"}],\"recordEnumKeys\":{\"A\":\"first\",\"B\":\"second\"},\"default\":\"test\"}",
+              "call_id": "call_TEySn4skpAXdge7NF0mvhgrl",
               "name": "manySchemasTool"
             }
           ],
@@ -3162,11 +3164,11 @@
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 346,
+            "output_tokens": 343,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1165
+            "total_tokens": 1162
           },
           "user": null,
           "metadata": {}
@@ -3175,7 +3177,7 @@
       }
     },
     {
-      "hash": "74ce0ca44da0322f",
+      "hash": "ef554586c03c26fe",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -3192,13 +3194,15 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_078b5e066fd85a4c006a562c292f6081a2811279391d255184"
+              "type": "function_call",
+              "call_id": "call_TEySn4skpAXdge7NF0mvhgrl",
+              "name": "manySchemasTool",
+              "arguments": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjo8e8abb0000q9r6svi0qz4z\",\"stringRegex\":\"test-1234\",\"number\":42,\"numberGt\":10,\"numberLt\":3,\"numberGte\":5,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2024-06-20T12:00:00Z\",\"dateAfter\":\"2024-06-02T00:00:00Z\",\"dateBefore\":\"2024-06-01T00:00:00Z\",\"actualData\":\"2024-06-02T14:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"Text value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Book\"},\"record\":{\"name\":\"John\",\"city\":\"London\"},\"recordEnumKeys\":{\"A\":\"first\",\"B\":\"second\"},\"default\":\"test\"}"
             },
             {
               "type": "function_call_output",
-              "call_id": "call_Ta29fQDnYGc7TdyBnyzMHzMN",
-              "output": "{\"string\":\"Hello, world!\",\"stringMin\":\"Hello\",\"stringMax\":\"ShortWord\",\"stringEmail\":\"sample@example.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cklv5u9le00012v6wxdlhd8g0\",\"stringRegex\":\"test-hello\",\"number\":42,\"numberGt\":5,\"numberLt\":3,\"numberGte\":1,\"numberLte\":1,\"numberMultipleOf\":4,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\",\"cherry\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"one\",\"two\",\"three\",\"four\",\"five\"],\"date\":\"2024-05-01T12:30:00.000Z\",\"dateAfter\":\"2024-06-15T10:00:00.000Z\",\"dateBefore\":\"2023-12-31T09:00:00.000Z\",\"actualData\":\"2024-04-20T15:00:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":10},\"objectNested\":{\"user\":{\"name\":\"Jo\",\"age\":23}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"A\",\"nativeEnum\":\"B\",\"unionPrimitives\":\"hello\",\"unionObjects\":{\"amount\":100,\"inventoryItemName\":\"Widget\"},\"record\":{\"first\":\"one\",\"second\":\"two\"},\"recordEnumKeys\":{\"A\":\"Alpha\",\"B\":\"Beta\"},\"default\":\"test\"}"
+              "call_id": "call_TEySn4skpAXdge7NF0mvhgrl",
+              "output": "{\"string\":\"Sample text\",\"stringMin\":\"Hello!\",\"stringMax\":\"ShortText\",\"stringEmail\":\"example@email.com\",\"stringEmoji\":\"😊\",\"stringUrl\":\"https://example.com\",\"stringUuid\":\"123e4567-e89b-12d3-a456-426614174000\",\"stringCuid\":\"cjo8e8abb0000q9r6svi0qz4z\",\"stringRegex\":\"test-1234\",\"number\":42,\"numberGt\":10,\"numberLt\":3,\"numberGte\":5,\"numberLte\":1,\"numberMultipleOf\":8,\"numberInt\":7,\"exampleArray\":[\"apple\",\"banana\"],\"arrayMin\":[\"one\"],\"arrayMax\":[\"a\",\"b\",\"c\"],\"date\":\"2024-06-20T12:00:00.000Z\",\"dateAfter\":\"2024-06-02T00:00:00.000Z\",\"dateBefore\":\"2024-06-01T00:00:00.000Z\",\"actualData\":\"2024-06-02T14:30:00.000Z\",\"object\":{\"foo\":\"bar\",\"bar\":123},\"objectNested\":{\"user\":{\"name\":\"Al\",\"age\":25}},\"objectPassthrough\":{},\"objectLoose\":{},\"nullable\":null,\"enum\":\"B\",\"nativeEnum\":\"A\",\"unionPrimitives\":\"Text value\",\"unionObjects\":{\"amount\":10,\"inventoryItemName\":\"Book\"},\"record\":{\"name\":\"John\",\"city\":\"London\"},\"recordEnumKeys\":{\"A\":\"first\",\"B\":\"second\"},\"default\":\"test\"}"
             }
           ],
           "tools": [
@@ -3528,7 +3532,7 @@
           ],
           "tool_choice": "auto"
         },
-        "timestamp": 1784032306307
+        "timestamp": 1784034822309
       },
       "response": {
         "status": 200,
@@ -3537,12 +3541,12 @@
           "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
           "alt-svc": "h3=\":443\"; ma=86400",
           "cf-cache-status": "DYNAMIC",
-          "cf-ray": "a1b08bda691d697d-CDG",
+          "cf-ray": "a1b0c9479f42b8c3-CDG",
           "connection": "keep-alive",
           "content-type": "application/json",
-          "date": "Tue, 14 Jul 2026 12:31:50 GMT",
+          "date": "Tue, 14 Jul 2026 13:13:45 GMT",
           "openai-organization": "mastra-qb2kpb",
-          "openai-processing-ms": "4476",
+          "openai-processing-ms": "3330",
           "openai-project": "proj_Cvw1JiXoxHTeEWgnnK3t9AYG",
           "openai-version": "2020-10-01",
           "server": "cloudflare",
@@ -3551,21 +3555,21 @@
           "x-ratelimit-limit-requests": "10000",
           "x-ratelimit-limit-tokens": "30000000",
           "x-ratelimit-remaining-requests": "9999",
-          "x-ratelimit-remaining-tokens": "29999772",
+          "x-ratelimit-remaining-tokens": "29999757",
           "x-ratelimit-reset-requests": "6ms",
           "x-ratelimit-reset-tokens": "0s",
-          "x-request-id": "req_b5426e1139344163b3cb431bd7908603"
+          "x-request-id": "req_5aac901af3364f3c87b667de3005d9b8"
         },
         "body": {
-          "id": "resp_078b5e066fd85a4c006a562c3265a881a29c8287dc0604f929",
+          "id": "resp_01233b477cca49b5006a5636066ab4819c9d27fcd32c9242cf",
           "object": "response",
-          "created_at": 1784032306,
+          "created_at": 1784034822,
           "status": "completed",
           "background": false,
           "billing": {
             "payer": "developer"
           },
-          "completed_at": 1784032310,
+          "completed_at": 1784034825,
           "error": null,
           "frequency_penalty": 0,
           "incomplete_details": null,
@@ -3576,7 +3580,7 @@
           "moderation": null,
           "output": [
             {
-              "id": "msg_078b5e066fd85a4c006a562c331f4c81a2b3f68642ec4383d6",
+              "id": "msg_01233b477cca49b5006a563606f5a0819cbd3c4b46ecfcd266",
               "type": "message",
               "status": "completed",
               "content": [
@@ -3584,7 +3588,7 @@
                   "type": "output_text",
                   "annotations": [],
                   "logprobs": [],
-                  "text": "Here is the validated sample data returned by the manySchemasTool:\n\n- string: \"Hello, world!\"\n- stringMin: \"Hello\"\n- stringMax: \"ShortWord\"\n- stringEmail: \"sample@example.com\"\n- stringEmoji: \"😊\"\n- stringUrl: \"https://example.com\"\n- stringUuid: \"123e4567-e89b-12d3-a456-426614174000\"\n- stringCuid: \"cklv5u9le00012v6wxdlhd8g0\"\n- stringRegex: \"test-hello\"\n- number: 42\n- numberGt: 5\n- numberLt: 3\n- numberGte: 1\n- numberLte: 1\n- numberMultipleOf: 4\n- numberInt: 7\n- exampleArray: [\"apple\", \"banana\", \"cherry\"]\n- arrayMin: [\"one\"]\n- arrayMax: [\"one\", \"two\", \"three\", \"four\", \"five\"]\n- date: \"2024-05-01T12:30:00.000Z\"\n- dateAfter: \"2024-06-15T10:00:00.000Z\"\n- dateBefore: \"2023-12-31T09:00:00.000Z\"\n- actualData: \"2024-04-20T15:00:00.000Z\"\n- object: { foo: \"bar\", bar: 10 }\n- objectNested: { user: { name: \"Jo\", age: 23 } }\n- objectPassthrough: {}\n- objectLoose: {}\n- optional: (not set)\n- nullable: null\n- enum: \"A\"\n- nativeEnum: \"B\"\n- unionPrimitives: \"hello\"\n- unionObjects: { amount: 100, inventoryItemName: \"Widget\" }\n- record: { first: \"one\", second: \"two\" }\n- recordEnumKeys: { A: \"Alpha\", B: \"Beta\" }\n- default: \"test\"\n\nWould you like an explanation of any specific field or the sample data as a whole?"
+                  "text": "Here is the validated tool output with sample data:\n\n{\n  \"string\": \"Sample text\",\n  \"stringMin\": \"Hello!\",\n  \"stringMax\": \"ShortText\",\n  \"stringEmail\": \"example@email.com\",\n  \"stringEmoji\": \"😊\",\n  \"stringUrl\": \"https://example.com\",\n  \"stringUuid\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"stringCuid\": \"cjo8e8abb0000q9r6svi0qz4z\",\n  \"stringRegex\": \"test-1234\",\n  \"number\": 42,\n  \"numberGt\": 10,\n  \"numberLt\": 3,\n  \"numberGte\": 5,\n  \"numberLte\": 1,\n  \"numberMultipleOf\": 8,\n  \"numberInt\": 7,\n  \"exampleArray\": [\"apple\", \"banana\"],\n  \"arrayMin\": [\"one\"],\n  \"arrayMax\": [\"a\", \"b\", \"c\"],\n  \"date\": \"2024-06-20T12:00:00.000Z\",\n  \"dateAfter\": \"2024-06-02T00:00:00.000Z\",\n  \"dateBefore\": \"2024-06-01T00:00:00.000Z\",\n  \"actualData\": \"2024-06-02T14:30:00.000Z\",\n  \"object\": { \"foo\": \"bar\", \"bar\": 123 },\n  \"objectNested\": { \"user\": { \"name\": \"Al\", \"age\": 25 } },\n  \"objectPassthrough\": {},\n  \"objectLoose\": {},\n  \"nullable\": null,\n  \"enum\": \"B\",\n  \"nativeEnum\": \"A\",\n  \"unionPrimitives\": \"Text value\",\n  \"unionObjects\": { \"amount\": 10, \"inventoryItemName\": \"Book\" },\n  \"record\": { \"name\": \"John\", \"city\": \"London\" },\n  \"recordEnumKeys\": { \"A\": \"first\", \"B\": \"second\" },\n  \"default\": \"test\"\n}"
                 }
               ],
               "role": "assistant"
@@ -3960,16 +3964,16 @@
           "top_p": 1,
           "truncation": "disabled",
           "usage": {
-            "input_tokens": 1504,
+            "input_tokens": 1484,
             "input_tokens_details": {
               "cache_write_tokens": 0,
               "cached_tokens": 0
             },
-            "output_tokens": 445,
+            "output_tokens": 460,
             "output_tokens_details": {
               "reasoning_tokens": 0
             },
-            "total_tokens": 1949
+            "total_tokens": 1944
           },
           "user": null,
           "metadata": {}
