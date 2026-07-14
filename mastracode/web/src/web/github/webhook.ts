@@ -10,6 +10,8 @@ export interface GithubIssueTriageRunInput {
   labels: string[];
   sender?: string;
   installationId: number;
+  /** Active project resource id used by chat thread queries; projectPath remains the worktree scope. */
+  resourceId?: string;
   projectPath?: string;
   branch?: string;
 }

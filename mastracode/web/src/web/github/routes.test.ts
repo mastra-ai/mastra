@@ -425,6 +425,7 @@ describe('webhook route', () => {
       labels: ['bug', 'auto-triaged'],
       sender: 'ada',
       installationId: 7,
+      resourceId: 'p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
     });
@@ -1029,6 +1030,7 @@ describe('issues route', () => {
       issueUrl: 'https://github.com/octo/hello/issues/12',
       labels: ['bug', 'auto-triaged'],
       installationId: 7,
+      resourceId: 'p1',
       projectPath: '/workspace/worktrees/factory-issue-12-aeab418d',
       branch: 'factory/issue-12',
     });

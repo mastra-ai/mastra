@@ -259,6 +259,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
         await addIssueLabels(input.installationId, input.repository, input.issueNumber, ['auto-triaged']);
         return runIssueTriage({
           ...input,
+          resourceId: project.id,
           projectPath,
           branch,
           labels: input.labels.includes('auto-triaged') ? input.labels : [...input.labels, 'auto-triaged'],
@@ -628,6 +629,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
           issueUrl: body.url,
           labels: parseStringList(body.labels),
           installationId: project.installationId,
+          resourceId: project.id,
           projectPath,
           branch,
         });

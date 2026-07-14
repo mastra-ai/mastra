@@ -171,6 +171,10 @@ async function resolveRunThread(
   const taggedThread = (await session.listThreads({ tags, limit: 20 }))[0];
   if (taggedThread) {
     await session.switchThread(taggedThread.id);
+    if (taggedThread.id === threadId && isUntitledThread(taggedThread.title)) {
+      const messages = await session.listMessages(taggedThread.id, 1);
+      if (messages.length === 0) await session.renameThread(taggedThread.id, title);
+    }
     return taggedThread.id;
   }
 
@@ -178,6 +182,10 @@ async function resolveRunThread(
   const [threads, messages] = await Promise.all([session.listThreads(), session.listMessages(threadId, 1)]);
   const existing = threads.find(thread => thread.id === threadId);
   if (!existing) return (await session.createThread(title)).id;
-  if (!existing.title && messages.length === 0) await session.renameThread(threadId, title);
+  if (isUntitledThread(existing.title) && messages.length === 0) await session.renameThread(threadId, title);
   return threadId;
+}
+
+function isUntitledThread(title: string | null | undefined): boolean {
+  return !title || title === 'Untitled thread';
 }

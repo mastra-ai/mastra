@@ -273,11 +273,14 @@ async function runIssueTriage(
   input: GithubIssueTriageRunInput,
 ): Promise<GithubIssueTriageRunResult> {
   const branch = input.branch ?? issueBranch(input.issueNumber);
+  if (!input.resourceId) {
+    throw new Error('Issue triage requires a board resource id');
+  }
   if (!input.projectPath) {
     throw new Error('Issue triage requires a board project path');
   }
   const projectPath = input.projectPath;
-  const resourceId = projectPath;
+  const resourceId = input.resourceId;
   const scope = projectPath;
   const tags = buildIssueTriageTags(input, projectPath);
   const title = `Triage #${input.issueNumber}: ${input.issueTitle}`;
