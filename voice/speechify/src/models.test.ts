@@ -59,6 +59,59 @@ describe('SpeechifyVoice model support', () => {
     const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
     await drain(await voice.speak('Hello'));
 
-    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'simba-english' }));
+    expect(audioStreamMock).toHaveBeenCalledWith(
+      expect.objectContaining({ model: 'simba-english', voiceId: 'george' }),
+    );
+  });
+});
+
+describe('SpeechifyVoice Simba 3 voice pairing', () => {
+  beforeEach(() => {
+    audioStreamMock.mockReset();
+    audioStreamMock.mockResolvedValue(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array([1, 2, 3]));
+          controller.close();
+        },
+      }),
+    );
+  });
+
+  it('accepts a curated Simba 3 voice as the constructor speaker', async () => {
+    const voice = new SpeechifyVoice({
+      speechModel: { name: 'simba-3.2', apiKey: 'test-key' },
+      speaker: 'harper_32',
+    });
+    await drain(await voice.speak('Hello'));
+
+    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ model: 'simba-3.2', voiceId: 'harper_32' }));
+  });
+
+  it('defaults the speaker to harper_32 when a Simba 3 model is configured', async () => {
+    const voice = new SpeechifyVoice({ speechModel: { name: 'simba-3.2', apiKey: 'test-key' } });
+    await drain(await voice.speak('Hello'));
+
+    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ voiceId: 'harper_32' }));
+  });
+
+  it('keeps an explicit speaker over the model-based default', async () => {
+    const voice = new SpeechifyVoice({
+      speechModel: { name: 'simba-3.0', apiKey: 'test-key' },
+      speaker: 'wyatt_32',
+    });
+    await drain(await voice.speak('Hello'));
+
+    expect(audioStreamMock).toHaveBeenCalledWith(expect.objectContaining({ voiceId: 'wyatt_32' }));
+  });
+
+  it('lists the curated Simba 3 voices in getSpeakers', async () => {
+    const voice = new SpeechifyVoice({ speechModel: { apiKey: 'test-key' } });
+    const speakers = await voice.getSpeakers();
+    const ids = speakers.map(s => s.voiceId);
+
+    expect(ids).toContain('harper_32');
+    expect(ids).toContain('wyatt_32');
+    expect(ids).toContain('george');
   });
 });
