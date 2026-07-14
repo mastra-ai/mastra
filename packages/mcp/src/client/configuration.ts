@@ -14,13 +14,20 @@ import type {
   ResourceTemplate,
 } from '@modelcontextprotocol/sdk/types.js';
 import equal from 'fast-deep-equal';
+import type { OAuthClientInformationFull } from '../shared/oauth-types';
+import { UnauthorizedError } from '../shared/oauth-types';
 import { InternalMastraMCPClient } from './client';
-import type { MastraMCPServerDefinition } from './client';
+import type { MastraMCPServerDefinition, MCPServerAuthState } from './client';
 import { isReconnectableMCPError } from './error-utils';
+import { createOAuthCallbackServer, getCallbackUrlCandidates } from './oauth-callback-server';
+import { MCPOAuthClientProvider } from './oauth-provider';
 import { MCPClientServerProxy } from './server-proxy';
 
 const mcpClientInstances = new Map<string, InstanceType<typeof MCPClient>>();
 const TOOL_DISCOVERY_MAX_ATTEMPTS = 2;
+
+// Hostnames authenticate() accepts for the provider's redirect URL (RFC 8252 loopback redirection)
+const LOOPBACK_HOSTNAMES = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
 /**
  * Configuration options for creating an MCPClient instance.
@@ -74,6 +81,7 @@ export class MCPClient extends MastraBase {
   private defaultTimeout: number;
   private mcpClientsById = new Map<string, InternalMastraMCPClient>();
   private disconnectPromise: Promise<void> | null = null;
+  private authFlowsByServer = new Map<string, Promise<void>>();
 
   /**
    * Creates a new MCPClient instance for managing MCP server connections.
@@ -787,6 +795,116 @@ To fix this you have three different options:
   }
 
   /**
+   * Runs the interactive OAuth authorization-code flow for a server.
+   *
+   * Requires the server to be configured with an MCPOAuthClientProvider whose
+   * redirect URL points at a loopback address. The flow:
+   *
+   * 1. Starts a loopback callback server on the redirect URL's port (falling
+   *    back to the next sequential ports when it is in use)
+   * 2. Attempts a connection so the SDK runs discovery and dynamic client
+   *    registration, delivering the authorization URL through the provider's
+   *    `onRedirectToAuthorization` callback — the host directs the user there
+   * 3. Waits for the browser to deliver the authorization code, validates the
+   *    OAuth state, exchanges the code for tokens, and reconnects
+   *
+   * Concurrent calls for the same server join the pending flow; different
+   * servers authenticate independently. Hosts with custom redirect handling
+   * (e.g. a web app with an HTTPS redirect URL) should drive
+   * MCPOAuthClientProvider directly instead.
+   *
+   * @param serverName - The name of the server to authenticate (must match a key in `servers`)
+   * @param options.timeoutMs - How long to wait for the browser callback (default 5 minutes)
+   * @throws {Error} If the server has no MCPOAuthClientProvider or its redirect URL is not loopback
+   *
+   * @example
+   * ```typescript
+   * if (mcp.getServerAuthState('weatherServer') === 'needs-auth') {
+   *   await mcp.authenticate('weatherServer');
+   * }
+   * ```
+   */
+  public async authenticate(serverName: string, options?: { timeoutMs?: number }): Promise<void> {
+    const pendingFlow = this.authFlowsByServer.get(serverName);
+    if (pendingFlow) {
+      return pendingFlow;
+    }
+
+    const flow = this.runAuthorizationFlow(serverName, options).finally(() => {
+      this.authFlowsByServer.delete(serverName);
+    });
+    this.authFlowsByServer.set(serverName, flow);
+    return flow;
+  }
+
+  /**
+   * OAuth authorization state of a configured server.
+   *
+   * Returns `undefined` for servers without an authProvider and for servers
+   * that have not attempted a connection yet.
+   */
+  public getServerAuthState(serverName: string): MCPServerAuthState | undefined {
+    return this.mcpClientsById.get(serverName)?.authState;
+  }
+
+  private async runAuthorizationFlow(serverName: string, options?: { timeoutMs?: number }): Promise<void> {
+    const config = this.getServerConfig(serverName);
+    const provider = config.authProvider;
+    if (!(provider instanceof MCPOAuthClientProvider)) {
+      throw new Error(
+        `Cannot authenticate MCP server ${serverName}: it is not configured with an MCPOAuthClientProvider.`,
+      );
+    }
+
+    const redirectUrl = new URL(provider.redirectUrl.toString());
+    if (redirectUrl.protocol !== 'http:' || !LOOPBACK_HOSTNAMES.has(redirectUrl.hostname)) {
+      throw new Error(
+        `Cannot authenticate MCP server ${serverName}: the provider's redirect URL must be a loopback address, got ${redirectUrl.origin}.`,
+      );
+    }
+
+    const state = await provider.beginAuthorizationSession();
+    const callbackServer = await createOAuthCallbackServer({ redirectUrl, state });
+    try {
+      // Point the authorization request at the callback URL that actually
+      // bound, and register every fallback candidate during dynamic client
+      // registration so a future fallback port still matches a registered URI.
+      provider.applyResolvedRedirectUrl(callbackServer.url, getCallbackUrlCandidates(redirectUrl));
+
+      // Discard a stored client registration that does not cover the bound
+      // callback URL — the authorization server would reject its redirect_uri.
+      const clientInfo = (await provider.clientInformation()) as Partial<OAuthClientInformationFull> | undefined;
+      if (clientInfo?.redirect_uris && !clientInfo.redirect_uris.includes(callbackServer.url.toString())) {
+        await provider.invalidateCredentials('client');
+      }
+
+      const client = await this.getClientForServer(serverName);
+      try {
+        // With valid stored tokens this simply connects; otherwise the SDK
+        // delivers the authorization URL and throws UnauthorizedError.
+        await client.connect();
+        return;
+      } catch (error) {
+        if (!(error instanceof UnauthorizedError)) {
+          throw this.handleConnectError(serverName, error);
+        }
+      }
+
+      const { code } = await callbackServer.waitForCode(options);
+      await client.finishAuth(code);
+
+      try {
+        await client.connect();
+      } catch (error) {
+        throw error instanceof UnauthorizedError ? error : this.handleConnectError(serverName, error);
+      }
+    } finally {
+      provider.endAuthorizationSession();
+      await callbackServer.close();
+    }
+  }
+
+  /**
    * Returns instructions advertised by connected MCP servers during initialize.
    *
    * Servers that have not connected yet, or did not advertise instructions,
@@ -1106,7 +1224,11 @@ To fix this you have three different options:
     );
     this.logger.trackException(mastraError);
     this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
-    this.mcpClientsById.delete(name);
+    // Keep the client when authorization is required: it carries the needs-auth
+    // state and the pending transport that authenticate() completes.
+    if (!(error instanceof UnauthorizedError)) {
+      this.mcpClientsById.delete(name);
+    }
     return mastraError;
   }
 

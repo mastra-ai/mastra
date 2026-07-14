@@ -155,13 +155,14 @@ export interface MCPOAuthClientProviderOptions {
  * ```
  */
 export class MCPOAuthClientProvider implements OAuthClientProvider {
-  private readonly _redirectUrl: string | URL;
-  private readonly _clientMetadata: OAuthClientMetadata;
+  private _redirectUrl: string | URL;
+  private _clientMetadata: OAuthClientMetadata;
   private readonly storage: OAuthStorage;
   private readonly onRedirect?: (url: URL) => void | Promise<void>;
   private readonly generateState: () => string | Promise<string>;
 
   private _clientInfo?: OAuthClientInformation;
+  private _sessionState?: string;
 
   constructor(options: MCPOAuthClientProviderOptions) {
     this._redirectUrl = options.redirectUrl;
@@ -188,9 +189,54 @@ export class MCPOAuthClientProvider implements OAuthClientProvider {
 
   /**
    * Returns a OAuth2 state parameter.
+   *
+   * While an authorization session is active (see beginAuthorizationSession),
+   * the pinned session state is returned so a callback server can validate
+   * the redirect against a known value.
    */
   async state(): Promise<string> {
-    return this.generateState();
+    return this._sessionState ?? this.generateState();
+  }
+
+  /**
+   * Pins the OAuth state parameter for the next authorization request.
+   *
+   * Hosts driving an interactive authorization flow (e.g. MCPClient.authenticate)
+   * call this before triggering the flow so the loopback callback server knows
+   * which state value to expect. Call endAuthorizationSession once the flow settles.
+   *
+   * @returns The pinned state value, generated with the configured stateGenerator
+   */
+  async beginAuthorizationSession(): Promise<string> {
+    this._sessionState = await this.generateState();
+    return this._sessionState;
+  }
+
+  /**
+   * Clears the pinned authorization state (see beginAuthorizationSession).
+   */
+  endAuthorizationSession(): void {
+    this._sessionState = undefined;
+  }
+
+  /**
+   * Points the provider at the callback URL that is actually bound.
+   *
+   * Loopback callback servers may bind a fallback port when the preferred one
+   * is in use. Call this before triggering authorization so the authorization
+   * request's redirect_uri matches the listening server, and so dynamic client
+   * registration registers every candidate callback URL (see
+   * getCallbackUrlCandidates) rather than only the preferred one.
+   *
+   * @param redirectUrl - The callback URL that is actually bound
+   * @param registeredRedirectUris - The redirect URIs to register during dynamic client registration
+   */
+  applyResolvedRedirectUrl(redirectUrl: string | URL, registeredRedirectUris: (string | URL)[]): void {
+    this._redirectUrl = redirectUrl;
+    this._clientMetadata = {
+      ...this._clientMetadata,
+      redirect_uris: registeredRedirectUris.map(uri => uri.toString()),
+    };
   }
 
   /**
