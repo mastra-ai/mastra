@@ -14,9 +14,10 @@ import { Agent } from '../agent';
  * be picked up (status `running`) but never complete, because the workers that
  * drive execution to completion were never started.
  *
- * The fix lazily starts workers in `BackgroundTaskManager.enqueue()`, the choke
- * point every producer goes through, so dispatched tasks complete without the
- * user ever calling `startWorkers()` themselves.
+ * The fix lazily starts workers in `BackgroundTaskManager.dispatch()`/`resume()`,
+ * the choke points every producer goes through (enqueue, stale-task recovery,
+ * restart, resume), so dispatched tasks complete without the user ever calling
+ * `startWorkers()` themselves.
  */
 describe('background tasks in library mode (no explicit startWorkers)', () => {
   let mastra: Mastra | undefined;
@@ -142,7 +143,7 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
     expect(manager).toBeDefined();
 
     // Direct producer: no agent involved, so the fix must live in the
-    // manager's enqueue() choke point rather than the agent execution path.
+    // manager's dispatch choke point rather than the agent execution path.
     const bgTask = createBackgroundTask(manager!, {
       toolName: 'my-tool',
       toolCallId: 'call-1',
@@ -156,6 +157,45 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
     let status: string | undefined;
     for (let i = 0; i < 50; i++) {
       const { tasks } = await manager!.listTasks({});
+      status = tasks[0]?.status;
+      if (status === 'completed' || status === 'failed') break;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    expect(status).toBe('completed');
+  }, 15000);
+
+  it('runs a stale task recovered on restart to completion', async () => {
+    const store = new MockStore();
+
+    // Simulate a previous process that died with a pending task on disk.
+    const bgStore = await store.getStore('backgroundTasks');
+    await bgStore!.createTask({
+      id: 'stale-1',
+      status: 'pending',
+      toolName: 'my-tool',
+      toolCallId: 'call-1',
+      args: {},
+      agentId: 'a1',
+      runId: 'r1',
+      retryCount: 0,
+      maxRetries: 0,
+      createdAt: new Date(),
+    });
+
+    // "Restart": the constructor fires manager init, whose stale-task
+    // recovery re-dispatches the pending task via dispatch() — bypassing
+    // enqueue(). Before the fix moved to dispatch(), the recovered task
+    // stayed `running` forever because no workers were started.
+    mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    // The original closure executor is gone after a restart; the static
+    // registry (normally populated from Mastra-registered tools) drives it.
+    manager.registerStaticExecutor('my-tool', { execute: async () => ({ data: 'recovered' }) });
+
+    let status: string | undefined;
+    for (let i = 0; i < 50; i++) {
+      const { tasks } = await manager.listTasks({});
       status = tasks[0]?.status;
       if (status === 'completed' || status === 'failed') break;
       await new Promise(resolve => setTimeout(resolve, 100));

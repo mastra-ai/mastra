@@ -223,16 +223,6 @@ export class BackgroundTaskManager {
     // with id __background-task not found"). Await readiness up front.
     if (this.initPromise) await this.initPromise;
 
-    // Library-mode users (`new Mastra(...)` without `mastra start`) never call
-    // startWorkers(), so a dispatched task would be picked up but hang in
-    // `running` forever — the workers that drive it to completion were never
-    // started. enqueue() is the choke point every producer goes through (agent
-    // delegation, createBackgroundTask, direct enqueue), so lazily start them
-    // here. startWorkers() is idempotent — safe if already started.
-    if (this.#mastra && !this.#mastra.__workersStarted) {
-      await this.#mastra.startWorkers();
-    }
-
     const task: BackgroundTask = {
       id: this.#mastra?.generateId() ?? randomUUID(),
       status: 'pending',
@@ -399,6 +389,8 @@ export class BackgroundTaskManager {
       // caller retry once a slot frees.
       throw new Error(`Concurrency limit reached, cannot resume task "${taskId}" — retry once a slot is available`);
     }
+
+    await this.#ensureWorkersStarted();
 
     // Hand off to the worker subscriber. `task.resume` rides the same
     // `TOPIC_DISPATCH` + `WORKER_GROUP` exactly-once channel as
@@ -741,7 +733,24 @@ export class BackgroundTaskManager {
 
   // --- Internal ---
 
+  /**
+   * Library-mode users (`new Mastra(...)` without `mastra start`) never call
+   * startWorkers(), so a dispatched task would be picked up but hang in
+   * `running` forever — the workers that drive it to completion were never
+   * started. Called from every dispatch-like publish (enqueue/recovery/restart
+   * via dispatch(), plus resume()) so all producers are covered.
+   * startWorkers() is idempotent — safe if already started. Safe to call from
+   * within #doInit() (stale-task recovery): no worker start path awaits the
+   * manager's own initPromise when sharing Mastra's manager.
+   */
+  async #ensureWorkersStarted(): Promise<void> {
+    if (this.#mastra && !this.#mastra.__workersStarted) {
+      await this.#mastra.startWorkers();
+    }
+  }
+
   private async dispatch(task: BackgroundTask, isRestart?: boolean): Promise<void> {
+    await this.#ensureWorkersStarted();
     // Publish `task.dispatch` on `TOPIC_DISPATCH` with `WORKER_GROUP`, so
     // exactly one worker handles the task. `handleDispatch` flips the
     // task to running and starts the per-task workflow run.
