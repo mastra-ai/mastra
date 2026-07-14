@@ -20,7 +20,7 @@ const COLUMN_LABELS: Record<ToggleableColumn, string> = {
 function buildColumns(visible: Set<ToggleableColumn>): string {
   const parts: string[] = ['auto', 'auto', 'minmax(0, 10rem)'];
   if (visible.has('entity')) parts.push('minmax(0, 14rem)');
-  if (visible.has('input')) parts.push('minmax(0, 100rem)');
+  if (visible.has('input')) parts.push('minmax(0, 40rem)');
   return parts.join(' ');
 }
 
