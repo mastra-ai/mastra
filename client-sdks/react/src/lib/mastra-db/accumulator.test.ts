@@ -1145,7 +1145,11 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
 
     const uiMessages = new MessageList().add([user!], 'memory').get.all.aiV6.ui();
     expect(uiMessages).toHaveLength(1);
-    expect(uiMessages[0]?.parts.some(part => part.type === 'file')).toBe(true);
+    // Issue #19356 expected behavior: the attachment survives conversion as a
+    // usable AI SDK UI file part, with the original URL and media type intact.
+    expect(uiMessages[0]?.parts.filter(part => part.type === 'file')).toEqual([
+      { type: 'file', url: 'https://example.com/shot.png', mediaType: 'image/png' },
+    ]);
   });
 });
 
