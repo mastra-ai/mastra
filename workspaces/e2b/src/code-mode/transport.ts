@@ -83,10 +83,6 @@ export class E2BCodeModeTransport implements CodeModeTransport {
     const programSource = transformSync(buildProgramModule(program), { loader: 'ts', target: 'es2022' }).code;
     const runnerSource = buildRunner({ programModule: `file://${programPath}`, externals });
 
-    await e2b.files.makeDir(dir);
-    await e2b.files.write(programPath, programSource);
-    await e2b.files.write(runnerPath, runnerSource);
-
     const logs: string[] = [];
     let stderr = '';
     let done: CodeModeToolResult | undefined;
@@ -116,6 +112,10 @@ export class E2BCodeModeTransport implements CodeModeTransport {
     };
 
     try {
+      await e2b.files.makeDir(dir);
+      await e2b.files.write(programPath, programSource);
+      await e2b.files.write(runnerPath, runnerSource);
+
       let handle: ProcessHandle;
 
       const respond = async (
