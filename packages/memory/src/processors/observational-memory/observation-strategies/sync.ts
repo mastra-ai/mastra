@@ -127,6 +127,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       mainAgent: this.opts.agent,
       memory: this.deps.memory,
       sendSignal: this.opts.sendSignal,
+      sendStateSignal: this.opts.sendStateSignal,
       requestContext: this.opts.requestContext,
     });
     const output = {

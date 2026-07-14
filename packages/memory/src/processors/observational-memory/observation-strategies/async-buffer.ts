@@ -77,6 +77,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       mainAgent: this.opts.agent,
       memory: this.deps.memory,
       sendSignal: this.opts.sendSignal,
+      sendStateSignal: this.opts.sendStateSignal,
       requestContext: this.opts.requestContext,
     });
     return {

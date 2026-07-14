@@ -10,17 +10,14 @@ import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-function message(threadId: string, resourceId: string): MastraDBMessage {
+function message(threadId: string, resourceId: string, text = 'Maya Chen owns Project Atlas.'): MastraDBMessage {
   return {
     id: randomUUID(),
     threadId,
     resourceId,
     role: 'user',
     createdAt: new Date(),
-    content: {
-      format: 2,
-      parts: [{ type: 'text', text: 'Maya Chen owns Project Atlas, whose staging region is cobalt.' }],
-    },
+    content: { format: 2, parts: [{ type: 'text', text }] },
   };
 }
 
@@ -42,7 +39,7 @@ describe('Subconscious LibSQL integration', () => {
     await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
   });
 
-  it('captures durable scoped knowledge in one shared structured call and reconciles semantic vectors', async () => {
+  it('captures durable scoped knowledge, publishes activity, and reconciles semantic vectors', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'subconscious-libsql-'));
     directories.push(directory);
     const databaseUrl = `file:${join(directory, 'knowledge.db')}`;
@@ -76,13 +73,25 @@ describe('Subconscious LibSQL integration', () => {
           type: 'text' as const,
           text: JSON.stringify({
             capture: {
-              entities: [
-                {
-                  name: 'Project Atlas',
-                  kind: 'project',
-                  facts: [{ text: '[[Maya Chen]] owns [[Project Atlas]].' }, { text: 'The staging region is cobalt.' }],
-                },
-              ],
+              entities:
+                doGenerate.mock.calls.length === 1
+                  ? [
+                      {
+                        name: 'Project Atlas',
+                        kind: 'project',
+                        facts: [
+                          { text: '[[Maya Chen]] owns [[Project Atlas]].' },
+                          { text: 'The staging region is cobalt.' },
+                        ],
+                      },
+                      {
+                        name: 'Alpha Secret',
+                        kind: 'note',
+                        scope: 'thread',
+                        facts: [{ text: 'Only the alpha thread may see this.', scope: 'thread' }],
+                      },
+                    ]
+                  : [],
             },
           }),
         },
@@ -108,17 +117,60 @@ describe('Subconscious LibSQL integration', () => {
     await memory.saveMessages({ messages: [message(threadId, resourceId)] });
     const requestContext = new RequestContext();
     requestContext.set('organizationId', 'acme');
+    const alphaSignals: Array<{ contents: string; cacheKey: string }> = [];
+    const sendAlphaStateSignal = vi.fn(async signal => {
+      alphaSignals.push(signal as { contents: string; cacheKey: string });
+      return { skipped: false } as any;
+    });
 
-    const result = await (await memory.omEngine)!.observe({ threadId, resourceId, requestContext });
+    const result = await (await memory.omEngine)!.observe({
+      threadId,
+      resourceId,
+      requestContext,
+      sendStateSignal: sendAlphaStateSignal,
+    });
     expect(result.observed).toBe(true);
-    expect(doStream).toHaveBeenCalledOnce();
-    expect(doGenerate).toHaveBeenCalledOnce();
+    expect(alphaSignals[0]?.contents).toContain('[[Project Atlas]]');
+    expect(alphaSignals[0]?.contents).toContain('[[Alpha Secret]]');
 
     const knowledge = (await storage.getStore('knowledge'))!;
     const scope = ['org:acme', `resource:${resourceId}`, `thread:${threadId}`];
     const atlas = await knowledge.resolveEntity({ name: 'Project Atlas', scope });
     expect(atlas).toMatchObject({ kind: 'project', scope: scope.slice(0, 2) });
     expect((await knowledge.factsAbout({ entityId: atlas!.id, scope })).facts).toHaveLength(2);
+
+    const betaThreadId = randomUUID();
+    await memory.createThread({ threadId: betaThreadId, resourceId, title: 'Sibling thread' });
+    const betaScope = ['org:acme', `resource:${resourceId}`, `thread:${betaThreadId}`];
+    const betaCache = new Map<string, string>();
+    const betaEmissions: string[] = [];
+    const sendBetaStateSignal = vi.fn(async signal => {
+      const state = signal as { id: string; cacheKey: string; contents: string };
+      if (betaCache.get(state.id) === state.cacheKey) return { skipped: true, reason: 'unchanged' } as any;
+      betaCache.set(state.id, state.cacheKey);
+      betaEmissions.push(state.contents);
+      return { skipped: false } as any;
+    });
+    for (const text of ['What changed?', 'Anything else?']) {
+      await memory.saveMessages({ messages: [message(betaThreadId, resourceId, text)] });
+      const betaResult = await (await memory.omEngine)!.observe({
+        threadId: betaThreadId,
+        resourceId,
+        requestContext,
+        sendStateSignal: sendBetaStateSignal,
+      });
+      expect(betaResult.observed).toBe(true);
+    }
+    expect(betaEmissions).toHaveLength(1);
+    expect(betaEmissions[0]).toContain('[[Project Atlas]]');
+    expect(betaEmissions[0]).not.toContain('[[Alpha Secret]]');
+    expect(sendBetaStateSignal).toHaveBeenCalledTimes(2);
+    expect(sendBetaStateSignal.mock.calls[0]?.[0]).toMatchObject({
+      cacheKey: sendBetaStateSignal.mock.calls[1]?.[0].cacheKey,
+    });
+    expect(await knowledge.listActivity({ scope: betaScope, limit: 20 })).not.toEqual([]);
+    expect(doStream).toHaveBeenCalledTimes(3);
+    expect(doGenerate).toHaveBeenCalledTimes(3);
 
     expect(await memory.drainKnowledgeSemanticIndex(scope)).toBeGreaterThan(0);
     expect(await knowledge.listSemanticOutbox({ status: 'pending', scope })).toEqual([]);
