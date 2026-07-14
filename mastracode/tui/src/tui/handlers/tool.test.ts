@@ -1,11 +1,23 @@
 import { Container } from '@earendil-works/pi-tui';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../chat-boundary-reconciliation.js';
 import { isChatBoundarySpacer } from '../components/chat-boundary-spacer.js';
 
 import type { TUIState } from '../state.js';
-import { handleToolEnd, handleToolInputDelta, handleToolInputStart, handleToolStart } from './tool.js';
+import {
+  clearToolInputParsers,
+  handleToolEnd,
+  handleToolInputDelta,
+  handleToolInputStart,
+  handleToolStart,
+} from './tool.js';
 import type { EventHandlerContext } from './types.js';
+
+async function flushParser(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await new Promise(resolve => setTimeout(resolve, 100));
+}
 
 function visibleChildren(ctx: EventHandlerContext) {
   return ctx.state.chatContainer.children.filter(child => !isChatBoundarySpacer(child));
@@ -47,6 +59,10 @@ function createToolHandlerContext(): EventHandlerContext {
 }
 
 describe('task tool rendering', () => {
+  afterEach(() => {
+    clearToolInputParsers();
+  });
+
   it('keeps successful task tools out of the chat tool list', () => {
     const ctx = createToolHandlerContext();
 
@@ -101,32 +117,37 @@ describe('task tool rendering', () => {
     expect((second as any).render(100).join('\n')).not.toContain('╭──');
   });
 
-  it('marks quiet tool result objects with isError true as failed even when the event flag is false', () => {
+  it('marks quiet tool result objects with isError true as failed even when the event flag is false', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
+    const buffers = new Map([['call-1', { toolName: 'string_replace_lsp', text: '' }]]);
+    vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'string_replace_lsp');
     handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","old_string":"missing","new_string":"replacement"}');
+    await flushParser();
     handleToolEnd(ctx, 'call-1', { content: 'The specified text was not found.', isError: true }, false);
 
     const output = stripAnsi(ctx.state.chatContainer.render(100).join('\n'));
     expect(output).toContain('The specified text was not found.');
-    expect(output).toContain('▐edit▌ ✗');
+    expect(output).toContain('▐edit▌src/example.ts▌ ✗');
   });
 
-  it('regroups quiet tools as streamed args arrive', () => {
+  it('regroups quiet tools as streamed args arrive', async () => {
     const ctx = createToolHandlerContext();
     ctx.state.quietMode = true;
     const buffers = new Map([
-      ['call-1', { toolName: 'view', text: '{"path":"src/example.ts","offset":80,"limit":90}' }],
-      ['call-2', { toolName: 'view', text: '{"path":"src/example.ts","offset":1,"limit":25}' }],
+      ['call-1', { toolName: 'view', text: '' }],
+      ['call-2', { toolName: 'view', text: '' }],
     ]);
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'view');
-    handleToolInputDelta(ctx, 'call-1', '');
+    handleToolInputDelta(ctx, 'call-1', '{"path":"src/example.ts","offset":80,"limit":90}');
+    await flushParser();
     handleToolInputStart(ctx, 'call-2', 'view');
-    handleToolInputDelta(ctx, 'call-2', '');
+    handleToolInputDelta(ctx, 'call-2', '{"path":"src/example.ts","offset":1,"limit":25}');
+    await flushParser();
 
     const output = stripAnsi(ctx.state.chatContainer.render(120).join('\n'));
     expect(output).toContain('view');
@@ -134,13 +155,14 @@ describe('task tool rendering', () => {
     expect(output).toContain('●───── /example.ts:1-25▌');
   });
 
-  it('streams submit_plan args into a plan box instead of rendering a generic tool', () => {
+  it('streams submit_plan args into a plan box instead of rendering a generic tool', async () => {
     const ctx = createToolHandlerContext();
-    const buffers = new Map([['call-1', { toolName: 'submit_plan', text: '{"path":".mastracode/plans/ship-it.md"}' }]]);
+    const buffers = new Map([['call-1', { toolName: 'submit_plan', text: '' }]]);
     vi.mocked(ctx.state.session.displayState.get).mockReturnValue({ toolInputBuffers: buffers } as any);
 
     handleToolInputStart(ctx, 'call-1', 'submit_plan');
     handleToolInputDelta(ctx, 'call-1', '{"path":".mastracode/plans/ship-it.md"}');
+    await flushParser();
 
     expect(ctx.state.pendingTools.has('call-1')).toBe(false);
     expect(ctx.state.allToolComponents).toHaveLength(0);

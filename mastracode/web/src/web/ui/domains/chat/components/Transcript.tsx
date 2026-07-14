@@ -20,6 +20,7 @@ import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
 } from '../hooks/useAgentControllerRunMutations';
+import { stripSerializedAnsi } from '../services/ansi';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 
 function ToolIcon({ name, size = 14, className }: { name: string; size?: number; className?: string }) {
@@ -216,7 +217,8 @@ function ToolCard({
   }, [forceExpanded]);
   const argsPreview = tool.args !== undefined ? JSON.stringify(tool.args) : tool.argsText;
   const argsPretty = tool.args !== undefined ? stringify(tool.args) : tool.argsText;
-  const resultText = tool.status !== 'running' && tool.result !== undefined ? stringify(tool.result) : undefined;
+  const resultText =
+    tool.status !== 'running' && tool.result !== undefined ? stripSerializedAnsi(stringify(tool.result)) : undefined;
   const edit = editArgs(tool.toolName, tool.args);
 
   return (
@@ -567,9 +569,15 @@ function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry })
 // ---------------------------------------------------------------------------
 
 export function Transcript() {
-  const { resourceId, sessionEnabled, baseUrl } = useChatSessionContext();
+  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
-  const hookArgs = { agentControllerId: AGENT_CONTROLLER_ID, resourceId, baseUrl, enabled: sessionEnabled };
+  const hookArgs = {
+    agentControllerId: AGENT_CONTROLLER_ID,
+    resourceId,
+    projectPath,
+    baseUrl,
+    enabled: sessionEnabled,
+  };
   const approveMutation = useApproveAgentControllerToolMutation(hookArgs);
   const respondMutation = useRespondAgentControllerSuspensionMutation(hookArgs);
 
@@ -710,14 +718,26 @@ function MessageBubble({ entry }: { entry: MessageEntry }) {
       const groupPosition = toolGroupPositions.get(part.toolInvocation.toolCallId);
       return <ToolCard tool={tool} forceExpanded={allExpanded} groupPosition={groupPosition} />;
     },
-    File: (part: FilePart) => <pre className={resultBlock}>{stringify(part)}</pre>,
+    File: (part: FilePart) => <FileAttachment part={part} />,
   };
 
   const status = statusMetadata(entry);
-  if (status) return <StatusMetadataCard status={status} />;
+  // Some harness status parts (e.g. om_* markers) carry no text; skip them
+  // entirely instead of rendering an empty notice bubble.
+  if (status) return status.text.trim() ? <StatusMetadataCard status={status} /> : null;
   if (entry.message.role === 'assistant' && !hasRenderablePart) return null;
 
   return <MessageFactory message={entry.message} roles={roles} {...renderers} fallback={() => null} />;
+}
+
+function FileAttachment({ part }: { part: FilePart }) {
+  if (part.mimeType?.startsWith('image/')) {
+    const src = part.data.startsWith('data:') ? part.data : `data:${part.mimeType};base64,${part.data}`;
+    return (
+      <img src={src} alt="Attached image" className="my-1.5 max-h-80 max-w-full rounded-md border border-border1" />
+    );
+  }
+  return <pre className={resultBlock}>{stringify(part)}</pre>;
 }
 
 function toolFromInvocationPart(part: ToolInvocationPart, runtime?: ToolCall): ToolCall {

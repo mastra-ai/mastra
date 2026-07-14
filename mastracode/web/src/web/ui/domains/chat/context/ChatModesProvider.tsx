@@ -13,17 +13,19 @@ interface ChatModesProviderProps {
 }
 
 export function ChatModesProvider({ children }: ChatModesProviderProps) {
-  const { resourceId, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const modesQuery = useAgentControllerModes({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
   const switchModeMutation = useSwitchAgentControllerModeMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     resourceId,
+    projectPath,
     baseUrl,
     enabled: sessionEnabled,
   });
