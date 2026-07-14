@@ -29,6 +29,8 @@ export interface McpSelectorOptions {
   onReloadAll: () => Promise<{ statuses: McpServerStatus[]; skipped: McpSkippedServer[] }>;
   /** Callback to reconnect a single server by name — returns updated status */
   onReconnectServer: (name: string) => Promise<McpServerStatus>;
+  /** Callback to run the OAuth flow for a single server by name — returns updated status */
+  onAuthenticateServer: (name: string) => Promise<McpServerStatus>;
   /** Get captured stderr logs for a server */
   getServerLogs: (name: string) => string[];
   /** Show an info message in the chat area */
@@ -58,6 +60,13 @@ const FAILED_ACTIONS: ServerAction[] = [
   { label: 'Reconnect', key: 'reconnect' },
 ];
 
+const NEEDS_AUTH_ACTIONS: ServerAction[] = [
+  { label: 'Authenticate', key: 'authenticate' },
+  { label: 'View error', key: 'error' },
+  { label: 'View logs', key: 'logs' },
+  { label: 'Reconnect', key: 'reconnect' },
+];
+
 const CONNECTING_ACTIONS: ServerAction[] = [{ label: 'Waiting for connection...', key: 'none' }];
 
 // =============================================================================
@@ -72,6 +81,7 @@ export class McpSelectorComponent extends Box implements Focusable {
   private getStatusesCallback: McpSelectorOptions['getStatuses'];
   private onReloadAllCallback: McpSelectorOptions['onReloadAll'];
   private onReconnectServerCallback: McpSelectorOptions['onReconnectServer'];
+  private onAuthenticateServerCallback: McpSelectorOptions['onAuthenticateServer'];
   private getServerLogsCallback: McpSelectorOptions['getServerLogs'];
   private showInfoCallback: McpSelectorOptions['showInfo'];
   private onCloseCallback: () => void;
@@ -107,6 +117,7 @@ export class McpSelectorComponent extends Box implements Focusable {
     this.getStatusesCallback = options.getStatuses;
     this.onReloadAllCallback = options.onReloadAll;
     this.onReconnectServerCallback = options.onReconnectServer;
+    this.onAuthenticateServerCallback = options.onAuthenticateServer;
     this.getServerLogsCallback = options.getServerLogs;
     this.showInfoCallback = options.showInfo;
     this.onCloseCallback = options.onClose;
@@ -165,6 +176,9 @@ export class McpSelectorComponent extends Box implements Focusable {
       } else if (status.connected) {
         icon = theme.fg('success', '✔');
         stateText = theme.fg('success', 'connected');
+      } else if (status.needsAuth) {
+        icon = theme.fg('warning', '⚠');
+        stateText = theme.fg('warning', 'needs auth');
       } else {
         icon = theme.fg('error', '✗');
         stateText = theme.fg('error', 'failed');
@@ -320,6 +334,8 @@ export class McpSelectorComponent extends Box implements Focusable {
       this.subMenuActions = CONNECTING_ACTIONS;
     } else if (status.connected) {
       this.subMenuActions = CONNECTED_ACTIONS;
+    } else if (status.needsAuth) {
+      this.subMenuActions = NEEDS_AUTH_ACTIONS;
     } else {
       this.subMenuActions = FAILED_ACTIONS;
     }
@@ -376,6 +392,11 @@ export class McpSelectorComponent extends Box implements Focusable {
       case 'reconnect': {
         this.subMenuOpen = false;
         this.doReconnectServer(status);
+        break;
+      }
+      case 'authenticate': {
+        this.subMenuOpen = false;
+        this.doAuthenticateServer(status);
         break;
       }
     }
@@ -458,6 +479,64 @@ export class McpSelectorComponent extends Box implements Focusable {
           };
         }
         this.showInfoCallback(`MCP: Failed to reconnect "${name}": ${errMsg}`);
+      })
+      .finally(() => {
+        if (!this._reloading) {
+          this.updateList();
+        }
+      });
+  }
+
+  private doAuthenticateServer(status: McpServerStatus): void {
+    if (status.connecting) return;
+    const name = status.name;
+
+    // Mark this server as connecting while the OAuth flow runs
+    const idx = this.statuses.findIndex(s => s.name === name);
+    if (idx >= 0) {
+      this.statuses[idx] = {
+        name,
+        connected: false,
+        connecting: true,
+        toolCount: 0,
+        toolNames: [],
+        transport: status.transport,
+      };
+    }
+    this.updateList();
+    this.showInfoCallback(`MCP: Authenticating "${name}" — complete the sign-in in your browser.`);
+
+    this.onAuthenticateServerCallback(name)
+      .then((updated: McpServerStatus) => {
+        // If a reload-all started, ignore stale authenticate results
+        if (this._reloading) return;
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = updated;
+        }
+        if (updated.connected) {
+          this.showInfoCallback(`MCP: Authenticated "${name}" — ${updated.toolCount} tool(s)`);
+        } else {
+          this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${updated.error ?? 'Unknown error'}`);
+        }
+      })
+      .catch((err: unknown) => {
+        if (this._reloading) return;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const i = this.statuses.findIndex(s => s.name === name);
+        if (i >= 0) {
+          this.statuses[i] = {
+            name,
+            connected: false,
+            connecting: false,
+            toolCount: 0,
+            toolNames: [],
+            transport: status.transport,
+            error: errMsg,
+            needsAuth: true,
+          };
+        }
+        this.showInfoCallback(`MCP: Failed to authenticate "${name}": ${errMsg}`);
       })
       .finally(() => {
         if (!this._reloading) {

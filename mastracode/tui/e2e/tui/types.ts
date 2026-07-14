@@ -84,6 +84,7 @@ export type ScenarioName =
   | 'mcp-http-tool-call'
   | 'mcp-long-running-tool'
   | 'mcp-reload-config'
+  | 'mcp-oauth-authenticate'
   | 'mcp-selector-reconnect'
   | 'mcp-server-config'
   | 'mcp-skipped-validation'
