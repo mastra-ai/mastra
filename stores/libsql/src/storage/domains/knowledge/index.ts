@@ -40,6 +40,7 @@ import type {
   KnowledgeSemanticDocumentType,
   KnowledgeSemanticOperation,
   KnowledgeSemanticOutboxEntry,
+  ListKnowledgeFactsBySourceInput,
   ListKnowledgeFactsInput,
   ListKnowledgeFactsOutput,
   ListKnowledgeRecordsInput,
@@ -595,6 +596,21 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   }
   async factsTouching(input: ListKnowledgeFactsInput): Promise<ListKnowledgeFactsOutput> {
     return this.#listFacts(input, true);
+  }
+
+  async listFactsBySource(input: ListKnowledgeFactsBySourceInput): Promise<ListKnowledgeFactsOutput> {
+    const scope = canonicalizeKnowledgeScope(input.scope);
+    const key = knowledgeScopeKey(scope);
+    const args: InValue[] = [input.sourceThreadId, key, key];
+    if (input.after) args.push(input.after);
+    const limit = input.limit ?? 100;
+    args.push(limit + 1);
+    const result = await this.#client.execute({
+      sql: `SELECT *,json(scope) AS scopeJson FROM "${TABLE_KNOWLEDGE_FACTS}" WHERE sourceThreadId=? AND ${visibleSql}${input.includeDeleted ? '' : ' AND deletedAt IS NULL'}${input.after ? ' AND id > ?' : ''} ORDER BY id ASC LIMIT ?`,
+      args,
+    });
+    const facts = result.rows.map(parseFact);
+    return { facts: facts.slice(0, limit), nextCursor: facts.length > limit ? facts[limit - 1]?.id : undefined };
   }
 
   async removeFact(input: { id: string; deletedBy: string }): Promise<KnowledgeFact> {

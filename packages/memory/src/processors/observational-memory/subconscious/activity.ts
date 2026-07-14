@@ -107,6 +107,24 @@ export function renderSubconsciousActivity(snapshot: SubconsciousActivitySnapsho
   ].join('\n');
 }
 
+export async function publishSubconsciousError(input: {
+  error: string;
+  sendStateSignal?: ProcessorContext['sendStateSignal'];
+}): Promise<void> {
+  if (!input.sendStateSignal) return;
+  const snapshot: SubconsciousActivitySnapshot = { updates: [], hot: [], errors: [input.error] };
+  const contents = renderSubconsciousActivity(snapshot);
+  await input.sendStateSignal({
+    id: SUBCONSCIOUS_ACTIVITY_STATE_ID,
+    mode: 'snapshot',
+    cacheKey: createHash('sha256').update(contents).digest('hex'),
+    tagName: 'state',
+    attributes: { id: SUBCONSCIOUS_ACTIVITY_STATE_ID },
+    contents,
+    value: snapshot,
+  });
+}
+
 export async function publishSubconsciousActivity(input: {
   store: KnowledgeStorage;
   scope: KnowledgeScope;
