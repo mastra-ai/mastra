@@ -30,14 +30,19 @@
 import { Mastra } from '@mastra/core/mastra';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { buildAuthRoutes, createWebAuthGate, createWebAuthProvider, isWebAuthEnabled } from '../web/auth.js';
+import { buildLinearAgentTools } from '../web/linear/agent-tools.js';
 import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
   assembleWebApiRoutes,
+  resolveFactoryReady,
   resolveGithubReady,
   resolveIntakeReady,
   resolveLinearReady,
 } from '../web/web-surface.js';
+import type { WebApiRoutesDeps } from '../web/web-surface.js';
+
+type BuildApiRoutesDeps = Pick<WebApiRoutesDeps, 'controller' | 'authStorage'>;
 
 const CONTROLLER_ID = 'code';
 
@@ -68,6 +73,9 @@ const linearReady = await resolveLinearReady();
 // Intake source configuration (Settings › Intake) — needs at least one source.
 const intakeReady = await resolveIntakeReady(githubReady || linearReady);
 
+// Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
+const factoryReady = await resolveFactoryReady(githubReady);
+
 const webAuthEnabled = isWebAuthEnabled();
 
 const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
@@ -91,13 +99,24 @@ const prepared = await prepareAgentControllerMount({
   ...(process.env.APP_DATABASE_URL
     ? { storage: { backend: 'pg', connectionString: process.env.APP_DATABASE_URL } }
     : {}),
-  buildApiRoutes: ({ controller, authStorage }) => [
+  // Linear tools are resolved per session: exposed only when the session's
+  // project belongs to an org with an active Linear connection.
+  ...(linearReady ? { extraTools: buildLinearAgentTools } : {}),
+  buildApiRoutes: ({ controller, authStorage }: BuildApiRoutesDeps) => [
     // Public WorkOS `/auth/*` routes (login/callback/logout/me). Folded in as
     // `apiRoutes` (not plain Hono routes) because the entry can't touch the Hono
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.
     ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
     // Custom `/web/*` routes (fs / config / github).
-    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady, linearReady, intakeReady }),
+    ...assembleWebApiRoutes({
+      controller,
+      authStorage,
+      publicOrigin,
+      githubReady,
+      linearReady,
+      intakeReady,
+      factoryReady,
+    }),
   ],
   buildServerConfig: () => {
     const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};

@@ -48,7 +48,7 @@ describe('agent-controller mutation hooks cache behavior', () => {
     await waitFor(() => expect(result.current.settingsQuery.data?.notifications).toBe('off'));
 
     await act(async () => {
-      await result.current.sendMessage.mutateAsync('hello');
+      await result.current.sendMessage.mutateAsync({ text: 'hello' });
     });
     await waitForMutationsIdle(client);
 

@@ -15,6 +15,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { DONE_SOUND_OPTIONS, loadDoneSound, playDoneSound, saveDoneSound } from '../services/doneSound';
+import type { DoneSound } from '../services/doneSound';
+
 type ThinkingLevel = AgentControllerSessionSettings['thinkingLevel'];
 type NotificationMode = AgentControllerSessionSettings['notifications'];
 
@@ -38,19 +41,36 @@ interface GeneralTabProps {
 }
 
 export function GeneralTab({ theme, onThemeChange }: GeneralTabProps) {
+  const [doneSound, setDoneSound] = useState<DoneSound>(() => loadDoneSound());
+  const changeDoneSound = (next: DoneSound) => {
+    setDoneSound(next);
+    saveDoneSound(next);
+    // Preview the pick so the user hears what they chose.
+    playDoneSound(next);
+  };
   return (
-    <FieldRow label="Theme" hint="Color scheme for the interface">
-      <Segmented
-        ariaLabel="Theme"
-        value={theme}
-        options={[
-          { value: 'system', label: 'System' },
-          { value: 'light', label: 'Light' },
-          { value: 'dark', label: 'Dark' },
-        ]}
-        onChange={onThemeChange}
-      />
-    </FieldRow>
+    <>
+      <FieldRow label="Theme" hint="Color scheme for the interface">
+        <Segmented
+          ariaLabel="Theme"
+          value={theme}
+          options={[
+            { value: 'system', label: 'System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark', label: 'Dark' },
+          ]}
+          onChange={onThemeChange}
+        />
+      </FieldRow>
+      <FieldRow label="Completion sound" hint="Played when an agent run finishes in a workspace">
+        <Segmented
+          ariaLabel="Completion sound"
+          value={doneSound}
+          options={DONE_SOUND_OPTIONS}
+          onChange={changeDoneSound}
+        />
+      </FieldRow>
+    </>
   );
 }
 

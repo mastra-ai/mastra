@@ -2,7 +2,7 @@ import type { AgentControllerEvent, AgentControllerMessage, AgentControllerOMPro
 import { useReducer, useRef } from 'react';
 
 import { createInitialTranscript, transcriptReducer } from '../services/transcript';
-import type { TranscriptState, UsageSnapshot } from '../services/transcript';
+import type { OutgoingFile, TranscriptState, UsageSnapshot } from '../services/transcript';
 
 export interface SessionStateSnapshot {
   omProgress?: AgentControllerOMProgress;
@@ -55,8 +55,8 @@ export function useAgentControllerTranscript({
     dispatch({ type: 'event', event });
   };
 
-  const localUser = (text: string, steer?: boolean) => {
-    dispatch({ type: 'localUser', text, steer });
+  const localUser = (text: string, steer?: boolean, files?: OutgoingFile[]) => {
+    dispatch({ type: 'localUser', text, steer, files });
   };
 
   const resolvePrompt = (id: string) => {

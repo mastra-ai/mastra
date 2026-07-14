@@ -10,6 +10,7 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from '../../workspaces/hooks/useWorkspaces';
+import type { Project } from '../../workspaces/services/projects';
 import { createWorkItem, updateWorkItem } from '../services/workItems';
 import type { WorkItemSource } from '../services/workItems';
 
@@ -69,6 +70,9 @@ export function useStartFactoryRun() {
   const mutation = useMutation({
     mutationFn: async ({ branch, threadTitle, threadTags, prompt, workItem }: StartFactoryRunInput) => {
       const updatedProject = await createWorkspace.mutateAsync(branch);
+      queryClient.setQueryData(queryKeys.projects(), (projects: Project[] | undefined) =>
+        projects?.map(project => (project.id === updatedProject.id ? updatedProject : project)),
+      );
       const projectPath = deriveProjectPath(updatedProject);
       if (!projectPath) throw new Error('Could not resolve the new worktree path');
 
