@@ -33,10 +33,10 @@ export const WithActions: Story = {
       <HeaderTitle>Agents</HeaderTitle>
       <HeaderAction>
         <Button variant="ghost" size="md">
-          <Search className="h-4 w-4" />
+          <Search className="size-4" />
         </Button>
         <Button size="md">
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
           New Agent
         </Button>
       </HeaderAction>
@@ -53,7 +53,7 @@ export const WithGroup: Story = {
       </HeaderGroup>
       <HeaderAction>
         <Button variant="outline" size="md">
-          <Settings className="h-4 w-4" />
+          <Settings className="size-4" />
         </Button>
       </HeaderAction>
     </Header>
@@ -76,13 +76,13 @@ export const ComplexHeader: Story = {
       </HeaderGroup>
       <HeaderAction>
         <Button variant="ghost" size="md">
-          <Bell className="h-4 w-4" />
+          <Bell className="size-4" />
         </Button>
         <Button variant="ghost" size="md">
-          <Settings className="h-4 w-4" />
+          <Settings className="size-4" />
         </Button>
         <Button size="md">
-          <Plus className="h-4 w-4" />
+          <Plus className="size-4" />
           Create
         </Button>
       </HeaderAction>

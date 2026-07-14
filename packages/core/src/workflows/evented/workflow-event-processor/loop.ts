@@ -2,6 +2,7 @@ import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
+import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
@@ -320,7 +321,10 @@ export async function processWorkflowForEach(
 
     if (suspendedIndices.length > 0) {
       // Limit resumption to concurrency value (like initial execution)
-      const concurrency = step.opts.concurrency ?? 1;
+      const concurrency = resolveForeachConcurrency(step.opts, {
+        inputData: (prevResult as any)?.output,
+        getInitData: () => (stepResults as any)?.input,
+      });
       const indicesToResume = suspendedIndices.slice(0, concurrency);
 
       // Reset suspended iterations to "pending" state before re-running them.
@@ -451,7 +455,11 @@ export async function processWorkflowForEach(
 
   if (executionPath.length === 1 && idx === 0) {
     // on first iteratation we need to kick off up to the set concurrency
-    const concurrency = Math.min(step.opts.concurrency ?? 1, targetLen);
+    const resolvedConcurrency = resolveForeachConcurrency(step.opts, {
+      inputData: (prevResult as any)?.output,
+      getInitData: () => (stepResults as any)?.input,
+    });
+    const concurrency = Math.min(resolvedConcurrency, targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
     await workflowsStore?.updateWorkflowResults({

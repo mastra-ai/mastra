@@ -23,12 +23,12 @@ export function DataListSkeleton({ columns = 'auto 1fr auto auto', numberOfRows 
       {Array.from({ length: numberOfRows }).map((_, rowIdx) => (
         <div
           key={rowIdx}
-          className="data-list-row grid grid-cols-subgrid gap-6 lg:gap-8 xl:gap-10 2xl:gap-12 3xl:gap-14 col-span-full px-5 border-y border-b-border1 border-t-transparent transition-colors duration-200 rounded-lg"
+          className="data-list-row col-span-full grid grid-cols-subgrid gap-6 rounded-lg border-y border-t-transparent border-b-border1 px-5 transition-colors duration-200 2xl:gap-12 3xl:gap-14 lg:gap-8 xl:gap-10"
         >
           {Array.from({ length: columnCount }).map((_, colIdx) => (
             <DataListCell key={colIdx}>
               <div
-                className="bg-surface4 rounded-md animate-pulse text-transparent h-[1rem] select-none"
+                className="h-4 animate-pulse rounded-md bg-surface4 text-transparent select-none"
                 style={{ width: getPseudoRandomWidth(rowIdx, colIdx) }}
               />
             </DataListCell>

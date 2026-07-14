@@ -16,9 +16,10 @@ import { useOverlays } from './lib/overlays';
  * (`useActiveProjectContext`, focused chat hooks, `useOverlays`), so nothing is
  * wired through props here.
  *
- * Threads are scoped to the worktree they run in, so GitHub projects nest the
- * thread list under the active worktree inside the Workspaces section; local
- * projects (no worktrees) keep the flat list.
+ * Threads are scoped to the worktree they run in. GitHub projects nest the
+ * thread list under the main-branch workspace inside the Workspaces section —
+ * feature worktrees hold a single conversation, so they show no thread list;
+ * local projects (no worktrees) keep the flat list.
  */
 export function Sidebar() {
   const overlays = useOverlays();

@@ -5,6 +5,7 @@ import { PricingModel, PricingTier } from './pricing-model';
 import type { PricingMeter, PricingConditionOperator, PricingConditionField } from './types';
 
 const DATA_FILE_NAME = 'pricing-data.jsonl';
+const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
 
 type MinifiedMeterKey = 'it' | 'ot' | 'icrt' | 'icwt' | 'iat' | 'oat' | 'ort';
 type MinifiedConditionFieldKey = 'tit';
@@ -74,7 +75,7 @@ export class PricingRegistry {
 
   get(args: { provider: string; model: string }): PricingModel | null {
     // Try all model name variants in order of preference
-    const variants = getModelVariants(args.model);
+    const variants = getModelVariants(args.model, normalizeProvider(args.provider));
     for (const variant of variants) {
       const key = makePricingKey({ provider: args.provider, model: variant });
       const match = this.pricingModels.get(key);
@@ -199,11 +200,14 @@ function normalizeProvider(provider: string): string {
  *    same with dots flattened, e.g. "google/gemini-2.5-flash" → "gemini-2-5-flash"
  *    (covers OpenRouter entries stored without the vendor prefix, including
  *    dotted versions)
+ * 5. For Bedrock, geographic and vendor prefixes dropped and Bedrock version suffixes
+ *    stripped, e.g. "us.anthropic.claude-sonnet-4-5-20250929-v1:0" →
+ *    "claude-sonnet-4-5"
  *
  * Each variant is also tried with its date suffix stripped.
  * The Set dedupes so non-prefixed inputs do not pay for redundant lookups.
  */
-function getModelVariants(model: string): string[] {
+function getModelVariants(model: string, provider: string): string[] {
   const variants = new Set<string>();
   const add = (v: string) => {
     variants.add(v);
@@ -222,6 +226,25 @@ function getModelVariants(model: string): string[] {
     const withoutVendor = model.substring(slashIndex + 1);
     add(withoutVendor);
     add(withoutVendor.replace(/\./g, '-'));
+  }
+
+  if (provider === 'amazon-bedrock') {
+    const addBedrockVariant = (v: string) => {
+      add(v);
+      add(v.replace(/-(?:v)?\d+(?::\d+)?$/, ''));
+    };
+    const segments = model.split('.');
+    const withoutGeography = BEDROCK_GEOGRAPHY_PREFIXES.has(segments[0] ?? '') ? segments.slice(1).join('.') : model;
+
+    addBedrockVariant(withoutGeography);
+    addBedrockVariant(withoutGeography.replace(/\./g, '-'));
+
+    const vendorSeparator = withoutGeography.indexOf('.');
+    if (vendorSeparator !== -1) {
+      const withoutVendor = withoutGeography.substring(vendorSeparator + 1);
+      addBedrockVariant(withoutVendor);
+      addBedrockVariant(withoutVendor.replace(/\./g, '-'));
+    }
   }
 
   return [...variants];

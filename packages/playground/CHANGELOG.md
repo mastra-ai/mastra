@@ -1,5 +1,38 @@
 # @internal/playground
 
+## 1.19.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`03c91aa`](https://github.com/mastra-ai/mastra/commit/03c91aabb07d6b0e19d6dff3f3cbb9f86070269e), [`02c2bd9`](https://github.com/mastra-ai/mastra/commit/02c2bd906b145ab806287712e1796d92bfc32c2a), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb)]:
+  - @mastra/core@1.51.0-alpha.8
+  - @mastra/playground-ui@41.0.0-alpha.8
+  - @mastra/client-js@1.32.0-alpha.8
+  - @mastra/ai-sdk@1.6.2-alpha.1
+  - @mastra/react@1.2.5-alpha.8
+
+## 1.19.0-alpha.7
+
+### Patch Changes
+
+- Fixed the test-chat composer on the agent editor page rejecting typed input. Typing in the composer textarea while editing an agent's system prompt, tools, or variables now works the same as it does on the regular chat page. ([#19253](https://github.com/mastra-ai/mastra/pull/19253))
+
+- Updated dependencies [[`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`1ce5121`](https://github.com/mastra-ai/mastra/commit/1ce512155d122bb21f47d98383e82ffbf84b39e8), [`3cfc47a`](https://github.com/mastra-ai/mastra/commit/3cfc47a6b89940aadd0f46fb01ae9624a73a865d), [`2bb7817`](https://github.com/mastra-ai/mastra/commit/2bb78176112fde628483de2830528f7eee911e56), [`51d9870`](https://github.com/mastra-ai/mastra/commit/51d987032c689c2855374d0f244f5d654da809d1), [`5cab274`](https://github.com/mastra-ai/mastra/commit/5cab2744250e22d12fefa7b32637dce224233cee), [`7fa27d3`](https://github.com/mastra-ai/mastra/commit/7fa27d3b6f5ed68cd34e454a4d3ad9c482a0cfbc), [`2a9d47d`](https://github.com/mastra-ai/mastra/commit/2a9d47d0e84142cc82ec6ad9f7386ca722f0180f), [`17439bc`](https://github.com/mastra-ai/mastra/commit/17439bc492fb055172aff30f5a5ddf1d054408a3), [`a58dcbb`](https://github.com/mastra-ai/mastra/commit/a58dcbb546d7e1d65ebdc1f39e55f0908fcd9391), [`153bd3b`](https://github.com/mastra-ai/mastra/commit/153bd3b396bdfed6b74cf43de12db8fd2d83c04a), [`07bb863`](https://github.com/mastra-ai/mastra/commit/07bb8631919c6f7cf377dccd45b096e0f17fbed0), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`8a586ec`](https://github.com/mastra-ai/mastra/commit/8a586eca9a4914f31dff6140d0d45ac375b00669), [`3927473`](https://github.com/mastra-ai/mastra/commit/392747323ddb10c643d12be7b9ae913159dfaeed), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009), [`dce50dc`](https://github.com/mastra-ai/mastra/commit/dce50dc9a1c1fcd0f427bb5f6250ec74910cb04b), [`634caff`](https://github.com/mastra-ai/mastra/commit/634caff29a9200ad058b67d53f96d9e5832fb8a2), [`2d5c856`](https://github.com/mastra-ai/mastra/commit/2d5c85612f65dee3e63f5b8e52b428e9a23c0b64), [`25e7c12`](https://github.com/mastra-ai/mastra/commit/25e7c126a770069ae7fb7ecf1d2adb40e017b009)]:
+  - @mastra/core@1.51.0-alpha.7
+  - @mastra/playground-ui@41.0.0-alpha.7
+  - @mastra/client-js@1.32.0-alpha.7
+  - @mastra/react@1.2.5-alpha.7
+
+## 1.19.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies [[`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6), [`e2d5f37`](https://github.com/mastra-ai/mastra/commit/e2d5f373bd289be534d5f8694d34465010533df6)]:
+  - @mastra/client-js@1.31.2-alpha.6
+  - @mastra/core@1.51.0-alpha.6
+  - @mastra/react@1.2.5-alpha.6
+  - @mastra/playground-ui@40.1.0-alpha.6
+
 ## 1.19.0-alpha.5
 
 ### Patch Changes

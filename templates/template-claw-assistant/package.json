@@ -1,7 +1,7 @@
 {
   "name": "template-claw-assistant",
   "version": "1.0.0",
-  "description": "An autonomous personal assistant (\"Claw\") that operates your local workspace: filesystem, sandboxed shell, AgentBrowser (Playwright), provider-native web search, observational memory, and skills. Uses Mastra Gateway and Turso (libSQL).",
+  "description": "An autonomous personal assistant (\"Claw\") that operates your local workspace: filesystem, sandboxed shell, AgentBrowser (Playwright), provider-native web search, observational memory, and skills. Uses Mastra's Gateway and Turso (libSQL).",
   "main": "index.js",
   "scripts": {
     "dev": "mastra dev",

@@ -1,5 +1,18 @@
 # @mastra/agent-builder
 
+## 1.1.6-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#16699](https://github.com/mastra-ai/mastra/pull/16699))
+  - Updated dependency [`@ai-sdk/anthropic-v5@npm:@ai-sdk/anthropic@2.0.85` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic-v5/v/2.0.85) (from `npm:@ai-sdk/anthropic@2.0.81`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/google-v5@npm:@ai-sdk/google@2.0.78` ↗︎](https://www.npmjs.com/package/@ai-sdk/google-v5/v/2.0.78) (from `npm:@ai-sdk/google@2.0.72`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/groq-v5@npm:@ai-sdk/groq@2.0.43` ↗︎](https://www.npmjs.com/package/@ai-sdk/groq-v5/v/2.0.43) (from `npm:@ai-sdk/groq@2.0.40`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/openai-v5@npm:@ai-sdk/openai@2.0.110` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai-v5/v/2.0.110) (from `npm:@ai-sdk/openai@2.0.106`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/xai-v5@npm:@ai-sdk/xai@2.0.76` ↗︎](https://www.npmjs.com/package/@ai-sdk/xai-v5/v/2.0.76) (from `npm:@ai-sdk/xai@2.0.72`, in `dependencies`)
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/core@1.51.0-alpha.8
+
 ## 1.1.6-alpha.3
 
 ### Patch Changes

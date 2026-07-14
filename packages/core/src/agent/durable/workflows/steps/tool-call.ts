@@ -27,7 +27,7 @@ import type {
   RunRegistryEntry,
 } from '../../types';
 import { applyToolPayloadTransformToChunk } from '../../utils/apply-tool-payload-transform';
-import { resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
+import { rebuildRunToolsFromMastra, resolveTool, toolRequiresApproval } from '../../utils/resolve-runtime';
 import { serializeError } from '../../utils/serialize-state';
 
 /**
@@ -247,6 +247,7 @@ export function createDurableToolCallStep() {
           memoryConfig?: MemoryConfig;
           threadExists?: boolean;
         };
+        requestContextEntries?: Record<string, unknown>;
         agentSpanData?: unknown;
         modelSpanData?: unknown;
       }>();
@@ -303,6 +304,13 @@ export function createDurableToolCallStep() {
       const registryEntry = globalRunRegistry.get(runId);
       let tool = registryEntry?.tools?.[toolName];
       let mastraTools: Record<string, any> | undefined;
+      // Tools rebuilt from the Mastra instance when the per-process registry is
+      // empty (cross-process worker). Populated lazily below; reused for
+      // workspace/memory resolution further down.
+      let rebuiltTools: Record<string, any> | undefined;
+      let rebuiltWorkspace: any;
+      let rebuiltMemory: any;
+      let rebuiltSaveQueueManager: any;
 
       if (!tool) {
         tool = findProviderToolByName(registryEntry?.tools as any, toolName) as typeof tool;
@@ -330,6 +338,40 @@ export function createDurableToolCallStep() {
         }
       }
 
+      // Cross-process fallback: workspace/skill tools are per-request closures
+      // never registered at the Mastra-instance level, so the lookups above miss
+      // them when the durable steps run on a separate process (e.g. the
+      // @mastra/inngest connect() worker) whose registry is empty. Rebuild the
+      // full toolset from the agent — the same rebuild the LLM step already does
+      // via resolveRuntimeDependencies — and retry. This is the root-cause fix
+      // for `ToolNotFoundError` on skill/mastra_workspace_* tools cross-process.
+      if (!tool && mastra) {
+        const rebuilt = await rebuildRunToolsFromMastra({
+          mastra: mastra as Mastra,
+          runId,
+          agentId: initData.agentId,
+          state: state as any,
+          options: agentOptions,
+          requestContextEntries: initData.requestContextEntries,
+          logger,
+        });
+        if (rebuilt) {
+          rebuiltTools = rebuilt.tools;
+          rebuiltWorkspace = rebuilt.workspace;
+          rebuiltMemory = rebuilt.memory;
+          rebuiltSaveQueueManager = rebuilt.saveQueueManager;
+          tool = rebuiltTools[toolName] as typeof tool;
+          if (!tool) {
+            tool = findProviderToolByName(rebuiltTools as any, toolName) as typeof tool;
+          }
+          if (!tool) {
+            tool = Object.values(rebuiltTools).find(
+              (t: any) => t && typeof t === 'object' && 'id' in t && t.id === toolName,
+            ) as typeof tool;
+          }
+        }
+      }
+
       // Resolve the key the tool is registered under for activeTools filtering.
       // Prefer the per-run registryEntry key (exact name then identity match),
       // and fall back to the Mastra-wide registry when the tool was resolved
@@ -337,16 +379,18 @@ export function createDurableToolCallStep() {
       // `webSearch` invoked by its model-facing name `web_search` would be
       // hidden whenever `activeTools` was set, because the key from
       // registryEntry.tools would be `undefined`.
-      const toolKey = registryEntry?.tools?.[toolName]
-        ? toolName
-        : (Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
-          Object.entries(mastraTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0]);
+      const toolKey =
+        registryEntry?.tools?.[toolName] || rebuiltTools?.[toolName]
+          ? toolName
+          : (Object.entries(registryEntry?.tools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
+            Object.entries(rebuiltTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0] ??
+            Object.entries(mastraTools ?? {}).find(([, registeredTool]) => registeredTool === tool)?.[0]);
       const effectiveActiveTools = activeTools === null ? undefined : (activeTools ?? agentOptions.activeTools);
       const activeToolKey = toolKey ?? toolName;
       const isHiddenByActiveTools = effectiveActiveTools !== undefined && !effectiveActiveTools.includes(activeToolKey);
 
       if (!tool || isHiddenByActiveTools) {
-        const availableToolNames = effectiveActiveTools ?? Object.keys(registryEntry?.tools ?? {});
+        const availableToolNames = effectiveActiveTools ?? Object.keys(rebuiltTools ?? registryEntry?.tools ?? {});
         const availableToolsStr =
           availableToolNames.length > 0 ? ` Available tools: ${availableToolNames.join(', ')}` : '';
         const error = {
@@ -367,10 +411,12 @@ export function createDurableToolCallStep() {
         };
       }
 
-      // Get memory-related state for message persistence
-      const saveQueueManager = registryEntry?.saveQueueManager;
-      const memory = registryEntry?.memory;
-      const workspace = registryEntry?.workspace;
+      // Get memory-related state for message persistence. Fall back to the
+      // values rebuilt from Mastra above (cross-process worker), so workspace
+      // tools receive their `workspace` and message flushing still works.
+      const saveQueueManager = registryEntry?.saveQueueManager ?? rebuiltSaveQueueManager;
+      const memory = registryEntry?.memory ?? rebuiltMemory;
+      const workspace = registryEntry?.workspace ?? rebuiltWorkspace;
       let threadExists = state?.threadExists ?? false;
 
       // Reconstruct MessageList from workflow state if available
@@ -413,7 +459,9 @@ export function createDurableToolCallStep() {
               [...registryEntry.requestContext.entries()].filter(([key]) => key !== '__mastra_requireToolApproval'),
             )
           : undefined,
-        workspace: registryEntry?.workspace,
+        // Use the same rebuilt-workspace fallback as execution (above), so
+        // workspace-aware approval policies see their workspace cross-process.
+        workspace,
       });
 
       // Add suspended-tool / pending-approval metadata to the last assistant
@@ -996,6 +1044,24 @@ export function createDurableToolCallStep() {
                   result: `Background task resumed. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
                 };
               }
+            }
+
+            const isPreviouslyRunning = await bgTask.checkIfRunning({
+              toolCallId,
+              runId,
+              agentId: initData.agentId,
+              threadId: state?.threadId,
+              resourceId: state?.resourceId,
+              toolName,
+            });
+
+            if (isPreviouslyRunning) {
+              const task = await bgTask.restart();
+              return {
+                ...typedInput,
+                args: cleanedArgs,
+                result: `Background task restarted. Task ID: ${task.id}. The tool "${toolName}" is running in the background. You will be notified when it completes.`,
+              };
             }
 
             const { task, fallbackToSync } = await bgTask.dispatch();

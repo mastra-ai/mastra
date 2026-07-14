@@ -1,6 +1,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod';
+import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
@@ -20,6 +21,8 @@ describeForAllEngines('background-task-agent-level scenario', engine => {
   const getMock = useLoopScenarioAimock();
 
   it('opts in a non-background tool at agent level and dispatches it in the background', async () => {
+    const onChunks: ChunkType[] = [];
+
     // Tool WITHOUT tool-level `background: { enabled: true }` — agent-level must
     // elevate it.
     const plainTool = createTool({
@@ -42,6 +45,13 @@ describeForAllEngines('background-task-agent-level scenario', engine => {
       stopWhen: stepCountIs(3),
       backgroundTasks: { enabled: true },
       collectChunks: true,
+      ...(engine !== 'durable'
+        ? {
+            onChunk: (chunk: ChunkType) => {
+              onChunks.push(chunk);
+            },
+          }
+        : {}),
       fixtures: llm => {
         llm.on(
           { endpoint: 'chat', sequenceIndex: 0 },
@@ -58,5 +68,14 @@ describeForAllEngines('background-task-agent-level scenario', engine => {
     expect(startedChunk?.payload).toMatchObject({
       toolName: 'plain-work',
     });
+
+    if (engine !== 'durable') {
+      const onChunkStarted = onChunks.find(c => c.type === 'background-task-started');
+      expect(onChunkStarted).toBeDefined();
+      expect(onChunkStarted?.payload).toMatchObject({
+        toolName: 'plain-work',
+        toolCallId: 'call_plain',
+      });
+    }
   });
 });
