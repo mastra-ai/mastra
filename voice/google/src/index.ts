@@ -327,7 +327,7 @@ export class GoogleVoice extends MastraVoice {
    */
   async speak(input: string | NodeJS.ReadableStream, options?: GoogleSpeakOptions): Promise<NodeJS.ReadableStream> {
     const defaultVoiceName = options?.speaker || this.speaker;
-    const defaultLanguageCode = options?.languageCode || options?.speaker?.split('-').slice(0, 2).join('-') || 'en-US';
+    const defaultLanguageCode = options?.languageCode || defaultVoiceName?.split('-').slice(0, 2).join('-') || 'en-US';
 
     const requestInput: ISynthesizeSpeechRequest['input'] = options?.input
       ? { ...options.input }

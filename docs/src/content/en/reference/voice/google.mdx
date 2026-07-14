@@ -194,7 +194,7 @@ Converts text to speech using Google Cloud Text-to-Speech service.
             name: 'input',
             type: "ISynthesizeSpeechRequest['input']",
             description:
-              'Rich input object passed through to the Google Cloud TTS API. Supports `ssml`, `markup`, `prompt` (Gemini-TTS style steering), `customPronunciations`, and `multiSpeakerMarkup`. When provided without `text`, `ssml`, or `markup`, the positional `input` argument is used as the `text` field automatically.',
+              'Rich input object passed through to the Google Cloud TTS API. Supports `ssml`, `markup`, `prompt` (Gemini-TTS style steering), `customPronunciations`, and `multiSpeakerMarkup`. When provided without `text`, `ssml`, `markup`, or `multiSpeakerMarkup`, the positional `input` argument is used as the `text` field automatically.',
             isOptional: true,
           },
           {

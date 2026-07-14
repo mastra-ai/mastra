@@ -200,6 +200,20 @@ describe('GoogleVoice Unit Tests', () => {
       expect(call.voice.languageCode).toBe('en-US');
     });
 
+    it('should derive languageCode from non-en-US default speaker', async () => {
+      const voice = new GoogleVoice({ speaker: 'cmn-CN-Standard-A' });
+      const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
+      (voice as any).ttsClient = { synthesizeSpeech: mockSynthesize };
+
+      await voice.speak('Hi', {
+        voice: { modelName: 'gemini-2.5-flash-tts' },
+      });
+      const call = mockSynthesize.mock.calls[0][0];
+      expect(call.voice.name).toBe('cmn-CN-Standard-A');
+      expect(call.voice.languageCode).toBe('cmn-CN');
+      expect(call.voice.modelName).toBe('gemini-2.5-flash-tts');
+    });
+
     it('should allow caller voice fields to override defaults', async () => {
       const voice = new GoogleVoice({ speaker: 'en-US-Studio-O' });
       const mockSynthesize = vi.fn().mockResolvedValue([{ audioContent: Buffer.from('audio') }]);
