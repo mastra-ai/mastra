@@ -7,8 +7,16 @@ import type { AudioStreamRequest, VoiceModelName } from '@speechify/api-sdk';
 import { SPEECHIFY_VOICES } from './voices';
 import type { SpeechifyVoiceId } from './voices';
 
+/**
+ * Models accepted by the Speechify API. Extends the SDK's `VoiceModelName`
+ * with the Simba 3 generation models, which the API accepts but the SDK's
+ * type union does not yet include. `simba-3.0` and `simba-3.2` are
+ * currently English only.
+ */
+type SpeechifyModel = VoiceModelName | 'simba-3.0' | 'simba-3.2';
+
 interface SpeechifyConfig {
-  name?: VoiceModelName;
+  name?: SpeechifyModel;
   apiKey?: string;
 }
 
@@ -55,15 +63,19 @@ export class SpeechifyVoice extends MastraVoice {
     input: string | NodeJS.ReadableStream,
     options?: {
       speaker?: string;
-    } & Omit<AudioStreamRequest, 'voiceId' | 'input'>,
+      model?: SpeechifyModel;
+    } & Omit<AudioStreamRequest, 'voiceId' | 'input' | 'model'>,
   ): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
 
+    const { speaker, model, ...streamOptions } = options ?? {};
     const request: AudioStreamRequest = {
+      ...streamOptions,
       input: text,
-      model: (options?.model || this.speechModel?.name) as VoiceModelName,
-      voiceId: (options?.speaker || this.speaker) as SpeechifyVoiceId,
-      ...options,
+      // The SDK sends `model` to the API verbatim, so casting the wider
+      // SpeechifyModel union into its narrower VoiceModelName is safe.
+      model: (model || this.speechModel?.name) as VoiceModelName,
+      voiceId: (speaker || this.speaker) as SpeechifyVoiceId,
     };
 
     const webStream = await this.client.audioStream(request);
@@ -108,4 +120,4 @@ export class SpeechifyVoice extends MastraVoice {
   }
 }
 
-export type { SpeechifyConfig, SpeechifyVoiceId };
+export type { SpeechifyConfig, SpeechifyModel, SpeechifyVoiceId };

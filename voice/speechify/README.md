@@ -23,7 +23,7 @@ import { SpeechifyVoice } from '@mastra/voice-speechify';
 
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-english', // Optional, defaults to 'simba-english'
+    name: 'simba-3.2', // Optional, defaults to 'simba-english'
     apiKey: 'your-api-key', // Optional, can use SPEECHIFY_API_KEY env var
   },
   speaker: 'george', // Optional, defaults to 'george'
@@ -49,7 +49,7 @@ The `SpeechifyVoice` constructor accepts the following options:
 
 ```typescript
 interface SpeechifyConfig {
-  name?: string; // Optional Speechify model name (default: 'simba-english')
+  name?: SpeechifyModel; // Optional Speechify model name (default: 'simba-english')
   apiKey?: string; // Optional API key (can also use env var)
 }
 
@@ -57,6 +57,19 @@ new SpeechifyVoice({
   speechModel?: SpeechifyConfig,
   speaker?: string // Optional default speaker ID
 })
+```
+
+## Available Models
+
+- `simba-3.2`: Speechify's latest streaming-native model with the lowest latency and richest expressivity. Recommended for English. Currently English only.
+- `simba-3.0`: The earlier Simba 3 model, still available. Currently English only.
+- `simba-english`: The default model, optimized for English.
+- `simba-multilingual`: Optimized for non-English or mixed-language input.
+
+The model can also be overridden per request:
+
+```typescript
+const stream = await voice.speak('Hello world', { model: 'simba-3.2' });
 ```
 
 ## Available Speakers
