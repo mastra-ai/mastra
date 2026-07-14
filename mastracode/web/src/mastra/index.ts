@@ -35,6 +35,7 @@ import { handleServerError } from '../web/server-error.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from '../web/spa-static.js';
 import {
   assembleWebApiRoutes,
+  resolveFactoryReady,
   resolveGithubReady,
   resolveIntakeReady,
   resolveLinearReady,
@@ -69,6 +70,9 @@ const linearReady = await resolveLinearReady();
 // Intake source configuration (Settings › Intake) — needs at least one source.
 const intakeReady = await resolveIntakeReady(githubReady || linearReady);
 
+// Factory work-item board — hangs off GitHub projects, same fail-soft pattern.
+const factoryReady = await resolveFactoryReady(githubReady);
+
 const webAuthEnabled = isWebAuthEnabled();
 
 const redirectUri = process.env.WORKOS_REDIRECT_URI ?? `${publicOrigin}/auth/callback`;
@@ -101,7 +105,15 @@ const prepared = await prepareAgentControllerMount({
     // app the deployer generates. `requiresAuth: false`; the gate skips `/auth/*`.
     ...(authProvider ? buildAuthRoutes(authProvider, redirectUri) : []),
     // Custom `/web/*` routes (fs / config / github).
-    ...assembleWebApiRoutes({ controller, authStorage, publicOrigin, githubReady, linearReady, intakeReady }),
+    ...assembleWebApiRoutes({
+      controller,
+      authStorage,
+      publicOrigin,
+      githubReady,
+      linearReady,
+      intakeReady,
+      factoryReady,
+    }),
   ],
   buildServerConfig: () => {
     const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};

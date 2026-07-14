@@ -277,14 +277,14 @@ describe('WorkspacesSection', () => {
   it('stays on non-thread routes when switching workspaces', async () => {
     seedActiveProject(githubProject);
     useAgentControllerHandlers();
-    renderSection(undefined, '/factory/intake');
+    renderSection(undefined, '/factory/board');
 
     await userEvent.click(await screen.findByRole('button', { name: 'feat-ui' }));
 
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'feat-ui' })).toHaveAttribute('aria-current', 'true'),
     );
-    expect(screen.getByTestId('location')).toHaveTextContent('/factory/intake');
+    expect(screen.getByTestId('location')).toHaveTextContent('/factory/board');
   });
 
   it('creates a new workspace and selects it', async () => {
