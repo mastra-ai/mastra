@@ -57,6 +57,14 @@ Variables are applied when a deploy starts. To apply changed variables to a runn
 mastra env restart staging
 ```
 
+To see the full set an environment's deploys actually run with — environment-scoped and project-scoped values merged, with managed variables listed by name — pull them into a local env file:
+
+```bash
+mastra env vars pull staging --output .env.staging
+```
+
+Managed variable values are injected at deploy time and never written to the file; they appear as name-only comments.
+
 :::note
 Environment variables don't override managed database variables. To point an environment at a different database, attach an [environment-scoped database](/docs/mastra-platform/database#attach-with-the-cli) instead.
 :::

@@ -24,7 +24,7 @@ Use a hosted database when your project needs durable storage that's managed by 
 
 ## Providers
 
-Hosted databases are available through three providers. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
+Hosted databases are available through two providers today — Turso and Postgres — with MongoDB coming soon. Pick one when you attach a database, then wire its injected variables into the matching Mastra storage adapter in your code.
 
 Each provider injects a fixed set of variable names — for example, a single `DATABASE_URL` for Postgres and separate `TURSO_*` variables for Turso. Those names must be unique within each environment, which means an environment can use at most one database per provider. Attach Turso and Postgres to the same project when you need separate stores for different workloads.
 
