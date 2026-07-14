@@ -153,7 +153,7 @@ export function ScoresList({
     <div
       className={cn('grid h-full min-h-0 gap-4 items-start', hasSidePanel ? 'grid-cols-[1fr_1fr]' : 'grid-cols-[1fr]')}
     >
-      <div className="flex flex-col h-full min-h-0 gap-0">
+      <div className="flex flex-col h-full min-h-0 min-w-0 gap-0">
         <div className="flex items-center justify-end pb-2 shrink-0">
           <DropdownMenu>
             <DropdownMenu.Trigger asChild>
