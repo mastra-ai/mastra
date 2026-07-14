@@ -629,7 +629,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       perStep,
       stepResults,
       state,
-      workflowId: _workflowId,
+      workflowId,
     } = args;
 
     // Extract final state from stepResults or args
@@ -642,7 +642,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // keep writing to its watch topic when the next step executes, so only
     // truly terminal runs get their topic cleared.
     if (!perStep) {
-      this.scheduleRunTopicCleanup(_workflowId, runId);
+      this.scheduleRunTopicCleanup(workflowId, runId);
     }
 
     // handle nested workflow
