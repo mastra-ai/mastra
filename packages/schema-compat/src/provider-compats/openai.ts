@@ -264,7 +264,11 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
           // Finite key set (z.record with enum keys): expand losslessly into a closed
           // object with one property per key. zod already emitted `required` with all
           // keys for exhaustive records; the standard handling below fixes up the rest.
+          // `x-record-object` tells #traverse this object validates as a record, so
+          // null values for keys made nullable below (z.partialRecord) must be
+          // deleted — records validate any *present* key's value.
           schema.properties = Object.fromEntries(enumKeys.map(key => [key, structuredClone(valueSchema)]));
+          (schema as Record<string, unknown>)['x-record-object'] = true;
           delete (schema as Record<string, unknown>)['propertyNames'];
         } else if (parentSchema) {
           // Arbitrary keys: rewrite as an array of { key, value } pairs, marked with
@@ -408,7 +412,13 @@ export class OpenAISchemaCompatLayer extends SchemaCompatLayer {
     const optionalProperties = (resolved['x-optional'] ?? []) as string[];
     for (const key in obj) {
       if (optionalProperties.includes(key) && obj[key] === null) {
-        obj[key] = undefined;
+        if (resolved['x-record-object'] === true) {
+          // Enum-keyed records rewritten to closed objects (z.partialRecord) validate
+          // any *present* key's value, so only a truly absent key round-trips.
+          delete obj[key];
+        } else {
+          obj[key] = undefined;
+        }
       } else if (properties[key]) {
         obj[key] = this.#traverse(obj[key], properties[key]);
       }

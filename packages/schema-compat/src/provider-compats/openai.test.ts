@@ -219,6 +219,72 @@ describe('OpenAISchemaCompatLayer', () => {
       expect(JSON.stringify(json)).not.toContain('"propertyNames"');
       expect(json.additionalProperties).toBe(false);
     });
+
+    it('handles z.partialRecord: nullable values that fold back to absent keys', async () => {
+      const schema = z.object({ m: z.partialRecord(z.enum(['a', 'b']), z.string()) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      const m = json.properties.m;
+      // Strict mode requires every property, so keys are required but nullable.
+      expect(m.required).toEqual(['a', 'b']);
+      expect(m['x-optional']).toEqual(['a', 'b']);
+      expect(JSON.stringify(json)).not.toContain('"propertyNames"');
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const full = await compatSchema['~standard'].validate({ m: { a: 'x', b: 'y' } });
+      expect(full).toEqual({ value: { m: { a: 'x', b: 'y' } } });
+      // null marks an omitted key; it must be deleted (not undefined) because
+      // records validate any present key's value.
+      const sparse = await compatSchema['~standard'].validate({ m: { a: 'x', b: null } });
+      expect(sparse).toEqual({ value: { m: { a: 'x' } } });
+    });
+
+    it('rewrites records inside arrays', async () => {
+      const schema = z.object({ list: z.array(z.record(z.string(), z.number())) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      expect(json.properties.list.items['x-record']).toBe(true);
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({
+        list: [[{ key: 'a', value: 1 }], [{ key: 'b', value: 2 }]],
+      });
+      expect(result).toEqual({ value: { list: [{ a: 1 }, { b: 2 }] } });
+    });
+
+    it('rewrites records inside unions', async () => {
+      const schema = z.object({ u: z.union([z.record(z.string(), z.string()), z.number()]) });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+      expect(json.properties.u.anyOf.some((v: any) => v['x-record'] === true)).toBe(true);
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const asRecord = await compatSchema['~standard'].validate({ u: [{ key: 'a', value: 'b' }] });
+      expect(asRecord).toEqual({ value: { u: { a: 'b' } } });
+      const asNumber = await compatSchema['~standard'].validate({ u: 5 });
+      expect(asNumber).toEqual({ value: { u: 5 } });
+    });
+
+    it('preserves .describe() text on rewritten records', () => {
+      const schema = z.object({ m: z.record(z.string(), z.string()).describe('user metadata') });
+
+      const json = compat.processToJSONSchema(schema) as Record<string, any>;
+
+      expect(json.properties.m.description).toBe('user metadata');
+    });
+
+    it('folds back records whose values contain optional fields', async () => {
+      const schema = z.object({
+        m: z.record(z.string(), z.object({ a: z.string().optional() })),
+      });
+
+      const compatSchema = compat.processToCompatSchema(schema);
+      const result = await compatSchema['~standard'].validate({
+        m: [{ key: 'k', value: { a: null } }],
+      });
+
+      expect(result).toEqual({ value: { m: { k: {} } } });
+    });
   });
 
   // =============================================================================
