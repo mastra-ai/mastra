@@ -276,4 +276,45 @@ describe('background tasks in library mode (no explicit startWorkers)', () => {
     expect(status).toBe('completed');
     expect(mastra.scheduler).toBeUndefined();
   }, 15000);
+
+  it('restarts workers for a dispatch after stopWorkers()', async () => {
+    mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      backgroundTasks: { enabled: true },
+    });
+
+    const manager = mastra.backgroundTaskManager!;
+    const makeTask = (n: number) =>
+      createBackgroundTask(manager, {
+        toolName: `my-tool-${n}`,
+        toolCallId: `call-${n}`,
+        args: {},
+        agentId: 'a1',
+        runId: `r${n}`,
+        context: { executor: { execute: async () => ({ data: `hello-${n}` }) } },
+      });
+
+    const waitForAllTerminal = async (count: number) => {
+      let statuses: string[] = [];
+      for (let i = 0; i < 50; i++) {
+        const { tasks } = await manager.listTasks({});
+        statuses = tasks.map(t => t.status);
+        if (statuses.length === count && statuses.every(s => s === 'completed' || s === 'failed')) break;
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      return statuses;
+    };
+
+    await makeTask(1).dispatch();
+    expect(await waitForAllTerminal(1)).toEqual(['completed']);
+
+    // Stopping workers must reset the lazy-start guard: a later dispatch on
+    // the same instance has to boot the execution workers again, or it gets
+    // picked up but hangs in `running` forever.
+    await mastra.stopWorkers();
+
+    await makeTask(2).dispatch();
+    expect(await waitForAllTerminal(2)).toEqual(['completed', 'completed']);
+  }, 20000);
 });

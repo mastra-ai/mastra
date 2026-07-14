@@ -84,6 +84,16 @@ export class BackgroundTaskManager {
     this.#mastra = mastra;
   }
 
+  /**
+   * Reset the lazy-start guard. Called by `Mastra.stopWorkers()` — the
+   * execution workers are gone, so the next dispatch on this instance must
+   * lazily start them again instead of skipping and hanging in `running`.
+   * @internal
+   */
+  __onWorkersStopped(): void {
+    this.#workersStarted = false;
+  }
+
   async getStorage() {
     const storage = this.#mastra?.getStorage();
     if (!storage) {

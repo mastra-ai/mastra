@@ -5435,6 +5435,9 @@ export class Mastra<
 
     await this.#pubsub.flush();
     this.#workersStarted = false;
+    // Keep the background-task manager's lazy-start guard in sync — the
+    // execution workers just stopped, so the next dispatch must restart them.
+    this.#backgroundTaskManager?.__onWorkersStopped();
   }
 
   /**
