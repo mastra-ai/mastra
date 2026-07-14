@@ -39,6 +39,29 @@ export type {
   ExtractorSource,
 } from './extractor';
 export { WorkingMemoryExtractor } from './working-memory-extractor';
+export {
+  KnowledgeSemanticIndexCoordinator,
+  StaleKnowledgeSemanticIndexError,
+  Subconscious,
+  SubconsciousCaptureExtractor,
+  subconsciousCaptureSchema,
+} from './subconscious';
+export type {
+  KnowledgeSemanticIndexCoordinatorConfig,
+  ResolvedSubconsciousAgent,
+  ResolvedSubconsciousConfig,
+  SubconsciousBuiltInObservationAgent,
+  SubconsciousBuiltInObservationConfig,
+  SubconsciousBuiltInReflectionAgent,
+  SubconsciousBuiltInReflectionConfig,
+  SubconsciousCaptureHook,
+  SubconsciousCaptureOutput,
+  SubconsciousConfig,
+  SubconsciousCustomObservationConfig,
+  SubconsciousCustomReflectionConfig,
+  SubconsciousObservationEntry,
+  SubconsciousReflectionEntry,
+} from './subconscious';
 
 // Standalone conversation summarization (reuses the Observer + extractor plumbing)
 export { summarizeConversation } from './summarize';

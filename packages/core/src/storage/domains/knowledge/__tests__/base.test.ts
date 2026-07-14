@@ -157,6 +157,18 @@ describe('InMemoryKnowledgeStorage', () => {
     ]);
   });
 
+  it('serializes semantic work for successive versions of one document', async () => {
+    const store = createStore();
+    const entity = await store.createEntity({ name: 'Atlas', kind: 'task', scope: resource });
+    await store.updateEntity({ id: entity.id, version: entity.version, kind: 'project' });
+
+    const first = await store.claimSemanticOutbox({ workerId: 'first', limit: 10 });
+    expect(first).toHaveLength(1);
+    expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toEqual([]);
+    await store.completeSemanticOutbox({ ids: [first[0]!.id], workerId: 'first' });
+    expect(await store.claimSemanticOutbox({ workerId: 'second', limit: 10 })).toHaveLength(1);
+  });
+
   it('enforces ceilings and monotonic curation cursors', async () => {
     const store = createStore();
     const entity = await store.createEntity({ name: 'Secret', kind: 'task', scope: resource });
