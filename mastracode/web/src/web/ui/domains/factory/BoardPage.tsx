@@ -12,7 +12,11 @@ import { SkeletonRows } from '../../ui';
 import { FactoryItemActions } from './components/FactoryItemActions';
 import { FactoryPageShell } from './components/FactoryPageShell';
 import { LoadMoreSentinel } from './components/LoadMoreSentinel';
-import { useProjectIssuesQuery, useProjectPullRequestsQuery } from './hooks/useFactoryData';
+import {
+  useProjectIssuesQuery,
+  useProjectPullRequestsQuery,
+  useStartIssueTriageMutation,
+} from './hooks/useFactoryData';
 import { useIntakeConfigQuery } from './hooks/useIntakeConfig';
 import { useLinearIssuesQuery, useLinearStatusQuery } from './hooks/useLinearData';
 import { useStartFactoryRun } from './hooks/useStartFactoryRun';
@@ -36,6 +40,23 @@ const BOARD_STAGES = [
 ] as const;
 
 type BoardStageId = (typeof BOARD_STAGES)[number]['id'];
+
+const AUTO_TRIAGED_LABEL = 'auto-triaged';
+const NEEDS_APPROVAL_LABEL = 'needs-approval';
+
+function hasLabel(labels: readonly string[], label: string): boolean {
+  return labels.some(item => item.toLowerCase() === label);
+}
+
+function metadataLabels(metadata: Record<string, unknown>): string[] {
+  return Array.isArray(metadata.labels)
+    ? metadata.labels.filter((label): label is string => typeof label === 'string')
+    : [];
+}
+
+function issueTriageThreadTags(issueNumber: number): Record<string, string> {
+  return { role: 'triage', source: 'github-issue', purpose: 'issue-triage', issueNumber: String(issueNumber) };
+}
 
 function stageLabel(stage: string): string {
   return BOARD_STAGES.find(s => s.id === stage)?.label ?? stage;
@@ -99,20 +120,26 @@ interface BoardCandidate {
   /** Column the candidate is offered in: issues in Intake, PRs in Review. */
   column: BoardStageId;
   /** Default one-click run for the candidate. */
-  actionLabel: 'Investigate' | 'Review';
+  actionLabel: 'Investigate' | 'Prepare approval' | 'Review';
   /** Session slot + stage the default run fills. */
-  runRole: 'work' | 'review';
+  runRole: 'triage' | 'work' | 'review';
   runStage: BoardStageId;
   branch: string;
   threadTitle: string;
   defaultPrompt: string;
   customPrompt: (instructions: string) => string;
+  threadTags?: Record<string, string>;
   metadata: Record<string, unknown>;
+  issue?: GithubIssue;
 }
 
 function issueCandidate(issue: GithubIssue): BoardCandidate {
-  const ref = `GitHub issue #${issue.number}: "${issue.title}" (${issue.url})`;
-  const base = `Investigate ${ref}.`;
+  const labels = issue.labels;
+  const autoTriaged = hasLabel(labels, AUTO_TRIAGED_LABEL);
+  const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
+  const ref = `GitHub issue #${issue.number} (${issue.url})`;
+  const investigateBase = `Investigate ${ref}.`;
+  const approvalBase = `Prepare approval for ${ref}.`;
   return {
     sourceKey: `github-issue:${issue.number}`,
     source: 'github-issue',
@@ -121,21 +148,25 @@ function issueCandidate(issue: GithubIssue): BoardCandidate {
     meta: `#${issue.number}${issue.author ? ` · ${issue.author}` : ''} · opened ${relativeTime(issue.createdAt)}`,
     icon: CircleDot,
     iconClassName: 'text-accent1',
-    column: 'intake',
-    actionLabel: 'Investigate',
-    runRole: 'work',
-    runStage: 'execute',
+    column: autoTriaged ? 'triage' : 'intake',
+    actionLabel: needsApproval ? 'Prepare approval' : 'Investigate',
+    runRole: needsApproval ? 'triage' : 'work',
+    runStage: needsApproval ? 'triage' : 'execute',
     branch: `factory/issue-${issue.number}`,
-    threadTitle: `Issue #${issue.number}: ${issue.title}`,
-    defaultPrompt: `Use the understand-issue skill to investigate ${ref}.`,
-    customPrompt: instructions => guidedPrompt(base, instructions),
-    metadata: { number: issue.number, author: issue.author },
+    threadTitle: needsApproval ? `Triage #${issue.number}: ${issue.title}` : `Issue #${issue.number}: ${issue.title}`,
+    defaultPrompt: needsApproval
+      ? `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`
+      : `Use the understand-issue skill to investigate ${ref}.`,
+    customPrompt: instructions => guidedPrompt(needsApproval ? approvalBase : investigateBase, instructions),
+    threadTags: needsApproval ? issueTriageThreadTags(issue.number) : undefined,
+    metadata: { number: issue.number, author: issue.author, labels },
+    issue,
   };
 }
 
 function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
-  const ref = `GitHub pull request #${pr.number}: "${pr.title}" (${pr.url})`;
-  const checkout = `The PR head branch is ${pr.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${pr.number}\`).`;
+  const ref = `GitHub pull request #${pr.number} (${pr.url})`;
+  const checkout = `Check out the PR in this worktree first with \`gh pr checkout ${pr.number}\`.`;
   const base = `Review ${ref}. ${checkout}`;
   return {
     sourceKey: `github-pr:${pr.number}`,
@@ -158,7 +189,7 @@ function pullRequestCandidate(pr: GithubPullRequest): BoardCandidate {
 }
 
 function linearCandidate(issue: LinearIssue): BoardCandidate {
-  const ref = `Linear issue ${issue.identifier}: "${issue.title}" (${issue.url})`;
+  const ref = `Linear issue ${issue.identifier} (${issue.url})`;
   const fetchHint = `Start by fetching the issue's full details (description and comments) with the linear_get_issue tool.`;
   const base = `Investigate ${ref}. ${fetchHint}`;
   return {
@@ -184,12 +215,13 @@ function linearCandidate(issue: LinearIssue): BoardCandidate {
 // ── Runs on persisted items ─────────────────────────────────────────────────
 
 interface ItemRunSpec {
-  actionLabel: 'Start work' | 'Start review';
-  role: 'work' | 'review';
+  actionLabel: 'Start work' | 'Start review' | 'Investigate' | 'Prepare approval';
+  role: 'triage' | 'work' | 'review';
   stages: string[];
   branch: string;
   threadTitle: string;
   prompt: string;
+  threadTags?: Record<string, string>;
 }
 
 /**
@@ -200,18 +232,23 @@ interface ItemRunSpec {
 function itemRunSpec(item: WorkItem): ItemRunSpec | null {
   const meta = item.metadata;
   if (item.source === 'github-issue' && typeof meta.number === 'number') {
-    const ref = `GitHub issue #${meta.number}: "${item.title}"${item.url ? ` (${item.url})` : ''}`;
+    const labels = metadataLabels(meta);
+    const needsApproval = hasLabel(labels, NEEDS_APPROVAL_LABEL);
+    const ref = `GitHub issue #${meta.number}${item.url ? ` (${item.url})` : ''}`;
     return {
-      actionLabel: 'Start work',
-      role: 'work',
-      stages: stagesAfterRunStart(item.stages, 'execute'),
+      actionLabel: needsApproval ? 'Prepare approval' : 'Investigate',
+      role: needsApproval ? 'triage' : 'work',
+      stages: stagesAfterRunStart(item.stages, needsApproval ? 'triage' : 'execute'),
       branch: `factory/issue-${meta.number}`,
-      threadTitle: `Issue #${meta.number}: ${item.title}`,
-      prompt: `Use the understand-issue skill to investigate ${ref}.`,
+      threadTitle: needsApproval ? `Triage #${meta.number}: ${item.title}` : `Issue #${meta.number}: ${item.title}`,
+      prompt: needsApproval
+        ? `Prepare approval for ${ref}. Review the existing triage comment and summarize the decision needed before implementation or closure.`
+        : `Use the understand-issue skill to investigate ${ref}.`,
+      threadTags: needsApproval ? issueTriageThreadTags(meta.number) : undefined,
     };
   }
   if (item.source === 'linear-issue' && typeof meta.identifier === 'string') {
-    const ref = `Linear issue ${meta.identifier}: "${item.title}"${item.url ? ` (${item.url})` : ''}`;
+    const ref = `Linear issue ${meta.identifier}${item.url ? ` (${item.url})` : ''}`;
     return {
       actionLabel: 'Start work',
       role: 'work',
@@ -222,14 +259,14 @@ function itemRunSpec(item: WorkItem): ItemRunSpec | null {
     };
   }
   if (item.source === 'github-pr' && typeof meta.number === 'number' && typeof meta.headBranch === 'string') {
-    const ref = `GitHub pull request #${meta.number}: "${item.title}"${item.url ? ` (${item.url})` : ''}`;
+    const ref = `GitHub pull request #${meta.number}${item.url ? ` (${item.url})` : ''}`;
     return {
       actionLabel: 'Start review',
       role: 'review',
       stages: stagesAfterRunStart(item.stages, 'review'),
       branch: `factory/pr-${meta.number}`,
       threadTitle: `PR #${meta.number}: ${item.title}`,
-      prompt: `Use the understand-pr skill to review ${ref}. The PR head branch is ${meta.headBranch}; check it out in this worktree first (e.g. \`gh pr checkout ${meta.number}\`).`,
+      prompt: `Use the understand-pr skill to review ${ref}. Check out the PR in this worktree first with \`gh pr checkout ${meta.number}\`.`,
     };
   }
   return null;
@@ -312,6 +349,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
 
   // Only the active intake feed fetches; the other feed loads on switch.
   const issues = useProjectIssuesQuery(activeIntakeSource === 'github' ? githubProjectId : undefined);
+  const triageIssues = useProjectIssuesQuery(githubProjectId, AUTO_TRIAGED_LABEL);
   const pulls = useProjectPullRequestsQuery(githubProjectId);
   const linearIssues = useLinearIssuesQuery(activeIntakeSource === 'linear');
 
@@ -319,19 +357,24 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
   const update = useUpdateWorkItemMutation(githubProjectId);
   const remove = useDeleteWorkItemMutation(githubProjectId);
   const { start, enabled: runEnabled } = useStartFactoryRun();
+  const triage = useStartIssueTriageMutation(githubProjectId);
 
   const workItems = useMemo(() => items.data ?? [], [items.data]);
 
   // Live candidates minus anything already on the board (any stage).
   const candidates = useMemo(() => {
     const known = new Set(workItems.map(item => item.sourceKey).filter(Boolean));
+    const intakeIssues = (activeIntakeSource === 'github' ? (issues.data ?? []) : []).filter(
+      issue => !hasLabel(issue.labels, AUTO_TRIAGED_LABEL),
+    );
     const all: BoardCandidate[] = [
-      ...(activeIntakeSource === 'github' ? (issues.data ?? []).map(issueCandidate) : []),
+      ...intakeIssues.map(issueCandidate),
+      ...(triageIssues.data ?? []).map(issueCandidate),
       ...(pulls.data ?? []).map(pullRequestCandidate),
       ...(activeIntakeSource === 'linear' ? (linearIssues.data ?? []).map(linearCandidate) : []),
     ];
     return all.filter(candidate => !known.has(candidate.sourceKey));
-  }, [workItems, issues.data, pulls.data, linearIssues.data, activeIntakeSource]);
+  }, [workItems, issues.data, triageIssues.data, pulls.data, linearIssues.data, activeIntakeSource]);
 
   const moveItem = (id: string, fromStage: string | null, toStage: string) => {
     const item = workItems.find(i => i.id === id);
@@ -361,7 +404,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
     );
   }
 
-  const mutationError = [start, upsert, update, remove].find(m => m.isError)?.error;
+  const mutationError = [start, triage, upsert, update, remove].find(m => m.isError)?.error;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -412,6 +455,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                     start.mutate({
                       branch: spec.branch,
                       threadTitle: spec.threadTitle,
+                      threadTags: spec.threadTags,
                       prompt: spec.prompt,
                       workItem: {
                         id: item.id,
@@ -433,12 +477,16 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                 <CandidateCard
                   key={candidate.sourceKey}
                   candidate={candidate}
-                  starting={start.isPending && start.variables?.branch === candidate.branch}
-                  disabled={!runEnabled || start.isPending}
+                  starting={
+                    (start.isPending && start.variables?.branch === candidate.branch) ||
+                    (triage.isPending && triage.variables?.number === candidate.issue?.number)
+                  }
+                  disabled={!runEnabled || start.isPending || triage.isPending}
                   onRun={prompt =>
                     start.mutate({
                       branch: candidate.branch,
                       threadTitle: candidate.threadTitle,
+                      threadTags: candidate.threadTags,
                       prompt: prompt === undefined ? candidate.defaultPrompt : candidate.customPrompt(prompt),
                       workItem: {
                         role: candidate.runRole,
@@ -452,6 +500,7 @@ function Board({ githubProjectId }: { githubProjectId: string }) {
                     })
                   }
                   onFile={() => handleDrop({ kind: 'candidate', candidate }, candidate.column)}
+                  onTriage={candidate.issue ? () => triage.mutate(candidate.issue!) : undefined}
                 />
               ))}
             {stage.id === 'intake' && (
@@ -622,6 +671,7 @@ function CandidateCard({
   disabled,
   onRun,
   onFile,
+  onTriage,
 }: {
   candidate: BoardCandidate;
   starting: boolean;
@@ -630,8 +680,12 @@ function CandidateCard({
   onRun: (prompt?: string) => void;
   /** File the candidate onto the board without starting a run. */
   onFile: () => void;
+  /** Run first-contact issue triage without leaving the board. */
+  onTriage?: () => void;
 }) {
   const Icon = candidate.icon;
+  const labels = metadataLabels(candidate.metadata);
+  const showTriage = candidate.source === 'github-issue' && !hasLabel(labels, AUTO_TRIAGED_LABEL) && onTriage;
   return (
     <article
       draggable
@@ -665,7 +719,12 @@ function CandidateCard({
         disabled={disabled}
         onAction={() => onRun()}
         onRunPrompt={prompt => onRun(prompt)}
-        menuExtras={<DropdownMenu.Item onClick={onFile}>Add to board</DropdownMenu.Item>}
+        menuExtras={
+          <>
+            {showTriage && <DropdownMenu.Item onClick={onTriage}>Triage issue</DropdownMenu.Item>}
+            <DropdownMenu.Item onClick={onFile}>Add to board</DropdownMenu.Item>
+          </>
+        }
       />
     </article>
   );
