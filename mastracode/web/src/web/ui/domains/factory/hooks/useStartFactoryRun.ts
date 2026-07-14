@@ -10,6 +10,7 @@ import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 // Deep imports (not the workspaces barrel) to avoid provider/component cycles.
 import { useActiveProjectContext } from '../../workspaces/context/ActiveProjectProvider';
 import { deriveProjectPath, useCreateWorkspaceMutation } from '../../workspaces/hooks/useWorkspaces';
+import type { Project } from '../../workspaces/services/projects';
 import { createWorkItem, updateWorkItem } from '../services/workItems';
 import type { WorkItemSource } from '../services/workItems';
 
@@ -37,6 +38,8 @@ export interface StartFactoryRunInput {
   branch: string;
   /** Title for the new thread shown in the sidebar. */
   threadTitle: string;
+  /** Existing thread tags to prefer before falling back to the session thread. */
+  threadTags?: Record<string, string>;
   /** First user message sent to the agent (e.g. a skill invocation). */
   prompt: string;
   /** Board card to file for this run (kanban record; optional). */
@@ -65,8 +68,11 @@ export function useStartFactoryRun() {
   });
 
   const mutation = useMutation({
-    mutationFn: async ({ branch, threadTitle, prompt, workItem }: StartFactoryRunInput) => {
+    mutationFn: async ({ branch, threadTitle, threadTags, prompt, workItem }: StartFactoryRunInput) => {
       const updatedProject = await createWorkspace.mutateAsync(branch);
+      queryClient.setQueryData(queryKeys.projects(), (projects: Project[] | undefined) =>
+        projects?.map(project => (project.id === updatedProject.id ? updatedProject : project)),
+      );
       const projectPath = deriveProjectPath(updatedProject);
       if (!projectPath) throw new Error('Could not resolve the new worktree path');
 
@@ -90,7 +96,7 @@ export function useStartFactoryRun() {
       // resumed a real thread (titled or with messages), i.e. a repeat run on
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
-      const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle);
+      const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
       await scopedSession.sendMessage(prompt);
 
       // Append the prompt to the thread's message cache so it renders
@@ -161,11 +167,31 @@ async function resolveRunThread(
   session: AgentControllerSession,
   threadId: string | undefined,
   title: string,
+  projectPath: string,
+  threadTags: Record<string, string> | undefined,
 ): Promise<string> {
+  const extraTags = Object.entries(threadTags ?? {}).filter(([, value]) => value);
+  if (extraTags.length > 0) {
+    const tags = { projectPath, ...Object.fromEntries(extraTags) };
+    const taggedThread = (await session.listThreads({ tags, limit: 20 }))[0];
+    if (taggedThread) {
+      await session.switchThread(taggedThread.id);
+      if (taggedThread.id === threadId && isUntitledThread(taggedThread.title)) {
+        const messages = await session.listMessages(taggedThread.id, 1);
+        if (messages.length === 0) await session.renameThread(taggedThread.id, title);
+      }
+      return taggedThread.id;
+    }
+  }
+
   if (!threadId) return (await session.createThread(title)).id;
   const [threads, messages] = await Promise.all([session.listThreads(), session.listMessages(threadId, 1)]);
   const existing = threads.find(thread => thread.id === threadId);
   if (!existing) return (await session.createThread(title)).id;
-  if (!existing.title && messages.length === 0) await session.renameThread(threadId, title);
+  if (isUntitledThread(existing.title) && messages.length === 0) await session.renameThread(threadId, title);
   return threadId;
+}
+
+function isUntitledThread(title: string | null | undefined): boolean {
+  return !title || title === 'Untitled thread';
 }

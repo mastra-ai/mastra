@@ -11,7 +11,8 @@ export const queryKeys = {
   projects: () => ['projects'] as const,
   githubStatus: () => ['github', 'status'] as const,
   githubRepos: (query: string | undefined) => ['github', 'repos', query ?? null] as const,
-  githubIssues: (githubProjectId: string | undefined) => ['github', 'issues', githubProjectId ?? null] as const,
+  githubIssues: (githubProjectId: string | undefined, label?: string) =>
+    ['github', 'issues', githubProjectId ?? null, label ?? null] as const,
   githubPulls: (githubProjectId: string | undefined) => ['github', 'prs', githubProjectId ?? null] as const,
   githubProjectSettings: (githubProjectId: string | undefined) =>
     ['github', 'project-settings', githubProjectId ?? null] as const,
