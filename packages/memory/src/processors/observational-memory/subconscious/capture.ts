@@ -4,6 +4,7 @@ import { z } from 'zod';
 
 import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext, ExtractorRuntimeContext } from '../extractor';
+import { publishSubconsciousActivity } from './activity';
 import type {
   SubconsciousBuiltInObservationConfig,
   SubconsciousCaptureOutput,
@@ -23,6 +24,7 @@ export const subconsciousCaptureSchema = z.object({
         .trim()
         .min(1)
         .refine(kind => kind !== 'page', 'Entity kind "page" is reserved'),
+      scope: z.enum(['org', 'resource', 'thread']).optional(),
       facts: z.array(
         z.object({
           text: z.string().trim().min(1),
@@ -37,6 +39,7 @@ export const subconsciousCaptureSchema = z.object({
 const CAPTURE_INSTRUCTIONS = `Extract durable, explicitly stated knowledge from the observations.
 Return entities with short stable names, a freeform kind, and facts nested under the entity each fact is about.
 Use common kinds such as person, task, event, project, or organization when they fit. Never use the reserved kind page.
+Set entity scope to the narrowest level where that identity should be shared. Omit it to use the configured default scope.
 Facts must be grounded in the conversation, concise, and written as prose. Do not infer unstated information.
 Wrap every named entity mentioned in fact text in [[wikilinks]].
 Set a fact scope only when the conversation establishes where it applies. Use org for organization-wide facts, resource for facts shared across this resource's conversations, and thread for conversation-private facts.
@@ -86,6 +89,7 @@ export interface CaptureExtractorOptions {
   defaultScope: KnowledgeScopeLevel;
   maxScope?: KnowledgeScopeLevel;
   learnedGuidance: boolean;
+  activityRecentUpdates?: number;
 }
 
 export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureOutput> {
@@ -93,10 +97,12 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
     const defaultImplementation: SubconsciousDefaultCapture = async context => {
       const scopeContext = requireScopeContext(context);
       const store = await getKnowledgeStore(context);
-      const entityLevel = clampScope(options.defaultScope, options.maxScope);
-      const entityScope = expandKnowledgeScope(scopeContext, entityLevel);
 
       for (const extractedEntity of context.current.entities) {
+        const entityScope = expandKnowledgeScope(
+          scopeContext,
+          clampScope(extractedEntity.scope ?? options.defaultScope, options.maxScope),
+        );
         const entity = await store.createEntity({
           name: extractedEntity.name,
           kind: extractedEntity.kind,
@@ -141,11 +147,28 @@ export class SubconsciousCaptureExtractor extends Extractor<SubconsciousCaptureO
         return sections.filter(Boolean).join('\n\n');
       },
       onExtracted: async context => {
-        if (options.config?.onExtracted) {
-          return options.config.onExtracted({ ...context, defaultImplementation });
+        const publishActivity = async (errors?: string[]) => {
+          if (!options.activityRecentUpdates) return;
+          const scope = requireScopeContext(context);
+          await publishSubconsciousActivity({
+            store: await getKnowledgeStore(context),
+            scope,
+            recentUpdates: options.activityRecentUpdates,
+            sendStateSignal: context.sendStateSignal,
+            errors,
+          });
+        };
+
+        try {
+          const result = options.config?.onExtracted
+            ? await options.config.onExtracted({ ...context, defaultImplementation })
+            : await defaultImplementation(context);
+          await publishActivity();
+          return result ?? context.current;
+        } catch (error) {
+          await publishActivity([error instanceof Error ? error.message : String(error)]).catch(() => {});
+          throw error;
         }
-        await defaultImplementation(context);
-        return context.current;
       },
     });
   }
