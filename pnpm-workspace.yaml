@@ -34,18 +34,19 @@ enableGlobalVirtualStore: true
 
 catalog:
   '@microsoft/api-extractor': ^7.57.7
-  '@vitest/coverage-v8': 4.1.9
-  '@vitest/ui': 4.1.9
+  '@vitest/coverage-v8': 4.1.10
+  '@vitest/ui': 4.1.10
   date-fns: 4.4.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^6.0.3
-  vitest: 4.1.9
+  vitest: 4.1.10
   zod: ^4.4.3
   tsx: ^4.22.4
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': patches/@changesets__get-dependents-graph@2.1.4.patch
+  '@earendil-works/pi-tui@0.80.6': patches/@earendil-works__pi-tui@0.80.6.patch
   tsup@8.5.1: patches/tsup@8.5.1.patch
 
 packageExtensions:
@@ -161,7 +162,7 @@ overrides:
   form-data@>=4.0.0 <4.0.6: 4.0.6
   brace-expansion@<1.1.13: 1.1.13
   brace-expansion@>=2.0.0 <2.0.3: 2.0.3
-  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.5
+  '@clerk/shared@>=3.0.0 <3.47.5': 3.47.7
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
   joi@>=17.0.0 <17.13.4: 17.13.4

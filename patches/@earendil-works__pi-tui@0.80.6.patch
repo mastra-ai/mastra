@@ -1,0 +1,15 @@
+diff --git a/dist/utils.js b/dist/utils.js
+index bc550a400f3ac921263a8f2fa1753335b4fded8c..eb17cdc3a91466b812a6eca53a97473abcecfa0c 100644
+--- a/dist/utils.js
++++ b/dist/utils.js
+@@ -212,6 +212,10 @@ export function visibleWidth(str) {
+         }
+         clean = stripped;
+     }
++    // ANSI-styled printable ASCII remains single-column text after normalization.
++    if (isPrintableAscii(clean)) {
++        return clean.length;
++    }
+     // Calculate width
+     let width = 0;
+     for (const { segment } of graphemeSegmenter.segment(clean)) {

@@ -1,5 +1,19 @@
 # @mastra/temporal
 
+## 0.2.7-alpha.8
+
+### Patch Changes
+
+- dependencies updates: ([#19391](https://github.com/mastra-ai/mastra/pull/19391))
+  - Updated dependency [`@temporalio/activity@^1.20.2` ↗︎](https://www.npmjs.com/package/@temporalio/activity/v/1.20.2) (from `^1.17.2`, in `dependencies`)
+  - Updated dependency [`@temporalio/client@^1.20.2` ↗︎](https://www.npmjs.com/package/@temporalio/client/v/1.20.2) (from `^1.17.2`, in `dependencies`)
+  - Updated dependency [`@temporalio/plugin@^1.20.2` ↗︎](https://www.npmjs.com/package/@temporalio/plugin/v/1.20.2) (from `^1.17.2`, in `dependencies`)
+  - Updated dependency [`@temporalio/worker@^1.20.2` ↗︎](https://www.npmjs.com/package/@temporalio/worker/v/1.20.2) (from `^1.17.2`, in `dependencies`)
+  - Updated dependency [`@temporalio/workflow@^1.20.2` ↗︎](https://www.npmjs.com/package/@temporalio/workflow/v/1.20.2) (from `^1.17.2`, in `dependencies`)
+- Updated dependencies [[`bd6d240`](https://github.com/mastra-ai/mastra/commit/bd6d2402db93dddaef0721667e7e8a030e7c6e16), [`0111486`](https://github.com/mastra-ai/mastra/commit/01114867612593eef5cfa2fda6a1194dfedda841), [`96a3749`](https://github.com/mastra-ai/mastra/commit/96a37492235f5b8076b3e3177d83ed5a5e44a640), [`3e26c87`](https://github.com/mastra-ai/mastra/commit/3e26c87de0c5bc2583b795ce6ca5889b6b161acb), [`a5008f2`](https://github.com/mastra-ai/mastra/commit/a5008f22ae710ad9402ea9f2547d8c02f74d384b)]:
+  - @mastra/core@1.51.0-alpha.8
+  - @mastra/deployer@1.51.0-alpha.8
+
 ## 0.2.7-alpha.7
 
 ### Patch Changes
