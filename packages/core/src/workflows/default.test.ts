@@ -943,7 +943,7 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
   }: {
     step: any;
     prevOutput: any[];
-    concurrency: number;
+    concurrency: number | ((ctx: { inputData: unknown; getInitData: () => unknown }) => number);
     workflowId?: string;
     runId?: string;
   }) =>
@@ -1124,6 +1124,86 @@ describe('DefaultExecutionEngine.executeForeach concurrency', () => {
         suspendPayload: { item: 1 },
       });
     }
+  });
+
+  // Concurrency may be a resolver function evaluated at execution time from the
+  // run's input, instead of a static number (used by durable agents to derive
+  // tool-call concurrency from serialized run state).
+  it('resolves concurrency from a resolver function at execution time', async () => {
+    const gate = deferred();
+    const starts: number[] = [];
+    let active = 0;
+    let maxActive = 0;
+    const resolverContexts: { inputData: unknown }[] = [];
+
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => {
+        starts.push(inputData);
+        active++;
+        maxActive = Math.max(maxActive, active);
+        try {
+          if (inputData === 0) {
+            await gate.promise;
+          }
+          return inputData * 2;
+        } finally {
+          active--;
+        }
+      },
+    };
+
+    const resultPromise = runForeach({
+      step,
+      prevOutput: [0, 1, 2, 3],
+      concurrency: ctx => {
+        resolverContexts.push({ inputData: ctx.inputData });
+        return 2;
+      },
+    });
+
+    await waitFor(() => starts.includes(2));
+    expect(maxActive).toBeLessThanOrEqual(2);
+
+    gate.resolve();
+    const result = await resultPromise;
+
+    expect(result.status).toBe('success');
+    if (result.status === 'success') {
+      expect(result.output).toEqual([0, 2, 4, 6]);
+    }
+    expect(maxActive).toBe(2);
+    // Resolver is called at execution time with the foreach input.
+    expect(resolverContexts).toEqual([{ inputData: [0, 1, 2, 3] }]);
+  });
+
+  it('falls back to sequential execution when the resolver returns an invalid value', async () => {
+    let maxActive = 0;
+    let active = 0;
+
+    const step = {
+      id: 'process-item',
+      inputSchema: z.any(),
+      outputSchema: z.any(),
+      execute: async ({ inputData }: { inputData: number }) => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        active--;
+        return inputData;
+      },
+    };
+
+    const result = await runForeach({
+      step,
+      prevOutput: [0, 1, 2],
+      concurrency: () => Number.NaN,
+    });
+
+    expect(result.status).toBe('success');
+    expect(maxActive).toBe(1);
   });
 });
 

@@ -1,7 +1,7 @@
 {
   "name": "template-company-knowledge",
   "version": "1.0.0",
-  "description": "A company knowledge agent that indexes Linear issues and Notion pages into pgvector (Neon Postgres) and answers questions via semantic recall, with provider-native web search as a fallback. Uses Mastra Gateway.",
+  "description": "A company knowledge agent that indexes Linear issues and Notion pages into pgvector (Neon Postgres) and answers questions via semantic recall, with provider-native web search as a fallback. Uses Mastra's Gateway.",
   "main": "index.js",
   "scripts": {
     "dev": "mastra dev",

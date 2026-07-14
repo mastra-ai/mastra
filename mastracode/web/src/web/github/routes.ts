@@ -46,6 +46,7 @@ import {
 import { getGithubFeatureDiagnostics, isGithubFeatureEnabled, signState, verifyState } from './config';
 import { getAppDb } from './db';
 import { withProjectLock } from './project-lock';
+import { handleGithubWebhook } from './webhook';
 import {
   commitAll,
   computeSandboxWorkdir,
@@ -60,6 +61,7 @@ import {
   pushBranch,
   reattachProjectSandbox,
   removeWorktree,
+  runWorktreeSetup,
   SandboxBudgetError,
   teardownProjectSandbox,
   WorktreeError,
@@ -217,6 +219,17 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
   if (!isGithubFeatureEnabled()) {
     return routes;
   }
+
+  routes.push(
+    registerApiRoute('/web/github/webhook', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const result = await handleGithubWebhook(loose(c));
+        return c.json(result.body, result.status);
+      },
+    }),
+  );
 
   const redirectUri = options.redirectUri ?? `${(options.baseUrl ?? '').replace(/\/$/, '')}/auth/github/callback`;
 
@@ -557,6 +570,58 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions = {}): ApiRo
     }),
   );
 
+  // ── Read per-project settings ────────────────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/settings', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+        return c.json({ setupCommand: loaded.project.setupCommand });
+      },
+    }),
+  );
+
+  // ── Update per-project settings ──────────────────────────────────────────
+  routes.push(
+    registerApiRoute('/web/github/projects/:id/settings', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const loaded = await loadOrgProject(loose(c));
+        if ('response' in loaded) return loaded.response;
+
+        let body: { setupCommand?: unknown };
+        try {
+          body = await c.req.json();
+        } catch {
+          return c.json({ error: 'Invalid JSON body' }, 400);
+        }
+        if (body.setupCommand !== null && typeof body.setupCommand !== 'string') {
+          return c.json({ error: 'Invalid setupCommand' }, 400);
+        }
+        if (typeof body.setupCommand === 'string' && body.setupCommand.length > 2000) {
+          return c.json({ error: 'setupCommand too long (max 2000 characters)' }, 400);
+        }
+        // Reject control characters (except newline/tab). The command is a
+        // shell script by design, but escape sequences and NULs have no
+        // legitimate use and can spoof logs or confuse the sandbox shell.
+        if (typeof body.setupCommand === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body.setupCommand)) {
+          return c.json({ error: 'setupCommand contains control characters' }, 400);
+        }
+        // An empty/whitespace command means "no setup step".
+        const setupCommand =
+          typeof body.setupCommand === 'string' && body.setupCommand.trim().length > 0
+            ? body.setupCommand.trim()
+            : null;
+
+        await getAppDb().update(githubProjects).set({ setupCommand }).where(eq(githubProjects.id, loaded.project.id));
+        return c.json({ setupCommand });
+      },
+    }),
+  );
+
   // ── Worktree / branch / commit / push / PR ──────────────────────────────
   routes.push(...buildProjectGitRoutes());
 
@@ -783,6 +848,14 @@ function buildProjectGitRoutes(): ApiRoute[] {
               token,
               repoFullName: project.repoFullName,
             });
+
+            // Run the project's setup command in the fresh checkout before the
+            // route resolves — callers only start agent runs after this request
+            // succeeds, so the tree is guaranteed set up before any agent
+            // execution. Reused worktrees were already set up on creation.
+            if (!result.reused && project.setupCommand) {
+              await runWorktreeSetup(sandbox, result.worktreePath, project.setupCommand);
+            }
 
             await getAppDb()
               .insert(githubWorktrees)
