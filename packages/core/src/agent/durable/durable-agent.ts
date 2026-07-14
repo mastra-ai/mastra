@@ -2492,6 +2492,13 @@ export class DurableAgent<
    * Clear retained pubsub state for a run's topic (cached history and, for
    * persistent transports, the underlying stream). Fire-and-forget: the
    * `clearTopic` contract is best-effort and non-throwing.
+   *
+   * Unlike the evented workflow engine's per-run topic cleanup, this needs no
+   * restart guard: cleanup timers arm only on terminal outcomes
+   * (FINISH/ERROR/ABORT — never SUSPENDED), `resume()` rejects runs whose
+   * snapshot isn't `suspended`, `untilIdle` continuations mint a fresh runId
+   * per segment, and cross-process `recover()` can't race a dead process's
+   * timer. No supported flow re-engages a runId after its timer is armed.
    */
   #clearPubsubTopic(runId: string): void {
     void this.pubsub.clearTopic(AGENT_STREAM_TOPIC(runId));

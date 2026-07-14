@@ -149,6 +149,11 @@ describe('WorkflowEventProcessor per-run topic cleanup', () => {
       })
       .catch(() => {});
 
+    // Force the persisted status terminal so the fire-time status guard would
+    // NOT protect the topic. Only the in-process timer cancellation can
+    // prevent deletion here — this isolates the layer under test.
+    await persistRunStatus(mastra, 'success');
+
     await new Promise(resolve => setTimeout(resolve, 80));
     expect(clearTopicSpy).not.toHaveBeenCalled();
 

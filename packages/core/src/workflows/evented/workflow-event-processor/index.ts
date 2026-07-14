@@ -187,6 +187,16 @@ export class WorkflowEventProcessor extends EventProcessor {
 
   private async clearRunTopicUnlessActive(workflowId: string, runId: string): Promise<void> {
     try {
+      // Without a storage backend there is no way to observe a cross-process
+      // restart, so we delete unconditionally — the in-process timer
+      // cancellation in processWorkflowStart still covers same-process
+      // restarts. The status check below is also not atomic with the delete:
+      // a restart persisting `running` between the read and the DEL can still
+      // lose its topic. That window is milliseconds (vs. the full cleanup
+      // delay without this guard) and self-heals — persistent transports
+      // recover subscribers on the next publish (e.g. Redis NOGROUP
+      // recreation). Closing it fully would require distributed locking,
+      // which best-effort topic cleanup does not justify.
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
       if (workflowsStore) {
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
