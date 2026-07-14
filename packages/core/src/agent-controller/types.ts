@@ -753,6 +753,7 @@ export type AgentControllerEvent =
       suspendPayload: unknown;
       resumeSchema?: string;
     }
+  | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
   | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
   | {
       type: 'tool_end';
