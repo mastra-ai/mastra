@@ -1,5 +1,17 @@
 # @internal/playground
 
+## 1.19.0-alpha.14
+
+### Patch Changes
+
+- Fixed the scorer detail page layout so the Input column no longer stretches far wider than the screen. The column now has a sensible maximum width and truncates long inputs, keeping the table within the viewport. Also fixed the score details pane collapsing to an unusable sliver when opened with the Input column visible — the table now cedes space so the pane keeps its half of the layout. ([#19451](https://github.com/mastra-ai/mastra/pull/19451))
+
+- Updated dependencies [[`fd13f8e`](https://github.com/mastra-ai/mastra/commit/fd13f8e21990f9904c3eedba3a626bb4a929cdb8), [`a99eae8`](https://github.com/mastra-ai/mastra/commit/a99eae8908e500c1b2d12f9d277be616b98617a5), [`fd13f8e`](https://github.com/mastra-ai/mastra/commit/fd13f8e21990f9904c3eedba3a626bb4a929cdb8), [`f703f87`](https://github.com/mastra-ai/mastra/commit/f703f878de072d51fda557f9c50867d8252bef05), [`0ad646f`](https://github.com/mastra-ai/mastra/commit/0ad646f71a530f2454664299e5e01bfd13fa12e5)]:
+  - @mastra/client-js@1.32.0-alpha.13
+  - @mastra/core@1.51.0-alpha.13
+  - @mastra/react@1.2.5-alpha.13
+  - @mastra/playground-ui@41.0.0-alpha.13
+
 ## 1.19.0-alpha.13
 
 ### Patch Changes
