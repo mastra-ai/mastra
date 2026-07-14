@@ -72,6 +72,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
       values: result.extractedValues,
       failures: result.extractionFailures,
       previousValues: this.priorExtractedValues,
+      rawObservations: result.observations,
       threadId: this.opts.threadId,
       resourceId: this.opts.resourceId,
       mainAgent: this.opts.agent,
