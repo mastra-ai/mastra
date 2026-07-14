@@ -30,6 +30,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { redactStreamChunk } from './redact';
+export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
 export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
@@ -484,7 +485,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     getHeader: (name: string) => string | undefined,
   ): { authConfig: unknown; authMode: MastraAuthMode } | null {
     const isStudioRequest = isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER));
-    const studioAuth = this.mastra.getStudio()?.auth;
+    const studioAuth = this.mastra.getStudio?.()?.auth;
     const serverAuth = this.mastra.getServer()?.auth;
 
     // Dual auth is opt-in: if studio.auth is configured, Studio requests use it exclusively
@@ -509,7 +510,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
 
     if (authMode === 'studio') {
-      return this.mastra.getStudio()?.rbac ?? this.mastra.getServer()?.rbac;
+      return this.mastra.getStudio?.()?.rbac ?? this.mastra.getServer()?.rbac;
     }
 
     return this.mastra.getServer()?.rbac;
@@ -522,7 +523,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
 
     if (authMode === 'studio') {
-      return this.mastra.getStudio()?.fga ?? this.mastra.getServer()?.fga;
+      return this.mastra.getStudio?.()?.fga ?? this.mastra.getServer()?.fga;
     }
 
     return this.mastra.getServer()?.fga;
@@ -882,6 +883,13 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      // Log before responding — otherwise the error is invisible on the server
+      // and the client only ever sees an opaque 500.
+      this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
+        method: c.req.method,
+        path: c.req.path,
+        error: err instanceof Error ? (err.stack ?? err.message) : String(err),
+      });
       return c.json({ error: 'Internal Server Error' }, 500);
     });
 

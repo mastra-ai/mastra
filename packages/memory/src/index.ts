@@ -43,8 +43,16 @@ import type { VectorFilter } from '@mastra/core/vector';
 import { isStandardSchemaWithJSON, toStandardSchema } from '@mastra/schema-compat/schema';
 import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
+import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
+import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
+import type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+} from './processors/observational-memory/summarize';
+import { TokenCounter } from './processors/observational-memory/token-counter';
+import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory } from './tools/working-memory';
 
@@ -52,6 +60,20 @@ export {
   ModelByInputTokens,
   type ModelByInputTokensConfig,
 } from './processors/observational-memory/model-by-input-tokens';
+export {
+  Extractor,
+  type ExtractorConfig,
+  type ExtractorOnExtractedContext,
+  type ExtractorRuntimeContext,
+  type ExtractorSource,
+} from './processors/observational-memory';
+export { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
+export type {
+  SummarizeConversationOptions,
+  SummarizeConversationResult,
+  SummarizeModel,
+} from './processors/observational-memory/summarize';
 
 /**
  * Normalize a `boolean | object` observational memory config.
@@ -203,6 +225,12 @@ function normalizeObservationalMemoryConfig(
   return config as NormalizedObservationalMemoryConfig;
 }
 
+function hasWorkingMemoryExtractor(
+  extractors: NonNullable<NonNullable<ObservationalMemoryConfig['observation']>['extract']> | undefined,
+): boolean {
+  return !!extractors?.some(extractor => extractor.slug === 'working-memory');
+}
+
 // Re-export for testing purposes
 export { deepMergeWorkingMemory };
 
@@ -212,6 +240,12 @@ const CHARS_PER_TOKEN = 4;
 const DEFAULT_MESSAGE_RANGE = { before: 1, after: 1 } as const;
 const DEFAULT_TOP_K = 4;
 const VECTOR_DELETE_BATCH_SIZE = 100;
+
+// Max number of distinct contents whose embeddings are kept in the in-process
+// cache. Bounds memory so a long-running Memory instance can't accumulate every
+// message/query it has ever embedded (each entry holds chunk text + vectors).
+// Matches the default used by the core SemanticRecall embedding cache.
+const DEFAULT_EMBEDDING_CACHE_MAX_SIZE = 1000;
 
 /**
  * Concrete implementation of MastraMemory that adds support for thread configuration
@@ -244,6 +278,40 @@ export class Memory extends MastraMemory {
     } else {
       void this._omEngine?.then(engine => engine?.__registerMastra(mastra));
     }
+  }
+
+  public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
+    return this.applyManagedWorkingMemoryDefaults(super.getMergedThreadConfig(config));
+  }
+
+  private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
+    const omConfig = normalizeObservationalMemoryConfig(
+      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
+    );
+    if (!omConfig?.observation?.manageWorkingMemory || !config.workingMemory?.enabled) {
+      return config;
+    }
+
+    const currentWorkingMemory = config.workingMemory;
+    const workingMemory = {
+      ...currentWorkingMemory,
+      agentManaged: currentWorkingMemory.agentManaged ?? false,
+      useStateSignals: currentWorkingMemory.useStateSignals ?? true,
+    };
+    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
+    const extract = observation.extract ?? [];
+
+    return {
+      ...config,
+      workingMemory,
+      observationalMemory: {
+        ...omConfig,
+        observation: {
+          ...observation,
+          extract: hasWorkingMemoryExtractor(extract) ? extract : [...extract, new WorkingMemoryExtractor()],
+        },
+      },
+    } as MemoryConfigInternal;
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
@@ -504,6 +572,11 @@ export class Memory extends MastraMemory {
         );
       }
 
+      const semanticConfig = typeof config.semanticRecall === 'object' ? config.semanticRecall : undefined;
+      const threshold = semanticConfig?.threshold;
+      const filteredVectorResults =
+        threshold !== undefined ? vectorResults.filter(r => r.score >= threshold) : vectorResults;
+
       // Get raw messages from storage
       const memoryStore = await this.getMemoryStore();
 
@@ -518,9 +591,9 @@ export class Memory extends MastraMemory {
         page,
         orderBy: effectiveOrderBy,
         filter,
-        ...(vectorResults?.length
+        ...(filteredVectorResults?.length
           ? {
-              include: vectorResults.map(r => ({
+              include: filteredVectorResults.map(r => ({
                 id: r.metadata?.message_id,
                 threadId: r.metadata?.thread_id,
                 withNextMessages:
@@ -944,16 +1017,37 @@ ${workingMemory}`;
     const chunks: string[] = [];
     let currentChunk = '';
 
-    // Split text into words to avoid breaking words
+    // Split text into words to avoid breaking words where possible.
     const words = text.split(/\s+/);
 
     for (const word of words) {
+      // A single word can be longer than the chunk budget (e.g. a base64 data URI,
+      // a minified JS/JSON blob, a long URL, or spaceless CJK text where the entire
+      // message is one "word"). The whitespace split can't break these, so hard-split
+      // the oversized word by character count to guarantee every chunk stays under the
+      // embedder's token limit instead of emitting one oversized chunk it would reject.
+      if (word.length > charSize) {
+        // Flush whatever we've accumulated so far before the oversized word.
+        if (currentChunk) {
+          chunks.push(currentChunk);
+          currentChunk = '';
+        }
+        for (let i = 0; i < word.length; i += charSize) {
+          chunks.push(word.slice(i, i + charSize));
+        }
+        continue;
+      }
+
       // Add space before word unless it's the first word in the chunk
       const wordWithSpace = currentChunk ? ' ' + word : word;
 
       // If adding this word would exceed the chunk size, start a new chunk
       if (currentChunk.length + wordWithSpace.length > charSize) {
-        chunks.push(currentChunk);
+        // Guard against pushing an empty leading chunk: if the very first word
+        // already filled/exceeded the budget, currentChunk is still '' here.
+        if (currentChunk) {
+          chunks.push(currentChunk);
+        }
         currentChunk = word;
       } else {
         currentChunk += wordWithSpace;
@@ -970,23 +1064,27 @@ ${workingMemory}`;
 
   private hasher = xxhash();
 
-  // embedding is computationally expensive so cache content -> embeddings/chunks
-  private embeddingCache = new Map<
-    number,
+  // Embedding is computationally expensive, so cache content -> embeddings/chunks.
+  // Bounded by an LRU so a long-running instance can't retain every embedded
+  // message/query (and its vectors + chunk text) for the life of the process.
+  private embeddingCache = new LRUCache<
+    bigint,
     {
       chunks: string[];
       embeddings: Awaited<ReturnType<typeof embedMany>>['embeddings'];
       usage?: { tokens: number };
       dimension: number | undefined;
     }
-  >();
+  >({ max: DEFAULT_EMBEDDING_CACHE_MAX_SIZE });
   private firstEmbed: Promise<any> | undefined;
   protected async embedMessageContent(content: string) {
-    // use fast xxhash for lower memory usage. if we cache by content string we will store all messages in memory for the life of the process
-    const key = (await this.hasher).h32(content);
+    // Key by the content hash (not the content itself) to keep keys small. Use the
+    // 64-bit hash: h32 is only 32 bits, so distinct contents collide after ~tens of
+    // thousands of entries, which would return another message's cached embeddings.
+    const key = (await this.hasher).h64(content);
     const cached = this.embeddingCache.get(key);
     if (cached) {
-      this.logger.debug('Embedding cache hit', { contentHash: key, chunks: cached.chunks.length });
+      this.logger.debug('Embedding cache hit', { contentHash: key.toString(), chunks: cached.chunks.length });
       return cached;
     }
     const chunks = this.chunkText(content);
@@ -1382,8 +1480,10 @@ ${workingMemory}`;
       return null;
     }
 
-    // In readOnly mode, provide context without tool instructions
-    if (config?.readOnly) {
+    const workingMemoryConfig = config.workingMemory;
+
+    // In readOnly or non-agent-managed mode, provide context without tool instructions.
+    if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
       return this.getReadOnlyWorkingMemoryInstruction({
         template: workingMemoryTemplate,
         data: workingMemoryData,
@@ -1614,6 +1714,7 @@ ${workingMemory}`;
 
     return new OMClass({
       storage: memoryStore,
+      memory: this,
       scope: omConfig.scope,
       retrieval: omConfig.retrieval,
       activateAfterIdle: omConfig.activateAfterIdle,
@@ -1637,6 +1738,7 @@ ${workingMemory}`;
             instruction: omConfig.observation.instruction,
             threadTitle: omConfig.observation.threadTitle,
             observeAttachments: omConfig.observation.observeAttachments,
+            extract: omConfig.observation.extract,
           }
         : undefined,
       reflection: omConfig.reflection
@@ -1648,6 +1750,7 @@ ${workingMemory}`;
             bufferActivation: omConfig.reflection.bufferActivation,
             blockAfter: omConfig.reflection.blockAfter,
             instruction: omConfig.reflection.instruction,
+            extract: omConfig.reflection.extract,
           }
         : undefined,
     });
@@ -2007,6 +2110,131 @@ Notes:
   }
 
   /**
+   * Summarize one of this memory's threads in one shot.
+   *
+   * Loads the thread's messages from storage and runs `summarizeConversation()` over them —
+   * Observational Memory's Observer plumbing as a standalone call. Nothing is written back to
+   * memory: the summary and extracted values are returned to you (and to each extractor's
+   * `onExtracted` hook), so you decide where they go. Works whether or not observational
+   * memory is enabled on this instance.
+   *
+   * Use this when a session ends and you want a summary or structured extraction of the whole
+   * conversation — for example a voice call at hang-up.
+   *
+   * Messages are loaded page-by-page starting from the newest, bounded by `lastMessages` and
+   * `maxInputTokens`, so summarizing a very long thread doesn't read its entire history from
+   * storage.
+   *
+   * @example
+   * ```ts
+   * const result = await memory.summarizeThread({
+   *   model: 'openai/gpt-4.1-mini',
+   *   threadId: call.threadId,
+   *   instructions: 'Summarize this voicemail call for the business owner.',
+   *   extract: [callSummaryExtractor],
+   * });
+   * ```
+   */
+  public async summarizeThread(
+    opts: {
+      threadId: string;
+      resourceId?: string;
+      /** Only summarize the last N messages of the thread. By default the whole thread is loaded, bounded by `maxInputTokens`. */
+      lastMessages?: number;
+      /**
+       * Stop loading older messages once the collected messages exceed this estimated token count,
+       * so very long threads don't get read from storage in full. The newest message is always
+       * included. Defaults to 1,000,000 tokens.
+       */
+      maxInputTokens?: number;
+    } & Omit<SummarizeConversationOptions, 'messages' | 'memory' | 'mastra' | 'threadId' | 'resourceId'>,
+  ): Promise<SummarizeConversationResult> {
+    const { lastMessages, maxInputTokens, ...summarizeOptions } = opts;
+    // TODO: when Observational Memory is enabled on this instance, build the summary from the
+    // thread's existing observations plus the still-unobserved messages instead of re-reading the
+    // raw message history. https://github.com/mastra-ai/mastra/pull/19135#discussion_r3546310808
+    const messages = await this.loadMessagesForSummarization({
+      threadId: opts.threadId,
+      resourceId: opts.resourceId,
+      lastMessages,
+      maxInputTokens: maxInputTokens ?? SUMMARIZE_THREAD_DEFAULTS.maxInputTokens,
+      abortSignal: summarizeOptions.abortSignal,
+    });
+    return summarizeConversation({
+      ...summarizeOptions,
+      messages,
+      memory: this,
+      mastra: this._mastraInstance,
+    });
+  }
+
+  /**
+   * Load a thread's messages for `summarizeThread()` without reading the whole thread from
+   * storage at once. Pages backwards from the newest message and stops once `lastMessages`
+   * messages are collected or the estimated token count crosses `maxInputTokens` (the newest
+   * message is always kept). Returns messages in chronological order.
+   */
+  private async loadMessagesForSummarization({
+    threadId,
+    resourceId,
+    lastMessages,
+    maxInputTokens,
+    abortSignal,
+  }: {
+    threadId: string;
+    resourceId?: string;
+    lastMessages?: number;
+    maxInputTokens: number;
+    abortSignal?: AbortSignal;
+  }): Promise<MastraDBMessage[]> {
+    if (lastMessages !== undefined && lastMessages <= 0) return [];
+
+    const tokenCounter = new TokenCounter();
+    const collected: MastraDBMessage[] = [];
+    let tokens = 0;
+    let page = 0;
+
+    while (true) {
+      abortSignal?.throwIfAborted();
+
+      // Each page is the next-older slice of the thread, returned in chronological order
+      // (recall queries newest-first and reverses each page when no orderBy is given).
+      const { messages: batch, hasMore } = await this.recall({
+        threadId,
+        resourceId,
+        perPage: SUMMARIZE_THREAD_DEFAULTS.pageSize,
+        page,
+      });
+      if (batch.length === 0) break;
+
+      let reachedLimit = false;
+      const kept: MastraDBMessage[] = [];
+      for (let i = batch.length - 1; i >= 0; i--) {
+        abortSignal?.throwIfAborted();
+
+        const message = batch[i]!;
+        if (lastMessages !== undefined && collected.length + kept.length >= lastMessages) {
+          reachedLimit = true;
+          break;
+        }
+        const messageTokens = tokenCounter.countMessage(message);
+        if (collected.length + kept.length > 0 && tokens + messageTokens > maxInputTokens) {
+          reachedLimit = true;
+          break;
+        }
+        kept.unshift(message);
+        tokens += messageTokens;
+      }
+
+      collected.unshift(...kept);
+      if (reachedLimit || !hasMore) break;
+      page++;
+    }
+
+    return collected;
+  }
+
+  /**
    * Index a list of messages directly (without querying storage).
    * Used by observe-time indexing to vectorize newly-observed messages.
    */
@@ -2102,7 +2330,9 @@ Notes:
     this.assertWorkingMemoryStateSignalsCompatibility(mergedConfig);
     const tools: Record<string, ToolAction<any, any, any>> = {};
 
-    if (mergedConfig.workingMemory?.enabled && !mergedConfig.readOnly) {
+    const workingMemoryConfig = mergedConfig.workingMemory;
+
+    if (workingMemoryConfig?.enabled && workingMemoryConfig.agentManaged !== false && !mergedConfig.readOnly) {
       const { name, tool } = createWorkingMemoryTool(mergedConfig, {
         vNext: this.isVNextWorkingMemoryConfig(mergedConfig),
       });

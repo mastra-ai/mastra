@@ -54,6 +54,9 @@ export const TABLE_NOTIFICATIONS = 'mastra_notifications';
 // Harness sessions
 export const TABLE_HARNESS_SESSIONS = 'mastra_harness_sessions';
 
+// Thread state (per-thread, per-type durable state; e.g. the task list)
+export const TABLE_THREAD_STATE = 'mastra_thread_state';
+
 /** Union of all core table name constants. */
 export type TABLE_NAMES =
   | typeof TABLE_WORKFLOW_SNAPSHOT
@@ -91,7 +94,8 @@ export type TABLE_NAMES =
   | typeof TABLE_CHANNEL_CONFIG
   | typeof TABLE_TOOL_PROVIDER_CONNECTIONS
   | typeof TABLE_NOTIFICATIONS
-  | typeof TABLE_HARNESS_SESSIONS;
+  | typeof TABLE_HARNESS_SESSIONS
+  | typeof TABLE_THREAD_STATE;
 
 export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
@@ -127,6 +131,15 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   source: { type: 'text' },
   resourceId: { type: 'text', nullable: true },
   threadId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  // Batch handle: groups all per-trace scores produced by one batch scoring call.
+  // Each score keeps its own per-execution `runId`; `batchId` is shared across the batch.
+  batchId: { type: 'text', nullable: true },
+  // Dataset provenance: which curated dataset item this score was produced against.
+  // Lets baseline scores join back to dataset items (ground truth) without re-running.
+  datasetId: { type: 'text', nullable: true },
+  datasetItemId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp' },
   updatedAt: { type: 'timestamp' },
 };
@@ -230,6 +243,8 @@ export const SCORER_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'draft', 'published', or 'archived'
   activeVersionId: { type: 'text', nullable: true }, // FK to scorer_definition_versions.id
   authorId: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -428,6 +443,14 @@ export const HARNESS_SESSIONS_SCHEMA: Record<string, StorageColumn> = {
   deletedAt: { type: 'timestamp', nullable: true },
 };
 
+export const THREAD_STATE_SCHEMA: Record<string, StorageColumn> = {
+  threadId: { type: 'text', nullable: false },
+  type: { type: 'text', nullable: false },
+  value: { type: 'jsonb', nullable: false },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
 export const SKILL_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false, primaryKey: true },
   skillId: { type: 'text', nullable: false },
@@ -508,6 +531,10 @@ export const DATASETS_SCHEMA: Record<string, StorageColumn> = {
   targetType: { type: 'text', nullable: true },
   targetIds: { type: 'jsonb', nullable: true },
   scorerIds: { type: 'jsonb', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
+  candidateKey: { type: 'text', nullable: true },
+  candidateId: { type: 'text', nullable: true },
   version: { type: 'integer', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
@@ -517,6 +544,8 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   id: { type: 'text', nullable: false },
   datasetId: { type: 'text', nullable: false, references: { table: 'mastra_datasets', column: 'id' } },
   datasetVersion: { type: 'integer', nullable: false },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   validTo: { type: 'integer', nullable: true },
   isDeleted: { type: 'boolean', nullable: false },
   input: { type: 'jsonb', nullable: false },
@@ -525,6 +554,7 @@ export const DATASET_ITEMS_SCHEMA: Record<string, StorageColumn> = {
   metadata: { type: 'jsonb', nullable: true },
   source: { type: 'jsonb', nullable: true },
   expectedTrajectory: { type: 'jsonb', nullable: true },
+  toolMocks: { type: 'jsonb', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -554,6 +584,8 @@ export const EXPERIMENTS_SCHEMA: Record<string, StorageColumn> = {
   startedAt: { type: 'timestamp', nullable: true },
   completedAt: { type: 'timestamp', nullable: true },
   agentVersion: { type: 'text', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -573,6 +605,9 @@ export const EXPERIMENT_RESULTS_SCHEMA: Record<string, StorageColumn> = {
   traceId: { type: 'text', nullable: true },
   status: { type: 'text', nullable: true },
   tags: { type: 'jsonb', nullable: true },
+  toolMockReport: { type: 'jsonb', nullable: true },
+  organizationId: { type: 'text', nullable: true },
+  projectId: { type: 'text', nullable: true },
   createdAt: { type: 'timestamp', nullable: false },
 };
 
@@ -729,6 +764,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_TOOL_PROVIDER_CONNECTIONS]: TOOL_PROVIDER_CONNECTIONS_SCHEMA,
   [TABLE_NOTIFICATIONS]: NOTIFICATIONS_SCHEMA,
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
+  [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
 };
 
 /**
@@ -743,6 +779,7 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
     compositePrimaryKey: ['authorId', 'providerId', 'connectionId'],
   },
   [TABLE_NOTIFICATIONS]: { columns: NOTIFICATIONS_SCHEMA, compositePrimaryKey: ['threadId', 'id'] },
+  [TABLE_THREAD_STATE]: { columns: THREAD_STATE_SCHEMA, compositePrimaryKey: ['threadId', 'type'] },
 };
 
 /**

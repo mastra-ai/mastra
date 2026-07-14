@@ -7,13 +7,7 @@ packages:
 
 # FilesSDKFilesystem
 
-Stores files in any storage backend supported by [FilesSDK](https://files-sdk.dev) — a unified abstraction over S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, MinIO, the local filesystem, and more.
-
-:::info
-
-For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
-
-:::
+Stores files in any storage backend supported by [FilesSDK](https://files-sdk.dev) — a unified abstraction over S3, Cloudflare R2, Google Cloud Storage, Azure Blob, Vercel Blob, MinIO, the local filesystem, and more. For interface details, see [WorkspaceFilesystem Interface](/reference/workspace/filesystem).
 
 Use `FilesSDKFilesystem` when you want a single adapter that can target multiple storage backends with the same code. Swap the underlying driver without changing the workspace setup. If you only target one backend and want first-class options for that backend, prefer the dedicated provider (for example [`S3Filesystem`](/reference/workspace/s3-filesystem) or [`GCSFilesystem`](/reference/workspace/gcs-filesystem)).
 
@@ -48,6 +42,7 @@ const workspace = new Workspace({
 })
 
 const agent = new Agent({
+  id: 'file-agent',
   name: 'file-agent',
   model: '__GATEWAY_ANTHROPIC_MODEL_OPUS__',
   workspace,

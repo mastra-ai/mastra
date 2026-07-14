@@ -165,7 +165,11 @@ describe('extractV6NativeApproval', () => {
 
     const result = extractV6NativeApproval(messages as any);
 
-    expect(result).toEqual({ resumeData: { approved: true }, runId: 'run-123' });
+    expect(result).toEqual({
+      resumeData: { approved: true },
+      runId: 'run-123',
+      toolCallId: 'tooluse_abc123',
+    });
   });
 
   it('includes reason when the user denied with a reason', () => {
@@ -188,7 +192,11 @@ describe('extractV6NativeApproval', () => {
 
     const result = extractV6NativeApproval(messages as any);
 
-    expect(result).toEqual({ resumeData: { approved: false, reason: 'Not safe' }, runId: 'run-456' });
+    expect(result).toEqual({
+      resumeData: { approved: false, reason: 'Not safe' },
+      runId: 'run-456',
+      toolCallId: 'tooluse_xyz',
+    });
   });
 
   it('omits reason when not provided', () => {
@@ -253,6 +261,37 @@ describe('extractV6NativeApproval', () => {
     ];
 
     expect(extractV6NativeApproval(messages as any)).toBeNull();
+  });
+
+  it('picks the most recent approval-responded part when one assistant message has several (issue #17899)', () => {
+    const messages = [
+      {
+        role: 'assistant' as const,
+        id: 'msg-1',
+        parts: [
+          {
+            type: 'tool-myTool',
+            toolCallId: 'old-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `old-run${APPROVAL_ID_SEPARATOR}old-call`, approved: true },
+          },
+          {
+            type: 'tool-myTool',
+            toolCallId: 'new-call',
+            state: 'approval-responded' as const,
+            input: {},
+            approval: { id: `new-run${APPROVAL_ID_SEPARATOR}new-call`, approved: false, reason: 'changed mind' },
+          },
+        ],
+      },
+    ];
+
+    const result = extractV6NativeApproval(messages as any);
+
+    expect(result?.runId).toBe('new-run');
+    expect(result?.resumeData.approved).toBe(false);
+    expect(result?.resumeData.reason).toBe('changed mind');
   });
 
   it('scans from the end and picks the most recent approval-responded part', () => {
@@ -364,7 +403,7 @@ describe('handleChatStream v6 native approve() resume flow', () => {
     expect(mockAgent.resumeStream).toHaveBeenCalledTimes(1);
     expect(mockAgent.resumeStream).toHaveBeenCalledWith(
       { approved: true },
-      expect.objectContaining({ runId: 'run-123' }),
+      expect.objectContaining({ runId: 'run-123', toolCallId: 'tooluse_abc123' }),
     );
     expect(mockAgent.stream).not.toHaveBeenCalled();
   });

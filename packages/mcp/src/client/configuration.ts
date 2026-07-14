@@ -233,7 +233,7 @@ To fix this you have three different options:
        */
       onRequest: async (serverName: string, handler: (request: ElicitRequest['params']) => Promise<ElicitResult>) => {
         try {
-          const internalClient = await this.getConnectedClientForServer(serverName);
+          const internalClient = await this.getClientForServer(serverName);
           return internalClient.elicitation.onRequest(handler);
         } catch (err) {
           throw new MastraError(
@@ -661,6 +661,59 @@ To fix this you have three different options:
     };
   }
 
+  /**
+   * Provides access to tool-related notification operations across all configured servers.
+   *
+   * To fetch tools, use `listTools()` or `listToolsets()`.
+   *
+   * @example
+   * ```typescript
+   * // React to tool list changes on a server
+   * await mcp.tools.onListChanged('weatherServer', async () => {
+   *   console.log('Tool list changed, re-fetching...');
+   *   const tools = await mcp.listTools();
+   * });
+   * ```
+   */
+  public get tools() {
+    this.addToInstanceCache();
+    return {
+      /**
+       * Sets a notification handler for when the tool list changes on a server.
+       *
+       * @param serverName - Name of the server to monitor
+       * @param handler - Callback function invoked when tools are added/removed/modified
+       * @returns Promise resolving when handler is registered
+       * @throws {MastraError} If setting up the handler fails
+       *
+       * @example
+       * ```typescript
+       * await mcp.tools.onListChanged('weatherServer', async () => {
+       *   const tools = await mcp.listTools();
+       * });
+       * ```
+       */
+      onListChanged: async (serverName: string, handler: () => void) => {
+        try {
+          const internalClient = await this.getConnectedClientForServer(serverName);
+          return internalClient.setToolListChangedNotificationHandler(handler);
+        } catch (error) {
+          throw new MastraError(
+            {
+              id: 'MCP_CLIENT_ON_LIST_CHANGED_TOOLS_FAILED',
+              domain: ErrorDomain.MCP,
+              category: ErrorCategory.THIRD_PARTY,
+              details: {
+                serverName,
+              },
+            },
+            error,
+          );
+        }
+      },
+    };
+  }
+
   private addToInstanceCache() {
     if (!mcpClientInstances.has(this.id)) {
       mcpClientInstances.set(this.id, this);
@@ -771,8 +824,35 @@ To fix this you have three different options:
    * ```
    */
   public async listTools(): Promise<Record<string, Tool<any, any, any, any>>> {
+    const result = await this.listToolsWithErrors();
+    return result.tools;
+  }
+
+  /**
+   * Retrieves all tools from all configured servers with namespaced names,
+   * along with any per-server errors.
+   *
+   * Like listTools(), but also returns errors for servers that failed to connect
+   * or list tools. This allows callers to report specific failure reasons per server.
+   *
+   * @returns Object with `tools` (successful tools) and `errors` (failed servers with error messages).
+   * Transient connection failures are retried once after reconnecting the affected server.
+   *
+   * @example
+   * ```typescript
+   * const { tools, errors } = await mcp.listToolsWithErrors();
+   * for (const [name, err] of Object.entries(errors)) {
+   *   console.error(`Server ${name} failed: ${err}`);
+   * }
+   * ```
+   */
+  public async listToolsWithErrors(): Promise<{
+    tools: Record<string, Tool<any, any, any, any>>;
+    errors: Record<string, string>;
+  }> {
     this.addToInstanceCache();
     const connectedTools: Record<string, Tool<any, any, any, any>> = {};
+    const errors: Record<string, string> = {};
 
     for (const serverName of Object.keys(this.serverConfigs)) {
       try {
@@ -794,10 +874,11 @@ To fix this you have three different options:
         );
         this.logger.trackException(mastraError);
         this.logger.error('Failed to list tools from server:', { error: mastraError.toString() });
+        errors[serverName] = error instanceof Error ? error.message : String(error);
       }
     }
 
-    return connectedTools;
+    return { tools: connectedTools, errors };
   }
 
   /**
@@ -953,7 +1034,15 @@ To fix this you have three different options:
     return client.stderr;
   }
 
-  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
+  private getServerConfig(serverName: string): MastraMCPServerDefinition {
+    const serverConfig = this.serverConfigs[serverName];
+    if (!serverConfig) {
+      throw new Error(`Server configuration not found for name: ${serverName}`);
+    }
+    return serverConfig;
+  }
+
+  private async getOrCreateClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
     if (this.disconnectPromise) {
       await this.disconnectPromise;
     }
@@ -969,13 +1058,9 @@ To fix this you have three different options:
       if (!existingClient) {
         throw new Error(`Client ${name} exists but is undefined`);
       }
-      await existingClient.connect();
       return existingClient;
     }
 
-    this.logger.debug('Connecting to MCP server', { name });
-
-    // Create client with server configuration including log handler
     const mcpClient = new InternalMastraMCPClient({
       name,
       server: config,
@@ -987,36 +1072,50 @@ To fix this you have three different options:
 
     this.mcpClientsById.set(name, mcpClient);
 
+    return mcpClient;
+  }
+
+  private async getConnectedClient(name: string, config: MastraMCPServerDefinition): Promise<InternalMastraMCPClient> {
+    this.logger.debug('Connecting to MCP server', { name });
+
+    const mcpClient = await this.getOrCreateClient(name, config);
+
     try {
       await mcpClient.connect();
     } catch (e) {
-      const mastraError = new MastraError(
-        {
-          id: 'MCP_CLIENT_CONNECT_FAILED',
-          domain: ErrorDomain.MCP,
-          category: ErrorCategory.THIRD_PARTY,
-          text: `Failed to connect to MCP server ${name}: ${e instanceof Error ? e.stack || e.message : String(e)}`,
-          details: {
-            name,
-          },
-        },
-        e,
-      );
-      this.logger.trackException(mastraError);
-      this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
-      this.mcpClientsById.delete(name);
-      throw mastraError;
+      throw this.handleConnectError(name, e);
     }
     this.logger.debug('Connected to MCP server', { name });
     return mcpClient;
   }
 
+  private handleConnectError(name: string, error: unknown): MastraError {
+    const mastraError = new MastraError(
+      {
+        id: 'MCP_CLIENT_CONNECT_FAILED',
+        domain: ErrorDomain.MCP,
+        category: ErrorCategory.THIRD_PARTY,
+        text: `Failed to connect to MCP server ${name}: ${
+          error instanceof Error ? error.stack || error.message : String(error)
+        }`,
+        details: {
+          name,
+        },
+      },
+      error,
+    );
+    this.logger.trackException(mastraError);
+    this.logger.error('MCPClient errored connecting to MCP server:', { error: mastraError.toString() });
+    this.mcpClientsById.delete(name);
+    return mastraError;
+  }
+
   private async getConnectedClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
-    const serverConfig = this.serverConfigs[serverName];
-    if (!serverConfig) {
-      throw new Error(`Server configuration not found for name: ${serverName}`);
-    }
-    return this.getConnectedClient(serverName, serverConfig);
+    return this.getConnectedClient(serverName, this.getServerConfig(serverName));
+  }
+
+  private async getClientForServer(serverName: string): Promise<InternalMastraMCPClient> {
+    return this.getOrCreateClient(serverName, this.getServerConfig(serverName));
   }
 
   private async getToolsForServer(serverName: string): Promise<Record<string, Tool<any, any, any, any>>> {

@@ -131,14 +131,27 @@ const browser = new StagehandBrowser({
 })
 ```
 
-:::note
-
 See [StagehandBrowser reference](/reference/browser/stagehand-browser) for all configuration options.
 
-:::
+## Recording
+
+Stagehand can opt into alpha browser recording tools:
+
+```typescript
+const browser = new StagehandBrowser({
+  headless: false,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  recording: {
+    outputDir: './browser-recordings',
+  },
+})
+```
+
+This adds `browser_record` and `browser_record_caption` to the agent's toolset. See [Browser recording (alpha)](/docs/browser/recording) for details.
 
 ## Related
 
 - [Browser overview](/docs/browser/overview)
 - [AgentBrowser](/docs/browser/agent-browser)
+- [Browser recording (alpha)](/docs/browser/recording)
 - [StagehandBrowser reference](/reference/browser/stagehand-browser)

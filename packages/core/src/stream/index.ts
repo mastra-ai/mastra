@@ -39,7 +39,12 @@ export type {
   FilePayload,
   SourcePayload,
   IsTaskCompletePayload,
+  GoalEvaluationPayload,
   TripwirePayload,
+
+  // Callback Types
+  MastraOnFinishCallback,
+  MastraOnFinishCallbackArgs,
 
   // JSON & Data Types
   JSONArray,

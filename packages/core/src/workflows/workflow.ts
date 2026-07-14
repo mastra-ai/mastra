@@ -33,7 +33,8 @@ import {
 } from '../observability';
 import { executeWithContext } from '../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../processors';
-import { ProcessorRunner, ProcessorState, createProcessorSendSignal } from '../processors/runner';
+import { ProcessorRunner, ProcessorState } from '../processors/runner';
+import { createProcessorSendSignal } from '../processors/send-signal';
 import {
   summarizeActiveToolsForSpan,
   summarizeProcessorModelForSpan,
@@ -47,7 +48,7 @@ import { toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
 import type { StorageListWorkflowRunsInput } from '../storage';
 import { WorkflowRunOutput } from '../stream/RunOutput';
-import type { ChunkType, LanguageModelUsage } from '../stream/types';
+import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
 import { Tool } from '../tools/tool';
 import type { ToolExecutionContext } from '../tools/types';
@@ -94,6 +95,7 @@ import type {
   OutputWriter,
   StepMetadata,
   WorkflowRunStartOptions,
+  ForeachOptions,
 } from './types';
 import { cleanStepResult, createRestartExecutionParams, createTimeTravelExecutionParams } from './utils';
 
@@ -752,6 +754,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         state,
         result: outputResult,
         finishReason,
+        providerMetadata,
         toolCalls,
         text,
         retryCount,
@@ -1046,6 +1049,7 @@ function createStepFromProcessor<TProcessorId extends string>(
         processorStates,
         result: outputResult,
         finishReason,
+        providerMetadata,
         toolCalls,
         text,
         retryCount,
@@ -1404,6 +1408,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messageList: checkedMessageList,
                 stepNumber: stepNumber ?? 0,
                 finishReason,
+                providerMetadata: providerMetadata as ProviderMetadata | undefined,
                 toolCalls: toolCalls as any,
                 text,
                 usage: (usage as LanguageModelUsage) ?? defaultUsage,
@@ -1620,6 +1625,7 @@ export class Workflow<
     this.#options = {
       validateInputs: options.validateInputs ?? true,
       shouldPersistSnapshot: options.shouldPersistSnapshot ?? (() => true),
+      pruneSnapshot: options.pruneSnapshot,
       tracingPolicy: options.tracingPolicy,
       onFinish: options.onFinish,
       onError: options.onError,
@@ -1888,6 +1894,18 @@ export class Workflow<
           a[key] = {
             requestContextPath: m.requestContextPath,
             schema: m.schema,
+          };
+        } else if (m.initData !== undefined) {
+          // `mapVariable({ initData: <workflow> })` keeps a live Workflow instance
+          // by reference. Serializing it here would deep-walk the whole workflow
+          // (logger, nested step graph, …) into `mapConfig` — a multi-hundred-MB
+          // string that OOMs at .commit() before the length guard below can trim
+          // it (#19018). The execute path only reads `m.initData` for truthiness
+          // (it calls getInitData()), so a slim id reference is behaviourally
+          // identical at runtime.
+          a[key] = {
+            initData: m.initData?.id ?? true,
+            path: m.path,
           };
         } else {
           a[key] = m;
@@ -2222,11 +2240,10 @@ export class Workflow<
           unknown extends TStepRC ? unknown : TRequestContext
         >
       : 'Previous step must return an array type',
-    opts?: {
-      concurrency: number;
-    },
+    opts?: ForeachOptions,
   ) {
     const actualStep = step as Step<any, any, any, any, any, any>;
+    const concurrency = opts?.concurrency ?? 1;
     this.stepFlow.push({ type: 'foreach', step: step as any, opts: opts ?? { concurrency: 1 } });
     this.serializedStepFlow.push({
       type: 'foreach',
@@ -2238,7 +2255,7 @@ export class Workflow<
         serializedStepFlow: (step as SerializedStep).serializedStepFlow,
         canSuspend: Boolean(actualStep.suspendSchema || actualStep.resumeSchema),
       },
-      opts: opts ?? { concurrency: 1 },
+      opts: typeof concurrency === 'function' ? { fn: concurrency.toString() } : { concurrency },
     });
     this.steps[(step as any).id] = step as any;
     return this as unknown as Workflow<
@@ -2356,9 +2373,14 @@ export class Workflow<
       stepResults: {},
     });
 
-    const existingRun = await this.getWorkflowRunById(runIdToUse, {
-      withNestedWorkflows: false,
-    });
+    // A freshly-minted run for a workflow that never persists a snapshot (e.g. the
+    // transient processor workflows from #17344) cannot have a stored row, so this
+    // existence read would be a guaranteed miss. Skipping it removes one storage
+    // round trip per streamed chunk on the agent output-processor hot path (#19015).
+    const existingRun =
+      shouldPersistSnapshot || options?.runId
+        ? await this.getWorkflowRunById(runIdToUse, { withNestedWorkflows: false })
+        : undefined;
 
     // Check if run exists in persistent storage (not just in-memory)
     const existsInStorage = existingRun && !existingRun.isFromInMemory;
@@ -2371,26 +2393,29 @@ export class Workflow<
 
     if (!existsInStorage && shouldPersistSnapshot) {
       const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+      const initialSnapshot: WorkflowRunState = {
+        runId: runIdToUse,
+        status: 'pending',
+        value: {},
+        // @ts-expect-error - context type mismatch
+        context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
+        activePaths: [],
+        activeStepsPath: {},
+        serializedStepGraph: this.serializedStepGraph,
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        result: undefined,
+        error: undefined,
+        timestamp: Date.now(),
+      };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: this.id,
         runId: runIdToUse,
         resourceId: options?.resourceId,
-        snapshot: {
-          runId: runIdToUse,
-          status: 'pending',
-          value: {},
-          // @ts-expect-error - context type mismatch
-          context: this.#nestedWorkflowInput ? { input: this.#nestedWorkflowInput } : {},
-          activePaths: [],
-          activeStepsPath: {},
-          serializedStepGraph: this.serializedStepGraph,
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          result: undefined,
-          error: undefined,
-          timestamp: Date.now(),
-        },
+        snapshot: this.#options.pruneSnapshot
+          ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
+          : initialSnapshot,
       });
     }
 
@@ -2584,18 +2609,20 @@ export class Workflow<
           context: (timeTravel?.nestedStepResults?.[this.id] ?? {}) as any,
           nestedStepsContext: timeTravel?.nestedStepResults as any,
           requestContext,
+          actor,
           ...observabilityContext,
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
           perStep,
         });
       } else if (restart) {
-        res = await run.restart({ requestContext, ...observabilityContext, outputWriter });
+        res = await run.restart({ requestContext, actor, ...observabilityContext, outputWriter });
       } else if (isResume) {
         res = await run.resume({
           resumeData,
           step: resume.steps?.length > 0 ? (resume.steps as any) : undefined,
           requestContext,
+          actor,
           ...observabilityContext,
           outputWriter,
           outputOptions: { includeState: true, includeResumeLabels: true },
@@ -2606,6 +2633,7 @@ export class Workflow<
         res = await run.start({
           inputData,
           requestContext,
+          actor,
           ...observabilityContext,
           outputWriter,
           initialState: state,
@@ -3209,6 +3237,7 @@ export class Run<
     format,
     outputOptions,
     perStep,
+    actor,
     ...rest
   }: (TInput extends unknown
     ? {
@@ -3233,6 +3262,7 @@ export class Run<
         includeResumeLabels?: boolean;
       };
       perStep?: boolean;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
     // note: this span is ended inside this.executionEngine.execute()
@@ -3272,6 +3302,7 @@ export class Run<
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: (requestContext ?? new RequestContext()) as RequestContext,
+      actor,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,
@@ -3358,6 +3389,7 @@ export class Run<
       requestContext,
       onChunk,
       tracingOptions,
+      actor,
       ...rest
     }: (TInput extends unknown
       ? {
@@ -3369,6 +3401,7 @@ export class Run<
       requestContext?: RequestContext<TRequestContext>;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext> = {} as (TInput extends unknown
       ? {
           inputData?: TInput;
@@ -3379,6 +3412,7 @@ export class Run<
       requestContext?: RequestContext<TRequestContext>;
       onChunk?: (chunk: StreamEvent) => Promise<unknown>;
       tracingOptions?: TracingOptions;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
   ): {
     stream: ReadableStream<StreamEvent>;
@@ -3437,6 +3471,7 @@ export class Run<
     this.executionResults = this._start({
       inputData,
       requestContext,
+      actor,
       format: 'legacy',
       ...observabilityContext,
       tracingOptions,
@@ -3523,6 +3558,7 @@ export class Run<
     initialState,
     outputOptions,
     perStep,
+    actor,
     ...rest
   }: (TInput extends unknown
     ? {
@@ -3546,6 +3582,7 @@ export class Run<
         includeResumeLabels?: boolean;
       };
       perStep?: boolean;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>): WorkflowRunOutput<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
     if (this.closeStreamAction && this.streamOutput) {
@@ -3599,6 +3636,7 @@ export class Run<
         const executionResultsPromise = self._start({
           inputData,
           requestContext,
+          actor,
           ...observabilityContext,
           tracingOptions,
           initialState,
@@ -3657,6 +3695,7 @@ export class Run<
     forEachIndex,
     outputOptions,
     perStep,
+    actor,
     ...rest
   }: {
     resumeData?: TResume;
@@ -3676,6 +3715,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    actor?: ActorSignal;
   } & Partial<ObservabilityContext> = {}) {
     const observabilityContext = resolveObservabilityContext(rest);
     this.closeStreamAction = async () => {};
@@ -3725,6 +3765,7 @@ export class Run<
           resumeData,
           step,
           requestContext,
+          actor,
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {
@@ -3842,6 +3883,7 @@ export class Run<
       };
       forEachIndex?: number;
       perStep?: boolean;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._resume(params);
@@ -3884,6 +3926,7 @@ export class Run<
       };
       forEachIndex?: number;
       perStep?: boolean;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
   ): Promise<{ runId: string }> {
     // Fire resume in background, don't await completion
@@ -3902,6 +3945,7 @@ export class Run<
       requestContext?: RequestContext<TRequestContext>;
       outputWriter?: OutputWriter;
       tracingOptions?: TracingOptions;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext> = {},
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._restart(args);
@@ -3931,6 +3975,7 @@ export class Run<
       };
       forEachIndex?: number;
       perStep?: boolean;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(params);
@@ -4104,6 +4149,7 @@ export class Run<
         format: params.format,
         pubsub: this.pubsub,
         requestContext: requestContextToUse as RequestContext,
+        actor: params.actor,
         abortController: this.abortController,
         workflowSpan,
         outputOptions: params.outputOptions,
@@ -4132,11 +4178,13 @@ export class Run<
     requestContext,
     outputWriter,
     tracingOptions,
+    actor,
     ...rest
   }: {
     requestContext?: RequestContext<TRequestContext>;
     outputWriter?: OutputWriter;
     tracingOptions?: TracingOptions;
+    actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
     const allowedEngines = ['default', 'evented'];
@@ -4193,6 +4241,7 @@ export class Run<
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse as RequestContext,
+      actor,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,
@@ -4219,6 +4268,7 @@ export class Run<
     tracingOptions,
     outputOptions,
     perStep,
+    actor,
     ...rest
   }: {
     inputData?: TInput;
@@ -4242,6 +4292,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    actor?: ActorSignal;
   } & Partial<ObservabilityContext>): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     const observabilityContext = resolveObservabilityContext(rest);
     if (!stepParam || (Array.isArray(stepParam) && stepParam.length === 0)) {
@@ -4328,6 +4379,7 @@ export class Run<
       pubsub: this.pubsub,
       retryConfig: this.retryConfig,
       requestContext: requestContextToUse as RequestContext,
+      actor,
       abortController: this.abortController,
       outputWriter,
       workflowSpan,
@@ -4367,6 +4419,7 @@ export class Run<
         includeResumeLabels?: boolean;
       };
       perStep?: boolean;
+      actor?: ActorSignal;
     } & Partial<ObservabilityContext>,
   ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
     return this._timeTravel(args);
@@ -4383,6 +4436,7 @@ export class Run<
     tracingOptions,
     outputOptions,
     perStep,
+    actor,
     ...rest
   }: {
     inputData?: TTravelInput;
@@ -4405,6 +4459,7 @@ export class Run<
       includeResumeLabels?: boolean;
     };
     perStep?: boolean;
+    actor?: ActorSignal;
   } & Partial<ObservabilityContext>) {
     const observabilityContext = resolveObservabilityContext(rest);
     this.closeStreamAction = async () => {};
@@ -4445,6 +4500,7 @@ export class Run<
           resumeData,
           initialState,
           requestContext,
+          actor,
           ...observabilityContext,
           tracingOptions,
           outputWriter: async chunk => {

@@ -1,10 +1,10 @@
 import type { DatasetExperiment, DatasetRecord } from '@mastra/client-js';
+import { Chip } from '@mastra/playground-ui/components/Chip';
 import {
-  Chip,
   DataList as EntityList,
   DataListSkeleton as EntityListSkeleton,
-  StatusBadge,
-} from '@mastra/playground-ui';
+} from '@mastra/playground-ui/components/DataList';
+import { StatusBadge } from '@mastra/playground-ui/components/StatusBadge';
 import { useMemo } from 'react';
 import { useLinkComponent } from '@/lib/framework';
 
@@ -78,7 +78,7 @@ export function ExperimentsList({
   }
 
   return (
-    <EntityList columns={COLUMNS}>
+    <EntityList columns={COLUMNS} variant="striped">
       <EntityList.Top>
         <EntityList.TopCell>Experiment</EntityList.TopCell>
         <EntityList.TopCell>Dataset</EntityList.TopCell>

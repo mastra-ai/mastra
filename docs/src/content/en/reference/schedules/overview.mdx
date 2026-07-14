@@ -1,0 +1,354 @@
+---
+title: "Reference: mastra.schedules | Schedules"
+description: "API reference for mastra.schedules, the service for creating and managing agent and workflow cron schedules."
+packages:
+  - "@mastra/core"
+---
+
+# `mastra.schedules`
+
+**Added in:** `@mastra/core@1.50.0`
+
+`mastra.schedules` is the CRUD service for persisted cron schedules. Use it to create, list, update, pause, resume, manually run, and delete schedules for agents or workflows.
+
+For usage patterns and concepts, see [Schedules](/docs/long-running-agents/schedules).
+
+## Usage example
+
+Create an agent schedule:
+
+```typescript title="src/mastra/schedules.ts"
+const schedule = await mastra.schedules.create({
+  agentId: 'pinger',
+  cron: '0 * * * *',
+  prompt: 'Give me a status update.',
+})
+```
+
+Create a workflow schedule:
+
+```typescript title="src/mastra/schedules.ts"
+const schedule = await mastra.schedules.create({
+  workflowId: 'daily-report',
+  cron: '0 9 * * *',
+  inputData: { reportType: 'summary' },
+})
+```
+
+Schedules require a storage adapter that implements the schedules domain. Supported adapters include `@mastra/libsql`, `@mastra/pg`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, and `@mastra/spanner`.
+
+## Methods
+
+### Create schedules
+
+#### `create(input)`
+
+Creates an agent or workflow schedule. Pass `agentId` to create an agent schedule, or `workflowId` to create a workflow schedule.
+
+```typescript
+const schedule = await mastra.schedules.create({
+  agentId: 'pinger',
+  cron: '0 * * * *',
+  prompt: 'Give me a status update.',
+})
+```
+
+##### Agent schedule input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Optional stable schedule ID. The value is normalized to `agent_<slug>`. When omitted, Mastra generates an `agent_<uuid>` ID.',
+    isOptional: true,
+  },
+  {
+    name: 'agentId',
+    type: 'string',
+    description: 'ID of the agent to run on each schedule fire.',
+  },
+  {
+    name: 'cron',
+    type: 'string',
+    description: 'Cron expression for the schedule. Accepts 5-, 6-, or 7-part cron expressions and Croner nicknames.',
+  },
+  {
+    name: 'prompt',
+    type: 'string',
+    description: 'Prompt sent to the agent on each schedule fire.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Free-form label for distinguishing multiple schedules on the same agent or thread.',
+    isOptional: true,
+  },
+  {
+    name: 'timezone',
+    type: 'string',
+    description: 'IANA timezone used to resolve cron fire times, for example `America/New_York`.',
+    isOptional: true,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description:
+      'Thread that receives the scheduled signal. When omitted, each fire runs threadless with `agent.generate()`.',
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Resource ID for threaded schedules. Required when `threadId` is set.',
+    isOptional: true,
+  },
+  {
+    name: 'signalType',
+    type: 'AgentSignalType',
+    description: 'Signal type for threaded schedule fires. Defaults to `notification`.',
+    isOptional: true,
+  },
+  {
+    name: 'tagName',
+    type: 'string',
+    description: 'XML tag name used to render the scheduled signal. Defaults to `schedule`.',
+    isOptional: true,
+  },
+  {
+    name: 'attributes',
+    type: 'AgentSignalAttributes',
+    description: 'Attributes rendered on the scheduled signal XML tag.',
+    isOptional: true,
+  },
+  {
+    name: 'providerOptions',
+    type: 'Record<string, unknown>',
+    description: 'JSON-safe provider options merged into the schedule signal payload on every fire.',
+    isOptional: true,
+  },
+  {
+    name: 'ifActive',
+    type: 'ScheduleIfActive',
+    description: 'Behavior when the target thread is actively streaming. Requires `threadId`.',
+    isOptional: true,
+  },
+  {
+    name: 'ifIdle',
+    type: 'ScheduleIfIdle',
+    description: 'Behavior when the target thread is idle. Requires `threadId`.',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Arbitrary metadata stored with the schedule row.',
+    isOptional: true,
+  },
+  {
+    name: 'status',
+    type: "'active' | 'paused'",
+    description: 'Initial lifecycle status. Defaults to `active`.',
+    isOptional: true,
+    defaultValue: "'active'",
+  },
+]}
+/>
+
+##### Workflow schedule input
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: 'string',
+    description:
+      'Optional stable schedule ID. The value is normalized to `schedule_<slug>`. When omitted, Mastra generates a `schedule_<uuid>` ID.',
+    isOptional: true,
+  },
+  {
+    name: 'workflowId',
+    type: 'string',
+    description: 'ID of the workflow to start on each schedule fire.',
+  },
+  {
+    name: 'cron',
+    type: 'string',
+    description: 'Cron expression for the schedule. Accepts 5-, 6-, or 7-part cron expressions and Croner nicknames.',
+  },
+  {
+    name: 'timezone',
+    type: 'string',
+    description: 'IANA timezone used to resolve cron fire times.',
+    isOptional: true,
+  },
+  {
+    name: 'inputData',
+    type: 'unknown',
+    description: 'Input data passed to the workflow run.',
+    isOptional: true,
+  },
+  {
+    name: 'initialState',
+    type: 'unknown',
+    description: 'Initial workflow state for the scheduled run.',
+    isOptional: true,
+  },
+  {
+    name: 'requestContext',
+    type: 'Record<string, unknown>',
+    description: 'Request context passed to the workflow run.',
+    isOptional: true,
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, unknown>',
+    description: 'Arbitrary metadata stored with the schedule row.',
+    isOptional: true,
+  },
+  {
+    name: 'status',
+    type: "'active' | 'paused'",
+    description: 'Initial lifecycle status. Defaults to `active`.',
+    isOptional: true,
+    defaultValue: "'active'",
+  },
+]}
+/>
+
+### Read schedules
+
+#### `get(id)`
+
+Gets a schedule by ID. Bare agent schedule IDs are also resolved to the normalized `agent_<slug>` form.
+
+```typescript
+const schedule = await mastra.schedules.get('pinger')
+```
+
+#### `list(filter?)`
+
+Lists schedules. Without a filter, it returns agent and workflow schedules.
+
+```typescript
+const schedules = await mastra.schedules.list({
+  agentId: 'pinger',
+  status: 'active',
+})
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'filter',
+    type: 'ListSchedulesFilter',
+    description: 'Optional filters for the list operation.',
+    isOptional: true,
+    properties: [
+      {
+        type: 'ListSchedulesFilter',
+        parameters: [
+          {
+            name: 'agentId',
+            type: 'string',
+            description: 'Return only agent schedules for this agent.',
+            isOptional: true,
+          },
+          {
+            name: 'workflowId',
+            type: 'string',
+            description: 'Return only workflow schedules for this workflow.',
+            isOptional: true,
+          },
+          {
+            name: 'threadId',
+            type: 'string',
+            description: 'Return only agent schedules for this thread.',
+            isOptional: true,
+          },
+          {
+            name: 'resourceId',
+            type: 'string',
+            description: 'Return only agent schedules for this resource.',
+            isOptional: true,
+          },
+          {
+            name: 'name',
+            type: 'string',
+            description: 'Return only agent schedules with this label.',
+            isOptional: true,
+          },
+          {
+            name: 'status',
+            type: "'active' | 'paused'",
+            description: 'Return only schedules with this status.',
+            isOptional: true,
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+### Update schedules
+
+#### `update(id, patch)`
+
+Updates a schedule. Changing `cron` or `timezone` recomputes the next fire time. Updating `status` from `paused` to `active` also recomputes the next fire time.
+
+```typescript
+const updated = await mastra.schedules.update('pinger', {
+  cron: '*/30 * * * *',
+  prompt: 'Give me a status update every 30 minutes.',
+})
+```
+
+Agent schedule patches can update `cron`, `timezone`, `prompt`, `name`, `signalType`, `tagName`, `attributes`, `providerOptions`, `ifActive`, `ifIdle`, `metadata`, and `status`. `threadId` and `resourceId` aren't patchable; create a new schedule when the thread target needs to change.
+
+Workflow schedule patches can update `cron`, `timezone`, `inputData`, `initialState`, `requestContext`, `metadata`, and `status`. Agent-only patch fields such as `prompt`, `signalType`, and `ifIdle` throw on workflow schedules.
+
+### Lifecycle
+
+#### `pause(id)`
+
+Pauses a schedule. Pausing is durable and idempotent.
+
+```typescript
+const paused = await mastra.schedules.pause('pinger')
+```
+
+#### `resume(id)`
+
+Resumes a paused schedule and recomputes the next fire time from the current time.
+
+```typescript
+const active = await mastra.schedules.resume('pinger')
+```
+
+#### `run(id)`
+
+Fires a schedule once immediately without changing its cron cadence.
+
+```typescript
+const run = await mastra.schedules.run('pinger')
+```
+
+For agent schedules, `claimId` uses `manual_<scheduleId>_<timestamp>`. For workflow schedules, `claimId` uses `sched_<scheduleId>_<timestamp>` and is reused as the workflow run ID.
+
+#### `delete(id)`
+
+Deletes a schedule. Deleting a missing schedule is a no-op.
+
+```typescript
+await mastra.schedules.delete('pinger')
+```
+
+## Schedule behavior
+
+- Agent schedule IDs use the `agent_` prefix. Workflow schedule IDs created through `mastra.schedules.create()` use the `schedule_` prefix.
+- Threaded agent schedules require `resourceId` when `threadId` is set.
+- `signalType`, `ifActive`, `ifIdle`, and `resourceId` require `threadId`.
+- Workflow schedules don't accept agent-only patch fields such as `prompt`, `signalType`, or `ifIdle`.
+- `run()` publishes a manual fire immediately and doesn't change the stored cron cadence.

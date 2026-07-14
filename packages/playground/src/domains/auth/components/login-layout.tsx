@@ -1,4 +1,4 @@
-import { LogoWithoutText } from '@mastra/playground-ui';
+import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import type { ReactNode } from 'react';
 
 export type LoginLayoutProps = {

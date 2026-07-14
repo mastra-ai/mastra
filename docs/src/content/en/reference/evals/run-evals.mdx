@@ -36,6 +36,25 @@ console.log(`Average scores:`, result.scores)
 console.log(`Processed ${result.summary.totalItems} items`)
 ```
 
+### With gates and thresholds
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+import { faithfulnessScorer } from './scorers'
+
+const result = await runEvals({
+  target: myAgent,
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+  scorers: [{ scorer: faithfulnessScorer, threshold: 0.7 }, checks.includes('Brooklyn')],
+})
+
+result.verdict // 'passed' | 'scored' | 'failed'
+result.gateResults // [{ id, passed, score }]
+result.thresholdResults // [{ id, passed, averageScore, threshold }]
+```
+
 ## Parameters
 
 <PropertiesTable
@@ -54,10 +73,17 @@ console.log(`Processed ${result.summary.totalItems} items`)
   },
   {
     name: 'scorers',
-    type: 'MastraScorer[] | AgentScorerConfig | WorkflowScorerConfig',
+    type: 'ScorerEntry[] | AgentScorerConfig | WorkflowScorerConfig',
     description:
-      'Scorers to use. A flat array applies all scorers to the raw output. For agents, an `AgentScorerConfig` object separates agent-level and trajectory scorers. For workflows, a `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory.',
-    isOptional: false,
+      'Scorers to use. Each entry is either a bare `MastraScorer` or `{ scorer, threshold }` for threshold tracking. An `AgentScorerConfig` object separates agent-level and trajectory scorers. A `WorkflowScorerConfig` object specifies scorers for the workflow, individual steps, and trajectory. Optional when at least one gate is provided (gate-only runs).',
+    isOptional: true,
+  },
+  {
+    name: 'gates',
+    type: 'MastraScorer[]',
+    description:
+      'Scorers that must score 1.0 for the run to pass. If any gate averages below 1.0 across data items, the verdict is `failed`. Gates run before regular scorers on each data item. When provided, `scorers` may be omitted.',
+    isOptional: true,
   },
   {
     name: 'targetOptions',
@@ -198,10 +224,84 @@ For workflows, use `WorkflowScorerConfig` to specify scorers at different levels
     type: 'number',
     description: 'Total number of test cases processed.',
   },
+  {
+    name: 'verdict',
+    type: "'passed' | 'scored' | 'failed'",
+    description:
+      'Present when `gates` or threshold-bearing scorers are provided. `passed` = all gates and thresholds met. `scored` = gates passed but a threshold was missed. `failed` = at least one gate did not score 1.0.',
+    isOptional: true,
+  },
+  {
+    name: 'gateResults',
+    type: 'GateResult[]',
+    description:
+      'Per-gate results averaged across all data items. Each entry has `id`, `passed` (boolean), and `score` (0–1).',
+    isOptional: true,
+  },
+  {
+    name: 'thresholdResults',
+    type: 'ThresholdResult[]',
+    description:
+      'Per-threshold-scorer results averaged across all data items. Each entry has `id`, `passed`, `averageScore`, and `threshold`.',
+    isOptional: true,
+  },
+]}
+/>
+
+## ScorerEntry
+
+A scorer entry in the `scorers` array can be either a bare scorer or a scorer with a threshold:
+
+<PropertiesTable
+  content={[
+  {
+    name: 'scorer',
+    type: 'MastraScorer',
+    description: 'The scorer instance.',
+  },
+  {
+    name: 'threshold',
+    type: 'number | { min?: number; max?: number }',
+    description:
+      'A number implies minimum threshold (score at or above passes). Use `{ min, max }` for range-based checks — e.g. `{ max: 0.3 }` for scorers like hallucination where a high score is bad. Both `min` and `max` must be between 0 and 1.',
+  },
 ]}
 />
 
 ## Examples
+
+### Gates and verdict
+
+Use `gates` for hard pass/fail requirements and `{ scorer, threshold }` for tracked quality metrics:
+
+```typescript
+import { runEvals } from '@mastra/core/evals'
+import { checks } from '@mastra/evals/checks'
+
+const result = await runEvals({
+  target: weatherAgent,
+  data: [{ input: 'What is the weather in Brooklyn?' }],
+  gates: [checks.calledTool('get_weather'), checks.noToolErrors()],
+  scorers: [
+    { scorer: faithfulnessScorer, threshold: 0.7 }, // min threshold (number shorthand)
+    { scorer: hallucinationScorer, threshold: { max: 0.3 } }, // max threshold (high = bad)
+    { scorer: toneScorer, threshold: { min: 0.5, max: 0.9 } }, // range threshold
+    checks.includes('Brooklyn'), // bare scorer, no threshold
+  ],
+})
+
+if (result.verdict === 'failed') {
+  console.log(
+    'Gate failures:',
+    result.gateResults?.filter(g => !g.passed),
+  )
+} else if (result.verdict === 'scored') {
+  console.log(
+    'Threshold misses:',
+    result.thresholdResults?.filter(t => !t.passed),
+  )
+}
+```
 
 ### Agent Evaluation
 
@@ -364,6 +464,8 @@ const result = await runEvals({
 
 ## Related
 
+- [Gates and Verdicts](/docs/evals/gates-and-verdicts): Conceptual guide to severity semantics
+- [Quick Checks](/reference/evals/checks): Zero-LLM composable micro-scorers
 - [createScorer()](/reference/evals/create-scorer): Create custom scorers for experiments
 - [MastraScorer](/reference/evals/mastra-scorer): Learn about scorer structure and methods
 - [Trajectory Accuracy](/reference/evals/trajectory-accuracy): Built-in trajectory evaluation scorers

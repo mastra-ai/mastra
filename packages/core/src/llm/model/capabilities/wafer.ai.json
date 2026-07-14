@@ -1,3 +1,4 @@
 {
-  "attachment": ["Qwen3.5-397B-A17B"]
+  "attachment": ["Kimi-K2.6", "MiniMax-M3"],
+  "temperature": ["GLM-5.1", "GLM-5.2", "MiniMax-M3", "glm5.2-fast"]
 }

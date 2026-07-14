@@ -3,7 +3,7 @@ import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
-import type { DatasetItemSource, TargetType } from '@mastra/core/storage';
+import type { DatasetItemSource, DatasetItemToolMock, TargetType } from '@mastra/core/storage';
 import { z } from 'zod';
 import { isReservedRequestContextKey } from '../constants';
 import { HTTPException } from '../http-exception';
@@ -16,6 +16,7 @@ import {
   datasetAndItemIdPathParams,
   datasetItemVersionPathParams,
   paginationQuerySchema,
+  tenancyQuerySchema,
   listItemsQuerySchema,
   createDatasetBodySchema,
   updateDatasetBodySchema,
@@ -204,15 +205,17 @@ export const GET_DATASET_ROUTE = createRoute({
   path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: datasetResponseSchema.nullable(),
   summary: 'Get dataset by ID',
   description: 'Returns details for a specific dataset',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId }) => {
+  handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const ds = await mastra.datasets.get({ id: datasetId });
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       return (await ds.getDetails()) as any;
     } catch (error) {
       if (error instanceof MastraError) {
@@ -228,6 +231,7 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   bodySchema: updateDatasetBodySchema,
   responseSchema: datasetResponseSchema,
   summary: 'Update dataset',
@@ -248,6 +252,8 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         targetType,
         targetIds,
         scorerIds,
+        organizationId,
+        projectId,
       } = params as {
         name?: string;
         description?: string;
@@ -259,8 +265,10 @@ export const UPDATE_DATASET_ROUTE = createRoute({
         targetType?: TargetType;
         targetIds?: string[];
         scorerIds?: string[] | null;
+        organizationId?: string;
+        projectId?: string;
       };
-      const ds = await mastra.datasets.get({ id: datasetId });
+      const ds = await mastra.datasets.get({ id: datasetId, organizationId, projectId });
       const result = await ds.update({
         name,
         description,
@@ -300,16 +308,24 @@ export const DELETE_DATASET_ROUTE = createRoute({
   path: '/datasets/:datasetId',
   responseType: 'json',
   pathParamSchema: datasetIdPathParams,
+  queryParamSchema: tenancyQuerySchema,
   responseSchema: successResponseSchema,
   summary: 'Delete dataset',
   description: 'Deletes a dataset and all its items',
   tags: ['Datasets'],
   requiresAuth: true,
-  handler: async ({ mastra, datasetId }) => {
+  handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      await mastra.datasets.get({ id: datasetId }); // validates existence
-      await mastra.datasets.delete({ id: datasetId });
+      const { organizationId, projectId } = params as { organizationId?: string; projectId?: string };
+      // For unscoped deletes, preserve the legacy 404-on-missing behavior via a
+      // preflight get(). For scoped deletes, skip the preflight: a tenancy
+      // mismatch must be a silent no-op (matches "delete non-existent id is a
+      // no-op") so cross-tenant existence is not leaked via error timing/status.
+      if (organizationId === undefined && projectId === undefined) {
+        await mastra.datasets.get({ id: datasetId });
+      }
+      await mastra.datasets.delete({ id: datasetId, organizationId, projectId });
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
@@ -346,7 +362,8 @@ export const LIST_ITEMS_ROUTE = createRoute({
         version,
         search,
       });
-      // When version is specified, result is DatasetItem[] (flat). Otherwise paginated.
+      // Handler always passes `page` and `perPage`, so `listItems` always
+      // returns the paginated shape; the guard is defensive.
       if (Array.isArray(result)) {
         return { items: result, pagination: { total: result.length, page: 0, perPage: result.length, hasMore: false } };
       }
@@ -374,16 +391,17 @@ export const ADD_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory } = params as {
+      const { input, groundTruth, requestContext, metadata, source, expectedTrajectory, toolMocks } = params as {
         input: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
         source?: DatasetItemSource;
         expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
-      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory });
+      return await ds.addItem({ input, groundTruth, requestContext, metadata, source, expectedTrajectory, toolMocks });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -441,12 +459,13 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { input, groundTruth, requestContext, metadata, expectedTrajectory } = params as {
+      const { input, groundTruth, requestContext, metadata, expectedTrajectory, toolMocks } = params as {
         input?: unknown;
         groundTruth?: unknown;
         requestContext?: Record<string, unknown>;
         metadata?: Record<string, unknown>;
         expectedTrajectory?: unknown;
+        toolMocks?: DatasetItemToolMock[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
       // Check if item exists and belongs to dataset
@@ -454,7 +473,15 @@ export const UPDATE_ITEM_ROUTE = createRoute({
       if (!existing || (existing as any).datasetId !== datasetId) {
         throw new HTTPException(404, { message: `Item not found: ${itemId}` });
       }
-      return await ds.updateItem({ itemId, input, groundTruth, requestContext, metadata, expectedTrajectory });
+      return await ds.updateItem({
+        itemId,
+        input,
+        groundTruth,
+        requestContext,
+        metadata,
+        expectedTrajectory,
+        toolMocks,
+      });
     } catch (error) {
       if (isSchemaValidationError(error)) {
         throw new HTTPException(400, {
@@ -918,6 +945,7 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
           input: unknown;
           groundTruth?: unknown;
           expectedTrajectory?: unknown;
+          toolMocks?: DatasetItemToolMock[];
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;
         }>;

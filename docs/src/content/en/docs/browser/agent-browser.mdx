@@ -75,14 +75,24 @@ const browser = new AgentBrowser({
 
 AgentBrowser uses accessibility tree refs to identify elements. When an agent calls `browser_snapshot`, it receives a text representation of the page with refs like `@e1`, `@e2`, etc. The agent then uses these refs with other tools to interact with elements.
 
-:::note
+## Recording
 
-See [AgentBrowser reference](/reference/browser/agent-browser) for all configuration options and tool details.
+AgentBrowser can opt into alpha browser recording tools:
 
-:::
+```typescript
+const browser = new AgentBrowser({
+  headless: false,
+  recording: {
+    outputDir: './browser-recordings',
+  },
+})
+```
+
+This adds `browser_record` and `browser_record_caption` to the agent's toolset. See [Browser recording (alpha)](/docs/browser/recording) for details. See [AgentBrowser reference](/reference/browser/agent-browser) for all configuration options and tool details.
 
 ## Related
 
 - [Browser overview](/docs/browser/overview)
 - [Stagehand](/docs/browser/stagehand)
+- [Browser recording (alpha)](/docs/browser/recording)
 - [AgentBrowser reference](/reference/browser/agent-browser)

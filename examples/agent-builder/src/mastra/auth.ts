@@ -8,6 +8,11 @@ import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
 export async function initWorkOS() {
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',
+    // Map each authenticated user to a distinct resource id. This is what a
+    // `caller-supplied` tool connection reads to bucket Composio connected
+    // accounts per tenant. Without it, every caller collapses into the shared
+    // `'default'` bucket and OAuth accounts leak across tenants.
+    mapUserToResourceId: user => user.id,
   });
 
   const rbacProvider = new MastraRBACWorkos({

@@ -1,11 +1,11 @@
 import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
 
-import { requiredEnv } from './env';
+import { hasEnv } from './env';
 
 export async function initWorkOS() {
-  requiredEnv('WORKOS_API_KEY');
-  requiredEnv('WORKOS_CLIENT_ID');
-  requiredEnv('WORKOS_COOKIE_PASSWORD');
+  if (!hasEnv('WORKOS_API_KEY') || !hasEnv('WORKOS_CLIENT_ID') || !hasEnv('WORKOS_COOKIE_PASSWORD')) {
+    return null;
+  }
 
   const mastraAuth = new MastraAuthWorkos({
     redirectUri: process.env.WORKOS_REDIRECT_URI || 'http://localhost:4111/api/auth/callback',

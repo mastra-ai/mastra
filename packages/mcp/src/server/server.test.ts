@@ -9,7 +9,10 @@ import type { InternalCoreTool, Tool } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
 import { createStep, Workflow } from '@mastra/core/workflows';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import type {
   Resource,
   ResourceTemplate,
@@ -19,6 +22,7 @@ import type {
   Prompt,
 } from '@modelcontextprotocol/sdk/types.js';
 import { MockLanguageModelV2, convertArrayToReadableStream } from 'ai/test';
+import getPort from 'get-port';
 import { Hono } from 'hono';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { z } from 'zod/v3';
@@ -28,7 +32,19 @@ import { MCPClient } from '../client/configuration';
 import { MCPServer } from './server';
 import type { MastraPrompt, MCPServerResources, MCPServerResourceContent, MCPRequestHandlerExtra } from './types';
 
-const PORT = 9100 + Math.floor(Math.random() * 1000);
+// Bind `server` to a free port found via the `get-port` package (the same approach the
+// mastra CLI uses for port allocation) and resolve to the assigned port.
+// Avoids hardcoded random port ranges that flake tests on CI when two suites pick the same port.
+const listenOnFreePort = async (server: http.Server): Promise<number> => {
+  const port = await getPort();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(port, () => resolve());
+  });
+  return port;
+};
+
+let PORT: number;
 let server: MCPServer;
 let httpServer: http.Server;
 
@@ -390,7 +406,7 @@ describe('MCPServer', () => {
     let resourceTestServerInstance: MCPServer;
     let localHttpServerForResources: http.Server;
     let resourceTestInternalClient: InternalMastraMCPClient;
-    const RESOURCE_TEST_PORT = 9200 + Math.floor(Math.random() * 1000);
+    let RESOURCE_TEST_PORT: number;
 
     const mockResourceContents: Record<string, MCPServerResourceContent> = {
       'weather://current': {
@@ -408,6 +424,9 @@ describe('MCPServer', () => {
       },
       'weather://historical': {
         text: JSON.stringify({ averageHigh: 20, averageLow: 10 }),
+      },
+      'weather://ui': {
+        text: '<html><body>widget</body></html>',
       },
     };
 
@@ -429,6 +448,12 @@ describe('MCPServer', () => {
         name: 'Historical Weather Data',
         description: 'Past 30 days weather data',
         mimeType: 'application/json',
+      },
+      {
+        uri: 'weather://ui',
+        name: 'Weather UI Widget',
+        mimeType: 'text/html',
+        _meta: { ui: { csp: { connectDomains: ['https://api.example.com'] } } },
       },
     ];
 
@@ -463,7 +488,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => localHttpServerForResources.listen(RESOURCE_TEST_PORT, () => resolve()));
+      RESOURCE_TEST_PORT = await listenOnFreePort(localHttpServerForResources);
 
       resourceTestInternalClient = new InternalMastraMCPClient({
         name: 'resource-test-internal-client',
@@ -535,9 +560,18 @@ describe('MCPServer', () => {
 
     it('should throw an error when reading a non-existent resource URI', async () => {
       const uri = 'weather://nonexistent';
-      await expect(resourceTestInternalClient.readResource(uri)).rejects.toThrow(
-        'Resource not found: weather://nonexistent',
-      );
+      await expect(resourceTestInternalClient.readResource(uri)).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Resource not found: weather://nonexistent'),
+      });
+    });
+
+    it('should preserve resource `_meta` on read contents (MCP Apps CSP)', async () => {
+      const uri = 'weather://ui';
+      const resourceContentResult = (await resourceTestInternalClient.readResource(uri)) as ReadResourceResult;
+      expect(resourceContentResult.contents.length).toBe(1);
+      const content = resourceContentResult.contents[0] as { _meta?: Record<string, unknown> };
+      expect(content._meta).toEqual({ ui: { csp: { connectDomains: ['https://api.example.com'] } } });
     });
   });
 
@@ -677,9 +711,10 @@ describe('MCPServer', () => {
 
     it('should throw an error when reading a non-existent resource', async () => {
       const uri = 'test://resource/nonexistent';
-      await expect(notificationTestInternalClient.readResource(uri)).rejects.toThrow(
-        'Resource not found: test://resource/nonexistent',
-      );
+      await expect(notificationTestInternalClient.readResource(uri)).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Resource not found: test://resource/nonexistent'),
+      });
     });
 
     it('should list resource templates', async () => {
@@ -735,7 +770,7 @@ describe('MCPServer', () => {
     let promptServer: MCPServer;
     let promptInternalClient: InternalMastraMCPClient;
     let promptHttpServer: http.Server;
-    const PROMPT_PORT = 9500 + Math.floor(Math.random() * 1000);
+    let PROMPT_PORT: number;
 
     let currentPrompts: (MastraPrompt & { getMessages?: (args: any) => Promise<any[]> })[] = [
       {
@@ -785,7 +820,7 @@ describe('MCPServer', () => {
           res,
         });
       });
-      await new Promise<void>(resolve => promptHttpServer.listen(PROMPT_PORT, () => resolve()));
+      PROMPT_PORT = await listenOnFreePort(promptHttpServer);
       promptInternalClient = new InternalMastraMCPClient({
         name: 'prompt-test-internal-client',
         server: { url: new URL(`http://localhost:${PROMPT_PORT}/sse`) },
@@ -851,7 +886,10 @@ describe('MCPServer', () => {
     it('should throw error if required argument is missing', async () => {
       await expect(
         promptInternalClient.getPrompt({ name: 'explain-code', args: {} }), // missing 'code'
-      ).rejects.toThrow(/Missing required argument/);
+      ).rejects.toMatchObject({
+        code: ErrorCode.InvalidParams,
+        message: expect.stringContaining('Missing required argument: code'),
+      });
     });
 
     it('should succeed if all required arguments are provided', async () => {
@@ -932,7 +970,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => httpServer.listen(PORT, () => resolve()));
+      PORT = await listenOnFreePort(httpServer);
     });
 
     afterAll(async () => {
@@ -1048,7 +1086,7 @@ describe('MCPServer', () => {
   describe('MCPServer HTTP Transport', () => {
     let server: MCPServer;
     let client: MCPClient;
-    const PORT = 9200 + Math.floor(Math.random() * 1000);
+    let PORT: number;
     const TOKEN = `<random-token>`;
 
     beforeAll(async () => {
@@ -1090,7 +1128,7 @@ describe('MCPServer', () => {
         });
       });
 
-      await new Promise<void>(resolve => httpServer.listen(PORT, () => resolve()));
+      PORT = await listenOnFreePort(httpServer);
 
       client = new MCPClient({
         servers: {
@@ -1204,7 +1242,7 @@ describe('MCPServer', () => {
     let hono: Hono;
     let honoServer: ServerType;
     let client: MCPClient;
-    const PORT = 9300 + Math.floor(Math.random() * 1000);
+    let PORT: number;
 
     beforeAll(async () => {
       server = new MCPServer({
@@ -1236,6 +1274,7 @@ describe('MCPServer', () => {
         });
       });
 
+      PORT = await getPort();
       honoServer = serve({ fetch: hono.fetch, port: PORT });
 
       // Initialize MCPClient with SSE endpoint
@@ -1288,21 +1327,6 @@ describe('MCPServer', () => {
     let sessionHttpServer: http.Server;
     let currentTestPort: number;
 
-    // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
-    // Avoids the random-port collisions that were flaking these tests on CI.
-    const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
-      new Promise<number>((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, () => {
-          const address = server.address();
-          if (address && typeof address === 'object') {
-            resolve(address.port);
-          } else {
-            reject(new Error('Failed to obtain ephemeral port'));
-          }
-        });
-      });
-
     afterEach(async () => {
       if (sessionHttpServer) {
         sessionHttpServer.closeAllConnections?.();
@@ -1336,7 +1360,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'default-session-client',
@@ -1375,7 +1399,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'no-session-client',
@@ -1414,7 +1438,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'serverless-client',
@@ -1462,7 +1486,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'custom-session-client',
@@ -1502,7 +1526,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       const client = new InternalMastraMCPClient({
         name: 'override-test-client',
@@ -1519,6 +1543,212 @@ describe('MCPServer', () => {
       expect(Object.keys(tools).length).toBeGreaterThan(0);
 
       await client.disconnect();
+    });
+
+    it('should still return final tool results in serverless JSON response mode (default)', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessJsonServer',
+        version: '1.0.0',
+        tools: {
+          echoTool: {
+            description: 'Echoes the provided message',
+            parameters: z.object({ message: z.string() }),
+            execute: async ({ message }: { message: string }) => ({ echoed: message }),
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Default serverless mode: enableJsonResponse stays true (no streaming opt-in)
+          options: { serverless: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-json-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const result = await client.callTool({ name: 'echoTool', arguments: { message: 'hello' } });
+
+        // Final tool result is still delivered in JSON response mode
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ echoed: 'hello' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
+    it('should deliver notifications/progress to an MCP client onprogress handler in serverless streaming mode', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessStreamingServer',
+        version: '1.0.0',
+        tools: {
+          progressTool: {
+            description: 'Reports progress while working',
+            parameters: z.object({}),
+            execute: async (_args: unknown, context: any) => {
+              const extra = context?.mcp?.extra;
+              const progressToken = extra?._meta?.progressToken;
+              if (progressToken !== undefined && extra?.sendNotification) {
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 1, total: 2 },
+                });
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 2, total: 2 },
+                });
+              }
+              return { result: 'done' };
+            },
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // Opt into request-scoped SSE streaming for serverless requests
+          options: { serverless: true, serverlessStreaming: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-streaming-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const progressUpdates: Array<{ progress: number; total?: number }> = [];
+        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+          onprogress: notification =>
+            progressUpdates.push({ progress: notification.progress, total: notification.total }),
+        });
+
+        // The client received the request-scoped progress notifications
+        expect(progressUpdates).toEqual([
+          { progress: 1, total: 2 },
+          { progress: 2, total: 2 },
+        ]);
+
+        // The final tool result is still delivered after the stream completes
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
+    it('should let an explicit enableJsonResponse override serverlessStreaming', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessExplicitJsonServer',
+        version: '1.0.0',
+        tools: {
+          progressTool: {
+            description: 'Reports progress while working',
+            parameters: z.object({}),
+            execute: async (_args: unknown, context: any) => {
+              const extra = context?.mcp?.extra;
+              const progressToken = extra?._meta?.progressToken;
+              if (progressToken !== undefined && extra?.sendNotification) {
+                await extra.sendNotification({
+                  method: 'notifications/progress',
+                  params: { progressToken, progress: 1, total: 2 },
+                });
+              }
+              return { result: 'done' };
+            },
+          },
+        },
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          // serverlessStreaming requests streaming, but an explicit enableJsonResponse wins
+          options: { serverless: true, serverlessStreaming: true, enableJsonResponse: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-explicit-json-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        const progressUpdates: number[] = [];
+        const result = await client.callTool({ name: 'progressTool', arguments: {} }, undefined, {
+          onprogress: notification => progressUpdates.push(notification.progress),
+        });
+
+        // JSON response mode buffers the request, so no progress notifications stream through
+        expect(progressUpdates).toEqual([]);
+
+        // The final tool result is still delivered
+        const content = result.content as Array<{ type: string; text: string }>;
+        expect(JSON.parse(content[0].text)).toEqual({ result: 'done' });
+      } finally {
+        await client.close();
+        await transport.close();
+      }
+    });
+
+    it('should not require or persist an mcp-session-id in serverless streaming mode', async () => {
+      sessionServer = new MCPServer({
+        name: 'ServerlessNoSessionServer',
+        version: '1.0.0',
+        tools: minimalTestTool,
+      });
+
+      sessionHttpServer = http.createServer(async (req: http.IncomingMessage, res: http.ServerResponse) => {
+        const url = new URL(req.url || '', `http://localhost:${currentTestPort}`);
+        await sessionServer.startHTTP({
+          url,
+          httpPath: '/http',
+          req,
+          res,
+          options: { serverless: true, serverlessStreaming: true },
+        });
+      });
+
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
+
+      const client = new Client({ name: 'serverless-no-session-client', version: '1.0.0' });
+      const transport = new StreamableHTTPClientTransport(new URL(`http://localhost:${currentTestPort}/http`));
+      try {
+        await client.connect(transport);
+
+        // Stateless mode: the server assigns no session, so the client transport has no session ID
+        expect(transport.sessionId).toBeUndefined();
+
+        // Subsequent requests still work without an mcp-session-id
+        const tools = await client.listTools();
+        expect(tools.tools.length).toBeGreaterThan(0);
+      } finally {
+        await client.close();
+        await transport.close();
+      }
     });
 
     it('should return 404 when a stale session ID is provided', async () => {
@@ -1538,7 +1768,7 @@ describe('MCPServer', () => {
         });
       });
 
-      currentTestPort = await listenOnEphemeralPort(sessionHttpServer);
+      currentTestPort = await listenOnFreePort(sessionHttpServer);
 
       // Send a POST request with a session ID that doesn't exist on the server
       const response = await fetch(`http://localhost:${currentTestPort}/http`, {
@@ -2160,21 +2390,6 @@ describe('MCPServer - Elicitation', () => {
   let elicitationHttpServer: http.Server;
   let ELICITATION_PORT: number;
 
-  // Helper: bind to OS-assigned port (port 0) and resolve to the actual port.
-  // Avoids the random-port collisions that were flaking these tests on CI.
-  const listenOnEphemeralPort = (server: http.Server): Promise<number> =>
-    new Promise<number>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(0, () => {
-        const address = server.address();
-        if (address && typeof address === 'object') {
-          resolve(address.port);
-        } else {
-          reject(new Error('Failed to obtain ephemeral port'));
-        }
-      });
-    });
-
   beforeAll(async () => {
     elicitationServer = new MCPServer({
       name: 'ElicitationTestServer',
@@ -2236,7 +2451,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    ELICITATION_PORT = await listenOnEphemeralPort(elicitationHttpServer);
+    ELICITATION_PORT = await listenOnFreePort(elicitationHttpServer);
   });
 
   afterAll(async () => {
@@ -2396,9 +2611,10 @@ describe('MCPServer - Elicitation', () => {
       message: 'This should fail gracefully',
     });
 
-    // When no elicitation handler is provided, the server's elicitInput should fail
-    // and the tool should return a reject response
-    expect(result.content[0].text).toContain('Method not found');
+    // When no elicitation handler is provided, the client does not advertise the
+    // elicitation capability, so the server's elicitInput fails before sending and
+    // the tool returns the error text.
+    expect(result.content[0].text).toContain('Client does not support form elicitation');
   });
 
   it('should validate elicitation request schema structure', async () => {
@@ -2483,24 +2699,32 @@ describe('MCPServer - Elicitation', () => {
       },
     });
 
-    // Each client registers its own independent handler
-    elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
-    elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
+    // Each client registers its own independent handler. onRequest is async (it
+    // resolves the per-server client), so it must be awaited before listTools()
+    // connects — otherwise the elicitation capability may be registered after
+    // connect(), which the SDK rejects.
+    await elicitationClient1.elicitation.onRequest('elicitation1', client1Handler);
+    await elicitationClient2.elicitation.onRequest('elicitation2', client2Handler);
 
-    const tools = await elicitationClient1.listTools();
-    const tool = tools['elicitation1_testElicitationTool'];
-    expect(tool).toBeDefined();
-    await tool.execute!({
-      message: 'Please provide your information',
-    });
+    try {
+      const tools = await elicitationClient1.listTools();
+      const tool = tools['elicitation1_testElicitationTool'];
+      expect(tool).toBeDefined();
+      await tool.execute!({
+        message: 'Please provide your information',
+      });
 
-    const tools2 = await elicitationClient2.listTools();
-    const tool2 = tools2['elicitation2_testElicitationTool'];
-    expect(tool2).toBeDefined();
+      const tools2 = await elicitationClient2.listTools();
+      const tool2 = tools2['elicitation2_testElicitationTool'];
+      expect(tool2).toBeDefined();
 
-    // Verify handlers are isolated - they should not interfere with each other
-    expect(client1Handler).toHaveBeenCalled();
-    expect(client2Handler).not.toHaveBeenCalled();
+      // Verify handlers are isolated - they should not interfere with each other
+      expect(client1Handler).toHaveBeenCalled();
+      expect(client2Handler).not.toHaveBeenCalled();
+    } finally {
+      await elicitationClient1.disconnect();
+      await elicitationClient2.disconnect();
+    }
   }, 10000);
 
   it('should support custom timeout in elicitation request options', async () => {
@@ -2549,7 +2773,7 @@ describe('MCPServer - Elicitation', () => {
       },
     };
 
-    const customTimeoutPort = 9600 + Math.floor(Math.random() * 1000);
+    let customTimeoutPort: number;
     const customTimeoutServer = new MCPServer({
       name: 'CustomTimeoutServer',
       version: '1.0.0',
@@ -2566,7 +2790,7 @@ describe('MCPServer - Elicitation', () => {
       });
     });
 
-    await new Promise<void>(resolve => customTimeoutHttpServer.listen(customTimeoutPort, () => resolve()));
+    customTimeoutPort = await listenOnFreePort(customTimeoutHttpServer);
 
     try {
       // Create a client that responds after a delay but within the custom timeout
@@ -2628,7 +2852,7 @@ describe('MCPServer - Elicitation', () => {
 describe('MCPServer with Tool Output Schema', () => {
   let serverWithOutputSchema: MCPServer;
   let clientWithOutputSchema: MCPClient;
-  const PORT = 9600 + Math.floor(Math.random() * 1000);
+  let PORT: number;
   let httpServerWithOutputSchema: http.Server;
 
   const structuredTool: ToolsInput = {
@@ -2663,7 +2887,7 @@ describe('MCPServer with Tool Output Schema', () => {
       });
     });
 
-    await new Promise<void>(resolve => httpServerWithOutputSchema.listen(PORT, () => resolve()));
+    PORT = await listenOnFreePort(httpServerWithOutputSchema);
 
     clientWithOutputSchema = new MCPClient({
       servers: {
@@ -2688,9 +2912,16 @@ describe('MCPServer with Tool Output Schema', () => {
     const tools = await clientWithOutputSchema.listTools();
     const tool = tools['local_structuredTool'];
     expect(tool).toBeDefined();
-    // outputSchema is not passed to createTool (MCP SDK validates via AJV internally),
-    // so it won't be on the Mastra tool wrapper
-    expect(tool.outputSchema).toBeUndefined();
+    const documentedSchema = tool.outputSchema?.['~standard'].jsonSchema.output({ target: 'draft-07' });
+    expect(documentedSchema).toMatchObject({
+      type: 'object',
+      properties: {
+        processedInput: { type: 'string' },
+        timestamp: { type: 'string' },
+      },
+    });
+    // MCP SDK validates output; Mastra schema is documentation-only (always passes).
+    expect(tool.outputSchema?.['~standard'].validate({ not: 'valid' })).toEqual({ value: { not: 'valid' } });
   });
 
   it('should call tool and receive structuredContent', async () => {
@@ -2711,7 +2942,7 @@ describe('MCPServer - Tool Input Validation', () => {
   let validationClient: InternalMastraMCPClient;
   let httpValidationServer: ServerType;
   let tools: Record<string, Tool<any, any, any, any>>;
-  const VALIDATION_PORT = 9700 + Math.floor(Math.random() * 100);
+  let VALIDATION_PORT: number;
 
   const toolsWithValidation: ToolsInput = {
     stringTool: {
@@ -2779,6 +3010,7 @@ describe('MCPServer - Tool Input Validation', () => {
       });
     });
 
+    VALIDATION_PORT = await getPort();
     httpValidationServer = serve({
       fetch: app.fetch,
       port: VALIDATION_PORT,
@@ -2786,7 +3018,10 @@ describe('MCPServer - Tool Input Validation', () => {
 
     validationClient = new InternalMastraMCPClient({
       name: 'validation-test-client',
-      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`) },
+      // These tests assert the shape of the server's isError validation envelope
+      // (result.isError / result.content), so opt out of the default throw-on-error
+      // behavior and resolve with the raw result instead.
+      server: { url: new URL(`http://localhost:${VALIDATION_PORT}/sse`), onToolError: 'return' },
     });
 
     await validationClient.connect();
@@ -3062,7 +3297,7 @@ describe('MCPServer - Tool Input Validation', () => {
  * from both pre-parsed middleware (like express.json()) and raw streams.
  */
 describe('MCPServer readJsonBody compatibility', () => {
-  const READ_JSON_BODY_PORT = 9400 + Math.floor(Math.random() * 100);
+  let READ_JSON_BODY_PORT: number;
   let readJsonServer: MCPServer;
   let readJsonHttpServer: http.Server;
 
@@ -3092,9 +3327,7 @@ describe('MCPServer readJsonBody compatibility', () => {
       });
     });
 
-    await new Promise<void>(resolve => {
-      readJsonHttpServer.listen(READ_JSON_BODY_PORT, resolve);
-    });
+    READ_JSON_BODY_PORT = await listenOnFreePort(readJsonHttpServer);
   });
 
   afterAll(async () => {
@@ -3125,7 +3358,7 @@ describe('MCPServer readJsonBody compatibility', () => {
   });
 
   describe('HTTP transport with pre-parsed body (simulating express.json())', () => {
-    const PREPARSED_PORT = 9500 + Math.floor(Math.random() * 100);
+    let PREPARSED_PORT: number;
     let preParsedServer: MCPServer;
     let preParsedHttpServer: http.Server;
 
@@ -3163,9 +3396,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      await new Promise<void>(resolve => {
-        preParsedHttpServer.listen(PREPARSED_PORT, resolve);
-      });
+      PREPARSED_PORT = await listenOnFreePort(preParsedHttpServer);
     });
 
     afterAll(async () => {
@@ -3216,7 +3447,7 @@ describe('MCPServer readJsonBody compatibility', () => {
   });
 
   describe('SSE transport with pre-parsed body', () => {
-    const SSE_PORT = 9600 + Math.floor(Math.random() * 100);
+    let SSE_PORT: number;
     let sseServer: MCPServer;
     let sseHttpServer: http.Server;
 
@@ -3255,9 +3486,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      await new Promise<void>(resolve => {
-        sseHttpServer.listen(SSE_PORT, resolve);
-      });
+      SSE_PORT = await listenOnFreePort(sseHttpServer);
     });
 
     afterAll(async () => {
@@ -3287,7 +3516,7 @@ describe('MCPServer readJsonBody compatibility', () => {
   });
 
   describe('SSE transport with raw stream (no middleware)', () => {
-    const SSE_RAW_PORT = 9700 + Math.floor(Math.random() * 100);
+    let SSE_RAW_PORT: number;
     let sseRawServer: MCPServer;
     let sseRawHttpServer: http.Server;
 
@@ -3310,9 +3539,7 @@ describe('MCPServer readJsonBody compatibility', () => {
         });
       });
 
-      await new Promise<void>(resolve => {
-        sseRawHttpServer.listen(SSE_RAW_PORT, resolve);
-      });
+      SSE_RAW_PORT = await listenOnFreePort(sseRawHttpServer);
     });
 
     afterAll(async () => {

@@ -1,5 +1,6 @@
-import { CodeEditor } from '@mastra/playground-ui';
-import type { JsonSchema, RuleGroup } from '@mastra/playground-ui';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
+import type { JsonSchema } from '@mastra/playground-ui/utils/json-schema';
+import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import type { UseFormReturn } from 'react-hook-form';
 import { Controller, useWatch } from 'react-hook-form';
 

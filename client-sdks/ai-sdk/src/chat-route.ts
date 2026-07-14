@@ -24,32 +24,38 @@ import type {
 } from './public-types';
 
 /**
- * Scans a v6 UIMessage array for an 'approval-responded' tool part in the
- * last trailing assistant message only. When found, splits the composite
- * approvalId ("${runId}::${toolCallId}") to recover the runId needed for
- * resumeStream.
+ * Scans a v6 UIMessage array for the most recent 'approval-responded' tool
+ * part in the last trailing assistant message only. When found, splits the
+ * composite approvalId ("${runId}::${toolCallId}") to recover the runId and
+ * toolCallId needed for a targeted resumeStream.
  *
  * Only the last trailing assistant message is inspected so that approval
- * responses from earlier turns are never re-processed.
+ * responses from earlier turns are never re-processed. Within that message,
+ * parts are scanned in reverse so the decision the user just acted on wins
+ * over any earlier 'approval-responded' parts that have not yet transitioned
+ * to 'output-available'.
  *
  * Returns null when no approval response is present (normal chat turn).
  */
 export function extractV6NativeApproval(
   messages: V6UIMessage[],
-): { resumeData: Record<string, unknown>; runId: string } | null {
+): { resumeData: Record<string, unknown>; runId: string; toolCallId: string } | null {
   // Only inspect the actual trailing message. If a user has already sent a
   // follow-up turn after an approval response, we must treat that as a normal
   // chat submission rather than replaying the stale approval response.
   const lastAssistantMsg = messages.at(-1);
   if (!lastAssistantMsg || lastAssistantMsg.role !== 'assistant') return null;
 
-  for (const part of lastAssistantMsg.parts ?? []) {
+  const parts = lastAssistantMsg.parts ?? [];
+  for (let i = parts.length - 1; i >= 0; i--) {
+    const part = parts[i]!;
     if (!isToolUIPart(part) || part.state !== 'approval-responded') continue;
 
     const lastSep = part.approval.id.lastIndexOf(APPROVAL_ID_SEPARATOR);
     if (lastSep === -1) continue;
     const runId = part.approval.id.slice(0, lastSep);
-    if (!runId) continue;
+    const toolCallId = part.approval.id.slice(lastSep + APPROVAL_ID_SEPARATOR.length);
+    if (!runId || !toolCallId) continue;
 
     return {
       resumeData: {
@@ -57,6 +63,7 @@ export function extractV6NativeApproval(
         ...(part.approval.reason != null ? { reason: part.approval.reason } : {}),
       },
       runId,
+      toolCallId,
     };
   }
 
@@ -162,9 +169,29 @@ export async function handleChatStream<OUTPUT = undefined>({
     throw new Error('runId is required when resumeData is provided');
   }
 
-  const agentObj = agentVersion ? await mastra.getAgentById(agentId, agentVersion) : mastra.getAgentById(agentId);
-  if (!agentObj) {
+  const baseAgent = mastra.getAgentById(agentId);
+  if (!baseAgent) {
     throw new Error(`Agent ${agentId} not found`);
+  }
+
+  // When an editor is configured, an agent's runtime config (instructions, tools,
+  // model, ...) can live in stored config rather than the code definition. Studio
+  // resolves these stored overrides before every run, so this endpoint must do the
+  // same or it would execute a stale/empty code-defined agent (issue #18574). An
+  // explicit agentVersion (from query params or route options) wins; otherwise we
+  // default to the published version, matching the built-in agent handlers.
+  let agentObj = baseAgent;
+  const editorAgent = mastra.getEditor?.()?.agent;
+  if (editorAgent) {
+    agentObj = await editorAgent.applyStoredOverrides(
+      baseAgent,
+      agentVersion ?? { status: 'published' },
+      requestContext as RequestContext | undefined,
+    );
+  } else if (agentVersion) {
+    // No editor configured: preserve the prior behavior of surfacing the
+    // "editor required for versioned agent lookup" error for explicit versions.
+    agentObj = await mastra.getAgentById(agentId, agentVersion);
   }
 
   if (!Array.isArray(messages)) {
@@ -209,6 +236,7 @@ export async function handleChatStream<OUTPUT = undefined>({
     ...defaultOptionsRest,
     ...restOptions,
     ...(effectiveRunId && { runId: effectiveRunId }),
+    ...(nativeApproval?.toolCallId && { toolCallId: nativeApproval.toolCallId }),
     requestContext: requestContext || defaultOptions?.requestContext,
     ...(Object.keys(mergedProviderOptions).length > 0 && { providerOptions: mergedProviderOptions }),
   };
@@ -279,6 +307,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
     sendFinish?: boolean;
     sendReasoning?: boolean;
     sendSources?: boolean;
+    onError?: (error: unknown) => string;
   };
 
 /**
@@ -294,6 +323,7 @@ export type chatRouteOptions<OUTPUT = undefined> = {
  * @param {boolean} [options.sendFinish=true] - Whether to send finish events in the stream
  * @param {boolean} [options.sendReasoning=false] - Whether to include reasoning steps in the stream
  * @param {boolean} [options.sendSources=false] - Whether to include source citations in the stream
+ * @param {(error: unknown) => string} [options.onError] - Custom error serializer streamed to the client. When omitted, errors are passed through a default serializer that strips sensitive fields (e.g. `APICallError.requestBodyValues`, which holds the system prompt) before they reach the client.
  *
  * @returns {ReturnType<typeof registerApiRoute>} A registered API route handler
  *
@@ -334,6 +364,7 @@ export function chatRoute<OUTPUT = undefined>({
   sendFinish = true,
   sendReasoning = false,
   sendSources = false,
+  onError,
 }: chatRouteOptions<OUTPUT>): ReturnType<typeof registerApiRoute> {
   if (!agent && !path.includes('/:agentId')) {
     throw new Error('Path must include :agentId to route to the correct agent or pass the agent explicitly');
@@ -529,6 +560,7 @@ export function chatRoute<OUTPUT = undefined>({
         sendFinish,
         sendReasoning,
         sendSources,
+        onError,
       };
 
       if (version === 'v6') {

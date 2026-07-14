@@ -25,6 +25,10 @@ export function registerApiCommand(program: CommanderCommand): void {
     .command('api')
     .description('Call Mastra APIs')
     .option('--url <url>', 'target Mastra server URL')
+    .option(
+      '--server-api-prefix <serverApiPrefix>',
+      'API route prefix of the Mastra server (default: /api; also honors MASTRA_API_PREFIX)',
+    )
     .option('--header <header>', 'custom HTTP header (repeatable)', collect, [])
     .option('--timeout <ms>', 'client-side request timeout')
     .option('--pretty', 'pretty-print JSON output', false);
@@ -653,6 +657,7 @@ export async function executeDescriptor(
       descriptor: requestDescriptor,
       pathParams,
       input: requestInput,
+      apiPrefix: target.apiPrefix,
     };
     let response: unknown;
     let effectiveDescriptor = requestDescriptor;

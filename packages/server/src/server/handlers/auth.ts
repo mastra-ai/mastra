@@ -16,7 +16,7 @@ import type {
   SSOCallbackResult,
 } from '@mastra/core/auth';
 import type { IRBACProvider, IFGAProvider, EEUser } from '@mastra/core/auth/ee';
-import type { MastraAuthProvider } from '@mastra/core/server';
+import type { IMastraAuthProvider } from '@mastra/core/server';
 
 import { z } from 'zod/v4';
 import { supportsSessionRefresh } from '../auth/helpers';
@@ -77,14 +77,14 @@ function loadPermissionPatterns(): Promise<Record<string, unknown> | undefined> 
  * use it exclusively. Otherwise, Studio requests fall back to server.auth for
  * backward compatibility.
  */
-function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | null {
+function getAuthProvider(mastra: any, isStudio?: boolean): IMastraAuthProvider | null {
   // Check if studio.auth is explicitly configured
   const studioConfig = mastra.getStudio?.();
   const hasStudioAuth = studioConfig?.auth && typeof studioConfig.auth.authenticateToken === 'function';
 
   // If this is a Studio request AND studio.auth is configured, use it exclusively
   if (isStudio && hasStudioAuth) {
-    return studioConfig.auth as MastraAuthProvider;
+    return studioConfig.auth as IMastraAuthProvider;
   }
 
   // Otherwise (non-studio request, OR studio request without studio.auth configured),
@@ -95,7 +95,7 @@ function getAuthProvider(mastra: any, isStudio?: boolean): MastraAuthProvider | 
   // Auth can be either MastraAuthConfig or MastraAuthProvider
   // If it has authenticateToken method, it's a provider
   if (typeof serverConfig.auth.authenticateToken === 'function') {
-    return serverConfig.auth as MastraAuthProvider;
+    return serverConfig.auth as IMastraAuthProvider;
   }
 
   return null;
@@ -380,7 +380,7 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
       const stateId = crypto.randomUUID();
       const state = `${stateId}|${encodeURIComponent(postLoginRedirect)}`;
 
-      const loginUrl = auth.getLoginUrl(oauthCallbackUri, state);
+      const loginUrl = await Promise.resolve(auth.getLoginUrl(oauthCallbackUri, state));
 
       // Build response with optional PKCE cookies
       const headers = new Headers({ 'Content-Type': 'application/json' });
@@ -417,7 +417,7 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
   tags: ['Auth'],
   handler: async ctx => {
     const { mastra, code, state, request } = ctx as any;
-    const isStudio = isStudioRequest(request);
+    const _isStudio = isStudioRequest(request); // Kept for potential future use; currently we prefer studio auth for SSO
 
     // Build base URL for redirects (Response.redirect requires absolute URL)
     const baseUrl = getPublicOrigin(request);
@@ -457,7 +457,15 @@ export const GET_SSO_CALLBACK_ROUTE = createPublicRoute({
     }
 
     try {
-      const auth = getAuthProvider(mastra, isStudio);
+      // For SSO callback, the redirect from the identity provider won't include
+      // the x-mastra-client-type header. Prefer studio auth for SSO (it's the
+      // typical SSO use case), fall back to server auth only if studio doesn't exist.
+      let auth = getAuthProvider(mastra, true); // Try studio first
+
+      // If studio doesn't have SSO, fall back to server
+      if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
+        auth = getAuthProvider(mastra, false);
+      }
 
       if (!auth || !implementsInterface<ISSOProvider>(auth, 'handleCallback')) {
         return Response.redirect(`${absoluteRedirect}?error=sso_not_configured`, 302);

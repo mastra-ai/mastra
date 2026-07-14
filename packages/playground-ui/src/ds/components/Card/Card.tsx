@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
   // Base styles
-  'rounded-lg border border-border1 bg-surface2 transition-all duration-normal ease-out-custom',
+  'duration-normal rounded-lg border border-border1 bg-surface2 transition-all ease-out-custom',
   {
     variants: {
       elevation: {
@@ -14,7 +14,7 @@ const cardVariants = cva(
         elevated: 'shadow-elevated',
       },
       interactive: {
-        true: 'cursor-pointer hover:border-border2 hover:bg-surface3 active:scale-[0.99]',
+        true: 'active:scale-0.99 cursor-pointer hover:border-border2 hover:bg-surface3',
         false: '',
       },
     },
@@ -61,7 +61,7 @@ export type CardTitleProps = React.HTMLAttributes<HTMLHeadingElement>;
 export const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(({ className, ...props }, ref) => (
   <h3
     ref={ref}
-    className={cn('text-ui-md font-semibold text-neutral6 leading-none tracking-tight', className)}
+    className={cn('text-ui-md leading-none font-semibold tracking-tight text-neutral6', className)}
     {...props}
   />
 ));

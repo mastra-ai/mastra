@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import type { ElementType, ReactNode } from 'react';
-import { HorizontalBars } from '../../../ds/components/HorizontalBars';
-import { MetricsCard } from '../../../ds/components/MetricsCard';
-import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import type { ReactNode } from 'react';
+import { HorizontalBars } from '../../../ds/components/HorizontalBars/horizontal-bars';
+import { MetricsCard } from '../../../ds/components/MetricsCard/metrics-card';
+import { TabContent } from '../../../ds/components/Tabs/tabs-content';
+import { TabList } from '../../../ds/components/Tabs/tabs-list';
+import { Tabs } from '../../../ds/components/Tabs/tabs-root';
+import { Tab } from '../../../ds/components/Tabs/tabs-tab';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import type { TokenUsageByAgentRow } from '../hooks/use-token-usage-by-agent-metrics';
 import { CHART_COLORS, formatCompact, formatCost } from './metrics-utils';
 
@@ -15,7 +19,7 @@ export interface TokenUsageByAgentCardViewProps {
   /** Optional slot for top-bar action buttons. */
   actions?: ReactNode;
   /** Override how drilldown links are rendered. Defaults to `<a>`. */
-  LinkComponent?: ElementType;
+  LinkComponent?: LinkComponent;
 }
 
 type TokenUsageTab = 'tokens' | 'cost';
@@ -37,7 +41,7 @@ export function TokenUsageByAgentCardView({
   const rows = data ?? [];
   const hasData = rows.length > 0;
   const totalTokens = rows.reduce((s, d) => s + d.total, 0);
-  const costRows = rows.filter(d => d.cost != null && d.cost > 0);
+  const costRows = rows.filter((d): d is TokenUsageByAgentRow & { cost: number } => d.cost != null && d.cost > 0);
   const uniqueCostUnits = new Set(costRows.map(d => d.costUnit ?? 'usd'));
   const hasSingleCostUnit = uniqueCostUnits.size <= 1;
   const costUnit = hasSingleCostUnit ? ([...uniqueCostUnits][0] ?? 'usd') : null;
@@ -74,7 +78,7 @@ export function TokenUsageByAgentCardView({
               onValueChange={v => {
                 if (isTokenUsageTab(v)) setActiveTab(v);
               }}
-              className="grid grid-rows-[auto_1fr] overflow-y-auto h-full"
+              className="grid h-full grid-rows-[auto_1fr] overflow-y-auto"
             >
               <TabList>
                 <Tab value="tokens">Tokens</Tab>
@@ -103,7 +107,7 @@ export function TokenUsageByAgentCardView({
                     data={costRows
                       .slice()
                       .sort((a, b) => (b.cost ?? 0) - (a.cost ?? 0))
-                      .map(d => ({ name: d.name, values: [d.cost!], href: getRowHref?.(d) }))}
+                      .map(d => ({ name: d.name, values: [d.cost], href: getRowHref?.(d) }))}
                     segments={[{ label: 'Cost', color: CHART_COLORS.purple }]}
                     maxVal={Math.max(...costRows.map(d => d.cost ?? 0))}
                     fmt={v => formatCost(v, costUnit)}

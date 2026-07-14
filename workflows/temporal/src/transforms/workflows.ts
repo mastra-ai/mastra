@@ -6,7 +6,9 @@ import * as t from '@babel/types';
 import { rollup } from 'rollup';
 import { toWorkflowType } from '../utils';
 import {
+  collectCreateStepFactoryBindings,
   collectImportedNames,
+  getCreateStepCallFromExpression,
   getCreateStepId,
   getObjectPropertyName,
   isCreateWorkflowCall,
@@ -83,6 +85,43 @@ function createTemporalWorkflowHelperStatements(): t.Statement[] {
   });
 }
 
+function getTemporalWorkflowRuntimeOptions(program: t.Program): t.ObjectExpression | undefined {
+  for (const statement of program.body) {
+    const declarationStatement = t.isVariableDeclaration(statement)
+      ? statement
+      : t.isExportNamedDeclaration(statement) && t.isVariableDeclaration(statement.declaration)
+        ? statement.declaration
+        : null;
+
+    if (!declarationStatement) {
+      continue;
+    }
+
+    for (const declaration of declarationStatement.declarations) {
+      if (!isWorkflowHelperDestructure(declaration) || !t.isCallExpression(declaration.init)) {
+        continue;
+      }
+
+      const [temporalParams] = declaration.init.arguments;
+      if (!temporalParams || !t.isObjectExpression(temporalParams)) {
+        continue;
+      }
+
+      for (const property of temporalParams.properties) {
+        if (
+          t.isObjectProperty(property) &&
+          getObjectPropertyName(property) === 'startToCloseTimeout' &&
+          t.isExpression(property.value)
+        ) {
+          return t.objectExpression([
+            t.objectProperty(t.identifier('startToCloseTimeout'), t.cloneNode(property.value, true)),
+          ]);
+        }
+      }
+    }
+  }
+}
+
 /**
  * Walks a chained workflow expression like `createWorkflow(...).then(...).commit()`
  * back to its root `createWorkflow(...)` call while preserving method order.
@@ -125,6 +164,14 @@ function parseWorkflowChain(
  */
 function collectStepBindings(program: t.Program): Map<string, string> {
   const stepBindings = new Map<string, string>();
+  const stepFactoryBindings = collectCreateStepFactoryBindings(program);
+
+  for (const [factoryName, createStepCall] of stepFactoryBindings) {
+    const stepId = getCreateStepId(createStepCall);
+    if (stepId) {
+      stepBindings.set(factoryName, stepId);
+    }
+  }
 
   for (const statement of program.body) {
     if (
@@ -143,7 +190,8 @@ function collectStepBindings(program: t.Program): Map<string, string> {
         continue;
       }
 
-      const stepId = getCreateStepId(declaration.init);
+      const createStepCall = getCreateStepCallFromExpression(declaration.init, stepFactoryBindings);
+      const stepId = getCreateStepId(createStepCall);
       if (stepId) {
         stepBindings.set(declaration.id.name, stepId);
       }
@@ -202,6 +250,10 @@ function getWorkflowStepName(node: t.Node | null | undefined, stepBindings: Map<
 
   if (t.isStringLiteral(node)) {
     return node.value;
+  }
+
+  if (t.isCallExpression(node) && t.isIdentifier(node.callee)) {
+    return stepBindings.get(node.callee.name) ?? getCreateStepId(node);
   }
 
   return getCreateStepId(node);
@@ -358,10 +410,16 @@ function createTemporalWorkflowStatements(
   includeCommit: boolean,
   stepBindings: Map<string, string>,
   workflowBindings: Map<string, string>,
+  runtimeOptions?: t.ObjectExpression,
 ): t.Statement[] {
   // Start from `createWorkflow(<static id>)` and rebuild the chain one call at a time
   // using normalized arguments from `rewriteChainMethod`.
-  let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), [t.cloneNode(workflowId, true)]);
+  const createWorkflowArgs = [t.cloneNode(workflowId, true)];
+  if (runtimeOptions) {
+    createWorkflowArgs.push(t.cloneNode(runtimeOptions, true));
+  }
+
+  let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), createWorkflowArgs);
 
   for (const method of methods) {
     const rewrittenMethod = rewriteChainMethod(method, filePath, exportName, stepBindings, workflowBindings);
@@ -467,6 +525,7 @@ interface WorkflowTransformState {
   stepBindings: Map<string, string>;
   workflowBindings: Map<string, string>;
   workflowExports: TemporalWorkflowExport[];
+  runtimeOptions?: t.ObjectExpression;
 }
 
 function createWorkflowTransformState(program: t.Program, filePath: string): WorkflowTransformState {
@@ -479,6 +538,7 @@ function createWorkflowTransformState(program: t.Program, filePath: string): Wor
     stepBindings: collectStepBindings(program),
     workflowBindings: collectWorkflowBindings(program, filePath),
     workflowExports: [],
+    runtimeOptions: getTemporalWorkflowRuntimeOptions(program),
   };
 }
 
@@ -659,6 +719,7 @@ function rewriteWorkflowVariableDeclaration(
         state.committedWorkflowNames.has(declaration.id.name),
         state.stepBindings,
         state.workflowBindings,
+        state.runtimeOptions,
       ),
     );
   }

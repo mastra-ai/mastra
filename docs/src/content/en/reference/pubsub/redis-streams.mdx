@@ -8,7 +8,7 @@ packages:
 
 # RedisStreamsPubSub
 
-`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure.
+`RedisStreamsPubSub` is a [`PubSub`](/reference/pubsub/base) implementation backed by [Redis Streams](https://redis.io/docs/latest/develop/data-types/streams/). It delivers events across processes and hosts, with persistence, consumer groups, and redelivery on failure. It also implements [`LeaseProvider`](/reference/pubsub/lease-provider), so the signals layer can elect a single owner per resource across instances, which is what lets signals coordinate runs in distributed and serverless deployments.
 
 Use it for distributed deployments where several services share an event stream. For single-process delivery, use [`EventEmitterPubSub`](/reference/pubsub/event-emitter). For Google Cloud, use [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub).
 
@@ -74,6 +74,14 @@ export const mastra = new Mastra({
     description: 'Approximate maximum number of entries kept per stream. Set to 0 to disable trimming.',
     isOptional: true,
     defaultValue: '10000',
+  },
+  {
+    name: 'streamIdleTtlMs',
+    type: 'number',
+    description:
+      'Idle expiry in milliseconds: a sliding TTL refreshed on every write (publish, nack retry, group re-creation). Each write resets it, so an actively-written stream never expires mid-flight; a stream left idle for the full duration is deleted by Redis automatically. Note that only writes refresh the TTL — a consumer slowly draining a backlog does not — so set it well above the longest expected gap between writes on a live topic. This is a backstop, not the primary cleanup — `clearTopic` handles normal end-of-lifecycle deletion; this only bounds memory for streams that never reach a `clearTopic` call (e.g. a crashed run). Must be a non-negative integer. Defaults to 0 (disabled).',
+    isOptional: true,
+    defaultValue: '0',
   },
   {
     name: 'reclaimIntervalMs',
@@ -142,6 +150,16 @@ Waits for in-flight publishes to complete.
 await pubsub.flush()
 ```
 
+### `clearTopic(topic)`
+
+Deletes a topic's stream and every consumer group on it, freeing the memory a finished topic would otherwise hold. Mastra's run lifecycles — durable agents and the evented workflow engine — call this automatically when a run reaches a terminal state; call it yourself only once nothing will read the topic again. It's best-effort and never throws — failures are logged at warn level. A subscriber still attached when the stream is deleted recovers on its own but misses the deleted entries.
+
+Automatic cleanup requires `@mastra/core` and `@mastra/redis-streams` versions that both support `clearTopic`: the runtime routes the call through its caching layer, so upgrade the two packages together to get end-of-run stream deletion.
+
+```typescript
+await pubsub.clearTopic('workflow.events.run-123')
+```
+
 ### `close()`
 
 Closes the Redis connections and stops all subscriptions. Call this during graceful shutdown.
@@ -153,3 +171,11 @@ await pubsub.close()
 ## Redelivery and reclaim
 
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
+
+## Distributed leasing
+
+`RedisStreamsPubSub` implements the [`LeaseProvider`](/reference/pubsub/lease-provider) contract on top of the same Redis connection. The [signals runtime](/docs/long-running-agents/signals) uses it to elect a single owner (usually per thread key) so that across instances only one process wakes and runs the agent, and others route follow-up work to the holder. This is what makes signals work on serverless and multi-instance deployments; without a shared lease, each instance would start its own competing run.
+
+Lease keys are namespaced under the same `keyPrefix` as topics, as `<keyPrefix>:lease:<key>`. All operations are atomic: `acquireLease` uses `SET NX PX` and refreshes its own TTL idempotently, while `releaseLease`, `renewLease`, and `transferLease` use Lua scripts that check ownership before mutating, so a concurrent renewal from another owner is never clobbered.
+
+You don't call these methods directly. Configuring `RedisStreamsPubSub` as the `pubsub` backend is enough for the runtime to detect and use the capability. See [`LeaseProvider`](/reference/pubsub/lease-provider) for the full method contract.

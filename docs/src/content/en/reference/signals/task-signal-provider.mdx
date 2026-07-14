@@ -1,0 +1,78 @@
+---
+title: "Reference: TaskSignalProvider | Signals"
+description: "API reference for TaskSignalProvider, a signal provider that bundles the built-in task tools and the task state-signal processor behind a single agent registration."
+packages:
+  - "@mastra/core"
+---
+
+# TaskSignalProvider
+
+Bundles the built-in task tools (`task_write`, `task_update`, `task_complete`, `task_check`) and the `TaskStateProcessor` behind a single agent registration. Use it to add a structured, durable task list to an agent without wiring the tools and processor separately.
+
+Extends [`SignalProvider`](/reference/signals/signal-provider). The task list is stored in the thread-scoped `tasks` storage domain (the source of truth) and projected onto the agent state-signal lane by the processor, so it survives observational-memory truncation without invalidating the prompt cache.
+
+## Usage example
+
+Register the provider on an agent that has `Memory` and a Mastra `storage`:
+
+```typescript title="src/mastra/index.ts"
+import { Agent } from '@mastra/core/agent'
+import { TaskSignalProvider } from '@mastra/core/signals'
+
+const agent = new Agent({
+  id: 'coder',
+  name: 'coder',
+  instructions: '...',
+  model,
+  memory,
+  signals: [new TaskSignalProvider()],
+})
+```
+
+The Agent automatically merges the four task tools into its toolset and registers the processor on its input-processor chain. No other wiring is required.
+
+Task tracking requires a memory-backed thread (`threadId` + `resourceId`). Without memory the task tools no-op and return a result explaining that task tracking requires agent memory. The `tasks` storage domain is wired in-memory by default, so task tracking works without configuring a storage backend.
+
+## Constructor parameters
+
+`TaskSignalProvider` takes no constructor arguments.
+
+## Properties
+
+<PropertiesTable
+  content={[
+  {
+    name: 'id',
+    type: "'task-signals'",
+    description: 'Stable identifier for the provider instance.',
+  },
+]}
+/>
+
+## Methods
+
+### Agent integration
+
+These methods are called automatically by the Agent when the provider is passed to `signals`. You normally don't call them directly.
+
+#### `getTools()`
+
+Returns the four task tools keyed by their tool ids (`task_write`, `task_update`, `task_complete`, `task_check`). The Agent merges these into its toolset.
+
+```typescript
+const tools = new TaskSignalProvider().getTools()
+// { task_write, task_update, task_complete, task_check }
+```
+
+Returns: `Record<string, Tool>`
+
+#### `getInputProcessors()`
+
+Returns the provider's `TaskStateProcessor` instance. The Agent registers it on the input-processor chain, which propagates the Mastra instance so the processor can resolve the `tasks` store.
+
+```typescript
+const [processor] = new TaskSignalProvider().getInputProcessors()
+// processor instanceof TaskStateProcessor
+```
+
+Returns: `InputProcessorOrWorkflow[]`

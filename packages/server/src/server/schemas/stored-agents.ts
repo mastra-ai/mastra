@@ -132,10 +132,15 @@ const skillConfigSchema = z.object({
 /** Skills config: skill IDs mapped to per-skill config */
 const skillsConfigSchema = z.record(z.string(), skillConfigSchema);
 
-/** Workspace reference: either a stored workspace ID or an inline config */
+/** Workspace reference: a stored workspace ID, inline config, or a registered workspace provider */
 const workspaceRefSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('id'), workspaceId: z.string() }),
   z.object({ type: z.literal('inline'), config: workspaceSnapshotConfigSchema }),
+  z.object({
+    type: z.literal('provider'),
+    provider: z.string().describe('Workspace provider identifier'),
+    config: z.record(z.string(), z.unknown()).describe('Provider-specific configuration'),
+  }),
 ]);
 
 /** Screencast options for streaming browser frames */
@@ -374,6 +379,12 @@ export const updateStoredAgentBodySchema = agentMetadataSchema
 
 export const exportStoredAgentBodySchema = snapshotConfigUpdateSchema.partial();
 
+export const openStoredAgentChangeRequestBodySchema = exportStoredAgentBodySchema.extend({
+  changeMessage: z.string().trim().max(500).optional(),
+  userName: z.string().trim().min(1).max(120).optional(),
+  inspectOnly: z.boolean().optional(),
+});
+
 // ============================================================================
 // Response Schemas
 // ============================================================================
@@ -541,6 +552,12 @@ export const exportStoredAgentResponseSchema = z.object({
   fileName: z.string(),
   content: z.string(),
   config: z.record(z.string(), z.unknown()),
+});
+
+export const openStoredAgentChangeRequestResponseSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  url: z.string(),
+  ref: z.string().optional(),
 });
 
 // ============================================================================

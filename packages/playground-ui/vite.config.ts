@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import nodeExternals from 'rollup-plugin-node-externals';
@@ -8,19 +8,137 @@ import { defineConfig } from 'vite';
 import dts from 'vite-plugin-dts';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
 
-// One library entry per design-system component folder, exposed publicly as
-// `@mastra/playground-ui/components/<Name>` (see the `./components/*` exports
-// wildcard in package.json). Deep imports let consumers skip the root barrel
-// so bundlers only pull the components they use.
 const componentsDir = resolve(__dirname, 'src/ds/components');
-const componentEntries = Object.fromEntries(
-  readdirSync(componentsDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory())
-    .map(dirent => [`components/${dirent.name}`, resolve(componentsDir, dirent.name, 'index.ts')] as const)
-    .filter(([, file]) => {
-      if (existsSync(file)) return true;
-      console.warn(`[playground-ui] skipping component without index.ts: ${file}`);
-      return false;
+
+// Public hook subpath entries, exposed as
+// `@mastra/playground-ui/hooks/<hook-file>` via the `./hooks/*` package export.
+const hooksDir = resolve(__dirname, 'src/hooks');
+const hookEntries = Object.fromEntries(
+  readdirSync(hooksDir, { withFileTypes: true })
+    .filter(dirent => dirent.isFile())
+    .map(dirent => dirent.name)
+    .filter(
+      fileName => /\.(ts|tsx)$/.test(fileName) && !fileName.endsWith('.test.tsx') && !fileName.endsWith('.test.ts'),
+    )
+    .map(fileName => {
+      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
+      return [`hooks/${entryName}`, resolve(hooksDir, fileName)] as const;
+    }),
+);
+
+// Public utility subpath entries, exposed as
+// `@mastra/playground-ui/utils/<utility-file>` via the `./utils/*` package export.
+const utilsDir = resolve(__dirname, 'src/utils');
+const utilityEntries = Object.fromEntries(
+  readdirSync(utilsDir, { withFileTypes: true })
+    .filter(dirent => dirent.isFile())
+    .map(dirent => dirent.name)
+    .filter(
+      fileName => /\.(ts|tsx)$/.test(fileName) && !fileName.endsWith('.test.tsx') && !fileName.endsWith('.test.ts'),
+    )
+    .map(fileName => {
+      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
+      return [`utils/${entryName}`, resolve(utilsDir, fileName)] as const;
+    }),
+);
+
+const createPublicFileEntries = (sourceDir: string, entryPrefix: string) => {
+  const entries: Array<readonly [string, string]> = [];
+
+  const walk = (currentDir: string) => {
+    readdirSync(currentDir, { withFileTypes: true }).forEach(dirent => {
+      if (dirent.isDirectory()) {
+        if (dirent.name === '__tests__') return;
+        walk(resolve(currentDir, dirent.name));
+        return;
+      }
+
+      if (!dirent.isFile()) return;
+
+      const fileName = dirent.name;
+      if (
+        !/\.(ts|tsx)$/.test(fileName) ||
+        fileName.endsWith('.test.ts') ||
+        fileName.endsWith('.test.tsx') ||
+        fileName.endsWith('.stories.ts') ||
+        fileName.endsWith('.stories.tsx')
+      ) {
+        return;
+      }
+
+      const file = resolve(currentDir, fileName);
+      const entryName = relative(sourceDir, file)
+        .replace(/\\/g, '/')
+        .replace(/\.(ts|tsx)$/, '')
+        .replace(/(?:^|\/)index$/, '');
+
+      if (!entryName) return;
+
+      entries.push([`${entryPrefix}/${entryName}`, file] as const);
+    });
+  };
+
+  walk(sourceDir);
+
+  return Object.fromEntries(entries);
+};
+
+const createComponentEntries = (sourceDir: string, entryPrefix: string) => {
+  const entries: Array<readonly [string, string]> = [];
+
+  const walk = (currentDir: string) => {
+    readdirSync(currentDir, { withFileTypes: true }).forEach(dirent => {
+      if (!dirent.isDirectory()) return;
+      if (dirent.name === '__tests__') return;
+
+      const directory = resolve(currentDir, dirent.name);
+      const indexFile = resolve(directory, 'index.ts');
+
+      if (existsSync(indexFile)) {
+        const entryName = relative(sourceDir, directory).replace(/\\/g, '/');
+        entries.push([`${entryPrefix}/${entryName}`, indexFile] as const);
+        return;
+      }
+
+      walk(directory);
+    });
+  };
+
+  walk(sourceDir);
+
+  return Object.fromEntries(entries);
+};
+
+// One library entry per design-system component folder with an index.ts, exposed
+// publicly as `@mastra/playground-ui/components/<Name>` or a nested subpath such
+// as `@mastra/playground-ui/components/ai/plan`. Namespace folders without an
+// index.ts are only organizational and are not published as broad barrels.
+const componentEntries = createComponentEntries(componentsDir, 'components');
+
+const domainEntries = createPublicFileEntries(resolve(__dirname, 'src/domains'), 'domains');
+const eeEntries = createPublicFileEntries(resolve(__dirname, 'src/ee'), 'ee');
+const primitiveEntries = createPublicFileEntries(resolve(__dirname, 'src/ds/primitives'), 'primitives');
+const resizeEntries = createPublicFileEntries(resolve(__dirname, 'src/lib/resize'), 'resize');
+const storeEntries = createPublicFileEntries(resolve(__dirname, 'src/store'), 'store');
+
+// Public icon subpath entries, exposed as
+// `@mastra/playground-ui/icons/<IconName>` via the `./icons/*` package export.
+const iconsDir = resolve(__dirname, 'src/ds/icons');
+const iconEntries = Object.fromEntries(
+  readdirSync(iconsDir, { withFileTypes: true })
+    .filter(dirent => dirent.isFile())
+    .map(dirent => dirent.name)
+    .filter(
+      fileName =>
+        /\.(ts|tsx)$/.test(fileName) &&
+        fileName !== 'index.ts' &&
+        !fileName.endsWith('.stories.tsx') &&
+        !fileName.endsWith('.test.tsx') &&
+        !fileName.endsWith('.test.ts'),
+    )
+    .map(fileName => {
+      const entryName = fileName.replace(/\.(ts|tsx)$/, '');
+      return [`icons/${entryName}`, resolve(iconsDir, fileName)] as const;
     }),
 );
 
@@ -56,11 +174,18 @@ const libConfig: UserConfig = {
   build: {
     lib: {
       entry: {
-        index: resolve(__dirname, 'src/index.ts'),
-        utils: resolve(__dirname, 'src/utils.ts'),
+        style: resolve(__dirname, 'src/style.ts'),
         tokens: resolve(__dirname, 'src/ds/tokens/index.ts'),
         // Slashed keys make Rollup emit nested output: dist/components/<Name>.<format>.js
+        ...utilityEntries,
+        ...domainEntries,
+        ...eeEntries,
+        ...primitiveEntries,
+        ...resizeEntries,
+        ...storeEntries,
+        ...iconEntries,
         ...componentEntries,
+        ...hookEntries,
       },
       formats: ['es', 'cjs'],
       fileName: (format, entryName) => {
@@ -75,17 +200,9 @@ const libConfig: UserConfig = {
     rollupOptions: {
       external: ['motion/react'],
       output: {
-        // With ~98 entries, hoisted transitive imports would bloat every entry
+        // With ~300 entries, hoisted transitive imports would bloat every entry
         // chunk with empty side-effect imports of shared chunks.
         hoistTransitiveImports: false,
-        // Pin the global Tailwind stylesheet to a chunk named `index` so its
-        // compiled CSS keeps emitting as dist/index.css — the target of the
-        // public `./style.css` export. With many entries Rollup would
-        // otherwise attach it to an arbitrary shared chunk (and an arbitrary
-        // .css filename), breaking the export.
-        manualChunks(id) {
-          if (id === resolve(__dirname, 'src/index.css')) return 'index';
-        },
       },
     },
   },

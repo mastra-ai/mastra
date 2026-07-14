@@ -1,8 +1,12 @@
-import { Checkbox, ScrollArea, Txt, cn } from '@mastra/playground-ui';
+import { Checkbox } from '@mastra/playground-ui/components/Checkbox';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { SearchIcon } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
 import { useMemo, useState } from 'react';
 import { useAgentColor } from '../../../contexts/agent-color-context';
-import { AgentSearchbar } from '../agent-searchbar';
 
 export interface FilterableListItem {
   id: string;
@@ -51,14 +55,18 @@ export const FilterableList = ({
       className="flex h-full min-h-0 flex-col gap-3 border-r border-border1 py-6 px-6"
       data-testid={`${testIdPrefix}-filter`}
     >
-      <div className="shrink-0" data-testid={`${testIdPrefix}-filter-search`}>
-        <AgentSearchbar
-          onSearch={setSearch}
-          label={`Filter ${title.toLowerCase()}`}
-          placeholder={`Filter ${title.toLowerCase()}...`}
-          size="lg"
-          debounceMs={0}
-        />
+      <div className="shrink-0 rounded-full bg-surface3" data-testid={`${testIdPrefix}-filter-search`}>
+        <InputGroup variant="outline" size="lg">
+          <InputGroupAddon align="inline-start">
+            <SearchIcon />
+          </InputGroupAddon>
+          <InputGroupInput
+            type="search"
+            aria-label={`Filter ${title.toLowerCase()}`}
+            placeholder={`Filter ${title.toLowerCase()}...`}
+            onChange={event => setSearch(event.target.value)}
+          />
+        </InputGroup>
       </div>
 
       <div className="flex shrink-0 items-center gap-2 text-ui-xs">

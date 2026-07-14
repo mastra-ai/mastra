@@ -1,4 +1,5 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
+import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/select';
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
@@ -155,7 +156,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('h-4 w-4 opacity-60', transitions.colors)} />
+              <ChevronDown className={cn('size-4 opacity-60', transitions.colors)} />
             </span>
           }
         />
@@ -165,43 +166,72 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
 );
 SelectTrigger.displayName = 'SelectTrigger';
 
-export type SelectContentProps = Omit<SelectPrimitive.Popup.Props, 'className'> & {
-  className?: string;
-  /**
-   * Kept for API compatibility with the previous Radix API. Radix supported
-   * `position="popper" | "item-aligned"`; Base UI always uses popper-style
-   * positioning so this prop is accepted but has no effect.
-   */
-  position?: 'popper' | 'item-aligned';
-  /** Optional portal container, forwarded to `Select.Portal`. */
-  container?: HTMLElement | null;
-  side?: SelectPrimitive.Positioner.Props['side'];
-  align?: SelectPrimitive.Positioner.Props['align'];
-  sideOffset?: SelectPrimitive.Positioner.Props['sideOffset'];
-};
+type SelectContentPositionerProps = Omit<SelectPositionerProps, keyof SelectPopupProps>;
+
+export type SelectContentProps = Omit<SelectPopupProps, 'className'> &
+  SelectContentPositionerProps & {
+    className?: string;
+    /**
+     * Kept for API compatibility with the previous Radix API. Radix supported
+     * `position="popper" | "item-aligned"`; Base UI always uses popper-style
+     * positioning so this prop is accepted but has no effect.
+     */
+    position?: 'popper' | 'item-aligned';
+    /** Optional portal container, forwarded to `Select.Portal`. */
+    container?: HTMLElement | null;
+  };
 
 const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
   (
-    { className, children, position: _position, container, side = 'bottom', align = 'start', sideOffset = 4, ...props },
+    {
+      className,
+      children,
+      position: _position,
+      container,
+      side = 'bottom',
+      align = 'start',
+      sideOffset = 4,
+      alignItemWithTrigger = false,
+      anchor,
+      positionMethod,
+      alignOffset,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+      ...props
+    },
     ref,
   ) => {
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const positionerProps: SelectContentPositionerProps = {
+      side,
+      align,
+      sideOffset,
+      alignItemWithTrigger,
+      anchor,
+      positionMethod,
+      alignOffset,
+      collisionBoundary,
+      collisionPadding,
+      sticky,
+      arrowPadding,
+      disableAnchorTracking,
+      collisionAvoidance,
+    };
+
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
-        <SelectPrimitive.Positioner
-          className="z-50 outline-none"
-          side={side}
-          align={align}
-          sideOffset={sideOffset}
-          alignItemWithTrigger={false}
-        >
+        <SelectPrimitive.Positioner className="z-50 outline-none" {...positionerProps}>
           <SelectPrimitive.Popup
             ref={ref}
             className={cn(
-              'relative z-50 min-w-32 min-w-[var(--anchor-width)] max-h-dropdown-max-height max-h-[var(--available-height)] overflow-y-auto overflow-x-hidden rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog origin-[var(--transform-origin)]',
-              'data-[open]:animate-in data-[closed]:animate-out data-[closed]:fade-out-0 data-[open]:fade-in-0 data-[closed]:zoom-out-95 data-[open]:zoom-in-95',
+              'relative z-50 max-h-[min(var(--max-height-dropdown-max-height),var(--available-height))] min-w-[max(8rem,var(--anchor-width))] origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto rounded-xl border border-border1 bg-surface3 p-1 text-neutral4 shadow-dialog',
+              'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
               'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
               className,
             )}
@@ -224,7 +254,7 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-pointer select-none items-center gap-2.5 rounded-lg py-1.5 pl-2 pr-8 text-neutral4 text-ui-smd leading-ui-sm',
+      'relative flex w-full cursor-pointer items-center gap-2.5 rounded-lg py-1.5 pr-8 pl-2 text-ui-smd leading-ui-sm text-neutral4 select-none',
       'outline-none focus:outline-none focus-visible:outline-none',
       transitions.colors,
       'hover:bg-surface4 hover:text-neutral6',
@@ -236,9 +266,9 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
     )}
     {...props}
   >
-    <span className="absolute right-2 flex h-3.5 w-3.5 items-center justify-center">
+    <span className="absolute right-2 flex size-3.5 items-center justify-center">
       <SelectPrimitive.ItemIndicator>
-        <Check className="h-4 w-4 text-neutral6" />
+        <Check className="size-4 text-neutral6" />
       </SelectPrimitive.ItemIndicator>
     </span>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>

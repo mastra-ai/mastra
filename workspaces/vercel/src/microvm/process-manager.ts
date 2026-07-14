@@ -12,7 +12,7 @@
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
 import type { Command } from '@vercel/sandbox';
-import type { VercelMicroVMSandbox } from './index';
+import type { VercelSandbox } from './index';
 
 // =============================================================================
 // Process Handle
@@ -22,7 +22,7 @@ import type { VercelMicroVMSandbox } from './index';
  * Wraps a detached Vercel Sandbox {@link Command} to conform to Mastra's
  * ProcessHandle. Not exported — internal to this module.
  */
-class VercelMicroVMProcessHandle extends ProcessHandle {
+class VercelSandboxProcessHandle extends ProcessHandle {
   readonly pid: string;
 
   private readonly _command: Command;
@@ -132,7 +132,7 @@ class VercelMicroVMProcessHandle extends ProcessHandle {
   }
 
   async sendStdin(_data: string): Promise<void> {
-    throw new Error('VercelMicroVMSandbox does not support sending stdin to running processes.');
+    throw new Error('VercelSandbox does not support sending stdin to running processes.');
   }
 }
 
@@ -140,7 +140,7 @@ class VercelMicroVMProcessHandle extends ProcessHandle {
 // Process Manager
 // =============================================================================
 
-export interface VercelMicroVMProcessManagerOptions {
+export interface VercelSandboxProcessManagerOptions {
   env?: Record<string, string | undefined>;
 }
 
@@ -148,7 +148,7 @@ export interface VercelMicroVMProcessManagerOptions {
  * Vercel Sandbox implementation of SandboxProcessManager. Uses one detached
  * `runCommand` per spawned process.
  */
-export class VercelMicroVMProcessManager extends SandboxProcessManager<VercelMicroVMSandbox> {
+export class VercelSandboxProcessManager extends SandboxProcessManager<VercelSandbox> {
   async spawn(command: string, options: SpawnProcessOptions = {}): Promise<ProcessHandle> {
     const mergedEnv = { ...this.env, ...options.env };
     const env = Object.fromEntries(
@@ -165,7 +165,7 @@ export class VercelMicroVMProcessManager extends SandboxProcessManager<VercelMic
       detached: true,
     });
 
-    const handle = new VercelMicroVMProcessHandle(cmd, Date.now(), options);
+    const handle = new VercelSandboxProcessHandle(cmd, Date.now(), options);
 
     const streamingPromise = (async () => {
       for await (const log of cmd.logs()) {

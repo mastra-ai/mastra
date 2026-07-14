@@ -248,6 +248,77 @@ describe('createToolCallStep tool execution error handling', () => {
   });
 });
 
+describe('createToolCallStep FGA checks', () => {
+  afterEach(() => {
+    vi.clearAllMocks();
+    vi.restoreAllMocks();
+  });
+
+  it('should bypass membership resolution for a tenant-scoped trusted actor', async () => {
+    const controller = { enqueue: vi.fn() };
+    const suspend = vi.fn();
+    const streamState = { serialize: vi.fn().mockReturnValue('serialized-state') };
+    const messageList = createMessageList();
+    const toolResult = { ok: true };
+    const tools = {
+      'system-tool': {
+        execute: vi.fn().mockResolvedValue(toolResult),
+      },
+    };
+    const fgaProvider = {
+      require: vi.fn().mockResolvedValue(undefined),
+      check: vi.fn(),
+      filterAccessible: vi.fn(),
+    };
+    const requestContext = new RequestContext();
+    requestContext.set('organizationId', 'org-1');
+
+    const toolCallStep = createToolCallStep({
+      tools,
+      messageList,
+      controller,
+      runId: 'system-run-id',
+      streamState,
+      mastra: {
+        getServer: () => ({ fga: fgaProvider }),
+      },
+      actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+    } as any);
+
+    const result = await toolCallStep.execute(
+      makeBaseExecuteParams(suspend, {
+        requestContext,
+        writer: new ToolStream({
+          prefix: 'tool',
+          callId: 'system-call-id',
+          name: 'system-tool',
+          runId: 'system-run-id',
+        }),
+        inputData: {
+          toolCallId: 'system-call-id',
+          toolName: 'system-tool',
+          args: { value: 'test' },
+        },
+      }),
+    );
+
+    expect(fgaProvider.require).not.toHaveBeenCalled();
+    expect(tools['system-tool'].execute).toHaveBeenCalledWith(
+      { value: 'test' },
+      expect.objectContaining({
+        toolCallId: 'system-call-id',
+        actor: { actorKind: 'system', sourceWorkflow: 'nightly-workflow' },
+      }),
+    );
+    expect(result).toEqual({
+      result: toolResult,
+      toolCallId: 'system-call-id',
+      toolName: 'system-tool',
+      args: { value: 'test' },
+    });
+  });
+});
+
 describe('createToolCallStep tool approval workflow', () => {
   let controller: { enqueue: Mock };
   let suspend: Mock;
@@ -355,8 +426,14 @@ describe('createToolCallStep tool approval workflow', () => {
 
     const result = await toolCallStep.execute(makeExecuteParams({ inputData, resumeData }));
 
+    // A declined approval returns the decision (not a `result` string) so it persists as
+    // `output-denied` with the approval object; the reason carries the existing message.
     expect(result).toEqual({
-      result: 'Tool call was not approved by the user',
+      approval: {
+        id: inputData.toolCallId,
+        approved: false,
+        reason: 'Tool call was not approved by the user',
+      },
       ...inputData,
     });
     expectNoToolExecution();
@@ -394,9 +471,15 @@ describe('createToolCallStep tool approval workflow', () => {
       }),
     );
     expect(suspend).not.toHaveBeenCalled();
+    // An approved approval-gated tool tags its result with the approval grant so it
+    // round-trips on recall as `approval: { approved: true }`.
     expect(result).toEqual({
       result: toolResult,
       ...inputData,
+      approval: {
+        id: inputData.toolCallId,
+        approved: true,
+      },
     });
   });
 });

@@ -96,7 +96,11 @@ import type {
   ListTracesArgs,
   ListTracesResponse,
   ObservabilityStorageStrategy,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
   ScoreRecord,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import type { DbClient } from '../../../client';
@@ -109,6 +113,10 @@ import {
   qualifiedTable,
   schemaDDL,
   TABLE_DISCOVERY,
+  TABLE_FEEDBACK_EVENTS,
+  TABLE_LOG_EVENTS,
+  TABLE_METRIC_EVENTS,
+  TABLE_SCORE_EVENTS,
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import * as discoveryOps from './discovery';
@@ -116,10 +124,11 @@ import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { detectPartman, detectTimescale, setupPartitioning } from './partitioning';
+import { detectPartman, detectTimescale, resolveMode, setupPartitioning } from './partitioning';
 import type { PartitioningOptions, PartitionMode } from './partitioning';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
+import { prunePartitionedTable, pruneTimescaleTable, retentionCutoff } from './retention';
 import * as scoresOps from './scores';
 import * as tracesOps from './traces';
 import * as tracingOps from './tracing';
@@ -244,6 +253,61 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   /** Resolved partition mode after init(). Useful for tests and diagnostics. */
   get partitionMode(): PartitionMode | undefined {
     return this.#partitionMode;
+  }
+
+  // -------------------------------------------------------------------------
+  // Retention
+  // -------------------------------------------------------------------------
+
+  /**
+   * All five signal tables are insert-only growth tables. The anchor column is
+   * each table's partition / chunk key, so age-based expiry drops whole day
+   * partitions instead of deleting rows (see `./retention.ts`). `indexed: true`
+   * reflects that expiry never scans — it acts on partition bounds.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    spans: { table: TABLE_SPAN_EVENTS, column: 'endedAt', indexed: true },
+    metrics: { table: TABLE_METRIC_EVENTS, column: 'timestamp', indexed: true },
+    logs: { table: TABLE_LOG_EVENTS, column: 'timestamp', indexed: true },
+    scores: { table: TABLE_SCORE_EVENTS, column: 'timestamp', indexed: true },
+    feedback: { table: TABLE_FEEDBACK_EVENTS, column: 'timestamp', indexed: true },
+  };
+
+  /**
+   * Expire signal events older than each table's `maxAge` by dropping whole
+   * day partitions (native / pg_partman) or chunks (Timescale). Only
+   * partitions wholly older than the cutoff are dropped, so the effective
+   * granularity is one day. Each partition drop counts as one batch for
+   * `maxBatches` / `maxRows` / abort-signal purposes; `deleted` reports the
+   * row count of the dropped partitions.
+   */
+  override async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    return this.#run('VNEXT_PRUNE', async () => {
+      // Resolve lazily so prune() works on a domain that was constructed but
+      // not init()-ed in this process (e.g. a dedicated cron worker).
+      const mode = (this.#partitionMode ??= await resolveMode(this.#client, this.#partitioning));
+
+      const results: PruneResult[] = [];
+      const now = Date.now();
+
+      for (const [key, entry] of Object.entries(ObservabilityStoragePostgresVNext.retentionTables)) {
+        const policy = policies[key];
+        if (!policy) continue;
+
+        if (options?.signal?.aborted) {
+          results.push({ domain: 'observability', table: entry.table, deleted: 0, done: false });
+          continue;
+        }
+
+        const cutoff = retentionCutoff(policy, now);
+        const args = { client: this.#client, schema: this.#schema, table: entry.table, cutoff, options };
+        const outcome = mode === 'timescale' ? await pruneTimescaleTable(args) : await prunePartitionedTable(args);
+
+        results.push({ domain: 'observability', table: entry.table, deleted: outcome.deleted, done: outcome.done });
+      }
+
+      return results;
+    });
   }
 
   public override get observabilityStrategy(): {

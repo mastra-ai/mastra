@@ -46,18 +46,65 @@ export type AgentScorerConfig = {
   trajectory?: MastraScorer<any, any, any, any>[];
 };
 
+/** Threshold configuration: a number implies minimum, or an object with min/max bounds. */
+export type ThresholdConfig = number | { min?: number; max?: number };
+
+/** A scorer with an associated pass/fail threshold. */
+export type ScorerWithThreshold = {
+  scorer: MastraScorer<any, any, any, any>;
+  /** A number implies minimum threshold. Use { min, max } for range-based checks. */
+  threshold: ThresholdConfig;
+};
+
+/** A scorer entry: either a bare scorer or one with a threshold. */
+export type ScorerEntry = MastraScorer<any, any, any, any> | ScorerWithThreshold;
+
+/** Result of a gate evaluation for a single data item. */
+export type GateResult = {
+  id: string;
+  passed: boolean;
+  score: number;
+};
+
+/** Verdict of an eval run. */
+export type EvalVerdict = 'passed' | 'scored' | 'failed';
+
 type RunEvalsResult = {
   scores: Record<string, any>;
   summary: {
     totalItems: number;
   };
+  /** Present when `gates` or threshold-bearing scorers are provided. */
+  verdict?: EvalVerdict;
+  /** Per-gate results (averaged across all data items). */
+  gateResults?: GateResult[];
+  /** Per-threshold-scorer results (averaged across all data items). */
+  thresholdResults?: Array<{ id: string; passed: boolean; averageScore: number; threshold: ThresholdConfig }>;
 };
 
-// Agent with scorers array
+// Agent with gates (scorers optional) — gate-only runs are allowed
 export function runEvals<TAgent extends Agent>(config: {
   data: RunEvalsDataItem<TAgent>[];
-  scorers: MastraScorer<any, any, any, any>[];
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates: MastraScorer<any, any, any, any>[];
+  scorers?: ScorerEntry[];
   target: TAgent;
+  targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
+  onItemComplete?: (params: {
+    item: RunEvalsDataItem<TAgent>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
+    scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
+  }) => void | Promise<void>;
+  concurrency?: number;
+}): Promise<RunEvalsResult>;
+
+// Agent with scorers array (gates optional)
+export function runEvals<TAgent extends Agent>(config: {
+  data: RunEvalsDataItem<TAgent>[];
+  scorers: ScorerEntry[];
+  target: TAgent;
+  /** Gates: scorers that must score 1.0 for the run to pass. */
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?: Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
@@ -118,8 +165,9 @@ export function runEvals<TAgent extends Agent>(config: {
 
 export async function runEvals(config: {
   data: RunEvalsDataItem<any>[];
-  scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
+  scorers?: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
   target: Agent | Workflow;
+  gates?: MastraScorer<any, any, any, any>[];
   targetOptions?:
     | Omit<AgentExecutionOptions<any>, 'scorers' | 'returnScorerData' | 'requestContext'>
     | WorkflowRunOptions;
@@ -130,12 +178,29 @@ export async function runEvals(config: {
   }) => void | Promise<void>;
   concurrency?: number;
 }): Promise<RunEvalsResult> {
-  const { data, scorers, target, targetOptions, onItemComplete, concurrency = 1 } = config;
+  const { data, scorers = [], gates, target, targetOptions, onItemComplete, concurrency = 1 } = config;
 
-  validateEvalsInputs(data, scorers, target);
+  // Normalize ScorerEntry[] into bare scorers + threshold metadata
+  const { bareScorers, thresholdMap } = normalizeScorerEntries(scorers);
+
+  validateEvalsInputs(data, bareScorers, target, gates);
 
   let totalItems = 0;
   const scoreAccumulator = new ScoreAccumulator();
+
+  // Track gate scores per gate across all items
+  const gateScoresByGateId: Record<string, number[]> = {};
+  if (gates) {
+    for (const gate of gates) {
+      gateScoresByGateId[gate.id] = [];
+    }
+  }
+
+  // Track threshold scorer scores across items
+  const thresholdScoresByScorerID: Record<string, number[]> = {};
+  for (const scorerId of thresholdMap.keys()) {
+    thresholdScoresByScorerID[scorerId] = [];
+  }
 
   // Get storage from target's Mastra instance if available
   // Agent uses getMastraInstance(), Workflow uses .mastra getter
@@ -147,8 +212,40 @@ export async function runEvals(config: {
     data,
     async (item: RunEvalsDataItem<any>) => {
       const targetResult = await executeTarget(target, item, targetOptions);
-      const scorerResults = await runScorers(scorers, targetResult, item, storage);
+
+      // Run gates first
+      if (gates) {
+        for (const gate of gates) {
+          try {
+            const gateScore = await gate.run({
+              input: targetResult.scoringData?.input,
+              output: targetResult.scoringData?.output,
+              groundTruth: item.groundTruth,
+              requestContext: item.requestContext,
+              scoreSource: 'experiment',
+              targetScope: 'span',
+              targetEntityType: targetResult.entityType,
+              targetTraceId: targetResult.traceId,
+              targetSpanId: targetResult.spanId,
+            });
+            gateScoresByGateId[gate.id]!.push(gateScore.score as number);
+          } catch {
+            // Gate failure = score 0
+            gateScoresByGateId[gate.id]!.push(0);
+          }
+        }
+      }
+
+      const scorerResults = await runScorers(bareScorers, targetResult, item, storage);
       scoreAccumulator.addScores(scorerResults);
+
+      // Track threshold scores
+      for (const [scorerId] of thresholdMap) {
+        const result = scorerResults[scorerId];
+        if (result && typeof result === 'object' && 'score' in result) {
+          thresholdScoresByScorerID[scorerId]!.push(result.score);
+        }
+      }
 
       // Save scores to storage if available
       if (storage) {
@@ -174,12 +271,124 @@ export async function runEvals(config: {
     { concurrency },
   );
 
-  return {
+  const result: RunEvalsResult = {
     scores: scoreAccumulator.getAverageScores(),
     summary: {
       totalItems,
     },
   };
+
+  // Compute verdict if gates or thresholds are present
+  const hasGates = gates && gates.length > 0;
+  const hasThresholds = thresholdMap.size > 0;
+
+  if (hasGates || hasThresholds) {
+    // Compute gate results
+    let allGatesPassed = true;
+    if (hasGates) {
+      result.gateResults = [];
+      for (const gate of gates!) {
+        const scores = gateScoresByGateId[gate.id]!;
+        const avgScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+        const passed = avgScore >= 1.0;
+        if (!passed) allGatesPassed = false;
+        result.gateResults.push({ id: gate.id, passed, score: avgScore });
+      }
+    }
+
+    // Compute threshold results
+    let allThresholdsPassed = true;
+    if (hasThresholds) {
+      result.thresholdResults = [];
+      for (const [scorerId, threshold] of thresholdMap) {
+        const scores = thresholdScoresByScorerID[scorerId]!;
+        const averageScore = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+        const passed = checkThresholdPassed(averageScore, threshold);
+        if (!passed) allThresholdsPassed = false;
+        result.thresholdResults.push({ id: scorerId, passed, averageScore, threshold });
+      }
+    }
+
+    // Determine verdict
+    if (!allGatesPassed) {
+      result.verdict = 'failed';
+    } else if (!allThresholdsPassed) {
+      result.verdict = 'scored';
+    } else {
+      result.verdict = 'passed';
+    }
+  }
+
+  return result;
+}
+
+function checkThresholdPassed(score: number, threshold: ThresholdConfig): boolean {
+  if (typeof threshold === 'number') {
+    return score >= threshold;
+  }
+  if (threshold.min !== undefined && score < threshold.min) return false;
+  if (threshold.max !== undefined && score > threshold.max) return false;
+  return true;
+}
+
+function isScorerWithThreshold(entry: ScorerEntry): entry is ScorerWithThreshold {
+  return typeof entry === 'object' && 'scorer' in entry && 'threshold' in entry;
+}
+
+function validateThresholdBound(value: number, label: string, scorerId: string): void {
+  if (!Number.isFinite(value) || value < 0 || value > 1) {
+    throw new MastraError({
+      domain: 'SCORER',
+      id: 'INVALID_SCORER_THRESHOLD',
+      category: 'USER',
+      text: `${label} threshold for scorer "${scorerId}" must be a finite number between 0 and 1, got ${value}`,
+    });
+  }
+}
+
+function normalizeScorerEntries(
+  scorers: ScorerEntry[] | MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
+): {
+  bareScorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig;
+  thresholdMap: Map<string, ThresholdConfig>;
+} {
+  const thresholdMap = new Map<string, ThresholdConfig>();
+
+  // Non-array configs (WorkflowScorerConfig / AgentScorerConfig) pass through unchanged
+  if (!Array.isArray(scorers)) {
+    return { bareScorers: scorers, thresholdMap };
+  }
+
+  const bareScorers: MastraScorer<any, any, any, any>[] = [];
+  for (const entry of scorers) {
+    if (isScorerWithThreshold(entry)) {
+      const { threshold } = entry;
+      if (typeof threshold === 'number') {
+        validateThresholdBound(threshold, 'Minimum', entry.scorer.id);
+      } else {
+        if (threshold.min !== undefined) {
+          validateThresholdBound(threshold.min, 'Minimum', entry.scorer.id);
+        }
+        if (threshold.max !== undefined) {
+          validateThresholdBound(threshold.max, 'Maximum', entry.scorer.id);
+        }
+        if (threshold.min !== undefined && threshold.max !== undefined && threshold.min > threshold.max) {
+          throw new MastraError({
+            domain: 'SCORER',
+            id: 'INVALID_SCORER_THRESHOLD',
+            category: 'USER',
+            text: `Threshold for scorer "${entry.scorer.id}" has min (${threshold.min}) greater than max (${threshold.max})`,
+          });
+        }
+      }
+      bareScorers.push(entry.scorer);
+      thresholdMap.set(entry.scorer.id, threshold);
+    } else {
+      bareScorers.push(entry);
+    }
+  }
+
+  return { bareScorers, thresholdMap };
 }
 
 function isWorkflow(target: Agent | Workflow): target is Workflow {
@@ -206,7 +415,9 @@ function validateEvalsInputs(
   data: RunEvalsDataItem<any>[],
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
   target: Agent | Workflow,
+  gates?: MastraScorer<any, any, any, any>[],
 ): void {
+  const hasGates = !!gates && gates.length > 0;
   if (data.length === 0) {
     throw new MastraError({
       domain: 'SCORER',
@@ -230,12 +441,14 @@ function validateEvalsInputs(
 
   // Validate scorers
   if (Array.isArray(scorers)) {
-    if (scorers.length === 0) {
+    // Gate-only runs are valid: a non-empty gates array satisfies the
+    // "at least one scorer" requirement even when scorers is empty.
+    if (scorers.length === 0 && !hasGates) {
       throw new MastraError({
         domain: 'SCORER',
         id: 'NO_SCORERS_PROVIDED',
         category: 'USER',
-        text: 'At least one scorer must be provided',
+        text: 'At least one scorer or gate must be provided',
       });
     }
   } else if (isWorkflow(target) && isWorkflowScorerConfig(scorers)) {

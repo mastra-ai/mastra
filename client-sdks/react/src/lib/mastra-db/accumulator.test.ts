@@ -1,4 +1,5 @@
 import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
+import { MessageList } from '@mastra/core/agent/message-list';
 import type { ChunkType } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
 import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
@@ -298,6 +299,14 @@ const fileChunkPlain = (mimeType: string, data: string): ChunkType =>
     payload: { mimeType, data, base64: false },
   }) as unknown as ChunkType;
 
+const fileChunkBinary = (mimeType: string, data: Uint8Array): ChunkType =>
+  ({
+    type: 'file',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: { mimeType, data },
+  }) as unknown as ChunkType;
+
 const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkType =>
   ({
     type: 'is-task-complete',
@@ -311,6 +320,26 @@ const isTaskCompleteChunk = (passed: boolean, suppressFeedback = false): ChunkTy
       timedOut: false,
       reason: 'done',
       maxIterationReached: false,
+    },
+  }) as unknown as ChunkType;
+
+const goalChunk = (passed: boolean): ChunkType =>
+  ({
+    type: 'goal',
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload: {
+      objective: 'Ship the feature',
+      iteration: 1,
+      maxRuns: 50,
+      passed,
+      status: passed ? 'done' : 'active',
+      results: [],
+      reason: passed ? 'Goal achieved' : 'Not yet',
+      duration: 5,
+      timedOut: false,
+      maxRunsReached: false,
+      suppressFeedback: false,
     },
   }) as unknown as ChunkType;
 
@@ -873,18 +902,35 @@ describe('accumulateChunk - content', () => {
 
   it('file with base64 string data produces a base64 data URL', () => {
     const out = reduce([startChunk(), fileChunkBase64('image/png', 'aGVsbG8=')]);
-    const filePart = out[0].content.parts.find(p => p.type === 'file') as unknown as {
-      url: string;
-      mediaType: string;
-    };
-    expect(filePart.mediaType).toBe('image/png');
-    expect(filePart.url).toBe('data:image/png;base64,aGVsbG8=');
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'image/png',
+      data: 'data:image/png;base64,aGVsbG8=',
+    });
   });
 
   it('file with plain string data percent-encodes into a data URL', () => {
     const out = reduce([startChunk(), fileChunkPlain('text/plain', 'hello world')]);
-    const filePart = out[0].content.parts.find(p => p.type === 'file') as unknown as { url: string };
-    expect(filePart.url).toBe('data:text/plain,hello%20world');
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'text/plain',
+      data: 'data:text/plain,hello%20world',
+    });
+  });
+
+  it('file with large Uint8Array binary data does not overflow the call stack', () => {
+    const bytes = new Uint8Array(200_000);
+    bytes.fill(0x41);
+    const out = reduce([startChunk(), fileChunkBinary('application/octet-stream', bytes)]);
+    const filePart = out[0].content.parts.find(p => p.type === 'file');
+    const expectedBase64 = Buffer.from(bytes).toString('base64');
+    expect(filePart).toMatchObject({
+      type: 'file',
+      mimeType: 'application/octet-stream',
+      data: `data:application/octet-stream;base64,${expectedBase64}`,
+    });
   });
 
   it('is-task-complete emits an assistant feedback message with completionResult', () => {
@@ -899,6 +945,15 @@ describe('accumulateChunk - content', () => {
     const initial = reduce([startChunk()]);
     const out = reduce([isTaskCompleteChunk(true, true)], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  // The goal chunk is a consumer-only signal: the core goal step already injects
+  // its feedback into the message history, so the accumulator must NOT surface it
+  // as its own DB message (unlike is-task-complete).
+  it('goal chunk returns the conversation unchanged (no DB message)', () => {
+    const initial = reduce([startChunk()]);
+    expect(reduce([goalChunk(false)], streamMeta(), initial)).toEqual(initial);
+    expect(reduce([goalChunk(true)], streamMeta(), initial)).toEqual(initial);
   });
 });
 
@@ -1072,7 +1127,28 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(user?.id).toBe('sig-1');
     expect(user?.content.parts).toEqual([
       { type: 'text', text: 'see this' },
-      { type: 'file', mediaType: 'image/png', url: 'data:image/png;base64,abc123', filename: 'image.png' },
+      { type: 'file', mimeType: 'image/png', data: 'data:image/png;base64,abc123', filename: 'image.png' },
+    ]);
+  });
+
+  it('signal file parts convert to AI SDK UI messages without crashing', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', [
+        { type: 'text', text: 'have a look at this' },
+        { type: 'file', data: 'https://example.com/shot.png', mediaType: 'image/png' },
+      ]),
+    ]);
+
+    const user = out.find(m => m.role === 'user');
+    expect(user).toBeDefined();
+
+    const uiMessages = new MessageList().add([user!], 'memory').get.all.aiV6.ui();
+    expect(uiMessages).toHaveLength(1);
+    // Issue #19356 expected behavior: the attachment survives conversion as a
+    // usable AI SDK UI file part, with the original URL and media type intact.
+    expect(uiMessages[0]?.parts.filter(part => part.type === 'file')).toEqual([
+      { type: 'file', url: 'https://example.com/shot.png', mediaType: 'image/png' },
     ]);
   });
 });

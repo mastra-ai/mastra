@@ -1,7 +1,7 @@
-import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
 import { useMainSidebar } from './main-sidebar-context';
+import { Drawer, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
 import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
 import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 import { cn } from '@/lib/utils';
@@ -172,7 +172,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     [isCollapsed, width, minWidth, maxWidth, setWidth, expand, commit, toggleSidebar],
   );
 
-  // Mobile: render as an off-canvas drawer via Base UI Dialog.
+  // Mobile: render as an off-canvas drawer via Base UI Drawer.
   // Auto-close on link navigation (standard drawer UX). Don't gate on
   // `defaultPrevented` — client-side router links call `preventDefault()` for
   // SPA navigation, and we still want to close the drawer when they do.
@@ -191,38 +191,24 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
 
   if (isMobile) {
     return (
-      <DialogPrimitive.Root open={openMobile} onOpenChange={setOpenMobile}>
-        <DialogPrimitive.Portal>
-          <DialogPrimitive.Backdrop
-            className={cn(
-              'fixed inset-0 z-40 bg-overlay backdrop-blur-sm',
-              'opacity-100 transition-opacity duration-200 ease-out motion-reduce:transition-none',
-              'data-[starting-style]:opacity-0 data-[ending-style]:opacity-0 data-[ending-style]:duration-150 data-[ending-style]:ease-in',
-            )}
-          />
-          <DialogPrimitive.Popup
-            className={cn(
-              'fixed inset-y-0 left-0 z-50 flex h-full flex-col',
-              'w-3/4 max-w-(--sidebar-width-mobile)',
-              'bg-surface2 shadow-xl',
-              'data-[open]:animate-in data-[closed]:animate-out',
-              'data-[open]:slide-in-from-left data-[closed]:slide-out-to-left',
-              'duration-200',
-              className,
-            )}
-          >
-            <VisuallyHidden asChild>
-              <DialogPrimitive.Title>Navigation</DialogPrimitive.Title>
-            </VisuallyHidden>
-            <VisuallyHidden asChild>
-              <DialogPrimitive.Description>Primary site navigation drawer</DialogPrimitive.Description>
-            </VisuallyHidden>
-            <div onClick={closeOnAnchor} className="flex flex-col h-full min-h-0 px-4 py-2 overflow-hidden">
-              {children}
-            </div>
-          </DialogPrimitive.Popup>
-        </DialogPrimitive.Portal>
-      </DialogPrimitive.Root>
+      <Drawer side="left" open={openMobile} onOpenChange={setOpenMobile}>
+        <DrawerContent
+          className={cn(
+            'w-3/4 max-w-(--sidebar-width-mobile) overflow-hidden rounded-none border-0 bg-surface2 shadow-xl',
+            className,
+          )}
+        >
+          <VisuallyHidden asChild>
+            <DrawerTitle>Navigation</DrawerTitle>
+          </VisuallyHidden>
+          <VisuallyHidden asChild>
+            <DrawerDescription>Primary site navigation drawer</DrawerDescription>
+          </VisuallyHidden>
+          <div onClick={closeOnAnchor} className="flex h-full min-h-0 flex-col overflow-hidden px-4 py-2">
+            {children}
+          </div>
+        </DrawerContent>
+      </Drawer>
     );
   }
 
@@ -231,7 +217,7 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
   return (
     <div
       className={cn(
-        'sidebar-layout group/sidebar relative shrink-0 self-stretch min-h-0',
+        'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch',
         'w-(--sidebar-width)',
         'transition-[width] duration-220 ease-[cubic-bezier(0.32,0.72,0,1)]',
         'motion-reduce:transition-none',
@@ -243,10 +229,10 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
     >
       <div
         className={cn(
-          'flex flex-col h-full min-h-0 overflow-hidden',
+          'flex h-full min-h-0 flex-col overflow-hidden',
           'transition-opacity duration-200 motion-reduce:transition-none',
           isCollapsed ? 'px-2' : 'px-4',
-          isHidden && 'opacity-0 pointer-events-none px-0',
+          isHidden && 'pointer-events-none px-0 opacity-0',
         )}
       >
         {children}
@@ -278,8 +264,8 @@ export function MainSidebarRoot({ children, className }: MainSidebarRootProps) {
         <ResizeHandleIndicator
           className={cn(
             'group-hover:opacity-100',
-            'group-focus-visible:opacity-100 group-focus-visible:via-accent1',
-            'in-data-[sidebar-gesture=active]:opacity-100 in-data-[sidebar-gesture=active]:via-neutral6/45',
+            'group-focus-visible:via-accent1 group-focus-visible:opacity-100',
+            'in-data-[sidebar-gesture=active]:via-neutral6/45 in-data-[sidebar-gesture=active]:opacity-100',
           )}
         />
       </div>

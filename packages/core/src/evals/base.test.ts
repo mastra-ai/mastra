@@ -195,8 +195,8 @@ describe('createScorer', () => {
       expect(result).toMatchSnapshot();
     });
 
-    it('forwards judge.jsonPromptInjection to agent.generate', async () => {
-      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+    it('forwards judge.jsonPromptInjection to agent.stream', async () => {
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
         const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
 
@@ -216,15 +216,223 @@ describe('createScorer', () => {
 
         await scorer.run(testData.scoringInput);
 
-        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(true);
       } finally {
-        generateSpy.mockRestore();
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('forwards judge memory to the internal judge agent run', async () => {
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ score: 1 }) } as any);
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+        const memory = { id: 'judge-memory' } as any;
+
+        const scorer = createScorer({
+          id: 'judge-memory-scorer',
+          name: 'judge-memory-scorer',
+          description: 'Verifies scorer judge memory plumbing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            memory,
+            defaultMemoryOptions: {
+              thread: {
+                id: 'thread-1-goal-1',
+                metadata: { goalJudge: true, parentThreadId: 'thread-1', goalId: 'goal-1' },
+              },
+              resource: 'resource-1',
+            },
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.memory).toEqual({
+          thread: {
+            id: 'thread-1-goal-1',
+            metadata: { goalJudge: true, parentThreadId: 'thread-1', goalId: 'goal-1' },
+          },
+          resource: 'resource-1',
+        });
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('merges per-step judge memory options onto scorer defaults', async () => {
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ value: 1 }) } as any);
+      try {
+        const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
+        const memory = { id: 'judge-memory' } as any;
+
+        const scorer = createScorer({
+          id: 'judge-memory-merge-scorer',
+          name: 'judge-memory-merge-scorer',
+          description: 'Verifies per-step judge memory options merge with defaults',
+          judge: {
+            model,
+            instructions: 'Top-level instructions',
+            memory,
+            defaultMemoryOptions: {
+              thread: 'default-thread',
+              resource: 'default-resource',
+              options: { lastMessages: 3 } as any,
+            },
+          },
+        })
+          .analyze({
+            description: 'analyze',
+            outputSchema: z.object({ value: z.number() }),
+            createPrompt: () => 'analyze this',
+            judge: {
+              model,
+              instructions: 'Step instructions',
+              memory: {
+                thread: 'step-thread',
+                options: { semanticRecall: { topK: 2 } } as any,
+              },
+            },
+          })
+          .generateScore(({ results }) => results.analyzeStepResult?.value ?? 0);
+
+        await scorer.run(testData.scoringInput);
+
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
+        expect(options?.memory).toEqual({
+          thread: 'step-thread',
+          resource: 'default-resource',
+          options: { lastMessages: 3, semanticRecall: { topK: 2 } },
+        });
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('exposes the internal judge stream when it starts', async () => {
+      let resolveObject!: (value: { score: number }) => void;
+      const judgeStream = {
+        object: new Promise(resolve => (resolveObject = resolve)),
+        fullStream: new ReadableStream(),
+      } as any;
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream').mockResolvedValue(judgeStream);
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+        const onStream = vi.fn(() => resolveObject({ score: 1 }));
+
+        const scorer = createScorer({
+          id: 'judge-stream-scorer',
+          name: 'judge-stream-scorer',
+          description: 'Verifies scorer judge stream observer plumbing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            onStream,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        expect(onStream).toHaveBeenCalledWith(judgeStream);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('forwards scorer-level judge processors to the internal judge agent', async () => {
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ score: 1 }) } as any);
+      try {
+        const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+        const inputProcessor = { id: 'test-input-processor', processInput: ({ messages }: any) => messages };
+        const outputProcessor = { id: 'test-output-processor', processOutputResult: ({ messages }: any) => messages };
+        const errorProcessor = { id: 'test-error-retry-processor', processAPIError: () => ({ retry: true }) };
+
+        const scorer = createScorer({
+          id: 'judge-processors-scorer',
+          name: 'judge-processors-scorer',
+          description: 'Verifies scorer judge processor plumbing',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+            inputProcessors: [inputProcessor],
+            outputProcessors: [outputProcessor],
+            errorProcessors: [errorProcessor],
+            maxProcessorRetries: 3,
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        await scorer.run(testData.scoringInput);
+
+        const judge = streamSpy.mock.instances[0] as Agent;
+        expect(await judge.listConfiguredInputProcessors()).toContain(inputProcessor);
+        expect(await judge.listConfiguredOutputProcessors()).toContain(outputProcessor);
+        expect(await judge.listErrorProcessors()).toContain(errorProcessor);
+      } finally {
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('lets the per-step judge override the scorer-level error processors', async () => {
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValue({ object: Promise.resolve({ value: 1 }) } as any);
+      try {
+        const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
+        const scorerLevelErrorProcessor = { id: 'scorer-error-processor', processAPIError: () => ({ retry: true }) };
+        const stepLevelErrorProcessor = { id: 'step-error-processor', processAPIError: () => ({ retry: true }) };
+
+        const scorer = createScorer({
+          id: 'judge-processors-override-scorer',
+          name: 'judge-processors-override-scorer',
+          description: 'Per-step override of judge error processors',
+          judge: {
+            model,
+            instructions: 'Top-level instructions',
+            errorProcessors: [scorerLevelErrorProcessor],
+          },
+        })
+          .analyze({
+            description: 'analyze',
+            outputSchema: z.object({ value: z.number() }),
+            createPrompt: () => 'analyze this',
+            judge: {
+              model,
+              instructions: 'Step instructions',
+              errorProcessors: [stepLevelErrorProcessor],
+            },
+          })
+          .generateScore(({ results }) => results.analyzeStepResult?.value ?? 0);
+
+        await scorer.run(testData.scoringInput);
+
+        const judge = streamSpy.mock.instances[0] as Agent;
+        const errorProcessors = await judge.listErrorProcessors();
+        expect(errorProcessors).toContain(stepLevelErrorProcessor);
+        expect(errorProcessors).not.toContain(scorerLevelErrorProcessor);
+      } finally {
+        streamSpy.mockRestore();
       }
     });
 
     it('lets the per-step judge override the scorer-level jsonPromptInjection', async () => {
-      const generateSpy = vi.spyOn(Agent.prototype, 'generate');
+      const streamSpy = vi.spyOn(Agent.prototype, 'stream');
       try {
         const model = createMockModel({ mockText: { value: 1 }, version: 'v2' });
 
@@ -252,10 +460,46 @@ describe('createScorer', () => {
 
         await scorer.run(testData.scoringInput);
 
-        const [, options] = (generateSpy.mock.calls[0] ?? []) as any[];
+        const [, options] = (streamSpy.mock.calls[0] ?? []) as any[];
         expect(options?.structuredOutput?.jsonPromptInjection).toBe(false);
       } finally {
-        generateSpy.mockRestore();
+        streamSpy.mockRestore();
+      }
+    });
+
+    it('retries the judge with jsonPromptInjection when the first attempt yields no structured object', async () => {
+      // Regression guard: a judge model can resolve *without throwing* but
+      // produce no parseable structured object. The judge must recover via the
+      // jsonPromptInjection retry instead of crashing when it reads result.object.
+      const model = createMockModel({ mockText: { score: 1 }, version: 'v2' });
+      const streamSpy = vi
+        .spyOn(Agent.prototype, 'stream')
+        .mockResolvedValueOnce({ object: Promise.resolve(undefined) } as any)
+        .mockResolvedValueOnce({ object: Promise.resolve({ score: 1 }) } as any);
+      try {
+        const scorer = createScorer({
+          id: 'json-fallback-recovery-scorer',
+          name: 'json-fallback-recovery-scorer',
+          description: 'Recovers from an undefined structured object via jsonPromptInjection',
+          judge: {
+            model,
+            instructions: 'Test instructions',
+          },
+        }).generateScore({
+          description: 'score',
+          createPrompt: () => 'score this',
+        });
+
+        const result = await scorer.run(testData.scoringInput);
+
+        // Two stream calls: the failed first attempt + the jsonPromptInjection retry.
+        expect(streamSpy).toHaveBeenCalledTimes(2);
+        expect(((streamSpy.mock.calls as any)[0]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBeFalsy();
+        expect(((streamSpy.mock.calls as any)[1]?.[1] as any)?.structuredOutput?.jsonPromptInjection).toBe(true);
+        // The scorer recovered and produced the retried score.
+        expect(result.score).toBe(1);
+      } finally {
+        streamSpy.mockRestore();
       }
     });
   });
