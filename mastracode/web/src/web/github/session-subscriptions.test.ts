@@ -59,12 +59,19 @@ beforeEach(() => {
 });
 
 describe('parseCreatedPullRequest', () => {
-  it('extracts one canonical PR URL from a successful direct gh pr create command', () => {
+  it.each([
+    { command: 'gh pr create --draft --title "Fix"', output: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' } },
+    {
+      command:
+        'gh pr create --head factory/issue-6 --base main --draft --title "Fix" --body-file /tmp/pr-body.md\nstatus=$?\nrm /tmp/pr-body.md\nexit $status',
+      output: { result: 'https://github.com/mastra-ai/mastra/pull/123\n' },
+    },
+  ])('extracts one canonical PR URL from successful execute_command output', ({ command, output }) => {
     expect(
       parseCreatedPullRequest({
         toolName: 'execute_command',
-        input: { command: 'gh pr create --draft --title "Fix"' },
-        output: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' },
+        input: { command },
+        output,
       }),
     ).toBe('https://github.com/mastra-ai/mastra/pull/123');
   });

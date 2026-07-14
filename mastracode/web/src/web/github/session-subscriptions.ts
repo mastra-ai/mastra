@@ -131,7 +131,8 @@ export function parseCreatedPullRequest(context: { toolName: string; input: unkn
   if (typeof command !== 'string' || !/^\s*gh\s+pr\s+create(?:\s|$)/.test(command) || /(?:&&|\|\||[;|`])/.test(command)) {
     return undefined;
   }
-  const stdout = typeof context.output === 'string' ? context.output : (context.output as { stdout?: unknown } | undefined)?.stdout;
+  const output = context.output as { stdout?: unknown; result?: unknown } | undefined;
+  const stdout = typeof context.output === 'string' ? context.output : (output?.stdout ?? output?.result);
   if (typeof stdout !== 'string') return undefined;
   const urls = stdout.match(/https:\/\/github\.com\/[^\s/]+\/[^\s/]+\/pull\/\d+/g) ?? [];
   return urls.length === 1 ? urls[0] : undefined;
