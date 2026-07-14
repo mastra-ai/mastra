@@ -190,8 +190,8 @@ describe('ChatMessageList', () => {
     expect(screen.getAllByText('octo/repo#43 was closed')).toHaveLength(1);
     expect(screen.getByText('I will inspect the updated pull request.')).toBeInTheDocument();
     expect(screen.getAllByText('github')).toHaveLength(3);
-    expect(screen.getByText('high')).toBeInTheDocument();
-    expect(screen.getAllByText('urgent')).toHaveLength(2);
+    expect(screen.queryByText('high')).not.toBeInTheDocument();
+    expect(screen.queryByText('urgent')).not.toBeInTheDocument();
     const targetLink = screen.getByRole('link', { name: /Open notification target/ });
     expect(targetLink).toHaveAttribute('href', 'https://github.com/octo/repo/pull/42');
     expect(targetLink.querySelector('[data-notification-state="open"]')).toBeInTheDocument();
@@ -266,7 +266,7 @@ describe('ChatMessageList', () => {
 
     await waitFor(() => expect(screen.getByText('octo/repo#42 was approved')).toBeInTheDocument());
     expect(screen.getByText('github')).toBeInTheDocument();
-    expect(screen.getByText('urgent')).toBeInTheDocument();
+    expect(screen.queryByText('urgent')).not.toBeInTheDocument();
   });
 
   it('given a running turn without streamed assistant text, then it shows the working indicator', async () => {

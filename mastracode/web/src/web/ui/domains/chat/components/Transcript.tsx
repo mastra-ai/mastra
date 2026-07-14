@@ -577,11 +577,6 @@ function NotificationCard({ entry }: { entry: NotificationEntry }) {
         <Txt variant="ui-sm" font="mono">
           {entry.source ?? 'notification'}
         </Txt>
-        {entry.priority && (
-          <Badge variant={entry.priority === 'high' || entry.priority === 'urgent' ? 'error' : 'default'}>
-            {entry.priority}
-          </Badge>
-        )}
         {url && <ExternalLink size={12} className="ml-auto" aria-hidden />}
       </div>
       <Txt variant="ui-sm" className="py-1">
