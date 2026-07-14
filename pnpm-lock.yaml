@@ -181,6 +181,7 @@ packageExtensionsChecksum: sha256-/cD8y6AI9CdIuSvELFiNyGPNGS77AbBTfsEAe7m2Qbo=
 
 patchedDependencies:
   '@changesets/get-dependents-graph@2.1.4': eb65c5cbf43c61ce6dcb0c77fa30d9aebcdffa3a70dee1faefc4cde4125f28fa
+  '@earendil-works/pi-tui@0.80.6': 88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b
   tsup@8.5.1: 78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f
 
 importers:
@@ -594,7 +595,7 @@ importers:
     dependencies:
       firebase-admin:
         specifier: ^13.7.0
-        version: 13.9.0(encoding@0.1.13)
+        version: 13.9.0
     devDependencies:
       '@internal/auth':
         specifier: workspace:*
@@ -1060,7 +1061,7 @@ importers:
     dependencies:
       '@chat-adapter/slack':
         specifier: ^4.29.0
-        version: 4.29.0(ai@6.0.220(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
+        version: 4.29.0(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)
     devDependencies:
       '@mastra/core':
         specifier: workspace:*
@@ -1418,8 +1419,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(msw@2.14.6(@types/node@22.19.15)(typescript@6.0.3))(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))
       wrangler:
-        specifier: ^4.107.0
-        version: 4.107.0(bufferutil@4.1.0)
+        specifier: ^4.110.0
+        version: 4.110.0(bufferutil@4.1.0)
       zod:
         specifier: ^3.25.76
         version: 3.25.76
@@ -1656,7 +1657,7 @@ importers:
         version: 3.10.1
       '@docusaurus/types':
         specifier: ^3.10.1
-        version: 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+        version: 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@playwright/test':
         specifier: ^1.58.2
         version: 1.60.0
@@ -2140,14 +2141,14 @@ importers:
         specifier: ^3.0.105
         version: 3.0.105(zod@4.4.3)
       '@ai-sdk/anthropic':
-        specifier: ^3.0.92
-        version: 3.0.94(zod@4.4.3)
+        specifier: ^3.0.96
+        version: 3.0.96(zod@4.4.3)
       '@ai-sdk/openai':
-        specifier: ^3.0.80
-        version: 3.0.81(zod@4.4.3)
+        specifier: ^3.0.84
+        version: 3.0.84(zod@4.4.3)
       '@ai-sdk/openai-compatible':
-        specifier: ^2.0.56
-        version: 2.0.57(zod@4.4.3)
+        specifier: ^2.0.59
+        version: 2.0.59(zod@4.4.3)
       '@ast-grep/napi':
         specifier: ^0.42.0
         version: 0.42.2
@@ -2194,8 +2195,8 @@ importers:
         specifier: workspace:*
         version: link:../../integrations/tavily
       ai:
-        specifier: ^6.0.219
-        version: 6.0.220(zod@4.4.3)
+        specifier: ^6.0.224
+        version: 6.0.224(zod@4.4.3)
       execa:
         specifier: ^9.6.1
         version: 9.6.1
@@ -2261,14 +2262,14 @@ importers:
         specifier: ^3.0.105
         version: 3.0.105(zod@4.4.3)
       '@ai-sdk/anthropic':
-        specifier: ^3.0.92
-        version: 3.0.94(zod@4.4.3)
+        specifier: ^3.0.96
+        version: 3.0.96(zod@4.4.3)
       '@ai-sdk/openai':
-        specifier: ^3.0.80
-        version: 3.0.81(zod@4.4.3)
+        specifier: ^3.0.84
+        version: 3.0.84(zod@4.4.3)
       '@ai-sdk/openai-compatible':
-        specifier: ^2.0.56
-        version: 2.0.57(zod@4.4.3)
+        specifier: ^2.0.59
+        version: 2.0.59(zod@4.4.3)
       '@ast-grep/napi':
         specifier: ^0.42.0
         version: 0.42.2
@@ -2276,8 +2277,8 @@ importers:
         specifier: ^3.864.0
         version: 3.1006.0
       '@earendil-works/pi-tui':
-        specifier: ^0.79.4
-        version: 0.79.4
+        specifier: 0.80.6
+        version: 0.80.6(patch_hash=88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b)
       '@mastra/agent-browser':
         specifier: workspace:*
         version: link:../../browser/agent-browser
@@ -2327,8 +2328,8 @@ importers:
         specifier: workspace:*
         version: link:../../voice/openai
       ai:
-        specifier: ^6.0.219
-        version: 6.0.220(zod@4.4.3)
+        specifier: ^6.0.224
+        version: 6.0.224(zod@4.4.3)
       chalk:
         specifier: ^5.5.0
         version: 5.6.2
@@ -2341,9 +2342,9 @@ importers:
       fastest-levenshtein:
         specifier: ^1.0.16
         version: 1.0.16
-      partial-json:
-        specifier: ^0.1.7
-        version: 0.1.7
+      jsonriver:
+        specifier: ^1.1.1
+        version: 1.1.1
       posthog-node:
         specifier: ^5.37.0
         version: 5.37.0(rxjs@7.8.2)
@@ -3567,14 +3568,14 @@ importers:
         version: 3.25.76
     devDependencies:
       '@ai-sdk/gateway':
-        specifier: ^3.0.143
-        version: 3.0.144(zod@3.25.76)
+        specifier: ^3.0.148
+        version: 3.0.148(zod@3.25.76)
       '@ai-sdk/provider':
-        specifier: ^3.0.13
-        version: 3.0.13
+        specifier: ^3.0.14
+        version: 3.0.14
       '@ai-sdk/provider-utils':
-        specifier: ^4.0.35
-        version: 4.0.36(zod@3.25.76)
+        specifier: ^4.0.38
+        version: 4.0.38(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -3597,8 +3598,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
       ai:
-        specifier: ^6.0.219
-        version: 6.0.220(zod@3.25.76)
+        specifier: ^6.0.224
+        version: 6.0.224(zod@3.25.76)
       eslint:
         specifier: ^10.4.1
         version: 10.6.0(jiti@2.7.0)
@@ -3628,14 +3629,14 @@ importers:
         version: 3.25.76
     devDependencies:
       '@ai-sdk/gateway':
-        specifier: ^4.0.12
-        version: 4.0.12(zod@3.25.76)
+        specifier: ^4.0.16
+        version: 4.0.16(zod@3.25.76)
       '@ai-sdk/provider':
-        specifier: ^4.0.2
-        version: 4.0.2
+        specifier: ^4.0.3
+        version: 4.0.3
       '@ai-sdk/provider-utils':
-        specifier: ^5.0.5
-        version: 5.0.5(zod@3.25.76)
+        specifier: ^5.0.7
+        version: 5.0.7(zod@3.25.76)
       '@internal/lint':
         specifier: workspace:*
         version: link:../../_config
@@ -3658,8 +3659,8 @@ importers:
         specifier: 'catalog:'
         version: 4.1.10(vitest@4.1.10)
       ai:
-        specifier: ^7.0.15
-        version: 7.0.16(zod@3.25.76)
+        specifier: ^7.0.22
+        version: 7.0.22(zod@3.25.76)
       eslint:
         specifier: ^10.4.1
         version: 10.6.0(jiti@2.7.0)
@@ -4010,26 +4011,26 @@ importers:
   packages/core:
     dependencies:
       '@a2a-js/sdk':
-        specifier: ~0.3.13
-        version: 0.3.13(@grpc/grpc-js@1.14.4)(express@5.2.1)
+        specifier: ~0.3.14
+        version: 0.3.14(@grpc/grpc-js@1.14.4)(express@5.2.1)
       '@ai-sdk/provider-utils-v5':
         specifier: npm:@ai-sdk/provider-utils@3.0.28
         version: '@ai-sdk/provider-utils@3.0.28(zod@4.4.3)'
       '@ai-sdk/provider-utils-v6':
-        specifier: npm:@ai-sdk/provider-utils@4.0.35
-        version: '@ai-sdk/provider-utils@4.0.35(zod@4.4.3)'
+        specifier: npm:@ai-sdk/provider-utils@4.0.38
+        version: '@ai-sdk/provider-utils@4.0.38(zod@4.4.3)'
       '@ai-sdk/provider-utils-v7':
-        specifier: npm:@ai-sdk/provider-utils@5.0.5
-        version: '@ai-sdk/provider-utils@5.0.5(zod@4.4.3)'
+        specifier: npm:@ai-sdk/provider-utils@5.0.7
+        version: '@ai-sdk/provider-utils@5.0.7(zod@4.4.3)'
       '@ai-sdk/provider-v5':
         specifier: npm:@ai-sdk/provider@2.0.3
         version: '@ai-sdk/provider@2.0.3'
       '@ai-sdk/provider-v6':
-        specifier: npm:@ai-sdk/provider@3.0.13
-        version: '@ai-sdk/provider@3.0.13'
+        specifier: npm:@ai-sdk/provider@3.0.14
+        version: '@ai-sdk/provider@3.0.14'
       '@ai-sdk/provider-v7':
-        specifier: npm:@ai-sdk/provider@4.0.2
-        version: '@ai-sdk/provider@4.0.2'
+        specifier: npm:@ai-sdk/provider@4.0.3
+        version: '@ai-sdk/provider@4.0.3'
       '@ai-sdk/ui-utils-v5':
         specifier: npm:@ai-sdk/ui-utils@1.2.11
         version: '@ai-sdk/ui-utils@1.2.11(zod@4.4.3)'
@@ -4056,7 +4057,7 @@ importers:
         version: 8.20.0
       chat:
         specifier: ^4.29.0
-        version: 4.29.0(ai@6.0.220(zod@4.4.3))(zod@4.4.3)
+        version: 4.29.0(ai@6.0.224(zod@4.4.3))(zod@4.4.3)
       croner:
         specifier: ^10.0.1
         version: 10.0.1
@@ -4107,17 +4108,17 @@ importers:
         version: 1.1.0
     devDependencies:
       '@ai-sdk/alibaba-v6':
-        specifier: npm:@ai-sdk/alibaba@1.0.34
-        version: '@ai-sdk/alibaba@1.0.34(zod@4.4.3)'
+        specifier: npm:@ai-sdk/alibaba@1.0.37
+        version: '@ai-sdk/alibaba@1.0.37(zod@4.4.3)'
       '@ai-sdk/anthropic-v5':
         specifier: npm:@ai-sdk/anthropic@2.0.85
         version: '@ai-sdk/anthropic@2.0.85(zod@4.4.3)'
       '@ai-sdk/anthropic-v6':
-        specifier: npm:@ai-sdk/anthropic@3.0.92
-        version: '@ai-sdk/anthropic@3.0.92(zod@4.4.3)'
+        specifier: npm:@ai-sdk/anthropic@3.0.96
+        version: '@ai-sdk/anthropic@3.0.96(zod@4.4.3)'
       '@ai-sdk/anthropic-v7':
-        specifier: npm:@ai-sdk/anthropic@4.0.8
-        version: '@ai-sdk/anthropic@4.0.8(zod@4.4.3)'
+        specifier: npm:@ai-sdk/anthropic@4.0.12
+        version: '@ai-sdk/anthropic@4.0.12(zod@4.4.3)'
       '@ai-sdk/azure':
         specifier: ^2.0.114
         version: 2.0.114(zod@4.4.3)
@@ -4134,23 +4135,23 @@ importers:
         specifier: npm:@ai-sdk/google@2.0.78
         version: '@ai-sdk/google@2.0.78(zod@4.4.3)'
       '@ai-sdk/google-v6':
-        specifier: npm:@ai-sdk/google@3.0.88
-        version: '@ai-sdk/google@3.0.88(zod@4.4.3)'
+        specifier: npm:@ai-sdk/google@3.0.91
+        version: '@ai-sdk/google@3.0.91(zod@4.4.3)'
       '@ai-sdk/google-v7':
-        specifier: npm:@ai-sdk/google@4.0.8
-        version: '@ai-sdk/google@4.0.8(zod@4.4.3)'
+        specifier: npm:@ai-sdk/google@4.0.12
+        version: '@ai-sdk/google@4.0.12(zod@4.4.3)'
       '@ai-sdk/groq-v5':
         specifier: npm:@ai-sdk/groq@2.0.43
         version: '@ai-sdk/groq@2.0.43(zod@4.4.3)'
       '@ai-sdk/groq-v6':
-        specifier: npm:@ai-sdk/groq@3.0.47
-        version: '@ai-sdk/groq@3.0.47(zod@4.4.3)'
+        specifier: npm:@ai-sdk/groq@3.0.50
+        version: '@ai-sdk/groq@3.0.50(zod@4.4.3)'
       '@ai-sdk/mistral-v5':
-        specifier: npm:@ai-sdk/mistral@2.0.36
-        version: '@ai-sdk/mistral@2.0.36(zod@4.4.3)'
+        specifier: npm:@ai-sdk/mistral@2.0.37
+        version: '@ai-sdk/mistral@2.0.37(zod@4.4.3)'
       '@ai-sdk/mistral-v6':
-        specifier: npm:@ai-sdk/mistral@3.0.45
-        version: '@ai-sdk/mistral@3.0.45(zod@4.4.3)'
+        specifier: npm:@ai-sdk/mistral@3.0.48
+        version: '@ai-sdk/mistral@3.0.48(zod@4.4.3)'
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.4.3)
@@ -4161,11 +4162,11 @@ importers:
         specifier: npm:@ai-sdk/openai@2.0.110
         version: '@ai-sdk/openai@2.0.110(zod@4.4.3)'
       '@ai-sdk/openai-v6':
-        specifier: npm:@ai-sdk/openai@3.0.80
-        version: '@ai-sdk/openai@3.0.80(zod@4.4.3)'
+        specifier: npm:@ai-sdk/openai@3.0.84
+        version: '@ai-sdk/openai@3.0.84(zod@4.4.3)'
       '@ai-sdk/openai-v7':
-        specifier: npm:@ai-sdk/openai@4.0.7
-        version: '@ai-sdk/openai@4.0.7(zod@4.4.3)'
+        specifier: npm:@ai-sdk/openai@4.0.11
+        version: '@ai-sdk/openai@4.0.11(zod@4.4.3)'
       '@ai-sdk/perplexity-v5':
         specifier: npm:@ai-sdk/perplexity@2.0.33
         version: '@ai-sdk/perplexity@2.0.33(zod@4.4.3)'
@@ -4182,8 +4183,8 @@ importers:
         specifier: npm:@ai-sdk/xai@2.0.76
         version: '@ai-sdk/xai@2.0.76(zod@4.4.3)'
       '@ai-sdk/xai-v6':
-        specifier: npm:@ai-sdk/xai@3.0.102
-        version: '@ai-sdk/xai@3.0.102(zod@4.4.3)'
+        specifier: npm:@ai-sdk/xai@3.0.106
+        version: '@ai-sdk/xai@3.0.106(zod@4.4.3)'
       '@ast-grep/napi':
         specifier: ^0.40.5
         version: 0.40.5
@@ -4269,8 +4270,8 @@ importers:
         specifier: ^4.12.8
         version: 4.12.25
       hono-openapi:
-        specifier: ^1.3.0
-        version: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.25))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.25)(openapi-types@12.1.3)
+        specifier: ^1.3.1
+        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.25))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.25)(openapi-types@12.1.3)
       rollup:
         specifier: ^4.61.1
         version: 4.62.2
@@ -4496,8 +4497,8 @@ importers:
         specifier: ^2.1.0
         version: 2.1.0
       hono-openapi:
-        specifier: ^1.3.0
-        version: 1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.25))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.25)(openapi-types@12.1.3)
+        specifier: ^1.3.1
+        version: 1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.25))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.25)(openapi-types@12.1.3)
       stacktrace-parser:
         specifier: ^0.1.11
         version: 0.1.11
@@ -4600,8 +4601,8 @@ importers:
         specifier: ^1.3.24
         version: 1.3.24(zod@4.4.3)
       '@ai-sdk/openai-v6':
-        specifier: npm:@ai-sdk/openai@3.0.80
-        version: '@ai-sdk/openai@3.0.80(zod@4.4.3)'
+        specifier: npm:@ai-sdk/openai@3.0.84
+        version: '@ai-sdk/openai@3.0.84(zod@4.4.3)'
       '@copilotkit/aimock':
         specifier: ^1.29.0
         version: 1.29.0(vitest@4.1.10)
@@ -5588,14 +5589,14 @@ importers:
         version: 3.25.1(zod@4.4.3)
     devDependencies:
       '@ai-sdk/anthropic':
-        specifier: ^3.0.92
-        version: 3.0.94(zod@4.4.3)
+        specifier: ^3.0.96
+        version: 3.0.96(zod@4.4.3)
       '@ai-sdk/google':
-        specifier: ^3.0.88
-        version: 3.0.89(zod@4.4.3)
+        specifier: ^3.0.91
+        version: 3.0.91(zod@4.4.3)
       '@ai-sdk/openai':
-        specifier: ^3.0.80
-        version: 3.0.81(zod@4.4.3)
+        specifier: ^3.0.84
+        version: 3.0.84(zod@4.4.3)
       '@internal/ai-sdk-v4':
         specifier: workspace:*
         version: link:../_vendored/ai_v4
@@ -6541,7 +6542,7 @@ importers:
         version: 10.6.0(jiti@2.7.0)
       miniflare:
         specifier: ^4.20260415.0
-        version: 4.20260701.0(bufferutil@4.1.0)
+        version: 4.20260708.1(bufferutil@4.1.0)
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)
@@ -6593,7 +6594,7 @@ importers:
         version: 10.6.0(jiti@2.7.0)
       miniflare:
         specifier: ^4.20260415.0
-        version: 4.20260701.0(bufferutil@4.1.0)
+        version: 4.20260708.1(bufferutil@4.1.0)
       tsup:
         specifier: ^8.5.1
         version: 8.5.1(patch_hash=78092cc873f6c3c61ff4846b4b326faa7db54bb3c1506c510614d708601e2b7f)(@microsoft/api-extractor@7.58.9(@types/node@22.19.15))(@swc/core@1.15.7(@swc/helpers@0.5.17))(jiti@2.7.0)(postcss@8.5.16)(tsx@4.22.4)(typescript@6.0.3)(yaml@2.9.0)
@@ -7401,7 +7402,7 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.8.0
+        specifier: ^8.8.1
         version: 8.8.1(encoding@0.1.13)
     devDependencies:
       '@internal/lint':
@@ -8477,20 +8478,20 @@ importers:
         specifier: workspace:*
         version: link:../../packages/deployer
       '@temporalio/activity':
-        specifier: ^1.17.2
-        version: 1.17.2
+        specifier: ^1.20.2
+        version: 1.20.2
       '@temporalio/client':
-        specifier: ^1.17.2
-        version: 1.17.2
+        specifier: ^1.20.2
+        version: 1.20.2
       '@temporalio/plugin':
-        specifier: ^1.17.2
-        version: 1.17.2
+        specifier: ^1.20.2
+        version: 1.20.2
       '@temporalio/worker':
-        specifier: ^1.17.2
-        version: 1.17.2(@swc/helpers@0.5.17)(lightningcss@1.32.0)(postcss@8.5.16)(tslib@2.8.1)
+        specifier: ^1.20.2
+        version: 1.20.2(@swc/helpers@0.5.17)(lightningcss@1.32.0)(postcss@8.5.16)(tslib@2.8.1)
       '@temporalio/workflow':
-        specifier: ^1.17.2
-        version: 1.17.2
+        specifier: ^1.20.2
+        version: 1.20.2
       rollup:
         specifier: ^4.61.1
         version: 4.62.2
@@ -8955,7 +8956,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.5.0
-        version: 1.6.0(@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.220(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
+        version: 1.6.0(@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.224(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9144,8 +9145,8 @@ importers:
   workspaces/railway:
     dependencies:
       railway:
-        specifier: ^3.4.1
-        version: 3.4.1
+        specifier: ^3.5.5
+        version: 3.5.5
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9280,8 +9281,8 @@ packages:
       graphql:
         optional: true
 
-  '@a2a-js/sdk@0.3.13':
-    resolution: {integrity: sha512-BZr0f9JVNQs3GKOM9xINWCh6OKIJWZFPyqqVqTym5mxO2Eemc6I/0zL7zWnljHzGdaf5aZQyQN5xa6PSH62q+A==}
+  '@a2a-js/sdk@0.3.14':
+    resolution: {integrity: sha512-F6Ew1AtPzCLhTn8h9yiqTe7DiDf6XVrSnq9V1YqSl9eWqPm6anMveTiKdCSb/76cW0YiJc24rNaUrVezFFHbqQ==}
     engines: {node: '>=18'}
     peerDependencies:
       '@bufbuild/protobuf': ^2.10.2
@@ -9306,8 +9307,8 @@ packages:
     peerDependencies:
       zod: ^3.25.0 || ^4.0.0
 
-  '@ai-sdk/alibaba@1.0.34':
-    resolution: {integrity: sha512-J9b7kn/Be00kEg0XeYw2ANK2rFmei8RFp9fFIAkOD0Hx9njyyjQWy4TQPTp1AAVKhXee4hraalYe9uyQ7hU2xw==}
+  '@ai-sdk/alibaba@1.0.37':
+    resolution: {integrity: sha512-h10PuNAx8QL98mdjA/PCfvCFSUhg5g9d1zLMroHxrsPrwBokVCWZF+PMSG1aOIb8z/rcvpnuQFifcZs6CJQg4w==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9336,20 +9337,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/anthropic@3.0.92':
-    resolution: {integrity: sha512-dFrf4xhx2yM686KHFm76Nn7nBekjkjiw1btqOyR26/kXz58QMguhNsjyvMqPktD8AW/wwTAq0fDRVyDvF2gH1w==}
+  '@ai-sdk/anthropic@3.0.96':
+    resolution: {integrity: sha512-6VQzaXQdm5FkX6NWOyKzV5GB11C8IqkgsKZE91lg/bdwyvnQJLDwal2qkE0+fC8CCGeW5d+VV8Mw/+H+OcDC1A==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/anthropic@3.0.94':
-    resolution: {integrity: sha512-sRENM4zDL4Cd/TBifbZ/X88Vv9vK8r7G5f2DDMi69+89QjXOVtASWj7y2d3kYBPGPEGHWHkSKq/nQ+pSYWY14w==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/anthropic@4.0.8':
-    resolution: {integrity: sha512-ZqT9kLxS2Cbo/4juwtEGbYyP0jNQTnUUKy2nQ8Vn28xqNu50+TukO/oCEWCpm18YbQq7N+hr6ClJs/ATTFpBTg==}
+  '@ai-sdk/anthropic@4.0.12':
+    resolution: {integrity: sha512-IquWNkGRSF2ulYJ6YIIUqMsNAIDeZFB3/4W92aSOtCxH1TfuVoq3qw4M4TxTxIw4As9cnkeRLe7b9LDMzPDsnA==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9390,14 +9385,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@3.0.144':
-    resolution: {integrity: sha512-U0B6LI+12JNN7rCzYQ5hlaKJCMypFldnLBLzJSgioC4Z6hrCLA8K6ICl2MfRfpLfo9yz2EN30chgo/89RDe5ZQ==}
+  '@ai-sdk/gateway@3.0.148':
+    resolution: {integrity: sha512-C/mTeSdmhu8dAnH3vZaRXffD8Oewo1r4QEGxvCdR8eC9b4PKPs2CLsbg3DVJH/X3Bea5fAu87Ob7P3fSS+oq/g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/gateway@4.0.12':
-    resolution: {integrity: sha512-Y7Fy8xJwPz7ZC0DhSQG3HIVk+drup42hrIj6yqKlib3CxwiR0F7nYyUI8+kPrEtbZEoyKoRstvT4/o0HEyFBHA==}
+  '@ai-sdk/gateway@4.0.16':
+    resolution: {integrity: sha512-9iYxdOLquoOFk5e+02P9qfBIA+EJU0FNJvyjGxi4iXJabt2+GlbaCg7TX0sTtxOsBVkdabkatqWM6+kvp53tBg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9426,20 +9421,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/google@3.0.88':
-    resolution: {integrity: sha512-CN3PHCz5pa2sBowwZG4sNqE+7YfHWZT6+5KU12YMWuBssZ03s143Jr2jThkN5Fgemy8Kyg+ub2XbpHGhtIZ2yQ==}
+  '@ai-sdk/google@3.0.91':
+    resolution: {integrity: sha512-d/ho+sDjArFjreE2002t9jE4LXX3wde97dN2HCLCX1l41gaJV3wf/c/19axjUNfIf/4uUq+nJmhBO0lW/dg3yw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/google@3.0.89':
-    resolution: {integrity: sha512-/FCPSbFqSdrDmhLoLf2e0dnQMoZWEciBAut5qcRJ+DKpa4TIfKOqCEUOmPI9DOuPzKPgVnUWUfmFFXpAlnhxCw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/google@4.0.8':
-    resolution: {integrity: sha512-GELd0RkltieuODzr6tfnEOIufeooctYpGUNxujeh+zrChbHUkX2K6Li4h2EAfizctkY4k3JvC93dU9eh2QxzoQ==}
+  '@ai-sdk/google@4.0.12':
+    resolution: {integrity: sha512-4Rw4viFwH2Wprx6OssZzhV/KgNWaA7qYr5Kg28AlZ7r3sEvyXH0kDZtZok7onPjr0RuFTg2EjCjTIeoCesg0Ww==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9456,20 +9445,20 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/groq@3.0.47':
-    resolution: {integrity: sha512-85v39PpVRUxSy6OSb1Z+Xe54JfdNxbHmy+U6AqTCNvRsAfzjxizbC34WUjC2hJsvCuTJvnrbVnS2cV9JuqXYGQ==}
+  '@ai-sdk/groq@3.0.50':
+    resolution: {integrity: sha512-1gDBiXuPveG1n6wSPlOO4w/4/dYVBEjEezx+e7uiO8jvL7Pheu+CBRcdgYFd5sYqSONTbl0zEApYFBEbilSqCg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/mistral@2.0.36':
-    resolution: {integrity: sha512-8p1Fa5AwnrdZJMgSaFDhnmwfEeddbR8SXcFAwbL3wTouBx0Q+2nohGoIWleJTPuQqeAW2FaBMMTt+DKpdFqjEw==}
+  '@ai-sdk/mistral@2.0.37':
+    resolution: {integrity: sha512-KiL/bVRDJcn5U1a3XOTG4Xd8olFSDWAZeOTYGXDI0JPaRCm+hioeHiO/fVBRrPcbY2Xtbe4NJ8QgEnBIvtf7Vw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/mistral@3.0.45':
-    resolution: {integrity: sha512-IyOPiBqPkd6RPqTvhDN6/JcoF7VVP2499FY4acnMz08Y7a1c1ZplsL6lPRTOmcFEwto1491ePilD9H0GtY1QEg==}
+  '@ai-sdk/mistral@3.0.48':
+    resolution: {integrity: sha512-SOZMjV48dyAn1rsiZSN7emeO0KYKnr9/SqMFPpJYUddPcnLSjac9GGWVKn+LnSzD7Woh3lYbYbJWdbJOQ2U2sQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9492,14 +9481,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai-compatible@2.0.56':
-    resolution: {integrity: sha512-cQrN6OUn/jvsY3OdsU6Wn+ss7vp1iwIcakZKSlSRMnYqShBfyT7Qht+eqmgxs7w9ttrw6FAG6o11AiBs+iEsTA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai-compatible@2.0.57':
-    resolution: {integrity: sha512-Qt4GfVxKT70YxlDHJeHQ72pO4+Dj8lPGB76+4dENHOrTZp7L24eRIo9mljOLXU8WFZf0uv49bF6CfLnefHMPiw==}
+  '@ai-sdk/openai-compatible@2.0.59':
+    resolution: {integrity: sha512-CFsUizO+jL+jSlN13rW2nQE9EbWx+8PSFBdB3TtD0UGYOxtefCVa5hsrNo5NUOJJGX5f4xHiXE1i2m5nQ80QPg==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9516,20 +9499,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai@3.0.80':
-    resolution: {integrity: sha512-u3EfYbBG4YS/U2eOGH0yv8lPRwDj25X3sTluUKMYEwOLTZzWYv0IPtrpO7tPEra0QU4oq5Gpg49/FGFSrzE4vA==}
+  '@ai-sdk/openai@3.0.84':
+    resolution: {integrity: sha512-cmgbeJL0bbY0yTJH4/AdmP5E7MjWRL9G8UdhIi0JlV/So03o82ORJofW8OzwCZPTORVQblFbpZXYGDcUd9NdUQ==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai@3.0.81':
-    resolution: {integrity: sha512-VarNyiLU5nSbyVQw3M8HUzw/UlnWfGA5LpZsA35rq2oC/lD4Oqg2VC+qgV3w39hhTwpqfouYO59pKF4yaFVlYg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/openai@4.0.7':
-    resolution: {integrity: sha512-55K0j8RRjcKosUvIl8u/+SMaS1wedq77xN2iuhlOvB/USbIgSmjkWKV9lqGhhp+Qxhnm3qg5NzrqOI1jmra9fQ==}
+  '@ai-sdk/openai@4.0.11':
+    resolution: {integrity: sha512-2PLnVPBsdJusgquPVYgPWd3ox4lbUFkp7DVUSmM0lQ4VISQoNxdgo6TvFAHgwQn9wJ/ckVYVRLU7+BvHc7T8ww==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9558,20 +9535,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@4.0.35':
-    resolution: {integrity: sha512-bjYld/2KGPLt78kpqbya+fD4LYS7BqVQJyUjE3qAHrYB0FR2Q90BaWEVIBZaguTWXf/A8L6uG1zO1v9TxVlGWg==}
+  '@ai-sdk/provider-utils@4.0.38':
+    resolution: {integrity: sha512-/HHGmtKllqjg1OLc023v9w9kK3laW7Z6TzfZukYQWCsGBbzB9p60zTvvpXFVcs44NZBVXL3viOa1HRKUbeee8g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/provider-utils@4.0.36':
-    resolution: {integrity: sha512-hy0V+eyKcYyjmIxdcSh1jvy4+zNC7DbP0/V45jkRmfVnz+lI6GslT0qsd0V/bfJKo/A+P2t1tYFypTQJdOH1Sg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: ^3.25.76 || ^4.1.8
-
-  '@ai-sdk/provider-utils@5.0.5':
-    resolution: {integrity: sha512-oI0t3dvCoqWNV1I8o1Rybi2DXDvHES5r/TrwtJW90tuFLVepgJlftPxrcjh8vaSvjqC2diTuA2vXyjKAyHJm4A==}
+  '@ai-sdk/provider-utils@5.0.7':
+    resolution: {integrity: sha512-OSm5/5kdrHa11WIOo5LYgDKnxYWp5aB/wx5EXRHi0jpUGduMDeB6oht9U6p+UNNWIP3F/EqPpV8d7vdP/iRnqg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -9584,12 +9555,12 @@ packages:
     resolution: {integrity: sha512-h88OPkavHTiN9tMn2l5awAznGB0lXzjcLhgR1/rvjB2zlLprsNxbM2tt6OJsHUxduLC3klq0/eqaSf6fX5XVww==}
     engines: {node: '>=18'}
 
-  '@ai-sdk/provider@3.0.13':
-    resolution: {integrity: sha512-ZPtVYt5QIJzOta1kdUiDuCx4HhFkvNPv/rvmZ2b1iXwybYjJsCnNYR4PAw4kW7rgVfDARvHXcU64efWuqNp6bw==}
+  '@ai-sdk/provider@3.0.14':
+    resolution: {integrity: sha512-5X1k57JBJ4H7H1QjX7CnJYAB1I19r/trVZTMcSms7/kLNZ8RaU4Nt2agcwZzv82Hfx6Q7/TOLU7agAKeFfc8cA==}
     engines: {node: '>=18'}
 
-  '@ai-sdk/provider@4.0.2':
-    resolution: {integrity: sha512-pfPoy9J1B1xV7cqJ8MYHOsDYrMv5tR3+EMNfI249OhkD2uRakvav3Fo7XpD2luuN/YNCBY7KfEQc7vEV7KEtyw==}
+  '@ai-sdk/provider@4.0.3':
+    resolution: {integrity: sha512-e0CpNWJUY7OxAFAnCZkw+ri9QOHWwTs1tXP42782KFGCU07qt8NiXCrCVowyCB5dP2r5/Uls+g2oPd8kOJn9dw==}
     engines: {node: '>=22'}
 
   '@ai-sdk/react@1.2.12':
@@ -9626,8 +9597,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/xai@3.0.102':
-    resolution: {integrity: sha512-NeQyOR7OCqDMgaLS4uNX/ep/HrwUzzFYLzXQSRoqLy2jsnqxAJhsgltRwAwf+ADjyPBIAKEOestWnIQA+LrLrQ==}
+  '@ai-sdk/xai@3.0.106':
+    resolution: {integrity: sha512-mX6uXo3u6kdvF+lTUiWVnn6SeLpMiriqlJmxVU6hOUxaC2ud+/9QrUk4mrX4pm0MJwQ78NlBaq+m/b0MoMit+g==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -11256,32 +11227,32 @@ packages:
       workerd:
         optional: true
 
-  '@cloudflare/workerd-darwin-64@1.20260701.1':
-    resolution: {integrity: sha512-Zd9Y1bah6DwwBN2RW8vJohffQrIUazb8UXnqSNecOxM+jJLhUuvv5IOG8dbHcV83TyZAubea6gsQXo2yH1lDdw==}
+  '@cloudflare/workerd-darwin-64@1.20260708.1':
+    resolution: {integrity: sha512-HXFCvhS1wpg3uXO0CLUwmwC41i2loM5FSK69EUchOBpmYBAXxT1oHLm6EOA5lqhTk5Mu9kjRiQYxa1GwKPwfJg==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [darwin]
 
-  '@cloudflare/workerd-darwin-arm64@1.20260701.1':
-    resolution: {integrity: sha512-yBLsjS1qCWqFyCY37qRUrYfzHHvMGvjh8zRKJ6MvUivYDhkZTzqduppK38FoqYvayLJ5KbcxH7zo5rkxGqbsaA==}
+  '@cloudflare/workerd-darwin-arm64@1.20260708.1':
+    resolution: {integrity: sha512-JVlJaKDoRTVKSroHIlf8g3UCPjKj4iDbMZE2CNYht5qQ+2rL0FAUiVlV82G3BqKnnw9kHYnnsMzC08b9zVtdzA==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [darwin]
 
-  '@cloudflare/workerd-linux-64@1.20260701.1':
-    resolution: {integrity: sha512-vMfqSIMfoo4xmZXEuUVqLpSFS921YKjiR9q7kDXPi6Vld1PK74UHg9LZuBavT2KSyemHUCTpj9y/4JSYOEyQbQ==}
+  '@cloudflare/workerd-linux-64@1.20260708.1':
+    resolution: {integrity: sha512-3daE60YdD7YX0Jtuzc9DE/r/qMkmx8ZvHTkF8Mzmp3F5tbzlV0DAzmu5PFUPF2WuvtKbAhZKbvC2cHmWpQYxnA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [linux]
 
-  '@cloudflare/workerd-linux-arm64@1.20260701.1':
-    resolution: {integrity: sha512-HRfwbKU2pK44V2NhoM0+iH0JJSj7nQ9Wv13ifIiGYCmTtDL8/zKtEhX7kQ3D4Vy/Cpjhttl0FkfqXj1aqLDPPg==}
+  '@cloudflare/workerd-linux-arm64@1.20260708.1':
+    resolution: {integrity: sha512-VLdNYOx5Hj+9C6isy0ACWZsbMtSxex2DIJWEe7cZxUdlphZ58ZT8zxNXK8yunFiowd34hn3VwGMopdvdj8lvmA==}
     engines: {node: '>=16'}
     cpu: [arm64]
     os: [linux]
 
-  '@cloudflare/workerd-windows-64@1.20260701.1':
-    resolution: {integrity: sha512-ngxCiIN9s/fM2o1IBMD0o1/mcXrv2NJVdyznh51UH8sQuvrTrXvV2nM0Uj/qU2wMwF6prgNBcdcd7AZeZGiBQA==}
+  '@cloudflare/workerd-windows-64@1.20260708.1':
+    resolution: {integrity: sha512-bC/aSAwLy16Vjo24i9XU3aWH+eRgz7NeR5xPKavGbembO18ZywYTQbXh14eXtY6fAqN3RzRG8psijTdhX4xydA==}
     engines: {node: '>=16'}
     cpu: [x64]
     os: [win32]
@@ -12194,8 +12165,8 @@ packages:
   '@duckdb/node-bindings@1.5.2-r.2':
     resolution: {integrity: sha512-A17A6pXB7SEBAm93POdmEG+f4vQWMSujUP8/hNUfDWjaqp4C5mUWFnyuBM4XiB4qyXXH3vbjis2TYsnxAN2xEQ==}
 
-  '@earendil-works/pi-tui@0.79.4':
-    resolution: {integrity: sha512-/ZhfFiHSBMH7AbDrBQIN+UWlJnl9tSEpLYICRGGMzmNfyCqX+30NYacIhyOEaD8R5rS6wJZysAOPU0yNwigbXw==}
+  '@earendil-works/pi-tui@0.80.6':
+    resolution: {integrity: sha512-bSuzS4EVSqEPj/Qr/p9eqCESfKsGuDNbl77EGci8Iaqqt/C/XCBZL1MjXaxSWW1NsT5afjp/Cb0NTPzOLv/aPA==}
     engines: {node: '>=22.19.0'}
 
   '@elastic/elasticsearch@8.19.1':
@@ -18375,41 +18346,41 @@ packages:
   '@tediousjs/connection-string@1.1.0':
     resolution: {integrity: sha512-z9ZBWEG+8pIB5V1zYzlRPXx0oRJ5H7coPnMQK8EZOw03UTPI9Umn6viL36f5w+CuqkKsnCM50RVStpjZmR0Bng==}
 
-  '@temporalio/activity@1.17.2':
-    resolution: {integrity: sha512-NPaR+R4q3cBr6VH6cvsQ6jgBX6PwymOmM4ZFPH9FLHypzelPY9STI/SG+0fxgGLCYmZSuUhdEdT7yDNpUWpDwA==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/activity@1.20.2':
+    resolution: {integrity: sha512-j2WAFsBrUcalJOt/GJ5bL+oD426KKNGR1M/O2noy94jdL9P0Q8QbkrQoixInHOPmQX0WY9cSVBdH+Ho6toe5BA==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/client@1.17.2':
-    resolution: {integrity: sha512-d2IwhBQISZ2weQw5/64ajsc997yVN/Ye52op/9GA4flssk1OkA/pjjqCuRN54urMWUn91r7Xd2iscSkeb7Y9FA==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/client@1.20.2':
+    resolution: {integrity: sha512-z9CLE/K6yHQeI3ArF9Y7nao8urpZCrLF9FKPLr34TZQa6+UbuOABcKBaJOHUW/Ecjwtee0uFke/FF9oGx0A4Yw==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/common@1.17.2':
-    resolution: {integrity: sha512-E+eR17bc/vR7HrmJBLCUq/asQplOUbl2Tm+JQgeK/fbSEAH2KJNL3sAVxx4/32KnOciKOYuV450brEicSNtnwQ==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/common@1.20.2':
+    resolution: {integrity: sha512-MXWFfnb/1Y+pynT9d8DZaNeovMJwPgwaNLzCLJtLZf5Ufn/TtMZlrXkoiUPjr8ERLOs2v9K0jkq4g1XZT3CJgw==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/core-bridge@1.17.2':
-    resolution: {integrity: sha512-7m9hnnGoaAr2gpy5418ID2CKQn4PAx1bDReWcqWMZcFKsdv/tibtldaO6DQn6LrJopIrAA1zaXZtX8S6bI1YUA==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/core-bridge@1.20.2':
+    resolution: {integrity: sha512-Jw1WTQeAnfLONDpDZIGfs3K4JL8W29SOOqzzIUDBiz9oxLd+qHQljqfJowP7vUDQYUG9hFA8pw8VT45SVszUUQ==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/nexus@1.17.2':
-    resolution: {integrity: sha512-d1K7ZPEv+xBHoucy5IPagQr+t+zBVELflAqgX6Qp0qwLwfvhuwJztfsNUh1t7T4/pAnGqFlgQRC8ZSAL+QvQGA==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/nexus@1.20.2':
+    resolution: {integrity: sha512-NzFZOdvzfPChXGg0JbeqGW47nkyRNSmKc1l9xN2LFMBv68fHFhFe5OqWay5LyuQyM4zFXJcY7G45oXJby6xVEg==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/plugin@1.17.2':
-    resolution: {integrity: sha512-vBWHNf+0R3+yfb/LVQKWrzlXuwGWQjb88+5mfFCfGQaxyMeHzkQQBMNJ5NIoCLJsnwhs+1U93hldQ8j+fDL4yg==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/plugin@1.20.2':
+    resolution: {integrity: sha512-KPyvEq8Dktd2w7FoYQbpCKNYEW1kqmqyRySfHoddvu6PwUrpF94Wvm0Inkxy/Yq/CT7fD8aONSpqbZg4Oyukbw==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/proto@1.17.2':
-    resolution: {integrity: sha512-ecsk9F8863/FBwipQjJtuO/kEzWpIU9poAx+/twnJOesZW5dOabw7hYuqfUQul2H5MWm25qUvgU+SgLEgwr3zw==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/proto@1.20.2':
+    resolution: {integrity: sha512-m/lfRAV4u0RQ9FszvH0c9+GEvRXZPLCQgSFaTb9BrLhuJFxUHgqc8gwbWhOyRG1pgAilRZtfkhOi/OLAUFDfNA==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/worker@1.17.2':
-    resolution: {integrity: sha512-B/Mnme6GsVipO/qYlRMbNKs9kDBzyNolGnPTkfdU2j4vodwq8HLsjEuP5QCs5dW6WQ9ikwXJMerXc8Uy21QIww==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/worker@1.20.2':
+    resolution: {integrity: sha512-p0wd8Ga7OIijL7wqV4FqcZMTn64QdhASJSf8pq+92spOlhF16gOElaEmM2ZqgMKgO73kWrh/HjooMNVoLvPtow==}
+    engines: {node: '>= 20.3.0'}
 
-  '@temporalio/workflow@1.17.2':
-    resolution: {integrity: sha512-eRnZfjfaL9gSmVCOk6zRCE9QKQSyLgnlhnOKMjeIqGJeZC8XAYA16A5HKv2Uf3UiE2EcqRhak+uRPZP9qnTrmQ==}
-    engines: {node: '>= 20.0.0'}
+  '@temporalio/workflow@1.20.2':
+    resolution: {integrity: sha512-n7yusxqs4xcRUsHBqSkt4qXXCZ0xrmkEY67NiVyIBAlqUB1pRFt1OMF/oayDH9G1jRYNlzyCbv4nbMJthMSVmg==}
+    engines: {node: '>= 20.3.0'}
 
   '@testing-library/dom@10.4.1':
     resolution: {integrity: sha512-o4PXJQidqJl82ckFaXUeoAW+XysPLauYI43Abki5hABd853iMhitooc6znOnczgbTYmEP6U6/y1ZyKAIsvMKGg==}
@@ -19798,14 +19769,14 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  ai@6.0.220:
-    resolution: {integrity: sha512-S0zifFbegc4CjfEo3nsEtBraXP22JKchN5SkcLDvIUNCefkWavmp8pPF0ey1yipBPRdTF7oy7EchLIZM1HmtuQ==}
+  ai@6.0.224:
+    resolution: {integrity: sha512-plo+hHwMANM+P6FjX8RN6W8c8so5NVZGwvDGCWGWwIbvI5tc0ZV1zhr9v/Kq78zyxKZWE50YCSYbqGiPFEhGww==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  ai@7.0.16:
-    resolution: {integrity: sha512-OuA+uz6ZUVId+SVeB5bThi25Ofee/FmLvffAA368tlgqYCe2qAhqZUpfHL0dd9QC/iPiszdvCQYENJavSo/0gw==}
+  ai@7.0.22:
+    resolution: {integrity: sha512-iAXYwQtR18qN7GXwNmGVAQM4uSJOh2+nZ5RP9NtDXfH5d4tlYyYzAM133O3U+eVcyWrvNRzecN9yW58xpCdfMg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -23146,14 +23117,14 @@ packages:
       '@modelcontextprotocol/sdk': '*'
       hono: '*'
 
-  hono-openapi@1.3.0:
-    resolution: {integrity: sha512-xDvCWpWEIv0weEmnl3EjRQzqbHIO8LnfzMuYOCmbuyE5aes6aXxLg4vM3ybnoZD5TiTUkA6PuRQPJs3R7WRBig==}
+  hono-openapi@1.3.1:
+    resolution: {integrity: sha512-NLVeVkhKZ3drmQNEIPac8HX8Y54uf1hJAgIM/7MfDsaeVVmB+QILWQxx5x3R3NvRHgedcbEbOCGY2uR7WQYyMw==}
     peerDependencies:
       '@hono/standard-validator': ^0.2.0
       '@standard-community/standard-json': ^0.3.5
       '@standard-community/standard-openapi': ^0.2.9
       '@types/json-schema': ^7.0.15
-      hono: ^4.8.3
+      hono: ^4.11.2
       openapi-types: ^12.1.3
     peerDependenciesMeta:
       '@hono/standard-validator':
@@ -23966,6 +23937,9 @@ packages:
     resolution: {integrity: sha512-wy8OTjwsJwQRnQJkKnMJJ9vcytRdBPAgIF/Hy6+s1dAj42BHMKiyL8JzEieIl3JY7idt8eyHwBWTO8mh/+mtwA==}
     hasBin: true
 
+  jsonriver@1.1.1:
+    resolution: {integrity: sha512-w/y/ZvC0YlJxRjySXt6hEji3RltOLAbSiDe3jlWekbIT7qLIOJF+tGNscwTWJZhoNQzi1dItJVMM2jEPZbHSEQ==}
+
   jsonschema@1.2.7:
     resolution: {integrity: sha512-3dFMg9hmI9LdHag/BRIhMefCfbq1hicvYMy8YhZQorAdzOzWz7NjniSpn39yjpzUAMIWtGyyZuH2KNBloH7ZLw==}
 
@@ -24469,9 +24443,9 @@ packages:
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
 
-  marked@15.0.12:
-    resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
-    engines: {node: '>= 18'}
+  marked@18.0.5:
+    resolution: {integrity: sha512-S6GcvALHg6K4ohtu4E7x0a1AqhAjp6cV8KhLSyN9qVapnzJkusVBxZRcIU9AeYsbe6P1hKDusSbEOzGyyuce6w==}
+    engines: {node: '>= 20'}
     hasBin: true
 
   marky@1.3.0:
@@ -24912,8 +24886,8 @@ packages:
     peerDependencies:
       webpack: ^5.0.0
 
-  miniflare@4.20260701.0:
-    resolution: {integrity: sha512-L6eAAi6IKtyb/7J6L+YsH2vb1yBrJWKRXI293JYDiMl70+6nncdAgigex58w6WBd+CwvdMsqOyNyGs95Op5gWQ==}
+  miniflare@4.20260708.1:
+    resolution: {integrity: sha512-c94O9zRDISdqO18EHt6l0iF/fWgWt8p18PJvRsA/L/NJZ9Cfke3s/F5Blg1XXF7WDutVRzWVWy8Vy4LaT5ifsA==}
     engines: {node: '>=22.0.0'}
     hasBin: true
 
@@ -25813,9 +25787,6 @@ packages:
     resolution: {integrity: sha512-CiyeOxFT/JZyN5m0z9PfXw4SCBJ6Sygz1Dpl0wqjlhDEGGBP1GnsUVEL0p63hoG1fcj3fHynXi9NYO4nWOL+qQ==}
     engines: {node: '>= 0.8'}
 
-  partial-json@0.1.7:
-    resolution: {integrity: sha512-Njv/59hHaokb/hRUjce3Hdv12wd60MtM9Z5Olmn+nehe0QDAsRtRbJPvJ0Z91TusF0SuZRIvnM+S4l6EIP8leA==}
-
   pascal-case@3.1.2:
     resolution: {integrity: sha512-uWlGT3YSnK9x3BQJaOdcZwrnV6hPpd8jFH1/ucpiLRPh/2zCVJKS19E4GvYHvaCcACn3foXZ0cLB9Wrx1KGe5g==}
 
@@ -26697,6 +26668,10 @@ packages:
     resolution: {integrity: sha512-+k0vdJKNdW+Vu+dYe8tZA/VvQb6XKNWexC6URwBFXxNnjLJz9nQJCemGyNgRAWD+B7+nGNc9qMPGwcD7s4nzUw==}
     engines: {node: '>=12.0.0'}
 
+  protobufjs@7.6.5:
+    resolution: {integrity: sha512-/FPD0nUc9jH6rfFjji9IBqOz4pcSE3CsT1m7Ep6Mdb0LxSUMj8hgl6GomOvZzpNpAqqGaXA0P3VSrZLFzIhQrw==}
+    engines: {node: '>=12.0.0'}
+
   protobufjs@8.6.0:
     resolution: {integrity: sha512-PIOO89BMGMXGz2333TVv/OqPNVWm7w30ll/4FtLbtLBaonzJMYwTbAZSSlobjIy9MoUgIAxSVUpK7aP7EpTtkg==}
     engines: {node: '>=12.0.0'}
@@ -26801,8 +26776,8 @@ packages:
   raf-schd@4.0.3:
     resolution: {integrity: sha512-tQkJl2GRWh83ui2DiPTJz9wEiMN20syf+5oKfB03yYP7ioZcJwsIK8FjrtLwH1m7C7e+Tt2yYBlrOpdT+dyeIQ==}
 
-  railway@3.4.1:
-    resolution: {integrity: sha512-SKzV9Ugyo1Q1RqQo+cYM3mCsIR69g9qMQBpSC6HKoakdFHgDI6p2EUQ+Sq9vJfuQP+ABkaKL29hixWreZoc/dA==}
+  railway@3.5.5:
+    resolution: {integrity: sha512-7P6/F9GQsZcuMxdy9OGSUkOkWkPbyVOUFAJxZNqZx4fV2ss2fCYJE/R/+8cP7/bysSGm2kGDzFhDk54ENhpN7w==}
     engines: {node: '>=22'}
     hasBin: true
 
@@ -27817,9 +27792,9 @@ packages:
     resolution: {integrity: sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA==}
     engines: {node: '>=0.10.0'}
 
-  source-map-loader@4.0.2:
-    resolution: {integrity: sha512-oYwAqCuL0OZhBoSgmdrLa7mv9MjommVMiQIWgcztf+eS4+8BfcUee6nenFnDhKOhzAVnk5gpZdfnz1iiBv+5sg==}
-    engines: {node: '>= 14.15.0'}
+  source-map-loader@5.0.0:
+    resolution: {integrity: sha512-k2Dur7CbSLcAH73sBcIkV5xjPV4SzqO1NJ7+XaQl8if3VODDUj3FNchNGpqgJSKbvUfJuhVdv8K2Eu8/TNl2eA==}
+    engines: {node: '>= 18.12.0'}
     peerDependencies:
       webpack: ^5.72.1
 
@@ -29519,17 +29494,17 @@ packages:
     resolution: {integrity: sha512-0yweIbkINJodk27gX9LBGMzyQdBDan3s/dEAiwBOj+Mf0PPyWL6/rikalkv8EeD0E8jm4o5RXEOrFTP3NXbhJg==}
     engines: {node: '>=12.17'}
 
-  workerd@1.20260701.1:
-    resolution: {integrity: sha512-uF813NG09JwNRRUfJ0zBomyTslSPM810dMj9LVvkQ7RAkLrQLzAlPU8Xh/3dIqZDo2bfd7tChbf2PtqLRARRJQ==}
+  workerd@1.20260708.1:
+    resolution: {integrity: sha512-WAK+Kt/VVCSldH2qSr8lx46XCJ4Q+bdlHNaFqUtOHthBEIB8C1N8HVW+VOLrxDoTCk0NGNv0zajnBeQK4JOB9w==}
     engines: {node: '>=16'}
     hasBin: true
 
-  wrangler@4.107.0:
-    resolution: {integrity: sha512-fw69ThymNitZ0oIEBU2yNeq3kK59UKz/jyA3udwRrQIAIsxX57q5qLOpPTN7qc5t8n9pnUeofe0uxtMuhQZW8w==}
+  wrangler@4.110.0:
+    resolution: {integrity: sha512-xZeXKYi7hxQRF5anL+v77RkufJNpF9f3Eqeyqq2QBsETpLZgh0Agj0jJ6JPtkbgn6ukZdh8OK5egsGPWIditgg==}
     engines: {node: '>=22.0.0'}
     hasBin: true
     peerDependencies:
-      '@cloudflare/workers-types': ^4.20260701.1
+      '@cloudflare/workers-types': ^5.20260708.1
     peerDependenciesMeta:
       '@cloudflare/workers-types':
         optional: true
@@ -29777,7 +29752,7 @@ snapshots:
     optionalDependencies:
       graphql: 16.14.0
 
-  '@a2a-js/sdk@0.3.13(@grpc/grpc-js@1.14.4)(express@5.2.1)':
+  '@a2a-js/sdk@0.3.14(@grpc/grpc-js@1.14.4)(express@5.2.1)':
     dependencies:
       uuid: 11.1.1
     optionalDependencies:
@@ -29792,11 +29767,11 @@ snapshots:
     dependencies:
       zod: 4.4.3
 
-  '@ai-sdk/alibaba@1.0.34(zod@4.4.3)':
+  '@ai-sdk/alibaba@1.0.37(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.56(zod@4.4.3)
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/openai-compatible': 2.0.59(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/amazon-bedrock@3.0.105(zod@4.4.3)':
@@ -29842,22 +29817,16 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/anthropic@3.0.92(zod@4.4.3)':
+  '@ai-sdk/anthropic@3.0.96(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/anthropic@3.0.94(zod@4.4.3)':
+  '@ai-sdk/anthropic@4.0.12(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@4.4.3)
-      zod: 4.4.3
-
-  '@ai-sdk/anthropic@4.0.8(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 4.0.2
-      '@ai-sdk/provider-utils': 5.0.5(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.7(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/azure@2.0.114(zod@4.4.3)':
@@ -29908,24 +29877,24 @@ snapshots:
       '@vercel/oidc': 3.1.0
       zod: 4.4.3
 
-  '@ai-sdk/gateway@3.0.144(zod@3.25.76)':
+  '@ai-sdk/gateway@3.0.148(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@3.25.76)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@3.25.76)
       '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
-  '@ai-sdk/gateway@3.0.144(zod@4.4.3)':
+  '@ai-sdk/gateway@3.0.148(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       '@vercel/oidc': 3.2.0
       zod: 4.4.3
 
-  '@ai-sdk/gateway@4.0.12(zod@3.25.76)':
+  '@ai-sdk/gateway@4.0.16(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.2
-      '@ai-sdk/provider-utils': 5.0.5(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.7(zod@3.25.76)
       '@vercel/oidc': 3.2.0
       zod: 3.25.76
 
@@ -29994,22 +29963,16 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/google@3.0.88(zod@4.4.3)':
+  '@ai-sdk/google@3.0.91(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/google@3.0.89(zod@4.4.3)':
+  '@ai-sdk/google@4.0.12(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@4.4.3)
-      zod: 4.4.3
-
-  '@ai-sdk/google@4.0.8(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 4.0.2
-      '@ai-sdk/provider-utils': 5.0.5(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.7(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/groq@1.2.9(zod@4.4.3)':
@@ -30024,22 +29987,22 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/groq@3.0.47(zod@4.4.3)':
+  '@ai-sdk/groq@3.0.50(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/mistral@2.0.36(zod@4.4.3)':
+  '@ai-sdk/mistral@2.0.37(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 2.0.3
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/mistral@3.0.45(zod@4.4.3)':
+  '@ai-sdk/mistral@3.0.48(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai-compatible@0.2.16(zod@4.4.3)':
@@ -30075,16 +30038,10 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/openai-compatible@2.0.56(zod@4.4.3)':
+  '@ai-sdk/openai-compatible@2.0.59(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
-      zod: 4.4.3
-
-  '@ai-sdk/openai-compatible@2.0.57(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/openai@1.3.24(zod@4.4.3)':
@@ -30105,22 +30062,16 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/openai@3.0.80(zod@4.4.3)':
+  '@ai-sdk/openai@3.0.84(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/openai@3.0.81(zod@4.4.3)':
+  '@ai-sdk/openai@4.0.11(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@4.4.3)
-      zod: 4.4.3
-
-  '@ai-sdk/openai@4.0.7(zod@4.4.3)':
-    dependencies:
-      '@ai-sdk/provider': 4.0.2
-      '@ai-sdk/provider-utils': 5.0.5(zod@4.4.3)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.7(zod@4.4.3)
       zod: 4.4.3
 
   '@ai-sdk/perplexity@2.0.33(zod@4.4.3)':
@@ -30181,38 +30132,31 @@ snapshots:
       eventsource-parser: 3.0.8
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@4.0.35(zod@4.4.3)':
+  '@ai-sdk/provider-utils@4.0.38(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
-      '@standard-schema/spec': 1.1.0
-      eventsource-parser: 3.0.8
-      zod: 4.4.3
-
-  '@ai-sdk/provider-utils@4.0.36(zod@3.25.76)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.13
+      '@ai-sdk/provider': 3.0.14
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@4.0.36(zod@4.4.3)':
+  '@ai-sdk/provider-utils@4.0.38(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 3.0.13
+      '@ai-sdk/provider': 3.0.14
       '@standard-schema/spec': 1.1.0
       eventsource-parser: 3.0.8
       zod: 4.4.3
 
-  '@ai-sdk/provider-utils@5.0.5(zod@3.25.76)':
+  '@ai-sdk/provider-utils@5.0.7(zod@3.25.76)':
     dependencies:
-      '@ai-sdk/provider': 4.0.2
+      '@ai-sdk/provider': 4.0.3
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.0.8
       zod: 3.25.76
 
-  '@ai-sdk/provider-utils@5.0.5(zod@4.4.3)':
+  '@ai-sdk/provider-utils@5.0.7(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/provider': 4.0.2
+      '@ai-sdk/provider': 4.0.3
       '@standard-schema/spec': 1.1.0
       '@workflow/serde': 4.1.0
       eventsource-parser: 3.0.8
@@ -30226,11 +30170,11 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/provider@3.0.13':
+  '@ai-sdk/provider@3.0.14':
     dependencies:
       json-schema: 0.4.0
 
-  '@ai-sdk/provider@4.0.2':
+  '@ai-sdk/provider@4.0.3':
     dependencies:
       json-schema: 0.4.0
 
@@ -30289,11 +30233,11 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.28(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/xai@3.0.102(zod@4.4.3)':
+  '@ai-sdk/xai@3.0.106(zod@4.4.3)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.56(zod@4.4.3)
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.35(zod@4.4.3)
+      '@ai-sdk/openai-compatible': 2.0.59(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       zod: 4.4.3
 
   '@algolia/abtesting@1.21.2':
@@ -32325,7 +32269,7 @@ snapshots:
       '@ai-sdk/google': 2.0.78(zod@4.4.3)
       '@ai-sdk/google-vertex': 3.0.137(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.10)(@vitest/ui@4.1.10)(jsdom@27.4.0(@noble/hashes@2.2.0)(bufferutil@4.1.0))(typescript@6.0.3)(vite@7.3.6(@types/node@22.19.15)(jiti@2.7.0)(lightningcss@1.32.0)(terser@5.44.1)(tsx@4.22.4)(yaml@2.9.0))(zod@4.4.3)
       '@ai-sdk/groq': 2.0.43(zod@4.4.3)
-      '@ai-sdk/mistral': 2.0.36(zod@4.4.3)
+      '@ai-sdk/mistral': 2.0.37(zod@4.4.3)
       '@ai-sdk/openai': 2.0.110(zod@4.4.3)
       '@ai-sdk/perplexity': 2.0.33(zod@4.4.3)
       '@ai-sdk/togetherai': 1.0.45(zod@4.4.3)
@@ -32531,20 +32475,20 @@ snapshots:
       human-id: 4.1.2
       prettier: 2.8.8
 
-  '@chat-adapter/shared@4.29.0(ai@6.0.220(zod@4.4.3))(zod@4.4.3)':
+  '@chat-adapter/shared@4.29.0(ai@6.0.224(zod@4.4.3))(zod@4.4.3)':
     dependencies:
-      chat: 4.29.0(ai@6.0.220(zod@4.4.3))(zod@4.4.3)
+      chat: 4.29.0(ai@6.0.224(zod@4.4.3))(zod@4.4.3)
     transitivePeerDependencies:
       - ai
       - supports-color
       - zod
 
-  '@chat-adapter/slack@4.29.0(ai@6.0.220(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
+  '@chat-adapter/slack@4.29.0(ai@6.0.224(zod@4.4.3))(bufferutil@4.1.0)(zod@4.4.3)':
     dependencies:
-      '@chat-adapter/shared': 4.29.0(ai@6.0.220(zod@4.4.3))(zod@4.4.3)
+      '@chat-adapter/shared': 4.29.0(ai@6.0.224(zod@4.4.3))(zod@4.4.3)
       '@slack/socket-mode': 2.0.7(bufferutil@4.1.0)
       '@slack/web-api': 7.15.2
-      chat: 4.29.0(ai@6.0.220(zod@4.4.3))(zod@4.4.3)
+      chat: 4.29.0(ai@6.0.224(zod@4.4.3))(zod@4.4.3)
     transitivePeerDependencies:
       - ai
       - bufferutil
@@ -32600,25 +32544,25 @@ snapshots:
 
   '@cloudflare/kv-asset-handler@0.5.0': {}
 
-  '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260701.1)':
+  '@cloudflare/unenv-preset@2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260708.1)':
     dependencies:
       unenv: 2.0.0-rc.24
     optionalDependencies:
-      workerd: 1.20260701.1
+      workerd: 1.20260708.1
 
-  '@cloudflare/workerd-darwin-64@1.20260701.1':
+  '@cloudflare/workerd-darwin-64@1.20260708.1':
     optional: true
 
-  '@cloudflare/workerd-darwin-arm64@1.20260701.1':
+  '@cloudflare/workerd-darwin-arm64@1.20260708.1':
     optional: true
 
-  '@cloudflare/workerd-linux-64@1.20260701.1':
+  '@cloudflare/workerd-linux-64@1.20260708.1':
     optional: true
 
-  '@cloudflare/workerd-linux-arm64@1.20260701.1':
+  '@cloudflare/workerd-linux-arm64@1.20260708.1':
     optional: true
 
-  '@cloudflare/workerd-windows-64@1.20260701.1':
+  '@cloudflare/workerd-windows-64@1.20260708.1':
     optional: true
 
   '@cloudflare/workers-types@4.20260511.1': {}
@@ -33439,40 +33383,6 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@docusaurus/babel@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@babel/core': 7.29.7
-      '@babel/generator': 7.29.7
-      '@babel/plugin-syntax-dynamic-import': 7.8.3(@babel/core@7.29.7)
-      '@babel/plugin-transform-runtime': 7.29.0(@babel/core@7.29.7)
-      '@babel/preset-env': 7.28.5(@babel/core@7.29.7)
-      '@babel/preset-react': 7.28.5(@babel/core@7.29.7)
-      '@babel/preset-typescript': 7.29.7(@babel/core@7.29.7)
-      '@babel/runtime': 7.29.7
-      '@babel/traverse': 7.29.7
-      '@docusaurus/logger': 3.10.1
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      babel-plugin-dynamic-import-node: 2.3.3
-      fs-extra: 11.3.5
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - react
-      - react-dom
-      - supports-color
-      - uglify-js
-      - webpack-cli
-
   '@docusaurus/bundler@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@babel/core': 7.29.7
@@ -33520,12 +33430,12 @@ snapshots:
 
   '@docusaurus/core@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
-      '@docusaurus/babel': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/babel': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/bundler': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/logger': 3.10.1
       '@docusaurus/mdx-loader': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mdx-js/react': 3.1.1(@types/react@19.2.17)(react@19.2.7)
       boxen: 6.2.1
@@ -33561,7 +33471,7 @@ snapshots:
       tinypool: 1.1.1
       tslib: 2.8.1
       update-notifier: 6.0.2
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
       webpack-bundle-analyzer: 4.10.2(bufferutil@4.1.0)
       webpack-dev-server: 5.2.5(bufferutil@4.1.0)(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
       webpack-merge: 6.0.1
@@ -33598,7 +33508,7 @@ snapshots:
 
   '@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16)':
     dependencies:
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@rspack/core': 1.7.12(@swc/helpers@0.5.17)
       '@swc/core': 1.15.7(@swc/helpers@0.5.17)
       '@swc/html': 1.15.11
@@ -33607,7 +33517,7 @@ snapshots:
       semver: 7.8.5
       swc-loader: 0.2.7(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16))
       tslib: 2.8.1
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/css'
@@ -33629,7 +33539,7 @@ snapshots:
   '@docusaurus/mdx-loader@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@docusaurus/logger': 3.10.1
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mdx-js/mdx': 3.1.1
       '@slorber/remark-comment': 1.0.0
@@ -33653,7 +33563,7 @@ snapshots:
       unist-util-visit: 5.1.0
       url-loader: 4.1.1(file-loader@6.2.0(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)))(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
       vfile: 6.0.3
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/core'
@@ -33672,7 +33582,7 @@ snapshots:
 
   '@docusaurus/module-type-aliases@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/history': 4.7.11
       '@types/react': 19.2.17
       '@types/react-router-config': 5.0.11
@@ -33704,9 +33614,9 @@ snapshots:
       '@docusaurus/mdx-loader': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/plugin-content-docs': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/theme-common': 3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       cheerio: 1.0.0-rc.12
       combine-promises: 1.2.0
@@ -33720,7 +33630,7 @@ snapshots:
       tslib: 2.8.1
       unist-util-visit: 5.1.0
       utility-types: 3.11.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@docusaurus/faster'
       - '@mdx-js/react'
@@ -33752,9 +33662,9 @@ snapshots:
       '@docusaurus/mdx-loader': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/module-type-aliases': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/theme-common': 3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/react-router-config': 5.0.11
       combine-promises: 1.2.0
@@ -33766,7 +33676,7 @@ snapshots:
       schema-dts: 1.1.5
       tslib: 2.8.1
       utility-types: 3.11.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@docusaurus/faster'
       - '@mdx-js/react'
@@ -33795,14 +33705,14 @@ snapshots:
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/mdx-loader': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.5
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       tslib: 2.8.1
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@docusaurus/faster'
       - '@mdx-js/react'
@@ -33830,8 +33740,8 @@ snapshots:
   '@docusaurus/plugin-css-cascade-layers@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       tslib: 2.8.1
     transitivePeerDependencies:
@@ -33863,8 +33773,8 @@ snapshots:
   '@docusaurus/plugin-debug@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.5
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -33897,7 +33807,7 @@ snapshots:
   '@docusaurus/plugin-google-analytics@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -33929,7 +33839,7 @@ snapshots:
   '@docusaurus/plugin-google-gtag@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/gtag.js': 0.0.20
       react: 19.2.7
@@ -33962,7 +33872,7 @@ snapshots:
   '@docusaurus/plugin-google-tag-manager@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
@@ -33995,9 +33905,9 @@ snapshots:
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/logger': 3.10.1
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.5
       react: 19.2.7
@@ -34031,15 +33941,15 @@ snapshots:
   '@docusaurus/plugin-svgr@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)':
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@svgr/core': 8.1.0(typescript@6.0.3)
       '@svgr/webpack': 8.1.0(typescript@6.0.3)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
       tslib: 2.8.1
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@docusaurus/faster'
       - '@mdx-js/react'
@@ -34068,8 +33978,8 @@ snapshots:
     dependencies:
       '@docusaurus/core': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/logger': 3.10.1
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@vercel/analytics': 1.6.1(react@19.2.7)
       react: 19.2.7
@@ -34121,7 +34031,7 @@ snapshots:
       '@docusaurus/theme-classic': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(@types/react@19.2.17)(bufferutil@4.1.0)(lightningcss@1.32.0)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/theme-common': 3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/theme-search-algolia': 3.10.1(@algolia/client-search@5.55.2)(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(@types/react@19.2.17)(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(search-insights@2.17.3)(typescript@6.0.3)
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)
     transitivePeerDependencies:
@@ -34177,9 +34087,9 @@ snapshots:
       '@docusaurus/plugin-content-pages': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/theme-common': 3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/theme-translations': 3.10.1
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@mdx-js/react': 3.1.1(@types/react@19.2.17)(react@19.2.7)
       clsx: 2.1.1
@@ -34224,8 +34134,8 @@ snapshots:
       '@docusaurus/mdx-loader': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/module-type-aliases': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/plugin-content-docs': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@types/history': 4.7.11
       '@types/react': 19.2.17
       '@types/react-router-config': 5.0.11
@@ -34261,7 +34171,7 @@ snapshots:
       '@docusaurus/plugin-content-docs': 3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3)
       '@docusaurus/theme-common': 3.10.1(@docusaurus/plugin-content-docs@3.10.1(@docusaurus/faster@3.10.1(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@swc/helpers@0.5.17)(postcss@8.5.16))(@mdx-js/react@3.1.1(@types/react@19.2.17)(react@19.2.7))(@rspack/core@1.7.12(@swc/helpers@0.5.17))(@swc/core@1.15.7(@swc/helpers@0.5.17))(bufferutil@4.1.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(typescript@6.0.3))(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/theme-translations': 3.10.1
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@docusaurus/utils-validation': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       algoliasearch: 5.55.2
       algoliasearch-helper: 3.27.0(algoliasearch@5.55.2)
@@ -34337,36 +34247,6 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@mdx-js/mdx': 3.1.1
-      '@types/history': 4.7.11
-      '@types/mdast': 4.0.4
-      '@types/react': 19.2.17
-      commander: 5.1.0
-      joi: 17.13.4
-      react: 19.2.7
-      react-dom: 19.2.7(react@19.2.7)
-      react-helmet-async: '@slorber/react-helmet-async@1.3.0(react-dom@19.2.7(react@19.2.7))(react@19.2.7)'
-      utility-types: 3.11.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
-      webpack-merge: 5.10.0
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - supports-color
-      - uglify-js
-      - webpack-cli
-
   '@docusaurus/utils-common@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -34389,33 +34269,11 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@docusaurus/utils-common@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - react
-      - react-dom
-      - supports-color
-      - uglify-js
-      - webpack-cli
-
   '@docusaurus/utils-validation@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
       '@docusaurus/logger': 3.10.1
-      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       fs-extra: 11.3.5
       joi: 17.13.4
       js-yaml: 3.15.0
@@ -34480,47 +34338,6 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@docusaurus/utils@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
-    dependencies:
-      '@docusaurus/logger': 3.10.1
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@docusaurus/utils-common': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      escape-string-regexp: 4.0.0
-      execa: 5.1.1
-      file-loader: 6.2.0(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
-      fs-extra: 11.3.5
-      github-slugger: 1.5.0
-      globby: 11.1.0
-      gray-matter: 4.0.3
-      jiti: 1.21.7
-      js-yaml: 3.15.0
-      lodash: 4.18.1
-      micromatch: 4.0.8
-      p-queue: 6.6.2
-      prompts: 2.4.2
-      resolve-pathname: 3.0.0
-      tslib: 2.8.1
-      url-loader: 4.1.1(file-loader@6.2.0(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)))(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
-      utility-types: 3.11.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - react
-      - react-dom
-      - supports-color
-      - uglify-js
-      - webpack-cli
-
   '@drizzle-team/brocli@0.10.2':
     optional: true
 
@@ -34565,10 +34382,10 @@ snapshots:
       '@duckdb/node-bindings-win32-arm64': 1.5.2-r.2
       '@duckdb/node-bindings-win32-x64': 1.5.2-r.2
 
-  '@earendil-works/pi-tui@0.79.4':
+  '@earendil-works/pi-tui@0.80.6(patch_hash=88572df39a8452647fa073db5bc0907de3f1cb04c52c4559c8cc6e662973818b)':
     dependencies:
       get-east-asian-width: 1.6.0
-      marked: 15.0.12
+      marked: 18.0.5
 
   '@elastic/elasticsearch@8.19.1':
     dependencies:
@@ -35278,7 +35095,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/firestore@7.11.6(encoding@0.1.13)':
+  '@google-cloud/firestore@7.11.6':
     dependencies:
       '@opentelemetry/api': 1.9.1
       fast-deep-equal: 3.1.3
@@ -36467,7 +36284,7 @@ snapshots:
 
   '@mastra/docusaurus-plugin-algolia@1.1.2(@docusaurus/types@3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7))(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(clsx@2.1.1)(lucide-react@1.23.0(react@19.2.7))(react-dom@19.2.7(react@19.2.7))(react@19.2.7)':
     dependencies:
-      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
+      '@docusaurus/types': 3.10.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@radix-ui/react-dialog': 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       '@tanstack/react-virtual': 3.14.5(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
       algoliasearch: 5.55.2
@@ -40711,73 +40528,71 @@ snapshots:
 
   '@tediousjs/connection-string@1.1.0': {}
 
-  '@temporalio/activity@1.17.2':
+  '@temporalio/activity@1.20.2':
     dependencies:
-      '@temporalio/client': 1.17.2
-      '@temporalio/common': 1.17.2
-      abort-controller: 3.0.0
+      '@temporalio/client': 1.20.2
+      '@temporalio/common': 1.20.2
 
-  '@temporalio/client@1.17.2':
+  '@temporalio/client@1.20.2':
     dependencies:
       '@grpc/grpc-js': 1.14.4
-      '@temporalio/common': 1.17.2
-      '@temporalio/proto': 1.17.2
+      '@temporalio/common': 1.20.2
+      '@temporalio/proto': 1.20.2
       abort-controller: 3.0.0
       long: 5.3.2
+      nexus-rpc: 0.0.2
       uuid: 11.1.1
 
-  '@temporalio/common@1.17.2':
+  '@temporalio/common@1.20.2':
     dependencies:
-      '@temporalio/proto': 1.17.2
+      '@temporalio/proto': 1.20.2
       long: 5.3.2
       ms: 3.0.0-canary.1
       nexus-rpc: 0.0.2
       proto3-json-serializer: 2.0.2
 
-  '@temporalio/core-bridge@1.17.2':
+  '@temporalio/core-bridge@1.20.2':
     dependencies:
       '@grpc/grpc-js': 1.14.4
-      '@temporalio/common': 1.17.2
+      '@temporalio/common': 1.20.2
 
-  '@temporalio/nexus@1.17.2':
+  '@temporalio/nexus@1.20.2':
     dependencies:
-      '@temporalio/client': 1.17.2
-      '@temporalio/common': 1.17.2
-      '@temporalio/proto': 1.17.2
+      '@temporalio/client': 1.20.2
+      '@temporalio/common': 1.20.2
+      '@temporalio/proto': 1.20.2
       long: 5.3.2
       nexus-rpc: 0.0.2
 
-  '@temporalio/plugin@1.17.2': {}
+  '@temporalio/plugin@1.20.2': {}
 
-  '@temporalio/proto@1.17.2':
+  '@temporalio/proto@1.20.2':
     dependencies:
       long: 5.3.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
 
-  '@temporalio/worker@1.17.2(@swc/helpers@0.5.17)(lightningcss@1.32.0)(postcss@8.5.16)(tslib@2.8.1)':
+  '@temporalio/worker@1.20.2(@swc/helpers@0.5.17)(lightningcss@1.32.0)(postcss@8.5.16)(tslib@2.8.1)':
     dependencies:
       '@grpc/grpc-js': 1.14.4
       '@swc/core': 1.15.7(@swc/helpers@0.5.17)
-      '@temporalio/activity': 1.17.2
-      '@temporalio/client': 1.17.2
-      '@temporalio/common': 1.17.2
-      '@temporalio/core-bridge': 1.17.2
-      '@temporalio/nexus': 1.17.2
-      '@temporalio/proto': 1.17.2
-      '@temporalio/workflow': 1.17.2
-      abort-controller: 3.0.0
+      '@temporalio/activity': 1.20.2
+      '@temporalio/client': 1.20.2
+      '@temporalio/common': 1.20.2
+      '@temporalio/core-bridge': 1.20.2
+      '@temporalio/nexus': 1.20.2
+      '@temporalio/proto': 1.20.2
+      '@temporalio/workflow': 1.20.2
       heap-js: 2.7.1
       memfs: 4.57.2(tslib@2.8.1)
       nexus-rpc: 0.0.2
-      proto3-json-serializer: 2.0.2
-      protobufjs: 7.6.3
+      protobufjs: 7.6.5
       rxjs: 7.8.2
       source-map: 0.7.6
-      source-map-loader: 4.0.2(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16))
+      source-map-loader: 5.0.0(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16))
       supports-color: 8.1.1
       swc-loader: 0.2.7(@swc/core@1.15.7(@swc/helpers@0.5.17))(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16))
       unionfs: 4.6.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@swc/css'
@@ -40794,10 +40609,10 @@ snapshots:
       - uglify-js
       - webpack-cli
 
-  '@temporalio/workflow@1.17.2':
+  '@temporalio/workflow@1.20.2':
     dependencies:
-      '@temporalio/common': 1.17.2
-      '@temporalio/proto': 1.17.2
+      '@temporalio/common': 1.20.2
+      '@temporalio/proto': 1.20.2
       nexus-rpc: 0.0.2
 
   '@testing-library/dom@10.4.1':
@@ -42519,27 +42334,27 @@ snapshots:
       '@opentelemetry/api': 1.9.0
       zod: 4.4.3
 
-  ai@6.0.220(zod@3.25.76):
+  ai@6.0.224(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 3.0.144(zod@3.25.76)
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@3.25.76)
+      '@ai-sdk/gateway': 3.0.148(zod@3.25.76)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@3.25.76)
       '@opentelemetry/api': 1.9.1
       zod: 3.25.76
 
-  ai@6.0.220(zod@4.4.3):
+  ai@6.0.224(zod@4.4.3):
     dependencies:
-      '@ai-sdk/gateway': 3.0.144(zod@4.4.3)
-      '@ai-sdk/provider': 3.0.13
-      '@ai-sdk/provider-utils': 4.0.36(zod@4.4.3)
+      '@ai-sdk/gateway': 3.0.148(zod@4.4.3)
+      '@ai-sdk/provider': 3.0.14
+      '@ai-sdk/provider-utils': 4.0.38(zod@4.4.3)
       '@opentelemetry/api': 1.9.1
       zod: 4.4.3
 
-  ai@7.0.16(zod@3.25.76):
+  ai@7.0.22(zod@3.25.76):
     dependencies:
-      '@ai-sdk/gateway': 4.0.12(zod@3.25.76)
-      '@ai-sdk/provider': 4.0.2
-      '@ai-sdk/provider-utils': 5.0.5(zod@3.25.76)
+      '@ai-sdk/gateway': 4.0.16(zod@3.25.76)
+      '@ai-sdk/provider': 4.0.3
+      '@ai-sdk/provider-utils': 5.0.7(zod@3.25.76)
       zod: 3.25.76
 
   ajv-draft-04@1.0.0(ajv@8.18.0):
@@ -42865,7 +42680,7 @@ snapshots:
       '@babel/core': 7.29.7
       find-cache-dir: 4.0.0
       schema-utils: 4.3.3
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   babel-plugin-dynamic-import-node@2.3.3:
     dependencies:
@@ -43397,7 +43212,7 @@ snapshots:
 
   chardet@2.1.1: {}
 
-  chat@4.29.0(ai@6.0.220(zod@4.4.3))(zod@4.4.3):
+  chat@4.29.0(ai@6.0.224(zod@4.4.3))(zod@4.4.3):
     dependencies:
       '@workflow/serde': 4.1.0-beta.2
       mdast-util-to-string: 4.0.0
@@ -43407,7 +43222,7 @@ snapshots:
       remend: 1.3.0
       unified: 11.0.5
     optionalDependencies:
-      ai: 6.0.220(zod@4.4.3)
+      ai: 6.0.224(zod@4.4.3)
       zod: 4.4.3
     transitivePeerDependencies:
       - supports-color
@@ -43881,7 +43696,7 @@ snapshots:
       normalize-path: 3.0.0
       schema-utils: 4.3.3
       serialize-javascript: 7.0.5
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   core-js-compat@3.49.0:
     dependencies:
@@ -44006,7 +43821,7 @@ snapshots:
       semver: 7.8.5
     optionalDependencies:
       '@rspack/core': 1.7.12(@swc/helpers@0.5.17)
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   css-minimizer-webpack-plugin@5.0.1(clean-css@5.3.3)(lightningcss@1.32.0)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16)):
     dependencies:
@@ -44016,7 +43831,7 @@ snapshots:
       postcss: 8.5.16
       schema-utils: 4.3.3
       serialize-javascript: 7.0.5
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     optionalDependencies:
       clean-css: 5.3.3
       lightningcss: 1.32.0
@@ -45528,7 +45343,7 @@ snapshots:
     dependencies:
       loader-utils: 2.0.4
       schema-utils: 3.3.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   file-type@21.3.4:
     dependencies:
@@ -45541,7 +45356,7 @@ snapshots:
 
   file-uri-to-path@1.0.0: {}
 
-  files-sdk@1.6.0(@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.220(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
+  files-sdk@1.6.0(@anthropic-ai/claude-agent-sdk@0.3.169(@anthropic-ai/sdk@0.39.0(encoding@0.1.13))(@modelcontextprotocol/sdk@1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3))(zod@4.4.3))(@aws-sdk/client-s3@3.1059.0)(@aws-sdk/lib-storage@3.997.0(@aws-sdk/client-s3@3.1059.0))(@azure/core-auth@1.10.1)(@azure/identity@4.13.0)(@azure/storage-blob@12.31.0)(@cfworker/json-schema@4.1.1)(@google-cloud/storage@7.21.0(encoding@0.1.13))(@openai/agents@0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(@supabase/storage-js@2.108.0)(ai@6.0.224(zod@4.4.3))(convex@1.38.0(bufferutil@4.1.0)(react@19.2.7))(google-auth-library@10.9.0)(openai@6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3))(zod@4.4.3):
     dependencies:
       commander: 14.0.3
     optionalDependencies:
@@ -45555,7 +45370,7 @@ snapshots:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       '@openai/agents': 0.11.6(@cfworker/json-schema@4.1.1)(bufferutil@4.1.0)(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
       '@supabase/storage-js': 2.108.0
-      ai: 6.0.220(zod@4.4.3)
+      ai: 6.0.224(zod@4.4.3)
       convex: 1.38.0(bufferutil@4.1.0)(react@19.2.7)
       google-auth-library: 10.9.0
       openai: 6.41.0(ws@8.21.0(bufferutil@4.1.0))(zod@4.4.3)
@@ -45661,7 +45476,7 @@ snapshots:
       pkg-types: 1.3.1
       yaml: 2.9.0
 
-  firebase-admin@13.9.0(encoding@0.1.13):
+  firebase-admin@13.9.0:
     dependencies:
       '@fastify/busboy': 3.2.0
       '@firebase/database-compat': 2.1.0
@@ -45674,7 +45489,7 @@ snapshots:
       node-forge: 1.4.0
       uuid: 11.1.1
     optionalDependencies:
-      '@google-cloud/firestore': 7.11.6(encoding@0.1.13)
+      '@google-cloud/firestore': 7.11.6
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)
     transitivePeerDependencies:
       - encoding
@@ -46428,7 +46243,7 @@ snapshots:
       '@modelcontextprotocol/sdk': 1.29.0(@cfworker/json-schema@4.1.1)(zod@4.4.3)
       hono: 4.12.25
 
-  hono-openapi@1.3.0(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.25))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.25)(openapi-types@12.1.3):
+  hono-openapi@1.3.1(@hono/standard-validator@0.2.2(@standard-schema/spec@1.1.0)(hono@4.12.25))(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-community/standard-openapi@0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3))(@types/json-schema@7.0.15)(hono@4.12.25)(openapi-types@12.1.3):
     dependencies:
       '@standard-community/standard-json': 0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3)
       '@standard-community/standard-openapi': 0.2.9(@standard-community/standard-json@0.3.5(@standard-schema/spec@1.1.0)(@types/json-schema@7.0.15)(@valibot/to-json-schema@1.7.0(valibot@1.4.1(typescript@6.0.3)))(arktype@2.2.0)(quansync@0.2.11)(valibot@1.4.1(typescript@6.0.3))(zod-to-json-schema@3.25.1(zod@4.4.3))(zod@4.4.3))(@standard-schema/spec@1.1.0)(arktype@2.2.0)(openapi-types@12.1.3)(valibot@1.4.1(typescript@6.0.3))(zod@4.4.3)
@@ -46502,7 +46317,7 @@ snapshots:
       tapable: 2.3.3
     optionalDependencies:
       '@rspack/core': 1.7.12(@swc/helpers@0.5.17)
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   htmlfy@0.8.1: {}
 
@@ -47228,6 +47043,8 @@ snapshots:
 
   jsonrepair@3.15.0: {}
 
+  jsonriver@1.1.1: {}
+
   jsonschema@1.2.7: {}
 
   jsonwebtoken@9.0.3:
@@ -47783,7 +47600,7 @@ snapshots:
 
   markdown-table@3.0.4: {}
 
-  marked@15.0.12: {}
+  marked@18.0.5: {}
 
   marky@1.3.0:
     optional: true
@@ -48690,14 +48507,14 @@ snapshots:
     dependencies:
       schema-utils: 4.3.3
       tapable: 2.3.3
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
-  miniflare@4.20260701.0(bufferutil@4.1.0):
+  miniflare@4.20260708.1(bufferutil@4.1.0):
     dependencies:
       '@cspotcode/source-map-support': 0.8.1
       sharp: 0.34.5
       undici: 7.28.0
-      workerd: 1.20260701.1
+      workerd: 1.20260708.1
       ws: 8.21.0(bufferutil@4.1.0)
       youch: 4.1.0-beta.10
     transitivePeerDependencies:
@@ -48742,7 +48559,7 @@ snapshots:
       jest-worker: 27.5.1
       schema-utils: 4.3.3
       terser: 5.44.1
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     optionalDependencies:
       '@swc/core': 1.15.7(@swc/helpers@0.5.17)
       clean-css: 5.3.3
@@ -49238,7 +49055,7 @@ snapshots:
     dependencies:
       loader-utils: 2.0.4
       schema-utils: 3.3.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   nunjucks@3.2.4(chokidar@3.6.0):
     dependencies:
@@ -49739,8 +49556,6 @@ snapshots:
 
   parseurl@1.3.3: {}
 
-  partial-json@0.1.7: {}
-
   pascal-case@3.1.2:
     dependencies:
       no-case: 3.0.4
@@ -50154,7 +49969,7 @@ snapshots:
       jiti: 1.21.7
       postcss: 8.5.16
       semver: 7.8.5
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - typescript
 
@@ -50651,6 +50466,20 @@ snapshots:
       '@types/node': 22.19.15
       long: 5.3.2
 
+  protobufjs@7.6.5:
+    dependencies:
+      '@protobufjs/aspromise': 1.1.2
+      '@protobufjs/base64': 1.1.2
+      '@protobufjs/codegen': 2.0.5
+      '@protobufjs/eventemitter': 1.1.1
+      '@protobufjs/fetch': 1.1.1
+      '@protobufjs/float': 1.0.2
+      '@protobufjs/path': 1.1.2
+      '@protobufjs/pool': 1.1.0
+      '@protobufjs/utf8': 1.1.1
+      '@types/node': 22.19.15
+      long: 5.3.2
+
   protobufjs@8.6.0:
     dependencies:
       long: 5.3.2
@@ -50777,7 +50606,7 @@ snapshots:
 
   raf-schd@4.0.3: {}
 
-  railway@3.4.1:
+  railway@3.5.5:
     dependencies:
       '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.0)
       graphql: 16.14.0
@@ -50880,7 +50709,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.7
       react-loadable: '@docusaurus/react-loadable@6.0.0(react@19.2.7)'
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   react-markdown@8.0.7(@types/react@19.2.17)(react@19.2.7):
     dependencies:
@@ -52285,11 +52114,11 @@ snapshots:
 
   source-map-js@1.2.1: {}
 
-  source-map-loader@4.0.2(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)):
+  source-map-loader@5.0.0(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)):
     dependencies:
       iconv-lite: 0.6.3
       source-map-js: 1.2.1
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   source-map-support@0.5.21:
     dependencies:
@@ -52725,7 +52554,7 @@ snapshots:
     dependencies:
       '@swc/core': 1.15.7(@swc/helpers@0.5.17)
       '@swc/counter': 0.1.3
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   swr@2.3.4(react@19.2.7):
     dependencies:
@@ -52896,7 +52725,7 @@ snapshots:
       schema-utils: 4.3.3
       serialize-javascript: 7.0.5
       terser: 5.44.1
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     optionalDependencies:
       '@swc/core': 1.15.7(@swc/helpers@0.5.17)
 
@@ -53549,7 +53378,7 @@ snapshots:
       loader-utils: 2.0.4
       mime-types: 2.1.35
       schema-utils: 3.3.0
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     optionalDependencies:
       file-loader: 6.2.0(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
 
@@ -54139,7 +53968,7 @@ snapshots:
       range-parser: 1.3.0
       schema-utils: 4.3.3
     optionalDependencies:
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - tslib
 
@@ -54174,7 +54003,7 @@ snapshots:
       webpack-dev-middleware: 7.4.5(tslib@2.8.1)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
       ws: 8.21.0(bufferutil@4.1.0)
     optionalDependencies:
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
     transitivePeerDependencies:
       - bufferutil
       - debug
@@ -54199,44 +54028,6 @@ snapshots:
   webpack-virtual-modules@0.6.2: {}
 
   webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16):
-    dependencies:
-      '@types/estree': 1.0.9
-      '@types/json-schema': 7.0.15
-      '@webassemblyjs/ast': 1.14.1
-      '@webassemblyjs/wasm-edit': 1.14.1
-      '@webassemblyjs/wasm-parser': 1.14.1
-      acorn: 8.17.0
-      acorn-import-phases: 1.0.4(acorn@8.17.0)
-      browserslist: 4.28.5
-      chrome-trace-event: 1.0.4
-      enhanced-resolve: 5.24.2
-      es-module-lexer: 2.3.0
-      eslint-scope: 5.1.1
-      events: 3.3.0
-      graceful-fs: 4.2.11
-      loader-runner: 4.3.2
-      mime-db: 1.54.0
-      minimizer-webpack-plugin: 5.6.1(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)(webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(@swc/html@1.15.11)(lightningcss@1.32.0)(postcss@8.5.16))
-      neo-async: 2.6.2
-      schema-utils: 4.3.3
-      tapable: 2.3.3
-      watchpack: 2.5.2
-      webpack-sources: 3.5.1
-    transitivePeerDependencies:
-      - '@minify-html/node'
-      - '@swc/core'
-      - '@swc/css'
-      - '@swc/html'
-      - clean-css
-      - cssnano
-      - csso
-      - esbuild
-      - html-minifier-terser
-      - lightningcss
-      - postcss
-      - uglify-js
-
-  webpack@5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16):
     dependencies:
       '@types/estree': 1.0.9
       '@types/json-schema': 7.0.15
@@ -54321,7 +54112,7 @@ snapshots:
       std-env: 3.10.0
     optionalDependencies:
       '@rspack/core': 1.7.12(@swc/helpers@0.5.17)
-      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(lightningcss@1.32.0)(postcss@8.5.16)
+      webpack: 5.108.4(@swc/core@1.15.7(@swc/helpers@0.5.17))(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.16))(html-minifier-terser@7.2.0)(lightningcss@1.32.0)(postcss@8.5.16)
 
   webrtc-adapter@9.0.5:
     dependencies:
@@ -54412,24 +54203,24 @@ snapshots:
 
   wordwrapjs@5.1.1: {}
 
-  workerd@1.20260701.1:
+  workerd@1.20260708.1:
     optionalDependencies:
-      '@cloudflare/workerd-darwin-64': 1.20260701.1
-      '@cloudflare/workerd-darwin-arm64': 1.20260701.1
-      '@cloudflare/workerd-linux-64': 1.20260701.1
-      '@cloudflare/workerd-linux-arm64': 1.20260701.1
-      '@cloudflare/workerd-windows-64': 1.20260701.1
+      '@cloudflare/workerd-darwin-64': 1.20260708.1
+      '@cloudflare/workerd-darwin-arm64': 1.20260708.1
+      '@cloudflare/workerd-linux-64': 1.20260708.1
+      '@cloudflare/workerd-linux-arm64': 1.20260708.1
+      '@cloudflare/workerd-windows-64': 1.20260708.1
 
-  wrangler@4.107.0(bufferutil@4.1.0):
+  wrangler@4.110.0(bufferutil@4.1.0):
     dependencies:
       '@cloudflare/kv-asset-handler': 0.5.0
-      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260701.1)
+      '@cloudflare/unenv-preset': 2.16.1(unenv@2.0.0-rc.24)(workerd@1.20260708.1)
       blake3-wasm: 2.1.5
       esbuild: 0.28.1
-      miniflare: 4.20260701.0(bufferutil@4.1.0)
+      miniflare: 4.20260708.1(bufferutil@4.1.0)
       path-to-regexp: 6.3.0
       unenv: 2.0.0-rc.24
-      workerd: 1.20260701.1
+      workerd: 1.20260708.1
     optionalDependencies:
       fsevents: 2.3.3
     transitivePeerDependencies:
