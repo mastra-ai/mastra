@@ -30,7 +30,8 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "e2b": "^2.29.1"
+    "e2b": "^2.29.1",
+    "esbuild": "^0.28.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

@@ -8908,6 +8908,9 @@ importers:
       e2b:
         specifier: ^2.29.1
         version: 2.29.1
+      esbuild:
+        specifier: ^0.28.0
+        version: 0.28.1
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
