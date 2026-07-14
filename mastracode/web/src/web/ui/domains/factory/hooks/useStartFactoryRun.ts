@@ -96,10 +96,7 @@ export function useStartFactoryRun() {
       // resumed a real thread (titled or with messages), i.e. a repeat run on
       // the same item, reuse that thread: the prompt lands as a follow-up
       // message instead of leaving a stray second thread in the worktree.
-      const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, {
-        projectPath,
-        ...threadTags,
-      });
+      const threadId = await resolveRunThread(scopedSession, created.threadId, threadTitle, projectPath, threadTags);
       await scopedSession.sendMessage(prompt);
 
       // Append the prompt to the thread's message cache so it renders
@@ -170,16 +167,21 @@ async function resolveRunThread(
   session: AgentControllerSession,
   threadId: string | undefined,
   title: string,
-  tags: Record<string, string>,
+  projectPath: string,
+  threadTags: Record<string, string> | undefined,
 ): Promise<string> {
-  const taggedThread = (await session.listThreads({ tags, limit: 20 }))[0];
-  if (taggedThread) {
-    await session.switchThread(taggedThread.id);
-    if (taggedThread.id === threadId && isUntitledThread(taggedThread.title)) {
-      const messages = await session.listMessages(taggedThread.id, 1);
-      if (messages.length === 0) await session.renameThread(taggedThread.id, title);
+  const extraTags = Object.entries(threadTags ?? {}).filter(([, value]) => value);
+  if (extraTags.length > 0) {
+    const tags = { projectPath, ...Object.fromEntries(extraTags) };
+    const taggedThread = (await session.listThreads({ tags, limit: 20 }))[0];
+    if (taggedThread) {
+      await session.switchThread(taggedThread.id);
+      if (taggedThread.id === threadId && isUntitledThread(taggedThread.title)) {
+        const messages = await session.listMessages(taggedThread.id, 1);
+        if (messages.length === 0) await session.renameThread(taggedThread.id, title);
+      }
+      return taggedThread.id;
     }
-    return taggedThread.id;
   }
 
   if (!threadId) return (await session.createThread(title)).id;
