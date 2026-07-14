@@ -528,7 +528,7 @@ function SubagentCard({ entry }: { entry: SubagentEntry }) {
 
 function NotificationCard({ entry }: { entry: NotificationEntry }) {
   return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+    <div className="rounded-lg border border-accent3/30 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Bell size={13} />
         <Txt variant="ui-sm" font="mono">
@@ -549,7 +549,7 @@ function NotificationCard({ entry }: { entry: NotificationEntry }) {
 
 function NotificationSummaryCard({ entry }: { entry: NotificationSummaryEntry }) {
   return (
-    <div className="rounded-lg border border-l-4 border-border1 border-l-accent3 bg-surface2 px-3 py-2 shadow-sm">
+    <div className="rounded-lg border border-accent3/30 bg-surface2 px-3 py-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Bell size={13} />
         <Txt variant="ui-sm" font="mono">
