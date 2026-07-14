@@ -346,14 +346,15 @@ export function createMcpManager(
    * Whether a failed HTTP server is blocked on OAuth authorization.
    *
    * Provider-backed servers report the exact state tracked by `@mastra/mcp`.
-   * Bare `url` entries carry no provider until the user authenticates, so a
-   * 401 in the connect error is the signal that the server wants OAuth.
+   * Bare `url` entries carry no provider until the user authenticates, so the
+   * signal is a 401 in the connect error — surfaced either as the status text
+   * or as the RFC 6750 `invalid_token` bearer error code in the response body.
    */
   function serverNeedsAuth(name: string, cfg: McpServerConfig, error?: string): boolean {
     if (getTransport(cfg) !== 'http') return false;
     if (client?.getServerAuthState?.(name) === 'needs-auth') return true;
     if (serverDefs[name]?.authProvider) return false;
-    return error !== undefined && /\b401\b|unauthorized/i.test(error);
+    return error !== undefined && /\b401\b|unauthorized|invalid_token/i.test(error);
   }
 
   /**
