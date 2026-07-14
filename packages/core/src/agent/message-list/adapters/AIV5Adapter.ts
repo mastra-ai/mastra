@@ -2,7 +2,14 @@ import * as AIV5 from '@internal/ai-sdk-v5';
 
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
-import { categorizeFileData, createDataUri, parseDataUri } from '../prompt/image-utils';
+import type { ImageContent } from '../prompt/image-utils';
+import {
+  categorizeFileData,
+  createDataUri,
+  imageContentToString,
+  parseDataUri,
+  resolveFilePartMediaTypeAndData,
+} from '../prompt/image-utils';
 import type {
   MastraDBMessage,
   MastraMessageContentV2,
@@ -385,30 +392,35 @@ export class AIV5Adapter {
 
         // Convert file parts from V2 format (data) to AIV5 format (url)
         if (part.type === 'file') {
+          // v5-shaped file parts (`mediaType`/`url`) can reach this v2→v5 path; resolve both
+          // shapes so the media type survives (instead of the image/png default) and the
+          // payload is read from `url` when v5-shaped. Mirrors #17366.
+          const { mediaType: fileMimeType, data: fileData } = resolveFilePartMediaTypeAndData(part);
+
           // Skip file parts that came from experimental_attachments to avoid duplicates
-          if (typeof part.data === 'string' && attachmentUrls.has(part.data)) {
+          if (typeof fileData === 'string' && attachmentUrls.has(fileData)) {
             continue;
           }
 
           const categorized =
-            typeof part.data === 'string'
-              ? categorizeFileData(part.data, part.mimeType)
-              : { type: 'raw' as const, mimeType: part.mimeType, data: part.data };
+            typeof fileData === 'string'
+              ? categorizeFileData(fileData, fileMimeType)
+              : { type: 'raw' as const, mimeType: fileMimeType, data: fileData };
 
-          if (categorized.type === 'url' && typeof part.data === 'string') {
+          if (categorized.type === 'url' && typeof fileData === 'string') {
             const v5UIPart: AIV5Type.FileUIPart = {
               type: 'file' as const,
-              url: part.data,
+              url: fileData,
               mediaType: categorized.mimeType || 'image/png',
             };
             v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
             parts.push(v5UIPart);
           } else {
             let filePartData: string;
-            let extractedMimeType = part.mimeType;
+            let extractedMimeType = fileMimeType;
 
-            if (typeof part.data === 'string') {
-              const parsed = parseDataUri(part.data);
+            if (typeof fileData === 'string') {
+              const parsed = parseDataUri(fileData);
 
               if (parsed.isDataUri) {
                 filePartData = parsed.base64Content;
@@ -416,10 +428,12 @@ export class AIV5Adapter {
                   extractedMimeType = extractedMimeType || parsed.mimeType;
                 }
               } else {
-                filePartData = part.data;
+                filePartData = fileData;
               }
             } else {
-              filePartData = part.data;
+              // Non-string payload (defensive: stored file parts carry string data/url):
+              // coerce so `filePartData` stays typed `string`.
+              filePartData = imageContentToString(fileData as ImageContent, extractedMimeType);
             }
 
             const finalMimeType = extractedMimeType || 'image/png';

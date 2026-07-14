@@ -1,5 +1,46 @@
 # @mastra/core
 
+## 1.51.0-alpha.10
+
+### Patch Changes
+
+- **Fixed** — `CachingPubSub.clearTopic` now forwards to the wrapped transport. Because the durable-agent runtime wraps every pubsub in `CachingPubSub`, clearing a topic previously dropped only the in-memory cache and never told a persistent backend (e.g. Redis Streams) to delete its stream — so finished runs' streams leaked. It now also calls `clearTopic` on the inner transport when the inner implements it. ([#19138](https://github.com/mastra-ai/mastra/pull/19138))
+
+- Fixed file attachments carrying AI SDK v5 metadata failing to persist and keep their media type. File parts using the v5 shape are now read wherever stored messages are converted, so they save correctly and retain their content type instead of erroring out. Also fixed distinct file attachments being wrongly deduplicated when they carried this metadata. ([#19021](https://github.com/mastra-ai/mastra/pull/19021))
+
+- Updated dependencies [[`171c3a2`](https://github.com/mastra-ai/mastra/commit/171c3a23f36199ad1354166fb515b22b57f310c2)]:
+  - @mastra/schema-compat@1.3.4-alpha.2
+
+## 1.51.0-alpha.9
+
+### Patch Changes
+
+- Fixed `stream.text` so it resolves only to the final step's answer and excludes interim commentary between tool calls when no memory or output processors are configured. All text still streams in full through `fullStream`, and per-step text remains available on `steps`. Fixes [#17986](https://github.com/mastra-ai/mastra/issues/17986). ([#18644](https://github.com/mastra-ai/mastra/pull/18644))
+
+## 1.51.0-alpha.8
+
+### Patch Changes
+
+- dependencies updates: ([#16699](https://github.com/mastra-ai/mastra/pull/16699))
+  - Updated dependency [`@ai-sdk/provider-utils-v5@npm:@ai-sdk/provider-utils@3.0.28` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v5/v/3.0.28) (from `npm:@ai-sdk/provider-utils@3.0.25`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.35` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.35) (from `npm:@ai-sdk/provider-utils@4.0.27`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.5` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.5) (from `npm:@ai-sdk/provider-utils@5.0.0`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.13` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.13) (from `npm:@ai-sdk/provider@3.0.10`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.2` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.2) (from `npm:@ai-sdk/provider@4.0.0`, in `dependencies`)
+
+- dependencies updates: ([#19328](https://github.com/mastra-ai/mastra/pull/19328))
+  - Updated dependency [`@a2a-js/sdk@~0.3.14` ↗︎](https://www.npmjs.com/package/@a2a-js/sdk/v/0.3.14) (from `~0.3.13`, in `dependencies`)
+
+- dependencies updates: ([#19385](https://github.com/mastra-ai/mastra/pull/19385))
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.38` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.38) (from `npm:@ai-sdk/provider-utils@4.0.35`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.7` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.7) (from `npm:@ai-sdk/provider-utils@5.0.5`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v6@npm:@ai-sdk/provider@3.0.14` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v6/v/3.0.14) (from `npm:@ai-sdk/provider@3.0.13`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.3` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.3) (from `npm:@ai-sdk/provider@4.0.2`, in `dependencies`)
+
+- Fixed background task start chunks reaching agent stream onChunk callbacks. ([#18628](https://github.com/mastra-ai/mastra/pull/18628))
+
+- Fixed durable agents resuming persisted runs after a process restart. ([#19363](https://github.com/mastra-ai/mastra/pull/19363))
+
 ## 1.51.0-alpha.7
 
 ### Minor Changes
