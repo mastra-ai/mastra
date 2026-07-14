@@ -23,13 +23,13 @@ Or let a deploy create it, which prompts for confirmation:
 mastra deploy --env staging
 ```
 
-`mastra env create` defaults to the `staging` type. Pass `--type` to set `production`, `staging`, or `preview` explicitly, and `--region` to choose where the environment runs:
+`mastra env create` defaults to the `staging` type. Pass `--type` to set `staging` or `preview` explicitly, and `--region` to choose where the environment runs:
 
 ```bash
-mastra env create eu-prod --type production --region eu
+mastra env create eu-preview --type preview --region eu
 ```
 
-The region is fixed at creation. Databases attached to an environment are placed near the environment's region automatically.
+Each project has a single `production` environment, created by your first deploy. The region is fixed at creation. Databases attached to an environment are placed near the environment's region automatically. The number of environments per project depends on your plan.
 
 ## List environments
 

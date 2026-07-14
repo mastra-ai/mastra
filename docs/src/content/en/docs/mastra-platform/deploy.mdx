@@ -38,13 +38,23 @@ A local `.env` file is optional. Environment variables stored on the platform ar
   </StepItem>
 
   <StepItem>
-    The CLI runs a preflight check before anything ships. If your storage falls back to a local file path, the deploy is blocked with a message like:
+    The CLI runs a preflight check before anything ships. Storage that points at a local file path blocks the deploy, because local files don't survive on the platform's ephemeral filesystem:
 
     ```
-    [LOCAL_STORAGE_PATH] file:./mastra.db will be used at runtime because TURSO_DATABASE_URL is not set
+    [LOCAL_STORAGE_PATH] Build contains a host-local storage URL: file:./mastra.db
     ```
 
-    Local file storage doesn't survive on the platform's ephemeral filesystem. Attach a [hosted database](/docs/mastra-platform/database) that provides the missing variables:
+    Fix it in two steps. First, guard the local path with an environment variable so the file is only used during local development:
+
+    ```ts title="src/mastra/index.ts"
+    new LibSQLStore({
+      // Uses the hosted database when deployed, a local file during development
+      url: process.env.TURSO_DATABASE_URL ?? 'file:./mastra.db',
+      authToken: process.env.TURSO_AUTH_TOKEN,
+    })
+    ```
+
+    Then attach a [hosted database](/docs/mastra-platform/database) that provides those variables:
 
     ```bash
     mastra env db create --kind turso
@@ -108,11 +118,13 @@ Preflight validates the built output before anything ships, and only flags issue
 
 The recommended response to a preflight block is to fix the cause, usually by attaching a hosted database or storing the variable on the platform. `--skip-preflight` exists as an escape hatch but skips the checks that prevent broken deploys.
 
-Run the same checks without deploying:
+Run the checks without deploying:
 
 ```bash
 mastra lint --preflight
 ```
+
+`mastra lint` only sees your local env files. Variables stored on the platform or injected by managed databases aren't visible to it, so a deploy can pass preflight where lint still reports an error.
 
 ## Environment variables
 
